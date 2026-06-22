@@ -69,6 +69,32 @@ paths:
                 $ref: "#/components/schemas/AuthUser"
         "401":
           description: Not authenticated
+    patch:
+      operationId: updateCurrentUser
+      tags:
+        - auth
+      summary: Update the current user's account settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAccountInput"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated
   /auth/providers:
     get:
       operationId: getAuthProviders
@@ -1836,6 +1862,15 @@ components:
           type: integer
         email:
           type: string
+        displayName:
+          type: string
+          nullable: true
+        themePreference:
+          type: string
+          enum:
+            - light
+            - dark
+          nullable: true
     Error:
       type: object
       required:
@@ -1843,6 +1878,18 @@ components:
       properties:
         error:
           type: string
+    UpdateAccountInput:
+      type: object
+      properties:
+        displayName:
+          type: string
+          nullable: true
+        themePreference:
+          type: string
+          enum:
+            - light
+            - dark
+          nullable: true
     AuthProviders:
       type: object
       required:

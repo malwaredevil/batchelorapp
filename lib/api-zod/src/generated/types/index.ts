@@ -8,6 +8,7 @@
 
 export * from './authProviders';
 export * from './authUser';
+export * from './authUserThemePreference';
 export * from './changePasswordInput';
 export * from './compareFabricBody';
 export * from './deletePotteryUnusedCategories200';
@@ -103,3 +104,5 @@ export * from './quiltingUpdateQuiltInput';
 export * from './quiltingUpdateShoppingItemInput';
 export * from './quiltingUpdateShoppingItemInputStatus';
 export * from './resetPasswordInput';
+export * from './updateAccountInput';
+export * from './updateAccountInputThemePreference';

@@ -27,7 +27,9 @@ export const LoginBody = zod.object({
 
 export const LoginResponse = zod.object({
   "id": zod.number(),
-  "email": zod.string()
+  "email": zod.string(),
+  "displayName": zod.string().nullish(),
+  "themePreference": zod.enum(['light', 'dark']).nullish()
 })
 
 
@@ -36,7 +38,25 @@ export const LoginResponse = zod.object({
  */
 export const GetCurrentUserResponse = zod.object({
   "id": zod.number(),
-  "email": zod.string()
+  "email": zod.string(),
+  "displayName": zod.string().nullish(),
+  "themePreference": zod.enum(['light', 'dark']).nullish()
+})
+
+
+/**
+ * @summary Update the current user's account settings
+ */
+export const UpdateCurrentUserBody = zod.object({
+  "displayName": zod.string().nullish(),
+  "themePreference": zod.enum(['light', 'dark']).nullish()
+})
+
+export const UpdateCurrentUserResponse = zod.object({
+  "id": zod.number(),
+  "email": zod.string(),
+  "displayName": zod.string().nullish(),
+  "themePreference": zod.enum(['light', 'dark']).nullish()
 })
 
 

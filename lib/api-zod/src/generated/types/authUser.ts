@@ -5,8 +5,11 @@
  * Unified API specification (pottery + quilting)
  * OpenAPI spec version: 0.1.0
  */
+import type { AuthUserThemePreference } from './authUserThemePreference';
 
 export interface AuthUser {
   id: number;
   email: string;
+  displayName?: string | null;
+  themePreference?: AuthUserThemePreference;
 }

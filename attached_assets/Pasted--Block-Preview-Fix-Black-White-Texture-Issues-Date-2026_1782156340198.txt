@@ -1,0 +1,57 @@
+# Block Preview Fix — Black & White Texture Issues
+
+**Date:** 2026-06-22  
+**Files changed:** `artifacts/pottery/src/pages/blocks/index.tsx`, `artifacts/pottery/src/pages/layouts/index.tsx`, `artifacts/pottery/src/pages/layouts/composer.tsx`  
+**GitHub commit:** `315e5548` (malwaredevil/quilting, branch: main)
+
+---
+
+## What was broken
+
+Two separate but related problems caused fabric textures to not appear in block and layout previews.
+
+### Problem 1 — Black blocks (invalid SVG fill)
+
+**Where:** Block designer preview (1×1 blocks and potentially larger), layout designer canvas when adding a premade block.
+
+**Cause:** When a block cell is assigned a fabric (stored as `fab:54` in the cell string), the SVG renderer needs to translate that into a CSS pattern reference like `url(#fab-54)`. This translation was done by a small helper function `rf()` inside each `SvgCell` component. The helper existed in the layout canvas (`LayoutGrid`) but was missing from the block list's `SvgCell` and the layout list's `SvgCell`. Without it, the raw string `fab:54` was passed directly as an SVG `fill` attribute — which is not a valid colour, so SVG renders it as **black**.
+
+**Fix:** Added the `rf()` helper to every `SvgCell` component in all three files so fabric cell strings are always translated to a valid pattern reference before being used as a fill.
+
+---
+
+### Problem 2 — White/grey blocks (three compounding causes)
+
+**Where:** Block list card previews, layout list card previews, and the block palette inside the layout composer (blocks showed white until one was dragged onto the canvas, which triggered a re-render).
+
+Three bugs were stacked on top of each other:
+
+#### 2a — Wrong SVG pattern coordinate system (`objectBoundingBox`)
+
+SVG patterns have two coordinate systems: `objectBoundingBox` (relative, 0–1) and `userSpaceOnUse` (absolute pixels). The code was using `objectBoundingBox` with an `<image>` element — this is notoriously unreliable in browsers, especially for small cells and non-rectangular shapes (triangles, curves). The browser would either size the image incorrectly or skip it entirely, leaving the cell white.
+
+**Fix:** Switched all `<pattern>` elements in all three files to `patternUnits="userSpaceOnUse"` with explicit pixel dimensions (`width={cellPx} height={cellPx}`).
+
+#### 2b — Pattern ID mismatch in the composer palette (`BlockMini`)
+
+The block palette in the layout composer uses a component called `BlockMini` which renders each block as a small SVG thumbnail. It declared its fabric patterns in `<defs>` with IDs like `mini-fab-54`. But the shared `SvgCell` component was using a fill resolver (`resolveFabricFill`) that always generated `url(#layout-fab-54)` — a different ID. Because the ID didn't match any `<defs>` entry, the pattern was never found and the cell rendered white.
+
+**Fix:** Added a `patternPrefix` prop to `SvgCell`. `BlockMini` now passes `patternPrefix="mini-fab"` so its cells resolve to `url(#mini-fab-54)`, matching its own `<defs>`. The layout canvas continues to use the default `"layout-fab"` prefix unchanged. The fill resolver inside `SvgCell` was also inlined (replacing the shared `resolveFabricFill` call) so each caller fully controls its own prefix.
+
+#### 2c — Wrong loading gate in the palette
+
+The palette was guarded by `!fabricsList` — intended to show a skeleton while fabric data was loading. However, TanStack Query returns an empty array `[]` from cache almost immediately, and `![]` is `false` (empty arrays are truthy in JavaScript). So the skeleton never appeared, the palette rendered immediately with an empty `fabricUrlMap`, and `BlockMini` had no URLs to fill its patterns with — showing white.
+
+**Fix:** Changed the guard to use `fabricsLoading` (destructured from `useListFabrics()`), which is `true` only while the actual network request is in flight. The skeleton now shows during loading; the real block thumbnails mount only after `fabricUrlMap` is populated.
+
+---
+
+## Summary of changes
+
+| File | Change |
+|------|--------|
+| `blocks/index.tsx` | `objectBoundingBox` → `userSpaceOnUse` with `cellPx` dimensions in block card `<defs>` |
+| `layouts/index.tsx` | Same pattern coordinate system fix for layout card previews |
+| `layouts/composer.tsx` | (1) `patternPrefix` prop on `SvgCell` + inlined resolver; (2) `BlockMini` `<defs>` switched to `userSpaceOnUse`; (3) palette gate changed from `!fabricsList` to `fabricsLoading` |
+
+All changes typecheck cleanly (`pnpm run typecheck` passes across all workspace packages).

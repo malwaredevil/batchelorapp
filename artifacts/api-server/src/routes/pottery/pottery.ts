@@ -42,12 +42,18 @@ import {
   embedText,
   type AnalysisContext,
 } from "../../lib/pottery/openai";
+import { generateVisualEmbedding } from "../../lib/visual-embed";
 import { serializeItem, serializeItems } from "../../lib/pottery/serialize";
 
-// All columns except `embedding` — the 1536-dim vector is only needed in the
-// compare route's similarity search; excluding it from list/detail queries cuts
-// ~6 KB per row from every collection page load.
-const { embedding: _embedding, ...itemColumns } = getTableColumns(potteryItems);
+// All columns except the two embedding vectors — the 1536-dim text embedding and
+// the 1024-dim visual embedding are only needed in the compare route's
+// similarity search; excluding them from list/detail queries cuts several KB per
+// row from every collection page load.
+const {
+  embedding: _embedding,
+  visualEmbedding: _visualEmbedding,
+  ...itemColumns
+} = getTableColumns(potteryItems);
 
 const MAX_NAME = 200;
 const MAX_NOTES = 4000;
@@ -180,7 +186,13 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
   }
 
   const dataUrl = toDataUrl(cleanBuffer, contentType);
-  const analysis = await analyzeImage([dataUrl]);
+  // Analyse text + generate the visual embedding in parallel. The visual
+  // embedding gracefully returns null when JINA_API_KEY is absent, so the
+  // visual-search lane simply stays empty rather than hard-failing.
+  const [analysis, visualEmbedding] = await Promise.all([
+    analyzeImage([dataUrl]),
+    generateVisualEmbedding(cleanBuffer),
+  ]);
   const embedding = await embedText(buildEmbeddingText(analysis));
 
   const nameField = clampField(req.body?.name, MAX_NAME);
@@ -215,6 +227,7 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
         acquiredAt: today,
         imagePath,
         embedding,
+        visualEmbedding,
       })
       .returning();
 
@@ -300,7 +313,7 @@ router.patch("/items/:id", async (req, res) => {
   if (body.dimensions !== undefined)
     fieldUpdates.dimensions = clampField(body.dimensions, MAX_TEXT);
 
-  let row: Omit<PotteryItemRow, "embedding">;
+  let row: Omit<PotteryItemRow, "embedding" | "visualEmbedding">;
 
   if (Object.keys(fieldUpdates).length > 0) {
     const [updated] = await db
@@ -610,7 +623,13 @@ async function runItemAnalysis(id: number): Promise<unknown> {
   };
 
   const analysis = await analyzeImage(dataUrls, reanalysisContext);
-  const embedding = await embedText(buildEmbeddingText(analysis));
+  const [embedding, visualEmbedding] = await Promise.all([
+    embedText(buildEmbeddingText(analysis)),
+    // Regenerate the visual embedding from the (possibly swapped) primary image
+    // so it stays in sync with the stored primary photo. Returns null when
+    // JINA_API_KEY is absent — leaving the existing value untouched below.
+    generateVisualEmbedding(primaryResult.buffer),
+  ]);
 
   const locked = new Set(item.lockedFields ?? []);
   const keep = <T>(field: string, aiVal: T, existing: T): T =>
@@ -644,6 +663,9 @@ async function runItemAnalysis(id: number): Promise<unknown> {
       item.aiDescription,
     ),
     embedding,
+    // Only overwrite the visual embedding when one was generated — when
+    // JINA_API_KEY is absent the existing column value is left untouched.
+    ...(visualEmbedding ? { visualEmbedding } : {}),
   };
 
   const [updated] = await db

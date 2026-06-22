@@ -1,7 +1,12 @@
 import OpenAI from "openai";
-import { env } from "../env";
-
-const client = new OpenAI({ apiKey: env.openaiApiKey });
+import { callWithFallback, getOpenAIClient } from "../ai-client";
+import {
+  asString,
+  asStringArray,
+  asVerdict,
+  parseJson,
+  type Verdict,
+} from "../ai-parse";
 
 const VISION_MODEL = "gpt-4o-mini";
 // Full gpt-4o for the comparison step — visual deduction needs the sharper model.
@@ -9,7 +14,7 @@ const COMPARE_MODEL = "gpt-4o";
 const EMBEDDING_MODEL = "text-embedding-3-small";
 export const EMBEDDING_DIMENSIONS = 1536;
 
-export type Verdict = "yes" | "maybe" | "no";
+export type { Verdict };
 
 export interface VisionAnalysis {
   name: string;
@@ -22,37 +27,6 @@ export interface VisionAnalysis {
   dominantColors: string[];
   motifs: string[];
   aiDescription: string | null;
-}
-
-function asString(value: unknown): string | null {
-  if (typeof value === "string" && value.trim().length > 0) {
-    return value.trim();
-  }
-  return null;
-}
-
-function asStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
-    .map((v) => v.trim())
-    .slice(0, 8);
-}
-
-function asVerdict(value: unknown): Verdict {
-  return value === "yes" || value === "maybe" || value === "no" ? value : "no";
-}
-
-function parseJson(content: string | null): Record<string, unknown> {
-  if (!content) return {};
-  try {
-    const parsed = JSON.parse(content);
-    return typeof parsed === "object" && parsed !== null
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
 }
 
 const ANALYSIS_PROMPT = `You are an expert ceramics and pottery cataloguer. You will be given one or more photos of the same pottery piece — different angles, front and back, or close-ups. Use every photo to build the most accurate assessment you can.
@@ -212,17 +186,19 @@ export async function analyzeImage(
     ? `${contextBlock}\n\n${baseInstruction}`
     : baseInstruction;
 
-  const completion = await client.chat.completions.create({
-    model: VISION_MODEL,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: ANALYSIS_PROMPT },
-      {
-        role: "user",
-        content: [{ type: "text", text: userText }, ...imageContent],
-      },
-    ],
-  });
+  const completion = await callWithFallback((c) =>
+    c.chat.completions.create({
+      model: VISION_MODEL,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: ANALYSIS_PROMPT },
+        {
+          role: "user",
+          content: [{ type: "text", text: userText }, ...imageContent],
+        },
+      ],
+    }),
+  );
 
   const raw = parseJson(completion.choices[0]?.message?.content ?? null);
   return {
@@ -254,7 +230,7 @@ export function buildEmbeddingText(analysis: VisionAnalysis): string {
 }
 
 export async function embedText(text: string): Promise<number[]> {
-  const response = await client.embeddings.create({
+  const response = await getOpenAIClient().embeddings.create({
     model: EMBEDDING_MODEL,
     input: text,
   });
@@ -357,14 +333,16 @@ export async function compareWithMatches(params: {
     }
   }
 
-  const completion = await client.chat.completions.create({
-    model: COMPARE_MODEL,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: COMPARE_PROMPT },
-      { role: "user", content },
-    ],
-  });
+  const completion = await callWithFallback((c) =>
+    c.chat.completions.create({
+      model: COMPARE_MODEL,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: COMPARE_PROMPT },
+        { role: "user", content },
+      ],
+    }),
+  );
 
   const raw = parseJson(completion.choices[0]?.message?.content ?? null);
   const rawMatches =

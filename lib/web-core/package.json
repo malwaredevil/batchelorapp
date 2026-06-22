@@ -1,0 +1,24 @@
+{
+  "name": "@workspace/web-core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./utils": "./src/utils.ts",
+    "./auth": "./src/auth.tsx",
+    "./use-mobile": "./src/use-mobile.tsx",
+    "./colors": "./src/colors.ts"
+  },
+  "dependencies": {
+    "@workspace/api-client-react": "workspace:*",
+    "clsx": "catalog:",
+    "tailwind-merge": "catalog:"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:"
+  }
+}

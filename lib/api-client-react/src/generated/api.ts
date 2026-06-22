@@ -80,7 +80,8 @@ import type {
   QuiltingUpdatePatternInput,
   QuiltingUpdateQuiltInput,
   QuiltingUpdateShoppingItemInput,
-  ResetPasswordInput
+  ResetPasswordInput,
+  UpdateAccountInput
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -389,6 +390,77 @@ export function useGetCurrentUser<TData = Awaited<ReturnType<typeof getCurrentUs
 
 
 
+
+export const getUpdateCurrentUserUrl = () => {
+
+
+
+
+  return `/api/auth/me`
+}
+
+/**
+ * @summary Update the current user's account settings
+ */
+export const updateCurrentUser = async (updateAccountInput: UpdateAccountInput, options?: RequestInit): Promise<AuthUser> => {
+
+  return customFetch<AuthUser>(getUpdateCurrentUserUrl(),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateAccountInput,)
+  }
+);}
+
+
+
+
+export const getUpdateCurrentUserMutationOptions = <TError = ErrorType<Error | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCurrentUser>>, TError,{data: BodyType<UpdateAccountInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateCurrentUser>>, TError,{data: BodyType<UpdateAccountInput>}, TContext> => {
+
+const mutationKey = ['updateCurrentUser'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCurrentUser>>, {data: BodyType<UpdateAccountInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateCurrentUser(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateCurrentUserMutationResult = NonNullable<Awaited<ReturnType<typeof updateCurrentUser>>>
+    export type UpdateCurrentUserMutationBody = BodyType<UpdateAccountInput>
+    export type UpdateCurrentUserMutationError = ErrorType<Error | void>
+
+    /**
+ * @summary Update the current user's account settings
+ */
+export const useUpdateCurrentUser = <TError = ErrorType<Error | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCurrentUser>>, TError,{data: BodyType<UpdateAccountInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateCurrentUser>>,
+        TError,
+        {data: BodyType<UpdateAccountInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateCurrentUserMutationOptions(options));
+    }
 
 export const getGetAuthProvidersUrl = () => {
 

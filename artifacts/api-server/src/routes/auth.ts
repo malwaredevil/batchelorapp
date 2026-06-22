@@ -7,6 +7,8 @@ import {
   LoginBody,
   LoginResponse,
   GetCurrentUserResponse,
+  UpdateCurrentUserBody,
+  UpdateCurrentUserResponse,
   GetAuthProvidersResponse,
   ChangePasswordBody,
   ForgotPasswordBody,
@@ -120,7 +122,68 @@ router.get("/auth/me", requireAuth, async (req, res) => {
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
-  res.json(GetCurrentUserResponse.parse({ id: user.id, email: user.email }));
+  res.json(
+    GetCurrentUserResponse.parse({
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName ?? null,
+      themePreference: user.themePreference ?? null,
+    }),
+  );
+});
+
+const VALID_THEMES = new Set(["light", "dark"]);
+
+router.patch("/auth/me", requireAuth, async (req, res) => {
+  const parsed = UpdateCurrentUserBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid account settings." });
+    return;
+  }
+
+  const updates: Partial<{
+    displayName: string | null;
+    themePreference: string | null;
+  }> = {};
+
+  if (parsed.data.displayName !== undefined) {
+    const name = parsed.data.displayName;
+    updates.displayName =
+      name === null ? null : name.trim().slice(0, 100) || null;
+  }
+  if (parsed.data.themePreference !== undefined) {
+    const theme = parsed.data.themePreference;
+    updates.themePreference =
+      theme && VALID_THEMES.has(theme) ? theme : null;
+  }
+
+  let user;
+  if (Object.keys(updates).length > 0) {
+    [user] = await db
+      .update(appUsers)
+      .set(updates)
+      .where(eq(appUsers.id, req.session.userId!))
+      .returning();
+  } else {
+    [user] = await db
+      .select()
+      .from(appUsers)
+      .where(eq(appUsers.id, req.session.userId!))
+      .limit(1);
+  }
+
+  if (!user) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  res.json(
+    UpdateCurrentUserResponse.parse({
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName ?? null,
+      themePreference: user.themePreference ?? null,
+    }),
+  );
 });
 
 router.get("/auth/providers", (_req, res) => {

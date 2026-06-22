@@ -567,6 +567,9 @@ importers:
       '@workspace/api-client-react':
         specifier: workspace:*
         version: link:../../lib/api-client-react
+      '@workspace/web-core':
+        specifier: workspace:*
+        version: link:../../lib/web-core
       class-variance-authority:
         specifier: 'catalog:'
         version: 0.7.1
@@ -759,6 +762,9 @@ importers:
       '@workspace/api-client-react':
         specifier: workspace:*
         version: link:../../lib/api-client-react
+      '@workspace/web-core':
+        specifier: workspace:*
+        version: link:../../lib/web-core
       class-variance-authority:
         specifier: 'catalog:'
         version: 0.7.1
@@ -1075,6 +1081,22 @@ importers:
       tsx:
         specifier: 'catalog:'
         version: 4.21.0
+
+  lib/web-core:
+    dependencies:
+      '@workspace/api-client-react':
+        specifier: workspace:*
+        version: link:../api-client-react
+      clsx:
+        specifier: 'catalog:'
+        version: 2.1.1
+      tailwind-merge:
+        specifier: 'catalog:'
+        version: 3.5.0
+    devDependencies:
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.14
 
   scripts:
     dependencies:

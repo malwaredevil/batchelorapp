@@ -9,7 +9,10 @@ import {
 } from "@workspace/db";
 
 // Embedding is excluded from list/detail queries — serialize only needs the rest.
-type ItemRowForSerialization = Omit<PotteryItemRow, "embedding">;
+type ItemRowForSerialization = Omit<
+  PotteryItemRow,
+  "embedding" | "visualEmbedding"
+>;
 
 export interface CategoryResult {
   id: number;

@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import {
+  createContext,
+  createElement,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 
 export type Theme = "light" | "dark";
 
@@ -20,7 +28,18 @@ function applyTheme(theme: Theme) {
   }
 }
 
-export function useTheme() {
+interface ThemeContextValue {
+  theme: Theme;
+  setTheme: (theme: Theme) => void;
+  toggleTheme: () => void;
+  isDark: boolean;
+}
+
+const ThemeContext = createContext<ThemeContextValue | null>(null);
+
+// Single source of truth for the theme — shared across the whole shell so the
+// header toggle, account page, and server-pref sync never desynchronize.
+export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
 
   useEffect(() => {
@@ -32,5 +51,17 @@ export function useTheme() {
     setTheme((t) => (t === "dark" ? "light" : "dark"));
   }, []);
 
-  return { theme, setTheme, toggleTheme, isDark: theme === "dark" };
+  return createElement(
+    ThemeContext.Provider,
+    { value: { theme, setTheme, toggleTheme, isDark: theme === "dark" } },
+    children,
+  );
+}
+
+export function useTheme(): ThemeContextValue {
+  const ctx = useContext(ThemeContext);
+  if (!ctx) {
+    throw new Error("useTheme must be used within a ThemeProvider");
+  }
+  return ctx;
 }

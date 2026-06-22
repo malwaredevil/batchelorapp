@@ -1,3 +1,3 @@
-- [Merge architecture](merge-architecture.md) — how pottery+quilting fold into batchelorapp: landing shell at /, sub-apps as separate artifacts at /pottery & /quilting, source repos layout.
-- [API contract packaging](api-contract-packaging.md) — unified OpenAPI built by a deterministic composition script (not per-app libs, not hand-merge); namespacing matrix + opId/schema rules.
-- [Single DDL source of truth](merge-architecture.md#single-ddl-source-of-truth) — bootstrap CLI + api-server startup migration both run one shared `STATEMENTS` list; never duplicate DDL or one entrypoint provisions a partial schema.
+- [Ad-hoc Supabase access from dev](supabase-adhoc-access.md) — sandbox env is empty & direct Postgres is DNS-blocked; for one-off DB writes use the Supabase REST API from a bash-invoked Node script.
+- [Sharing code across artifacts](shared-code-extraction.md) — cross-artifact shared code must be a lib/* package (leaf apps can't import each other); dedup via thin re-export adapters to preserve import surfaces.
+- [Hybrid AI retrieval](hybrid-ai-retrieval.md) — compare endpoints fuse text+visual embeddings (RRF k=60) then Voyage rerank; perMatch is keyed by sequential index, and visual_embedding must only be overwritten when non-null.

@@ -44,6 +44,7 @@ export const potteryItems = pgTable(
       .notNull()
       .default(sql`'{}'::text[]`),
     embedding: vector("embedding", { dimensions: 1536 }),
+    visualEmbedding: vector("visual_embedding", { dimensions: 1024 }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -52,6 +53,10 @@ export const potteryItems = pgTable(
     index("pottery_embedding_idx").using(
       "hnsw",
       table.embedding.op("vector_cosine_ops"),
+    ),
+    index("pottery_visual_embedding_idx").using(
+      "hnsw",
+      table.visualEmbedding.op("vector_cosine_ops"),
     ),
   ],
 ).enableRLS();

@@ -17,6 +17,8 @@ import {
   compareWithMatches,
   type CompareMatchInput,
 } from "../../lib/pottery/openai";
+import { generateVisualEmbedding } from "../../lib/visual-embed";
+import { rerankCandidates } from "../../lib/reranker";
 import { downloadAndShrinkImageForAi } from "../../lib/pottery/storage";
 import { serializeItems } from "../../lib/pottery/serialize";
 
@@ -25,17 +27,95 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 2, fieldSize: 8192 },
 });
 
-// Candidate cap for the vector similarity search.  Keeping this small limits
-// the number of images downloaded and forwarded to OpenAI in one request,
-// which bounds per-request memory use.  A private collection is small enough
-// that 10 strong candidates gives the model all the signal it needs.
+// How many top candidates (after reranking) go to the GPT vision call. A private
+// collection is small enough that 10 strong candidates give the model all the
+// signal it needs while bounding per-request image downloads and cost.
 const TOP_K = 10;
 
 // Max supplemental angles per collection piece sent to the vision model.
 // One extra angle is enough context; more would multiply download cost.
 const MAX_EXTRA_IMAGES = 1;
 
-const { embedding: _embedding, ...itemColumns } = getTableColumns(potteryItems);
+// Wider pools feed the Voyage reranker with more signal; the reranker trims to TOP_K.
+const TEXT_SEARCH_POOL = 30;
+const VISUAL_SEARCH_POOL = 30;
+
+// Exclude both embedding vectors — heavy and not needed in API responses.
+const {
+  embedding: _embedding,
+  visualEmbedding: _visualEmbedding,
+  ...itemColumns
+} = getTableColumns(potteryItems);
+
+// ---------------------------------------------------------------------------
+// Reciprocal Rank Fusion (k=60) — blends text and visual ranking lists.
+// Pieces appearing in both lists rise higher; textSimilarity from the text lane
+// is preserved for the GPT prompt and verdict flooring (more interpretable than
+// the RRF score).
+// ---------------------------------------------------------------------------
+function reciprocalRankFusion(
+  textRanked: Array<{ id: number; similarity: number }>,
+  visualRanked: Array<{ id: number; similarity: number }>,
+  k = 60,
+): Array<{ id: number; rrfScore: number; textSimilarity: number }> {
+  const scores = new Map<
+    number,
+    { rrfScore: number; textSimilarity: number }
+  >();
+
+  for (const { id, similarity } of textRanked) {
+    scores.set(id, { rrfScore: 0, textSimilarity: similarity });
+  }
+  for (const { id } of visualRanked) {
+    if (!scores.has(id)) scores.set(id, { rrfScore: 0, textSimilarity: 0 });
+  }
+  for (let i = 0; i < textRanked.length; i++) {
+    scores.get(textRanked[i].id)!.rrfScore += 1 / (k + i + 1);
+  }
+  for (let i = 0; i < visualRanked.length; i++) {
+    scores.get(visualRanked[i].id)!.rrfScore += 1 / (k + i + 1);
+  }
+
+  return Array.from(scores.entries())
+    .map(([id, { rrfScore, textSimilarity }]) => ({
+      id,
+      rrfScore,
+      textSimilarity,
+    }))
+    .sort((a, b) => b.rrfScore - a.rrfScore)
+    .slice(0, TOP_K);
+}
+
+/**
+ * Build a plain-text document from a pottery piece's structured attributes —
+ * this is what the Voyage reranker scores against the uploaded piece's text.
+ */
+function buildPotteryDocument(attrs: {
+  name: string | null;
+  style?: string | null;
+  shape?: string | null;
+  maker?: string | null;
+  patternDescription?: string | null;
+  motifs?: unknown;
+  dominantColors?: unknown;
+  aiDescription?: string | null;
+}): string {
+  const parts: string[] = [];
+  if (attrs.name) parts.push(`Name: ${attrs.name}`);
+  if (attrs.style) parts.push(`Style: ${attrs.style}`);
+  if (attrs.shape) parts.push(`Shape: ${attrs.shape}`);
+  if (attrs.maker) parts.push(`Maker: ${attrs.maker}`);
+  if (attrs.patternDescription)
+    parts.push(`Pattern: ${attrs.patternDescription}`);
+  const motifs = Array.isArray(attrs.motifs) ? (attrs.motifs as string[]) : [];
+  if (motifs.length) parts.push(`Motifs: ${motifs.join(", ")}`);
+  const colors = Array.isArray(attrs.dominantColors)
+    ? (attrs.dominantColors as string[])
+    : [];
+  if (colors.length) parts.push(`Colours: ${colors.join(", ")}`);
+  if (attrs.aiDescription) parts.push(attrs.aiDescription);
+  return parts.join(". ") || "Unknown pottery piece";
+}
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -55,10 +135,17 @@ router.post("/compare", aiLimiter, upload.single("image"), async (req, res) => {
   }
 
   // Strip all embedded metadata (EXIF, GPS, XMP, ICC) before sending the
-  // candidate image to OpenAI — the AI feature needs pixels, not metadata.
+  // candidate image to the AI — the feature needs pixels, not metadata.
   const cleanBuffer = await stripImageMetadata(file.buffer, contentType);
   const dataUrl = toDataUrl(cleanBuffer, contentType);
-  const analysis = await analyzeImage([dataUrl]);
+
+  // Analyse text + generate the visual embedding in parallel. The visual
+  // embedding gracefully returns null when JINA_API_KEY is absent, so the
+  // visual lane simply stays empty rather than hard-failing.
+  const [analysis, visualEmb] = await Promise.all([
+    analyzeImage([dataUrl]),
+    generateVisualEmbedding(cleanBuffer),
+  ]);
   const embedding = await embedText(buildEmbeddingText(analysis));
 
   const candidate = {
@@ -72,20 +159,50 @@ router.post("/compare", aiLimiter, upload.single("image"), async (req, res) => {
   };
 
   const vectorLiteral = `[${embedding.join(",")}]`;
-  const ranked = await db.execute<{ id: number; similarity: number }>(sql`
-    select id, 1 - (embedding <=> ${vectorLiteral}::vector) as similarity
-    from pottery_items
-    where embedding is not null
-    order by embedding <=> ${vectorLiteral}::vector
-    limit ${TOP_K}
-  `);
 
-  const rankedRows = ranked.rows.map((r) => ({
-    id: Number(r.id),
-    similarity: Number(r.similarity),
-  }));
+  // Text vector search (always) + visual vector search (when available) in parallel.
+  const [textRanked, visualRanked] = await Promise.all([
+    db
+      .execute<{ id: number; similarity: number }>(
+        sql`
+        select id, 1 - (embedding <=> ${vectorLiteral}::vector) as similarity
+        from pottery_items
+        where embedding is not null
+        order by embedding <=> ${vectorLiteral}::vector
+        limit ${TEXT_SEARCH_POOL}
+      `,
+      )
+      .then((r) =>
+        r.rows.map((row) => ({
+          id: Number(row.id),
+          similarity: Number(row.similarity),
+        })),
+      ),
+    visualEmb
+      ? db
+          .execute<{ id: number; similarity: number }>(
+            sql`
+            select id, 1 - (visual_embedding <=> ${`[${visualEmb.join(",")}]`}::vector) as similarity
+            from pottery_items
+            where visual_embedding is not null
+            order by visual_embedding <=> ${`[${visualEmb.join(",")}]`}::vector
+            limit ${VISUAL_SEARCH_POOL}
+          `,
+          )
+          .then((r) =>
+            r.rows.map((row) => ({
+              id: Number(row.id),
+              similarity: Number(row.similarity),
+            })),
+          )
+      : Promise.resolve([] as Array<{ id: number; similarity: number }>),
+  ]);
 
-  if (rankedRows.length === 0) {
+  // Merge via RRF. Falls back to text-only when the visual lane is empty
+  // (no JINA_API_KEY or no visual embeddings stored yet).
+  const mergedRanking = reciprocalRankFusion(textRanked, visualRanked);
+
+  if (mergedRanking.length === 0) {
     res.json(
       ComparePotteryResponse.parse({
         candidate,
@@ -99,17 +216,44 @@ router.post("/compare", aiLimiter, upload.single("image"), async (req, res) => {
     return;
   }
 
-  const ids = rankedRows.map((r) => r.id);
-  const similarityById = new Map(rankedRows.map((r) => [r.id, r.similarity]));
-
   const rows = await db
     .select(itemColumns)
     .from(potteryItems)
-    .where(inArray(potteryItems.id, ids));
+    .where(
+      inArray(
+        potteryItems.id,
+        mergedRanking.map((r) => r.id),
+      ),
+    );
   const rowById = new Map(rows.map((row) => [row.id, row]));
-  const orderedRows = ids
-    .map((id) => rowById.get(id))
+
+  // ── Voyage reranker ────────────────────────────────────────────────────────
+  // Re-score all RRF candidates against the uploaded piece's text description.
+  // Falls back to the RRF order silently when VOYAGE_API_KEY is absent or the
+  // call fails. After reranking, only TOP_K candidates proceed to the vision
+  // model — bounding GPT cost and focusing it on the best matches.
+  const rerankQuery = buildEmbeddingText(analysis);
+  const rerankDocs = mergedRanking.map(({ id }) => {
+    const row = rowById.get(id);
+    return {
+      id,
+      text: row ? buildPotteryDocument(row) : "Unknown pottery piece",
+    };
+  });
+  const rerankedIds = await rerankCandidates(rerankQuery, rerankDocs, TOP_K);
+  const rerankedRanking = rerankedIds
+    .map((id) => mergedRanking.find((r) => r.id === id))
+    .filter((r): r is NonNullable<typeof r> => r != null);
+
+  const similarityById = new Map(
+    rerankedRanking.map((r) => [r.id, r.textSimilarity]),
+  );
+
+  // Ordered candidate rows, in reranked order.
+  const orderedRows = rerankedRanking
+    .map((r) => rowById.get(r.id))
     .filter((row): row is NonNullable<typeof row> => row !== undefined);
+  const ids = orderedRows.map((row) => row.id);
 
   // Fetch supplemental images for all matched pieces in one query.
   const suppRows = await db
@@ -130,12 +274,10 @@ router.post("/compare", aiLimiter, upload.single("image"), async (req, res) => {
   const serialized = await serializeItems(orderedRows);
 
   // Download primary + supplemental images, shrinking each to at most
-  // 1024×1024 JPEG before forwarding to OpenAI.  This bounds per-image memory
-  // to roughly 50–300 KB regardless of the original upload size, so a
-  // worst-case request (TOP_K items × (1 primary + MAX_EXTRA_IMAGES
-  // supplemental)) stays well within safe memory limits.
-  // The full-resolution signed URLs in `serialized` are still returned to the
-  // authenticated client; only the AI path uses the shrunk copies.
+  // 1024×1024 JPEG before forwarding to the AI. This bounds per-image memory to
+  // roughly 50–300 KB regardless of the original upload size. The full-resolution
+  // signed URLs in `serialized` are still returned to the authenticated client;
+  // only the AI path uses the shrunk copies.
   const matchDataUrls = await Promise.all(
     orderedRows.map((row) => downloadAndShrinkImageForAi(row.imagePath)),
   );
@@ -166,10 +308,10 @@ router.post("/compare", aiLimiter, upload.single("image"), async (req, res) => {
     matches: verdictInputs,
   });
 
-  // Safety net: the embedding similarity score measures how close the
-  // AI-extracted pattern descriptions are. A high score is strong evidence
-  // the patterns match regardless of what the vision model concludes from
-  // photos alone (different angles, lighting, etc. can fool it).
+  // Safety net: the text-embedding similarity score measures how close the
+  // AI-extracted pattern descriptions are. A high score is strong evidence the
+  // patterns match regardless of what the vision model concludes from photos
+  // alone (different angles, lighting, etc. can fool it).
   // Floor the per-match verdict up when the embedding strongly disagrees.
   const FLOOR_TO_MAYBE = 0.78; // similarity >= this: "no" → "maybe"
   const FLOOR_TO_YES = 0.9; // similarity >= this: "no"/"maybe" → "yes"

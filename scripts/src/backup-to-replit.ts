@@ -7,8 +7,8 @@
  *
  * What is backed up:
  *   Shared:  app_users
- *   Pottery: pottery_categories, pottery_items (WITHOUT embedding), pottery_images,
- *            pottery_item_categories
+ *   Pottery: pottery_categories, pottery_items (WITHOUT embedding/visual_embedding),
+ *            pottery_images, pottery_item_categories
  *   Quilting: quilting_categories, quilting_fabrics (WITHOUT embedding/visual_embedding),
  *             quilting_patterns (WITHOUT embedding/visual_embedding),
  *             quilting_finished_quilts, quilting_fabric_links, quilting_pattern_links,
@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS app_users (
   password_hash TEXT NOT NULL,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS display_name TEXT;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS theme_preference TEXT;
 
 -- Pottery
 CREATE TABLE IF NOT EXISTS pottery_categories (
@@ -286,7 +288,14 @@ async function main() {
   // ── Shared ────────────────────────────────────────────────────────────────
   summary["app_users"] = await copyTable(source, dest, {
     table: "app_users",
-    columns: ["id", "email", "password_hash", "created_at"],
+    columns: [
+      "id",
+      "email",
+      "password_hash",
+      "display_name",
+      "theme_preference",
+      "created_at",
+    ],
     orderBy: "id",
   });
   await resetSequence(dest, "app_users", "id");

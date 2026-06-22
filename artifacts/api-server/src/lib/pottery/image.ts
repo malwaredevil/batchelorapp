@@ -1,80 +1,39 @@
 import sharp from "sharp";
 
-export type SupportedImageType = "image/jpeg" | "image/png" | "image/webp";
+// Shared, hardened image primitives (strict pixel ceiling, EXIF orientation
+// baked in, metadata stripped, storage-dimension cap) live in ../image. Pottery
+// re-exports them so its upload/compare paths get the same decompression-bomb
+// and EXIF protections as quilting, while keeping the historical pottery import
+// surface (shrinkForAi / AI_IMAGE_CONTENT_TYPE) unchanged.
+export {
+  sniffImageType,
+  toDataUrl,
+  stripImageMetadata,
+  type SupportedImageType,
+} from "../image";
 
 /**
- * Sniff the real image type from the file's magic bytes. Returns null for any
- * content that is not a supported image, regardless of the declared MIME type.
+ * Hard ceiling on the number of pixels Sharp will decode from any input — guards
+ * against decompression-bomb uploads (a tiny file that expands to a huge raster).
+ * 50 MP covers any real phone/camera photo while blocking pathological inputs.
  */
-export function sniffImageType(buffer: Buffer): SupportedImageType | null {
-  if (buffer.length < 12) return null;
+const MAX_INPUT_PIXELS = 50_000_000;
 
-  // JPEG: FF D8 FF
-  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
-    return "image/jpeg";
-  }
-
-  // PNG: 89 50 4E 47 0D 0A 1A 0A
-  if (
-    buffer[0] === 0x89 &&
-    buffer[1] === 0x50 &&
-    buffer[2] === 0x4e &&
-    buffer[3] === 0x47
-  ) {
-    return "image/png";
-  }
-
-  // WEBP: "RIFF" .... "WEBP"
-  if (
-    buffer.toString("ascii", 0, 4) === "RIFF" &&
-    buffer.toString("ascii", 8, 12) === "WEBP"
-  ) {
-    return "image/webp";
-  }
-
-  return null;
-}
-
-export function toDataUrl(buffer: Buffer, contentType: string): string {
-  return `data:${contentType};base64,${buffer.toString("base64")}`;
-}
-
-/**
- * Re-encode an image through sharp to strip all embedded metadata (EXIF, ICC
- * profiles, XMP, GPS, etc.) without altering the visible pixels.  The output
- * uses the same container format as the input so callers can continue using
- * the original `contentType`.
- */
-export async function stripImageMetadata(
-  buffer: Buffer,
-  contentType: SupportedImageType,
-): Promise<Buffer> {
-  const pipeline = sharp(buffer);
-  switch (contentType) {
-    case "image/jpeg":
-      return pipeline.jpeg().toBuffer();
-    case "image/png":
-      return pipeline.png().toBuffer();
-    case "image/webp":
-      return pipeline.webp().toBuffer();
-  }
-}
+const AI_MAX_DIMENSION = 1024;
+const AI_JPEG_QUALITY = 82;
 
 /**
  * Downscale and re-encode a stored image before sending it to the AI.
  *
- * Resize to at most AI_MAX_DIMENSION × AI_MAX_DIMENSION (preserving aspect
- * ratio), strip all metadata, and encode as JPEG at AI_JPEG_QUALITY.  This
- * bounds each image to roughly 50–300 KB regardless of the original upload
- * size, preventing a high image-count compare request from exhausting memory.
- *
- * Always outputs JPEG so the returned content-type is predictable.
+ * Decode under a strict pixel ceiling, bake in EXIF orientation, resize to at
+ * most AI_MAX_DIMENSION × AI_MAX_DIMENSION (preserving aspect ratio), strip all
+ * metadata, and encode as JPEG. This bounds each image to roughly 50–300 KB
+ * regardless of the original upload size, preventing a high image-count compare
+ * request from exhausting memory.
  */
-const AI_MAX_DIMENSION = 1024;
-const AI_JPEG_QUALITY = 82;
-
 export async function shrinkForAi(buffer: Buffer): Promise<Buffer> {
-  return sharp(buffer)
+  return sharp(buffer, { limitInputPixels: MAX_INPUT_PIXELS })
+    .rotate()
     .resize(AI_MAX_DIMENSION, AI_MAX_DIMENSION, {
       fit: "inside",
       withoutEnlargement: true,

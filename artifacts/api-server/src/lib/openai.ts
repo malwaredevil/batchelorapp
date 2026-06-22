@@ -1,13 +1,20 @@
 import OpenAI from "openai";
 import { callWithFallback, callModel, getOpenAIClient } from "./ai-client";
 import { classifyPrintType } from "./visual-embed";
+import {
+  asString,
+  asStringArray,
+  asVerdict,
+  parseJson,
+  type Verdict,
+} from "./ai-parse";
 
 const VISION_MODEL = "gpt-4o-mini";
 const COMPARE_MODEL = "gpt-4o";
 const EMBEDDING_MODEL = "text-embedding-3-small";
 export const EMBEDDING_DIMENSIONS = 1536;
 
-export type Verdict = "yes" | "maybe" | "no";
+export type { Verdict };
 
 export interface VisionAnalysis {
   name: string;
@@ -21,37 +28,6 @@ export interface VisionAnalysis {
   motifs: string[];
   styleDescriptors: string[];
   aiDescription: string | null;
-}
-
-function asString(value: unknown): string | null {
-  if (typeof value === "string" && value.trim().length > 0) {
-    return value.trim();
-  }
-  return null;
-}
-
-function asStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
-    .map((v) => v.trim())
-    .slice(0, 8);
-}
-
-function asVerdict(value: unknown): Verdict {
-  return value === "yes" || value === "maybe" || value === "no" ? value : "no";
-}
-
-function parseJson(content: string | null): Record<string, unknown> {
-  if (!content) return {};
-  try {
-    const parsed = JSON.parse(content);
-    return typeof parsed === "object" && parsed !== null
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
 }
 
 const ANALYSIS_PROMPT = `You are an expert quilting fabric cataloguer with deep knowledge of fabric manufacturers, designers, and collections. You will be given one or more photos of the same fabric — different angles, close-ups, or selvage shots. Use every photo to build the most accurate assessment you can.

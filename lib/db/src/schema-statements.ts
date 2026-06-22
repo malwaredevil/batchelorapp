@@ -29,6 +29,9 @@ export const STATEMENTS: string[] = [
     created_at timestamptz NOT NULL DEFAULT now()
   )`,
   `ALTER TABLE app_users ENABLE ROW LEVEL SECURITY`,
+  // Account settings (shared across both apps): per-user display name + theme.
+  `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS display_name text`,
+  `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS theme_preference text`,
 
   // ── Shared password reset tokens (superset of both apps' definitions) ──────
   `CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -296,6 +299,9 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE quilting_shopping_items ENABLE ROW LEVEL SECURITY`,
 
   // ── Visual embeddings (Jina CLIP v2, 1024-dim) ──────────────────────────────
+  `ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS visual_embedding vector(1024)`,
+  `CREATE INDEX IF NOT EXISTS pottery_visual_embedding_idx
+     ON pottery_items USING hnsw (visual_embedding vector_cosine_ops)`,
   `ALTER TABLE quilting_fabrics ADD COLUMN IF NOT EXISTS visual_embedding vector(1024)`,
   `CREATE INDEX IF NOT EXISTS quilting_fabrics_visual_embedding_idx
      ON quilting_fabrics USING hnsw (visual_embedding vector_cosine_ops)`,

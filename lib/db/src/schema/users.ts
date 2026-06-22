@@ -12,6 +12,9 @@ export const appUsers = pgTable("app_users", {
   id: serial("id").primaryKey(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
+  // Account settings shared across both apps.
+  displayName: text("display_name"),
+  themePreference: text("theme_preference"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

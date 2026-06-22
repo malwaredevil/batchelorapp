@@ -15,13 +15,36 @@ export interface LoginInput {
   rememberMe?: boolean;
 }
 
+export type AuthUserThemePreference = typeof AuthUserThemePreference[keyof typeof AuthUserThemePreference] | null;
+
+
+export const AuthUserThemePreference = {
+  light: 'light',
+  dark: 'dark',
+} as const;
+
 export interface AuthUser {
   id: number;
   email: string;
+  displayName?: string | null;
+  themePreference?: AuthUserThemePreference;
 }
 
 export interface Error {
   error: string;
+}
+
+export type UpdateAccountInputThemePreference = typeof UpdateAccountInputThemePreference[keyof typeof UpdateAccountInputThemePreference] | null;
+
+
+export const UpdateAccountInputThemePreference = {
+  light: 'light',
+  dark: 'dark',
+} as const;
+
+export interface UpdateAccountInput {
+  displayName?: string | null;
+  themePreference?: UpdateAccountInputThemePreference;
 }
 
 export interface AuthProviders {

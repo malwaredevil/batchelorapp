@@ -1,16 +1,6 @@
 import { type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import {
-  LayoutGrid,
-  PlusCircle,
-  ScanSearch,
-  LogOut,
-  Tag,
-  Wrench,
-  Settings,
-  KeyRound,
-  ChevronDown,
-} from "lucide-react";
+import { LogOut, Settings, ChevronDown } from "lucide-react";
 import { AppLogo } from "@/components/app-logo";
 import {
   useLogout,
@@ -26,34 +16,23 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-const MAIN_NAV = [
-  { href: "/", label: "Collection", icon: LayoutGrid },
-  { href: "/add", label: "Add piece", icon: PlusCircle },
-  { href: "/compare", label: "Compare", icon: ScanSearch },
-];
-
-const SETTINGS_NAV = [
-  { href: "/categories", label: "Categories", icon: Tag },
-  { href: "/maintenance", label: "Maintenance", icon: Wrench },
-  { href: "/account", label: "Account", icon: KeyRound },
-];
-
-const SETTINGS_PATHS = SETTINGS_NAV.map((s) => s.href);
+import { getNavItemsByGroup } from "@/features/registry";
 
 function isActive(current: string, href: string) {
   if (href === "/") return current === "/";
   return current === href || current.startsWith(href + "/");
 }
 
-function isSettingsActive(current: string) {
-  return SETTINGS_PATHS.some(
-    (p) => current === p || current.startsWith(p + "/"),
-  );
-}
-
 export function AppShell({ children }: { children: ReactNode }) {
   const [location, navigate] = useLocation();
+  const groups = getNavItemsByGroup();
+  const mainNav = groups.main;
+  const settingsNav = groups.settings;
+
+  const isSettingsActive = (current: string) =>
+    settingsNav.some(
+      (s) => current === s.href || current.startsWith(s.href + "/"),
+    );
   const queryClient = useQueryClient();
   const logout = useLogout({
     mutation: {
@@ -92,7 +71,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <div className="flex items-center gap-1">
             <nav className="mr-1 hidden items-center gap-1 md:flex">
-              {MAIN_NAV.map((item) => {
+              {mainNav.map((item) => {
                 const active = isActive(location, item.href);
                 return (
                   <Link
@@ -129,7 +108,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-44">
-                  {SETTINGS_NAV.map((item) => (
+                  {settingsNav.map((item) => (
                     <DropdownMenuItem
                       key={item.href}
                       onClick={() => navigate(item.href)}
@@ -168,7 +147,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Mobile bottom nav */}
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-card-border bg-background/95 backdrop-blur md:hidden">
         <div className="mx-auto flex max-w-md items-stretch justify-around px-2 py-1.5">
-          {MAIN_NAV.map((item) => {
+          {mainNav.map((item) => {
             const active = isActive(location, item.href);
             return (
               <Link

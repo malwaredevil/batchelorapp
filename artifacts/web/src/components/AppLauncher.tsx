@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   Menu,
   Search,
@@ -11,13 +12,50 @@ import {
   Moon,
   PlusCircle,
   LayoutGrid,
+  X,
+  Check,
+  LogOut,
+  User,
 } from "lucide-react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { useTheme } from "@/hooks/use-theme";
-import { APPS, WIDGETS } from "@/config/apps";
+import { useWidgets } from "@/hooks/use-widgets";
+import { useAuth } from "@/lib/auth";
+import { APPS } from "@/config/apps";
+
+const base = import.meta.env.BASE_URL;
+
+function initialsFrom(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
 const RECENT_ACTIVITY = [
   { title: "Added 'Speckled Mug'", cat: "Pottery", time: "2 hours ago" },
@@ -26,8 +64,51 @@ const RECENT_ACTIVITY = [
   { title: "Completed 'Star Pattern'", cat: "Quilting", time: "Last week" },
 ];
 
+const QUICK_ACTIONS = [
+  { id: "add-item", label: "Add Item", icon: Plus },
+  { id: "do-i-own", label: "Do I own this?", icon: Camera },
+  { id: "shopping-list", label: "Shopping List", icon: ShoppingBag },
+];
+
 export function AppLauncher() {
   const { isDark, toggleTheme } = useTheme();
+  const { enabled, available, addWidget, removeWidget } = useWidgets();
+  const { user } = useAuth();
+
+  const displayName = user?.displayName?.trim() || user?.email || "there";
+  const firstName = displayName.split(/[\s@]/)[0] || displayName;
+  const initials = initialsFrom(user?.displayName?.trim() || user?.email || "?");
+
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [customizing, setCustomizing] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+
+  // ⌘K / Ctrl+K opens the global search palette.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setSearchOpen((o) => !o);
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  function navigate(href: string) {
+    window.location.href = href;
+  }
+
+  async function signOut() {
+    try {
+      await fetch(`${base}api/auth/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } finally {
+      window.location.href = base;
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans flex flex-col">
@@ -49,6 +130,7 @@ export function AppLauncher() {
           <Button
             variant="outline"
             size="sm"
+            onClick={() => setSearchOpen(true)}
             className="hidden md:flex items-center gap-2 text-muted-foreground border-border"
           >
             <Search className="w-4 h-4" />
@@ -69,25 +151,84 @@ export function AppLauncher() {
             {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </Button>
 
-          <div className="flex items-center gap-3 pl-3 border-l border-border">
-            <div className="flex-col items-end hidden sm:flex">
-              <span className="text-sm font-medium leading-none">Jonathan Batchelor</span>
-              <span className="text-xs text-muted-foreground">Maker Account</span>
-            </div>
-            <Avatar className="h-9 w-9 border border-border">
-              <AvatarImage src="https://i.pravatar.cc/150?u=jonathan" />
-              <AvatarFallback className="bg-primary text-primary-foreground">JB</AvatarFallback>
-            </Avatar>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-3 pl-3 border-l border-border outline-none">
+                <div className="flex-col items-end hidden sm:flex">
+                  <span className="text-sm font-medium leading-none">{displayName}</span>
+                  <span className="text-xs text-muted-foreground">{user?.email}</span>
+                </div>
+                <Avatar className="h-9 w-9 border border-border">
+                  <AvatarFallback className="bg-primary text-primary-foreground">{initials}</AvatarFallback>
+                </Avatar>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>
+                <div className="flex flex-col">
+                  <span className="font-medium">{displayName}</span>
+                  <span className="text-xs font-normal text-muted-foreground">{user?.email}</span>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => navigate(`${base}account`)}>
+                <User className="w-4 h-4 mr-2" />
+                Profile
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => navigate(`${base}account`)}>
+                <Settings className="w-4 h-4 mr-2" />
+                Account settings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={signOut} className="text-destructive focus:text-destructive">
+                <LogOut className="w-4 h-4 mr-2" />
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
+
+      {/* Global search palette */}
+      <CommandDialog open={searchOpen} onOpenChange={setSearchOpen}>
+        <CommandInput placeholder="Search apps and actions..." />
+        <CommandList>
+          <CommandEmpty>No results found.</CommandEmpty>
+          <CommandGroup heading="Apps">
+            {APPS.map((app) => (
+              <CommandItem
+                key={app.id}
+                value={app.name}
+                onSelect={() => {
+                  setSearchOpen(false);
+                  navigate(app.href);
+                }}
+              >
+                <LayoutGrid className="w-4 h-4 mr-2" />
+                Open {app.name}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+          <CommandGroup heading="Quick actions">
+            {QUICK_ACTIONS.map((a) => {
+              const Icon = a.icon;
+              return (
+                <CommandItem key={a.id} value={a.label} onSelect={() => setSearchOpen(false)}>
+                  <Icon className="w-4 h-4 mr-2" />
+                  {a.label}
+                </CommandItem>
+              );
+            })}
+          </CommandGroup>
+        </CommandList>
+      </CommandDialog>
 
       <main className="flex-1 w-full max-w-[1280px] mx-auto p-6 md:p-8 lg:p-12 space-y-12">
         {/* Brand Intro & Quick Actions */}
         <div className="flex flex-col lg:flex-row gap-8 justify-between items-start">
           <div className="max-w-2xl space-y-2">
             <h1 className="text-4xl font-bold tracking-tight text-foreground">
-              Welcome back, Jonathan.
+              Welcome back, {firstName}.
             </h1>
             <p className="text-lg text-muted-foreground">
               Your maker's field guide. One login, all your collections.
@@ -178,26 +319,47 @@ export function AppLauncher() {
           </div>
         </section>
 
-        {/* Widgets — rendered from WIDGETS config (modular) */}
+        {/* Widgets — rendered from useWidgets (modular, persisted) */}
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-foreground font-semibold">
               <LayoutGrid className="w-5 h-5 text-primary" />
               <h3 className="text-lg">Widgets</h3>
             </div>
-            <Button variant="ghost" size="sm" className="text-muted-foreground">
-              Customize
+            <Button
+              variant={customizing ? "secondary" : "ghost"}
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => setCustomizing((c) => !c)}
+            >
+              {customizing ? (
+                <>
+                  <Check className="w-4 h-4 mr-1" />
+                  Done
+                </>
+              ) : (
+                "Customize"
+              )}
             </Button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {WIDGETS.map((w) => {
+            {enabled.map((w) => {
               const Icon = w.icon;
               return (
                 <div
                   key={w.id}
-                  className="rounded-xl border border-border bg-card p-4 space-y-3 hover:shadow-sm transition-shadow"
+                  className="relative rounded-xl border border-border bg-card p-4 space-y-3 hover:shadow-sm transition-shadow"
                 >
+                  {customizing && (
+                    <button
+                      onClick={() => removeWidget(w.id)}
+                      aria-label={`Remove ${w.title}`}
+                      className="absolute -top-2 -right-2 z-10 w-6 h-6 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow hover:scale-110 transition-transform"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     <Icon className="w-4 h-4 text-primary" />
                     {w.title}
@@ -207,11 +369,50 @@ export function AppLauncher() {
               );
             })}
 
-            {/* Add-widget affordance */}
-            <button className="rounded-xl border-2 border-dashed border-border bg-transparent p-4 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-muted/30 transition-colors min-h-[120px]">
-              <PlusCircle className="w-7 h-7" />
-              <span className="text-sm font-medium">Add widget</span>
-            </button>
+            {/* Add-widget affordance — opens a picker of available widgets */}
+            <Popover open={addOpen} onOpenChange={setAddOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  disabled={available.length === 0}
+                  className="rounded-xl border-2 border-dashed border-border bg-transparent p-4 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-muted/30 transition-colors min-h-[120px] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-muted-foreground disabled:hover:border-border"
+                >
+                  <PlusCircle className="w-7 h-7" />
+                  <span className="text-sm font-medium">
+                    {available.length === 0 ? "All widgets added" : "Add widget"}
+                  </span>
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="center" className="w-64 p-2">
+                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Available widgets
+                </div>
+                {available.length === 0 ? (
+                  <div className="px-2 py-3 text-sm text-muted-foreground">
+                    Nothing to add — all widgets are on your dashboard.
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {available.map((w) => {
+                      const Icon = w.icon;
+                      return (
+                        <button
+                          key={w.id}
+                          onClick={() => {
+                            addWidget(w.id);
+                            if (available.length === 1) setAddOpen(false);
+                          }}
+                          className="w-full flex items-center gap-2 rounded-md px-2 py-2 text-sm text-left hover:bg-muted transition-colors"
+                        >
+                          <Icon className="w-4 h-4 text-primary" />
+                          {w.title}
+                          <Plus className="w-3.5 h-3.5 ml-auto text-muted-foreground" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </PopoverContent>
+            </Popover>
           </div>
         </section>
 
@@ -260,11 +461,17 @@ export function AppLauncher() {
           </div>
 
           <div className="flex items-center gap-6">
-            <button className="hover:text-foreground transition-colors flex items-center gap-1">
+            <button
+              onClick={() => setSearchOpen(true)}
+              className="hover:text-foreground transition-colors flex items-center gap-1"
+            >
               <Search className="w-3.5 h-3.5" />
               Global Search
             </button>
-            <button className="hover:text-foreground transition-colors flex items-center gap-1">
+            <button
+              onClick={() => navigate(`${base}account`)}
+              className="hover:text-foreground transition-colors flex items-center gap-1"
+            >
               <Settings className="w-3.5 h-3.5" />
               Account Settings
             </button>

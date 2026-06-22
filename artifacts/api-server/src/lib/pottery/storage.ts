@@ -1,73 +1,24 @@
-import { createClient } from "@supabase/supabase-js";
-import { randomUUID } from "node:crypto";
-import { env } from "../env";
+import { ImageStorageService } from "../storage-core";
 import { shrinkForAi, toDataUrl, AI_IMAGE_CONTENT_TYPE } from "./image";
 import type { SupportedImageType } from "./image";
 
-const BUCKET = "pottery";
-
-const supabase = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
-
-const EXT_BY_TYPE: Record<SupportedImageType, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-};
-
-let bucketReady: Promise<void> | null = null;
-
-async function ensureBucket(): Promise<void> {
-  if (!bucketReady) {
-    bucketReady = (async () => {
-      const { data } = await supabase.storage.getBucket(BUCKET);
-      if (!data) {
-        const { error } = await supabase.storage.createBucket(BUCKET, {
-          public: false,
-        });
-        if (error && !/already exists/i.test(error.message)) {
-          throw error;
-        }
-      }
-    })();
-  }
-  return bucketReady;
-}
+const storage = new ImageStorageService("pottery");
 
 export async function uploadImage(
   buffer: Buffer,
   contentType: SupportedImageType,
 ): Promise<string> {
-  await ensureBucket();
-  const ext = EXT_BY_TYPE[contentType];
-  const path = `items/${randomUUID()}.${ext}`;
-  const { error } = await supabase.storage
-    .from(BUCKET)
-    .upload(path, buffer, { contentType, upsert: false });
-  if (error) throw error;
-  return path;
+  return storage.uploadImage(buffer, contentType);
 }
 
-/**
- * Download an image from private storage and return its raw bytes with
- * content-type.  Used internally to serve images through authenticated API
- * routes and to build data-URLs for AI calls.  Never used to produce
- * shareable bearer URLs.
- */
 export async function downloadImageBuffer(
   path: string,
 ): Promise<{ buffer: Buffer; contentType: string }> {
-  const { data, error } = await supabase.storage.from(BUCKET).download(path);
-  if (error || !data) {
-    throw error ?? new Error("Failed to download image");
-  }
-  const buffer = Buffer.from(await data.arrayBuffer());
-  return { buffer, contentType: data.type || "image/jpeg" };
+  return storage.downloadImageBuffer(path);
 }
 
 export async function downloadImageAsDataUrl(path: string): Promise<string> {
-  const { buffer, contentType } = await downloadImageBuffer(path);
+  const { buffer, contentType } = await storage.downloadImageBuffer(path);
   return `data:${contentType};base64,${buffer.toString("base64")}`;
 }
 
@@ -80,11 +31,11 @@ export async function downloadImageAsDataUrl(path: string): Promise<string> {
 export async function downloadAndShrinkImageForAi(
   path: string,
 ): Promise<string> {
-  const { buffer } = await downloadImageBuffer(path);
+  const { buffer } = await storage.downloadImageBuffer(path);
   const shrunk = await shrinkForAi(buffer);
   return toDataUrl(shrunk, AI_IMAGE_CONTENT_TYPE);
 }
 
 export async function deleteImage(path: string): Promise<void> {
-  await supabase.storage.from(BUCKET).remove([path]);
+  return storage.deleteImage(path);
 }

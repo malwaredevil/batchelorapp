@@ -1,0 +1,1 @@
+- [Supabase connection](supabase-connection.md) — DATABASE_URL holds the IPv6-only direct host; `lib/db/src/resolve-url.ts` rewrites it to the IPv4 pooler. Keep index.ts calling resolveDatabaseUrl().

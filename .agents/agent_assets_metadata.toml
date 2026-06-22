@@ -1,0 +1,38 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "kM-Z5p1doWW6CKQDN6aRA"
+uri = "file://artifacts/mockup-sandbox/public/images/pottery-warm.png"
+type = "image"
+title = "warm handmade ceramic pottery"
+
+[[generated]]
+id = "pe3IcFov_3i1R7orLaZmF"
+uri = "file://artifacts/mockup-sandbox/public/images/quilting-warm.png"
+type = "image"
+title = "warm folded quilting fabrics"
+
+[[generated]]
+id = "cAz_aP-oaq7tVzJeOTtFH"
+uri = "file://artifacts/mockup-sandbox/public/images/pottery-editorial.png"
+type = "image"
+title = "Handmade ceramic pottery editorial"
+
+[[generated]]
+id = "BlvzqBgL5D0jQIrphm8em"
+uri = "file://artifacts/mockup-sandbox/public/images/quilting-editorial.png"
+type = "image"
+title = "Folded quilting fabrics editorial"
+
+[[generated]]
+id = "HfLjIsUKZe5fFIa8RQsOv"
+uri = "file://artifacts/mockup-sandbox/public/images/pottery-collection.png"
+type = "image"
+title = "handmade ceramic pottery"
+
+[[generated]]
+id = "AgYwV2TH6mpFVmLEjLlEY"
+uri = "file://artifacts/mockup-sandbox/public/images/quilting-collection.png"
+type = "image"
+title = "folded quilting fabrics"

@@ -1,0 +1,73 @@
+/* Batchelor — Field Guide Palette (shared by Pottery + Quilting apps) */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
+:root {
+  /* Field Guide Palette — light */
+  --background: 210 40% 98%; /* #f8fafc slate */
+  --foreground: 222.2 84% 4.9%; /* #020817 */
+
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  --card-border: 214.3 31.8% 91.4%; /* #e2e8f0 */
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4.9%;
+  --popover-border: 214.3 31.8% 91.4%;
+
+  --primary: 212 55% 23%; /* #1B3A5C deep navy */
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+
+  --muted: 210 40% 96.1%; /* #f1f5f9 */
+  --muted-foreground: 215.4 16.3% 46.9%; /* #64748b */
+
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222.2 47.4% 11.2%;
+
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 212 55% 23%;
+
+  --font-sans: "Inter", sans-serif;
+  --font-serif: "Inter", sans-serif;
+  --font-mono: Menlo, monospace;
+  --radius: 0.5rem;
+}
+
+.dark {
+  /* Field Guide Palette — warm-brown dark */
+  --background: 25 12% 10%;
+  --foreground: 40 33% 98%;
+
+  --card: 25 10% 13%;
+  --card-foreground: 40 33% 98%;
+  --card-border: 25 10% 20%;
+
+  --popover: 25 10% 13%;
+  --popover-foreground: 40 33% 98%;
+  --popover-border: 25 10% 20%;
+
+  --primary: 212 55% 60%; /* lighter navy for dark mode */
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 153 14% 35%;
+  --secondary-foreground: 0 0% 100%;
+
+  --muted: 25 10% 20%;
+  --muted-foreground: 38 21% 75%;
+
+  --accent: 25 10% 20%;
+  --accent-foreground: 40 33% 98%;
+
+  --destructive: 0 60% 60%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 25 10% 20%;
+  --input: 25 10% 20%;
+  --ring: 212 55% 60%;
+}

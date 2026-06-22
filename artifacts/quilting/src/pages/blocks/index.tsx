@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo, useId } from "react";
 import { Link, useLocation } from "wouter";
 import {
   PlusCircle,
@@ -46,12 +46,14 @@ import {
   useDeleteBlock,
   useCreateBlock,
   useListQuiltingCategories,
+  useListFabrics,
   getListBlocksQueryKey,
   QuiltingCreateBlockInputGridSize,
 } from "@workspace/api-client-react";
 import type { QuiltingCategory } from "@workspace/api-client-react";
 import { parseCell, fmtInch } from "@/lib/cell-parser";
 import { cn } from "@/lib/utils";
+import { buildFabricUrlMap } from "@/components/FabricPicker";
 
 type BlockSeamLine = {
   axis: "h" | "v";
@@ -83,6 +85,8 @@ function SvgCell({
   h,
   cell,
   id,
+  fabricUrlMap = {},
+  patternPrefix = "fab",
 }: {
   x: number;
   y: number;
@@ -90,16 +94,26 @@ function SvgCell({
   h: number;
   cell: string;
   id: string;
+  fabricUrlMap?: Record<number, string>;
+  patternPrefix?: string;
 }) {
   const p = parseCell(cell);
   const cx = x + w / 2;
   const cy = y + h / 2;
   const sw = Math.max(0.4, w * 0.04); // seam-line stroke width scales with cell size
+  const rf = (c: string) => {
+    if (c.startsWith("fab:")) {
+      const n = parseInt(c.slice(4), 10);
+      if (!isNaN(n) && fabricUrlMap[n]) return `url(#${patternPrefix}-${n})`;
+      return "#D1D5DB";
+    }
+    return c || "#FFFFFF";
+  };
 
   switch (p.kind) {
     case "solid":
       return (
-        <rect x={x} y={y} width={w} height={h} fill={p.color || "#FFFFFF"} />
+        <rect x={x} y={y} width={w} height={h} fill={rf(p.color)} />
       );
 
     case "triangle": {
@@ -110,11 +124,11 @@ function SvgCell({
           <g>
             <polygon
               points={`${x},${y} ${x + w},${y} ${x + w},${y + h}`}
-              fill={p.a}
+              fill={rf(p.a)}
             />
             <polygon
               points={`${x},${y} ${x},${y + h} ${x + w},${y + h}`}
-              fill={p.b}
+              fill={rf(p.b)}
             />
           </g>
         );
@@ -123,11 +137,11 @@ function SvgCell({
         <g>
           <polygon
             points={`${x},${y} ${x + w},${y} ${x},${y + h}`}
-            fill={p.a}
+            fill={rf(p.a)}
           />
           <polygon
             points={`${x + w},${y} ${x},${y + h} ${x + w},${y + h}`}
-            fill={p.b}
+            fill={rf(p.b)}
           />
         </g>
       );
@@ -139,19 +153,19 @@ function SvgCell({
         <g>
           <polygon
             points={`${x},${y} ${x + w},${y} ${cx},${cy}`}
-            fill={p.top}
+            fill={rf(p.top)}
           />
           <polygon
             points={`${x + w},${y} ${x + w},${y + h} ${cx},${cy}`}
-            fill={p.right}
+            fill={rf(p.right)}
           />
           <polygon
             points={`${x + w},${y + h} ${x},${y + h} ${cx},${cy}`}
-            fill={p.bottom}
+            fill={rf(p.bottom)}
           />
           <polygon
             points={`${x},${y + h} ${x},${y} ${cx},${cy}`}
-            fill={p.left}
+            fill={rf(p.left)}
           />
         </g>
       );
@@ -159,31 +173,31 @@ function SvgCell({
     case "hsplit":
       return (
         <g>
-          <rect x={x} y={y} width={w} height={h / 2} fill={p.top} />
-          <rect x={x} y={y + h / 2} width={w} height={h / 2} fill={p.bottom} />
+          <rect x={x} y={y} width={w} height={h / 2} fill={rf(p.top)} />
+          <rect x={x} y={y + h / 2} width={w} height={h / 2} fill={rf(p.bottom)} />
         </g>
       );
 
     case "vsplit":
       return (
         <g>
-          <rect x={x} y={y} width={w / 2} height={h} fill={p.left} />
-          <rect x={x + w / 2} y={y} width={w / 2} height={h} fill={p.right} />
+          <rect x={x} y={y} width={w / 2} height={h} fill={rf(p.left)} />
+          <rect x={x + w / 2} y={y} width={w / 2} height={h} fill={rf(p.right)} />
         </g>
       );
 
     case "xsplit":
       return (
         <g>
-          <rect x={x} y={y} width={w / 2} height={h / 2} fill={p.tl} />
-          <rect x={x + w / 2} y={y} width={w / 2} height={h / 2} fill={p.tr} />
-          <rect x={x} y={y + h / 2} width={w / 2} height={h / 2} fill={p.bl} />
+          <rect x={x} y={y} width={w / 2} height={h / 2} fill={rf(p.tl)} />
+          <rect x={x + w / 2} y={y} width={w / 2} height={h / 2} fill={rf(p.tr)} />
+          <rect x={x} y={y + h / 2} width={w / 2} height={h / 2} fill={rf(p.bl)} />
           <rect
             x={x + w / 2}
             y={y + h / 2}
             width={w / 2}
             height={h / 2}
-            fill={p.br}
+            fill={rf(p.br)}
           />
         </g>
       );
@@ -250,18 +264,36 @@ function BlockPreviewSvg({
   seams = [],
   size = 120,
   tileCount = 2,
+  fabricUrlMap = {},
 }: {
   cells: string[];
   gridSize: number;
   seams?: BlockSeamLine[];
   size?: number;
   tileCount?: number;
+  fabricUrlMap?: Record<number, string>;
 }) {
   const gridH = Math.max(1, Math.ceil(cells.length / gridSize));
   const cellPx = size / (gridSize * tileCount);
   const svgH = gridH * tileCount * cellPx;
   const tiles = Array.from({ length: tileCount * tileCount }, (_, t) => t);
   const sw = Math.max(0.5, cellPx * 0.1);
+  const patternPrefix = `fab-${useId().replace(/:/g, "")}`;
+
+  // Collect unique fabric IDs used in this block
+  const fabIds = (() => {
+    const ids = new Set<number>();
+    const FAB_RE = /fab:(\d+)/g;
+    for (const c of cells) {
+      let m: RegExpExecArray | null;
+      FAB_RE.lastIndex = 0;
+      while ((m = FAB_RE.exec(c)) !== null) {
+        const n = parseInt(m[1], 10);
+        if (!isNaN(n) && fabricUrlMap[n]) ids.add(n);
+      }
+    }
+    return Array.from(ids);
+  })();
 
   return (
     <svg
@@ -270,6 +302,30 @@ function BlockPreviewSvg({
       xmlns="http://www.w3.org/2000/svg"
       shapeRendering="crispEdges"
     >
+      {fabIds.length > 0 && (
+        <defs>
+          {fabIds.map((id) => (
+            <pattern
+              key={id}
+              id={`${patternPrefix}-${id}`}
+              patternUnits="userSpaceOnUse"
+              x="0"
+              y="0"
+              width={cellPx}
+              height={cellPx}
+            >
+              <image
+                href={fabricUrlMap[id]}
+                x="0"
+                y="0"
+                width={cellPx}
+                height={cellPx}
+                preserveAspectRatio="xMidYMid slice"
+              />
+            </pattern>
+          ))}
+        </defs>
+      )}
       <rect width={size} height={svgH} fill="#FFFFFF" />
       {tiles.map((tile) => {
         const tr = Math.floor(tile / tileCount);
@@ -290,6 +346,8 @@ function BlockPreviewSvg({
                   w={cellPx}
                   h={cellPx}
                   cell={cell}
+                  fabricUrlMap={fabricUrlMap}
+                  patternPrefix={patternPrefix}
                 />
               );
             })}
@@ -338,12 +396,14 @@ function BlockCard({
   onDuplicate,
   onFilterByGridSize,
   onFilterByCategory,
+  fabricUrlMap = {},
 }: {
   block: BlockSummary;
   onDelete: (id: number) => void;
   onDuplicate: (block: BlockSummary) => void;
   onFilterByGridSize?: (gs: number) => void;
   onFilterByCategory?: (id: number) => void;
+  fabricUrlMap?: Record<number, string>;
 }) {
   const [, navigate] = useLocation();
   return (
@@ -356,6 +416,7 @@ function BlockCard({
             seams={block.seams}
             size={160}
             tileCount={1}
+            fabricUrlMap={fabricUrlMap}
           />
         </div>
         <div className="border-t border-card-border px-3 py-2 pr-8">
@@ -550,6 +611,11 @@ export default function Blocks() {
   const [, navigate] = useLocation();
   const { data: blockList, isLoading, isError } = useListBlocks();
   const { data: allCategories } = useListQuiltingCategories();
+  const { data: fabricsList } = useListFabrics();
+  const fabricUrlMap = useMemo(
+    () => buildFabricUrlMap(fabricsList ?? []),
+    [fabricsList],
+  );
 
   const [sortBy, setSortBy] = useState<SortKey>("date-desc");
   const [activeCatIds, setActiveCatIds] = useState<Set<number>>(new Set());
@@ -914,6 +980,7 @@ export default function Blocks() {
             <BlockCard
               key={block.id}
               block={block}
+              fabricUrlMap={fabricUrlMap}
               onDelete={handleDelete}
               onDuplicate={handleDuplicate}
               onFilterByGridSize={(gs) =>

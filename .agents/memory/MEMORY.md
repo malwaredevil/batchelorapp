@@ -1,3 +1,4 @@
 - [Ad-hoc Supabase access from dev](supabase-adhoc-access.md) — sandbox env is empty & direct Postgres is DNS-blocked; for one-off DB writes use the Supabase REST API from a bash-invoked Node script.
 - [Sharing code across artifacts](shared-code-extraction.md) — cross-artifact shared code must be a lib/* package (leaf apps can't import each other); dedup via thin re-export adapters to preserve import surfaces.
 - [Hybrid AI retrieval](hybrid-ai-retrieval.md) — compare endpoints fuse text+visual embeddings (RRF k=60) then Voyage rerank; perMatch is keyed by sequential index, and visual_embedding must only be overwritten when non-null.
+- [Quilting SVG fabric previews](quilting-svg-fabric-patterns.md) — fab:N cells must resolve to userSpaceOnUse <pattern> fills via rf(); scope pattern ids per-SVG with useId() or list/grid previews mis-scale; cover both triangle branches + layout trims.

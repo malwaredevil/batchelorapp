@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useId } from "react";
 import { Link, useLocation } from "wouter";
 import {
   PlusCircle,
@@ -47,10 +47,12 @@ import {
   useCreateLayout,
   useListBlocks,
   useListQuiltingCategories,
+  useListFabrics,
   getListLayoutsQueryKey,
 } from "@workspace/api-client-react";
 import type { QuiltingCategory } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
+import { buildFabricUrlMap } from "@/components/FabricPicker";
 
 type LayoutCell = { blockId: number | null; rotation: 0 | 90 | 180 | 270 };
 
@@ -94,36 +96,44 @@ function SvgCell({
   w,
   h,
   cell,
+  fabricUrlMap = {},
+  patternPrefix = "fab",
 }: {
   x: number;
   y: number;
   w: number;
   h: number;
   cell: string;
+  fabricUrlMap?: Record<number, string>;
+  patternPrefix?: string;
 }) {
   const p = parseCell(cell);
   const cx = x + w / 2;
   const cy = y + h / 2;
   const sw = Math.max(0.4, w * 0.04);
+  const rf = (c: string) => {
+    if (c.startsWith("fab:")) {
+      const n = parseInt(c.slice(4), 10);
+      if (!isNaN(n) && fabricUrlMap[n]) return `url(#${patternPrefix}-${n})`;
+      return "#D1D5DB";
+    }
+    return c || "#FFFFFF";
+  };
 
   switch (p.kind) {
-    case "solid": {
-      const fill = p.color.startsWith("fab:")
-        ? "#D1D5DB"
-        : p.color || "#FFFFFF";
-      return <rect x={x} y={y} width={w} height={h} fill={fill} />;
-    }
+    case "solid":
+      return <rect x={x} y={y} width={w} height={h} fill={rf(p.color)} />;
     case "triangle":
       if (p.type === "nwse")
         return (
           <g>
             <polygon
               points={`${x},${y} ${x + w},${y} ${x + w},${y + h}`}
-              fill={p.a}
+              fill={rf(p.a)}
             />
             <polygon
               points={`${x},${y} ${x},${y + h} ${x + w},${y + h}`}
-              fill={p.b}
+              fill={rf(p.b)}
             />
           </g>
         );
@@ -131,11 +141,11 @@ function SvgCell({
         <g>
           <polygon
             points={`${x},${y} ${x + w},${y} ${x},${y + h}`}
-            fill={p.a}
+            fill={rf(p.a)}
           />
           <polygon
             points={`${x + w},${y} ${x},${y + h} ${x + w},${y + h}`}
-            fill={p.b}
+            fill={rf(p.b)}
           />
         </g>
       );
@@ -144,48 +154,48 @@ function SvgCell({
         <g>
           <polygon
             points={`${x},${y} ${x + w},${y} ${cx},${cy}`}
-            fill={p.top}
+            fill={rf(p.top)}
           />
           <polygon
             points={`${x + w},${y} ${x + w},${y + h} ${cx},${cy}`}
-            fill={p.right}
+            fill={rf(p.right)}
           />
           <polygon
             points={`${x + w},${y + h} ${x},${y + h} ${cx},${cy}`}
-            fill={p.bottom}
+            fill={rf(p.bottom)}
           />
           <polygon
             points={`${x},${y + h} ${x},${y} ${cx},${cy}`}
-            fill={p.left}
+            fill={rf(p.left)}
           />
         </g>
       );
     case "hsplit":
       return (
         <g>
-          <rect x={x} y={y} width={w} height={h / 2} fill={p.top} />
-          <rect x={x} y={y + h / 2} width={w} height={h / 2} fill={p.bottom} />
+          <rect x={x} y={y} width={w} height={h / 2} fill={rf(p.top)} />
+          <rect x={x} y={y + h / 2} width={w} height={h / 2} fill={rf(p.bottom)} />
         </g>
       );
     case "vsplit":
       return (
         <g>
-          <rect x={x} y={y} width={w / 2} height={h} fill={p.left} />
-          <rect x={x + w / 2} y={y} width={w / 2} height={h} fill={p.right} />
+          <rect x={x} y={y} width={w / 2} height={h} fill={rf(p.left)} />
+          <rect x={x + w / 2} y={y} width={w / 2} height={h} fill={rf(p.right)} />
         </g>
       );
     case "xsplit":
       return (
         <g>
-          <rect x={x} y={y} width={w / 2} height={h / 2} fill={p.tl} />
-          <rect x={x + w / 2} y={y} width={w / 2} height={h / 2} fill={p.tr} />
-          <rect x={x} y={y + h / 2} width={w / 2} height={h / 2} fill={p.bl} />
+          <rect x={x} y={y} width={w / 2} height={h / 2} fill={rf(p.tl)} />
+          <rect x={x + w / 2} y={y} width={w / 2} height={h / 2} fill={rf(p.tr)} />
+          <rect x={x} y={y + h / 2} width={w / 2} height={h / 2} fill={rf(p.bl)} />
           <rect
             x={x + w / 2}
             y={y + h / 2}
             width={w / 2}
             height={h / 2}
-            fill={p.br}
+            fill={rf(p.br)}
           />
         </g>
       );
@@ -246,10 +256,12 @@ function LayoutPreview({
   layout,
   blocks,
   size = 160,
+  fabricUrlMap = {},
 }: {
   layout: LayoutSummary;
   blocks: BlockSummary[];
   size: number;
+  fabricUrlMap?: Record<number, string>;
 }) {
   const blockMap = new Map(blocks.map((b) => [b.id, b]));
   const sashW = layout.sashingWidthInches ?? 0;
@@ -257,6 +269,41 @@ function LayoutPreview({
   const sashingColor = layout.sashingColor ?? "#d4c5a9";
   const borderColor = layout.borderColor ?? "#8b6f5e";
   const cornerstoneColor = layout.cornerstoneColor ?? null;
+  const patternPrefix = `fab-${useId().replace(/:/g, "")}`;
+  const rf = (c: string) => {
+    if (c.startsWith("fab:")) {
+      const n = parseInt(c.slice(4), 10);
+      if (!isNaN(n) && fabricUrlMap[n]) return `url(#${patternPrefix}-${n})`;
+      return "#D1D5DB";
+    }
+    return c || "#FFFFFF";
+  };
+
+  // Collect all fabric IDs used in all blocks (and the layout trims) in this layout
+  const fabIds = (() => {
+    const ids = new Set<number>();
+    const FAB_RE = /fab:(\d+)/g;
+    for (const lc of layout.cells) {
+      if (lc.blockId === null) continue;
+      const block = blockMap.get(lc.blockId);
+      if (!block) continue;
+      for (const c of block.cells) {
+        let m: RegExpExecArray | null;
+        FAB_RE.lastIndex = 0;
+        while ((m = FAB_RE.exec(c)) !== null) {
+          const n = parseInt(m[1], 10);
+          if (!isNaN(n) && fabricUrlMap[n]) ids.add(n);
+        }
+      }
+    }
+    for (const c of [borderColor, sashingColor, cornerstoneColor ?? ""]) {
+      if (c.startsWith("fab:")) {
+        const n = parseInt(c.slice(4), 10);
+        if (!isNaN(n) && fabricUrlMap[n]) ids.add(n);
+      }
+    }
+    return Array.from(ids);
+  })();
 
   const unitW = layout.cols + sashW * (layout.cols - 1) + bordW * 2;
   const unitH = layout.rows + sashW * (layout.rows - 1) + bordW * 2;
@@ -275,8 +322,32 @@ function LayoutPreview({
       shapeRendering="crispEdges"
       className="bg-white"
     >
+      {fabIds.length > 0 && (
+        <defs>
+          {fabIds.map((id) => (
+            <pattern
+              key={id}
+              id={`${patternPrefix}-${id}`}
+              patternUnits="userSpaceOnUse"
+              x="0"
+              y="0"
+              width={cellPx}
+              height={cellPx}
+            >
+              <image
+                href={fabricUrlMap[id]}
+                x="0"
+                y="0"
+                width={cellPx}
+                height={cellPx}
+                preserveAspectRatio="xMidYMid slice"
+              />
+            </pattern>
+          ))}
+        </defs>
+      )}
       {borderPx > 0 && (
-        <rect x={0} y={0} width={W} height={H} fill={borderColor} />
+        <rect x={0} y={0} width={W} height={H} fill={rf(borderColor)} />
       )}
       {sashPx > 0 ? (
         <rect
@@ -284,7 +355,7 @@ function LayoutPreview({
           y={borderPx}
           width={W - borderPx * 2}
           height={H - borderPx * 2}
-          fill={sashingColor}
+          fill={rf(sashingColor)}
         />
       ) : (
         <rect
@@ -308,7 +379,7 @@ function LayoutPreview({
                 y={cy2}
                 width={sashPx}
                 height={sashPx}
-                fill={cornerstoneColor}
+                fill={rf(cornerstoneColor)}
               />
             );
           }),
@@ -348,6 +419,8 @@ function LayoutPreview({
                   w={bCellPx}
                   h={bCellPx}
                   cell={blockCell}
+                  fabricUrlMap={fabricUrlMap}
+                  patternPrefix={patternPrefix}
                 />
               );
             })}
@@ -369,9 +442,14 @@ function buildLayoutSvgString(
 ): string {
   const sashW = layout.sashingWidthInches ?? 0;
   const bordW = layout.borderWidthInches ?? 0;
-  const sashingColor = layout.sashingColor ?? "#d4c5a9";
-  const borderColor = layout.borderColor ?? "#8b6f5e";
-  const cornerstoneColorStr = layout.cornerstoneColor ?? null;
+  // Static export renders block cells as flat placeholders (no fabric images),
+  // so fab-backed trims fall back to a solid swatch rather than an invalid fill.
+  const solid = (c: string) => (c.startsWith("fab:") ? "#D1D5DB" : c);
+  const sashingColor = solid(layout.sashingColor ?? "#d4c5a9");
+  const borderColor = solid(layout.borderColor ?? "#8b6f5e");
+  const cornerstoneColorStr = layout.cornerstoneColor
+    ? solid(layout.cornerstoneColor)
+    : null;
 
   const unitW = layout.cols + sashW * (layout.cols - 1) + bordW * 2;
   const unitH = layout.rows + sashW * (layout.rows - 1) + bordW * 2;
@@ -501,6 +579,7 @@ function LayoutCard({
   onDuplicate,
   onFilterBySize,
   onFilterByCategory,
+  fabricUrlMap = {},
 }: {
   layout: LayoutSummary;
   blocks: BlockSummary[];
@@ -509,13 +588,19 @@ function LayoutCard({
   onDuplicate: (layout: LayoutSummary) => void;
   onFilterBySize?: (s: string) => void;
   onFilterByCategory?: (id: number) => void;
+  fabricUrlMap?: Record<number, string>;
 }) {
   const [, navigate] = useLocation();
   return (
     <div className="group relative overflow-hidden rounded-xl border border-card-border bg-card transition-shadow hover:shadow-md">
       <Link href={`/layouts/${layout.id}`} className="block">
         <div className="flex aspect-square items-center justify-center overflow-hidden bg-white p-2">
-          <LayoutPreview layout={layout} blocks={blocks} size={160} />
+          <LayoutPreview
+            layout={layout}
+            blocks={blocks}
+            size={160}
+            fabricUrlMap={fabricUrlMap}
+          />
         </div>
         <div className="border-t border-card-border px-3 py-2 pr-8">
           <p className="truncate text-sm font-semibold text-foreground">
@@ -628,6 +713,11 @@ export default function Layouts() {
   const { data: layoutList, isLoading, isError } = useListLayouts();
   const { data: blockList } = useListBlocks();
   const { data: allCategories } = useListQuiltingCategories();
+  const { data: fabricsList } = useListFabrics();
+  const fabricUrlMap = useMemo(
+    () => buildFabricUrlMap(fabricsList ?? []),
+    [fabricsList],
+  );
 
   const [sortBy, setSortBy] = useState<SortKey>("date-desc");
   const [activeCatIds, setActiveCatIds] = useState<Set<number>>(new Set());
@@ -936,6 +1026,7 @@ export default function Layouts() {
               layout={layout}
               blocks={blocks}
               blockMap={blockMap}
+              fabricUrlMap={fabricUrlMap}
               onDelete={handleDelete}
               onDuplicate={handleDuplicate}
               onFilterBySize={toggleSize}

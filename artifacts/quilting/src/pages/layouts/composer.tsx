@@ -1,4 +1,11 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+  useId,
+} from "react";
 import { Link, useLocation, useParams } from "wouter";
 import { useRegisterNavGuard } from "@/lib/nav-guard";
 import {
@@ -135,6 +142,8 @@ function SvgCell({
   h,
   cell,
   id,
+  fabricUrlMap = {},
+  patternPrefix = "layout-fab",
 }: {
   x: number;
   y: number;
@@ -142,30 +151,36 @@ function SvgCell({
   h: number;
   cell: string;
   id: string;
+  fabricUrlMap?: Record<number, string>;
+  patternPrefix?: string;
 }) {
   const p = parseCell(cell);
   const cx = x + w / 2;
   const cy = y + h / 2;
   const sw = Math.max(0.4, w * 0.04);
+  const rf = (c: string) => {
+    if (c.startsWith("fab:")) {
+      const n = parseInt(c.slice(4), 10);
+      if (!isNaN(n) && fabricUrlMap[n]) return `url(#${patternPrefix}-${n})`;
+      return "#D1D5DB";
+    }
+    return c || "#FFFFFF";
+  };
 
   switch (p.kind) {
-    case "solid": {
-      const fill = p.color.startsWith("fab:")
-        ? "#D1D5DB"
-        : p.color || "#FFFFFF";
-      return <rect x={x} y={y} width={w} height={h} fill={fill} />;
-    }
+    case "solid":
+      return <rect x={x} y={y} width={w} height={h} fill={rf(p.color)} />;
     case "triangle":
       if (p.type === "nwse") {
         return (
           <g>
             <polygon
               points={`${x},${y} ${x + w},${y} ${x + w},${y + h}`}
-              fill={p.a}
+              fill={rf(p.a)}
             />
             <polygon
               points={`${x},${y} ${x},${y + h} ${x + w},${y + h}`}
-              fill={p.b}
+              fill={rf(p.b)}
             />
           </g>
         );
@@ -174,11 +189,11 @@ function SvgCell({
         <g>
           <polygon
             points={`${x},${y} ${x + w},${y} ${x},${y + h}`}
-            fill={p.a}
+            fill={rf(p.a)}
           />
           <polygon
             points={`${x + w},${y} ${x},${y + h} ${x + w},${y + h}`}
-            fill={p.b}
+            fill={rf(p.b)}
           />
         </g>
       );
@@ -187,48 +202,48 @@ function SvgCell({
         <g>
           <polygon
             points={`${x},${y} ${x + w},${y} ${cx},${cy}`}
-            fill={p.top}
+            fill={rf(p.top)}
           />
           <polygon
             points={`${x + w},${y} ${x + w},${y + h} ${cx},${cy}`}
-            fill={p.right}
+            fill={rf(p.right)}
           />
           <polygon
             points={`${x + w},${y + h} ${x},${y + h} ${cx},${cy}`}
-            fill={p.bottom}
+            fill={rf(p.bottom)}
           />
           <polygon
             points={`${x},${y + h} ${x},${y} ${cx},${cy}`}
-            fill={p.left}
+            fill={rf(p.left)}
           />
         </g>
       );
     case "hsplit":
       return (
         <g>
-          <rect x={x} y={y} width={w} height={h / 2} fill={p.top} />
-          <rect x={x} y={y + h / 2} width={w} height={h / 2} fill={p.bottom} />
+          <rect x={x} y={y} width={w} height={h / 2} fill={rf(p.top)} />
+          <rect x={x} y={y + h / 2} width={w} height={h / 2} fill={rf(p.bottom)} />
         </g>
       );
     case "vsplit":
       return (
         <g>
-          <rect x={x} y={y} width={w / 2} height={h} fill={p.left} />
-          <rect x={x + w / 2} y={y} width={w / 2} height={h} fill={p.right} />
+          <rect x={x} y={y} width={w / 2} height={h} fill={rf(p.left)} />
+          <rect x={x + w / 2} y={y} width={w / 2} height={h} fill={rf(p.right)} />
         </g>
       );
     case "xsplit":
       return (
         <g>
-          <rect x={x} y={y} width={w / 2} height={h / 2} fill={p.tl} />
-          <rect x={x + w / 2} y={y} width={w / 2} height={h / 2} fill={p.tr} />
-          <rect x={x} y={y + h / 2} width={w / 2} height={h / 2} fill={p.bl} />
+          <rect x={x} y={y} width={w / 2} height={h / 2} fill={rf(p.tl)} />
+          <rect x={x + w / 2} y={y} width={w / 2} height={h / 2} fill={rf(p.tr)} />
+          <rect x={x} y={y + h / 2} width={w / 2} height={h / 2} fill={rf(p.bl)} />
           <rect
             x={x + w / 2}
             y={y + h / 2}
             width={w / 2}
             height={h / 2}
-            fill={p.br}
+            fill={rf(p.br)}
           />
         </g>
       );
@@ -292,9 +307,11 @@ function SvgCell({
 function BlockMini({
   block,
   size = 48,
+  fabricUrlMap = {},
 }: {
   block: BlockSummary;
   size?: number;
+  fabricUrlMap?: Record<number, string>;
 }) {
   const tileCount = 1;
   const gridH = Math.max(1, Math.ceil(block.cells.length / block.gridSize));
@@ -302,6 +319,22 @@ function BlockMini({
   const svgH = gridH * tileCount * cellPx;
   const tiles = Array.from({ length: tileCount * tileCount }, (_, t) => t);
   const sw = Math.max(0.3, cellPx * 0.08);
+  const patternPrefix = `mini-fab-${useId().replace(/:/g, "")}`;
+
+  const fabIds = (() => {
+    const ids = new Set<number>();
+    const FAB_RE = /fab:(\d+)/g;
+    for (const c of block.cells) {
+      let m: RegExpExecArray | null;
+      FAB_RE.lastIndex = 0;
+      while ((m = FAB_RE.exec(c)) !== null) {
+        const n = parseInt(m[1], 10);
+        if (!isNaN(n) && fabricUrlMap[n]) ids.add(n);
+      }
+    }
+    return Array.from(ids);
+  })();
+
   return (
     <svg
       width={size}
@@ -309,6 +342,30 @@ function BlockMini({
       xmlns="http://www.w3.org/2000/svg"
       shapeRendering="crispEdges"
     >
+      {fabIds.length > 0 && (
+        <defs>
+          {fabIds.map((id) => (
+            <pattern
+              key={id}
+              id={`${patternPrefix}-${id}`}
+              patternUnits="userSpaceOnUse"
+              x="0"
+              y="0"
+              width={cellPx}
+              height={cellPx}
+            >
+              <image
+                href={fabricUrlMap[id]}
+                x="0"
+                y="0"
+                width={cellPx}
+                height={cellPx}
+                preserveAspectRatio="xMidYMid slice"
+              />
+            </pattern>
+          ))}
+        </defs>
+      )}
       <rect width={size} height={svgH} fill="#FFFFFF" />
       {tiles.map((tile) => {
         const tr = Math.floor(tile / tileCount);
@@ -329,6 +386,8 @@ function BlockMini({
                   w={cellPx}
                   h={cellPx}
                   cell={cell}
+                  fabricUrlMap={fabricUrlMap}
+                  patternPrefix={patternPrefix}
                 />
               );
             })}
@@ -375,10 +434,14 @@ function BlockMini({
 // Layout grid SVG — renders blocks with sashing and border
 // ---------------------------------------------------------------------------
 
-function resolveFabricFill(color: string, map: Record<number, string>): string {
+function resolveFabricFill(
+  color: string,
+  map: Record<number, string>,
+  patternPrefix = "layout-fab",
+): string {
   if (color.startsWith("fab:")) {
     const id = parseInt(color.slice(4), 10);
-    if (!isNaN(id) && map[id]) return `url(#layout-fab-${id})`;
+    if (!isNaN(id) && map[id]) return `url(#${patternPrefix}-${id})`;
     return "#D1D5DB";
   }
   return color;
@@ -426,10 +489,25 @@ function LayoutGrid({
         if (!isNaN(n) && fabricUrlMap[n]) ids.add(n);
       }
     }
+    const FAB_RE = /fab:(\d+)/g;
+    for (const cell of cells) {
+      if (cell.blockId === null) continue;
+      const block = blockMap.get(cell.blockId);
+      if (!block) continue;
+      for (const bc of block.cells) {
+        let m: RegExpExecArray | null;
+        FAB_RE.lastIndex = 0;
+        while ((m = FAB_RE.exec(bc)) !== null) {
+          const n = parseInt(m[1], 10);
+          if (!isNaN(n) && fabricUrlMap[n]) ids.add(n);
+        }
+      }
+    }
     return ids;
   })();
 
-  const rf = (c: string) => resolveFabricFill(c, fabricUrlMap);
+  const patternPrefix = `layout-fab-${useId().replace(/:/g, "")}`;
+  const rf = (c: string) => resolveFabricFill(c, fabricUrlMap, patternPrefix);
 
   return (
     <svg
@@ -446,7 +524,7 @@ function LayoutGrid({
           {Array.from(fabricPatternIds).map((id) => (
             <pattern
               key={id}
-              id={`layout-fab-${id}`}
+              id={`${patternPrefix}-${id}`}
               patternUnits="userSpaceOnUse"
               x="0"
               y="0"
@@ -554,6 +632,8 @@ function LayoutGrid({
                       w={bCellPx}
                       h={bCellPx}
                       cell={blockCell}
+                      fabricUrlMap={fabricUrlMap}
+                      patternPrefix={patternPrefix}
                     />
                   );
                 })}
@@ -1522,7 +1602,7 @@ export default function LayoutComposer() {
                   }`}
                 >
                   <div className="shrink-0 overflow-hidden rounded">
-                    <BlockMini block={block} size={40} />
+                    <BlockMini block={block} size={40} fabricUrlMap={fabricUrlMap} />
                   </div>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{block.name}</p>

@@ -1,0 +1,91 @@
+import { Switch, Route, Redirect, Router as WouterRouter } from "wouter";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
+import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { AuthProvider, useAuth } from "@/lib/auth";
+import { AppShell } from "@/components/app-shell";
+import Login from "@/pages/login";
+import ForgotPassword from "@/pages/forgot-password";
+import ResetPassword from "@/pages/reset-password";
+import Collection from "@/pages/collection";
+import AddPiece from "@/pages/add";
+import PieceDetail from "@/pages/detail";
+import Compare from "@/pages/compare";
+import Categories from "@/pages/categories";
+import Maintenance from "@/pages/maintenance";
+import Account from "@/pages/account";
+import Settings from "@/pages/settings";
+import NotFound from "@/pages/not-found";
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
+function Splash() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <Loader2 className="h-6 w-6 animate-spin text-primary" />
+    </div>
+  );
+}
+
+function Routes() {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) return <Splash />;
+
+  if (!user) {
+    return (
+      <Switch>
+        <Route path="/login" component={Login} />
+        <Route path="/forgot-password" component={ForgotPassword} />
+        <Route path="/reset-password" component={ResetPassword} />
+        <Route>
+          <Redirect to="/login" />
+        </Route>
+      </Switch>
+    );
+  }
+
+  return (
+    <AppShell>
+      <Switch>
+        <Route path="/" component={Collection} />
+        <Route path="/add" component={AddPiece} />
+        <Route path="/compare" component={Compare} />
+        <Route path="/piece/:id" component={PieceDetail} />
+        <Route path="/categories" component={Categories} />
+        <Route path="/maintenance" component={Maintenance} />
+        <Route path="/account" component={Account} />
+        <Route path="/settings" component={Settings} />
+        <Route path="/login">
+          <Redirect to="/" />
+        </Route>
+        <Route component={NotFound} />
+      </Switch>
+    </AppShell>
+  );
+}
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+          <AuthProvider>
+            <Routes />
+          </AuthProvider>
+        </WouterRouter>
+        <Toaster />
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+}
+
+export default App;

@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/quilting/"
+title = "Quilting"
+version = "1.0.0"
+id = "artifacts/quilting"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/quilting/" ]
+localPort = 25604
+
+[services.development]
+run = "pnpm --filter @workspace/quilting run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/quilting", "run", "build" ]
+publicDir = "artifacts/quilting/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25604"
+BASE_PATH = "/quilting/"

@@ -1,0 +1,978 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: pottery
+    description: Pottery collection operations
+  - name: compare
+    description: Pattern comparison operations
+  - name: stats
+    description: Collection statistics
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Log in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Log out
+      responses:
+        "204":
+          description: Logged out
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [auth]
+      summary: Current user
+      responses:
+        "200":
+          description: Authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /auth/change-password:
+    post:
+      operationId: changePassword
+      tags: [auth]
+      summary: Change current user's password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordInput"
+      responses:
+        "204":
+          description: Password changed successfully
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Wrong current password or not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /auth/forgot-password:
+    post:
+      operationId: forgotPassword
+      tags: [auth]
+      summary: Request a password reset email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForgotPasswordInput"
+      responses:
+        "200":
+          description: Reset email queued (always 200 — no account enumeration)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+  /auth/reset-password:
+    post:
+      operationId: resetPassword
+      tags: [auth]
+      summary: Reset password using a one-time token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordInput"
+      responses:
+        "200":
+          description: Password reset successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /auth/providers:
+    get:
+      operationId: getAuthProviders
+      tags: [auth]
+      summary: Available login providers
+      responses:
+        "200":
+          description: Provider availability
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthProviders"
+  /pottery:
+    get:
+      operationId: listPottery
+      tags: [pottery]
+      summary: List pottery
+      responses:
+        "200":
+          description: Collection list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PotteryItem"
+    post:
+      operationId: createPottery
+      tags: [pottery]
+      summary: Add a pottery piece
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PotteryItem"
+        "400":
+          description: Invalid upload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /pottery/stragglers:
+    get:
+      operationId: getStragglers
+      tags: [pottery]
+      summary: List pieces missing an embedding or core attributes
+      description: >-
+        Returns pieces that need re-analysis: those with no similarity
+        embedding (invisible to the "Do I own this?" compare) or with no
+        descriptive attributes at all. Used by the Maintenance page to offer a
+        one-click targeted re-analysis.
+      responses:
+        "200":
+          description: Stragglers needing re-analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Stragglers"
+  /pottery/{id}:
+    get:
+      operationId: getPottery
+      tags: [pottery]
+      summary: Get a pottery piece
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The pottery piece
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PotteryItem"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      operationId: updatePottery
+      tags: [pottery]
+      summary: Update a pottery piece
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PotteryUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PotteryItem"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deletePottery
+      tags: [pottery]
+      summary: Remove a pottery piece
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /pottery/{id}/images:
+    post:
+      operationId: addPotteryImage
+      tags: [pottery]
+      summary: Add a supplemental image to a piece
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: Image added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PotteryImage"
+        "400":
+          description: Invalid upload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Piece not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /pottery/{id}/images/{imageId}:
+    patch:
+      operationId: updatePotteryImage
+      tags: [pottery]
+      summary: Update a supplemental image's label or position
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: imageId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PotteryImageUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PotteryImage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deletePotteryImage
+      tags: [pottery]
+      summary: Remove a supplemental image
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: imageId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /pottery/{id}/reanalyze:
+    post:
+      operationId: reanalyzePottery
+      tags: [pottery]
+      summary: Re-run AI analysis on a pottery piece
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated with fresh AI analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PotteryItem"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /pottery/{id}/set-primary-image:
+    post:
+      operationId: setPrimaryImage
+      tags: [pottery]
+      summary: Promote a supplemental image to primary and re-analyse
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PrimaryImageSelection"
+      responses:
+        "200":
+          description: Updated item with new primary image and fresh AI analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PotteryItem"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /categories:
+    get:
+      operationId: listCategories
+      tags: [pottery]
+      summary: List categories
+      responses:
+        "200":
+          description: Category list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Category"
+    post:
+      operationId: createCategory
+      tags: [pottery]
+      summary: Create a category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "409":
+          description: Name already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /categories/unused:
+    delete:
+      operationId: deleteUnusedCategories
+      tags: [pottery]
+      summary: Delete all categories that have no pieces assigned
+      responses:
+        "200":
+          description: Number of categories deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deleted]
+                properties:
+                  deleted:
+                    type: integer
+  /categories/{id}:
+    patch:
+      operationId: renameCategory
+      tags: [pottery]
+      summary: Rename a category
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Name already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deleteCategory
+      tags: [pottery]
+      summary: Delete a category
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /categories/{id}/colors:
+    put:
+      operationId: updateCategoryColors
+      tags: [pottery]
+      summary: Update a category's background and text colours
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryColorInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /categories/{id}/merge:
+    post:
+      operationId: mergeCategory
+      tags: [pottery]
+      summary: Merge a category into another (reassigns all pieces, deletes source)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MergeCategoryInput"
+      responses:
+        "204":
+          description: Merged and deleted
+        "400":
+          description: Cannot merge a category into itself
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Source or target not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /compare:
+    post:
+      operationId: comparePottery
+      tags: [compare]
+      summary: Compare a candidate photo against the collection
+      responses:
+        "200":
+          description: Comparison result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompareResult"
+        "400":
+          description: Invalid upload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /stats:
+    get:
+      operationId: getCollectionStats
+      tags: [stats]
+      summary: Collection statistics
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollectionStats"
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required: [status]
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+    StragglerItem:
+      type: object
+      required: [id, reasons]
+      properties:
+        id:
+          type: integer
+        reasons:
+          type: array
+          description: >-
+            Why this piece needs re-analysis. "embedding" = no similarity
+            vector (excluded from compare); "attributes" = no descriptive
+            fields were extracted.
+          items:
+            type: string
+            enum: [embedding, attributes]
+    Stragglers:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/StragglerItem"
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+        rememberMe:
+          type: boolean
+    ChangePasswordInput:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          minLength: 1
+        newPassword:
+          type: string
+          minLength: 8
+    AuthUser:
+      type: object
+      required: [id, email]
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+    ForgotPasswordInput:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+    ResetPasswordInput:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token:
+          type: string
+          minLength: 1
+        newPassword:
+          type: string
+          minLength: 8
+    MessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+    AuthProviders:
+      type: object
+      required: [google]
+      properties:
+        google:
+          type: boolean
+    Category:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        bgColor:
+          type: string
+          nullable: true
+        textColor:
+          type: string
+          nullable: true
+        count:
+          type: integer
+          description: Number of pieces assigned this category (only present on the category-list endpoint)
+    CategoryInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+        bgColor:
+          type: string
+          nullable: true
+        textColor:
+          type: string
+          nullable: true
+    CategoryColorInput:
+      type: object
+      properties:
+        bgColor:
+          type: string
+          nullable: true
+        textColor:
+          type: string
+          nullable: true
+    MergeCategoryInput:
+      type: object
+      required: [intoId]
+      properties:
+        intoId:
+          type: integer
+    PotteryImage:
+      type: object
+      required: [id, url, position]
+      properties:
+        id:
+          type: integer
+        url:
+          type: string
+        label:
+          type: ["string", "null"]
+        position:
+          type: integer
+    PrimaryImageSelection:
+      type: object
+      required: [imageId]
+      properties:
+        imageId:
+          type: integer
+    PotteryImageUpdate:
+      type: object
+      properties:
+        label:
+          type: ["string", "null"]
+        position:
+          type: integer
+    PotteryItem:
+      type: object
+      required:
+        - id
+        - name
+        - quantity
+        - lockedFields
+        - imageUrl
+        - dominantColors
+        - motifs
+        - categories
+        - images
+        - createdAt
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+        lockedFields:
+          type: array
+          items:
+            type: string
+        notes:
+          type: ["string", "null"]
+        dimensions:
+          type: ["string", "null"]
+        patternDescription:
+          type: ["string", "null"]
+        style:
+          type: ["string", "null"]
+        shape:
+          type: ["string", "null"]
+        maker:
+          type: ["string", "null"]
+        makerInfo:
+          type: ["string", "null"]
+        aiDescription:
+          type: ["string", "null"]
+        acquiredAt:
+          type: ["string", "null"]
+        dominantColors:
+          type: array
+          items:
+            type: string
+        motifs:
+          type: array
+          items:
+            type: string
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/Category"
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/PotteryImage"
+        imageUrl:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    PotteryUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        notes:
+          type: ["string", "null"]
+        acquiredAt:
+          type: ["string", "null"]
+        aiDescription:
+          type: ["string", "null"]
+        maker:
+          type: ["string", "null"]
+        makerInfo:
+          type: ["string", "null"]
+        dimensions:
+          type: ["string", "null"]
+        quantity:
+          type: integer
+          minimum: 1
+        lockedFields:
+          type: array
+          items:
+            type: string
+        categoryIds:
+          type: array
+          items:
+            type: integer
+    CompareCandidate:
+      type: object
+      required: [dominantColors, motifs]
+      properties:
+        patternDescription:
+          type: ["string", "null"]
+        style:
+          type: ["string", "null"]
+        shape:
+          type: ["string", "null"]
+        maker:
+          type: ["string", "null"]
+        dimensions:
+          type: ["string", "null"]
+        dominantColors:
+          type: array
+          items:
+            type: string
+        motifs:
+          type: array
+          items:
+            type: string
+    MatchResult:
+      type: object
+      required: [item, similarity, samePattern, exactPiece, explanation]
+      properties:
+        item:
+          $ref: "#/components/schemas/PotteryItem"
+        similarity:
+          type: number
+        samePattern:
+          type: string
+          enum: [yes, maybe, no]
+        exactPiece:
+          type: string
+          enum: [yes, maybe, no]
+        explanation:
+          type: string
+    CompareResult:
+      type: object
+      required: [candidate, matches, summary, ownsSamePattern, ownsExactPiece]
+      properties:
+        candidate:
+          $ref: "#/components/schemas/CompareCandidate"
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/MatchResult"
+        summary:
+          type: string
+        ownsSamePattern:
+          type: string
+          enum: [yes, maybe, no]
+        ownsExactPiece:
+          type: string
+          enum: [yes, maybe, no]
+    MotifCount:
+      type: object
+      required: [label, count]
+      properties:
+        label:
+          type: string
+        count:
+          type: integer
+    ColorCount:
+      type: object
+      required: [label, count]
+      properties:
+        label:
+          type: string
+        count:
+          type: integer
+    CollectionStats:
+      type: object
+      required: [totalItems, topMotifs, topColors]
+      properties:
+        totalItems:
+          type: integer
+        topMotifs:
+          type: array
+          items:
+            $ref: "#/components/schemas/MotifCount"
+        topColors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ColorCount"

@@ -13,3 +13,4 @@ export const db = drizzle(pool, { schema });
 
 export * from "./schema";
 export { resolveDatabaseUrl, sslConfig } from "./resolve-url";
+export { STATEMENTS } from "./schema-statements";

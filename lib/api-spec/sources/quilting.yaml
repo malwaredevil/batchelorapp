@@ -1,0 +1,2643 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Batchelor Quilting App API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: fabrics
+    description: Fabric collection operations
+  - name: patterns
+    description: Quilt pattern operations
+  - name: quilts
+    description: Finished quilt operations
+  - name: compare
+    description: Fabric comparison operations
+  - name: categories
+    description: Category / tag management
+  - name: stats
+    description: Collection statistics
+  - name: blocks
+    description: Block pattern designer
+  - name: layouts
+    description: Quilt layout composer
+  - name: shopping
+    description: Shopping list and budget tracker
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Log in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Log out
+      responses:
+        "200":
+          description: Logged out
+
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: Not authenticated
+
+  /auth/providers:
+    get:
+      operationId: getAuthProviders
+      tags: [auth]
+      summary: Get available login providers
+      responses:
+        "200":
+          description: Available providers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthProviders"
+
+  /auth/forgot-password:
+    post:
+      operationId: forgotPassword
+      tags: [auth]
+      summary: Request a password reset email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForgotPasswordInput"
+      responses:
+        "204":
+          description: >
+            Reset email sent (or silently accepted when email is not registered,
+            to avoid account enumeration)
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Email service not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/reset-password:
+    post:
+      operationId: resetPassword
+      tags: [auth]
+      summary: Consume a reset token and set a new password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordInput"
+      responses:
+        "204":
+          description: Password updated
+        "400":
+          description: Token invalid, expired, or already used
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/change-password:
+    post:
+      operationId: changePassword
+      tags: [auth]
+      summary: Change password for the current user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordInput"
+      responses:
+        "204":
+          description: Password changed
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Current password incorrect or not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ---------------------------------------------------------------------------
+  # Fabrics
+  # ---------------------------------------------------------------------------
+
+  /fabrics:
+    get:
+      operationId: listFabrics
+      tags: [fabrics]
+      summary: List all fabrics
+      responses:
+        "200":
+          description: Fabric list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Fabric"
+
+    post:
+      operationId: createFabric
+      tags: [fabrics]
+      summary: Add a fabric (with primary photo)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/CreateFabricInput"
+      responses:
+        "201":
+          description: Fabric created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fabric"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /fabrics/{id}:
+    get:
+      operationId: getFabric
+      tags: [fabrics]
+      summary: Get a fabric by ID
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Fabric detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fabric"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    patch:
+      operationId: updateFabric
+      tags: [fabrics]
+      summary: Update fabric metadata
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFabricInput"
+      responses:
+        "200":
+          description: Updated fabric
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fabric"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      operationId: deleteFabric
+      tags: [fabrics]
+      summary: Delete a fabric
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "204":
+          description: Deleted
+
+  /fabrics/{id}/image:
+    get:
+      operationId: getFabricImage
+      tags: [fabrics]
+      summary: Get primary fabric image (proxied, authenticated)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Image binary
+
+  /fabrics/{id}/reanalyze:
+    post:
+      operationId: reanalyzeFabric
+      tags: [fabrics]
+      summary: Re-run AI analysis on a fabric using its existing photos
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Updated fabric
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fabric"
+
+  /fabrics/bulk-reanalyze:
+    post:
+      operationId: bulkReanalyzeFabrics
+      tags: [fabrics]
+      summary: Re-run AI analysis on multiple fabrics
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkReanalyzeInput"
+      responses:
+        "200":
+          description: Bulk reanalysis results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkReanalyzeResult"
+
+  /fabrics/{id}/images:
+    post:
+      operationId: addFabricImage
+      tags: [fabrics]
+      summary: Add a supplemental image to a fabric
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/AddImageInput"
+      responses:
+        "201":
+          description: Image added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityImage"
+
+  /fabrics/{id}/images/{imageId}:
+    get:
+      operationId: getFabricSupplementalImage
+      tags: [fabrics]
+      summary: Get a supplemental fabric image
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - $ref: "#/components/parameters/ImageIdParam"
+      responses:
+        "200":
+          description: Image binary
+
+    patch:
+      operationId: updateFabricImage
+      tags: [fabrics]
+      summary: Update a supplemental fabric image label/position
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - $ref: "#/components/parameters/ImageIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateImageInput"
+      responses:
+        "200":
+          description: Updated image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityImage"
+
+    delete:
+      operationId: deleteFabricImage
+      tags: [fabrics]
+      summary: Delete a supplemental fabric image
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - $ref: "#/components/parameters/ImageIdParam"
+      responses:
+        "204":
+          description: Deleted
+
+  # ---------------------------------------------------------------------------
+  # Quilt Patterns
+  # ---------------------------------------------------------------------------
+
+  /patterns:
+    get:
+      operationId: listPatterns
+      tags: [patterns]
+      summary: List all quilt patterns
+      responses:
+        "200":
+          description: Pattern list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QuiltPattern"
+
+    post:
+      operationId: createPattern
+      tags: [patterns]
+      summary: Add a quilt pattern
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/CreatePatternInput"
+      responses:
+        "201":
+          description: Pattern created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuiltPattern"
+
+  /patterns/{id}:
+    get:
+      operationId: getPattern
+      tags: [patterns]
+      summary: Get a quilt pattern by ID
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Pattern detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuiltPattern"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    patch:
+      operationId: updatePattern
+      tags: [patterns]
+      summary: Update pattern metadata
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePatternInput"
+      responses:
+        "200":
+          description: Updated pattern
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuiltPattern"
+
+    delete:
+      operationId: deletePattern
+      tags: [patterns]
+      summary: Delete a pattern
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "204":
+          description: Deleted
+
+  /patterns/{id}/image:
+    get:
+      operationId: getPatternImage
+      tags: [patterns]
+      summary: Get primary pattern image
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Image binary
+
+  /patterns/{id}/reanalyze:
+    post:
+      operationId: reanalyzePattern
+      tags: [patterns]
+      summary: Re-run AI analysis on a pattern using its existing photo
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Updated pattern
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuiltPattern"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /patterns/{id}/enrich:
+    post:
+      operationId: enrichPattern
+      tags: [patterns]
+      summary: Enrich designer metadata via AI web search (Perplexity)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Updated pattern with enriched designer info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuiltPattern"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /patterns/{id}/extract-blocks:
+    post:
+      operationId: extractPatternBlocks
+      tags: [patterns]
+      summary: Extract block grid schema from pattern image via AI
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Extracted block schema
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExtractBlocksResult"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Pattern has no image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /patterns/bulk-reanalyze:
+    post:
+      operationId: bulkReanalyzePatterns
+      tags: [patterns]
+      summary: Re-run AI analysis on multiple patterns
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkReanalyzeInput"
+      responses:
+        "200":
+          description: Bulk reanalysis results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkReanalyzeResult"
+
+  /patterns/{id}/images:
+    post:
+      operationId: addPatternImage
+      tags: [patterns]
+      summary: Add a supplemental image to a pattern
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/AddImageInput"
+      responses:
+        "201":
+          description: Image added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityImage"
+
+  /patterns/{id}/images/{imageId}:
+    get:
+      operationId: getPatternSupplementalImage
+      tags: [patterns]
+      summary: Get a supplemental pattern image
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - $ref: "#/components/parameters/ImageIdParam"
+      responses:
+        "200":
+          description: Image binary
+
+    patch:
+      operationId: updatePatternImage
+      tags: [patterns]
+      summary: Update a supplemental pattern image
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - $ref: "#/components/parameters/ImageIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateImageInput"
+      responses:
+        "200":
+          description: Updated image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityImage"
+
+    delete:
+      operationId: deletePatternImage
+      tags: [patterns]
+      summary: Delete a supplemental pattern image
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - $ref: "#/components/parameters/ImageIdParam"
+      responses:
+        "204":
+          description: Deleted
+
+  # ---------------------------------------------------------------------------
+  # Finished Quilts
+  # ---------------------------------------------------------------------------
+
+  /quilts:
+    get:
+      operationId: listQuilts
+      tags: [quilts]
+      summary: List all finished quilts
+      responses:
+        "200":
+          description: Quilt list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FinishedQuilt"
+
+    post:
+      operationId: createQuilt
+      tags: [quilts]
+      summary: Add a finished quilt
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/CreateQuiltInput"
+      responses:
+        "201":
+          description: Quilt created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinishedQuilt"
+
+  /quilts/{id}:
+    get:
+      operationId: getQuilt
+      tags: [quilts]
+      summary: Get a finished quilt by ID
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Quilt detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinishedQuilt"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    patch:
+      operationId: updateQuilt
+      tags: [quilts]
+      summary: Update quilt metadata
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateQuiltInput"
+      responses:
+        "200":
+          description: Updated quilt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinishedQuilt"
+
+    delete:
+      operationId: deleteQuilt
+      tags: [quilts]
+      summary: Delete a finished quilt
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "204":
+          description: Deleted
+
+  /quilts/{id}/image:
+    get:
+      operationId: getQuiltImage
+      tags: [quilts]
+      summary: Get primary quilt image
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Image binary
+
+  /quilts/{id}/reanalyze:
+    post:
+      operationId: reanalyzeQuilt
+      tags: [quilts]
+      summary: Re-run AI analysis on a quilt using its existing photo
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Updated quilt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinishedQuilt"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /quilts/bulk-reanalyze:
+    post:
+      operationId: bulkReanalyzeQuilts
+      tags: [quilts]
+      summary: Re-run AI analysis on multiple quilts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkReanalyzeInput"
+      responses:
+        "200":
+          description: Bulk reanalysis results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkReanalyzeResult"
+
+  /quilts/{id}/images:
+    post:
+      operationId: addQuiltImage
+      tags: [quilts]
+      summary: Add a supplemental image to a quilt
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/AddImageInput"
+      responses:
+        "201":
+          description: Image added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityImage"
+
+  /quilts/{id}/images/{imageId}:
+    get:
+      operationId: getQuiltSupplementalImage
+      tags: [quilts]
+      summary: Get a supplemental quilt image
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - $ref: "#/components/parameters/ImageIdParam"
+      responses:
+        "200":
+          description: Image binary
+
+    patch:
+      operationId: updateQuiltImage
+      tags: [quilts]
+      summary: Update a supplemental quilt image
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - $ref: "#/components/parameters/ImageIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateImageInput"
+      responses:
+        "200":
+          description: Updated image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityImage"
+
+    delete:
+      operationId: deleteQuiltImage
+      tags: [quilts]
+      summary: Delete a supplemental quilt image
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - $ref: "#/components/parameters/ImageIdParam"
+      responses:
+        "204":
+          description: Deleted
+
+  # ---------------------------------------------------------------------------
+  # Compare
+  # ---------------------------------------------------------------------------
+
+  /compare:
+    post:
+      operationId: compareFabric
+      tags: [compare]
+      summary: Check if a fabric photo matches anything in the collection
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Comparison result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompareResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ---------------------------------------------------------------------------
+  # Categories
+  # ---------------------------------------------------------------------------
+
+  /categories:
+    get:
+      operationId: listCategories
+      tags: [categories]
+      summary: List all categories with usage counts
+      responses:
+        "200":
+          description: Category list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CategoryWithCount"
+
+    post:
+      operationId: createCategory
+      tags: [categories]
+      summary: Create a category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCategoryInput"
+      responses:
+        "201":
+          description: Category created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryWithCount"
+        "409":
+          description: Name already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /categories/unused:
+    delete:
+      operationId: deleteUnusedCategories
+      tags: [categories]
+      summary: Delete all categories with no assignments
+      responses:
+        "200":
+          description: Deleted count
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deleted]
+                properties:
+                  deleted:
+                    type: integer
+
+  /categories/{id}:
+    patch:
+      operationId: renameCategory
+      tags: [categories]
+      summary: Rename a category
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenameCategoryInput"
+      responses:
+        "200":
+          description: Updated category
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryWithCount"
+
+    delete:
+      operationId: deleteCategory
+      tags: [categories]
+      summary: Delete a category
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "204":
+          description: Deleted
+
+  /categories/{id}/colors:
+    put:
+      operationId: updateCategoryColors
+      tags: [categories]
+      summary: Update category badge colours
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCategoryColorsInput"
+      responses:
+        "200":
+          description: Updated category
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryWithCount"
+
+  /categories/{id}/merge:
+    post:
+      operationId: mergeCategory
+      tags: [categories]
+      summary: Merge a category into another
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MergeCategoryInput"
+      responses:
+        "200":
+          description: Merge result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [merged]
+                properties:
+                  merged:
+                    type: integer
+
+  # ---------------------------------------------------------------------------
+  # Shopping list
+  # ---------------------------------------------------------------------------
+
+  /shopping:
+    get:
+      operationId: listShoppingItems
+      tags: [shopping]
+      summary: List all shopping items
+      responses:
+        "200":
+          description: Shopping item list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ShoppingItem"
+
+    post:
+      operationId: createShoppingItem
+      tags: [shopping]
+      summary: Create a shopping item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateShoppingItemInput"
+      responses:
+        "201":
+          description: Item created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingItem"
+
+  /shopping/stats:
+    get:
+      operationId: getShoppingStats
+      tags: [shopping]
+      summary: Budget summary statistics
+      responses:
+        "200":
+          description: Budget stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingStats"
+
+  /shopping/{id}:
+    get:
+      operationId: getShoppingItem
+      tags: [shopping]
+      summary: Get a shopping item by ID
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Shopping item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingItem"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    patch:
+      operationId: updateShoppingItem
+      tags: [shopping]
+      summary: Update a shopping item
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateShoppingItemInput"
+      responses:
+        "200":
+          description: Updated item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingItem"
+
+    delete:
+      operationId: deleteShoppingItem
+      tags: [shopping]
+      summary: Delete a shopping item
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "204":
+          description: Deleted
+
+  # ---------------------------------------------------------------------------
+  # Quilt Layouts
+  # ---------------------------------------------------------------------------
+
+  /layouts:
+    get:
+      operationId: listLayouts
+      tags: [layouts]
+      summary: List all saved quilt layouts
+      responses:
+        "200":
+          description: Layout list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QuiltLayout"
+
+    post:
+      operationId: createLayout
+      tags: [layouts]
+      summary: Create a new quilt layout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLayoutInput"
+      responses:
+        "201":
+          description: Layout created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuiltLayout"
+
+  /layouts/{id}:
+    get:
+      operationId: getLayout
+      tags: [layouts]
+      summary: Get a quilt layout by ID
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Layout detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuiltLayout"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    patch:
+      operationId: updateLayout
+      tags: [layouts]
+      summary: Update a quilt layout
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateLayoutInput"
+      responses:
+        "200":
+          description: Updated layout
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuiltLayout"
+
+    delete:
+      operationId: deleteLayout
+      tags: [layouts]
+      summary: Delete a quilt layout
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "204":
+          description: Deleted
+
+  # ---------------------------------------------------------------------------
+  # Pattern import
+  # ---------------------------------------------------------------------------
+
+  /patterns/import-url:
+    post:
+      operationId: importPatternFromUrl
+      tags: [patterns]
+      summary: Import pattern info from a URL using AI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url:
+                  type: string
+                  format: uri
+      responses:
+        "200":
+          description: Extracted pattern info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportedPatternInfo"
+        "422":
+          description: Could not extract pattern info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ---------------------------------------------------------------------------
+  # Block Designs
+  # ---------------------------------------------------------------------------
+
+  /blocks:
+    get:
+      operationId: listBlocks
+      tags: [blocks]
+      summary: List all saved block designs
+      responses:
+        "200":
+          description: Block list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Block"
+
+    post:
+      operationId: createBlock
+      tags: [blocks]
+      summary: Create a new block design
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBlockInput"
+      responses:
+        "201":
+          description: Block created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Block"
+
+  /blocks/detect-seams:
+    post:
+      operationId: detectBlockSeams
+      tags: [blocks]
+      summary: Use AI to detect seam positions from a block photo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DetectSeamsInput"
+      responses:
+        "200":
+          description: Detected seam positions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DetectedSeams"
+
+  /blocks/{id}:
+    get:
+      operationId: getBlock
+      tags: [blocks]
+      summary: Get a block design by ID
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Block detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Block"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    patch:
+      operationId: updateBlock
+      tags: [blocks]
+      summary: Update a block design
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBlockInput"
+      responses:
+        "200":
+          description: Updated block
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Block"
+
+    delete:
+      operationId: deleteBlock
+      tags: [blocks]
+      summary: Delete a block design
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "204":
+          description: Deleted
+
+  # ---------------------------------------------------------------------------
+  # Stats
+  # ---------------------------------------------------------------------------
+
+  /stats:
+    get:
+      operationId: getStats
+      tags: [stats]
+      summary: Get collection statistics
+      responses:
+        "200":
+          description: Collection stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollectionStats"
+
+  /stats/stale:
+    get:
+      operationId: getStaleCount
+      tags: [stats]
+      summary: Count fabrics and patterns missing an AI embedding
+      responses:
+        "200":
+          description: Stale-items count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaleCount"
+
+# ---------------------------------------------------------------------------
+# Components
+# ---------------------------------------------------------------------------
+
+components:
+  parameters:
+    IdParam:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+
+    ImageIdParam:
+      name: imageId
+      in: path
+      required: true
+      schema:
+        type: integer
+
+  schemas:
+    # Shared
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+
+    AuthUser:
+      type: object
+      required: [id, email]
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+
+    AuthProviders:
+      type: object
+      required: [google]
+      properties:
+        google:
+          type: boolean
+
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+        rememberMe:
+          type: boolean
+
+    ForgotPasswordInput:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+
+    ResetPasswordInput:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token:
+          type: string
+        newPassword:
+          type: string
+
+    ChangePasswordInput:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+
+    Category:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        bgColor:
+          type: string
+          nullable: true
+        textColor:
+          type: string
+          nullable: true
+
+    CategoryWithCount:
+      allOf:
+        - $ref: "#/components/schemas/Category"
+        - type: object
+          required: [count]
+          properties:
+            count:
+              type: integer
+
+    EntityImage:
+      type: object
+      required: [id, url, position]
+      properties:
+        id:
+          type: integer
+        url:
+          type: string
+        label:
+          type: string
+          nullable: true
+        position:
+          type: integer
+
+    AddImageInput:
+      type: object
+      required: [image]
+      properties:
+        image:
+          type: string
+          format: binary
+        label:
+          type: string
+
+    UpdateImageInput:
+      type: object
+      properties:
+        label:
+          type: string
+          nullable: true
+        position:
+          type: integer
+
+    # Fabrics
+    Fabric:
+      type: object
+      required:
+        [
+          id,
+          name,
+          quantity,
+          quantityUnit,
+          dominantColors,
+          motifs,
+          styleDescriptors,
+          lockedFields,
+          categories,
+          images,
+          imageUrl,
+          hasEmbedding,
+          createdAt,
+        ]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        lineName:
+          type: string
+          nullable: true
+        designer:
+          type: string
+          nullable: true
+        manufacturer:
+          type: string
+          nullable: true
+        colorway:
+          type: string
+          nullable: true
+        printType:
+          type: string
+          nullable: true
+        fiberContent:
+          type: string
+          nullable: true
+        widthInches:
+          type: number
+          nullable: true
+        quantity:
+          type: number
+        quantityUnit:
+          type: string
+        sku:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        aiDescription:
+          type: string
+          nullable: true
+        dominantColors:
+          type: array
+          items:
+            type: string
+        motifs:
+          type: array
+          items:
+            type: string
+        styleDescriptors:
+          type: array
+          items:
+            type: string
+        acquiredAt:
+          type: string
+          nullable: true
+        lockedFields:
+          type: array
+          items:
+            type: string
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/Category"
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/EntityImage"
+        imageUrl:
+          type: string
+        hasEmbedding:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateFabricInput:
+      type: object
+      required: [image]
+      properties:
+        image:
+          type: string
+          format: binary
+        name:
+          type: string
+        lineName:
+          type: string
+        designer:
+          type: string
+        manufacturer:
+          type: string
+        colorway:
+          type: string
+        printType:
+          type: string
+        fiberContent:
+          type: string
+        widthInches:
+          type: string
+        quantity:
+          type: string
+        quantityUnit:
+          type: string
+        sku:
+          type: string
+        notes:
+          type: string
+        acquiredAt:
+          type: string
+        categories:
+          type: string
+
+    UpdateFabricInput:
+      type: object
+      properties:
+        name:
+          type: string
+        lineName:
+          type: string
+          nullable: true
+        designer:
+          type: string
+          nullable: true
+        manufacturer:
+          type: string
+          nullable: true
+        colorway:
+          type: string
+          nullable: true
+        printType:
+          type: string
+          nullable: true
+        fiberContent:
+          type: string
+          nullable: true
+        widthInches:
+          type: number
+          nullable: true
+        quantity:
+          type: number
+        quantityUnit:
+          type: string
+        sku:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        acquiredAt:
+          type: string
+          nullable: true
+        dominantColors:
+          type: array
+          items:
+            type: string
+        motifs:
+          type: array
+          items:
+            type: string
+        lockedFields:
+          type: array
+          items:
+            type: string
+        categories:
+          type: array
+          items:
+            type: string
+
+    # Quilt Patterns
+    QuiltPattern:
+      type: object
+      required:
+        [id, name, lockedFields, categories, images, hasEmbedding, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        designer:
+          type: string
+          nullable: true
+        blockSize:
+          type: string
+          nullable: true
+        difficulty:
+          type: string
+          nullable: true
+        sourceType:
+          type: string
+          nullable: true
+        sourceReference:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        acquiredAt:
+          type: string
+          nullable: true
+        lockedFields:
+          type: array
+          items:
+            type: string
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/Category"
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/EntityImage"
+        imageUrl:
+          type: string
+          nullable: true
+        hasEmbedding:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    CreatePatternInput:
+      type: object
+      required: [name]
+      properties:
+        image:
+          type: string
+          format: binary
+        name:
+          type: string
+        designer:
+          type: string
+        blockSize:
+          type: string
+        difficulty:
+          type: string
+        sourceType:
+          type: string
+        sourceReference:
+          type: string
+        notes:
+          type: string
+        acquiredAt:
+          type: string
+        categories:
+          type: string
+
+    UpdatePatternInput:
+      type: object
+      properties:
+        name:
+          type: string
+        designer:
+          type: string
+          nullable: true
+        blockSize:
+          type: string
+          nullable: true
+        difficulty:
+          type: string
+          nullable: true
+        sourceType:
+          type: string
+          nullable: true
+        sourceReference:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        acquiredAt:
+          type: string
+          nullable: true
+        lockedFields:
+          type: array
+          items:
+            type: string
+        categories:
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            maxLength: 100
+
+    # Finished Quilts
+    QuiltFabricSummary:
+      type: object
+      required: [id, name, imageUrl, dominantColors]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        colorway:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+        dominantColors:
+          type: array
+          items:
+            type: string
+
+    FinishedQuilt:
+      type: object
+      required:
+        [
+          id,
+          name,
+          lockedFields,
+          categories,
+          images,
+          imageUrl,
+          linkedFabricIds,
+          linkedPatternIds,
+          linkedFabrics,
+          createdAt,
+        ]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        dateCompleted:
+          type: string
+          nullable: true
+        sizeWidth:
+          type: number
+          nullable: true
+        sizeHeight:
+          type: number
+          nullable: true
+        recipient:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        lockedFields:
+          type: array
+          items:
+            type: string
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/Category"
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/EntityImage"
+        imageUrl:
+          type: string
+        linkedFabricIds:
+          type: array
+          items:
+            type: integer
+        linkedPatternIds:
+          type: array
+          items:
+            type: integer
+        linkedFabrics:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuiltFabricSummary"
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateQuiltInput:
+      type: object
+      required: [image, name]
+      properties:
+        image:
+          type: string
+          format: binary
+        name:
+          type: string
+        dateCompleted:
+          type: string
+        sizeWidth:
+          type: string
+        sizeHeight:
+          type: string
+        recipient:
+          type: string
+        notes:
+          type: string
+        categories:
+          type: string
+        linkedFabricIds:
+          type: string
+        linkedPatternIds:
+          type: string
+
+    UpdateQuiltInput:
+      type: object
+      properties:
+        name:
+          type: string
+        dateCompleted:
+          type: string
+          nullable: true
+        sizeWidth:
+          type: number
+          nullable: true
+        sizeHeight:
+          type: number
+          nullable: true
+        recipient:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        lockedFields:
+          type: array
+          items:
+            type: string
+        categories:
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            maxLength: 100
+        linkedFabricIds:
+          type: array
+          items:
+            type: integer
+        linkedPatternIds:
+          type: array
+          items:
+            type: integer
+
+    # Bulk reanalyze
+    BulkReanalyzeInput:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          items:
+            type: integer
+          maxItems: 50
+
+    BulkReanalyzeResult:
+      type: object
+      required: [succeeded, failed]
+      properties:
+        succeeded:
+          type: array
+          items:
+            type: integer
+        failed:
+          type: array
+          items:
+            type: integer
+
+    ExtractBlocksResult:
+      type: object
+      required: [gridSize, cells, confidence]
+      properties:
+        gridSize:
+          type: integer
+          enum: [4, 8, 12]
+        cells:
+          type: array
+          items:
+            type: string
+        confidence:
+          type: string
+          enum: [high, medium, low]
+
+    # Compare
+    FabricMatchResult:
+      type: object
+      required: [fabric, similarity, samePattern, exactFabric, explanation]
+      properties:
+        fabric:
+          $ref: "#/components/schemas/Fabric"
+        similarity:
+          type: number
+        samePattern:
+          type: string
+          enum: [yes, maybe, no]
+        exactFabric:
+          type: string
+          enum: [yes, maybe, no]
+        explanation:
+          type: string
+
+    CompareResult:
+      type: object
+      required: [summary, ownsSamePattern, ownsExactFabric, matches]
+      properties:
+        summary:
+          type: string
+        ownsSamePattern:
+          type: string
+          enum: [yes, maybe, no]
+        ownsExactFabric:
+          type: string
+          enum: [yes, maybe, no]
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/FabricMatchResult"
+
+    # Categories
+    CreateCategoryInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        bgColor:
+          type: string
+          nullable: true
+        textColor:
+          type: string
+          nullable: true
+
+    RenameCategoryInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
+    UpdateCategoryColorsInput:
+      type: object
+      properties:
+        bgColor:
+          type: string
+          nullable: true
+        textColor:
+          type: string
+          nullable: true
+
+    MergeCategoryInput:
+      type: object
+      required: [targetId]
+      properties:
+        targetId:
+          type: integer
+
+    # Stats
+    CollectionStats:
+      type: object
+      required:
+        [
+          totalFabrics,
+          totalPatterns,
+          totalQuilts,
+          totalYardage,
+          topColors,
+          topMotifs,
+          topPrintTypes,
+        ]
+      properties:
+        totalFabrics:
+          type: integer
+        totalPatterns:
+          type: integer
+        totalQuilts:
+          type: integer
+        totalYardage:
+          type: number
+        topColors:
+          type: array
+          items:
+            type: object
+            required: [color, count]
+            properties:
+              color:
+                type: string
+              count:
+                type: integer
+        topMotifs:
+          type: array
+          items:
+            type: object
+            required: [motif, count]
+            properties:
+              motif:
+                type: string
+              count:
+                type: integer
+        topPrintTypes:
+          type: array
+          items:
+            type: object
+            required: [printType, count]
+            properties:
+              printType:
+                type: string
+              count:
+                type: integer
+
+    StaleCount:
+      type: object
+      required: [count, fabrics, patterns]
+      properties:
+        count:
+          type: integer
+        fabrics:
+          type: integer
+        patterns:
+          type: integer
+
+    # Shopping list
+    ShoppingItem:
+      type: object
+      required: [id, name, status, priority, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        notes:
+          type: string
+          nullable: true
+        url:
+          type: string
+          nullable: true
+        quantity:
+          type: number
+          nullable: true
+        unit:
+          type: string
+          nullable: true
+        estimatedPriceUsd:
+          type: number
+          nullable: true
+        actualPriceUsd:
+          type: number
+          nullable: true
+        store:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [want, ordered, bought]
+        priority:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateShoppingItemInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        notes:
+          type: string
+          nullable: true
+        url:
+          type: string
+          nullable: true
+        quantity:
+          type: number
+          nullable: true
+        unit:
+          type: string
+          nullable: true
+        estimatedPriceUsd:
+          type: number
+          nullable: true
+        actualPriceUsd:
+          type: number
+          nullable: true
+        store:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [want, ordered, bought]
+        priority:
+          type: integer
+
+    UpdateShoppingItemInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        notes:
+          type: string
+          nullable: true
+        url:
+          type: string
+          nullable: true
+        quantity:
+          type: number
+          nullable: true
+        unit:
+          type: string
+          nullable: true
+        estimatedPriceUsd:
+          type: number
+          nullable: true
+        actualPriceUsd:
+          type: number
+          nullable: true
+        store:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [want, ordered, bought]
+        priority:
+          type: integer
+
+    ShoppingStats:
+      type: object
+      required:
+        [
+          totalItems,
+          wantCount,
+          orderedCount,
+          boughtCount,
+          totalEstimatedUsd,
+          totalSpentUsd,
+        ]
+      properties:
+        totalItems:
+          type: integer
+        wantCount:
+          type: integer
+        orderedCount:
+          type: integer
+        boughtCount:
+          type: integer
+        totalEstimatedUsd:
+          type: number
+        totalSpentUsd:
+          type: number
+
+    ImportedPatternInfo:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        designer:
+          type: string
+          nullable: true
+        difficulty:
+          type: string
+          nullable: true
+        blockSizeInches:
+          type: number
+          nullable: true
+        numPieces:
+          type: integer
+          nullable: true
+        style:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+
+    # Layouts
+    LayoutCell:
+      type: object
+      required: [blockId, rotation]
+      properties:
+        blockId:
+          type: integer
+          nullable: true
+        rotation:
+          type: integer
+          enum: [0, 90, 180, 270]
+
+    QuiltLayout:
+      type: object
+      required: [id, name, rows, cols, cells, categories, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        rows:
+          type: integer
+        cols:
+          type: integer
+        cells:
+          type: array
+          items:
+            $ref: "#/components/schemas/LayoutCell"
+        sashingWidthInches:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 6
+          description: Sashing strip width in inches (null = no sashing)
+        sashingColor:
+          type: string
+          nullable: true
+          description: Hex colour for sashing strips
+        borderWidthInches:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 6
+          description: Outer border width in inches (null = no border)
+        borderColor:
+          type: string
+          nullable: true
+          description: Hex colour for outer border
+        cornerstoneColor:
+          type: string
+          nullable: true
+          description: Hex colour for cornerstone squares at sashing intersections (null = no cornerstones)
+        createdAt:
+          type: string
+          format: date-time
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/Category"
+
+    CreateLayoutInput:
+      type: object
+      required: [name, rows, cols, cells]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        rows:
+          type: integer
+          minimum: 1
+          maximum: 16
+        cols:
+          type: integer
+          minimum: 1
+          maximum: 16
+        cells:
+          type: array
+          items:
+            $ref: "#/components/schemas/LayoutCell"
+        sashingWidthInches:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 6
+        sashingColor:
+          type: string
+          nullable: true
+        borderWidthInches:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 6
+        borderColor:
+          type: string
+          nullable: true
+        cornerstoneColor:
+          type: string
+          nullable: true
+          description: Hex colour for cornerstone squares (null = no cornerstones)
+        categoryNames:
+          type: array
+          items:
+            type: string
+            maxLength: 100
+          maxItems: 20
+
+    UpdateLayoutInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        rows:
+          type: integer
+          minimum: 1
+          maximum: 16
+        cols:
+          type: integer
+          minimum: 1
+          maximum: 16
+        cells:
+          type: array
+          items:
+            $ref: "#/components/schemas/LayoutCell"
+        sashingWidthInches:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 6
+        sashingColor:
+          type: string
+          nullable: true
+        borderWidthInches:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 6
+        borderColor:
+          type: string
+          nullable: true
+        cornerstoneColor:
+          type: string
+          nullable: true
+          description: Hex colour for cornerstone squares (null = no cornerstones)
+        categoryNames:
+          type: array
+          items:
+            type: string
+            maxLength: 100
+          maxItems: 20
+
+    # Blocks
+    BlockSeamLine:
+      type: object
+      required: [axis, pos, cellIdx]
+      properties:
+        axis:
+          type: string
+          enum: [h, v]
+        pos:
+          type: integer
+          description: Perpendicular position in half-cell units
+        cellIdx:
+          type: integer
+          description: Row index (h seams) or column index (v seams)
+        clipStart:
+          type: number
+          description: Fractional clip start (0–1) within the cell
+        clipEnd:
+          type: number
+          description: Fractional clip end (0–1) within the cell
+
+    Block:
+      type: object
+      required: [id, name, gridSize, cells, seams, categories, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        gridSize:
+          type: integer
+        cells:
+          type: array
+          items:
+            type: string
+        seams:
+          type: array
+          items:
+            $ref: "#/components/schemas/BlockSeamLine"
+          description: H/V seam lines drawn in the block designer
+        blockSizeInches:
+          type: number
+          nullable: true
+          description: Physical finished size of the entire block in inches (e.g. 12 for a 12" block)
+        seamAllowanceInches:
+          type: number
+          nullable: true
+          description: Seam allowance per side in inches (e.g. 0.25 for standard 1/4")
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/Category"
+        createdAt:
+          type: string
+          format: date-time
+
+    DetectSeamsInput:
+      type: object
+      required: [image, gridW, gridH]
+      properties:
+        image:
+          type: string
+          description: Base64 data URL of the block photo (JPEG or PNG, max ~1.5 MB)
+        gridW:
+          type: integer
+          minimum: 1
+          maximum: 20
+        gridH:
+          type: integer
+          minimum: 1
+          maximum: 20
+
+    DetectedSeams:
+      type: object
+      required: [seams, diagSeams]
+      properties:
+        seams:
+          type: array
+          items:
+            $ref: "#/components/schemas/DetectedSeam"
+        diagSeams:
+          type: array
+          items:
+            $ref: "#/components/schemas/DetectedDiagSeam"
+
+    DetectedSeam:
+      type: object
+      required: [axis, pos, cellIdx]
+      properties:
+        axis:
+          type: string
+          enum: [h, v]
+        pos:
+          type: integer
+        cellIdx:
+          type: integer
+
+    DetectedDiagSeam:
+      type: object
+      required: [diagType, row, col]
+      properties:
+        diagType:
+          type: string
+          enum: [nwse, nesw]
+        row:
+          type: integer
+        col:
+          type: integer
+
+    CreateBlockInput:
+      type: object
+      required: [name, gridSize, cells]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        gridSize:
+          type: integer
+          enum: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        cells:
+          type: array
+          items:
+            type: string
+        seams:
+          type: array
+          items:
+            $ref: "#/components/schemas/BlockSeamLine"
+          description: H/V seam lines to persist with the block
+        blockSizeInches:
+          type: number
+          nullable: true
+          minimum: 1
+          maximum: 120
+        seamAllowanceInches:
+          type: number
+          nullable: true
+          minimum: 0.0625
+          maximum: 1
+        categoryNames:
+          type: array
+          items:
+            type: string
+          description: Category names to assign (will be created if they do not exist)
+
+    UpdateBlockInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        gridSize:
+          type: integer
+          enum: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        cells:
+          type: array
+          items:
+            type: string
+        seams:
+          type: array
+          items:
+            $ref: "#/components/schemas/BlockSeamLine"
+          description: H/V seam lines to persist with the block
+        blockSizeInches:
+          type: number
+          nullable: true
+          minimum: 1
+          maximum: 120
+        categoryNames:
+          type: array
+          items:
+            type: string
+          description: Full replacement list of category names (replaces existing assignments)
+        seamAllowanceInches:
+          type: number
+          nullable: true
+          minimum: 0.0625
+          maximum: 1

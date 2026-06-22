@@ -1,0 +1,599 @@
+import { useState } from "react";
+import { Link, useLocation } from "wouter";
+import {
+  PlusCircle,
+  Scissors,
+  Search,
+  X,
+  MoreVertical,
+  SortAsc,
+  SortDesc,
+  RefreshCw,
+  CheckSquare,
+  Square,
+  Pencil,
+  ExternalLink,
+  Trash2,
+  Download,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import {
+  useListFabrics,
+  useDeleteFabric,
+  useReanalyzeFabric,
+  useBulkReanalyzeFabrics,
+  getListFabricsQueryKey,
+  getGetFabricQueryKey,
+} from "@workspace/api-client-react";
+import { downloadCollectionImage } from "@/lib/svg-export";
+
+type SortOption = "newest" | "oldest" | "az" | "za";
+
+const SORT_LABELS: Record<SortOption, string> = {
+  newest: "Newest first",
+  oldest: "Oldest first",
+  az: "Name A → Z",
+  za: "Name Z → A",
+};
+
+type FabricSummary = {
+  id: number;
+  name: string;
+  imageUrl: string;
+  quantity: number;
+  quantityUnit: string;
+  printType?: string | null;
+  designer?: string | null;
+  categories: Array<{
+    id: number;
+    name: string;
+    bgColor: string | null;
+    textColor: string | null;
+  }>;
+  createdAt: Date | string;
+};
+
+function FabricCard({
+  fabric,
+  onDelete,
+  onReanalyze,
+  isBulkMode,
+  isSelected,
+  onToggleSelect,
+  onFilterByPrintType,
+  onFilterByCategory,
+}: {
+  fabric: FabricSummary;
+  onDelete: (id: number) => void;
+  onReanalyze: (id: number) => void;
+  isBulkMode: boolean;
+  isSelected: boolean;
+  onToggleSelect: (id: number) => void;
+  onFilterByPrintType?: (pt: string) => void;
+  onFilterByCategory?: (id: number) => void;
+}) {
+  const [, navigate] = useLocation();
+  return (
+    <div
+      className="group relative overflow-hidden rounded-xl border border-card-border bg-card transition-shadow hover:shadow-md"
+      onClick={() => {
+        if (isBulkMode) onToggleSelect(fabric.id);
+      }}
+    >
+      {isBulkMode && (
+        <div
+          className={`absolute left-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full shadow-sm transition-colors ${isSelected ? "bg-primary text-primary-foreground" : "bg-background/90 text-muted-foreground"}`}
+        >
+          {isSelected ? (
+            <CheckSquare className="h-4 w-4" />
+          ) : (
+            <Square className="h-4 w-4" />
+          )}
+        </div>
+      )}
+      <Link
+        href={`/fabrics/${fabric.id}`}
+        className={`block ${isBulkMode ? "pointer-events-none" : ""}`}
+      >
+        <div className="aspect-square overflow-hidden bg-muted">
+          <img
+            src={fabric.imageUrl}
+            alt={fabric.name}
+            className="h-full w-full object-cover transition-transform group-hover:scale-105"
+          />
+        </div>
+        <div className="p-3 pr-8">
+          <p className="truncate text-sm font-semibold text-foreground">
+            {fabric.name}
+          </p>
+          {fabric.designer && (
+            <p className="truncate text-xs text-muted-foreground">
+              {fabric.designer}
+            </p>
+          )}
+          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+            {fabric.printType && (
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onFilterByPrintType?.(fabric.printType!);
+                }}
+                className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground capitalize transition-all hover:ring-2 hover:ring-primary/50 cursor-pointer"
+              >
+                {fabric.printType}
+              </button>
+            )}
+            {(fabric.categories ?? []).map((cat) => (
+              <button
+                key={cat.id}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onFilterByCategory?.(cat.id);
+                }}
+                className="rounded-full px-2 py-0.5 text-[10px] font-medium leading-tight transition-all hover:ring-2 hover:ring-primary/50 cursor-pointer"
+                style={{
+                  backgroundColor: cat.bgColor ?? "#e5e7eb",
+                  color: cat.textColor ?? "#374151",
+                }}
+              >
+                {cat.name}
+              </button>
+            ))}
+            <span className="ml-auto text-xs font-medium text-primary shrink-0">
+              {fabric.quantity} {fabric.quantityUnit}
+            </span>
+          </div>
+        </div>
+      </Link>
+
+      {!isBulkMode && (
+        <div className="absolute right-2 top-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-full bg-background/80 opacity-100 shadow-sm transition-opacity md:opacity-0 md:group-hover:opacity-100"
+              >
+                <MoreVertical className="h-3.5 w-3.5" />
+                <span className="sr-only">Options</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => navigate(`/fabrics/${fabric.id}`)}
+              >
+                <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                Open
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => navigate(`/fabrics/${fabric.id}?edit=1`)}
+              >
+                <Pencil className="mr-2 h-3.5 w-3.5" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onReanalyze(fabric.id)}>
+                <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                Refresh AI
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() =>
+                  downloadCollectionImage(fabric.imageUrl, fabric.name)
+                }
+              >
+                <Download className="mr-2 h-3.5 w-3.5" />
+                Download photo
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={() => onDelete(fabric.id)}
+              >
+                <Trash2 className="mr-2 h-3.5 w-3.5" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function Fabrics() {
+  const [search, setSearch] = useState("");
+  const [printTypeFilter, setPrintTypeFilter] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
+  const [sort, setSort] = useState<SortOption>("newest");
+  const [isBulkMode, setIsBulkMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const queryClient = useQueryClient();
+  const { data: fabrics, isLoading, isError } = useListFabrics();
+
+  const deleteFabric = useDeleteFabric({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListFabricsQueryKey() });
+        toast.success("Fabric deleted");
+      },
+      onError: () => toast.error("Failed to delete fabric."),
+    },
+  });
+
+  const reanalyzeFabric = useReanalyzeFabric({
+    mutation: {
+      onSuccess: (data, { id }) => {
+        queryClient.setQueryData(getGetFabricQueryKey(id), data);
+        queryClient.invalidateQueries({ queryKey: getListFabricsQueryKey() });
+        toast.success("AI analysis refreshed");
+      },
+      onError: () => toast.error("Failed to refresh AI analysis."),
+    },
+  });
+
+  const bulkReanalyze = useBulkReanalyzeFabrics({
+    mutation: {
+      onSuccess: ({ succeeded, failed }) => {
+        queryClient.invalidateQueries({ queryKey: getListFabricsQueryKey() });
+        setSelectedIds(new Set());
+        setIsBulkMode(false);
+        if (failed.length === 0) {
+          toast.success(
+            `Refreshed AI for ${succeeded.length} fabric${succeeded.length !== 1 ? "s" : ""}`,
+          );
+        } else {
+          toast.success(
+            `Refreshed ${succeeded.length}, failed ${failed.length}`,
+          );
+        }
+      },
+      onError: () => toast.error("Bulk refresh failed."),
+    },
+  });
+
+  function handleDelete(id: number) {
+    if (!confirm("Delete this fabric? This cannot be undone.")) return;
+    deleteFabric.mutate({ id });
+  }
+
+  function handleReanalyze(id: number) {
+    reanalyzeFabric.mutate({ id });
+    toast.info("Refreshing AI analysis…");
+  }
+
+  function toggleSelect(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleBulkMode() {
+    setIsBulkMode((v) => !v);
+    setSelectedIds(new Set());
+  }
+
+  function selectAll() {
+    if (sorted) setSelectedIds(new Set(sorted.map((f) => f.id)));
+  }
+
+  const printTypes =
+    fabrics && fabrics.length > 0
+      ? Array.from(
+          new Set(
+            fabrics
+              .map((f) => f.printType)
+              .filter((t): t is string => Boolean(t)),
+          ),
+        ).sort()
+      : [];
+
+  const allCategories = fabrics
+    ? Array.from(
+        new Map(
+          (fabrics as FabricSummary[])
+            .flatMap((f) => f.categories ?? [])
+            .map((c) => [c.id, c]),
+        ).values(),
+      )
+    : [];
+
+  const filtered = fabrics
+    ? (fabrics as FabricSummary[]).filter((f) => {
+        const q = search.trim().toLowerCase();
+        const matchesSearch =
+          !q ||
+          f.name.toLowerCase().includes(q) ||
+          (f.designer ?? "").toLowerCase().includes(q) ||
+          (f.printType ?? "").toLowerCase().includes(q);
+        const matchesType = !printTypeFilter || f.printType === printTypeFilter;
+        const matchesCat =
+          categoryFilter === null ||
+          (f.categories ?? []).some((c) => c.id === categoryFilter);
+        return matchesSearch && matchesType && matchesCat;
+      })
+    : null;
+
+  const sorted = filtered
+    ? [...filtered].sort((a, b) => {
+        if (sort === "az") return a.name.localeCompare(b.name);
+        if (sort === "za") return b.name.localeCompare(a.name);
+        const ta = new Date(a.createdAt).getTime();
+        const tb = new Date(b.createdAt).getTime();
+        return sort === "oldest" ? ta - tb : tb - ta;
+      })
+    : null;
+
+  const hasFilter =
+    search.trim().length > 0 ||
+    printTypeFilter !== null ||
+    categoryFilter !== null;
+
+  return (
+    <div>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Fabrics</h1>
+          <p className="text-sm text-muted-foreground">
+            {sorted
+              ? hasFilter
+                ? `${sorted.length} of ${fabrics!.length} fabric${fabrics!.length !== 1 ? "s" : ""}`
+                : `${sorted.length} fabric${sorted.length !== 1 ? "s" : ""} in your collection`
+              : "Your fabric collection"}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {fabrics && fabrics.length > 0 && (
+            <Button
+              variant={isBulkMode ? "secondary" : "outline"}
+              size="sm"
+              onClick={toggleBulkMode}
+            >
+              {isBulkMode ? "Done" : "Select"}
+            </Button>
+          )}
+          <Button asChild>
+            <Link href="/fabrics/add">
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Add fabric
+            </Link>
+          </Button>
+        </div>
+      </div>
+
+      {isBulkMode && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5">
+          <span className="flex-1 text-sm font-medium">
+            {selectedIds.size === 0
+              ? "Tap cards to select"
+              : `${selectedIds.size} selected`}
+          </span>
+          <button
+            onClick={selectAll}
+            className="text-xs text-primary hover:underline"
+          >
+            All
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="text-xs text-muted-foreground hover:underline"
+          >
+            None
+          </button>
+          {selectedIds.size > 0 && (
+            <Button
+              size="sm"
+              onClick={() =>
+                bulkReanalyze.mutate({ data: { ids: Array.from(selectedIds) } })
+              }
+              disabled={bulkReanalyze.isPending}
+            >
+              <RefreshCw
+                className={`mr-2 h-3.5 w-3.5 ${bulkReanalyze.isPending ? "animate-spin" : ""}`}
+              />
+              Refresh AI ({selectedIds.size})
+            </Button>
+          )}
+        </div>
+      )}
+
+      {fabrics && fabrics.length > 0 && (
+        <div className="mb-4 space-y-3">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Search by name, designer, or type…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-9 pl-9 pr-9"
+              />
+              {search && (
+                <button
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setSearch("")}
+                  aria-label="Clear search"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 shrink-0 gap-1.5"
+                >
+                  {sort === "newest" || sort === "za" ? (
+                    <SortDesc className="h-3.5 w-3.5" />
+                  ) : (
+                    <SortAsc className="h-3.5 w-3.5" />
+                  )}
+                  <span className="hidden sm:inline">{SORT_LABELS[sort]}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {(Object.keys(SORT_LABELS) as SortOption[]).map((s) => (
+                  <DropdownMenuItem
+                    key={s}
+                    onClick={() => setSort(s)}
+                    className={sort === s ? "font-medium text-primary" : ""}
+                  >
+                    {SORT_LABELS[s]}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          {(printTypes.length > 1 || allCategories.length > 0) && (
+            <div className="flex flex-wrap gap-2">
+              {printTypes.length > 1 &&
+                printTypes.map((pt) => (
+                  <button
+                    key={pt}
+                    onClick={() =>
+                      setPrintTypeFilter(printTypeFilter === pt ? null : pt)
+                    }
+                    className={`rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors ${
+                      printTypeFilter === pt
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    }`}
+                  >
+                    {pt}
+                  </button>
+                ))}
+              {allCategories.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() =>
+                    setCategoryFilter(categoryFilter === cat.id ? null : cat.id)
+                  }
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    categoryFilter === cat.id
+                      ? "ring-2 ring-primary ring-offset-1"
+                      : "opacity-80 hover:opacity-100"
+                  }`}
+                  style={
+                    cat.bgColor
+                      ? {
+                          backgroundColor: cat.bgColor,
+                          color: cat.textColor ?? undefined,
+                        }
+                      : {
+                          backgroundColor: "hsl(var(--muted))",
+                          color: "hsl(var(--muted-foreground))",
+                        }
+                  }
+                >
+                  {cat.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {isLoading && (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div
+              key={i}
+              className="overflow-hidden rounded-xl border border-card-border"
+            >
+              <Skeleton className="aspect-square w-full" />
+              <div className="space-y-2 p-3">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {isError && (
+        <div className="flex h-40 items-center justify-center rounded-xl border border-destructive/30 bg-destructive/5">
+          <p className="text-sm text-destructive">
+            Failed to load fabrics. Please refresh.
+          </p>
+        </div>
+      )}
+
+      {sorted && sorted.length === 0 && fabrics!.length === 0 && (
+        <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border py-20">
+          <Scissors className="h-10 w-10 text-muted-foreground/40" />
+          <div className="text-center">
+            <p className="font-medium text-foreground">No fabrics yet</p>
+            <p className="text-sm text-muted-foreground">
+              Add your first fabric to get started
+            </p>
+          </div>
+          <Button asChild>
+            <Link href="/fabrics/add">
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Add fabric
+            </Link>
+          </Button>
+        </div>
+      )}
+
+      {sorted && sorted.length === 0 && fabrics!.length > 0 && (
+        <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border py-16">
+          <Search className="h-8 w-8 text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground">
+            No fabrics match your filters
+          </p>
+          <button
+            onClick={() => {
+              setSearch("");
+              setPrintTypeFilter(null);
+              setCategoryFilter(null);
+            }}
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            Clear filters
+          </button>
+        </div>
+      )}
+
+      {sorted && sorted.length > 0 && (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+          {sorted.map((fabric) => (
+            <FabricCard
+              key={fabric.id}
+              fabric={fabric}
+              onDelete={handleDelete}
+              onReanalyze={handleReanalyze}
+              isBulkMode={isBulkMode}
+              isSelected={selectedIds.has(fabric.id)}
+              onToggleSelect={toggleSelect}
+              onFilterByPrintType={(pt) =>
+                setPrintTypeFilter((prev) => (prev === pt ? null : pt))
+              }
+              onFilterByCategory={(id) =>
+                setCategoryFilter((prev) => (prev === id ? null : id))
+              }
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

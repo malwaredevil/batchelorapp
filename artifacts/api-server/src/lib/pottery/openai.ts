@@ -1,0 +1,398 @@
+import OpenAI from "openai";
+import { env } from "../env";
+
+const client = new OpenAI({ apiKey: env.openaiApiKey });
+
+const VISION_MODEL = "gpt-4o-mini";
+// Full gpt-4o for the comparison step — visual deduction needs the sharper model.
+const COMPARE_MODEL = "gpt-4o";
+const EMBEDDING_MODEL = "text-embedding-3-small";
+export const EMBEDDING_DIMENSIONS = 1536;
+
+export type Verdict = "yes" | "maybe" | "no";
+
+export interface VisionAnalysis {
+  name: string;
+  patternDescription: string | null;
+  style: string | null;
+  shape: string | null;
+  maker: string | null;
+  makerInfo: string | null;
+  dimensions: string | null;
+  dominantColors: string[];
+  motifs: string[];
+  aiDescription: string | null;
+}
+
+function asString(value: unknown): string | null {
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value.trim();
+  }
+  return null;
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+    .map((v) => v.trim())
+    .slice(0, 8);
+}
+
+function asVerdict(value: unknown): Verdict {
+  return value === "yes" || value === "maybe" || value === "no" ? value : "no";
+}
+
+function parseJson(content: string | null): Record<string, unknown> {
+  if (!content) return {};
+  try {
+    const parsed = JSON.parse(content);
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+const ANALYSIS_PROMPT = `You are an expert ceramics and pottery cataloguer. You will be given one or more photos of the same pottery piece — different angles, front and back, or close-ups. Use every photo to build the most accurate assessment you can.
+
+Respond with STRICT JSON only, using exactly these keys:
+- "name": a concise, descriptive name that combines size (if measurable), the dominant decorative attribute, and the item type — in that order. The size you use in the name MUST be copied exactly from your "dimensions" answer — use the same snapped or rounded values, never different ones. Each inch value MUST use the ″ symbol followed immediately by its metric equivalent in parentheses, rounded to the nearest whole centimetre (1 inch = 2.54 cm). Use ONLY the ″ symbol for inches — never the word "in" or "inch". Choose the format that matches the piece type: (A) Single circular dimension (plates, bowls, round platters): '11″ (28 cm) Blue Willow Dinner Plate'. (B) Non-circular flat piece, top view only (trays, baking dishes, rectangular platters): '12″ (30 cm) × 8″ (20 cm) Blue Willow Serving Tray'. (C) Non-circular flat piece with depth measured from a side shot: '14″ (36 cm) × 6″ (15 cm) × 3″ (8 cm) Floral Oval Baking Dish'. (D) Upright vessel (mug, cup, vase, jug, pitcher) — diameter from top shot × height from side shot: '3″ (8 cm) × 5″ (13 cm) Blue Willow Mug'. If only one dimension is measurable, use that alone. (E) 3D sculptural piece with a circular footprint (round-base figurine, animal, bust) — diameter from top × height from front/side: '5″ (13 cm) × 10″ (25 cm) Snowman Figurine'. (F) 3D sculptural piece with a non-circular footprint — L × W from top × height from front/side: '6″ (15 cm) × 4″ (10 cm) × 9″ (23 cm) Cat Figurine'. Omit size entirely when no measurement is available (e.g. 'Spongeware Mixing Bowl'). Keep it concise — under 12 words including the size.
+- "patternDescription": a detailed description of the decorative surface pattern and decoration. Focus on the pattern itself so two pieces with the same pattern would read alike. Use null if the piece is plain/undecorated.
+- "style": the decorative style or technique (e.g. "Hand-painted Folk", "Blue-and-white Transferware", "Studio Stoneware") in Title Case, or null.
+- "shape": the form of the piece (e.g. "Mug", "Dinner Plate", "Vase", "Bowl") in Title Case, or null.
+- "maker": describe exactly what you can see in the maker's mark — any text, numbers, symbols, country of origin text, or stamp shape visible on the piece. Write in Title Case (e.g. "Johnson Brothers England" not "JOHNSON BROTHERS ENGLAND") even if the mark itself is stamped in capitals. Use null if no mark is visible.
+- "makerInfo": using the mark you described in "maker" plus the piece's style, decoration, shape, and any other clues, write 2–5 sentences about the manufacturer: who they were, where and roughly when they operated, what they were known for, and anything notable about this specific pattern or range if you recognise it. Draw on your full knowledge of pottery history, manufacturers, and backstamp dating. Be honest about uncertainty — use "likely", "possibly", or "consistent with" when not certain. Use null only if no mark is visible and the piece gives no useful clues about its origin.
+- "dimensions": if a Fiskars-style self-healing cutting mat is visible in any of the photos, measure the piece using the printed axis numbers. IMPORTANT — a back-of-piece shot (piece lying face-down on the mat, underside up) often shows the full footprint most clearly and is the best photo to use for sizing plates and bowls; prefer it over a face-up shot when both are available. Method: (1) Major grid lines = 1 inch (2.54 cm) apart; fine dot subdivisions = ⅛ inch (0.318 cm). (2) Top-down or bottom-up shot — SHAPE MATTERS: for circular/round pieces (plates, bowls, round platters) report diameter only; for non-circular pieces (rectangular, square, oval, trays, baking dishes, butter dishes, etc.) read the longest edge (length) AND the perpendicular edge (width), report as "L × W". (3) Side-on or front-on shots — apply the rule for the piece type: (a) Upright vessels (mugs, cups, vases, jugs, pitchers): side shot gives height. If a top-shot diameter was already measured, combine as "diameter × H". (b) Non-circular flat pieces (trays, baking dishes, casseroles): side or front shot gives depth — add as the third value so the result is "L × W × H" (depth is typically the smallest of the three). (c) 3D sculptural pieces (figurines, animals, character pieces, busts, statues): a front or side shot gives height (the tallest visible dimension); a second shot at roughly 90° to the first gives depth if it is visibly different from the width already measured from the top. Combine all available measurements: round footprint → "diameter × H"; non-round footprint → "L × W × H" where H is the tallest dimension (often the largest of the three). Ignore any hand visible in the frame — measure the ceramic only. (4) HOW TO MEASURE — a size is ALWAYS the DIFFERENCE between two axis readings, never a single axis number. Procedure: (i) Find the gridline that touches the LEFT (or BOTTOM) edge of the piece and read its axis value — call it A. (ii) Find the gridline that touches the RIGHT (or TOP) edge and read its axis value — call it B. (iii) Size in inches = B − A. Example: left edge at the 2″ axis mark, right edge at the 13″ mark → diameter = 13 − 2 = 11 inches. If only one edge is clearly visible, use the nearest printed number at that edge and the symmetry of the piece to estimate the other edge. After computing the inch difference, multiply by 2.54 to get cm. COMMON MISTAKE TO AVOID: do not report the axis number at one edge as if it were the diameter — always subtract the two edge positions. (5) SANITY CHECK before snapping: dinner plates are almost always 9–12 inches. If your computed diameter for a plate is larger than 13 inches, you have most likely read a single edge position instead of computing the difference — go back and subtract. (6) SNAP RULES — apply to each individual dimension independently. For the snap table (plates/bowls): (a) If a dimension is within 1.5 inches of exactly one table entry, use that entry. (b) If within 1.5 inches of two entries, always choose the LARGER — pieces are frequently cut off at the photo edge so raw readings run small; when in doubt, round up. (c) The ONLY permitted half-inch values are those in the table: 3½″, 4½″, 7½″. Never use any other half-inch value. (d) For dimensions that do not snap to any table entry (including all dimensions of non-circular pieces), round to the nearest whole inch. (e) Report with a descriptive label, e.g. "approx 27.9 cm (11″ dinner plate) diameter" for circular, or "approx 30 cm × 20 cm (12″ × 8″ serving tray)" for rectangular. Snap table (circular pieces only) — Plates: bread/side 6″ (15.2 cm), salad/dessert 7½″ (19.1 cm) or 8″ (20.3 cm), luncheon 9″ (22.9 cm), dinner 10″ (25.4 cm) / 11″ (27.9 cm), charger 12″ (30.5 cm) or 13″ (33.0 cm); Bowls: dip/condiment 3½″ (8.9 cm), small/prep 4½″ (11.4 cm), cereal/soup 6″ (15.2 cm), pasta 8″ (20.3 cm) or 9″ (22.9 cm), serving 11″ (27.9 cm) or 12″ (30.5 cm); Mugs: standard 3½″ tall × 3½″ wide (8.9 cm); Specialty: egg cup 2″ (5.1 cm), ramekin 3½″ (8.9 cm), 6-cup egg tray ~7″ × 4½″ (17.8 × 11.4 cm). Use null if no mat is visible in any photo or the piece covers too much of the grid to measure reliably.
+- "dominantColors": an array of 2-5 colour names chosen ONLY from this fixed palette: white, cream, ivory, beige, tan, brown, dark brown, terracotta, gold, yellow, orange, red, burgundy, pink, lavender, purple, light blue, sky blue, blue, cobalt blue, navy, teal, turquoise, green, sage, olive, grey, black. Pick the closest match from the palette — do not invent new names or use names not in this list.
+- "motifs": an array of the key recurring decorative elements (e.g. "blue floral", "vine border", "geometric bands"). Empty array if plain.
+- "aiDescription": write 2-4 sentences describing the piece as a whole — its appearance, character, and any notable features — as if writing a catalogue entry for a collector.
+
+Do not include any commentary outside the JSON.`;
+
+/** Unicode fraction → decimal inch value. */
+const UNICODE_FRACTIONS: Record<string, number> = {
+  "½": 0.5,
+  "¼": 0.25,
+  "¾": 0.75,
+  "⅓": 1 / 3,
+  "⅔": 2 / 3,
+  "⅛": 0.125,
+  "⅜": 0.375,
+  "⅝": 0.625,
+  "⅞": 0.875,
+};
+
+/**
+ * Finds every inch measurement in a generated name (e.g. `11"`, `10½″`)
+ * and ensures it is followed by the correct cm equivalent in parentheses.
+ * Idempotent — existing `(N cm)` annotations are replaced with the
+ * recalculated value so stale or incorrect figures are always corrected.
+ * Uses a plain `"` in output for readability.
+ */
+function addMetricToName(name: string): string {
+  return name.replace(
+    /(\d+)([½¼¾⅓⅔⅛⅜⅝⅞]?)([″"])\s*(?:\(\d+\s*cm\))?/g,
+    (_match, whole: string, frac: string) => {
+      const inches = parseInt(whole, 10) + (UNICODE_FRACTIONS[frac] ?? 0);
+      const cm = Math.round(inches * 2.54);
+      return `${whole}${frac}" (${cm} cm)`;
+    },
+  );
+}
+
+/**
+ * Existing field values passed to the AI during re-analysis so it can use
+ * user-confirmed ("locked") facts as bedrock context.
+ */
+export interface AnalysisContext {
+  /** Field names the user has locked — treated as confirmed hard truths. */
+  lockedFields: string[];
+  name?: string | null;
+  patternDescription?: string | null;
+  style?: string | null;
+  shape?: string | null;
+  maker?: string | null;
+  makerInfo?: string | null;
+  dimensions?: string | null;
+  /** Stored as JSON in DB; passed as-is and handled defensively. */
+  dominantColors?: unknown;
+  motifs?: unknown;
+}
+
+function buildContextBlock(ctx: AnalysisContext): string {
+  const locked = new Set(ctx.lockedFields);
+
+  const entries: Array<{ key: string; label: string; raw: unknown }> = [
+    { key: "maker", label: "maker / backstamp", raw: ctx.maker },
+    { key: "makerInfo", label: "maker background", raw: ctx.makerInfo },
+    { key: "name", label: "name", raw: ctx.name },
+    {
+      key: "patternDescription",
+      label: "pattern description",
+      raw: ctx.patternDescription,
+    },
+    { key: "style", label: "style", raw: ctx.style },
+    { key: "shape", label: "shape", raw: ctx.shape },
+    { key: "dimensions", label: "dimensions", raw: ctx.dimensions },
+    {
+      key: "dominantColors",
+      label: "dominant colours",
+      raw: ctx.dominantColors,
+    },
+    { key: "motifs", label: "motifs", raw: ctx.motifs },
+  ];
+
+  const lockedLines: string[] = [];
+  const knownLines: string[] = [];
+
+  for (const { key, label, raw } of entries) {
+    if (raw == null) continue;
+    if (Array.isArray(raw) && raw.length === 0) continue;
+    if (typeof raw === "string" && raw.trim() === "") continue;
+
+    let display: string;
+    if (Array.isArray(raw)) {
+      const strings = raw.filter(
+        (v): v is string => typeof v === "string" && v.trim() !== "",
+      );
+      if (strings.length === 0) continue;
+      display = strings.join(", ");
+    } else if (typeof raw === "string") {
+      // Truncate long free-text fields to avoid token bloat
+      display = raw.length > 600 ? raw.slice(0, 600) + "…" : raw;
+    } else {
+      continue;
+    }
+
+    const line = `  • ${label}: "${display}"`;
+    if (locked.has(key)) {
+      lockedLines.push(line);
+    } else {
+      knownLines.push(line);
+    }
+  }
+
+  if (lockedLines.length === 0 && knownLines.length === 0) return "";
+
+  const parts: string[] = [
+    "EXISTING RECORD — use this as context when cataloguing:",
+  ];
+
+  if (lockedLines.length > 0) {
+    parts.push(
+      `\nLOCKED (user-confirmed hard truths — treat as certain facts; use them as bedrock to enrich all other fields):\n${lockedLines.join("\n")}`,
+    );
+  }
+  if (knownLines.length > 0) {
+    parts.push(
+      `\nPREVIOUSLY KNOWN (AI-generated; keep if still accurate, improve if the photos show something better):\n${knownLines.join("\n")}`,
+    );
+  }
+
+  return parts.join("\n");
+}
+
+export async function analyzeImage(
+  dataUrls: string[],
+  context?: AnalysisContext,
+): Promise<VisionAnalysis> {
+  const imageContent = dataUrls.map((url) => ({
+    type: "image_url" as const,
+    image_url: { url },
+  }));
+
+  const contextBlock = context ? buildContextBlock(context) : "";
+  const baseInstruction =
+    dataUrls.length > 1
+      ? `Catalogue this pottery piece. All ${dataUrls.length} photos show the same piece from different angles — use them all. Respond with JSON only.`
+      : "Catalogue this pottery piece. Respond with JSON only.";
+  const userText = contextBlock
+    ? `${contextBlock}\n\n${baseInstruction}`
+    : baseInstruction;
+
+  const completion = await client.chat.completions.create({
+    model: VISION_MODEL,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: ANALYSIS_PROMPT },
+      {
+        role: "user",
+        content: [{ type: "text", text: userText }, ...imageContent],
+      },
+    ],
+  });
+
+  const raw = parseJson(completion.choices[0]?.message?.content ?? null);
+  return {
+    name: addMetricToName(asString(raw.name) ?? "Untitled piece"),
+    patternDescription: asString(raw.patternDescription),
+    style: asString(raw.style),
+    shape: asString(raw.shape),
+    maker: asString(raw.maker),
+    makerInfo: asString(raw.makerInfo),
+    dimensions: asString(raw.dimensions),
+    dominantColors: asStringArray(raw.dominantColors),
+    motifs: asStringArray(raw.motifs),
+    aiDescription: asString(raw.aiDescription),
+  };
+}
+
+export function buildEmbeddingText(analysis: VisionAnalysis): string {
+  return [
+    analysis.patternDescription ?? "Plain undecorated pottery",
+    analysis.style ? `Style: ${analysis.style}` : "",
+    analysis.shape ? `Shape: ${analysis.shape}` : "",
+    analysis.motifs.length ? `Motifs: ${analysis.motifs.join(", ")}` : "",
+    analysis.dominantColors.length
+      ? `Colours: ${analysis.dominantColors.join(", ")}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(". ");
+}
+
+export async function embedText(text: string): Promise<number[]> {
+  const response = await client.embeddings.create({
+    model: EMBEDDING_MODEL,
+    input: text,
+  });
+  return response.data[0].embedding;
+}
+
+export interface CompareMatchInput {
+  index: number;
+  imageUrl: string;
+  /** Additional angles of the same collection piece (supplemental photos). */
+  extraImageUrls: string[];
+  name: string;
+  patternDescription: string | null;
+  style: string | null;
+  motifs: string[];
+  similarity: number;
+}
+
+export interface CompareMatchVerdict {
+  samePattern: Verdict;
+  exactPiece: Verdict;
+  explanation: string;
+}
+
+export interface CompareVerdictResult {
+  summary: string;
+  ownsSamePattern: Verdict;
+  ownsExactPiece: Verdict;
+  perMatch: Record<number, CompareMatchVerdict>;
+}
+
+const COMPARE_PROMPT = `You are a specialist pottery appraiser comparing a CANDIDATE photo against pieces in a private collection. Your job is to give the owner a confident, useful answer — not a vague hedge.
+
+Each existing piece is labelled with a PATTERN SIMILARITY SCORE (0–1) computed from AI-extracted textual descriptions of both pieces. Use these scores as your primary guide:
+- Score ≥ 0.80: very strong evidence the patterns are the same. You should say "yes" for samePattern unless the photos show clearly different decoration.
+- Score 0.60–0.79: good evidence. Look carefully at the photos to confirm or rule out a pattern match.
+- Score < 0.50: patterns are probably different, but still examine the photos.
+
+Differences in photo angle, lighting, background, or framing do NOT indicate different pieces. Ignore photographic conditions — focus only on the decoration, pattern, colours, and form of the pottery itself.
+
+For EACH existing piece, give:
+- "samePattern": "yes" — the decorative pattern visually matches; "no" — it clearly does not; "maybe" — reserved for genuine ambiguity only (e.g. the candidate photo is blurry or partially obscures the pattern). Do NOT use "maybe" as a default or safety blanket.
+- "exactPiece": "yes" — same pattern AND same shape/size (likely the same physical object); "no" — same pattern but different form, or clearly different piece; "maybe" — same pattern but shape or size is inconclusive from the photos.
+- "explanation": one or two specific, concrete sentences. Reference what you actually see (colours, motifs, border style, shape). A non-expert should be able to read this and understand exactly why you reached your verdict.
+
+Then give an overall verdict:
+- "ownsSamePattern": "yes" if any perMatch is "yes"; "maybe" only if all pattern matches are "maybe"; "no" if none match.
+- "ownsExactPiece": same logic across the exactPiece verdicts.
+- "summary": 1–3 direct sentences. If the owner already owns this pattern or piece, say so plainly. If not, say so. Mention that exact-piece judgements from photos carry some uncertainty.
+
+Respond with STRICT JSON only:
+{
+  "summary": string,
+  "ownsSamePattern": "yes"|"maybe"|"no",
+  "ownsExactPiece": "yes"|"maybe"|"no",
+  "matches": { "<index>": { "samePattern": ..., "exactPiece": ..., "explanation": ... } }
+}
+The <index> keys must match the indices labelled in the message.`;
+
+export async function compareWithMatches(params: {
+  candidateDataUrl: string;
+  candidate: VisionAnalysis;
+  matches: CompareMatchInput[];
+}): Promise<CompareVerdictResult> {
+  const { candidateDataUrl, candidate, matches } = params;
+
+  const content: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
+    {
+      type: "text",
+      text: `CANDIDATE piece attributes:\n${JSON.stringify(
+        {
+          patternDescription: candidate.patternDescription,
+          style: candidate.style,
+          shape: candidate.shape,
+          motifs: candidate.motifs,
+          dominantColors: candidate.dominantColors,
+        },
+        null,
+        2,
+      )}\nCandidate photo:`,
+    },
+    { type: "image_url", image_url: { url: candidateDataUrl } },
+  ];
+
+  for (const match of matches) {
+    const photoCount = 1 + match.extraImageUrls.length;
+    content.push({
+      type: "text",
+      text: `Existing piece index ${match.index} — "${match.name}" (pattern similarity score ${match.similarity.toFixed(
+        2,
+      )}). Stored attributes: ${JSON.stringify({
+        patternDescription: match.patternDescription,
+        style: match.style,
+        motifs: match.motifs,
+      })}. ${photoCount > 1 ? `${photoCount} photos follow (different angles of the same piece):` : "Photo:"}`,
+    });
+    content.push({ type: "image_url", image_url: { url: match.imageUrl } });
+    for (const extra of match.extraImageUrls) {
+      content.push({ type: "image_url", image_url: { url: extra } });
+    }
+  }
+
+  const completion = await client.chat.completions.create({
+    model: COMPARE_MODEL,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: COMPARE_PROMPT },
+      { role: "user", content },
+    ],
+  });
+
+  const raw = parseJson(completion.choices[0]?.message?.content ?? null);
+  const rawMatches =
+    typeof raw.matches === "object" && raw.matches !== null
+      ? (raw.matches as Record<string, unknown>)
+      : {};
+
+  const perMatch: Record<number, CompareMatchVerdict> = {};
+  for (const match of matches) {
+    const entry = rawMatches[String(match.index)];
+    const obj =
+      typeof entry === "object" && entry !== null
+        ? (entry as Record<string, unknown>)
+        : {};
+    perMatch[match.index] = {
+      samePattern: asVerdict(obj.samePattern),
+      exactPiece: asVerdict(obj.exactPiece),
+      explanation:
+        asString(obj.explanation) ??
+        "No detailed comparison was available for this piece.",
+    };
+  }
+
+  return {
+    summary:
+      asString(raw.summary) ?? "Compared the photo against your collection.",
+    ownsSamePattern: asVerdict(raw.ownsSamePattern),
+    ownsExactPiece: asVerdict(raw.ownsExactPiece),
+    perMatch,
+  };
+}

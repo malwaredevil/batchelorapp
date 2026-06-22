@@ -1,1 +1,3 @@
 - [Merge architecture](merge-architecture.md) — how pottery+quilting fold into batchelorapp: landing shell at /, sub-apps as separate artifacts at /pottery & /quilting, source repos layout.
+- [API contract packaging](api-contract-packaging.md) — unified OpenAPI built by a deterministic composition script (not per-app libs, not hand-merge); namespacing matrix + opId/schema rules.
+- [Single DDL source of truth](merge-architecture.md#single-ddl-source-of-truth) — bootstrap CLI + api-server startup migration both run one shared `STATEMENTS` list; never duplicate DDL or one entrypoint provisions a partial schema.

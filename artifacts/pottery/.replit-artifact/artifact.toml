@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/pottery/"
+title = "Pottery"
+version = "1.0.0"
+id = "artifacts/pottery"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/pottery/" ]
+localPort = 22012
+
+[services.development]
+run = "pnpm --filter @workspace/pottery run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/pottery", "run", "build" ]
+publicDir = "artifacts/pottery/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22012"
+BASE_PATH = "/pottery/"

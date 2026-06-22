@@ -1,0 +1,28 @@
+name: Stale PRs
+
+on:
+  schedule:
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          days-before-issue-stale: -1
+          days-before-issue-close: -1
+          days-before-pr-stale: 60
+          days-before-pr-close: 30
+          stale-pr-label: "stale"
+          exempt-pr-labels: "security,dependencies-minor,dependencies-patch"
+          stale-pr-message: >
+            This PR has been open for 60 days with no activity. It will be closed
+            in 30 days unless updated. Add a comment or push a commit to keep it open.
+          close-pr-message: >
+            This PR was closed after 90 days of inactivity. Re-open if still relevant.

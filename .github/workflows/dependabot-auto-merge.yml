@@ -1,0 +1,38 @@
+name: Dependabot auto-merge
+
+on:
+  pull_request_target:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dependabot/fetch-metadata@v2
+        id: metadata
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Auto-merge high/critical security patches
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          GHSA_IDS="${{ steps.metadata.outputs.ghsa-ids }}"
+          if [ -z "$GHSA_IDS" ]; then
+            echo "No GHSA IDs found — skipping auto-merge"
+            exit 0
+          fi
+          for GHSA in $(echo "$GHSA_IDS" | tr ',' '\n'); do
+            SEVERITY=$(gh api "/advisories/$GHSA" --jq '.severity' 2>/dev/null || echo "unknown")
+            echo "Advisory $GHSA severity: $SEVERITY"
+            if [ "$SEVERITY" = "high" ] || [ "$SEVERITY" = "critical" ]; then
+              echo "Auto-merging PR for $SEVERITY advisory $GHSA"
+              gh pr merge --auto --squash "${{ github.event.pull_request.number }}"
+              exit 0
+            fi
+          done
+          echo "No high/critical advisories — skipping auto-merge"

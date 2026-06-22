@@ -1,6 +1,6 @@
-# [Project name]
+# Batchelor App
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Combined pnpm monorepo serving both the Pottery and Quilting collection apps under one domain (app.batchelor.app). Users log in once and access both apps.
 
 ## Run & Operate
 
@@ -8,38 +8,72 @@ _Replace the heading above with the project's name, and this line with one sente
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `pnpm --filter @workspace/db run bootstrap` — idempotent schema bootstrap (CREATE IF NOT EXISTS only — safe to re-run)
+- `pnpm --filter @workspace/scripts run backup-to-replit` — snapshot Supabase → Replit built-in DB
+- `pnpm --filter @workspace/scripts run restore-from-replit -- --confirm` — restore Replit DB → Supabase (destructive, use with care)
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
 - API: Express 5
-- DB: PostgreSQL + Drizzle ORM
+- DB: PostgreSQL + Drizzle ORM, hosted on Supabase (shared with pottery + quilting apps)
+- Image storage: Supabase Storage — private buckets `pottery` and `quilting`
+- Auth: email/password (bcrypt) + Google OAuth (shared single OAuth client)
+- Email: Resend
+- AI: OpenAI (vision + embeddings), OpenRouter, Jina, Voyage
 - Validation: Zod (`zod/v4`), `drizzle-zod`
 - API codegen: Orval (from OpenAPI spec)
 - Build: esbuild (CJS bundle)
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/api-server/` — single Express API server serving both apps' routes
+- `lib/db/` — shared Drizzle schema + bootstrap (pottery + quilting tables)
+- `scripts/src/backup-to-replit.ts` — Supabase → Replit DB snapshot
+- `scripts/src/restore-from-replit.ts` — restore from snapshot
+- `scripts/post-merge.sh` — runs after every agent merge: install → bootstrap → backup
+- `MERGE_HANDOFF_PROMPT.md` — prompt to extract handoff manifests from pottery/quilting Repls
+
+## Database layout (shared Supabase project: gadhlfluflknlwgmlmos)
+
+| Prefix | Owned by |
+|---|---|
+| `pottery_*` | Pottery app |
+| `quilting_*` | Quilting app |
+| `app_users`, `password_reset_tokens` | Shared (login) |
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- **One Supabase, two namespaced table sets.** Pottery and quilting already share one Supabase project. The merge adds nothing to the DB — just consolidates the code that talks to it.
+- **Additive-only migrations.** `bootstrap.ts` uses `CREATE TABLE IF NOT EXISTS` exclusively. `drizzle-kit push --force` is permanently banned (it introspects all tables and will silently drop the other app's tables).
+- **Backup before publish.** `post-merge.sh` snapshots Supabase → built-in Replit DB after every merge. Embedding columns are excluded (not in Replit DB's pgvector). Regenerate via each app's Bulk Re-analyse.
+- **Single Google OAuth client** shared by both apps. Redirect URI: `{host}/api/auth/google/callback`.
+- **DATABASE_URL → Supabase; PG* → Replit built-in DB.** Never swap these.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- **Pottery app** — catalogue and AI-search a pottery collection (photos, categories, semantic search)
+- **Quilting app** — catalogue fabrics, patterns, finished quilts; plan layouts; track shopping list
+- Both apps share user accounts and run under one domain
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Replit is primary source of truth; GitHub (`malwaredevil/batchelorapp`) is backup + issue tracker
+- Never run `drizzle-kit push --force` — ever
+- Always run backup before any schema change or publish
+- DATABASE_URL must point to the live Supabase (not the Replit built-in helium DB)
+- All three "optional" AI secrets (OPENROUTER_API_KEY, JINA_API_KEY, VOYAGE_API_KEY) are required
+- Single combined domain: app.batchelor.app (target), pottery.batchelor.app + quilting.batchelor.app (decommissioned after go-live)
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- `DATABASE_URL` is claimed by Replit's built-in DB — must be manually overridden in the Secrets tab to point at Supabase
+- Replit's network sandbox blocks direct Postgres connections (port 5432/6543) — use Supabase REST API or the pooler via the app server; `pg` client works only from deployed app, not from bash/scripts in dev
+- Secrets are per-Repl, not shared across separate Repls — pottery and quilting Repl secrets did not carry over here automatically
+- pgvector is enabled in Supabase but unavailable in the Replit built-in DB — backup excludes `embedding` and `visual_embedding` columns
+- Quilting uses both `embedding` (1536-dim, text) and `visual_embedding` (1024-dim, image) on fabrics and patterns
 
 ## Pointers
 
 - See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- See `MERGE_HANDOFF_PROMPT.md` for the prompt to run in each existing app before merging code

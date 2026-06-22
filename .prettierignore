@@ -1,0 +1,8 @@
+node_modules
+dist
+build
+.pnpm-store
+pnpm-lock.yaml
+*.tsbuildinfo
+lib/api-zod/src/
+lib/api-client-react/src/

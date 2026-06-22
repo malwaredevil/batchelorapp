@@ -5,10 +5,17 @@
   "type": "module",
   "scripts": {
     "hello": "tsx ./src/hello.ts",
+    "backup-to-replit": "tsx ./src/backup-to-replit.ts",
+    "restore-from-replit": "tsx ./src/restore-from-replit.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@workspace/db": "workspace:*",
+    "pg": "^8.20.0"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@types/pg": "^8.11.0",
     "tsx": "catalog:"
   }
 }

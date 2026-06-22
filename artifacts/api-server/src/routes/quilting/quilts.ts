@@ -574,7 +574,7 @@ router.post("/quilts/:id/images", upload.single("image"), async (req, res) => {
 
   res.status(201).json({
     id: image.id,
-    url: `/api/quilts/${id}/images/${image.id}`,
+    url: `/api/quilting/quilts/${id}/images/${image.id}`,
     label: image.label,
     position: image.position,
   });
@@ -617,7 +617,7 @@ router.patch("/quilts/:id/images/:imageId", async (req, res) => {
   }
   res.json({
     id: image.id,
-    url: `/api/quilts/${id}/images/${image.id}`,
+    url: `/api/quilting/quilts/${id}/images/${image.id}`,
     label: image.label,
     position: image.position,
   });

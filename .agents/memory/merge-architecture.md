@@ -33,5 +33,17 @@ description: How the pottery + quilting apps consolidate into the batchelorapp m
 
 **Why:** stale routes manifest as **404** (the old bundle only has whatever routes existed at its build time), which looks exactly like a mount/routing bug and sends you debugging the wrong thing. After any api-server route/lib change, restart first, then probe.
 
+## DB connectivity reality (corrects the "pg blocked in dev" caveat)
+- The Supavisor pooler IS reachable from the running dev **app-server workflow**: startup-migrate connects and reports "all tables verified / created successfully". The "Postgres blocked in the dev sandbox" caveat applies to one-off **bash/scripts** (and the IPv6-only direct host), NOT the long-running app server going through the pooler.
+
+**Why:** earlier notes implied the live DB could only be reached from the deployed app; in fact the dev api-server already talks to live Supabase. Don't waste time assuming dev can't reach the DB — check the startup-migrate log line instead.
+
+## Sub-app URL literals must carry the namespace prefix
+- Any server code that EMITS `/api/...` URL strings for a sub-app (image URLs in serializers, image-upload response `url` fields) must include the mount namespace: `/api/pottery/...` or `/api/quilting/...`. Routers mount under `/api/<app>/`, so an un-namespaced literal like `/api/fabrics/:id/image` 404s.
+
+**Why:** the transplant correctly namespaced pottery's serializer but missed quilting's (`lib/serialize.ts` + the `fabrics/patterns/quilts` image-upload routes) — the bug is invisible to typecheck and only shows as broken images at runtime.
+
+**How to apply:** after any route transplant, grep server code for backtick `/api/` literals and confirm each carries the app prefix; route *definitions* (relative to mount) are fine, only emitted absolute URLs need the prefix.
+
 ## GitHub tracking
 - Umbrella issue #1; pillar issues #4–#10; milestone "Batchelor Merge". Project board needs `project` token scope (token lacks it) — use the milestone instead. Workflow YAML files need a `workflow`-scoped token to push.

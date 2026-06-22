@@ -248,7 +248,7 @@ function toFabric(
     lockedFields: row.lockedFields ?? [],
     categories: cats,
     images: imgs,
-    imageUrl: `/api/fabrics/${row.id}/image`,
+    imageUrl: `/api/quilting/fabrics/${row.id}/image`,
     hasEmbedding,
     createdAt: row.createdAt,
   };
@@ -259,7 +259,7 @@ export async function serializeFabric(
 ): Promise<SerializedFabric> {
   const [catsMap, imgsMap, embedded] = await Promise.all([
     fetchCategoriesForEntities("fabric", [row.id]),
-    fetchImagesForEntities("fabric", [row.id], "/api/fabrics"),
+    fetchImagesForEntities("fabric", [row.id], "/api/quilting/fabrics"),
     fetchEmbeddingPresence("fabric", [row.id]),
   ]);
   return toFabric(
@@ -277,7 +277,7 @@ export async function serializeFabrics(
   const ids = rows.map((r) => r.id);
   const [catsMap, imgsMap, embedded] = await Promise.all([
     fetchCategoriesForEntities("fabric", ids),
-    fetchImagesForEntities("fabric", ids, "/api/fabrics"),
+    fetchImagesForEntities("fabric", ids, "/api/quilting/fabrics"),
     fetchEmbeddingPresence("fabric", ids),
   ]);
   return rows.map((row) =>
@@ -313,7 +313,7 @@ function toPattern(
     lockedFields: row.lockedFields ?? [],
     categories: cats,
     images: imgs,
-    imageUrl: row.imagePath ? `/api/patterns/${row.id}/image` : null,
+    imageUrl: row.imagePath ? `/api/quilting/patterns/${row.id}/image` : null,
     designerBio: row.designerBio ?? null,
     designerWebsite: row.designerWebsite ?? null,
     publicationName: row.publicationName ?? null,
@@ -328,7 +328,7 @@ export async function serializePattern(
 ): Promise<SerializedPattern> {
   const [catsMap, imgsMap, embedded] = await Promise.all([
     fetchCategoriesForEntities("pattern", [row.id]),
-    fetchImagesForEntities("pattern", [row.id], "/api/patterns"),
+    fetchImagesForEntities("pattern", [row.id], "/api/quilting/patterns"),
     fetchEmbeddingPresence("pattern", [row.id]),
   ]);
   return toPattern(
@@ -346,7 +346,7 @@ export async function serializePatterns(
   const ids = rows.map((r) => r.id);
   const [catsMap, imgsMap, embedded] = await Promise.all([
     fetchCategoriesForEntities("pattern", ids),
-    fetchImagesForEntities("pattern", ids, "/api/patterns"),
+    fetchImagesForEntities("pattern", ids, "/api/quilting/patterns"),
     fetchEmbeddingPresence("pattern", ids),
   ]);
   return rows.map((row) =>
@@ -382,7 +382,7 @@ async function fetchFabricSummaries(
       id: row.id,
       name: row.name,
       colorway: row.colorway,
-      imageUrl: `/api/fabrics/${row.id}/image`,
+      imageUrl: `/api/quilting/fabrics/${row.id}/image`,
       dominantColors: row.dominantColors ?? [],
     });
   }
@@ -445,7 +445,7 @@ function toQuilt(
     lockedFields: row.lockedFields ?? [],
     categories: cats,
     images: imgs,
-    imageUrl: `/api/quilts/${row.id}/image`,
+    imageUrl: `/api/quilting/quilts/${row.id}/image`,
     linkedFabricIds: fabricIds,
     linkedPatternIds: patternIds,
     linkedFabrics: fabricIds
@@ -460,7 +460,7 @@ export async function serializeQuilt(
 ): Promise<SerializedQuilt> {
   const [catsMap, imgsMap, links] = await Promise.all([
     fetchCategoriesForEntities("quilt", [row.id]),
-    fetchImagesForEntities("quilt", [row.id], "/api/quilts"),
+    fetchImagesForEntities("quilt", [row.id], "/api/quilting/quilts"),
     fetchQuiltLinks([row.id]),
   ]);
   const fabricIds = links.fabricLinks.get(row.id) ?? [];
@@ -482,7 +482,7 @@ export async function serializeQuilts(
   const ids = rows.map((r) => r.id);
   const [catsMap, imgsMap, links] = await Promise.all([
     fetchCategoriesForEntities("quilt", ids),
-    fetchImagesForEntities("quilt", ids, "/api/quilts"),
+    fetchImagesForEntities("quilt", ids, "/api/quilting/quilts"),
     fetchQuiltLinks(ids),
   ]);
   const allFabricIds = [...new Set([...links.fabricLinks.values()].flat())];

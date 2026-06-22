@@ -539,7 +539,7 @@ router.post(
 
     res.status(201).json({
       id: image.id,
-      url: `/api/patterns/${id}/images/${image.id}`,
+      url: `/api/quilting/patterns/${id}/images/${image.id}`,
       label: image.label,
       position: image.position,
     });
@@ -583,7 +583,7 @@ router.patch("/patterns/:id/images/:imageId", async (req, res) => {
   }
   res.json({
     id: image.id,
-    url: `/api/patterns/${id}/images/${image.id}`,
+    url: `/api/quilting/patterns/${id}/images/${image.id}`,
     label: image.label,
     position: image.position,
   });

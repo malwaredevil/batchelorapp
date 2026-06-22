@@ -671,7 +671,7 @@ router.post("/fabrics/:id/images", upload.single("image"), async (req, res) => {
 
   res.status(201).json({
     id: image.id,
-    url: `/api/fabrics/${id}/images/${image.id}`,
+    url: `/api/quilting/fabrics/${id}/images/${image.id}`,
     label: image.label,
     position: image.position,
   });
@@ -714,7 +714,7 @@ router.patch("/fabrics/:id/images/:imageId", async (req, res) => {
   const { id: fabricId } = UpdateFabricImageParams.parse(req.params);
   res.json({
     id: image.id,
-    url: `/api/fabrics/${fabricId}/images/${image.id}`,
+    url: `/api/quilting/fabrics/${fabricId}/images/${image.id}`,
     label: image.label,
     position: image.position,
   });

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -80,7 +80,6 @@ export function buildFabricUrlMap(
  *
  * - Shows a searchable list of fabrics with thumbnails.
  * - Clicking a fabric selects it as `fab:{id}`.
- * - Hovering shows a magnified preview popup to the left of the item.
  * - Shows a "Used fabrics" tally strip at the top when provided.
  */
 export function FabricPicker({
@@ -97,8 +96,6 @@ export function FabricPicker({
   placeholder?: string;
 }) {
   const [search, setSearch] = useState("");
-  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [hoveredId, setHoveredId] = useState<number | null>(null);
 
   const filtered = (fabrics ?? []).filter((f) => {
     if (!search.trim()) return true;
@@ -108,15 +105,6 @@ export function FabricPicker({
       (f.dominantColors ?? []).some((c) => c.toLowerCase().includes(q))
     );
   });
-
-  function onEnter(id: number) {
-    if (hoverTimer.current) clearTimeout(hoverTimer.current);
-    hoverTimer.current = setTimeout(() => setHoveredId(id), 250);
-  }
-  function onLeave() {
-    if (hoverTimer.current) clearTimeout(hoverTimer.current);
-    setHoveredId(null);
-  }
 
   return (
     <div className="space-y-2">
@@ -202,15 +190,9 @@ export function FabricPicker({
         {filtered.map((fabric) => {
           const fabValue = `fab:${fabric.id}`;
           const isActive = activeValue === fabValue;
-          const isHovered = hoveredId === fabric.id;
 
           return (
-            <div
-              key={fabric.id}
-              className="relative"
-              onMouseEnter={() => onEnter(fabric.id)}
-              onMouseLeave={onLeave}
-            >
+            <div key={fabric.id} className="relative">
               <button
                 onClick={() => onSelect(fabValue)}
                 className={`flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left transition-colors hover:bg-muted/40 ${
@@ -266,25 +248,6 @@ export function FabricPicker({
                   </span>
                 )}
               </button>
-
-              {/* Hover magnification — shows to the left of the panel */}
-              {isHovered && fabric.imageUrl && (
-                <div
-                  className="pointer-events-none absolute right-full top-0 z-50 mr-2 overflow-hidden rounded-lg border border-border bg-background shadow-xl"
-                  style={{ width: 160, height: 160 }}
-                >
-                  <img
-                    src={fabric.imageUrl}
-                    alt={fabric.name}
-                    className="h-full w-full object-cover"
-                  />
-                  <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-2 py-1">
-                    <p className="truncate text-[10px] text-white">
-                      {fabric.name}
-                    </p>
-                  </div>
-                </div>
-              )}
             </div>
           );
         })}

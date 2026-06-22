@@ -257,20 +257,32 @@ function getSubCellColor(
 }
 
 /**
- * Flood-fill bounded by drawn seam lines and diagonal seam cells.
+ * Seam-bounded "cloth" fill.
  *
- * Works at the CELL level so diagonals are handled correctly. Each cell is
- * one of three node types in the BFS graph:
- *   - "full"   : solid / hsplit / vsplit / xsplit  — connects in all 4 directions
- *   - "nwse-a" : upper-right half of a NWSE line/triangle cell — exits via top + right only
- *   - "nwse-b" : lower-left half                             — exits via bottom + left only
- *   - "nesw-a" : upper-left half of a NESW line/triangle cell — exits via top + left only
- *   - "nesw-b" : lower-right half                            — exits via bottom + right only
+ * Floods the contiguous region the click lands in, stopping at every seam:
+ * drawn H/V seam lines AND the internal seams baked into a cell's shape — a
+ * diagonal, the X of an xline/quad, or the mid-splits of an hsplit / vsplit /
+ * xsplit. The flood crosses a cell boundary only where no drawn seam blocks
+ * that half-edge, so a fill behaves like a single piece of cloth: it spreads
+ * into a neighbouring triangle or quarter when they are joined and stops where
+ * a seam would be sewn.
  *
- * xline and quad cells are opaque barriers (getEntrySub returns null → BFS skips them).
+ * Model: every cell is split into 8 octants fanning from its centre to the 4
+ * corners + 4 edge-midpoints, numbered clockwise from the top-left:
  *
- * H/V SeamLines block cell-boundary edges; mid-cell seams (odd pos) are ignored by the
- * cell-level BFS (they're unusual in practice).
+ *      O7 O0 | O1 O2        top edge:    O0 left  O1 right
+ *      ------+------        right edge:  O2 top   O3 bottom
+ *      O6 O5 | O4 O3        bottom edge: O5 left  O4 right
+ *                           left edge:   O7 top   O6 bottom
+ *
+ * A shape contributes internal seam segments between consecutive octants
+ * (SEP_CW). The BFS walks octant→octant inside a cell unless a seam separates
+ * them, and octant→octant across a boundary unless a drawn seam blocks that
+ * half-edge. Filled octants are then re-encoded back to the most specific cell
+ * shape (solid / triangle / quad / h|v|x-split), preserving the seam lines.
+ *
+ * qlines and curve cells have no centre-fan representation, so they flood as a
+ * single region (previous behaviour) and are out of scope here.
  *
  * clickGridX/Y are in cell-unit coordinates (0..gridSize).
  */
@@ -283,11 +295,11 @@ export function seamFill(
   color: string,
   seams: SeamLine[],
 ): string[] {
-  type Sub = "full" | "nwse-a" | "nwse-b" | "nesw-a" | "nesw-b";
+  type Sep = "nwse" | "nesw" | "hmid" | "vmid";
 
-  // Build H/V edge sets from the seam list (same coordinate convention as before).
-  // hEdges key "pos:sc": crossing the sub-row boundary at pos in sub-col sc is blocked.
-  // vEdges key "sr:pos": crossing the sub-col boundary at pos in sub-row sr is blocked.
+  // Drawn H/V seams block individual half-edges.
+  //   hEdges key "pos:sc": crossing the horizontal sub-row boundary `pos` in
+  //     sub-col `sc` is blocked.  vEdges key "sr:pos": vertical sub-col boundary.
   const hEdges = new Set<string>();
   const vEdges = new Set<string>();
   for (const seam of seams) {
@@ -302,153 +314,304 @@ export function seamFill(
     }
   }
 
-  // Does any H seam block the boundary between row r and row r+1 in column c?
-  function hSeamBlocks(r: number, c: number): boolean {
-    const pos = 2 * (r + 1);
-    return hEdges.has(`${pos}:${c * 2}`) || hEdges.has(`${pos}:${c * 2 + 1}`);
-  }
-  // Does any V seam block the boundary between col c and col c+1 in row r?
-  function vSeamBlocks(r: number, c: number): boolean {
-    const pos = 2 * (c + 1);
-    return vEdges.has(`${r * 2}:${pos}`) || vEdges.has(`${r * 2 + 1}:${pos}`);
-  }
-
-  /**
-   * Which sub-node do we enter when traveling in direction `dir` into cell (nr, nc)?
-   *
-   * NWSE (╲) edge ownership:
-   *   top edge → "a" (upper-right),  right edge → "a"
-   *   bottom edge → "b" (lower-left), left edge → "b"
-   *
-   * NESW (╱) edge ownership:
-   *   top edge → "a" (upper-left),   left edge → "a"
-   *   bottom edge → "b" (lower-right), right edge → "b"
-   *
-   * `dir` is the direction of travel (not the approach side).
-   *   "down"  → entering neighbor's top  edge
-   *   "up"    → entering neighbor's bottom edge
-   *   "right" → entering neighbor's left  edge
-   *   "left"  → entering neighbor's right edge
-   */
-  function getEntrySub(
-    nr: number,
-    nc: number,
-    dir: "up" | "down" | "left" | "right",
-  ): Sub | null {
-    if (nr < 0 || nr >= gridH || nc < 0 || nc >= gridW) return null;
-    const p = parseCell(cells[nr * gridW + nc] ?? "");
-    if (p.kind === "xline" || p.kind === "quad") return null; // opaque barrier
-    if (p.kind === "line" || p.kind === "triangle") {
-      if (p.type === "nwse")
-        return dir === "down" || dir === "left" ? "nwse-a" : "nwse-b";
-      return dir === "down" || dir === "right" ? "nesw-a" : "nesw-b";
+  // A drawn seam that runs along a cell's *internal* midline (odd `pos`) divides
+  // that single cell into two halves, exactly like an hsplit/vsplit cell shape —
+  // the even-`pos` boundary edges above only block *cross-cell* flow, so without
+  // this an internal midline seam (the only kind possible on a 1×1 block) is
+  // ignored and the fill floods the whole cell. Only full-span midline seams
+  // divide cleanly; clipped ones have no "partial divide + colour" encoding so
+  // they keep their pass-through behaviour.
+  const seamSeps = new Map<number, Set<Sep>>();
+  const addSeamSep = (k: number, s: Sep) => {
+    let set = seamSeps.get(k);
+    if (!set) seamSeps.set(k, (set = new Set()));
+    set.add(s);
+  };
+  for (const seam of seams) {
+    if (seam.pos % 2 !== 1) continue; // internal midlines only
+    const cs = seam.clipStart ?? 0,
+      ce = seam.clipEnd ?? 1;
+    if (cs > 0.001 || ce < 0.999) continue; // full-span only
+    if (seam.axis === "h") {
+      const r = (seam.pos - 1) / 2;
+      if (r < 0 || r >= gridH || seam.cellIdx < 0 || seam.cellIdx >= gridW)
+        continue;
+      addSeamSep(r * gridW + seam.cellIdx, "hmid");
+    } else {
+      const c = (seam.pos - 1) / 2;
+      if (c < 0 || c >= gridW || seam.cellIdx < 0 || seam.cellIdx >= gridH)
+        continue;
+      addSeamSep(seam.cellIdx * gridW + c, "vmid");
     }
-    return "full";
   }
 
-  // Determine the starting sub-node from the click coordinates
+  // Internal seam segment between octant o and (o+1)%8 (clockwise).
+  const SEP_CW: Sep[] = [
+    "vmid", // O0|O1  upper vertical midline
+    "nesw", // O1|O2  upper-right diagonal
+    "hmid", // O2|O3  right horizontal midline
+    "nwse", // O3|O4  lower-right diagonal
+    "vmid", // O4|O5  lower vertical midline
+    "nesw", // O5|O6  lower-left diagonal
+    "hmid", // O6|O7  left horizontal midline
+    "nwse", // O7|O0  upper-left diagonal
+  ];
+
+  // Which internal seams a cell's shape contains.
+  function cellSeps(p: ParsedCell): Sep[] {
+    switch (p.kind) {
+      case "line":
+      case "triangle":
+        return [p.type];
+      case "xline":
+      case "quad":
+        return ["nwse", "nesw"];
+      case "hsplit":
+        return ["hmid"];
+      case "vsplit":
+        return ["vmid"];
+      case "xsplit":
+        return ["hmid", "vmid"];
+      case "midline":
+        return [
+          ...(p.h ? (["hmid"] as Sep[]) : []),
+          ...(p.v ? (["vmid"] as Sep[]) : []),
+        ];
+      default:
+        return []; // solid / qlines → single region
+    }
+  }
+
+  // Existing colour of each of the 8 octants ("" when uncoloured / white).
+  function octColors(p: ParsedCell): string[] {
+    switch (p.kind) {
+      case "solid":
+        return Array(8).fill(p.color || "");
+      case "triangle":
+        return p.type === "nwse"
+          ? [p.a, p.a, p.a, p.a, p.b, p.b, p.b, p.b]
+          : [p.a, p.a, p.b, p.b, p.b, p.b, p.a, p.a];
+      case "quad":
+        return [
+          p.top,
+          p.top,
+          p.right,
+          p.right,
+          p.bottom,
+          p.bottom,
+          p.left,
+          p.left,
+        ];
+      case "hsplit":
+        return [
+          p.top,
+          p.top,
+          p.top,
+          p.bottom,
+          p.bottom,
+          p.bottom,
+          p.bottom,
+          p.top,
+        ];
+      case "vsplit":
+        return [
+          p.left,
+          p.right,
+          p.right,
+          p.right,
+          p.right,
+          p.left,
+          p.left,
+          p.left,
+        ];
+      case "xsplit":
+        return [p.tl, p.tr, p.tr, p.br, p.br, p.bl, p.bl, p.tl];
+      default:
+        return Array(8).fill(""); // line / xline / midline / qlines
+    }
+  }
+
+  // Re-encode a cell from its seam set + 8 octant colours, preserving seams.
+  function encodeOct(seps: Sep[], oc: string[]): string {
+    const has = (s: Sep) => seps.includes(s);
+    if (has("nwse") && has("nesw")) {
+      const t = oc[0],
+        r = oc[2],
+        b = oc[4],
+        l = oc[6];
+      if (!t && !r && !b && !l) return "xline";
+      return encodeQuad(t, r, b, l);
+    }
+    if (has("hmid") && has("vmid")) {
+      const tl = oc[0],
+        tr = oc[1],
+        br = oc[3],
+        bl = oc[5];
+      if (!tl && !tr && !br && !bl) return "seam-midline-hv";
+      return encodeXSplit(tl, tr, bl, br);
+    }
+    if (has("nwse") || has("nesw")) {
+      const type: "nwse" | "nesw" = has("nwse") ? "nwse" : "nesw";
+      const a = oc[0],
+        b = type === "nwse" ? oc[4] : oc[2];
+      if (!a && !b) return `${type}-line`;
+      return a === b ? a : encodeTriangle(type, a, b);
+    }
+    if (has("hmid")) {
+      const t = oc[0],
+        b = oc[3];
+      if (!t && !b) return "seam-midline-h";
+      return t === b ? t : encodeHSplit(t, b);
+    }
+    if (has("vmid")) {
+      const l = oc[0],
+        r = oc[1];
+      if (!l && !r) return "seam-midline-v";
+      return l === r ? l : encodeVSplit(l, r);
+    }
+    return oc[0]; // solid (single region)
+  }
+
+  // Which octant (0..7) a local click (x,y in 0..1) lands in.
+  function octantOf(x: number, y: number): number {
+    const a = (Math.atan2(y - 0.5, x - 0.5) * 180) / Math.PI;
+    let t = (a + 135) % 360;
+    if (t < 0) t += 360;
+    return Math.floor(t / 45) % 8;
+  }
+
+  // Per-cell parse + seam-set caches.
+  const parsedCache = new Array<ParsedCell | undefined>(cells.length);
+  const sepCache = new Array<Sep[] | undefined>(cells.length);
+  const getParsed = (k: number): ParsedCell =>
+    (parsedCache[k] ??= parseCell(cells[k] ?? ""));
+  const getSeps = (k: number): Sep[] => {
+    const cached = sepCache[k];
+    if (cached) return cached;
+    const base = cellSeps(getParsed(k));
+    const extra = seamSeps.get(k);
+    const merged = extra
+      ? Array.from(new Set<Sep>([...base, ...extra]))
+      : base;
+    return (sepCache[k] = merged);
+  };
+
   const startRow = Math.max(0, Math.min(gridH - 1, Math.floor(clickGridY)));
   const startCol = Math.max(0, Math.min(gridW - 1, Math.floor(clickGridX)));
-  const localX = clickGridX - startCol; // 0..1 within cell
-  const localY = clickGridY - startRow;
-  const startP = parseCell(cells[startRow * gridW + startCol] ?? "");
+  const startK = startRow * gridW + startCol;
+  const startOct = octantOf(clickGridX - startCol, clickGridY - startRow);
 
-  let startSub: Sub;
-  if (startP.kind === "line" || startP.kind === "triangle") {
-    if (startP.type === "nwse") {
-      startSub = nwseHalf(localX, localY, 1, 1) === "a" ? "nwse-a" : "nwse-b";
-    } else {
-      startSub = neswHalf(localX, localY, 1, 1) === "a" ? "nesw-a" : "nesw-b";
-    }
-  } else if (startP.kind === "xline" || startP.kind === "quad") {
-    return cells; // clicked on a barrier — do nothing
-  } else {
-    startSub = "full";
-  }
-
-  // BFS — visited is a Map<cellIndex, Set<Sub>> to group subs per cell
-  const visited = new Map<number, Set<Sub>>();
-  const enqueue = (r: number, c: number, sub: Sub): boolean => {
-    const k = r * gridW + c;
-    if (!visited.has(k)) visited.set(k, new Set());
-    const s = visited.get(k)!;
-    if (s.has(sub)) return false;
-    s.add(sub);
+  // BFS over (cellIndex, octant).
+  const visited = new Map<number, Set<number>>();
+  const enqueue = (k: number, o: number): boolean => {
+    let s = visited.get(k);
+    if (!s) visited.set(k, (s = new Set()));
+    if (s.has(o)) return false;
+    s.add(o);
     return true;
   };
 
-  const queue: Array<[number, number, Sub]> = [[startRow, startCol, startSub]];
-  enqueue(startRow, startCol, startSub);
+  const queue: Array<[number, number]> = [[startK, startOct]];
+  enqueue(startK, startOct);
 
   while (queue.length > 0) {
-    const [r, c, sub] = queue.shift()!;
+    const [k, o] = queue.shift()!;
+    const r = Math.floor(k / gridW);
+    const c = k % gridW;
+    const seps = getSeps(k);
 
-    // Which cardinal directions can this sub-node exit through?
-    const up = sub === "full" || sub === "nwse-a" || sub === "nesw-a";
-    const right = sub === "full" || sub === "nwse-a" || sub === "nesw-b";
-    const down = sub === "full" || sub === "nwse-b" || sub === "nesw-b";
-    const left = sub === "full" || sub === "nwse-b" || sub === "nesw-a";
+    // Within-cell: clockwise + counter-clockwise ring neighbours, unless an
+    // internal seam segment separates them.
+    const cw = (o + 1) % 8;
+    if (!seps.includes(SEP_CW[o]) && enqueue(k, cw)) queue.push([k, cw]);
+    const ccw = (o + 7) % 8;
+    if (!seps.includes(SEP_CW[ccw]) && enqueue(k, ccw)) queue.push([k, ccw]);
 
-    if (up && r > 0 && !hSeamBlocks(r - 1, c)) {
-      const s = getEntrySub(r - 1, c, "up");
-      if (s && enqueue(r - 1, c, s)) queue.push([r - 1, c, s]);
+    // Across the cell boundary via this octant's outer half-edge.
+    let nk = -1,
+      no = -1,
+      blocked = false;
+    switch (o) {
+      case 0: // top edge, left half → cell above, its O5
+        if (r > 0) {
+          nk = k - gridW;
+          no = 5;
+          blocked = hEdges.has(`${2 * r}:${c * 2}`);
+        }
+        break;
+      case 1: // top edge, right half → above, O4
+        if (r > 0) {
+          nk = k - gridW;
+          no = 4;
+          blocked = hEdges.has(`${2 * r}:${c * 2 + 1}`);
+        }
+        break;
+      case 2: // right edge, top half → right, O7
+        if (c < gridW - 1) {
+          nk = k + 1;
+          no = 7;
+          blocked = vEdges.has(`${r * 2}:${2 * (c + 1)}`);
+        }
+        break;
+      case 3: // right edge, bottom half → right, O6
+        if (c < gridW - 1) {
+          nk = k + 1;
+          no = 6;
+          blocked = vEdges.has(`${r * 2 + 1}:${2 * (c + 1)}`);
+        }
+        break;
+      case 4: // bottom edge, right half → below, O1
+        if (r < gridH - 1) {
+          nk = k + gridW;
+          no = 1;
+          blocked = hEdges.has(`${2 * (r + 1)}:${c * 2 + 1}`);
+        }
+        break;
+      case 5: // bottom edge, left half → below, O0
+        if (r < gridH - 1) {
+          nk = k + gridW;
+          no = 0;
+          blocked = hEdges.has(`${2 * (r + 1)}:${c * 2}`);
+        }
+        break;
+      case 6: // left edge, bottom half → left, O3
+        if (c > 0) {
+          nk = k - 1;
+          no = 3;
+          blocked = vEdges.has(`${r * 2 + 1}:${2 * c}`);
+        }
+        break;
+      case 7: // left edge, top half → left, O2
+        if (c > 0) {
+          nk = k - 1;
+          no = 2;
+          blocked = vEdges.has(`${r * 2}:${2 * c}`);
+        }
+        break;
     }
-    if (down && r < gridH - 1 && !hSeamBlocks(r, c)) {
-      const s = getEntrySub(r + 1, c, "down");
-      if (s && enqueue(r + 1, c, s)) queue.push([r + 1, c, s]);
-    }
-    if (left && c > 0 && !vSeamBlocks(r, c - 1)) {
-      const s = getEntrySub(r, c - 1, "left");
-      if (s && enqueue(r, c - 1, s)) queue.push([r, c - 1, s]);
-    }
-    if (right && c < gridW - 1 && !vSeamBlocks(r, c)) {
-      const s = getEntrySub(r, c + 1, "right");
-      if (s && enqueue(r, c + 1, s)) queue.push([r, c + 1, s]);
-    }
+    if (nk >= 0 && !blocked && enqueue(nk, no)) queue.push([nk, no]);
   }
 
-  // Apply colors
+  // A partially-snipped diagonal (clip range ≠ 0..1) does not cleanly divide
+  // the cell, and the cell format has no "clipped diagonal + colour"
+  // representation. Leave such cells untouched rather than silently promoting
+  // them to a full diagonal / quad and losing the user's snip.
+  const isClippedDiagonal = (p: ParsedCell): boolean =>
+    (p.kind === "line" && (p.cs !== 0 || p.ce !== 1)) ||
+    (p.kind === "xline" &&
+      (p.nwseCs !== 0 ||
+        p.nwseCe !== 1 ||
+        p.neswCs !== 0 ||
+        p.neswCe !== 1));
+
+  // Apply: paint the filled octants, then re-encode each touched cell.
   const next = [...cells];
-  for (const [cellIdx, subs] of visited) {
-    const existing = parseCell(next[cellIdx] ?? "");
-
-    // Skip opaque barriers (shouldn't appear — getEntrySub prevents them entering BFS)
-    if (existing.kind === "xline" || existing.kind === "quad") continue;
-
-    if (subs.has("full")) {
-      next[cellIdx] = color;
-      continue;
-    }
-
-    // Diagonal half-fills: convert line → triangle, or update existing triangle
-    if (subs.has("nwse-a") || subs.has("nwse-b")) {
-      const prevA =
-        existing.kind === "triangle" && existing.type === "nwse"
-          ? existing.a || "#FFFFFF"
-          : "#FFFFFF";
-      const prevB =
-        existing.kind === "triangle" && existing.type === "nwse"
-          ? existing.b || "#FFFFFF"
-          : "#FFFFFF";
-      const newA = subs.has("nwse-a") ? color : prevA;
-      const newB = subs.has("nwse-b") ? color : prevB;
-      next[cellIdx] = newA === newB ? newA : encodeTriangle("nwse", newA, newB);
-      continue;
-    }
-    if (subs.has("nesw-a") || subs.has("nesw-b")) {
-      const prevA =
-        existing.kind === "triangle" && existing.type === "nesw"
-          ? existing.a || "#FFFFFF"
-          : "#FFFFFF";
-      const prevB =
-        existing.kind === "triangle" && existing.type === "nesw"
-          ? existing.b || "#FFFFFF"
-          : "#FFFFFF";
-      const newA = subs.has("nesw-a") ? color : prevA;
-      const newB = subs.has("nesw-b") ? color : prevB;
-      next[cellIdx] = newA === newB ? newA : encodeTriangle("nesw", newA, newB);
-      continue;
-    }
+  for (const [k, octs] of visited) {
+    const p = getParsed(k);
+    if (isClippedDiagonal(p)) continue;
+    const oc = octColors(p);
+    for (const o of octs) oc[o] = color;
+    next[k] = encodeOct(getSeps(k), oc);
   }
   return next;
 }
@@ -1124,9 +1287,12 @@ export function BlockGrid({
       {fabricUrlMap &&
         (() => {
           const ids = new Set<number>();
+          const FAB_RE = /fab:(\d+)/g;
           for (const c of cells) {
-            if (c.startsWith("fab:")) {
-              const n = parseInt(c.slice(4), 10);
+            let m: RegExpExecArray | null;
+            FAB_RE.lastIndex = 0;
+            while ((m = FAB_RE.exec(c)) !== null) {
+              const n = parseInt(m[1], 10);
               if (!isNaN(n) && fabricUrlMap[n]) ids.add(n);
             }
           }
@@ -1570,9 +1736,12 @@ function TiledPreview({
       {Object.keys(fabricUrlMap).length > 0 &&
         (() => {
           const ids = new Set<number>();
+          const FAB_RE = /fab:(\d+)/g;
           for (const c of cells) {
-            if (c.startsWith("fab:")) {
-              const n = parseInt(c.slice(4), 10);
+            let m: RegExpExecArray | null;
+            FAB_RE.lastIndex = 0;
+            while ((m = FAB_RE.exec(c)) !== null) {
+              const n = parseInt(m[1], 10);
               if (!isNaN(n) && fabricUrlMap[n]) ids.add(n);
             }
           }

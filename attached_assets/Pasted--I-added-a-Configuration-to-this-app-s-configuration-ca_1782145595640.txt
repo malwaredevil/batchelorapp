@@ -1,0 +1,53 @@
+- [ ] I added a Configuration to this app's configuration called "SUPABASE_POOLER_HOST" that uses the same variables that they use. For this app in replit, I want the sub-domain to be app-batchelor.replit.app. So if you can have that be the suggestion when it comes time to publish this app that'd be great.
+- [ ] Another request I have is that this app, will co-exist while the other apps are still in production, so it must not destroy anything that they are doing in production. Additionally, there are features that you are going have to figure out how to decouple (e.g., the compare features and collections) such that the two different apps don't try to act on or compare against items in the other's sets. THis may take a planning round on your behalf where you will have to do some deep code review to make sure that it meets all of the above conditions before you start implementing.
+
+Here are the responses I got from the apps:
+
+Quilting app responded:
+"HANDOFF COMPLETE for Batchelor Quilting App
+
+The file MERGE_HANDOFF.md is now in the repo at commit aee0c1b. Here's what was filled in and what needs a human to confirm:
+
+Filled in automatically:
+
+All secret key names (16 keys) with dev/production status
+Storage bucket name (quilting), pgvector confirmed enabled, pooler region (EU West 1)
+Google OAuth redirect URI logic (dynamic, from auth.ts)
+Full deployment config (autoscale, build/run commands, health check path, static frontend)
+Scheduled jobs: confirmed none
+All 14 table names with column counts (from schema source)
+Approximate row counts from the most recent backup (14 fabrics, 2 categories, 15 entity-category rows, 2 users)
+All non-reproducible items (bucket setup, pgvector, Google OAuth, Resend domain, embedding rebuild after restore)
+Full .replit file contents
+Two things that need a human eye:
+
+Supabase project ref — I can't read secret values, so the ref (subdomain of SUPABASE_URL) needs to be looked up manually in the Supabase dashboard or Replit Secrets panel.
+GOOGLE_CLIENT_ID last 6 chars — same reason; check the Replit Secrets panel.
+Production deployment secrets — confirm OPENROUTER_API_KEY, VOYAGE_API_KEY, and the core keys are set in the Deployment > Secrets tab (I can see dev secrets but not the deployment panel).
+Everything else is complete."
+
+---
+
+Pottery app responded (note, i did the pull/push task it mentions needing to be done in github):
+"HANDOFF COMPLETE for Batchelor Pottery Collection ✓
+
+MERGE_HANDOFF.md has been created in the repo root and will be auto-committed by Replit's checkpoint system. All other changes (scripts/src/db-snapshot.ts, scripts/package.json) are similarly captured.
+
+What's in the document
+Section	Content
+A — Secrets	9 key names with dev/production status; GITHUB_PAT flagged as dev-only
+B — Supabase	Project ref gadhlfluflknlwgmlmos, bucket pottery, pgvector confirmed enabled
+C — Google OAuth	Last 6 of client ID, exact redirect URI pattern from code, note that new domain must be added to Google Cloud Console
+D — Deployment	Autoscale, build/run commands for both artifacts, port routing table
+E — Scheduled jobs	None
+F — DB snapshot	Full table list with column counts and row counts (22 tables, including all quilting_* tables on the shared instance)
+G — Non-reproducible	7 items including shared DB warning, pgvector manual step, Google Console update, legacy unprefixed category tables, multiple session tables
+H — .replit	Full file contents
+Warnings flagged in the document
+Shared Supabase DB — pottery and quilting share one instance; no drizzle-kit push --force ever
+Legacy category tables — categories/item_categories (25/527 rows) exist alongside the pottery_ prefixed versions; potentially orphaned
+Three session tables — pottery_sessions, quilting_sessions, user_sessions — merge team should confirm which the pottery API actually writes to
+Google OAuth redirect URIs — must be manually updated in Google Cloud Console for the new merged domain
+Git divergence — local at ca577a2, GitHub at 7fac6461; use Replit checkpoint as authoritative source
+The push
+The push to GitHub cannot be completed from the main agent — the remote is one commit ahead (a prior task-agent push), and the sandbox blocks git pull. If you want this synced to GitHub before the merge, the cleanest option is to start a background task agent with the instruction: "Pull from GitHub, then push all local changes including MERGE_HANDOFF.md to origin main.""

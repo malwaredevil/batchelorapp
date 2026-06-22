@@ -1,0 +1,66 @@
+- [ ] I added a Configuration to this app's configuration called "SUPABASE_POOLER_HOST" that uses the same variables that they use. For this app in replit, I want the sub-domain to be app-batchelor.replit.app. So if you can have that be the suggestion when it comes time to publish this app that'd be great.
+- [ ] Another request I have is that this app, will co-exist while the other apps are still in production, so it must not destroy anything that they are doing in production. Additionally, there are features that you are going have to figure out how to decouple (e.g., the compare features and collections) such that the two different apps don't try to act on or compare against items in the other's sets. THis may take a planning round on your behalf where you will have to do some deep code review to make sure that it meets all of the above conditions before you start implementing.
+- [ ] So before you start implementation, verify the following, and remember what I have said. For planning, etc., I will switch you to "Power" mode to empower you to do the best possible job in planning and implementing. You just need to make sure that you set yourself up for a seamless install that meets the intent.
+- [ ] If you haven't considered this yet, the app you create will also need to take username and password or Google authentication. THe passwords are already in the auth_users table. Additionally, each app has an account screen, that can now be consolidated since one account will be used to access both applications (as they were). You will also need to re-wire/re-use the forgot password on their main screens for this app. 
+- [ ] Before you create anything, we will also do mock ups for:
+  - [ ] The landing screen (it should have tiles and/or a main menu) and be in similar styles as the two apps we are consolidating.
+  - [ ] The main app should also have a common theme acrossed it (to include a title menu icon and matching favicon) just like the two consolidated apps
+- [ ] Individually, these apps have much of my taste in colors and style already implemented. I'd like to extend that to this app such that all of them share a common theme, style, feature set (if possible)  that consolidates the user account at a minimum.
+- [ ] Where possible I want the apps to share a common core set that is extendible, inheritable, imported (like object-oriented programming) so we can write a function once and then re-use it.
+- [ ] Right now, quilting app has the better AI and image features for its colllections. We need to plan how we can use those in the Pottery app without disrupting its old app.
+- [ ] Once we are satisfied with the new app, I'll disable the old apps and then we will remove any bridges we create to keep the old apps and the new app consolidated. That will need to be tracked in a GitHub Issue.
+- [ ] Currently, I prefer to track and update and close GitHub issues for anything we do on the repo. When I switch you to Power for the planning and implementation of this new app, you'll need to plan the implementation and track it in GitHub issues to ensure that everything is done. Additionally, You can use any planning or project management features in GitHub you need to make sure that the implementation is done in whatever order it needs to be done and that no step is overlooked.
+- [ ] When the GitHub repo is updated, all of the issues found by CodeQL, etc., need to be fixed if they are true findings such that this repo and GitHub repo are adhering to coding and security best practices.
+- [ ] Optional: The implementation phase can use GitHub PRs and Branches if it wants to do so in order to make sure that the code is sound and solid.
+- [ ] Remember to ask me when you want to go into Planning and Implementation (With a pause in between asking if I am ready for you to move to those phases).
+
+Here are the responses I got from the apps:
+
+Quilting app responded:
+"HANDOFF COMPLETE for Batchelor Quilting App
+
+The file MERGE_HANDOFF.md is now in the repo at commit aee0c1b. Here's what was filled in and what needs a human to confirm:
+
+Filled in automatically:
+
+All secret key names (16 keys) with dev/production status
+Storage bucket name (quilting), pgvector confirmed enabled, pooler region (EU West 1)
+Google OAuth redirect URI logic (dynamic, from auth.ts)
+Full deployment config (autoscale, build/run commands, health check path, static frontend)
+Scheduled jobs: confirmed none
+All 14 table names with column counts (from schema source)
+Approximate row counts from the most recent backup (14 fabrics, 2 categories, 15 entity-category rows, 2 users)
+All non-reproducible items (bucket setup, pgvector, Google OAuth, Resend domain, embedding rebuild after restore)
+Full .replit file contents
+Two things that need a human eye:
+
+Supabase project ref — I can't read secret values, so the ref (subdomain of SUPABASE_URL) needs to be looked up manually in the Supabase dashboard or Replit Secrets panel.
+GOOGLE_CLIENT_ID last 6 chars — same reason; check the Replit Secrets panel.
+Production deployment secrets — confirm OPENROUTER_API_KEY, VOYAGE_API_KEY, and the core keys are set in the Deployment > Secrets tab (I can see dev secrets but not the deployment panel).
+Everything else is complete."
+
+---
+
+Pottery app responded (note, i did the pull/push task it mentions needing to be done in github):
+"HANDOFF COMPLETE for Batchelor Pottery Collection ✓
+
+MERGE_HANDOFF.md has been created in the repo root and will be auto-committed by Replit's checkpoint system. All other changes (scripts/src/db-snapshot.ts, scripts/package.json) are similarly captured.
+
+What's in the document
+Section	Content
+A — Secrets	9 key names with dev/production status; GITHUB_PAT flagged as dev-only
+B — Supabase	Project ref gadhlfluflknlwgmlmos, bucket pottery, pgvector confirmed enabled
+C — Google OAuth	Last 6 of client ID, exact redirect URI pattern from code, note that new domain must be added to Google Cloud Console
+D — Deployment	Autoscale, build/run commands for both artifacts, port routing table
+E — Scheduled jobs	None
+F — DB snapshot	Full table list with column counts and row counts (22 tables, including all quilting_* tables on the shared instance)
+G — Non-reproducible	7 items including shared DB warning, pgvector manual step, Google Console update, legacy unprefixed category tables, multiple session tables
+H — .replit	Full file contents
+Warnings flagged in the document
+Shared Supabase DB — pottery and quilting share one instance; no drizzle-kit push --force ever
+Legacy category tables — categories/item_categories (25/527 rows) exist alongside the pottery_ prefixed versions; potentially orphaned
+Three session tables — pottery_sessions, quilting_sessions, user_sessions — merge team should confirm which the pottery API actually writes to
+Google OAuth redirect URIs — must be manually updated in Google Cloud Console for the new merged domain
+Git divergence — local at ca577a2, GitHub at 7fac6461; use Replit checkpoint as authoritative source
+The push
+The push to GitHub cannot be completed from the main agent — the remote is one commit ahead (a prior task-agent push), and the sandbox blocks git pull. If you want this synced to GitHub before the merge, the cleanest option is to start a background task agent with the instruction: "Pull from GitHub, then push all local changes including MERGE_HANDOFF.md to origin main.""

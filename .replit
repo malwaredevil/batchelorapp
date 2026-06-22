@@ -30,3 +30,8 @@ externalPort = 8080
 [[ports]]
 localPort = 8081
 externalPort = 80
+
+[userenv]
+
+[userenv.shared]
+SUPABASE_POOLER_HOST = "aws-0-eu-west-1.pooler.supabase.com"

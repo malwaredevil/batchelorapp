@@ -13,6 +13,8 @@ export interface QuiltingCollectionStats {
   totalFabrics: number;
   totalPatterns: number;
   totalQuilts: number;
+  totalBlocks: number;
+  totalLayouts: number;
   totalYardage: number;
   topColors: QuiltingCollectionStatsTopColorsItem[];
   topMotifs: QuiltingCollectionStatsTopMotifsItem[];

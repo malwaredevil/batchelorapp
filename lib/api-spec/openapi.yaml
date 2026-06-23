@@ -2936,6 +2936,8 @@ components:
         - totalFabrics
         - totalPatterns
         - totalQuilts
+        - totalBlocks
+        - totalLayouts
         - totalYardage
         - topColors
         - topMotifs
@@ -2946,6 +2948,10 @@ components:
         totalPatterns:
           type: integer
         totalQuilts:
+          type: integer
+        totalBlocks:
+          type: integer
+        totalLayouts:
           type: integer
         totalYardage:
           type: number

@@ -2150,6 +2150,8 @@ export const GetStatsResponse = zod.object({
   "totalFabrics": zod.number(),
   "totalPatterns": zod.number(),
   "totalQuilts": zod.number(),
+  "totalBlocks": zod.number(),
+  "totalLayouts": zod.number(),
   "totalYardage": zod.number(),
   "topColors": zod.array(zod.object({
   "color": zod.string(),

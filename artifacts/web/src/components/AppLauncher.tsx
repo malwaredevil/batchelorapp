@@ -124,17 +124,17 @@ export function AppLauncher() {
         },
         {
           value:
-            quiltingStatsData?.totalPatterns != null
-              ? String(quiltingStatsData.totalPatterns)
+            quiltingStatsData?.totalBlocks != null
+              ? String(quiltingStatsData.totalBlocks)
               : "—",
-          label: "Patterns",
+          label: "Blocks",
         },
         {
           value:
-            quiltingStatsData?.totalQuilts != null
-              ? String(quiltingStatsData.totalQuilts)
+            quiltingStatsData?.totalLayouts != null
+              ? String(quiltingStatsData.totalLayouts)
               : "—",
-          label: "Quilts",
+          label: "Layouts",
         },
       ];
     }
@@ -318,15 +318,26 @@ export function AppLauncher() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Do I own this? — pottery visual compare */}
-            <Button
-              variant="secondary"
-              className="bg-secondary text-secondary-foreground shadow-sm"
-              onClick={() => navigate(`${base}pottery/compare`)}
-            >
-              <Camera className="w-4 h-4 mr-2" />
-              Do I own this?
-            </Button>
+            {/* Do I own this? — dropdown for pottery or quilting compare */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="secondary" className="bg-secondary text-secondary-foreground shadow-sm">
+                  <Camera className="w-4 h-4 mr-2" />
+                  Do I own this?
+                  <ChevronDown className="w-3.5 h-3.5 ml-1 opacity-70" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => navigate(`${base}pottery/compare`)}>
+                  <Camera className="w-4 h-4 mr-2 text-muted-foreground" />
+                  Pottery piece
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => navigate(`${base}quilting/compare`)}>
+                  <Camera className="w-4 h-4 mr-2 text-muted-foreground" />
+                  Fabric
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             {/* Shopping List — quilting shopping */}
             <Button

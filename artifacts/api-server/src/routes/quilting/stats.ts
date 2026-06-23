@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, fabrics, quiltPatterns, finishedQuilts } from "@workspace/db";
+import { db, fabrics, quiltPatterns, finishedQuilts, blocks, layouts } from "@workspace/db";
 import { GetStatsResponse, GetStaleCountResponse } from "@workspace/api-zod";
 import { requireAuth } from "../../middleware/auth";
 import { sql, isNull } from "drizzle-orm";
@@ -39,6 +39,8 @@ router.get("/stats", async (_req, res) => {
     printTypeRows,
     patternCount,
     quiltCount,
+    blockCount,
+    layoutCount,
   ] = await Promise.all([
     db
       .execute<{ total: number; yardage: number }>(
@@ -78,6 +80,14 @@ router.get("/stats", async (_req, res) => {
       .select({ count: sql<number>`count(*)::int` })
       .from(finishedQuilts)
       .then((r) => r[0].count),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(blocks)
+      .then((r) => r[0].count),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(layouts)
+      .then((r) => r[0].count),
   ]);
 
   res.json(
@@ -85,6 +95,8 @@ router.get("/stats", async (_req, res) => {
       totalFabrics: Number(fabricTotals.total),
       totalPatterns: patternCount,
       totalQuilts: quiltCount,
+      totalBlocks: blockCount,
+      totalLayouts: layoutCount,
       totalYardage: Number(fabricTotals.yardage),
       topColors: colorRows.map((r) => ({
         color: r.label,

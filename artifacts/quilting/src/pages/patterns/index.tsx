@@ -212,7 +212,7 @@ function PatternCard({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 rounded-full opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100"
+                className="h-7 w-7 rounded-full opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 hover:opacity-100"
               >
                 <MoreVertical className="h-3.5 w-3.5" />
                 <span className="sr-only">Options</span>

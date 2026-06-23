@@ -107,7 +107,7 @@ function DesignCard({
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 rounded-full bg-background/80 opacity-100 shadow-sm transition-opacity md:opacity-0 md:group-hover:opacity-100"
+              className="h-7 w-7 rounded-full bg-background/80 opacity-100 shadow-sm transition-opacity md:opacity-0 md:group-hover:opacity-100 hover:opacity-100"
             >
               <MoreVertical className="h-3.5 w-3.5" />
               <span className="sr-only">Options</span>

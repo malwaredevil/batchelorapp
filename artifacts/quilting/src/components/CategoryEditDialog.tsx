@@ -30,16 +30,26 @@ export function CategoryEditDialog({
   isSaving,
 }: Props) {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  // Track categories created during this dialog session so that handleSave
+  // can resolve their names even if the query hasn't refetched yet.
+  const [localNewCats, setLocalNewCats] = useState<QuiltingCategory[]>([]);
 
   useEffect(() => {
     if (open) {
       setSelectedIds(currentCategories.map((c) => c.id));
+      setLocalNewCats([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const handleSave = () => {
-    const names = allCategories
+    // Merge allCategories (from the query) with any locally-created categories
+    // that may not have been included in the refetch yet.
+    const merged = [
+      ...allCategories,
+      ...localNewCats.filter((nc) => !allCategories.some((a) => a.id === nc.id)),
+    ];
+    const names = merged
       .filter((c) => selectedIds.includes(c.id))
       .map((c) => c.name);
     onSave(names);
@@ -66,9 +76,12 @@ export function CategoryEditDialog({
                   : [...prev, id],
               )
             }
-            onCreated={(cat) =>
-              setSelectedIds((prev) => [...prev, cat.id])
-            }
+            onCreated={(cat) => {
+              setSelectedIds((prev) => [...prev, cat.id]);
+              setLocalNewCats((prev) =>
+                prev.some((c) => c.id === cat.id) ? prev : [...prev, cat],
+              );
+            }}
             disabled={isSaving}
           />
         </div>

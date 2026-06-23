@@ -11,6 +11,11 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import {
+  CATEGORY_BG_PALETTE,
+  suggestCategoryBgColor,
+  autoTextColor,
+} from "@workspace/web-core";
 
 /**
  * Normalise typographic / "smart" characters to their plain ASCII equivalents,
@@ -58,6 +63,8 @@ export function TagSelector({
 }: TagSelectorProps) {
   const [input, setInput] = useState("");
   const [open, setOpen] = useState(false);
+  const [colorStep, setColorStep] = useState(false);
+  const [pickedBg, setPickedBg] = useState("");
   const inputId = useId();
   const queryClient = useQueryClient();
 
@@ -70,13 +77,13 @@ export function TagSelector({
         onCreated(newCat);
         setInput("");
         setOpen(false);
+        setColorStep(false);
         toast.success(`Category "${newCat.name}" created and added.`);
       },
       onError: () => toast.error("Could not create category."),
     },
   });
 
-  // Normalize the raw input — this is what gets compared and submitted.
   const normalized = normalizeTagInput(input);
   const lc = normalized.toLowerCase();
 
@@ -88,10 +95,21 @@ export function TagSelector({
   const showDropdown =
     open && normalized.length > 0 && (matches.length > 0 || showCreate);
 
-  function handleCreate() {
+  function enterColorStep() {
+    const suggested = suggestCategoryBgColor(allCategories.length);
+    setPickedBg(suggested);
+    setColorStep(true);
+  }
+
+  function confirmCreate() {
     if (!normalized || create.isPending) return;
-    // Send the normalized form so the server sees a clean, capitalised name.
-    create.mutate({ data: { name: normalized } });
+    create.mutate({
+      data: {
+        name: normalized,
+        bgColor: pickedBg || undefined,
+        textColor: pickedBg ? autoTextColor(pickedBg) : undefined,
+      },
+    });
   }
 
   return (
@@ -145,22 +163,37 @@ export function TagSelector({
         <Input
           id={inputId}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => {
+            setInput(e.target.value);
+            setColorStep(false);
+          }}
           onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          onBlur={() =>
+            setTimeout(() => {
+              setOpen(false);
+              setColorStep(false);
+            }, 150)
+          }
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
-              if (showCreate) handleCreate();
-              else if (matches.length === 1) {
+              if (colorStep) {
+                confirmCreate();
+              } else if (showCreate) {
+                enterColorStep();
+              } else if (matches.length === 1) {
                 onToggle(matches[0].id);
                 setInput("");
                 setOpen(false);
               }
             }
             if (e.key === "Escape") {
-              setOpen(false);
-              setInput("");
+              if (colorStep) {
+                setColorStep(false);
+              } else {
+                setOpen(false);
+                setInput("");
+              }
             }
           }}
           placeholder="Search or create a category…"
@@ -173,51 +206,113 @@ export function TagSelector({
         )}
 
         {showDropdown && (
-          <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-52 overflow-y-auto rounded-xl border border-card-border bg-card shadow-lg">
-            {matches.map((cat) => {
-              const selected = selectedIds.includes(cat.id);
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    onToggle(cat.id);
-                    setInput("");
-                    setOpen(false);
-                  }}
-                  className={cn(
-                    "flex w-full items-center gap-2 px-3 py-2 text-sm transition hover:bg-muted",
-                    selected && "font-medium text-primary",
-                  )}
-                >
-                  {selected ? (
-                    <Check className="h-3.5 w-3.5 shrink-0" />
-                  ) : (
-                    <span className="w-3.5 shrink-0" />
-                  )}
-                  {cat.name}
-                  {selected && (
-                    <span className="ml-auto text-xs text-muted-foreground">
-                      tap to remove
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-            {showCreate && (
+          <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-xl border border-card-border bg-card shadow-lg">
+            {!colorStep &&
+              matches.map((cat) => {
+                const selected = selectedIds.includes(cat.id);
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      onToggle(cat.id);
+                      setInput("");
+                      setOpen(false);
+                    }}
+                    className={cn(
+                      "flex w-full items-center gap-2 px-3 py-2 text-sm transition hover:bg-muted",
+                      selected && "font-medium text-primary",
+                    )}
+                  >
+                    {selected ? (
+                      <Check className="h-3.5 w-3.5 shrink-0" />
+                    ) : (
+                      <span className="w-3.5 shrink-0" />
+                    )}
+                    {cat.name}
+                    {selected && (
+                      <span className="ml-auto text-xs text-muted-foreground">
+                        tap to remove
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+
+            {!colorStep && showCreate && (
               <button
                 type="button"
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  handleCreate();
+                  enterColorStep();
                 }}
                 className="flex w-full items-center gap-2 border-t border-card-border px-3 py-2 text-sm font-medium text-primary transition hover:bg-muted"
               >
                 <Plus className="h-3.5 w-3.5 shrink-0" />
-                {/* Show the normalised form so the user sees what will actually be stored */}
                 Create &ldquo;{normalized}&rdquo;
               </button>
+            )}
+
+            {colorStep && showCreate && (
+              <div className="space-y-3 p-3">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                    style={{
+                      backgroundColor: pickedBg,
+                      color: autoTextColor(pickedBg),
+                    }}
+                  >
+                    {normalized}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    Choose a colour
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {CATEGORY_BG_PALETTE.map((bg) => (
+                    <button
+                      key={bg}
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setPickedBg(bg);
+                      }}
+                      className={cn(
+                        "h-5 w-5 rounded-full border-2 transition-all",
+                        pickedBg === bg
+                          ? "scale-110 border-foreground/60"
+                          : "border-transparent hover:scale-105",
+                      )}
+                      style={{ backgroundColor: bg }}
+                    />
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setColorStep(false);
+                    }}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    ← Back
+                  </button>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      confirmCreate();
+                    }}
+                    disabled={create.isPending}
+                    className="flex-1 rounded-md bg-primary py-1 text-xs font-medium text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
+                  >
+                    {create.isPending ? "Creating…" : `Create "${normalized}"`}
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         )}

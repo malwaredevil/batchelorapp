@@ -40,6 +40,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
+import { getCategoryPalette } from "@workspace/web-core";
 import { toast } from "sonner";
 import {
   useListBlocks,
@@ -848,8 +849,7 @@ export default function Blocks() {
       </div>
 
       {/* Search box */}
-      {blockList && blockList.length > 0 && (
-        <div className="mb-4">
+      <div className="mb-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
@@ -869,7 +869,6 @@ export default function Blocks() {
             )}
           </div>
         </div>
-      )}
 
       {/* Attribute + category filter pills */}
       {(filterableGridSizes.length > 1 || filterableCats.length > 0) && (
@@ -901,6 +900,9 @@ export default function Blocks() {
             })}
           {filterableCats.map((cat) => {
             const active = activeCatIds.has(cat.id);
+            const palette = cat.bgColor
+              ? { bgColor: cat.bgColor, textColor: cat.textColor ?? "#fff" }
+              : getCategoryPalette(cat.name);
             return (
               <button
                 key={cat.id}
@@ -912,9 +914,9 @@ export default function Blocks() {
                     : "opacity-70 hover:opacity-100",
                 )}
                 style={{
-                  backgroundColor: cat.bgColor ?? "#e5e7eb",
-                  color: cat.textColor ?? "#374151",
-                  borderColor: cat.bgColor ?? "#e5e7eb",
+                  backgroundColor: active ? palette.bgColor : "transparent",
+                  color: active ? palette.textColor : palette.bgColor,
+                  borderColor: palette.bgColor,
                 }}
               >
                 {cat.name}

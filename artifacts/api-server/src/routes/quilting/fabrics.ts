@@ -217,7 +217,7 @@ router.post("/fabrics", aiLimiter, upload.single("image"), async (req, res) => {
   const [embedding, imagePath, visualEmb] = await Promise.all([
     embedText(embeddingText),
     uploadImage(cleanBuffer, contentType),
-    generateVisualEmbedding(cleanBuffer),
+    generateVisualEmbedding(cleanBuffer).catch(() => null),
   ]);
 
   const quantity = parseFloat(req.body.quantity ?? "1") || 1;
@@ -475,7 +475,7 @@ router.post("/fabrics/:id/reanalyze", aiLimiter, async (req, res) => {
 
   const [analysis, visualEmb] = await Promise.all([
     analyzeImage(dataUrls, context),
-    generateVisualEmbedding(dataUrls[0]),
+    generateVisualEmbedding(dataUrls[0]).catch(() => null),
   ]);
   const embeddingText = buildEmbeddingText(analysis);
   const embedding = await embedText(embeddingText);
@@ -595,7 +595,7 @@ router.post("/fabrics/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
       };
       const [analysis, visualEmb] = await Promise.all([
         analyzeImage(dataUrls, context),
-        generateVisualEmbedding(dataUrls[0]),
+        generateVisualEmbedding(dataUrls[0]).catch(() => null),
       ]);
       const embedding = await embedText(buildEmbeddingText(analysis));
       await db
@@ -641,6 +641,9 @@ router.post("/fabrics/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
       succeeded.push(id);
     } catch {
       failed.push(id);
+    }
+    if (capped.indexOf(id) < capped.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
     }
   }
 

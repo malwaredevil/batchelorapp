@@ -499,6 +499,9 @@ router.post("/patterns/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
     } catch {
       failed.push(id);
     }
+    if (capped.indexOf(id) < capped.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
   }
 
   res.json(BulkReanalyzePatternsResponse.parse({ succeeded, failed }));

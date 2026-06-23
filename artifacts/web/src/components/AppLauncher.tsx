@@ -15,7 +15,7 @@ import {
   X,
   Check,
   LogOut,
-  User,
+  ChevronDown,
 } from "lucide-react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -47,6 +47,11 @@ import { useTheme } from "@/hooks/use-theme";
 import { useWidgets } from "@/hooks/use-widgets";
 import { useAuth } from "@/lib/auth";
 import { APPS } from "@/config/apps";
+import {
+  useGetCollectionStats,
+  useListPotteryCategories,
+  useGetStats,
+} from "@workspace/api-client-react";
 
 const base = import.meta.env.BASE_URL;
 
@@ -64,10 +69,11 @@ const RECENT_ACTIVITY = [
   { title: "Completed 'Star Pattern'", cat: "Quilting", time: "Last week" },
 ];
 
-const QUICK_ACTIONS = [
-  { id: "add-item", label: "Add Item", icon: Plus },
-  { id: "do-i-own", label: "Do I own this?", icon: Camera },
-  { id: "shopping-list", label: "Shopping List", icon: ShoppingBag },
+const ADD_ACTIONS = [
+  { label: "Pottery piece", href: `${base}pottery/add` },
+  { label: "Fabric", href: `${base}quilting/fabrics/add` },
+  { label: "Pattern", href: `${base}quilting/patterns/add` },
+  { label: "Quilt", href: `${base}quilting/quilts/add` },
 ];
 
 export function AppLauncher() {
@@ -82,6 +88,60 @@ export function AppLauncher() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [customizing, setCustomizing] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+
+  // Live stats from the API
+  const { data: potteryStatsData } = useGetCollectionStats();
+  const { data: potteryCategoriesData } = useListPotteryCategories();
+  const { data: quiltingStatsData } = useGetStats();
+
+  function liveStats(appId: string) {
+    if (appId === "pottery") {
+      return [
+        {
+          value:
+            potteryStatsData?.totalItems != null
+              ? String(potteryStatsData.totalItems)
+              : "—",
+          label: "Pieces",
+        },
+        {
+          value:
+            potteryCategoriesData != null
+              ? String(potteryCategoriesData.length)
+              : "—",
+          label: "Categories",
+        },
+      ];
+    }
+    if (appId === "quilting") {
+      return [
+        {
+          value:
+            quiltingStatsData?.totalFabrics != null
+              ? String(quiltingStatsData.totalFabrics)
+              : "—",
+          label: "Fabrics",
+        },
+        {
+          value:
+            quiltingStatsData?.totalPatterns != null
+              ? String(quiltingStatsData.totalPatterns)
+              : "—",
+          label: "Patterns",
+        },
+        {
+          value:
+            quiltingStatsData?.totalQuilts != null
+              ? String(quiltingStatsData.totalQuilts)
+              : "—",
+          label: "Quilts",
+        },
+      ];
+    }
+    // Fallback to static config for unknown apps
+    const app = APPS.find((a) => a.id === appId);
+    return app?.stats ?? [];
+  }
 
   // ⌘K / Ctrl+K opens the global search palette.
   useEffect(() => {
@@ -140,7 +200,7 @@ export function AppLauncher() {
             </kbd>
           </Button>
 
-          {/* Dark mode toggle — light is the default */}
+          {/* Dark mode toggle */}
           <Button
             variant="ghost"
             size="icon"
@@ -171,10 +231,6 @@ export function AppLauncher() {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => navigate(`${base}account`)}>
-                <User className="w-4 h-4 mr-2" />
-                Profile
-              </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => navigate(`${base}account`)}>
                 <Settings className="w-4 h-4 mr-2" />
                 Account settings
@@ -210,15 +266,22 @@ export function AppLauncher() {
             ))}
           </CommandGroup>
           <CommandGroup heading="Quick actions">
-            {QUICK_ACTIONS.map((a) => {
-              const Icon = a.icon;
-              return (
-                <CommandItem key={a.id} value={a.label} onSelect={() => setSearchOpen(false)}>
-                  <Icon className="w-4 h-4 mr-2" />
-                  {a.label}
-                </CommandItem>
-              );
-            })}
+            <CommandItem value="Add Pottery piece" onSelect={() => { setSearchOpen(false); navigate(`${base}pottery/add`); }}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Pottery piece
+            </CommandItem>
+            <CommandItem value="Add Fabric" onSelect={() => { setSearchOpen(false); navigate(`${base}quilting/fabrics/add`); }}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Fabric
+            </CommandItem>
+            <CommandItem value="Do I own this?" onSelect={() => { setSearchOpen(false); navigate(`${base}pottery/compare`); }}>
+              <Camera className="w-4 h-4 mr-2" />
+              Do I own this?
+            </CommandItem>
+            <CommandItem value="Shopping List" onSelect={() => { setSearchOpen(false); navigate(`${base}quilting/shopping`); }}>
+              <ShoppingBag className="w-4 h-4 mr-2" />
+              Shopping List
+            </CommandItem>
           </CommandGroup>
         </CommandList>
       </CommandDialog>
@@ -236,15 +299,41 @@ export function AppLauncher() {
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Item
-            </Button>
-            <Button variant="secondary" className="bg-secondary text-secondary-foreground shadow-sm">
+            {/* Add Item — dropdown to choose which collection */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Item
+                  <ChevronDown className="w-3.5 h-3.5 ml-1 opacity-70" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {ADD_ACTIONS.map((a) => (
+                  <DropdownMenuItem key={a.href} onSelect={() => navigate(a.href)}>
+                    <Plus className="w-4 h-4 mr-2 text-muted-foreground" />
+                    {a.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Do I own this? — pottery visual compare */}
+            <Button
+              variant="secondary"
+              className="bg-secondary text-secondary-foreground shadow-sm"
+              onClick={() => navigate(`${base}pottery/compare`)}
+            >
               <Camera className="w-4 h-4 mr-2" />
               Do I own this?
             </Button>
-            <Button variant="outline" className="shadow-sm">
+
+            {/* Shopping List — quilting shopping */}
+            <Button
+              variant="outline"
+              className="shadow-sm"
+              onClick={() => navigate(`${base}quilting/shopping`)}
+            >
               <ShoppingBag className="w-4 h-4 mr-2" />
               Shopping List
             </Button>
@@ -283,7 +372,7 @@ export function AppLauncher() {
 
                   <CardContent className="p-6 flex-1">
                     <div className="flex gap-3 mb-5">
-                      {app.stats.map((s) => (
+                      {liveStats(app.id).map((s) => (
                         <div
                           key={s.label}
                           className="flex-1 flex flex-col space-y-1 p-3 rounded-lg bg-secondary/50"
@@ -308,7 +397,7 @@ export function AppLauncher() {
               </a>
             ))}
 
-            {/* Add-app affordance — shows the grid is modular */}
+            {/* Add-app affordance */}
             <button className="min-h-[320px] rounded-xl border-2 border-dashed border-border bg-transparent flex flex-col items-center justify-center gap-3 text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-muted/30 transition-colors">
               <PlusCircle className="w-10 h-10" />
               <span className="font-medium">Add an app</span>
@@ -369,7 +458,7 @@ export function AppLauncher() {
               );
             })}
 
-            {/* Add-widget affordance — opens a picker of available widgets */}
+            {/* Add-widget affordance */}
             <Popover open={addOpen} onOpenChange={setAddOpen}>
               <PopoverTrigger asChild>
                 <button

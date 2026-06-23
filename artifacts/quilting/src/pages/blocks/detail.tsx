@@ -104,7 +104,7 @@ export default function BlockDetail() {
           className="relative flex aspect-square cursor-zoom-in items-center justify-center overflow-hidden rounded-2xl border border-card-border bg-white p-4 group"
           onClick={() => setZoomOpen(true)}
         >
-          <BlockPreviewSvg cells={cells} gridSize={gridSize} size={280} tileCount={2} fabricUrlMap={numMap} />
+          <BlockPreviewSvg cells={cells} gridSize={gridSize} size={280} tileCount={1} fabricUrlMap={numMap} />
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/20 group-hover:opacity-100">
             <ZoomIn className="h-10 w-10 text-white drop-shadow-lg" />
           </div>

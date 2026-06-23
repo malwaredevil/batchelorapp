@@ -25,7 +25,7 @@ export const APPS: AppEntry[] = [
   {
     id: "pottery",
     name: "Pottery",
-    href: `${base}pottery`,
+    href: `${base}pottery/`,
     image: `${base}images/pottery-collection.png`,
     updated: "Updated 2h ago",
     stats: [
@@ -38,7 +38,7 @@ export const APPS: AppEntry[] = [
   {
     id: "quilting",
     name: "Quilting",
-    href: `${base}quilting`,
+    href: `${base}quilting/`,
     image: `${base}images/quilting-collection.png`,
     updated: "Updated 1d ago",
     stats: [

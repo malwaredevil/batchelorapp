@@ -4,6 +4,7 @@ import { useGuardedNavigate } from "@/lib/nav-guard";
 import {
   LogOut,
   Library,
+  LayoutGrid,
   ShoppingBag,
   PenTool,
   Settings2,
@@ -125,21 +126,32 @@ export function AppShell({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-40 border-b border-card-border bg-background/85 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
           {/* Logo / wordmark */}
-          <button
-            onClick={() => navigate("/fabrics")}
-            className="flex items-center gap-2.5"
-            data-testid="link-home"
-          >
-            <AppLogo className="h-9 w-9 drop-shadow-sm" />
-            <div className="leading-tight">
-              <p className="text-base font-bold tracking-tight">
-                Ashley's Quilting Center
-              </p>
-              <p className="hidden text-[11px] font-medium text-muted-foreground sm:block">
-                Quilting Studio
-              </p>
-            </div>
-          </button>
+          <div className="flex items-center gap-2">
+            <a
+              href="/"
+              className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title="Back to all apps"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">All Apps</span>
+            </a>
+            <span className="text-border select-none text-sm">·</span>
+            <button
+              onClick={() => navigate("/fabrics")}
+              className="flex items-center gap-2.5"
+              data-testid="link-home"
+            >
+              <AppLogo className="h-9 w-9 drop-shadow-sm" />
+              <div className="leading-tight">
+                <p className="text-base font-bold tracking-tight">
+                  Ashley's Quilting Center
+                </p>
+                <p className="hidden text-[11px] font-medium text-muted-foreground sm:block">
+                  Quilting Studio
+                </p>
+              </div>
+            </button>
+          </div>
 
           {/* Desktop nav */}
           <div className="flex items-center gap-1">

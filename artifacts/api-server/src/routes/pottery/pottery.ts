@@ -61,6 +61,7 @@ import {
 } from "../../lib/pottery/openai";
 import { generateVisualEmbedding, generateZoneEmbedding } from "../../lib/visual-embed";
 import { serializeItem, serializeItems } from "../../lib/pottery/serialize";
+import { logger } from "../../lib/logger";
 
 // All columns except the three embedding vectors — the 1536-dim text embedding,
 // the 1024-dim whole-piece visual embedding, and the 1024-dim zone embedding are
@@ -886,7 +887,8 @@ router.post("/items/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
     try {
       await runItemAnalysis(id, userId);
       succeeded.push(id);
-    } catch {
+    } catch (err) {
+      logger.error({ itemId: id, err }, "bulk-reanalyze: item failed");
       failed.push(id);
     }
     // Brief pause between items so we don't burst-fire Jina/OpenRouter

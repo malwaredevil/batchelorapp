@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
-import { desc, eq, getTableColumns, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import {
   db,
   fabrics,
@@ -57,14 +57,7 @@ const MAX_FIELD = 200;
 const MAX_NOTES = 4000;
 const MAX_LABEL = 100;
 
-// Hard ceiling on how many supplemental images a single fabric may carry.
-// Keeps the per-fabric image count bounded so the reanalyze route cannot be
-// turned into an unbounded download/encode/AI fan-out by pre-seeding a fabric
-// with many supplemental images.
 const MAX_SUPPLEMENTAL_IMAGES = 10;
-
-// How many images (primary + supplemental) the reanalyze route may send to the
-// vision model in one call. Mirrors the per-fabric slice used in compare.
 const MAX_REANALYZE_IMAGES = 5;
 
 const upload = multer({
@@ -96,7 +89,25 @@ function parseStringArray(raw: unknown): string[] {
   return [];
 }
 
-async function resolveOrCreateCategories(names: string[]): Promise<number[]> {
+function isUniqueConstraintViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code: string }).code === "23505"
+  );
+}
+
+/**
+ * Resolve category names → IDs for a specific user, creating per-user
+ * categories as needed. Names taken globally by another user are silently
+ * skipped (the old global UNIQUE(name) constraint cannot be dropped
+ * additively, so cross-user name collisions are a known UX limitation).
+ */
+async function resolveOrCreateCategories(
+  names: string[],
+  userId: number,
+): Promise<number[]> {
   if (names.length === 0) return [];
   const ids: number[] = [];
   for (const name of names) {
@@ -105,16 +116,21 @@ async function resolveOrCreateCategories(names: string[]): Promise<number[]> {
     const [existing] = await db
       .select({ id: categories.id })
       .from(categories)
-      .where(eq(categories.name, trimmed))
+      .where(and(eq(categories.name, trimmed), eq(categories.userId, userId)))
       .limit(1);
     if (existing) {
       ids.push(existing.id);
     } else {
-      const [created] = await db
-        .insert(categories)
-        .values({ name: trimmed })
-        .returning({ id: categories.id });
-      ids.push(created.id);
+      try {
+        const [created] = await db
+          .insert(categories)
+          .values({ name: trimmed, userId })
+          .returning({ id: categories.id });
+        if (created) ids.push(created.id);
+      } catch (err) {
+        if (!isUniqueConstraintViolation(err)) throw err;
+        // Name taken globally by another user — skip this category
+      }
     }
   }
   return ids;
@@ -127,10 +143,12 @@ router.use(requireAuth);
 // List
 // ---------------------------------------------------------------------------
 
-router.get("/fabrics", async (_req, res) => {
+router.get("/fabrics", async (req, res) => {
+  const userId = req.session.userId!;
   const rows = await db
     .select(fabricColumns)
     .from(fabrics)
+    .where(eq(fabrics.userId, userId))
     .orderBy(desc(fabrics.createdAt));
   const items = await serializeFabrics(
     rows as Array<Omit<FabricRow, "embedding" | "visualEmbedding">>,
@@ -144,10 +162,11 @@ router.get("/fabrics", async (_req, res) => {
 
 router.get("/fabrics/:id", async (req, res) => {
   const { id } = GetFabricParams.parse(req.params);
+  const userId = req.session.userId!;
   const [row] = await db
     .select(fabricColumns)
     .from(fabrics)
-    .where(eq(fabrics.id, id))
+    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Fabric not found." });
@@ -167,6 +186,7 @@ router.get("/fabrics/:id", async (req, res) => {
 // ---------------------------------------------------------------------------
 
 router.post("/fabrics", aiLimiter, upload.single("image"), async (req, res) => {
+  const userId = req.session.userId!;
   const file = req.file;
   if (!file) {
     res.status(400).json({ error: "An image file is required." });
@@ -209,6 +229,7 @@ router.post("/fabrics", aiLimiter, upload.single("image"), async (req, res) => {
   const [row] = (await db
     .insert(fabrics)
     .values({
+      userId,
       name: clamp(req.body.name, MAX_NAME) ?? analysis.name,
       lineName: analysis.lineName,
       designer: analysis.designer,
@@ -240,17 +261,19 @@ router.post("/fabrics", aiLimiter, upload.single("image"), async (req, res) => {
 
   const categoryNames = parseStringArray(req.body.categories);
   if (categoryNames.length > 0) {
-    const catIds = await resolveOrCreateCategories(categoryNames);
-    await db
-      .insert(entityCategories)
-      .values(
-        catIds.map((cid) => ({
-          entityType: "fabric" as const,
-          entityId: row.id,
-          categoryId: cid,
-        })),
-      )
-      .onConflictDoNothing();
+    const catIds = await resolveOrCreateCategories(categoryNames, userId);
+    if (catIds.length > 0) {
+      await db
+        .insert(entityCategories)
+        .values(
+          catIds.map((cid) => ({
+            entityType: "fabric" as const,
+            entityId: row.id,
+            categoryId: cid,
+          })),
+        )
+        .onConflictDoNothing();
+    }
   }
 
   const serialized = await serializeFabric(row);
@@ -263,12 +286,13 @@ router.post("/fabrics", aiLimiter, upload.single("image"), async (req, res) => {
 
 router.patch("/fabrics/:id", async (req, res) => {
   const { id } = UpdateFabricParams.parse(req.params);
+  const userId = req.session.userId!;
   const body = UpdateFabricBody.parse(req.body);
 
   const [existing] = await db
     .select({ id: fabrics.id })
     .from(fabrics)
-    .where(eq(fabrics.id, id))
+    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)))
     .limit(1);
   if (!existing) {
     res.status(404).json({ error: "Fabric not found." });
@@ -296,14 +320,17 @@ router.patch("/fabrics/:id", async (req, res) => {
   if (body.lockedFields !== undefined) updates.lockedFields = body.lockedFields;
 
   if (Object.keys(updates).length > 0) {
-    await db.update(fabrics).set(updates).where(eq(fabrics.id, id));
+    await db
+      .update(fabrics)
+      .set(updates)
+      .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)));
   }
 
   if (body.categories !== undefined) {
     await db
       .delete(entityCategories)
       .where(sql`entity_type = 'fabric' AND entity_id = ${id}`);
-    const catIds = await resolveOrCreateCategories(body.categories);
+    const catIds = await resolveOrCreateCategories(body.categories, userId);
     if (catIds.length > 0) {
       await db
         .insert(entityCategories)
@@ -321,7 +348,7 @@ router.patch("/fabrics/:id", async (req, res) => {
   const [row] = await db
     .select(fabricColumns)
     .from(fabrics)
-    .where(eq(fabrics.id, id))
+    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)))
     .limit(1);
   res.json(
     UpdateFabricResponse.parse(
@@ -338,10 +365,11 @@ router.patch("/fabrics/:id", async (req, res) => {
 
 router.delete("/fabrics/:id", async (req, res) => {
   const { id } = DeleteFabricParams.parse(req.params);
+  const userId = req.session.userId!;
   const [row] = await db
     .select({ imagePath: fabrics.imagePath })
     .from(fabrics)
-    .where(eq(fabrics.id, id))
+    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Fabric not found." });
@@ -353,7 +381,9 @@ router.delete("/fabrics/:id", async (req, res) => {
     .from(quiltingImages)
     .where(sql`entity_type = 'fabric' AND entity_id = ${id}`);
 
-  await db.delete(fabrics).where(eq(fabrics.id, id));
+  await db
+    .delete(fabrics)
+    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)));
   await Promise.allSettled([
     deleteImage(row.imagePath),
     ...supplementalImages.map((img) => deleteImage(img.storagePath)),
@@ -367,10 +397,11 @@ router.delete("/fabrics/:id", async (req, res) => {
 
 router.get("/fabrics/:id/image", async (req, res) => {
   const { id } = GetFabricImageParams.parse(req.params);
+  const userId = req.session.userId!;
   const [row] = await db
     .select({ imagePath: fabrics.imagePath })
     .from(fabrics)
-    .where(eq(fabrics.id, id))
+    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Fabric not found." });
@@ -388,10 +419,11 @@ router.get("/fabrics/:id/image", async (req, res) => {
 
 router.post("/fabrics/:id/reanalyze", aiLimiter, async (req, res) => {
   const { id } = ReanalyzeFabricParams.parse(req.params);
+  const userId = req.session.userId!;
   const [row] = await db
     .select()
     .from(fabrics)
-    .where(eq(fabrics.id, id))
+    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Fabric not found." });
@@ -483,12 +515,12 @@ router.post("/fabrics/:id/reanalyze", aiLimiter, async (req, res) => {
         ? { visualEmbedding: sql`${`[${visualEmb.join(",")}]`}::vector` }
         : {}),
     })
-    .where(eq(fabrics.id, id));
+    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)));
 
   const [updated] = await db
     .select(fabricColumns)
     .from(fabrics)
-    .where(eq(fabrics.id, id))
+    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)))
     .limit(1);
   res.json(
     ReanalyzeFabricResponse.parse(
@@ -507,6 +539,7 @@ const MAX_BULK_REANALYZE = 20;
 
 router.post("/fabrics/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
   const { ids } = BulkReanalyzeFabricsBody.parse(req.body);
+  const userId = req.session.userId!;
   const capped = [...new Set(ids)].slice(0, MAX_BULK_REANALYZE);
   const succeeded: number[] = [];
   const failed: number[] = [];
@@ -516,7 +549,7 @@ router.post("/fabrics/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
       const [row] = await db
         .select()
         .from(fabrics)
-        .where(eq(fabrics.id, id))
+        .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)))
         .limit(1);
       if (!row) {
         failed.push(id);
@@ -604,7 +637,7 @@ router.post("/fabrics/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
               }
             : {}),
         })
-        .where(eq(fabrics.id, id));
+        .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)));
       succeeded.push(id);
     } catch {
       failed.push(id);
@@ -620,12 +653,14 @@ router.post("/fabrics/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
 
 router.post("/fabrics/:id/images", upload.single("image"), async (req, res) => {
   const { id } = AddFabricImageParams.parse(req.params);
+  const userId = req.session.userId!;
   const body = AddFabricImageBody.parse(req.body);
 
+  // Verify fabric ownership before adding supplemental image
   const [fabric] = await db
     .select({ id: fabrics.id })
     .from(fabrics)
-    .where(eq(fabrics.id, id))
+    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)))
     .limit(1);
   if (!fabric) {
     res.status(404).json({ error: "Fabric not found." });
@@ -679,10 +714,26 @@ router.post("/fabrics/:id/images", upload.single("image"), async (req, res) => {
 
 router.get("/fabrics/:id/images/:imageId", async (req, res) => {
   const { imageId } = UpdateFabricImageParams.parse(req.params);
+  const { id } = GetFabricImageParams.parse(req.params);
+  const userId = req.session.userId!;
+
+  // Verify fabric ownership before serving image
+  const [fabric] = await db
+    .select({ id: fabrics.id })
+    .from(fabrics)
+    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)))
+    .limit(1);
+  if (!fabric) {
+    res.status(404).json({ error: "Fabric not found." });
+    return;
+  }
+
   const [image] = await db
     .select()
     .from(quiltingImages)
-    .where(eq(quiltingImages.id, imageId))
+    .where(
+      sql`${quiltingImages.id} = ${imageId} AND entity_type = 'fabric' AND entity_id = ${id}`,
+    )
     .limit(1);
   if (!image) {
     res.status(404).json({ error: "Image not found." });
@@ -696,7 +747,21 @@ router.get("/fabrics/:id/images/:imageId", async (req, res) => {
 
 router.patch("/fabrics/:id/images/:imageId", async (req, res) => {
   const { imageId } = UpdateFabricImageParams.parse(req.params);
+  const { id } = UpdateFabricParams.parse(req.params);
+  const userId = req.session.userId!;
   const body = UpdateFabricImageBody.parse(req.body);
+
+  // Verify fabric ownership before modifying supplemental image
+  const [fabric] = await db
+    .select({ id: fabrics.id })
+    .from(fabrics)
+    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)))
+    .limit(1);
+  if (!fabric) {
+    res.status(404).json({ error: "Fabric not found." });
+    return;
+  }
+
   const [image] = await db
     .update(quiltingImages)
     .set({
@@ -705,16 +770,17 @@ router.patch("/fabrics/:id/images/:imageId", async (req, res) => {
         : {}),
       ...(body.position !== undefined ? { position: body.position } : {}),
     })
-    .where(eq(quiltingImages.id, imageId))
+    .where(
+      sql`${quiltingImages.id} = ${imageId} AND entity_type = 'fabric' AND entity_id = ${id}`,
+    )
     .returning();
   if (!image) {
     res.status(404).json({ error: "Image not found." });
     return;
   }
-  const { id: fabricId } = UpdateFabricImageParams.parse(req.params);
   res.json({
     id: image.id,
-    url: `/api/quilting/fabrics/${fabricId}/images/${image.id}`,
+    url: `/api/quilting/fabrics/${id}/images/${image.id}`,
     label: image.label,
     position: image.position,
   });
@@ -722,9 +788,25 @@ router.patch("/fabrics/:id/images/:imageId", async (req, res) => {
 
 router.delete("/fabrics/:id/images/:imageId", async (req, res) => {
   const { imageId } = DeleteFabricImageParams.parse(req.params);
+  const { id } = DeleteFabricParams.parse(req.params);
+  const userId = req.session.userId!;
+
+  // Verify fabric ownership BEFORE deleting the image
+  const [fabric] = await db
+    .select({ id: fabrics.id })
+    .from(fabrics)
+    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)))
+    .limit(1);
+  if (!fabric) {
+    res.status(404).json({ error: "Fabric not found." });
+    return;
+  }
+
   const [image] = await db
     .delete(quiltingImages)
-    .where(eq(quiltingImages.id, imageId))
+    .where(
+      sql`${quiltingImages.id} = ${imageId} AND entity_type = 'fabric' AND entity_id = ${id}`,
+    )
     .returning({ storagePath: quiltingImages.storagePath });
   if (!image) {
     res.status(404).json({ error: "Image not found." });

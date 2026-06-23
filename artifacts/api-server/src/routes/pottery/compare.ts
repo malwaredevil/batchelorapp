@@ -121,6 +121,7 @@ const router: IRouter = Router();
 router.use(requireAuth);
 
 router.post("/compare", aiLimiter, upload.single("image"), async (req, res) => {
+  const userId = req.session.userId!;
   const file = req.file;
   if (!file) {
     res.status(400).json({ error: "An image file is required." });
@@ -161,6 +162,7 @@ router.post("/compare", aiLimiter, upload.single("image"), async (req, res) => {
   const vectorLiteral = `[${embedding.join(",")}]`;
 
   // Text vector search (always) + visual vector search (when available) in parallel.
+  // Both searches are scoped to this user's items only.
   const [textRanked, visualRanked] = await Promise.all([
     db
       .execute<{ id: number; similarity: number }>(
@@ -168,6 +170,7 @@ router.post("/compare", aiLimiter, upload.single("image"), async (req, res) => {
         select id, 1 - (embedding <=> ${vectorLiteral}::vector) as similarity
         from pottery_items
         where embedding is not null
+          and user_id = ${userId}
         order by embedding <=> ${vectorLiteral}::vector
         limit ${TEXT_SEARCH_POOL}
       `,
@@ -185,6 +188,7 @@ router.post("/compare", aiLimiter, upload.single("image"), async (req, res) => {
             select id, 1 - (visual_embedding <=> ${`[${visualEmb.join(",")}]`}::vector) as similarity
             from pottery_items
             where visual_embedding is not null
+              and user_id = ${userId}
             order by visual_embedding <=> ${`[${visualEmb.join(",")}]`}::vector
             limit ${VISUAL_SEARCH_POOL}
           `,

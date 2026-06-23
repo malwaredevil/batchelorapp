@@ -365,8 +365,13 @@ export async function serializePatterns(
 
 async function fetchFabricSummaries(
   fabricIds: number[],
+  userId?: number,
 ): Promise<Map<number, QuiltFabricSummary>> {
   if (fabricIds.length === 0) return new Map();
+  const whereClause =
+    userId != null
+      ? and(inArray(fabrics.id, fabricIds), eq(fabrics.userId, userId))
+      : inArray(fabrics.id, fabricIds);
   const rows = await db
     .select({
       id: fabrics.id,
@@ -375,7 +380,7 @@ async function fetchFabricSummaries(
       dominantColors: fabrics.dominantColors,
     })
     .from(fabrics)
-    .where(inArray(fabrics.id, fabricIds));
+    .where(whereClause);
   const map = new Map<number, QuiltFabricSummary>();
   for (const row of rows) {
     map.set(row.id, {
@@ -458,13 +463,16 @@ function toQuilt(
 export async function serializeQuilt(
   row: QuiltRowForSerialization,
 ): Promise<SerializedQuilt> {
+  const userId = row.userId ?? undefined;
   const [catsMap, imgsMap, links] = await Promise.all([
     fetchCategoriesForEntities("quilt", [row.id]),
     fetchImagesForEntities("quilt", [row.id], "/api/quilting/quilts"),
     fetchQuiltLinks([row.id]),
   ]);
   const fabricIds = links.fabricLinks.get(row.id) ?? [];
-  const fabricSummaries = await fetchFabricSummaries(fabricIds);
+  // Scope fabric summaries to the quilt owner to prevent cross-user data leakage
+  // via linked-fabric fields (name, colorway, dominantColors).
+  const fabricSummaries = await fetchFabricSummaries(fabricIds, userId);
   return toQuilt(
     row,
     catsMap.get(row.id) ?? [],
@@ -486,7 +494,10 @@ export async function serializeQuilts(
     fetchQuiltLinks(ids),
   ]);
   const allFabricIds = [...new Set([...links.fabricLinks.values()].flat())];
-  const fabricSummaries = await fetchFabricSummaries(allFabricIds);
+  // Use the first row's userId as the owner scope (all rows belong to the same user
+  // because route handlers filter by req.session.userId).
+  const userId = rows[0]?.userId ?? undefined;
+  const fabricSummaries = await fetchFabricSummaries(allFabricIds, userId);
   return rows.map((row) =>
     toQuilt(
       row,

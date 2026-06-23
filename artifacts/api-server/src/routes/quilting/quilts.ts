@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   db,
   finishedQuilts,
@@ -9,6 +9,8 @@ import {
   quiltingImages,
   quiltFabricLinks,
   quiltPatternLinks,
+  fabrics,
+  quiltPatterns,
   type FinishedQuiltRow,
 } from "@workspace/db";
 import {
@@ -94,11 +96,57 @@ function parseIntArray(raw: unknown): number[] {
   return [];
 }
 
-async function resolveOrCreateCategories(names: string[]): Promise<number[]> {
-  // Bound the work this request can trigger: normalise, drop empties,
-  // de-duplicate, and cap the count so a large or repetitive array cannot
-  // amplify into a flood of per-name database round-trips. Resolution then uses
-  // a fixed number of batched queries regardless of input size.
+/**
+ * Filter a list of fabric IDs to those actually owned by userId.
+ * Prevents horizontal privilege escalation via linked-fabric insertion.
+ */
+async function filterOwnedFabricIds(
+  ids: number[],
+  userId: number,
+): Promise<number[]> {
+  if (ids.length === 0) return [];
+  const rows = await db
+    .select({ id: fabrics.id })
+    .from(fabrics)
+    .where(and(inArray(fabrics.id, ids), eq(fabrics.userId, userId)));
+  return rows.map((r) => r.id);
+}
+
+/**
+ * Filter a list of pattern IDs to those actually owned by userId.
+ */
+async function filterOwnedPatternIds(
+  ids: number[],
+  userId: number,
+): Promise<number[]> {
+  if (ids.length === 0) return [];
+  const rows = await db
+    .select({ id: quiltPatterns.id })
+    .from(quiltPatterns)
+    .where(
+      and(inArray(quiltPatterns.id, ids), eq(quiltPatterns.userId, userId)),
+    );
+  return rows.map((r) => r.id);
+}
+
+function isUniqueConstraintViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code: string }).code === "23505"
+  );
+}
+
+/**
+ * Resolve category names → IDs for a specific user, creating per-user
+ * categories as needed. Names already taken globally by another user are
+ * silently skipped.
+ */
+async function resolveOrCreateCategories(
+  names: string[],
+  userId: number,
+): Promise<number[]> {
   const unique: string[] = [];
   const seen = new Set<string>();
   for (const raw of names) {
@@ -111,30 +159,37 @@ async function resolveOrCreateCategories(names: string[]): Promise<number[]> {
   }
   if (unique.length === 0) return [];
 
-  // One batched lookup for the names that already exist.
+  // One batched lookup for names that already exist for this user
   const existing = await db
-    .select({ name: categories.name })
+    .select({ name: categories.name, id: categories.id })
     .from(categories)
-    .where(inArray(categories.name, unique));
+    .where(
+      and(inArray(categories.name, unique), eq(categories.userId, userId)),
+    );
   const existingNames = new Set(existing.map((c) => c.name));
+  const existingIds = existing.map((c) => c.id);
 
-  // One batched insert for the rest (name is UNIQUE, so concurrent inserts are
-  // absorbed by onConflictDoNothing).
+  // Insert missing names for this user
   const missing = unique.filter((n) => !existingNames.has(n));
   if (missing.length > 0) {
-    await db
-      .insert(categories)
-      .values(missing.map((name) => ({ name })))
-      .onConflictDoNothing();
+    try {
+      await db
+        .insert(categories)
+        .values(missing.map((name) => ({ name, userId })))
+        .onConflictDoNothing();
+    } catch (err) {
+      if (!isUniqueConstraintViolation(err)) throw err;
+    }
   }
 
-  // One final batched lookup resolves every id (rows inserted above plus any
-  // created concurrently by another request).
+  // Final batched lookup
   const all = await db
     .select({ id: categories.id })
     .from(categories)
-    .where(inArray(categories.name, unique));
-  return all.map((c) => c.id);
+    .where(
+      and(inArray(categories.name, unique), eq(categories.userId, userId)),
+    );
+  return [...new Set([...existingIds, ...all.map((c) => c.id)])];
 }
 
 const router: IRouter = Router();
@@ -144,10 +199,12 @@ router.use(requireAuth);
 // List
 // ---------------------------------------------------------------------------
 
-router.get("/quilts", async (_req, res) => {
+router.get("/quilts", async (req, res) => {
+  const userId = req.session.userId!;
   const rows = await db
     .select()
     .from(finishedQuilts)
+    .where(eq(finishedQuilts.userId, userId))
     .orderBy(desc(finishedQuilts.createdAt));
   const items = await serializeQuilts(rows);
   res.json(ListQuiltsResponse.parse(items));
@@ -159,10 +216,11 @@ router.get("/quilts", async (_req, res) => {
 
 router.get("/quilts/:id", async (req, res) => {
   const { id } = GetQuiltParams.parse(req.params);
+  const userId = req.session.userId!;
   const [row] = await db
     .select()
     .from(finishedQuilts)
-    .where(eq(finishedQuilts.id, id))
+    .where(and(eq(finishedQuilts.id, id), eq(finishedQuilts.userId, userId)))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Quilt not found." });
@@ -176,6 +234,7 @@ router.get("/quilts/:id", async (req, res) => {
 // ---------------------------------------------------------------------------
 
 router.post("/quilts", upload.single("image"), async (req, res) => {
+  const userId = req.session.userId!;
   const file = req.file;
   if (!file) {
     res.status(400).json({ error: "An image file is required." });
@@ -206,6 +265,7 @@ router.post("/quilts", upload.single("image"), async (req, res) => {
   const [row] = await db
     .insert(finishedQuilts)
     .values({
+      userId,
       name,
       dateCompleted: clamp(req.body.dateCompleted, 20),
       sizeWidth,
@@ -217,24 +277,36 @@ router.post("/quilts", upload.single("image"), async (req, res) => {
     .returning();
 
   const categoryNames = parseStringArray(req.body.categories);
-  const linkedFabricIds = parseIntArray(req.body.linkedFabricIds);
-  const linkedPatternIds = parseIntArray(req.body.linkedPatternIds);
+  const rawLinkedFabricIds = parseIntArray(req.body.linkedFabricIds);
+  const rawLinkedPatternIds = parseIntArray(req.body.linkedPatternIds);
+
+  // Validate ownership of linked entities before inserting links — prevents
+  // horizontal privilege escalation via arbitrary IDs in the request body.
+  const [linkedFabricIds, linkedPatternIds] = await Promise.all([
+    filterOwnedFabricIds(rawLinkedFabricIds, userId),
+    filterOwnedPatternIds(rawLinkedPatternIds, userId),
+  ]);
+
+  const categoryTask = async () => {
+    if (categoryNames.length > 0) {
+      const catIds = await resolveOrCreateCategories(categoryNames, userId);
+      if (catIds.length > 0) {
+        await db
+          .insert(entityCategories)
+          .values(
+            catIds.map((cid) => ({
+              entityType: "quilt" as const,
+              entityId: row.id,
+              categoryId: cid,
+            })),
+          )
+          .onConflictDoNothing();
+      }
+    }
+  };
 
   await Promise.all([
-    categoryNames.length > 0
-      ? resolveOrCreateCategories(categoryNames).then((catIds) =>
-          db
-            .insert(entityCategories)
-            .values(
-              catIds.map((cid) => ({
-                entityType: "quilt" as const,
-                entityId: row.id,
-                categoryId: cid,
-              })),
-            )
-            .onConflictDoNothing(),
-        )
-      : Promise.resolve(),
+    categoryTask(),
     linkedFabricIds.length > 0
       ? db
           .insert(quiltFabricLinks)
@@ -265,12 +337,13 @@ router.post("/quilts", upload.single("image"), async (req, res) => {
 
 router.patch("/quilts/:id", async (req, res) => {
   const { id } = UpdateQuiltParams.parse(req.params);
+  const userId = req.session.userId!;
   const body = UpdateQuiltBody.parse(req.body);
 
   const [existing] = await db
     .select({ id: finishedQuilts.id })
     .from(finishedQuilts)
-    .where(eq(finishedQuilts.id, id))
+    .where(and(eq(finishedQuilts.id, id), eq(finishedQuilts.userId, userId)))
     .limit(1);
   if (!existing) {
     res.status(404).json({ error: "Quilt not found." });
@@ -292,14 +365,14 @@ router.patch("/quilts/:id", async (req, res) => {
     await db
       .update(finishedQuilts)
       .set(updates)
-      .where(eq(finishedQuilts.id, id));
+      .where(and(eq(finishedQuilts.id, id), eq(finishedQuilts.userId, userId)));
   }
 
   if (body.categories !== undefined) {
     await db
       .delete(entityCategories)
       .where(sql`entity_type = 'quilt' AND entity_id = ${id}`);
-    const catIds = await resolveOrCreateCategories(body.categories);
+    const catIds = await resolveOrCreateCategories(body.categories, userId);
     if (catIds.length > 0) {
       await db
         .insert(entityCategories)
@@ -316,24 +389,28 @@ router.patch("/quilts/:id", async (req, res) => {
 
   if (body.linkedFabricIds !== undefined) {
     await db.delete(quiltFabricLinks).where(eq(quiltFabricLinks.quiltId, id));
-    if (body.linkedFabricIds.length > 0) {
+    const ownedFabricIds = await filterOwnedFabricIds(
+      body.linkedFabricIds,
+      userId,
+    );
+    if (ownedFabricIds.length > 0) {
       await db
         .insert(quiltFabricLinks)
-        .values(
-          body.linkedFabricIds.map((fid) => ({ quiltId: id, fabricId: fid })),
-        )
+        .values(ownedFabricIds.map((fid) => ({ quiltId: id, fabricId: fid })))
         .onConflictDoNothing();
     }
   }
 
   if (body.linkedPatternIds !== undefined) {
     await db.delete(quiltPatternLinks).where(eq(quiltPatternLinks.quiltId, id));
-    if (body.linkedPatternIds.length > 0) {
+    const ownedPatternIds = await filterOwnedPatternIds(
+      body.linkedPatternIds,
+      userId,
+    );
+    if (ownedPatternIds.length > 0) {
       await db
         .insert(quiltPatternLinks)
-        .values(
-          body.linkedPatternIds.map((pid) => ({ quiltId: id, patternId: pid })),
-        )
+        .values(ownedPatternIds.map((pid) => ({ quiltId: id, patternId: pid })))
         .onConflictDoNothing();
     }
   }
@@ -341,7 +418,7 @@ router.patch("/quilts/:id", async (req, res) => {
   const [updated] = await db
     .select()
     .from(finishedQuilts)
-    .where(eq(finishedQuilts.id, id))
+    .where(and(eq(finishedQuilts.id, id), eq(finishedQuilts.userId, userId)))
     .limit(1);
   res.json(UpdateQuiltResponse.parse(await serializeQuilt(updated)));
 });
@@ -355,10 +432,11 @@ const MAX_BULK_REANALYZE = 20;
 
 router.post("/quilts/:id/reanalyze", aiLimiter, async (req, res) => {
   const { id } = ReanalyzeQuiltParams.parse(req.params);
+  const userId = req.session.userId!;
   const [row] = await db
     .select()
     .from(finishedQuilts)
-    .where(eq(finishedQuilts.id, id))
+    .where(and(eq(finishedQuilts.id, id), eq(finishedQuilts.userId, userId)))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Quilt not found." });
@@ -402,18 +480,19 @@ router.post("/quilts/:id/reanalyze", aiLimiter, async (req, res) => {
       ...(lockedFields.includes("name") ? {} : { name: analysis.name }),
       ...(lockedFields.includes("notes") ? {} : { notes: analysis.notes }),
     })
-    .where(eq(finishedQuilts.id, id));
+    .where(and(eq(finishedQuilts.id, id), eq(finishedQuilts.userId, userId)));
 
   const [updated] = await db
     .select()
     .from(finishedQuilts)
-    .where(eq(finishedQuilts.id, id))
+    .where(and(eq(finishedQuilts.id, id), eq(finishedQuilts.userId, userId)))
     .limit(1);
   res.json(ReanalyzeQuiltResponse.parse(await serializeQuilt(updated)));
 });
 
 router.post("/quilts/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
   const { ids } = BulkReanalyzeQuiltsBody.parse(req.body);
+  const userId = req.session.userId!;
   const capped = [...new Set(ids)].slice(0, MAX_BULK_REANALYZE);
   const succeeded: number[] = [];
   const failed: number[] = [];
@@ -423,7 +502,9 @@ router.post("/quilts/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
       const [row] = await db
         .select()
         .from(finishedQuilts)
-        .where(eq(finishedQuilts.id, id))
+        .where(
+          and(eq(finishedQuilts.id, id), eq(finishedQuilts.userId, userId)),
+        )
         .limit(1);
       if (!row) {
         failed.push(id);
@@ -463,7 +544,9 @@ router.post("/quilts/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
           ...(lockedFields.includes("name") ? {} : { name: analysis.name }),
           ...(lockedFields.includes("notes") ? {} : { notes: analysis.notes }),
         })
-        .where(eq(finishedQuilts.id, id));
+        .where(
+          and(eq(finishedQuilts.id, id), eq(finishedQuilts.userId, userId)),
+        );
       succeeded.push(id);
     } catch {
       failed.push(id);
@@ -479,10 +562,11 @@ router.post("/quilts/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
 
 router.delete("/quilts/:id", async (req, res) => {
   const { id } = DeleteQuiltParams.parse(req.params);
+  const userId = req.session.userId!;
   const [row] = await db
     .select({ imagePath: finishedQuilts.imagePath })
     .from(finishedQuilts)
-    .where(eq(finishedQuilts.id, id))
+    .where(and(eq(finishedQuilts.id, id), eq(finishedQuilts.userId, userId)))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Quilt not found." });
@@ -494,7 +578,9 @@ router.delete("/quilts/:id", async (req, res) => {
     .from(quiltingImages)
     .where(sql`entity_type = 'quilt' AND entity_id = ${id}`);
 
-  await db.delete(finishedQuilts).where(eq(finishedQuilts.id, id));
+  await db
+    .delete(finishedQuilts)
+    .where(and(eq(finishedQuilts.id, id), eq(finishedQuilts.userId, userId)));
   await Promise.allSettled([
     deleteImage(row.imagePath),
     ...supplementalImages.map((img) => deleteImage(img.storagePath)),
@@ -508,10 +594,11 @@ router.delete("/quilts/:id", async (req, res) => {
 
 router.get("/quilts/:id/image", async (req, res) => {
   const { id } = GetQuiltImageParams.parse(req.params);
+  const userId = req.session.userId!;
   const [row] = await db
     .select({ imagePath: finishedQuilts.imagePath })
     .from(finishedQuilts)
-    .where(eq(finishedQuilts.id, id))
+    .where(and(eq(finishedQuilts.id, id), eq(finishedQuilts.userId, userId)))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Quilt not found." });
@@ -529,12 +616,14 @@ router.get("/quilts/:id/image", async (req, res) => {
 
 router.post("/quilts/:id/images", upload.single("image"), async (req, res) => {
   const { id } = AddQuiltImageParams.parse(req.params);
+  const userId = req.session.userId!;
   const body = AddQuiltImageBody.parse(req.body);
 
+  // Verify quilt ownership
   const [quilt] = await db
     .select({ id: finishedQuilts.id })
     .from(finishedQuilts)
-    .where(eq(finishedQuilts.id, id))
+    .where(and(eq(finishedQuilts.id, id), eq(finishedQuilts.userId, userId)))
     .limit(1);
   if (!quilt) {
     res.status(404).json({ error: "Quilt not found." });
@@ -582,10 +671,26 @@ router.post("/quilts/:id/images", upload.single("image"), async (req, res) => {
 
 router.get("/quilts/:id/images/:imageId", async (req, res) => {
   const { imageId } = UpdateQuiltImageParams.parse(req.params);
+  const { id } = GetQuiltImageParams.parse(req.params);
+  const userId = req.session.userId!;
+
+  // Verify quilt ownership before serving image
+  const [quilt] = await db
+    .select({ id: finishedQuilts.id })
+    .from(finishedQuilts)
+    .where(and(eq(finishedQuilts.id, id), eq(finishedQuilts.userId, userId)))
+    .limit(1);
+  if (!quilt) {
+    res.status(404).json({ error: "Quilt not found." });
+    return;
+  }
+
   const [image] = await db
     .select()
     .from(quiltingImages)
-    .where(eq(quiltingImages.id, imageId))
+    .where(
+      sql`${quiltingImages.id} = ${imageId} AND entity_type = 'quilt' AND entity_id = ${id}`,
+    )
     .limit(1);
   if (!image) {
     res.status(404).json({ error: "Image not found." });
@@ -600,7 +705,20 @@ router.get("/quilts/:id/images/:imageId", async (req, res) => {
 router.patch("/quilts/:id/images/:imageId", async (req, res) => {
   const { imageId } = UpdateQuiltImageParams.parse(req.params);
   const { id } = UpdateQuiltParams.parse(req.params);
+  const userId = req.session.userId!;
   const body = UpdateQuiltImageBody.parse(req.body);
+
+  // Verify quilt ownership before modifying image
+  const [quilt] = await db
+    .select({ id: finishedQuilts.id })
+    .from(finishedQuilts)
+    .where(and(eq(finishedQuilts.id, id), eq(finishedQuilts.userId, userId)))
+    .limit(1);
+  if (!quilt) {
+    res.status(404).json({ error: "Quilt not found." });
+    return;
+  }
+
   const [image] = await db
     .update(quiltingImages)
     .set({
@@ -609,7 +727,9 @@ router.patch("/quilts/:id/images/:imageId", async (req, res) => {
         : {}),
       ...(body.position !== undefined ? { position: body.position } : {}),
     })
-    .where(eq(quiltingImages.id, imageId))
+    .where(
+      sql`${quiltingImages.id} = ${imageId} AND entity_type = 'quilt' AND entity_id = ${id}`,
+    )
     .returning();
   if (!image) {
     res.status(404).json({ error: "Image not found." });
@@ -625,9 +745,25 @@ router.patch("/quilts/:id/images/:imageId", async (req, res) => {
 
 router.delete("/quilts/:id/images/:imageId", async (req, res) => {
   const { imageId } = DeleteQuiltImageParams.parse(req.params);
+  const { id } = DeleteQuiltParams.parse(req.params);
+  const userId = req.session.userId!;
+
+  // Verify quilt ownership BEFORE deleting the image
+  const [quilt] = await db
+    .select({ id: finishedQuilts.id })
+    .from(finishedQuilts)
+    .where(and(eq(finishedQuilts.id, id), eq(finishedQuilts.userId, userId)))
+    .limit(1);
+  if (!quilt) {
+    res.status(404).json({ error: "Quilt not found." });
+    return;
+  }
+
   const [image] = await db
     .delete(quiltingImages)
-    .where(eq(quiltingImages.id, imageId))
+    .where(
+      sql`${quiltingImages.id} = ${imageId} AND entity_type = 'quilt' AND entity_id = ${id}`,
+    )
     .returning({ storagePath: quiltingImages.storagePath });
   if (!image) {
     res.status(404).json({ error: "Image not found." });

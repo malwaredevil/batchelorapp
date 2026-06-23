@@ -86,6 +86,7 @@ router.post(
   compareLimiter,
   upload.single("image"),
   async (req, res) => {
+    const userId = req.session.userId!;
     const file = req.file;
     if (!file) {
       res.status(400).json({ error: "An image file is required." });
@@ -111,7 +112,7 @@ router.post(
 
     const vectorLiteral = `[${embedding.join(",")}]`;
 
-    // Text vector search (always) + visual vector search (when available) in parallel.
+    // Text vector search + visual vector search, scoped to this user's fabrics only.
     const [textRanked, visualRanked] = await Promise.all([
       db
         .execute<{ id: number; similarity: number }>(
@@ -119,6 +120,7 @@ router.post(
           select id, 1 - (embedding <=> ${vectorLiteral}::vector) as similarity
           from ${fabrics}
           where embedding is not null
+            and user_id = ${userId}
           order by embedding <=> ${vectorLiteral}::vector
           limit ${TEXT_SEARCH_POOL}
         `,
@@ -136,6 +138,7 @@ router.post(
               select id, 1 - (visual_embedding <=> ${`[${visualEmb.join(",")}]`}::vector) as similarity
               from ${fabrics}
               where visual_embedding is not null
+                and user_id = ${userId}
               order by visual_embedding <=> ${`[${visualEmb.join(",")}]`}::vector
               limit ${VISUAL_SEARCH_POOL}
             `,
@@ -177,10 +180,6 @@ router.post(
       );
 
     // ── Voyage reranker ────────────────────────────────────────────────────────
-    // Re-score all RRF candidates against the uploaded fabric's text description.
-    // Falls back to the RRF order silently when VOYAGE_API_KEY is absent or the
-    // call fails. After reranking, only TOP_K candidates proceed to the vision
-    // model — this keeps GPT costs bounded and focuses it on the best matches.
     const fabricRowById = new Map(fabricRows.map((r) => [r.id, r]));
     const rerankQuery = buildEmbeddingText(analysis);
     const rerankDocs = mergedRanking.map(({ id }) => {
@@ -191,7 +190,6 @@ router.post(
       };
     });
     const rerankedIds = await rerankCandidates(rerankQuery, rerankDocs, TOP_K);
-    // Reorder mergedRanking to match Voyage's ranking, sliced to TOP_K.
     const rerankedRanking = rerankedIds
       .map((id) => mergedRanking.find((r) => r.id === id))
       .filter((r): r is NonNullable<typeof r> => r != null);

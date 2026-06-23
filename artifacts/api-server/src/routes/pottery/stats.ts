@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { eq } from "drizzle-orm";
 import { db, potteryItems } from "@workspace/db";
 import { GetCollectionStatsResponse } from "@workspace/api-zod";
 import { requireAuth } from "../../middleware/auth";
@@ -15,13 +16,15 @@ function topCounts(
     .map(([label, count]) => ({ label, count }));
 }
 
-router.get("/stats", async (_req, res) => {
+router.get("/stats", async (req, res) => {
+  const userId = req.session.userId!;
   const rows = await db
     .select({
       motifs: potteryItems.motifs,
       colors: potteryItems.dominantColors,
     })
-    .from(potteryItems);
+    .from(potteryItems)
+    .where(eq(potteryItems.userId, userId));
 
   const motifCounts = new Map<string, number>();
   const colorCounts = new Map<string, number>();

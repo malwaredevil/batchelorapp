@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
-import { eq, desc, inArray, and } from "drizzle-orm";
+import { and, eq, desc, inArray } from "drizzle-orm";
 import {
   db,
   layouts,
@@ -75,7 +75,19 @@ interface CategoryResult {
   textColor: string | null;
 }
 
-async function resolveOrCreateCategories(names: string[]): Promise<number[]> {
+function isUniqueConstraintViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code: string }).code === "23505"
+  );
+}
+
+async function resolveOrCreateCategories(
+  names: string[],
+  userId: number,
+): Promise<number[]> {
   const unique = [...new Set(names.map((n) => n.trim()).filter(Boolean))].slice(
     0,
     MAX_CATEGORY_NAMES,
@@ -85,16 +97,21 @@ async function resolveOrCreateCategories(names: string[]): Promise<number[]> {
     const [existing] = await db
       .select({ id: categories.id })
       .from(categories)
-      .where(eq(categories.name, name))
+      .where(and(eq(categories.name, name), eq(categories.userId, userId)))
       .limit(1);
     if (existing) {
       ids.push(existing.id);
     } else {
-      const [created] = await db
-        .insert(categories)
-        .values({ name })
-        .returning({ id: categories.id });
-      if (created) ids.push(created.id);
+      try {
+        const [created] = await db
+          .insert(categories)
+          .values({ name, userId })
+          .returning({ id: categories.id });
+        if (created) ids.push(created.id);
+      } catch (err) {
+        if (!isUniqueConstraintViolation(err)) throw err;
+        // Name taken globally — skip
+      }
     }
   }
   return ids;
@@ -175,18 +192,25 @@ function serialize(
   };
 }
 
-router.get("/layouts", async (_req, res) => {
-  const rows = await db.select().from(layouts).orderBy(desc(layouts.createdAt));
+router.get("/layouts", async (req, res) => {
+  const userId = req.session.userId!;
+  const rows = await db
+    .select()
+    .from(layouts)
+    .where(eq(layouts.userId, userId))
+    .orderBy(desc(layouts.createdAt));
   const catMap = await fetchLayoutCategories(rows.map((r) => r.id));
   res.json(rows.map((r) => serialize(r, catMap.get(r.id) ?? [])));
 });
 
 router.post("/layouts", async (req, res) => {
+  const userId = req.session.userId!;
   const data = CreateLayoutSchema.parse(req.body);
   const cells = normalizeCells(data.cells, data.rows, data.cols);
   const [row] = await db
     .insert(layouts)
     .values({
+      userId,
       name: data.name,
       rows: data.rows,
       cols: data.cols,
@@ -201,7 +225,7 @@ router.post("/layouts", async (req, res) => {
 
   let cats: CategoryResult[] = [];
   if (data.categoryNames && data.categoryNames.length > 0) {
-    const catIds = await resolveOrCreateCategories(data.categoryNames);
+    const catIds = await resolveOrCreateCategories(data.categoryNames, userId);
     if (catIds.length > 0) {
       await db.insert(entityCategories).values(
         catIds.map((cid) => ({
@@ -220,11 +244,15 @@ router.post("/layouts", async (req, res) => {
 
 router.get("/layouts/:id", async (req, res) => {
   const id = Number(req.params.id);
+  const userId = req.session.userId!;
   if (!Number.isInteger(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
   }
-  const [row] = await db.select().from(layouts).where(eq(layouts.id, id));
+  const [row] = await db
+    .select()
+    .from(layouts)
+    .where(and(eq(layouts.id, id), eq(layouts.userId, userId)));
   if (!row) {
     res.status(404).json({ error: "Layout not found" });
     return;
@@ -235,6 +263,7 @@ router.get("/layouts/:id", async (req, res) => {
 
 router.patch("/layouts/:id", async (req, res) => {
   const id = Number(req.params.id);
+  const userId = req.session.userId!;
   if (!Number.isInteger(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
@@ -248,7 +277,7 @@ router.patch("/layouts/:id", async (req, res) => {
     const [existing] = await db
       .select({ rows: layouts.rows, cols: layouts.cols })
       .from(layouts)
-      .where(eq(layouts.id, id));
+      .where(and(eq(layouts.id, id), eq(layouts.userId, userId)));
     const rows = data.rows ?? existing?.rows ?? 5;
     const cols = data.cols ?? existing?.cols ?? 5;
     update.cells = normalizeCells(data.cells, rows, cols);
@@ -264,7 +293,7 @@ router.patch("/layouts/:id", async (req, res) => {
   const [row] = await db
     .update(layouts)
     .set(update)
-    .where(eq(layouts.id, id))
+    .where(and(eq(layouts.id, id), eq(layouts.userId, userId)))
     .returning();
   if (!row) {
     res.status(404).json({ error: "Layout not found" });
@@ -281,7 +310,10 @@ router.patch("/layouts/:id", async (req, res) => {
         ),
       );
     if (data.categoryNames.length > 0) {
-      const catIds = await resolveOrCreateCategories(data.categoryNames);
+      const catIds = await resolveOrCreateCategories(
+        data.categoryNames,
+        userId,
+      );
       if (catIds.length > 0) {
         await db.insert(entityCategories).values(
           catIds.map((cid) => ({
@@ -300,10 +332,22 @@ router.patch("/layouts/:id", async (req, res) => {
 
 router.delete("/layouts/:id", async (req, res) => {
   const id = Number(req.params.id);
+  const userId = req.session.userId!;
   if (!Number.isInteger(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
   }
+
+  // Verify ownership before deleting
+  const [existing] = await db
+    .select({ id: layouts.id })
+    .from(layouts)
+    .where(and(eq(layouts.id, id), eq(layouts.userId, userId)));
+  if (!existing) {
+    res.status(404).json({ error: "Layout not found" });
+    return;
+  }
+
   await db
     .delete(entityCategories)
     .where(
@@ -312,7 +356,9 @@ router.delete("/layouts/:id", async (req, res) => {
         eq(entityCategories.entityId, id),
       ),
     );
-  await db.delete(layouts).where(eq(layouts.id, id));
+  await db
+    .delete(layouts)
+    .where(and(eq(layouts.id, id), eq(layouts.userId, userId)));
   res.status(204).send();
 });
 

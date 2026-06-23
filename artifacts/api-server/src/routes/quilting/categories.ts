@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { asc, eq, count as sqlCount, sql } from "drizzle-orm";
+import { and, asc, eq, count as sqlCount, sql } from "drizzle-orm";
 import {
   db,
   quiltingCategories as categories,
@@ -29,19 +29,15 @@ function isUniqueConstraintViolation(err: unknown): boolean {
 
 function normalizeCategoryName(raw: string): string {
   const t = raw
-    // Curly / double-prime double-quote variants → "
     .replace(
       /[\u201C\u201D\u201E\u201F\u2033\u2036\u275D\u275E\u301D\u301E\u02BA\uFF02″]/g,
       '"',
     )
-    // Curly / prime single-quote and apostrophe variants → '
     .replace(
       /[\u2018\u2019\u201A\u201B\u2032\u2035\u275B\u275C\u02B9\u02BC\uFF07′]/g,
       "'",
     )
-    // Em-dash, en-dash, figure dash, horizontal bar → hyphen
     .replace(/[\u2013\u2014\u2015\u2012]/g, "-")
-    // Horizontal ellipsis → three dots
     .replace(/\u2026/g, "...")
     .trim();
   if (!t) return t;
@@ -51,7 +47,7 @@ function normalizeCategoryName(raw: string): string {
 const router: IRouter = Router();
 router.use(requireAuth);
 
-async function fetchWithCount(id: number) {
+async function fetchWithCount(id: number, userId: number) {
   const [row] = await db
     .select({
       id: categories.id,
@@ -62,7 +58,7 @@ async function fetchWithCount(id: number) {
     })
     .from(categories)
     .leftJoin(entityCategories, eq(entityCategories.categoryId, categories.id))
-    .where(eq(categories.id, id))
+    .where(and(eq(categories.id, id), eq(categories.userId, userId)))
     .groupBy(
       categories.id,
       categories.name,
@@ -72,7 +68,8 @@ async function fetchWithCount(id: number) {
   return row ?? null;
 }
 
-router.get("/categories", async (_req, res) => {
+router.get("/categories", async (req, res) => {
+  const userId = req.session.userId!;
   const rows = await db
     .select({
       id: categories.id,
@@ -83,6 +80,7 @@ router.get("/categories", async (_req, res) => {
     })
     .from(categories)
     .leftJoin(entityCategories, eq(entityCategories.categoryId, categories.id))
+    .where(eq(categories.userId, userId))
     .groupBy(
       categories.id,
       categories.name,
@@ -94,18 +92,20 @@ router.get("/categories", async (_req, res) => {
 });
 
 router.post("/categories", async (req, res) => {
+  const userId = req.session.userId!;
   const body = CreateCategoryBody.parse(req.body);
   const name = normalizeCategoryName(body.name);
   try {
     const [row] = await db
       .insert(categories)
       .values({
+        userId,
         name,
         bgColor: body.bgColor ?? null,
         textColor: body.textColor ?? null,
       })
       .returning({ id: categories.id });
-    const withCount = await fetchWithCount(row.id);
+    const withCount = await fetchWithCount(row.id, userId);
     res.status(201).json(ListCategoriesResponseItem.parse(withCount));
   } catch (err) {
     if (isUniqueConstraintViolation(err)) {
@@ -119,6 +119,7 @@ router.post("/categories", async (req, res) => {
 });
 
 router.patch("/categories/:id", async (req, res) => {
+  const userId = req.session.userId!;
   const { id } = RenameCategoryParams.parse(req.params);
   const body = RenameCategoryBody.parse(req.body);
   const name = normalizeCategoryName(body.name);
@@ -126,13 +127,13 @@ router.patch("/categories/:id", async (req, res) => {
     const [updated] = await db
       .update(categories)
       .set({ name })
-      .where(eq(categories.id, id))
+      .where(and(eq(categories.id, id), eq(categories.userId, userId)))
       .returning({ id: categories.id });
     if (!updated) {
       res.status(404).json({ error: "Category not found." });
       return;
     }
-    const withCount = await fetchWithCount(id);
+    const withCount = await fetchWithCount(id, userId);
     res.json(ListCategoriesResponseItem.parse(withCount));
   } catch (err) {
     if (isUniqueConstraintViolation(err)) {
@@ -146,37 +147,51 @@ router.patch("/categories/:id", async (req, res) => {
 });
 
 router.put("/categories/:id/colors", async (req, res) => {
+  const userId = req.session.userId!;
   const { id } = UpdateCategoryColorsParams.parse(req.params);
   const body = UpdateCategoryColorsBody.parse(req.body);
   const [updated] = await db
     .update(categories)
     .set({ bgColor: body.bgColor ?? null, textColor: body.textColor ?? null })
-    .where(eq(categories.id, id))
+    .where(and(eq(categories.id, id), eq(categories.userId, userId)))
     .returning({ id: categories.id });
   if (!updated) {
     res.status(404).json({ error: "Category not found." });
     return;
   }
-  const withCount = await fetchWithCount(id);
+  const withCount = await fetchWithCount(id, userId);
   res.json(ListCategoriesResponseItem.parse(withCount));
 });
 
 // Must be before DELETE /categories/:id so "unused" is not treated as :id
-router.delete("/categories/unused", async (_req, res) => {
+router.delete("/categories/unused", async (req, res) => {
+  const userId = req.session.userId!;
+
+  // Delete categories owned by this user that have no entity_categories reference
+  // at all. Using NOT IN on a full-table subquery is safe because
+  // entity_categories is the single join table for all entity types (fabric,
+  // pattern, quilt, block, layout), so a zero-reference category is genuinely
+  // unused regardless of entity type.
   const deletedRows = await db
     .delete(categories)
     .where(
-      sql`${categories.id} NOT IN (SELECT category_id FROM entity_categories)`,
+      and(
+        eq(categories.userId, userId),
+        sql`${categories.id} NOT IN (
+          SELECT DISTINCT category_id FROM quilting_entity_categories
+        )`,
+      ),
     )
     .returning({ id: categories.id });
   res.json({ deleted: deletedRows.length });
 });
 
 router.delete("/categories/:id", async (req, res) => {
+  const userId = req.session.userId!;
   const { id } = DeleteCategoryParams.parse(req.params);
   const [row] = await db
     .delete(categories)
-    .where(eq(categories.id, id))
+    .where(and(eq(categories.id, id), eq(categories.userId, userId)))
     .returning({ id: categories.id });
   if (!row) {
     res.status(404).json({ error: "Category not found." });
@@ -186,6 +201,7 @@ router.delete("/categories/:id", async (req, res) => {
 });
 
 router.post("/categories/:id/merge", async (req, res) => {
+  const userId = req.session.userId!;
   const { id } = DeleteCategoryParams.parse(req.params);
   const { targetId } = MergeCategoryBody.parse(req.body);
 
@@ -198,12 +214,12 @@ router.post("/categories/:id/merge", async (req, res) => {
     db
       .select({ id: categories.id })
       .from(categories)
-      .where(eq(categories.id, id))
+      .where(and(eq(categories.id, id), eq(categories.userId, userId)))
       .then((r) => r[0]),
     db
       .select({ id: categories.id })
       .from(categories)
-      .where(eq(categories.id, targetId))
+      .where(and(eq(categories.id, targetId), eq(categories.userId, userId)))
       .then((r) => r[0]),
   ]);
 
@@ -233,7 +249,9 @@ router.post("/categories/:id/merge", async (req, res) => {
       .onConflictDoNothing();
   }
 
-  await db.delete(categories).where(eq(categories.id, id));
+  await db
+    .delete(categories)
+    .where(and(eq(categories.id, id), eq(categories.userId, userId)));
 
   res.json({ merged: sourceAssignments.length });
 });

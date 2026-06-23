@@ -15,6 +15,7 @@ export const potteryItems = pgTable(
   "pottery_items",
   {
     id: serial("id").primaryKey(),
+    userId: integer("user_id"),
     name: text("name").notNull(),
     quantity: integer("quantity").notNull().default(1),
     notes: text("notes"),
@@ -58,6 +59,7 @@ export const potteryItems = pgTable(
       "hnsw",
       table.visualEmbedding.op("vector_cosine_ops"),
     ),
+    index("pottery_items_user_id_idx").on(table.userId),
   ],
 ).enableRLS();
 
@@ -66,7 +68,8 @@ export type InsertPotteryItem = typeof potteryItems.$inferInsert;
 
 export const potteryCategories = pgTable("pottery_categories", {
   id: serial("id").primaryKey(),
-  name: text("name").notNull().unique(),
+  userId: integer("user_id"),
+  name: text("name").notNull(),
   bgColor: text("bg_color"),
   textColor: text("text_color"),
   createdAt: timestamp("created_at", { withTimezone: true })

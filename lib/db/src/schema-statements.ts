@@ -298,6 +298,29 @@ export const STATEMENTS: string[] = [
   )`,
   `ALTER TABLE quilting_shopping_items ENABLE ROW LEVEL SECURITY`,
 
+  // ── Per-user ownership columns (tenant isolation) ───────────────────────────
+  // These columns are nullable so the additive migration is safe on existing data.
+  // All application queries filter by user_id; rows with user_id IS NULL are
+  // legacy data that become inaccessible to any session after this migration.
+  `ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS user_id integer REFERENCES app_users(id)`,
+  `CREATE INDEX IF NOT EXISTS pottery_items_user_id_idx ON pottery_items (user_id)`,
+  `ALTER TABLE pottery_categories ADD COLUMN IF NOT EXISTS user_id integer REFERENCES app_users(id)`,
+  `CREATE INDEX IF NOT EXISTS pottery_categories_user_id_idx ON pottery_categories (user_id)`,
+  `ALTER TABLE quilting_fabrics ADD COLUMN IF NOT EXISTS user_id integer REFERENCES app_users(id)`,
+  `CREATE INDEX IF NOT EXISTS quilting_fabrics_user_id_idx ON quilting_fabrics (user_id)`,
+  `ALTER TABLE quilting_patterns ADD COLUMN IF NOT EXISTS user_id integer REFERENCES app_users(id)`,
+  `CREATE INDEX IF NOT EXISTS quilting_patterns_user_id_idx ON quilting_patterns (user_id)`,
+  `ALTER TABLE quilting_finished_quilts ADD COLUMN IF NOT EXISTS user_id integer REFERENCES app_users(id)`,
+  `CREATE INDEX IF NOT EXISTS quilting_finished_quilts_user_id_idx ON quilting_finished_quilts (user_id)`,
+  `ALTER TABLE quilting_blocks ADD COLUMN IF NOT EXISTS user_id integer REFERENCES app_users(id)`,
+  `CREATE INDEX IF NOT EXISTS quilting_blocks_user_id_idx ON quilting_blocks (user_id)`,
+  `ALTER TABLE quilting_layouts ADD COLUMN IF NOT EXISTS user_id integer REFERENCES app_users(id)`,
+  `CREATE INDEX IF NOT EXISTS quilting_layouts_user_id_idx ON quilting_layouts (user_id)`,
+  `ALTER TABLE quilting_shopping_items ADD COLUMN IF NOT EXISTS user_id integer REFERENCES app_users(id)`,
+  `CREATE INDEX IF NOT EXISTS quilting_shopping_items_user_id_idx ON quilting_shopping_items (user_id)`,
+  `ALTER TABLE quilting_categories ADD COLUMN IF NOT EXISTS user_id integer REFERENCES app_users(id)`,
+  `CREATE INDEX IF NOT EXISTS quilting_categories_user_id_idx ON quilting_categories (user_id)`,
+
   // ── Visual embeddings (Jina CLIP v2, 1024-dim) ──────────────────────────────
   `ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS visual_embedding vector(1024)`,
   `CREATE INDEX IF NOT EXISTS pottery_visual_embedding_idx

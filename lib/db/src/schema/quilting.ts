@@ -14,12 +14,13 @@ import {
 } from "drizzle-orm/pg-core";
 
 // ---------------------------------------------------------------------------
-// Categories (styled tags shared across all quilting entity types)
+// Categories (styled tags scoped per user)
 // ---------------------------------------------------------------------------
 
 export const quiltingCategories = pgTable("quilting_categories", {
   id: serial("id").primaryKey(),
-  name: text("name").notNull().unique(),
+  userId: integer("user_id"),
+  name: text("name").notNull(),
   bgColor: text("bg_color"),
   textColor: text("text_color"),
   createdAt: timestamp("created_at", { withTimezone: true })
@@ -37,6 +38,7 @@ export const fabrics = pgTable(
   "quilting_fabrics",
   {
     id: serial("id").primaryKey(),
+    userId: integer("user_id"),
     name: text("name").notNull(),
     lineName: text("line_name"),
     designer: text("designer"),
@@ -83,6 +85,7 @@ export const fabrics = pgTable(
       "hnsw",
       table.visualEmbedding.op("vector_cosine_ops"),
     ),
+    index("quilting_fabrics_user_id_idx").on(table.userId),
   ],
 ).enableRLS();
 
@@ -97,6 +100,7 @@ export const quiltPatterns = pgTable(
   "quilting_patterns",
   {
     id: serial("id").primaryKey(),
+    userId: integer("user_id"),
     name: text("name").notNull(),
     designer: text("designer"),
     blockSize: text("block_size"),
@@ -129,6 +133,7 @@ export const quiltPatterns = pgTable(
       "hnsw",
       table.visualEmbedding.op("vector_cosine_ops"),
     ),
+    index("quilting_patterns_user_id_idx").on(table.userId),
   ],
 ).enableRLS();
 
@@ -141,6 +146,7 @@ export type InsertQuiltPattern = typeof quiltPatterns.$inferInsert;
 
 export const finishedQuilts = pgTable("quilting_finished_quilts", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id"),
   name: text("name").notNull(),
   dateCompleted: date("date_completed"),
   sizeWidth: real("size_width"),
@@ -265,6 +271,7 @@ export type InsertQuiltingImage = typeof quiltingImages.$inferInsert;
 
 export const blocks = pgTable("quilting_blocks", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id"),
   name: text("name").notNull(),
   gridSize: integer("grid_size").notNull().default(8),
   cells: text("cells")
@@ -293,6 +300,7 @@ export type InsertBlock = typeof blocks.$inferInsert;
 
 export const layouts = pgTable("quilting_layouts", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id"),
   name: text("name").notNull(),
   rows: integer("rows").notNull().default(5),
   cols: integer("cols").notNull().default(5),
@@ -323,6 +331,7 @@ export type InsertLayout = typeof layouts.$inferInsert;
 
 export const shoppingItems = pgTable("quilting_shopping_items", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id"),
   name: text("name").notNull(),
   notes: text("notes"),
   url: text("url"),

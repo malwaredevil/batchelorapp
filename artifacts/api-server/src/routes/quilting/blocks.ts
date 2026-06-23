@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
-import { eq, desc, asc, inArray, and } from "drizzle-orm";
+import { and, eq, desc, asc, inArray } from "drizzle-orm";
 import {
   db,
   blocks,
@@ -85,8 +85,21 @@ interface CategoryResult {
   textColor: string | null;
 }
 
-/** Resolve category names → IDs, creating any that don't exist yet. */
-async function resolveOrCreateCategories(names: string[]): Promise<number[]> {
+function isUniqueConstraintViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code: string }).code === "23505"
+  );
+}
+
+/** Resolve category names → IDs for a specific user, creating per-user
+ * categories as needed. Names taken globally by another user are skipped. */
+async function resolveOrCreateCategories(
+  names: string[],
+  userId: number,
+): Promise<number[]> {
   const unique = [...new Set(names.map((n) => n.trim()).filter(Boolean))].slice(
     0,
     MAX_CATEGORY_NAMES,
@@ -96,16 +109,21 @@ async function resolveOrCreateCategories(names: string[]): Promise<number[]> {
     const [existing] = await db
       .select({ id: categories.id })
       .from(categories)
-      .where(eq(categories.name, name))
+      .where(and(eq(categories.name, name), eq(categories.userId, userId)))
       .limit(1);
     if (existing) {
       ids.push(existing.id);
     } else {
-      const [created] = await db
-        .insert(categories)
-        .values({ name })
-        .returning({ id: categories.id });
-      if (created) ids.push(created.id);
+      try {
+        const [created] = await db
+          .insert(categories)
+          .values({ name, userId })
+          .returning({ id: categories.id });
+        if (created) ids.push(created.id);
+      } catch (err) {
+        if (!isUniqueConstraintViolation(err)) throw err;
+        // Name taken globally by another user — skip
+      }
     }
   }
   return ids;
@@ -164,7 +182,6 @@ function serialize(
 }
 
 function normalizeCells(cells: string[], gridSize: number): string[] {
-  // Preserve rectangular block dimensions — derive row count from actual cells, not gridSize²
   const rowCount = Math.max(1, Math.ceil(cells.length / gridSize));
   const size = gridSize * rowCount;
   const result = cells.slice(0, size).map((c) => c || "");
@@ -197,18 +214,25 @@ router.post("/blocks/detect-seams", aiLimiter, async (req, res) => {
 // CRUD
 // ---------------------------------------------------------------------------
 
-router.get("/blocks", async (_req, res) => {
-  const rows = await db.select().from(blocks).orderBy(desc(blocks.createdAt));
+router.get("/blocks", async (req, res) => {
+  const userId = req.session.userId!;
+  const rows = await db
+    .select()
+    .from(blocks)
+    .where(eq(blocks.userId, userId))
+    .orderBy(desc(blocks.createdAt));
   const catMap = await fetchBlockCategories(rows.map((r) => r.id));
   res.json(rows.map((r) => serialize(r, catMap.get(r.id) ?? [])));
 });
 
 router.post("/blocks", async (req, res) => {
+  const userId = req.session.userId!;
   const data = CreateBlockSchema.parse(req.body);
   const cells = normalizeCells(data.cells, data.gridSize);
   const [row] = await db
     .insert(blocks)
     .values({
+      userId,
       name: data.name,
       gridSize: data.gridSize,
       cells,
@@ -220,7 +244,7 @@ router.post("/blocks", async (req, res) => {
 
   let cats: CategoryResult[] = [];
   if (data.categoryNames && data.categoryNames.length > 0) {
-    const catIds = await resolveOrCreateCategories(data.categoryNames);
+    const catIds = await resolveOrCreateCategories(data.categoryNames, userId);
     if (catIds.length > 0) {
       await db.insert(entityCategories).values(
         catIds.map((cid) => ({
@@ -239,11 +263,15 @@ router.post("/blocks", async (req, res) => {
 
 router.get("/blocks/:id", async (req, res) => {
   const id = Number(req.params.id);
+  const userId = req.session.userId!;
   if (!Number.isInteger(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
   }
-  const [row] = await db.select().from(blocks).where(eq(blocks.id, id));
+  const [row] = await db
+    .select()
+    .from(blocks)
+    .where(and(eq(blocks.id, id), eq(blocks.userId, userId)));
   if (!row) {
     res.status(404).json({ error: "Block not found" });
     return;
@@ -254,6 +282,7 @@ router.get("/blocks/:id", async (req, res) => {
 
 router.patch("/blocks/:id", async (req, res) => {
   const id = Number(req.params.id);
+  const userId = req.session.userId!;
   if (!Number.isInteger(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
@@ -265,11 +294,11 @@ router.patch("/blocks/:id", async (req, res) => {
   if (data.cells !== undefined) {
     let gridSize: number = data.gridSize ?? 8;
     if (data.gridSize === undefined) {
-      const row = await db
+      const [existing] = await db
         .select({ gridSize: blocks.gridSize })
         .from(blocks)
-        .where(eq(blocks.id, id));
-      gridSize = row[0]?.gridSize ?? 8;
+        .where(and(eq(blocks.id, id), eq(blocks.userId, userId)));
+      gridSize = existing?.gridSize ?? 8;
     }
     update.cells = normalizeCells(data.cells, gridSize);
   }
@@ -282,14 +311,13 @@ router.patch("/blocks/:id", async (req, res) => {
   const [row] = await db
     .update(blocks)
     .set(update)
-    .where(eq(blocks.id, id))
+    .where(and(eq(blocks.id, id), eq(blocks.userId, userId)))
     .returning();
   if (!row) {
     res.status(404).json({ error: "Block not found" });
     return;
   }
 
-  // Replace category assignments when categoryNames is provided (even if empty array = clear all).
   if (data.categoryNames !== undefined) {
     await db
       .delete(entityCategories)
@@ -300,7 +328,10 @@ router.patch("/blocks/:id", async (req, res) => {
         ),
       );
     if (data.categoryNames.length > 0) {
-      const catIds = await resolveOrCreateCategories(data.categoryNames);
+      const catIds = await resolveOrCreateCategories(
+        data.categoryNames,
+        userId,
+      );
       if (catIds.length > 0) {
         await db.insert(entityCategories).values(
           catIds.map((cid) => ({
@@ -319,11 +350,22 @@ router.patch("/blocks/:id", async (req, res) => {
 
 router.delete("/blocks/:id", async (req, res) => {
   const id = Number(req.params.id);
+  const userId = req.session.userId!;
   if (!Number.isInteger(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
   }
-  // Cascade-delete category assignments for this block.
+
+  // Verify ownership before deleting
+  const [existing] = await db
+    .select({ id: blocks.id })
+    .from(blocks)
+    .where(and(eq(blocks.id, id), eq(blocks.userId, userId)));
+  if (!existing) {
+    res.status(404).json({ error: "Block not found" });
+    return;
+  }
+
   await db
     .delete(entityCategories)
     .where(
@@ -332,7 +374,9 @@ router.delete("/blocks/:id", async (req, res) => {
         eq(entityCategories.entityId, id),
       ),
     );
-  await db.delete(blocks).where(eq(blocks.id, id));
+  await db
+    .delete(blocks)
+    .where(and(eq(blocks.id, id), eq(blocks.userId, userId)));
   res.status(204).send();
 });
 

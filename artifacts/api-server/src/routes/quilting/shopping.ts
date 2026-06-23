@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
-import { eq, desc, sql } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import { db, shoppingItems } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 
@@ -45,16 +45,22 @@ function serialize(row: typeof shoppingItems.$inferSelect) {
   };
 }
 
-router.get("/shopping", async (_req, res) => {
+router.get("/shopping", async (req, res) => {
+  const userId = req.session.userId!;
   const rows = await db
     .select()
     .from(shoppingItems)
+    .where(eq(shoppingItems.userId, userId))
     .orderBy(desc(shoppingItems.priority), desc(shoppingItems.createdAt));
   res.json(rows.map(serialize));
 });
 
-router.get("/shopping/stats", async (_req, res) => {
-  const rows = await db.select().from(shoppingItems);
+router.get("/shopping/stats", async (req, res) => {
+  const userId = req.session.userId!;
+  const rows = await db
+    .select()
+    .from(shoppingItems)
+    .where(eq(shoppingItems.userId, userId));
   const stats = {
     totalItems: rows.length,
     wantCount: rows.filter((r) => r.status === "want").length,
@@ -74,10 +80,12 @@ router.get("/shopping/stats", async (_req, res) => {
 });
 
 router.post("/shopping", async (req, res) => {
+  const userId = req.session.userId!;
   const data = CreateSchema.parse(req.body);
   const [row] = await db
     .insert(shoppingItems)
     .values({
+      userId,
       name: data.name,
       notes: data.notes ?? null,
       url: data.url ?? null,
@@ -94,6 +102,7 @@ router.post("/shopping", async (req, res) => {
 });
 
 router.get("/shopping/:id", async (req, res) => {
+  const userId = req.session.userId!;
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     res.status(400).json({ error: "Invalid id" });
@@ -102,7 +111,7 @@ router.get("/shopping/:id", async (req, res) => {
   const [row] = await db
     .select()
     .from(shoppingItems)
-    .where(eq(shoppingItems.id, id));
+    .where(and(eq(shoppingItems.id, id), eq(shoppingItems.userId, userId)));
   if (!row) {
     res.status(404).json({ error: "Item not found" });
     return;
@@ -111,6 +120,7 @@ router.get("/shopping/:id", async (req, res) => {
 });
 
 router.patch("/shopping/:id", async (req, res) => {
+  const userId = req.session.userId!;
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     res.status(400).json({ error: "Invalid id" });
@@ -133,7 +143,7 @@ router.patch("/shopping/:id", async (req, res) => {
   const [row] = await db
     .update(shoppingItems)
     .set(update)
-    .where(eq(shoppingItems.id, id))
+    .where(and(eq(shoppingItems.id, id), eq(shoppingItems.userId, userId)))
     .returning();
   if (!row) {
     res.status(404).json({ error: "Item not found" });
@@ -143,12 +153,20 @@ router.patch("/shopping/:id", async (req, res) => {
 });
 
 router.delete("/shopping/:id", async (req, res) => {
+  const userId = req.session.userId!;
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
   }
-  await db.delete(shoppingItems).where(eq(shoppingItems.id, id));
+  const [row] = await db
+    .delete(shoppingItems)
+    .where(and(eq(shoppingItems.id, id), eq(shoppingItems.userId, userId)))
+    .returning({ id: shoppingItems.id });
+  if (!row) {
+    res.status(404).json({ error: "Item not found" });
+    return;
+  }
   res.status(204).send();
 });
 

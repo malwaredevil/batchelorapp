@@ -14,6 +14,9 @@ import {
   Copy,
   Trash2,
   RotateCcw,
+  RotateCw,
+  FlipHorizontal2,
+  FlipVertical2,
   Pipette,
   ChevronDown,
   ChevronUp,
@@ -240,6 +243,194 @@ function encodeVSplit(left: string, right: string): string {
 }
 function encodeXSplit(tl: string, tr: string, bl: string, br: string): string {
   return `xsplit:${tl}:${tr}:${bl}:${br}`;
+}
+
+// ---------------------------------------------------------------------------
+// Block transform helpers — rotate 90° CW, flip H, flip V
+// ---------------------------------------------------------------------------
+
+const QCYCLE: Record<string, string> = { ne: "se", se: "sw", sw: "nw", nw: "ne" };
+const QFLIP_H: Record<string, string> = { ne: "nw", nw: "ne", se: "sw", sw: "se" };
+const QFLIP_V: Record<string, string> = { ne: "se", se: "ne", nw: "sw", sw: "nw" };
+
+function rotateQlines(dirs: string[], map: Record<string, string>): string {
+  const QORDER = ["ne", "se", "sw", "nw"];
+  const next = dirs.map((d) => map[d] ?? d);
+  const sorted = QORDER.filter((d) => next.includes(d));
+  return sorted.length === 0 ? "" : `qlines:${sorted.join(":")}`;
+}
+
+function encodeLineCell(type: "nwse" | "nesw", cs: number, ce: number): string {
+  const prefix = type === "nwse" ? "nwse-line" : "nesw-line";
+  return cs === 0 && ce === 1 ? prefix : `${prefix}:${cs}:${ce}`;
+}
+
+/** Transform a single cell's *content* for a 90° clockwise rotation. */
+function rotateCellContent90CW(cell: string): string {
+  const p = parseCell(cell);
+  switch (p.kind) {
+    case "solid":   return cell;
+    case "triangle":
+      // nwse(A=upper-right, B=lower-left) → nesw(A=upper-left, B=lower-right): A→B-slot, B→A-slot
+      // nesw(A=upper-left, B=lower-right) → nwse(A=upper-right, B=lower-left): A→A-slot, B→B-slot
+      return p.type === "nwse"
+        ? `nesw:${p.b}:${p.a}`
+        : `nwse:${p.a}:${p.b}`;
+    case "quad":
+      // Each triangle rotates CW: T→R, R→B, B→L, L→T → new quad T'=L, R'=T, B'=R, L'=B
+      return `quad:${p.left}:${p.top}:${p.right}:${p.bottom}`;
+    case "hsplit":
+      // Top goes right, bottom goes left → vsplit(left=B, right=T)
+      return `vsplit:${p.bottom}:${p.top}`;
+    case "vsplit":
+      // Left goes top, right goes bottom → hsplit(top=L, bottom=R)
+      return `hsplit:${p.left}:${p.right}`;
+    case "xsplit":
+      // Corners rotate CW: TL→TR, TR→BR, BR→BL, BL→TL → new TL=BL, TR=TL, BR=TR, BL=BR
+      return `xsplit:${p.bl}:${p.tl}:${p.br}:${p.tr}`;
+    case "line":
+      // nwse diagonal rotates to nesw (and vice-versa); fractional position unchanged
+      return p.type === "nwse"
+        ? encodeLineCell("nesw", p.cs, p.ce)
+        : encodeLineCell("nwse", p.cs, p.ce);
+    case "xline":
+      // nwse ↔ nesw swap
+      return encodeXline(p.neswCs, p.neswCe, p.nwseCs, p.nwseCe);
+    case "midline":
+      if (p.h && p.v) return "seam-midline-hv";
+      return p.h ? "seam-midline-v" : "seam-midline-h";
+    case "qlines":
+      return rotateQlines(p.dirs, QCYCLE);
+    default: return cell;
+  }
+}
+
+/** Transform a single cell's *content* for a horizontal flip (mirror left↔right). */
+function flipCellContentH(cell: string): string {
+  const p = parseCell(cell);
+  switch (p.kind) {
+    case "solid":   return cell;
+    case "triangle":
+      // Diagonal direction flips; each colour stays in the same relative position (A→A, B→B)
+      return p.type === "nwse" ? `nesw:${p.a}:${p.b}` : `nwse:${p.a}:${p.b}`;
+    case "quad":
+      // L↔R, T and B stay
+      return `quad:${p.top}:${p.left}:${p.bottom}:${p.right}`;
+    case "hsplit": return cell; // horizontal split — unchanged by H-flip
+    case "vsplit":
+      return `vsplit:${p.right}:${p.left}`;
+    case "xsplit":
+      return `xsplit:${p.tr}:${p.tl}:${p.br}:${p.bl}`;
+    case "line":
+      return p.type === "nwse"
+        ? encodeLineCell("nesw", p.cs, p.ce)
+        : encodeLineCell("nwse", p.cs, p.ce);
+    case "xline":
+      return encodeXline(p.neswCs, p.neswCe, p.nwseCs, p.nwseCe);
+    case "midline": return cell;
+    case "qlines":
+      return rotateQlines(p.dirs, QFLIP_H);
+    default: return cell;
+  }
+}
+
+/** Transform a single cell's *content* for a vertical flip (mirror top↔bottom). */
+function flipCellContentV(cell: string): string {
+  const p = parseCell(cell);
+  switch (p.kind) {
+    case "solid":   return cell;
+    case "triangle":
+      // Diagonal direction flips; A and B swap slots
+      return p.type === "nwse" ? `nesw:${p.b}:${p.a}` : `nwse:${p.b}:${p.a}`;
+    case "quad":
+      // T↔B, L and R stay
+      return `quad:${p.bottom}:${p.right}:${p.top}:${p.left}`;
+    case "hsplit":
+      return `hsplit:${p.bottom}:${p.top}`;
+    case "vsplit": return cell; // vertical split — unchanged by V-flip
+    case "xsplit":
+      return `xsplit:${p.bl}:${p.br}:${p.tl}:${p.tr}`;
+    case "line":
+      return p.type === "nwse"
+        ? encodeLineCell("nesw", p.cs, p.ce)
+        : encodeLineCell("nwse", p.cs, p.ce);
+    case "xline":
+      return encodeXline(p.neswCs, p.neswCe, p.nwseCs, p.nwseCe);
+    case "midline": return cell;
+    case "qlines":
+      return rotateQlines(p.dirs, QFLIP_V);
+    default: return cell;
+  }
+}
+
+/**
+ * Rotate all cells + seams 90° clockwise.
+ * For non-square grids gridW and gridH swap.
+ */
+function applyRotate90CW(
+  cells: string[],
+  seams: SeamLine[],
+  gridW: number,
+  gridH: number,
+): { cells: string[]; seams: SeamLine[]; newW: number; newH: number } {
+  const newW = gridH;
+  const newH = gridW;
+  const newCells: string[] = new Array(newW * newH).fill("");
+  for (let row = 0; row < gridH; row++) {
+    for (let col = 0; col < gridW; col++) {
+      const newRow = col;
+      const newCol = gridH - 1 - row;
+      newCells[newRow * newW + newCol] = rotateCellContent90CW(cells[row * gridW + col] ?? "");
+    }
+  }
+  const newSeams: SeamLine[] = seams.map((s) =>
+    s.axis === "h"
+      ? { ...s, axis: "v" as const, pos: 2 * gridH - s.pos, cellIdx: s.cellIdx }
+      : { ...s, axis: "h" as const, pos: s.pos, cellIdx: gridH - 1 - s.cellIdx },
+  );
+  return { cells: newCells, seams: newSeams, newW, newH };
+}
+
+/** Flip all cells + seams horizontally (mirror left↔right). */
+function applyFlipH(
+  cells: string[],
+  seams: SeamLine[],
+  gridW: number,
+  gridH: number,
+): { cells: string[]; seams: SeamLine[] } {
+  const newCells = cells.map((c, idx) => {
+    const row = Math.floor(idx / gridW);
+    const col = idx % gridW;
+    const mirrorIdx = row * gridW + (gridW - 1 - col);
+    return flipCellContentH(cells[mirrorIdx] ?? "");
+  });
+  const newSeams: SeamLine[] = seams.map((s) =>
+    s.axis === "h"
+      ? { ...s, cellIdx: gridW - 1 - s.cellIdx }
+      : { ...s, pos: 2 * gridW - s.pos },
+  );
+  return { cells: newCells, seams: newSeams };
+}
+
+/** Flip all cells + seams vertically (mirror top↔bottom). */
+function applyFlipV(
+  cells: string[],
+  seams: SeamLine[],
+  gridW: number,
+  gridH: number,
+): { cells: string[]; seams: SeamLine[] } {
+  const newCells = cells.map((c, idx) => {
+    const row = Math.floor(idx / gridW);
+    const col = idx % gridW;
+    const mirrorIdx = (gridH - 1 - row) * gridW + col;
+    return flipCellContentV(cells[mirrorIdx] ?? "");
+  });
+  const newSeams: SeamLine[] = seams.map((s) =>
+    s.axis === "h"
+      ? { ...s, pos: 2 * gridH - s.pos }
+      : { ...s, cellIdx: gridH - 1 - s.cellIdx },
+  );
+  return { cells: newCells, seams: newSeams };
 }
 
 /** Return the colour of one of the four sub-quadrants of a cell (for seam fill mapping). */
@@ -2957,6 +3148,44 @@ export default function BlockDesigner() {
     });
   }
 
+  function handleRotateCW() {
+    pushHistory(cells, seams);
+    const { cells: c, seams: s, newW, newH } = applyRotate90CW(cells, seams, gridW, gridH);
+    setGridW(newW); setGridH(newH); setCells(c); setSeams(s); setIsDirty(true);
+  }
+
+  function handleRotateCCW() {
+    pushHistory(cells, seams);
+    let c = cells, s = seams, w = gridW, h = gridH;
+    for (let i = 0; i < 3; i++) {
+      const r = applyRotate90CW(c, s, w, h);
+      c = r.cells; s = r.seams; w = r.newW; h = r.newH;
+    }
+    setGridW(w); setGridH(h); setCells(c); setSeams(s); setIsDirty(true);
+  }
+
+  function handleRotate180() {
+    pushHistory(cells, seams);
+    let c = cells, s = seams, w = gridW, h = gridH;
+    for (let i = 0; i < 2; i++) {
+      const r = applyRotate90CW(c, s, w, h);
+      c = r.cells; s = r.seams; w = r.newW; h = r.newH;
+    }
+    setGridW(w); setGridH(h); setCells(c); setSeams(s); setIsDirty(true);
+  }
+
+  function handleFlipHorizontal() {
+    pushHistory(cells, seams);
+    const { cells: c, seams: s } = applyFlipH(cells, seams, gridW, gridH);
+    setCells(c); setSeams(s); setIsDirty(true);
+  }
+
+  function handleFlipVertical() {
+    pushHistory(cells, seams);
+    const { cells: c, seams: s } = applyFlipV(cells, seams, gridW, gridH);
+    setCells(c); setSeams(s); setIsDirty(true);
+  }
+
   function handleClear() {
     if (!confirm("Clear all cells?")) return;
     pushHistory(cells, seams);
@@ -3571,7 +3800,7 @@ export default function BlockDesigner() {
           <DropdownMenuTrigger asChild>
             <button className={menuBtnCls}>Edit</button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-44">
+          <DropdownMenuContent align="start" className="w-52">
             <DropdownMenuItem
               onClick={handleUndo}
               disabled={history.length === 0}
@@ -3581,6 +3810,28 @@ export default function BlockDesigner() {
               <span className="ml-auto text-[10px] text-muted-foreground">
                 ⌘Z
               </span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleRotateCW}>
+              <RotateCw className="mr-2 h-3.5 w-3.5" />
+              Rotate 90° clockwise
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleRotateCCW}>
+              <RotateCcw className="mr-2 h-3.5 w-3.5" />
+              Rotate 90° counter-clockwise
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleRotate180}>
+              <RotateCw className="mr-2 h-3.5 w-3.5" />
+              Rotate 180°
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleFlipHorizontal}>
+              <FlipHorizontal2 className="mr-2 h-3.5 w-3.5" />
+              Flip horizontal
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleFlipVertical}>
+              <FlipVertical2 className="mr-2 h-3.5 w-3.5" />
+              Flip vertical
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem

@@ -873,135 +873,133 @@ export default function Layouts() {
   ).sort();
   const totalCount = (layoutList ?? []).length;
 
+  const hasFilter =
+    search.trim().length > 0 ||
+    activeCatIds.size > 0 ||
+    activeSizes.size > 0;
+
+  function clearFilters() {
+    setSearch("");
+    setActiveCatIds(new Set());
+    setActiveSizes(new Set());
+  }
+
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
             Quilt Layout Composer
           </h1>
           <p className="text-sm text-muted-foreground">
             {layoutList
-              ? `${displayed.length} of ${totalCount} layout${totalCount !== 1 ? "s" : ""}`
+              ? hasFilter
+                ? `${displayed.length} of ${totalCount} layout${totalCount !== 1 ? "s" : ""}`
+                : `${totalCount} layout${totalCount !== 1 ? "s" : ""}`
               : "Arrange block designs into a full quilt layout"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9 shrink-0 gap-1.5"
-              >
-                {sortBy === "date-desc" || sortBy === "name-desc" ? (
-                  <SortDesc className="h-3.5 w-3.5" />
-                ) : (
-                  <SortAsc className="h-3.5 w-3.5" />
-                )}
-                <span className="hidden sm:inline">{SORT_LABELS[sortBy]}</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
-                <DropdownMenuItem
-                  key={key}
-                  onClick={() => setSortBy(key)}
-                  className={sortBy === key ? "font-medium text-primary" : ""}
-                >
-                  {SORT_LABELS[key]}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <Button asChild>
-            <Link href="/layouts/new">
-              <PlusCircle className="mr-2 h-4 w-4" />
-              New layout
-            </Link>
-          </Button>
-        </div>
+        <Button asChild>
+          <Link href="/layouts/new">
+            <PlusCircle className="mr-2 h-4 w-4" />
+            New layout
+          </Link>
+        </Button>
       </div>
 
-      {/* Search box */}
-      <div className="mb-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder="Search by name…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-9 pl-9 pr-9"
-            />
-            {search && (
-              <button
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                onClick={() => setSearch("")}
-                aria-label="Clear search"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-        </div>
-
-      {/* Attribute + category filter pills */}
-      {(filterableSizes.length > 1 || filterableCats.length > 0) && (
-        <div className="mb-4 flex flex-wrap gap-1.5">
-          {filterableSizes.length > 1 &&
-            filterableSizes.map((s) => {
-              const active = activeSizes.has(s);
-              return (
+      {/* Search + sort row */}
+      {layoutList && totalCount > 0 && (
+        <div className="mb-4 space-y-3">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Search by name…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-9 pl-9 pr-9"
+              />
+              {search && (
                 <button
-                  key={s}
-                  onClick={() => toggleSize(s)}
-                  className={cn(
-                    "rounded-full border border-muted bg-muted px-3 py-1 text-xs font-medium transition-all",
-                    active
-                      ? "ring-2 ring-primary ring-offset-1"
-                      : "opacity-70 hover:opacity-100",
-                  )}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setSearch("")}
+                  aria-label="Clear search"
                 >
-                  {s} blocks
+                  <X className="h-3.5 w-3.5" />
                 </button>
-              );
-            })}
-          {filterableCats.map((cat) => {
-            const active = activeCatIds.has(cat.id);
-            const palette = cat.bgColor
-              ? { bgColor: cat.bgColor, textColor: cat.textColor ?? "#fff" }
-              : getCategoryPalette(cat.name);
-            return (
-              <button
-                key={cat.id}
-                onClick={() => toggleCat(cat.id)}
-                className={cn(
-                  "rounded-full border px-3 py-1 text-xs font-medium transition-all",
-                  active
-                    ? "ring-2 ring-primary ring-offset-1"
-                    : "opacity-70 hover:opacity-100",
-                )}
-                style={{
-                  backgroundColor: active ? palette.bgColor : "transparent",
-                  color: active ? palette.textColor : palette.bgColor,
-                  borderColor: palette.bgColor,
-                }}
-              >
-                {cat.name}
-              </button>
-            );
-          })}
-          {(activeCatIds.size > 0 || activeSizes.size > 0) && (
-            <button
-              onClick={() => {
-                setActiveCatIds(new Set());
-                setActiveSizes(new Set());
-              }}
-              className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground hover:bg-muted"
-            >
-              Clear filter
-            </button>
+              )}
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 shrink-0 gap-1.5"
+                >
+                  {sortBy === "date-desc" || sortBy === "name-desc" ? (
+                    <SortDesc className="h-3.5 w-3.5" />
+                  ) : (
+                    <SortAsc className="h-3.5 w-3.5" />
+                  )}
+                  <span className="hidden sm:inline">{SORT_LABELS[sortBy]}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
+                  <DropdownMenuItem
+                    key={key}
+                    onClick={() => setSortBy(key)}
+                    className={sortBy === key ? "font-medium text-primary" : ""}
+                  >
+                    {SORT_LABELS[key]}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          {/* Size + category filter pills */}
+          {(filterableSizes.length > 1 || filterableCats.length > 0) && (
+            <div className="flex flex-wrap gap-2">
+              {filterableSizes.length > 1 &&
+                filterableSizes.map((s) => {
+                  const active = activeSizes.has(s);
+                  return (
+                    <button
+                      key={s}
+                      onClick={() => toggleSize(s)}
+                      className={cn(
+                        "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                        active
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                      )}
+                    >
+                      {s} blocks
+                    </button>
+                  );
+                })}
+              {filterableCats.map((cat) => {
+                const active = activeCatIds.has(cat.id);
+                const palette = cat.bgColor
+                  ? { bgColor: cat.bgColor, textColor: cat.textColor ?? "#fff" }
+                  : getCategoryPalette(cat.name);
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => toggleCat(cat.id)}
+                    className="rounded-full border px-3 py-1 text-xs font-medium transition"
+                    style={{
+                      backgroundColor: active ? palette.bgColor : "transparent",
+                      color: active ? palette.textColor : palette.bgColor,
+                      borderColor: palette.bgColor,
+                    }}
+                  >
+                    {cat.name}
+                  </button>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
@@ -1055,10 +1053,10 @@ export default function Layouts() {
             No layouts match the selected filters.
           </p>
           <button
-            onClick={() => setActiveCatIds(new Set())}
+            onClick={clearFilters}
             className="text-sm text-primary underline-offset-2 hover:underline"
           >
-            Clear filter
+            Clear all filters
           </button>
         </div>
       )}

@@ -15,6 +15,7 @@ import {
   ExternalLink,
   Trash2,
   Download,
+  ZoomIn,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +40,7 @@ import {
   useGetStats,
 } from "@workspace/api-client-react";
 import { downloadCollectionImage } from "@/lib/svg-export";
+import { PreviewZoomModal } from "@/components/PreviewZoomModal";
 
 type SortOption = "newest" | "oldest" | "az" | "za";
 
@@ -86,7 +88,9 @@ function QuiltCard({
   onFilterByCategory?: (id: number) => void;
 }) {
   const [, navigate] = useLocation();
+  const [zoomOpen, setZoomOpen] = useState(false);
   return (
+    <>
     <div
       className="group relative overflow-hidden rounded-xl border border-card-border bg-card transition-shadow hover:shadow-md"
       onClick={() => {
@@ -108,12 +112,19 @@ function QuiltCard({
         href={`/quilts/${quilt.id}`}
         className={`block ${isBulkMode ? "pointer-events-none" : ""}`}
       >
-        <div className="aspect-square overflow-hidden bg-muted">
+        <div className="relative aspect-square overflow-hidden bg-muted">
           <img
             src={quilt.imageUrl}
             alt={quilt.name}
             className="h-full w-full object-cover transition-transform group-hover:scale-105"
           />
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setZoomOpen(true); }}
+            className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/70"
+            title="Zoom preview"
+          >
+            <ZoomIn className="h-3.5 w-3.5" />
+          </button>
         </div>
         <div className="p-3 pr-8">
           <p className="truncate text-sm font-semibold text-foreground">
@@ -214,6 +225,15 @@ function QuiltCard({
         </div>
       )}
     </div>
+    <PreviewZoomModal open={zoomOpen} onClose={() => setZoomOpen(false)} title={quilt.name}>
+      <img
+        src={quilt.imageUrl}
+        alt={quilt.name}
+        className="max-h-[85vh] max-w-[85vw] rounded object-contain"
+        draggable={false}
+      />
+    </PreviewZoomModal>
+    </>
   );
 }
 

@@ -16,6 +16,7 @@ import {
   FileImage,
   FileCode2,
   Upload,
+  ZoomIn,
 } from "lucide-react";
 import {
   buildBlockSvgString,
@@ -55,6 +56,7 @@ import type { QuiltingCategory } from "@workspace/api-client-react";
 import { parseCell, fmtInch } from "@/lib/cell-parser";
 import { buildFabricUrlMap } from "@/components/FabricPicker";
 import { cn } from "@/lib/utils";
+import { PreviewZoomModal } from "@/components/PreviewZoomModal";
 
 type BlockSeamLine = {
   axis: "h" | "v";
@@ -425,10 +427,12 @@ function BlockCard({
   fabricUrlMap?: Record<number, string>;
 }) {
   const [, navigate] = useLocation();
+  const [zoomOpen, setZoomOpen] = useState(false);
   return (
+    <>
     <div className="group relative overflow-hidden rounded-xl border border-card-border bg-card transition-shadow hover:shadow-md">
       <Link href={`/blocks/${block.id}`} className="block">
-        <div className="flex items-center justify-center overflow-hidden bg-white">
+        <div className="relative flex items-center justify-center overflow-hidden bg-white">
           <BlockPreviewSvg
             cells={block.cells}
             gridSize={block.gridSize}
@@ -437,6 +441,13 @@ function BlockCard({
             tileCount={1}
             fabricUrlMap={fabricUrlMap}
           />
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setZoomOpen(true); }}
+            className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/70"
+            title="Zoom preview"
+          >
+            <ZoomIn className="h-3.5 w-3.5" />
+          </button>
         </div>
         <div className="border-t border-card-border px-3 py-2 pr-8">
           <p className="truncate text-sm font-semibold text-foreground">
@@ -550,6 +561,17 @@ function BlockCard({
         </DropdownMenu>
       </div>
     </div>
+    <PreviewZoomModal open={zoomOpen} onClose={() => setZoomOpen(false)} title={block.name}>
+      <BlockPreviewSvg
+        cells={block.cells}
+        gridSize={block.gridSize}
+        seams={block.seams}
+        size={500}
+        tileCount={3}
+        fabricUrlMap={fabricUrlMap}
+      />
+    </PreviewZoomModal>
+    </>
   );
 }
 

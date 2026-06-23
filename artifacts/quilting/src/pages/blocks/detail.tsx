@@ -13,9 +13,9 @@ import {
   getListBlocksQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { buildBlockSvgString } from "@/lib/svg-export";
 import { fmtInch } from "@/lib/cell-parser";
 import { buildFabricUrlMap } from "@/components/FabricPicker";
+import { BlockPreviewSvg } from "@/components/BlockPreviewSvg";
 import { PreviewZoomModal } from "@/components/PreviewZoomModal";
 
 export default function BlockDetail() {
@@ -33,9 +33,6 @@ export default function BlockDetail() {
 
   const { data: fabrics = [] } = useListFabrics();
   const numMap = buildFabricUrlMap(fabrics as Parameters<typeof buildFabricUrlMap>[0]);
-  const fabricUrlMap: Record<string, string> = Object.fromEntries(
-    Object.entries(numMap).map(([k, v]) => [k, v as string]),
-  );
 
   const deleteBlock = useDeleteBlock({
     mutation: {
@@ -89,9 +86,6 @@ export default function BlockDetail() {
   const gridSize = b.gridSize;
   const gridH = Math.max(1, Math.ceil(cells.length / gridSize));
 
-  const svgStr = buildBlockSvgString(cells, gridSize, 1, 280, fabricUrlMap);
-  const svgDataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgStr)}`;
-
   return (
     <div className="mx-auto max-w-3xl">
       <Button
@@ -110,11 +104,7 @@ export default function BlockDetail() {
           className="relative flex aspect-square cursor-zoom-in items-center justify-center overflow-hidden rounded-2xl border border-card-border bg-white p-4 group"
           onClick={() => setZoomOpen(true)}
         >
-          <img
-            src={svgDataUrl}
-            alt={b.name}
-            className="max-h-full max-w-full object-contain"
-          />
+          <BlockPreviewSvg cells={cells} gridSize={gridSize} size={280} tileCount={2} fabricUrlMap={numMap} />
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/20 group-hover:opacity-100">
             <ZoomIn className="h-10 w-10 text-white drop-shadow-lg" />
           </div>
@@ -227,12 +217,7 @@ export default function BlockDetail() {
         </div>
       </div>
       <PreviewZoomModal open={zoomOpen} onClose={() => setZoomOpen(false)} title={b.name}>
-        <img
-          src={svgDataUrl}
-          alt={b.name}
-          className="max-h-[85vh] max-w-[85vw] object-contain"
-          draggable={false}
-        />
+        <BlockPreviewSvg cells={cells} gridSize={gridSize} size={500} tileCount={3} fabricUrlMap={numMap} />
       </PreviewZoomModal>
     </div>
   );

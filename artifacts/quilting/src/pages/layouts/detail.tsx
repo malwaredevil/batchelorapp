@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { ArrowLeft, Pencil, Trash2, ZoomIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,26 +14,10 @@ import {
   getListLayoutsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { svgCellStr } from "@/lib/svg-export";
 import { fmtInch } from "@/lib/cell-parser";
 import { buildFabricUrlMap } from "@/components/FabricPicker";
+import { LayoutPreviewSvg } from "@/components/LayoutPreviewSvg";
 import { PreviewZoomModal } from "@/components/PreviewZoomModal";
-
-type BlockSeamLine = {
-  axis: "h" | "v";
-  pos: number;
-  cellIdx: number;
-  clipStart?: number;
-  clipEnd?: number;
-};
-
-type BlockSummary = {
-  id: number;
-  gridSize: number;
-  cells: string[];
-  blockSizeInches?: number | null;
-  seams?: BlockSeamLine[];
-};
 
 type LayoutCellData = { blockId: number | null; rotation: 0 | 90 | 180 | 270 };
 
@@ -56,7 +40,6 @@ type LayoutData = {
   }>;
 };
 
-const SVG_SIZE = 280;
 
 export default function LayoutDetail() {
   const { id } = useParams<{ id: string }>();
@@ -74,9 +57,6 @@ export default function LayoutDetail() {
   const { data: allBlocks = [] } = useListBlocks();
   const { data: fabrics = [] } = useListFabrics();
   const numMap = buildFabricUrlMap(fabrics as Parameters<typeof buildFabricUrlMap>[0]);
-  const fabricUrlMap: Record<string, string> = Object.fromEntries(
-    Object.entries(numMap).map(([k, v]) => [k, v as string]),
-  );
 
   const deleteLayout = useDeleteLayout({
     mutation: {
@@ -89,66 +69,6 @@ export default function LayoutDetail() {
     },
   });
 
-  const svgDataUrl = useMemo(() => {
-    if (!layout) return "";
-    const l = layout as unknown as LayoutData;
-    const blockMap = new Map<number, BlockSummary>(
-      (allBlocks as unknown as BlockSummary[]).map((b) => [b.id, b]),
-    );
-
-    const rows = l.rows;
-    const cols = l.cols;
-    const blockPxW = SVG_SIZE / cols;
-    const blockPxH = SVG_SIZE / rows;
-
-    const shapes: string[] = [];
-
-    for (let li = 0; li < l.cells.length; li++) {
-      const layoutCell = l.cells[li];
-      const row = Math.floor(li / cols);
-      const col = li % cols;
-      const bx = col * blockPxW;
-      const by = row * blockPxH;
-
-      if (layoutCell.blockId == null) {
-        shapes.push(
-          `<rect x="${bx}" y="${by}" width="${blockPxW}" height="${blockPxH}" fill="#f3f4f6" stroke="#e5e7eb" stroke-width="0.5"/>`,
-        );
-        continue;
-      }
-
-      const block = blockMap.get(layoutCell.blockId);
-      if (!block) {
-        shapes.push(
-          `<rect x="${bx}" y="${by}" width="${blockPxW}" height="${blockPxH}" fill="#e5e7eb"/>`,
-        );
-        continue;
-      }
-
-      const gs = block.gridSize;
-      const gh = Math.max(1, Math.ceil(block.cells.length / gs));
-      const cellW = blockPxW / gs;
-      const cellH = blockPxH / gh;
-
-      for (let ci = 0; ci < block.cells.length; ci++) {
-        const cellRow = Math.floor(ci / gs);
-        const cellCol = ci % gs;
-        shapes.push(
-          svgCellStr(
-            bx + cellCol * cellW,
-            by + cellRow * cellH,
-            cellW,
-            cellH,
-            block.cells[ci] ?? "",
-            fabricUrlMap,
-          ),
-        );
-      }
-    }
-
-    const svgStr = `<svg width="${SVG_SIZE}" height="${SVG_SIZE}" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><rect width="${SVG_SIZE}" height="${SVG_SIZE}" fill="#ffffff"/>${shapes.join("")}</svg>`;
-    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgStr)}`;
-  }, [layout, allBlocks, fabricUrlMap]);
 
   if (isLoading) {
     return (
@@ -194,23 +114,18 @@ export default function LayoutDetail() {
       <div className="grid gap-6 md:grid-cols-2">
         {/* Left: layout SVG preview */}
         <div
-          className={`relative flex aspect-square items-center justify-center overflow-hidden rounded-2xl border border-card-border bg-white p-4 group${svgDataUrl ? " cursor-zoom-in" : ""}`}
-          onClick={() => svgDataUrl && setZoomOpen(true)}
+          className="relative flex aspect-square cursor-zoom-in items-center justify-center overflow-hidden rounded-2xl border border-card-border bg-white p-4 group"
+          onClick={() => setZoomOpen(true)}
         >
-          {svgDataUrl ? (
-            <img
-              src={svgDataUrl}
-              alt={l.name}
-              className="max-h-full max-w-full object-contain"
-            />
-          ) : (
-            <div className="text-xs text-muted-foreground">No preview</div>
-          )}
-          {svgDataUrl && (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/20 group-hover:opacity-100">
-              <ZoomIn className="h-10 w-10 text-white drop-shadow-lg" />
-            </div>
-          )}
+          <LayoutPreviewSvg
+            layout={l}
+            blocks={allBlocks as unknown as { id: number; gridSize: number; cells: string[]; rotation?: number }[]}
+            fabricUrlMap={numMap}
+            size={280}
+          />
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/20 group-hover:opacity-100">
+            <ZoomIn className="h-10 w-10 text-white drop-shadow-lg" />
+          </div>
         </div>
 
         {/* Right: info + actions */}
@@ -316,16 +231,14 @@ export default function LayoutDetail() {
           )}
         </div>
       </div>
-      {svgDataUrl && (
-        <PreviewZoomModal open={zoomOpen} onClose={() => setZoomOpen(false)} title={l.name}>
-          <img
-            src={svgDataUrl}
-            alt={l.name}
-            className="max-h-[85vh] max-w-[85vw] object-contain"
-            draggable={false}
-          />
-        </PreviewZoomModal>
-      )}
+      <PreviewZoomModal open={zoomOpen} onClose={() => setZoomOpen(false)} title={l.name}>
+        <LayoutPreviewSvg
+          layout={l}
+          blocks={allBlocks as unknown as { id: number; gridSize: number; cells: string[]; rotation?: number }[]}
+          fabricUrlMap={numMap}
+          size={500}
+        />
+      </PreviewZoomModal>
     </div>
   );
 }

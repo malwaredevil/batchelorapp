@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import {
   PlusCircle,
@@ -37,6 +37,7 @@ import {
   getGetFabricQueryKey,
 } from "@workspace/api-client-react";
 import { downloadCollectionImage } from "@/lib/svg-export";
+import { colorToHex } from "@workspace/web-core";
 
 type SortOption = "newest" | "oldest" | "az" | "za";
 
@@ -55,6 +56,8 @@ type FabricSummary = {
   quantityUnit: string;
   printType?: string | null;
   designer?: string | null;
+  dominantColors: string[];
+  motifs: string[];
   categories: Array<{
     id: number;
     name: string;
@@ -73,6 +76,8 @@ function FabricCard({
   onToggleSelect,
   onFilterByPrintType,
   onFilterByCategory,
+  onFilterByColor,
+  activeColor,
 }: {
   fabric: FabricSummary;
   onDelete: (id: number) => void;
@@ -82,6 +87,8 @@ function FabricCard({
   onToggleSelect: (id: number) => void;
   onFilterByPrintType?: (pt: string) => void;
   onFilterByCategory?: (id: number) => void;
+  onFilterByColor?: (c: string) => void;
+  activeColor?: string | null;
 }) {
   const [, navigate] = useLocation();
   return (
@@ -156,6 +163,29 @@ function FabricCard({
               {fabric.quantity} {fabric.quantityUnit}
             </span>
           </div>
+          {fabric.dominantColors.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {fabric.dominantColors.slice(0, 6).map((c, i) => (
+                <button
+                  key={i}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onFilterByColor?.(c);
+                  }}
+                  title={c}
+                  aria-label={`Filter by ${c}`}
+                  aria-pressed={activeColor === c}
+                  className={`h-4 w-4 rounded-full border transition-transform hover:scale-110 ${
+                    activeColor === c
+                      ? "ring-2 ring-primary ring-offset-1 scale-110"
+                      : "border-border/40"
+                  }`}
+                  style={{ backgroundColor: colorToHex(c) }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </Link>
 
@@ -217,6 +247,7 @@ export default function Fabrics() {
   const [search, setSearch] = useState("");
   const [printTypeFilter, setPrintTypeFilter] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
+  const [colorFilter, setColorFilter] = useState<string | null>(null);
   const [sort, setSort] = useState<SortOption>("newest");
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -313,6 +344,19 @@ export default function Fabrics() {
       )
     : [];
 
+  const usedColors = useMemo(() => {
+    if (!fabrics || fabrics.length === 0) return [];
+    const freq = new Map<string, number>();
+    for (const f of fabrics as FabricSummary[]) {
+      for (const c of f.dominantColors ?? []) {
+        freq.set(c, (freq.get(c) ?? 0) + 1);
+      }
+    }
+    return Array.from(freq.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([color]) => color);
+  }, [fabrics]);
+
   const filtered = fabrics
     ? (fabrics as FabricSummary[]).filter((f) => {
         const q = search.trim().toLowerCase();
@@ -325,7 +369,10 @@ export default function Fabrics() {
         const matchesCat =
           categoryFilter === null ||
           (f.categories ?? []).some((c) => c.id === categoryFilter);
-        return matchesSearch && matchesType && matchesCat;
+        const matchesColor =
+          colorFilter === null ||
+          (f.dominantColors ?? []).includes(colorFilter);
+        return matchesSearch && matchesType && matchesCat && matchesColor;
       })
     : null;
 
@@ -342,7 +389,15 @@ export default function Fabrics() {
   const hasFilter =
     search.trim().length > 0 ||
     printTypeFilter !== null ||
-    categoryFilter !== null;
+    categoryFilter !== null ||
+    colorFilter !== null;
+
+  function clearFilters() {
+    setSearch("");
+    setPrintTypeFilter(null);
+    setCategoryFilter(null);
+    setColorFilter(null);
+  }
 
   return (
     <div>
@@ -462,6 +517,37 @@ export default function Fabrics() {
             </DropdownMenu>
           </div>
 
+          {usedColors.length > 0 && (
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+              {usedColors.map((color) => (
+                <button
+                  key={color}
+                  onClick={() =>
+                    setColorFilter(colorFilter === color ? null : color)
+                  }
+                  title={color}
+                  aria-label={color}
+                  aria-pressed={colorFilter === color}
+                  className={`h-6 w-6 shrink-0 rounded-full border transition-transform hover:scale-110 ${
+                    colorFilter === color
+                      ? "ring-2 ring-primary ring-offset-2 scale-110"
+                      : "border-border/40"
+                  }`}
+                  style={{ backgroundColor: colorToHex(color) }}
+                />
+              ))}
+              {colorFilter !== null && (
+                <button
+                  onClick={() => setColorFilter(null)}
+                  className="shrink-0 text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                >
+                  <X className="h-3 w-3" />
+                  Clear color
+                </button>
+              )}
+            </div>
+          )}
+
           {(printTypes.length > 1 || allCategories.length > 0) && (
             <div className="flex flex-wrap gap-2">
               {printTypes.length > 1 &&
@@ -561,11 +647,7 @@ export default function Fabrics() {
             No fabrics match your filters
           </p>
           <button
-            onClick={() => {
-              setSearch("");
-              setPrintTypeFilter(null);
-              setCategoryFilter(null);
-            }}
+            onClick={clearFilters}
             className="text-xs font-medium text-primary hover:underline"
           >
             Clear filters
@@ -578,17 +660,21 @@ export default function Fabrics() {
           {sorted.map((fabric) => (
             <FabricCard
               key={fabric.id}
-              fabric={fabric}
+              fabric={fabric as FabricSummary}
               onDelete={handleDelete}
               onReanalyze={handleReanalyze}
               isBulkMode={isBulkMode}
               isSelected={selectedIds.has(fabric.id)}
               onToggleSelect={toggleSelect}
+              activeColor={colorFilter}
               onFilterByPrintType={(pt) =>
                 setPrintTypeFilter((prev) => (prev === pt ? null : pt))
               }
               onFilterByCategory={(id) =>
                 setCategoryFilter((prev) => (prev === id ? null : id))
+              }
+              onFilterByColor={(c) =>
+                setColorFilter((prev) => (prev === c ? null : c))
               }
             />
           ))}

@@ -2,7 +2,10 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { toast } from "sonner";
 import { Loader2, ScanSearch, RotateCcw } from "lucide-react";
-import type { PotteryCompareResult as CompareResult, PotteryMatchResult as MatchResult } from "@workspace/api-client-react";
+import type {
+  PotteryCompareResult as CompareResult,
+  PotteryMatchResult as MatchResult,
+} from "@workspace/api-client-react";
 import { useUploadCompare } from "@/hooks/use-pottery";
 import { ImagePicker } from "@/components/image-picker";
 import { ImageEditor } from "@/components/image-editor";

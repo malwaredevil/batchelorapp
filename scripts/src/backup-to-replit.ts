@@ -234,11 +234,18 @@ CREATE TABLE IF NOT EXISTS quilting_shopping_items (
 async function copyTable(
   source: pg.Client,
   dest: pg.Client,
-  opts: { table: string; columns: string[]; orderBy?: string; jsonbColumns?: string[] },
+  opts: {
+    table: string;
+    columns: string[];
+    orderBy?: string;
+    jsonbColumns?: string[];
+  },
 ): Promise<number> {
   const cols = opts.columns.join(", ");
   const order = opts.orderBy ? ` ORDER BY ${opts.orderBy}` : "";
-  const { rows } = await source.query(`SELECT ${cols} FROM ${opts.table}${order}`);
+  const { rows } = await source.query(
+    `SELECT ${cols} FROM ${opts.table}${order}`,
+  );
   if (rows.length === 0) return 0;
 
   await dest.query(`TRUNCATE ${opts.table} CASCADE`);
@@ -271,7 +278,10 @@ async function resetSequence(dest: pg.Client, table: string, col: string) {
 }
 
 async function main() {
-  const source = new Client({ connectionString: resolveDatabaseUrl(), ssl: sslConfig });
+  const source = new Client({
+    connectionString: resolveDatabaseUrl(),
+    ssl: sslConfig,
+  });
   const dest = new Client({
     host: process.env.PGHOST,
     port: Number(process.env.PGPORT ?? 5432),
@@ -286,7 +296,9 @@ async function main() {
   await dest.connect();
 
   // Ensure destination schema exists
-  for (const stmt of DEST_SCHEMA.split(";").map((s) => s.trim()).filter(Boolean)) {
+  for (const stmt of DEST_SCHEMA.split(";")
+    .map((s) => s.trim())
+    .filter(Boolean)) {
     await dest.query(stmt);
   }
 
@@ -318,10 +330,27 @@ async function main() {
   summary["pottery_items"] = await copyTable(source, dest, {
     table: "pottery_items",
     columns: [
-      "id", "name", "quantity", "notes", "dimensions", "pattern_description",
-      "style", "shape", "maker", "maker_info", "dominant_colors", "motifs",
-      "image_path", "pattern_crop_path", "acquired_at", "condition", "origin",
-      "approximate_era", "ai_description", "locked_fields", "created_at",
+      "id",
+      "name",
+      "quantity",
+      "notes",
+      "dimensions",
+      "pattern_description",
+      "style",
+      "shape",
+      "maker",
+      "maker_info",
+      "dominant_colors",
+      "motifs",
+      "image_path",
+      "pattern_crop_path",
+      "acquired_at",
+      "condition",
+      "origin",
+      "approximate_era",
+      "ai_description",
+      "locked_fields",
+      "created_at",
     ],
     orderBy: "id",
   });
@@ -329,7 +358,14 @@ async function main() {
 
   summary["pottery_images"] = await copyTable(source, dest, {
     table: "pottery_images",
-    columns: ["id", "item_id", "storage_path", "label", "position", "created_at"],
+    columns: [
+      "id",
+      "item_id",
+      "storage_path",
+      "label",
+      "position",
+      "created_at",
+    ],
     orderBy: "id",
   });
   await resetSequence(dest, "pottery_images", "id");
@@ -350,10 +386,27 @@ async function main() {
   summary["quilting_fabrics"] = await copyTable(source, dest, {
     table: "quilting_fabrics",
     columns: [
-      "id", "name", "line_name", "designer", "manufacturer", "colorway",
-      "print_type", "fiber_content", "width_inches", "quantity", "quantity_unit",
-      "sku", "notes", "ai_description", "dominant_colors", "motifs",
-      "style_descriptors", "image_path", "acquired_at", "locked_fields", "created_at",
+      "id",
+      "name",
+      "line_name",
+      "designer",
+      "manufacturer",
+      "colorway",
+      "print_type",
+      "fiber_content",
+      "width_inches",
+      "quantity",
+      "quantity_unit",
+      "sku",
+      "notes",
+      "ai_description",
+      "dominant_colors",
+      "motifs",
+      "style_descriptors",
+      "image_path",
+      "acquired_at",
+      "locked_fields",
+      "created_at",
     ],
     orderBy: "id",
   });
@@ -362,9 +415,21 @@ async function main() {
   summary["quilting_patterns"] = await copyTable(source, dest, {
     table: "quilting_patterns",
     columns: [
-      "id", "name", "designer", "block_size", "difficulty", "source_type",
-      "source_reference", "notes", "image_path", "acquired_at", "locked_fields",
-      "designer_bio", "designer_website", "publication_name", "publication_year",
+      "id",
+      "name",
+      "designer",
+      "block_size",
+      "difficulty",
+      "source_type",
+      "source_reference",
+      "notes",
+      "image_path",
+      "acquired_at",
+      "locked_fields",
+      "designer_bio",
+      "designer_website",
+      "publication_name",
+      "publication_year",
       "created_at",
     ],
     orderBy: "id",
@@ -374,8 +439,16 @@ async function main() {
   summary["quilting_finished_quilts"] = await copyTable(source, dest, {
     table: "quilting_finished_quilts",
     columns: [
-      "id", "name", "date_completed", "size_width", "size_height",
-      "recipient", "notes", "image_path", "locked_fields", "created_at",
+      "id",
+      "name",
+      "date_completed",
+      "size_width",
+      "size_height",
+      "recipient",
+      "notes",
+      "image_path",
+      "locked_fields",
+      "created_at",
     ],
     orderBy: "id",
   });
@@ -398,7 +471,15 @@ async function main() {
 
   summary["quilting_images"] = await copyTable(source, dest, {
     table: "quilting_images",
-    columns: ["id", "entity_type", "entity_id", "storage_path", "label", "position", "created_at"],
+    columns: [
+      "id",
+      "entity_type",
+      "entity_id",
+      "storage_path",
+      "label",
+      "position",
+      "created_at",
+    ],
     orderBy: "id",
   });
   await resetSequence(dest, "quilting_images", "id");
@@ -406,8 +487,14 @@ async function main() {
   summary["quilting_blocks"] = await copyTable(source, dest, {
     table: "quilting_blocks",
     columns: [
-      "id", "name", "grid_size", "cells", "block_size_inches",
-      "seam_allowance_inches", "seams", "created_at",
+      "id",
+      "name",
+      "grid_size",
+      "cells",
+      "block_size_inches",
+      "seam_allowance_inches",
+      "seams",
+      "created_at",
     ],
     orderBy: "id",
     jsonbColumns: ["seams"],
@@ -417,9 +504,17 @@ async function main() {
   summary["quilting_layouts"] = await copyTable(source, dest, {
     table: "quilting_layouts",
     columns: [
-      "id", "name", "rows", "cols", "cells", "sashing_width_inches",
-      "sashing_color", "border_width_inches", "border_color",
-      "cornerstone_color", "created_at",
+      "id",
+      "name",
+      "rows",
+      "cols",
+      "cells",
+      "sashing_width_inches",
+      "sashing_color",
+      "border_width_inches",
+      "border_color",
+      "cornerstone_color",
+      "created_at",
     ],
     orderBy: "id",
     jsonbColumns: ["cells"],
@@ -429,9 +524,18 @@ async function main() {
   summary["quilting_shopping_items"] = await copyTable(source, dest, {
     table: "quilting_shopping_items",
     columns: [
-      "id", "name", "notes", "url", "quantity", "unit",
-      "estimated_price_usd", "actual_price_usd", "store",
-      "status", "priority", "created_at",
+      "id",
+      "name",
+      "notes",
+      "url",
+      "quantity",
+      "unit",
+      "estimated_price_usd",
+      "actual_price_usd",
+      "store",
+      "status",
+      "priority",
+      "created_at",
     ],
     orderBy: "id",
   });

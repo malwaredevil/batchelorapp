@@ -22,6 +22,7 @@ Composite cells store multiple colors joined by `:` —
 e.g. a half-square triangle is `"nesw:fab:19:fab:10"` (two fabric tokens that
 each ALSO contain a colon). The shared `lib/cell-parser.ts` `parseCell()` was
 written assuming every color was a `#hex` value:
+
 - triangle branch used `cell.indexOf(":", 5)` to find the a/b separator;
 - quad/hsplit/vsplit/xsplit used `split(/:(?=#)/)` (split only before `#`).
 

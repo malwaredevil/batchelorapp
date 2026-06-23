@@ -215,22 +215,46 @@ function SvgCell({
       return (
         <g>
           <rect x={x} y={y} width={w} height={h / 2} fill={rf(p.top)} />
-          <rect x={x} y={y + h / 2} width={w} height={h / 2} fill={rf(p.bottom)} />
+          <rect
+            x={x}
+            y={y + h / 2}
+            width={w}
+            height={h / 2}
+            fill={rf(p.bottom)}
+          />
         </g>
       );
     case "vsplit":
       return (
         <g>
           <rect x={x} y={y} width={w / 2} height={h} fill={rf(p.left)} />
-          <rect x={x + w / 2} y={y} width={w / 2} height={h} fill={rf(p.right)} />
+          <rect
+            x={x + w / 2}
+            y={y}
+            width={w / 2}
+            height={h}
+            fill={rf(p.right)}
+          />
         </g>
       );
     case "xsplit":
       return (
         <g>
           <rect x={x} y={y} width={w / 2} height={h / 2} fill={rf(p.tl)} />
-          <rect x={x + w / 2} y={y} width={w / 2} height={h / 2} fill={rf(p.tr)} />
-          <rect x={x} y={y + h / 2} width={w / 2} height={h / 2} fill={rf(p.bl)} />
+          <rect
+            x={x + w / 2}
+            y={y}
+            width={w / 2}
+            height={h / 2}
+            fill={rf(p.tr)}
+          />
+          <rect
+            x={x}
+            y={y + h / 2}
+            width={w / 2}
+            height={h / 2}
+            fill={rf(p.bl)}
+          />
           <rect
             x={x + w / 2}
             y={y + h / 2}
@@ -341,11 +365,17 @@ function BlockMini({
               key={fabId}
               id={`mini-fab-${fabId}`}
               patternUnits="userSpaceOnUse"
-              x="0" y="0" width={cellPx} height={cellPx}
+              x="0"
+              y="0"
+              width={cellPx}
+              height={cellPx}
             >
               <image
                 href={fabricUrlMap[fabId]}
-                x="0" y="0" width={cellPx} height={cellPx}
+                x="0"
+                y="0"
+                width={cellPx}
+                height={cellPx}
                 preserveAspectRatio="xMidYMid slice"
               />
             </pattern>
@@ -1573,7 +1603,10 @@ export default function LayoutComposer() {
           {blockList && blockList.length > 0 && fabricsLoading && (
             <div className="flex flex-col gap-2">
               {blockList.map((block) => (
-                <div key={block.id} className="flex items-center gap-3 rounded-lg border border-border p-2">
+                <div
+                  key={block.id}
+                  className="flex items-center gap-3 rounded-lg border border-border p-2"
+                >
                   <Skeleton className="h-10 w-10 shrink-0 rounded" />
                   <div className="min-w-0 flex-1 space-y-1">
                     <Skeleton className="h-3.5 w-3/4" />
@@ -1597,7 +1630,11 @@ export default function LayoutComposer() {
                   }`}
                 >
                   <div className="shrink-0 overflow-hidden rounded">
-                    <BlockMini block={block} size={40} fabricUrlMap={fabricUrlMap} />
+                    <BlockMini
+                      block={block}
+                      size={40}
+                      fabricUrlMap={fabricUrlMap}
+                    />
                   </div>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{block.name}</p>

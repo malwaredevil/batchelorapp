@@ -9,6 +9,7 @@ The `DATABASE_URL` secret holds the **direct** Supabase host (`db.<ref>.supabase
 which is **IPv6-only and unreachable from Replit's IPv4-only network** (ENOTFOUND / blocked).
 
 `lib/db/src/resolve-url.ts` rewrites that at runtime to the **Supavisor pooler**:
+
 - host → `SUPABASE_POOLER_HOST` (`aws-0-eu-west-1.pooler.supabase.com`)
 - username → `postgres.<ref>` (pooler requires the ref in the username)
 - port → 5432 (session pooler)

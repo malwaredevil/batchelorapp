@@ -423,6 +423,25 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /pottery/items/items/bulk-reanalyze:
+    post:
+      operationId: bulkReanalyzePottery
+      tags:
+        - pottery
+      summary: Re-run AI analysis on multiple pottery pieces
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PotteryPotteryBulkReanalyzeInput"
+      responses:
+        "200":
+          description: Bulk reanalysis results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PotteryPotteryBulkReanalyzeResult"
   /pottery/items/{id}/set-primary-image:
     post:
       operationId: setPrimaryImage
@@ -2252,6 +2271,30 @@ components:
             - yes
             - maybe
             - no
+    PotteryPotteryBulkReanalyzeInput:
+      type: object
+      required:
+        - ids
+      properties:
+        ids:
+          type: array
+          items:
+            type: integer
+          maxItems: 20
+    PotteryPotteryBulkReanalyzeResult:
+      type: object
+      required:
+        - succeeded
+        - failed
+      properties:
+        succeeded:
+          type: array
+          items:
+            type: integer
+        failed:
+          type: array
+          items:
+            type: integer
     PotteryMotifCount:
       type: object
       required:

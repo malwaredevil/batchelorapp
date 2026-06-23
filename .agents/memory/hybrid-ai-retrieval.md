@@ -14,6 +14,7 @@ Both apps' `compare` routes follow the same pipeline. Keep them consistent.
 → GPT `compareWithMatches` for the final verdict.
 
 **Graceful degradation — required, do not break:**
+
 - No `JINA_API_KEY` → `generateVisualEmbedding()` returns `null`; visual lane stays empty; RRF degrades to text-only. All three "optional" AI keys are nominally required in prod, but the code must not hard-fail when one is missing.
 - No `VOYAGE_API_KEY` or rerank error → `rerankCandidates()` returns the input order unchanged.
 

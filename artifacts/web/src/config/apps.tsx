@@ -1,9 +1,4 @@
-import {
-  Cloud,
-  Newspaper,
-  Rss,
-  type LucideIcon,
-} from "lucide-react";
+import { Cloud, Newspaper, Rss, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 const base = import.meta.env.BASE_URL;
@@ -80,8 +75,12 @@ export const WIDGETS: WidgetEntry[] = [
     icon: Newspaper,
     body: (
       <ul className="space-y-2 text-sm">
-        <li className="text-foreground leading-snug">Glaze chemistry: reduction firing basics</li>
-        <li className="text-muted-foreground leading-snug">5 quilt-binding techniques compared</li>
+        <li className="text-foreground leading-snug">
+          Glaze chemistry: reduction firing basics
+        </li>
+        <li className="text-muted-foreground leading-snug">
+          5 quilt-binding techniques compared
+        </li>
       </ul>
     ),
   },

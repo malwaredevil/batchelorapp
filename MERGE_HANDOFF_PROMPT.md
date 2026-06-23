@@ -34,12 +34,14 @@ Run it in each app's Replit Agent separately.
 >
 > List every Secret key name that is configured in this Repl's Secrets panel.
 > For each key name, note:
+>
 > - Whether it is set in **development** (this Repl) only, or also on the live
 >   **deployment** (production) — check the Repl's Secrets tab and also check the
 >   Deployment's Secrets/Config if available.
 > - If a key is missing from the deployment that you expect to be there, flag it.
 >
 > Example format (names only, no values):
+>
 > ```
 > SUPABASE_URL              — dev ✓  production ✓
 > OPENAI_API_KEY            — dev ✓  production ✓
@@ -125,6 +127,7 @@ Run it in each app's Replit Agent separately.
 > ### STEP 4 — Confirm completion
 >
 > Reply with:
+>
 > - "HANDOFF COMPLETE for [app name]"
 > - A summary of anything unusual, unexpected, or that you were unable to determine.
 > - Any warnings or concerns about the merge that you noticed while doing this.

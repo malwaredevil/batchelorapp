@@ -123,5 +123,8 @@ export function topMotifs(
   return [...buckets.values()]
     .sort((a, b) => b.count - a.count)
     .slice(0, limit)
-    .map((bucket) => ({ label: bucketLabel(bucket.variants), count: bucket.count }));
+    .map((bucket) => ({
+      label: bucketLabel(bucket.variants),
+      count: bucket.count,
+    }));
 }

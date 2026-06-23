@@ -172,22 +172,46 @@ function SvgCell({
       return (
         <g>
           <rect x={x} y={y} width={w} height={h / 2} fill={rf(p.top)} />
-          <rect x={x} y={y + h / 2} width={w} height={h / 2} fill={rf(p.bottom)} />
+          <rect
+            x={x}
+            y={y + h / 2}
+            width={w}
+            height={h / 2}
+            fill={rf(p.bottom)}
+          />
         </g>
       );
     case "vsplit":
       return (
         <g>
           <rect x={x} y={y} width={w / 2} height={h} fill={rf(p.left)} />
-          <rect x={x + w / 2} y={y} width={w / 2} height={h} fill={rf(p.right)} />
+          <rect
+            x={x + w / 2}
+            y={y}
+            width={w / 2}
+            height={h}
+            fill={rf(p.right)}
+          />
         </g>
       );
     case "xsplit":
       return (
         <g>
           <rect x={x} y={y} width={w / 2} height={h / 2} fill={rf(p.tl)} />
-          <rect x={x + w / 2} y={y} width={w / 2} height={h / 2} fill={rf(p.tr)} />
-          <rect x={x} y={y + h / 2} width={w / 2} height={h / 2} fill={rf(p.bl)} />
+          <rect
+            x={x + w / 2}
+            y={y}
+            width={w / 2}
+            height={h / 2}
+            fill={rf(p.tr)}
+          />
+          <rect
+            x={x}
+            y={y + h / 2}
+            width={w / 2}
+            height={h / 2}
+            fill={rf(p.bl)}
+          />
           <rect
             x={x + w / 2}
             y={y + h / 2}
@@ -312,11 +336,17 @@ function LayoutPreview({
               key={id}
               id={`fab-${id}`}
               patternUnits="userSpaceOnUse"
-              x="0" y="0" width={cellPx} height={cellPx}
+              x="0"
+              y="0"
+              width={cellPx}
+              height={cellPx}
             >
               <image
                 href={fabricUrlMap[id]}
-                x="0" y="0" width={cellPx} height={cellPx}
+                x="0"
+                y="0"
+                width={cellPx}
+                height={cellPx}
                 preserveAspectRatio="xMidYMid slice"
               />
             </pattern>
@@ -566,7 +596,12 @@ function LayoutCard({
     <div className="group relative overflow-hidden rounded-xl border border-card-border bg-card transition-shadow hover:shadow-md">
       <Link href={`/layouts/${layout.id}`} className="block">
         <div className="flex aspect-square items-center justify-center overflow-hidden bg-white p-2">
-          <LayoutPreview layout={layout} blocks={blocks} size={160} fabricUrlMap={fabricUrlMap} />
+          <LayoutPreview
+            layout={layout}
+            blocks={blocks}
+            size={160}
+            fabricUrlMap={fabricUrlMap}
+          />
         </div>
         <div className="border-t border-card-border px-3 py-2 pr-8">
           <p className="truncate text-sm font-semibold text-foreground">

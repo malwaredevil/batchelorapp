@@ -38,6 +38,8 @@ import type {
   PotteryCollectionStats,
   PotteryCompareResult,
   PotteryMergeCategoryInput,
+  PotteryPotteryBulkReanalyzeInput,
+  PotteryPotteryBulkReanalyzeResult,
   PotteryPotteryImage,
   PotteryPotteryImageUpdate,
   PotteryPotteryItem,
@@ -1480,6 +1482,77 @@ export const useReanalyzePottery = <TError = ErrorType<Error>,
         TContext
       > => {
       return useMutation(getReanalyzePotteryMutationOptions(options));
+    }
+
+export const getBulkReanalyzePotteryUrl = () => {
+
+
+
+
+  return `/api/pottery/items/items/bulk-reanalyze`
+}
+
+/**
+ * @summary Re-run AI analysis on multiple pottery pieces
+ */
+export const bulkReanalyzePottery = async (potteryPotteryBulkReanalyzeInput: PotteryPotteryBulkReanalyzeInput, options?: RequestInit): Promise<PotteryPotteryBulkReanalyzeResult> => {
+
+  return customFetch<PotteryPotteryBulkReanalyzeResult>(getBulkReanalyzePotteryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      potteryPotteryBulkReanalyzeInput,)
+  }
+);}
+
+
+
+
+export const getBulkReanalyzePotteryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkReanalyzePottery>>, TError,{data: BodyType<PotteryPotteryBulkReanalyzeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof bulkReanalyzePottery>>, TError,{data: BodyType<PotteryPotteryBulkReanalyzeInput>}, TContext> => {
+
+const mutationKey = ['bulkReanalyzePottery'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkReanalyzePottery>>, {data: BodyType<PotteryPotteryBulkReanalyzeInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  bulkReanalyzePottery(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BulkReanalyzePotteryMutationResult = NonNullable<Awaited<ReturnType<typeof bulkReanalyzePottery>>>
+    export type BulkReanalyzePotteryMutationBody = BodyType<PotteryPotteryBulkReanalyzeInput>
+    export type BulkReanalyzePotteryMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Re-run AI analysis on multiple pottery pieces
+ */
+export const useBulkReanalyzePottery = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkReanalyzePottery>>, TError,{data: BodyType<PotteryPotteryBulkReanalyzeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof bulkReanalyzePottery>>,
+        TError,
+        {data: BodyType<PotteryPotteryBulkReanalyzeInput>},
+        TContext
+      > => {
+      return useMutation(getBulkReanalyzePotteryMutationOptions(options));
     }
 
 export const getSetPrimaryImageUrl = (id: number,) => {

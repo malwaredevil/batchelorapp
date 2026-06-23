@@ -175,8 +175,8 @@ export default function Maintenance() {
   }, [stragglerData, itemsById]);
 
   const embeddingCount =
-    stragglerData?.items.filter((s) => s.reasons.includes("embedding")).length ??
-    0;
+    stragglerData?.items.filter((s) => s.reasons.includes("embedding"))
+      .length ?? 0;
   const attributeCount =
     stragglerData?.items.filter((s) => s.reasons.includes("attributes"))
       .length ?? 0;

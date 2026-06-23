@@ -6,6 +6,7 @@ description: How to push changes / set branch protection / manage issues on GitH
 # Syncing to GitHub from the Replit main agent
 
 ## git CLI is blocked; use the REST API with a PAT
+
 - In the main agent sandbox, `git fetch`, `git push`, and `git commit` are all
   **blocked** ("Destructive git operations are not allowed"). You cannot push
   commits to GitHub via git at all from here.
@@ -27,6 +28,7 @@ Content is usually identical so a later Replit-side sync merges cleanly, but exp
 a merge commit; never force-push to "fix" it.
 
 ## Branch protection must not break the Replit→main flow
+
 - The user pushes **directly to `main`** from the Replit Git pane (Replit = source
   of truth). Set branch protection with **`enforce_admins=false`** so admins bypass
   required checks on direct pushes; otherwise the user can no longer push to main.
@@ -35,12 +37,14 @@ a merge commit; never force-push to "fix" it.
   `name:` values** — here `["Typecheck","Build API server"]`.
 
 ## CodeQL needs a public repo or GHAS
+
 - `PUT /code-scanning/default-setup` returns **404** on a private repo without
   GitHub Advanced Security. CodeQL can't be enabled until the repo is made public
   (free) or GHAS is purchased. A committed `codeql.yml` would just fail to upload
   results on a private repo, so don't add one as a workaround.
 
 ## CI lint gate is intentionally absent
+
 - Root `package.json` has no `lint` script and the repo isn't Prettier-formatted,
   so a required Lint check would be permanently red and block Dependabot
   auto-merge. CI runs Typecheck + Build API server only until a formatting pass is

@@ -9,17 +9,19 @@ When you need a one-off read/write against the live Supabase DB (e.g. seeding a
 column) outside the running app server, the obvious paths fail. Use the REST API.
 
 ## What does NOT work
+
 - **`code_execution` sandbox `process.env`** — undefined; the sandbox has no
   process env.
 - **`viewEnvVars` callback** — only returns a fixed allow-list
   (`SESSION_SECRET`, `DATABASE_URL`, `REPLIT_DOMAINS`, `REPLIT_DEV_DOMAIN`,
   `REPL_ID`). It does NOT expose `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`.
 - **`pg` Client with `DATABASE_URL` from bash** — the bash `DATABASE_URL`
-  resolves to the *direct* host `db.<ref>.supabase.co:5432`, which is DNS/network
+  resolves to the _direct_ host `db.<ref>.supabase.co:5432`, which is DNS/network
   blocked in dev (`ENOTFOUND` / blocked). Only the pooler host works, and only
   the app server / backup script rewrite to it.
 
 ## What DOES work
+
 - **A Node script invoked from bash** sees the full Repl secret set via
   `process.env` (unlike the code_execution sandbox). So `SUPABASE_URL` and
   `SUPABASE_SERVICE_ROLE_KEY` are available there.

@@ -36,10 +36,10 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
 
 ## Database layout (shared Supabase project: gadhlfluflknlwgmlmos)
 
-| Prefix | Owned by |
-|---|---|
-| `pottery_*` | Pottery app |
-| `quilting_*` | Quilting app |
+| Prefix                               | Owned by       |
+| ------------------------------------ | -------------- |
+| `pottery_*`                          | Pottery app    |
+| `quilting_*`                         | Quilting app   |
 | `app_users`, `password_reset_tokens` | Shared (login) |
 
 ## Architecture decisions
@@ -48,7 +48,7 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
 - **Additive-only migrations.** `bootstrap.ts` uses `CREATE TABLE IF NOT EXISTS` exclusively. `drizzle-kit push --force` is permanently banned (it introspects all tables and will silently drop the other app's tables).
 - **Backup before publish.** `post-merge.sh` snapshots Supabase → built-in Replit DB after every merge. Embedding columns are excluded (not in Replit DB's pgvector). Regenerate via each app's Bulk Re-analyse.
 - **Single Google OAuth client** shared by both apps. Redirect URI: `{host}/api/auth/google/callback`.
-- **DATABASE_URL → Supabase; PG* → Replit built-in DB.** Never swap these.
+- **DATABASE_URL → Supabase; PG\* → Replit built-in DB.** Never swap these.
 
 ## Product
 

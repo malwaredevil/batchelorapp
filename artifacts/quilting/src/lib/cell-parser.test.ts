@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  parseCell,
-  isFabricCell,
-  fabricIdFromCell,
-} from "./cell-parser";
+import { parseCell, isFabricCell, fabricIdFromCell } from "./cell-parser";
 
 // ---------------------------------------------------------------------------
 // Triangle cells (nwse / nesw)

@@ -3,6 +3,8 @@ name: CI
 on:
   pull_request:
     branches: [main]
+  pull_request_target:
+    branches: [main]
   push:
     branches: [main]
 
@@ -13,8 +15,11 @@ jobs:
   typecheck:
     name: Typecheck
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request_target' || github.actor == 'dependabot[bot]'
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -28,10 +33,13 @@ jobs:
   build-api:
     name: Build API server
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request_target' || github.actor == 'dependabot[bot]'
     env:
       NODE_ENV: production
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -41,3 +49,21 @@ jobs:
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @workspace/api-server run build
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request_target' || github.actor == 'dependabot[bot]'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint

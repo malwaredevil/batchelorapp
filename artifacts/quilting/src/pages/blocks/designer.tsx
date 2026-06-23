@@ -490,9 +490,7 @@ export function seamFill(
     if (cached) return cached;
     const base = cellSeps(getParsed(k));
     const extra = seamSeps.get(k);
-    const merged = extra
-      ? Array.from(new Set<Sep>([...base, ...extra]))
-      : base;
+    const merged = extra ? Array.from(new Set<Sep>([...base, ...extra])) : base;
     return (sepCache[k] = merged);
   };
 
@@ -599,10 +597,7 @@ export function seamFill(
   const isClippedDiagonal = (p: ParsedCell): boolean =>
     (p.kind === "line" && (p.cs !== 0 || p.ce !== 1)) ||
     (p.kind === "xline" &&
-      (p.nwseCs !== 0 ||
-        p.nwseCe !== 1 ||
-        p.neswCs !== 0 ||
-        p.neswCe !== 1));
+      (p.nwseCs !== 0 || p.nwseCe !== 1 || p.neswCs !== 0 || p.neswCe !== 1));
 
   // Apply: paint the filled octants, then re-encode each touched cell.
   const next = [...cells];

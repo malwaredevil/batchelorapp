@@ -343,6 +343,23 @@ export const ReanalyzePotteryResponse = zod.object({
 
 
 /**
+ * @summary Re-run AI analysis on multiple pottery pieces
+ */
+export const bulkReanalyzePotteryBodyIdsMax = 20;
+
+
+
+export const BulkReanalyzePotteryBody = zod.object({
+  "ids": zod.array(zod.number()).max(bulkReanalyzePotteryBodyIdsMax)
+})
+
+export const BulkReanalyzePotteryResponse = zod.object({
+  "succeeded": zod.array(zod.number()),
+  "failed": zod.array(zod.number())
+})
+
+
+/**
  * @summary Promote a supplemental image to primary and re-analyse
  */
 export const SetPrimaryImageParams = zod.object({

@@ -10,6 +10,7 @@ description: How the unified OpenAPI contract is composed for the merged pottery
 **Why:** Target architecture is single-login / single API surface with namespaced runtime routes. A single source-of-truth contract avoids duplicate auth contracts and authz drift across two apps. Per-app client libs were rejected (extra package graph + shared-auth duplication). Hand-merging the 3600-line YAML was rejected (duplicate keys / dangling $ref risk).
 
 **How to apply (namespacing matrix):**
+
 - Shared, deduped once (take from quilting, the superset): `/healthz`, `/auth/*`. Stay un-namespaced. Schemas referenced by these stay unprefixed (the only "shared" schemas).
 - Pottery feature paths → prefixed `/pottery/*`. The pottery item root `/pottery` is renamed to `/pottery/items` (avoids ugly `/api/pottery/pottery`). `/categories`→`/pottery/categories`, `/compare`→`/pottery/compare`, `/stats`→`/pottery/stats`.
 - Quilting feature paths → prefixed `/quilting/*` (fabrics, patterns, quilts, categories, stats, blocks, layouts, shopping, compare).

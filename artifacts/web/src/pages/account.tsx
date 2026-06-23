@@ -117,11 +117,14 @@ function AppearanceCard() {
     update.mutate({ data: { themePreference: next } });
   }
 
-  const options: { value: "light" | "dark"; label: string; icon: typeof Sun }[] =
-    [
-      { value: "light", label: "Light", icon: Sun },
-      { value: "dark", label: "Dark", icon: Moon },
-    ];
+  const options: {
+    value: "light" | "dark";
+    label: string;
+    icon: typeof Sun;
+  }[] = [
+    { value: "light", label: "Light", icon: Sun },
+    { value: "dark", label: "Dark", icon: Moon },
+  ];
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-6 shadow-sm">

@@ -1,6 +1,15 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
-import { and, asc, desc, eq, getTableColumns, isNull, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  getTableColumns,
+  isNull,
+  or,
+  sql,
+} from "drizzle-orm";
 import {
   db,
   potteryItems,
@@ -23,9 +32,14 @@ import {
   UpdatePotteryImageBody,
   DeletePotteryImageParams,
   GetStragglersResponse,
+  BulkReanalyzePotteryBody,
 } from "@workspace/api-zod";
 import { requireAuth } from "../../middleware/auth";
-import { aiLimiter, supplementalUploadLimiter } from "../../middleware/rateLimit";
+import {
+  aiLimiter,
+  bulkAiLimiter,
+  supplementalUploadLimiter,
+} from "../../middleware/rateLimit";
 import {
   sniffImageType,
   stripImageMetadata,
@@ -732,6 +746,30 @@ router.post("/items/:id/reanalyze", aiLimiter, async (req, res) => {
     const message = err instanceof Error ? err.message : "Unknown error.";
     res.status(status).json({ error: message });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Bulk re-analyze with AI
+// ---------------------------------------------------------------------------
+
+const MAX_BULK_REANALYZE = 20;
+
+router.post("/items/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
+  const { ids } = BulkReanalyzePotteryBody.parse(req.body);
+  const capped = [...new Set(ids)].slice(0, MAX_BULK_REANALYZE);
+  const succeeded: number[] = [];
+  const failed: number[] = [];
+
+  for (const id of capped) {
+    try {
+      await runItemAnalysis(id);
+      succeeded.push(id);
+    } catch {
+      failed.push(id);
+    }
+  }
+
+  res.json({ succeeded, failed });
 });
 
 // ---------------------------------------------------------------------------

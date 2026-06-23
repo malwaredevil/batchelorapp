@@ -3,7 +3,10 @@ import { Link, useLocation, useSearch } from "wouter";
 import {
   useListPottery,
   useListPotteryCategories as useListCategories,
+  useBulkReanalyzePottery,
+  getListPotteryQueryKey,
 } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { PotteryPotteryItem as PotteryItem } from "@workspace/api-client-react";
 import { topMotifs } from "../lib/motifs";
 import {
@@ -16,6 +19,7 @@ import {
   ArrowUpDown,
   GitCompare,
   Check,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -652,6 +656,50 @@ export default function Collection() {
     setSelectedIds([]);
   }
 
+  // Bulk reanalyze mode
+  const queryClient = useQueryClient();
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<number>>(
+    new Set(),
+  );
+  const [bulkStatus, setBulkStatus] = useState<string | null>(null);
+  const { mutateAsync: bulkReanalyze, isPending: isBulkPending } =
+    useBulkReanalyzePottery();
+
+  function toggleBulkSelect(id: number) {
+    setBulkSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else if (next.size < 20) next.add(id);
+      return next;
+    });
+  }
+
+  function exitBulkMode() {
+    setBulkMode(false);
+    setBulkSelectedIds(new Set());
+    setBulkStatus(null);
+  }
+
+  async function runBulkReanalyze() {
+    if (bulkSelectedIds.size === 0) return;
+    setBulkStatus("Analysing…");
+    try {
+      const result = await bulkReanalyze({
+        data: { ids: [...bulkSelectedIds] },
+      });
+      await queryClient.invalidateQueries({
+        queryKey: getListPotteryQueryKey(),
+      });
+      setBulkStatus(
+        `Done — ${result.succeeded.length} refreshed${result.failed.length ? `, ${result.failed.length} failed` : ""}.`,
+      );
+      setBulkSelectedIds(new Set());
+    } catch {
+      setBulkStatus("Something went wrong. Please try again.");
+    }
+  }
+
   const filtered = useMemo(() => {
     if (!data) return [];
     let result = data;
@@ -705,7 +753,7 @@ export default function Collection() {
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
-          {!compareMode ? (
+          {!compareMode && !bulkMode ? (
             <>
               {data && data.length >= 2 && (
                 <Button
@@ -716,6 +764,17 @@ export default function Collection() {
                 >
                   <GitCompare className="h-4 w-4" />
                   <span className="hidden sm:inline">Compare</span>
+                </Button>
+              )}
+              {data && data.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBulkMode(true)}
+                  data-testid="button-bulk-reanalyze-mode"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  <span className="hidden sm:inline">Select</span>
                 </Button>
               )}
               <Button
@@ -730,7 +789,11 @@ export default function Collection() {
               </Button>
             </>
           ) : (
-            <Button variant="outline" size="sm" onClick={exitCompareMode}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={compareMode ? exitCompareMode : exitBulkMode}
+            >
               <X className="h-4 w-4" />
               Cancel
             </Button>
@@ -964,6 +1027,15 @@ export default function Collection() {
             </div>
           )}
 
+          {bulkMode && (
+            <div className="mb-3 rounded-xl border border-amber-300/50 bg-amber-50/60 px-4 py-2.5 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+              {bulkStatus ??
+                (bulkSelectedIds.size === 0
+                  ? "Select up to 20 pieces to refresh their AI analysis."
+                  : `${bulkSelectedIds.size} selected${bulkSelectedIds.size === 20 ? " (max)" : ""}`)}
+            </div>
+          )}
+
           {filtered.length === 0 ? (
             <div className="py-12 text-center text-sm text-muted-foreground">
               No pieces match your search.{" "}
@@ -985,9 +1057,13 @@ export default function Collection() {
                 <PieceCard
                   key={item.id}
                   item={item}
-                  selecting={compareMode}
-                  selected={selectedIds.includes(item.id)}
-                  onToggleSelect={toggleSelect}
+                  selecting={compareMode || bulkMode}
+                  selected={
+                    bulkMode
+                      ? bulkSelectedIds.has(item.id)
+                      : selectedIds.includes(item.id)
+                  }
+                  onToggleSelect={bulkMode ? toggleBulkSelect : toggleSelect}
                   onQuickEdit={setQuickEditItem}
                   onColorFilter={(c) =>
                     setFilterColor(filterColor === c ? null : c)
@@ -1015,6 +1091,38 @@ export default function Collection() {
               <GitCompare className="h-4 w-4" />
               Compare
             </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk reanalyze floating bar */}
+      {bulkMode &&
+        bulkSelectedIds.size > 0 &&
+        !isBulkPending &&
+        !bulkStatus && (
+          <div className="fixed inset-x-0 bottom-20 z-30 flex justify-center px-4 md:bottom-6">
+            <div className="flex items-center gap-3 rounded-full border border-amber-300/60 bg-background/95 px-5 py-3 shadow-xl backdrop-blur">
+              <span className="text-sm font-medium text-muted-foreground">
+                {bulkSelectedIds.size} selected
+              </span>
+              <Button
+                size="sm"
+                onClick={runBulkReanalyze}
+                data-testid="button-bulk-reanalyze-run"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Refresh AI ({bulkSelectedIds.size})
+              </Button>
+            </div>
+          </div>
+        )}
+
+      {/* Bulk pending bar */}
+      {isBulkPending && (
+        <div className="fixed inset-x-0 bottom-20 z-30 flex justify-center px-4 md:bottom-6">
+          <div className="flex items-center gap-2 rounded-full border border-amber-300/60 bg-background/95 px-5 py-3 shadow-xl backdrop-blur">
+            <RefreshCw className="h-4 w-4 animate-spin text-amber-600" />
+            <span className="text-sm font-medium">Analysing…</span>
           </div>
         </div>
       )}

@@ -83,7 +83,9 @@ export function AppLauncher() {
 
   const displayName = user?.displayName?.trim() || user?.email || "there";
   const firstName = displayName.split(/[\s@]/)[0] || displayName;
-  const initials = initialsFrom(user?.displayName?.trim() || user?.email || "?");
+  const initials = initialsFrom(
+    user?.displayName?.trim() || user?.email || "?",
+  );
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [customizing, setCustomizing] = useState(false);
@@ -175,14 +177,22 @@ export function AppLauncher() {
       {/* Top Navigation */}
       <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" className="text-foreground" onClick={() => setSearchOpen(true)} aria-label="Open search">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-foreground"
+            onClick={() => setSearchOpen(true)}
+            aria-label="Open search"
+          >
             <Menu className="w-5 h-5" />
           </Button>
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded bg-primary flex items-center justify-center text-primary-foreground font-bold text-lg">
               B
             </div>
-            <span className="font-semibold text-xl tracking-tight text-primary">Batchelor</span>
+            <span className="font-semibold text-xl tracking-tight text-primary">
+              Batchelor
+            </span>
           </div>
         </div>
 
@@ -208,18 +218,28 @@ export function AppLauncher() {
             aria-label="Toggle dark mode"
             className="text-muted-foreground hover:text-foreground"
           >
-            {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            {isDark ? (
+              <Sun className="w-5 h-5" />
+            ) : (
+              <Moon className="w-5 h-5" />
+            )}
           </Button>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="flex items-center gap-3 pl-3 border-l border-border outline-none">
                 <div className="flex-col items-end hidden sm:flex">
-                  <span className="text-sm font-medium leading-none">{displayName}</span>
-                  <span className="text-xs text-muted-foreground">{user?.email}</span>
+                  <span className="text-sm font-medium leading-none">
+                    {displayName}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {user?.email}
+                  </span>
                 </div>
                 <Avatar className="h-9 w-9 border border-border">
-                  <AvatarFallback className="bg-primary text-primary-foreground">{initials}</AvatarFallback>
+                  <AvatarFallback className="bg-primary text-primary-foreground">
+                    {initials}
+                  </AvatarFallback>
                 </Avatar>
               </button>
             </DropdownMenuTrigger>
@@ -227,7 +247,9 @@ export function AppLauncher() {
               <DropdownMenuLabel>
                 <div className="flex flex-col">
                   <span className="font-medium">{displayName}</span>
-                  <span className="text-xs font-normal text-muted-foreground">{user?.email}</span>
+                  <span className="text-xs font-normal text-muted-foreground">
+                    {user?.email}
+                  </span>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
@@ -236,7 +258,10 @@ export function AppLauncher() {
                 Account settings
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={signOut} className="text-destructive focus:text-destructive">
+              <DropdownMenuItem
+                onSelect={signOut}
+                className="text-destructive focus:text-destructive"
+              >
                 <LogOut className="w-4 h-4 mr-2" />
                 Sign out
               </DropdownMenuItem>
@@ -266,19 +291,43 @@ export function AppLauncher() {
             ))}
           </CommandGroup>
           <CommandGroup heading="Quick actions">
-            <CommandItem value="Add Pottery piece" onSelect={() => { setSearchOpen(false); navigate(`${base}pottery/add`); }}>
+            <CommandItem
+              value="Add Pottery piece"
+              onSelect={() => {
+                setSearchOpen(false);
+                navigate(`${base}pottery/add`);
+              }}
+            >
               <Plus className="w-4 h-4 mr-2" />
               Add Pottery piece
             </CommandItem>
-            <CommandItem value="Add Fabric" onSelect={() => { setSearchOpen(false); navigate(`${base}quilting/fabrics/add`); }}>
+            <CommandItem
+              value="Add Fabric"
+              onSelect={() => {
+                setSearchOpen(false);
+                navigate(`${base}quilting/fabrics/add`);
+              }}
+            >
               <Plus className="w-4 h-4 mr-2" />
               Add Fabric
             </CommandItem>
-            <CommandItem value="Do I own this?" onSelect={() => { setSearchOpen(false); navigate(`${base}pottery/compare`); }}>
+            <CommandItem
+              value="Do I own this?"
+              onSelect={() => {
+                setSearchOpen(false);
+                navigate(`${base}pottery/compare`);
+              }}
+            >
               <Camera className="w-4 h-4 mr-2" />
               Do I own this?
             </CommandItem>
-            <CommandItem value="Shopping List" onSelect={() => { setSearchOpen(false); navigate(`${base}quilting/shopping`); }}>
+            <CommandItem
+              value="Shopping List"
+              onSelect={() => {
+                setSearchOpen(false);
+                navigate(`${base}quilting/shopping`);
+              }}
+            >
               <ShoppingBag className="w-4 h-4 mr-2" />
               Shopping List
             </CommandItem>
@@ -310,7 +359,10 @@ export function AppLauncher() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 {ADD_ACTIONS.map((a) => (
-                  <DropdownMenuItem key={a.href} onSelect={() => navigate(a.href)}>
+                  <DropdownMenuItem
+                    key={a.href}
+                    onSelect={() => navigate(a.href)}
+                  >
                     <Plus className="w-4 h-4 mr-2 text-muted-foreground" />
                     {a.label}
                   </DropdownMenuItem>
@@ -321,18 +373,25 @@ export function AppLauncher() {
             {/* Do I own this? — dropdown for pottery or quilting compare */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="secondary" className="bg-secondary text-secondary-foreground shadow-sm">
+                <Button
+                  variant="secondary"
+                  className="bg-secondary text-secondary-foreground shadow-sm"
+                >
                   <Camera className="w-4 h-4 mr-2" />
                   Do I own this?
                   <ChevronDown className="w-3.5 h-3.5 ml-1 opacity-70" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => navigate(`${base}pottery/compare`)}>
+                <DropdownMenuItem
+                  onSelect={() => navigate(`${base}pottery/compare`)}
+                >
                   <Camera className="w-4 h-4 mr-2 text-muted-foreground" />
                   Pottery piece
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => navigate(`${base}quilting/compare`)}>
+                <DropdownMenuItem
+                  onSelect={() => navigate(`${base}quilting/compare`)}
+                >
                   <Camera className="w-4 h-4 mr-2 text-muted-foreground" />
                   Fabric
                 </DropdownMenuItem>
@@ -360,11 +419,7 @@ export function AppLauncher() {
 
           <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
             {APPS.map((app) => (
-              <a
-                key={app.id}
-                href={app.href}
-                className="group block"
-              >
+              <a key={app.id} href={app.href} className="group block">
                 <Card className="h-full overflow-hidden border-border bg-card shadow-sm hover:shadow-md transition-all duration-200 flex flex-col cursor-pointer">
                   <div className="h-48 w-full relative overflow-hidden bg-muted">
                     <img
@@ -374,7 +429,9 @@ export function AppLauncher() {
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
                     <div className="absolute bottom-4 left-6 right-6 flex justify-between items-end">
-                      <h2 className="text-3xl font-bold text-white tracking-tight">{app.name}</h2>
+                      <h2 className="text-3xl font-bold text-white tracking-tight">
+                        {app.name}
+                      </h2>
                       <Badge className="bg-white/20 hover:bg-white/30 text-white backdrop-blur-md border-0">
                         {app.updated}
                       </Badge>
@@ -388,14 +445,18 @@ export function AppLauncher() {
                           key={s.label}
                           className="flex-1 flex flex-col space-y-1 p-3 rounded-lg bg-secondary/50"
                         >
-                          <span className="text-2xl font-bold text-primary">{s.value}</span>
+                          <span className="text-2xl font-bold text-primary">
+                            {s.value}
+                          </span>
                           <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
                             {s.label}
                           </span>
                         </div>
                       ))}
                     </div>
-                    <p className="text-sm text-muted-foreground leading-relaxed">{app.description}</p>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      {app.description}
+                    </p>
                   </CardContent>
 
                   <CardFooter className="p-6 pt-0 border-t border-border mt-auto bg-muted/20">
@@ -478,7 +539,9 @@ export function AppLauncher() {
                 >
                   <PlusCircle className="w-7 h-7" />
                   <span className="text-sm font-medium">
-                    {available.length === 0 ? "All widgets added" : "Add widget"}
+                    {available.length === 0
+                      ? "All widgets added"
+                      : "Add widget"}
                   </span>
                 </button>
               </PopoverTrigger>
@@ -538,10 +601,16 @@ export function AppLauncher() {
                   {item.cat.charAt(0)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{item.title}</p>
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {item.title}
+                  </p>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs font-medium text-primary">{item.cat}</span>
-                    <span className="text-[10px] text-muted-foreground">• {item.time}</span>
+                    <span className="text-xs font-medium text-primary">
+                      {item.cat}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      • {item.time}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -579,7 +648,11 @@ export function AppLauncher() {
               onClick={toggleTheme}
               className="hover:text-foreground transition-colors flex items-center gap-1"
             >
-              {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+              {isDark ? (
+                <Sun className="w-3.5 h-3.5" />
+              ) : (
+                <Moon className="w-3.5 h-3.5" />
+              )}
               {isDark ? "Light Mode" : "Dark Mode"}
             </button>
           </div>

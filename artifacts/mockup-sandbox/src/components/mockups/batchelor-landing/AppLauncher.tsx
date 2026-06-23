@@ -73,8 +73,12 @@ const WIDGETS = [
     icon: Newspaper,
     body: (
       <ul className="space-y-2 text-sm">
-        <li className="text-foreground leading-snug">Glaze chemistry: reduction firing basics</li>
-        <li className="text-muted-foreground leading-snug">5 quilt-binding techniques compared</li>
+        <li className="text-foreground leading-snug">
+          Glaze chemistry: reduction firing basics
+        </li>
+        <li className="text-muted-foreground leading-snug">
+          5 quilt-binding techniques compared
+        </li>
       </ul>
     ),
   },
@@ -113,7 +117,9 @@ export function AppLauncher() {
               <div className="w-8 h-8 rounded bg-primary flex items-center justify-center text-primary-foreground font-bold text-lg">
                 B
               </div>
-              <span className="font-semibold text-xl tracking-tight text-primary">Batchelor</span>
+              <span className="font-semibold text-xl tracking-tight text-primary">
+                Batchelor
+              </span>
             </div>
           </div>
 
@@ -138,17 +144,27 @@ export function AppLauncher() {
               aria-label="Toggle dark mode"
               className="text-muted-foreground hover:text-foreground"
             >
-              {dark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              {dark ? (
+                <Sun className="w-5 h-5" />
+              ) : (
+                <Moon className="w-5 h-5" />
+              )}
             </Button>
 
             <div className="flex items-center gap-3 pl-3 border-l border-border">
               <div className="flex-col items-end hidden sm:flex">
-                <span className="text-sm font-medium leading-none">Jonathan Batchelor</span>
-                <span className="text-xs text-muted-foreground">Maker Account</span>
+                <span className="text-sm font-medium leading-none">
+                  Jonathan Batchelor
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Maker Account
+                </span>
               </div>
               <Avatar className="h-9 w-9 border border-border">
                 <AvatarImage src="https://i.pravatar.cc/150?u=jonathan" />
-                <AvatarFallback className="bg-primary text-primary-foreground">JB</AvatarFallback>
+                <AvatarFallback className="bg-primary text-primary-foreground">
+                  JB
+                </AvatarFallback>
               </Avatar>
             </div>
           </div>
@@ -171,7 +187,10 @@ export function AppLauncher() {
                 <Plus className="w-4 h-4 mr-2" />
                 Add Item
               </Button>
-              <Button variant="secondary" className="bg-secondary text-secondary-foreground shadow-sm">
+              <Button
+                variant="secondary"
+                className="bg-secondary text-secondary-foreground shadow-sm"
+              >
                 <Camera className="w-4 h-4 mr-2" />
                 Do I own this?
               </Button>
@@ -203,7 +222,9 @@ export function AppLauncher() {
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
                     <div className="absolute bottom-4 left-6 right-6 flex justify-between items-end">
-                      <h2 className="text-3xl font-bold text-white tracking-tight">{app.name}</h2>
+                      <h2 className="text-3xl font-bold text-white tracking-tight">
+                        {app.name}
+                      </h2>
                       <Badge className="bg-white/20 hover:bg-white/30 text-white backdrop-blur-md border-0">
                         {app.updated}
                       </Badge>
@@ -217,14 +238,18 @@ export function AppLauncher() {
                           key={s.label}
                           className="flex-1 flex flex-col space-y-1 p-3 rounded-lg bg-secondary/50"
                         >
-                          <span className="text-2xl font-bold text-primary">{s.value}</span>
+                          <span className="text-2xl font-bold text-primary">
+                            {s.value}
+                          </span>
                           <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
                             {s.label}
                           </span>
                         </div>
                       ))}
                     </div>
-                    <p className="text-sm text-muted-foreground leading-relaxed">{app.description}</p>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      {app.description}
+                    </p>
                   </CardContent>
 
                   <CardFooter className="p-6 pt-0 border-t border-border mt-auto bg-muted/20">
@@ -254,7 +279,11 @@ export function AppLauncher() {
                 <LayoutGrid className="w-5 h-5 text-primary" />
                 <h3 className="text-lg">Widgets</h3>
               </div>
-              <Button variant="ghost" size="sm" className="text-muted-foreground">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+              >
                 Customize
               </Button>
             </div>
@@ -291,17 +320,37 @@ export function AppLauncher() {
                 <Activity className="w-5 h-5 text-primary" />
                 <h3 className="text-lg">Recent Activity</h3>
               </div>
-              <Button variant="ghost" size="sm" className="text-muted-foreground">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+              >
                 View all
               </Button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { title: "Added 'Speckled Mug'", cat: "Pottery", time: "2 hours ago" },
-                { title: "Updated Fabric Stash", cat: "Quilting", time: "Yesterday" },
-                { title: "Added 'Large Serving Bowl'", cat: "Pottery", time: "2 days ago" },
-                { title: "Completed 'Star Pattern'", cat: "Quilting", time: "Last week" },
+                {
+                  title: "Added 'Speckled Mug'",
+                  cat: "Pottery",
+                  time: "2 hours ago",
+                },
+                {
+                  title: "Updated Fabric Stash",
+                  cat: "Quilting",
+                  time: "Yesterday",
+                },
+                {
+                  title: "Added 'Large Serving Bowl'",
+                  cat: "Pottery",
+                  time: "2 days ago",
+                },
+                {
+                  title: "Completed 'Star Pattern'",
+                  cat: "Quilting",
+                  time: "Last week",
+                },
               ].map((item, i) => (
                 <div
                   key={i}
@@ -311,10 +360,16 @@ export function AppLauncher() {
                     {item.cat.charAt(0)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">{item.title}</p>
+                    <p className="text-sm font-medium text-foreground truncate">
+                      {item.title}
+                    </p>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs font-medium text-primary">{item.cat}</span>
-                      <span className="text-[10px] text-muted-foreground">• {item.time}</span>
+                      <span className="text-xs font-medium text-primary">
+                        {item.cat}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        • {item.time}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -346,7 +401,11 @@ export function AppLauncher() {
                 onClick={() => setDark((d) => !d)}
                 className="hover:text-foreground transition-colors flex items-center gap-1"
               >
-                {dark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+                {dark ? (
+                  <Sun className="w-3.5 h-3.5" />
+                ) : (
+                  <Moon className="w-3.5 h-3.5" />
+                )}
                 {dark ? "Light Mode" : "Dark Mode"}
               </button>
             </div>

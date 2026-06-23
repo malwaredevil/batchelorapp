@@ -1,11 +1,5 @@
 import { registerFeature } from "./registry";
-import {
-  LayoutGrid,
-  PlusCircle,
-  ScanSearch,
-  Tag,
-  Wrench,
-} from "lucide-react";
+import { LayoutGrid, PlusCircle, ScanSearch, Tag, Wrench } from "lucide-react";
 
 // ── Main ────────────────────────────────────────────────────────────────────
 
@@ -65,4 +59,3 @@ registerFeature({
     order: 20,
   },
 });
-

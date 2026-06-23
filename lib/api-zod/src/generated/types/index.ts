@@ -34,6 +34,8 @@ export * from './potteryMatchResultSamePattern';
 export * from './potteryMergeCategoryInput';
 export * from './potteryMessageResponse';
 export * from './potteryMotifCount';
+export * from './potteryPotteryBulkReanalyzeInput';
+export * from './potteryPotteryBulkReanalyzeResult';
 export * from './potteryPotteryImage';
 export * from './potteryPotteryImageUpdate';
 export * from './potteryPotteryItem';

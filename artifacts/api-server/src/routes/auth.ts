@@ -153,8 +153,7 @@ router.patch("/auth/me", requireAuth, async (req, res) => {
   }
   if (parsed.data.themePreference !== undefined) {
     const theme = parsed.data.themePreference;
-    updates.themePreference =
-      theme && VALID_THEMES.has(theme) ? theme : null;
+    updates.themePreference = theme && VALID_THEMES.has(theme) ? theme : null;
   }
 
   let user;

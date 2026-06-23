@@ -394,6 +394,24 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /pottery/items/bulk-reanalyze:
+    post:
+      operationId: bulkReanalyzePottery
+      tags: [pottery]
+      summary: Re-run AI analysis on multiple pottery pieces
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PotteryBulkReanalyzeInput"
+      responses:
+        "200":
+          description: Bulk reanalysis results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PotteryBulkReanalyzeResult"
   /pottery/{id}/set-primary-image:
     post:
       operationId: setPrimaryImage
@@ -946,6 +964,27 @@ components:
         ownsExactPiece:
           type: string
           enum: [yes, maybe, no]
+    PotteryBulkReanalyzeInput:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          items:
+            type: integer
+          maxItems: 20
+    PotteryBulkReanalyzeResult:
+      type: object
+      required: [succeeded, failed]
+      properties:
+        succeeded:
+          type: array
+          items:
+            type: integer
+        failed:
+          type: array
+          items:
+            type: integer
     MotifCount:
       type: object
       required: [label, count]

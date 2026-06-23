@@ -253,6 +253,16 @@ export interface PotteryCompareResult {
   ownsExactPiece: PotteryCompareResultOwnsExactPiece;
 }
 
+export interface PotteryPotteryBulkReanalyzeInput {
+  /** @maxItems 20 */
+  ids: number[];
+}
+
+export interface PotteryPotteryBulkReanalyzeResult {
+  succeeded: number[];
+  failed: number[];
+}
+
 export interface PotteryMotifCount {
   label: string;
   count: number;

@@ -106,11 +106,14 @@ export function useRelabelPotteryImage(itemId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: { imageId: number; label: string | null }) => {
-      const res = await fetch(`/api/pottery/items/${itemId}/images/${data.imageId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label: data.label }),
-      });
+      const res = await fetch(
+        `/api/pottery/items/${itemId}/images/${data.imageId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ label: data.label }),
+        },
+      );
       if (!res.ok) {
         const e = await res.json().catch(() => ({}));
         throw new Error(e.error || "Update failed");
@@ -130,9 +133,12 @@ export function useRemovePotteryImage(itemId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (imageId: number) => {
-      const res = await fetch(`/api/pottery/items/${itemId}/images/${imageId}`, {
-        method: "DELETE",
-      });
+      const res = await fetch(
+        `/api/pottery/items/${itemId}/images/${imageId}`,
+        {
+          method: "DELETE",
+        },
+      );
       if (!res.ok && res.status !== 204) {
         const e = await res.json().catch(() => ({}));
         throw new Error(e.error || "Delete failed");

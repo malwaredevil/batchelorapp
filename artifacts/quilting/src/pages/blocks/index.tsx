@@ -110,9 +110,7 @@ function SvgCell({
 
   switch (p.kind) {
     case "solid":
-      return (
-        <rect x={x} y={y} width={w} height={h} fill={rf(p.color)} />
-      );
+      return <rect x={x} y={y} width={w} height={h} fill={rf(p.color)} />;
 
     case "triangle": {
       // nwse: diagonal from top-left → bottom-right; A = upper-right tri, B = lower-left tri
@@ -172,7 +170,13 @@ function SvgCell({
       return (
         <g>
           <rect x={x} y={y} width={w} height={h / 2} fill={rf(p.top)} />
-          <rect x={x} y={y + h / 2} width={w} height={h / 2} fill={rf(p.bottom)} />
+          <rect
+            x={x}
+            y={y + h / 2}
+            width={w}
+            height={h / 2}
+            fill={rf(p.bottom)}
+          />
         </g>
       );
 
@@ -180,7 +184,13 @@ function SvgCell({
       return (
         <g>
           <rect x={x} y={y} width={w / 2} height={h} fill={rf(p.left)} />
-          <rect x={x + w / 2} y={y} width={w / 2} height={h} fill={rf(p.right)} />
+          <rect
+            x={x + w / 2}
+            y={y}
+            width={w / 2}
+            height={h}
+            fill={rf(p.right)}
+          />
         </g>
       );
 
@@ -188,8 +198,20 @@ function SvgCell({
       return (
         <g>
           <rect x={x} y={y} width={w / 2} height={h / 2} fill={rf(p.tl)} />
-          <rect x={x + w / 2} y={y} width={w / 2} height={h / 2} fill={rf(p.tr)} />
-          <rect x={x} y={y + h / 2} width={w / 2} height={h / 2} fill={rf(p.bl)} />
+          <rect
+            x={x + w / 2}
+            y={y}
+            width={w / 2}
+            height={h / 2}
+            fill={rf(p.tr)}
+          />
+          <rect
+            x={x}
+            y={y + h / 2}
+            width={w / 2}
+            height={h / 2}
+            fill={rf(p.bl)}
+          />
           <rect
             x={x + w / 2}
             y={y + h / 2}
@@ -306,11 +328,17 @@ function BlockPreviewSvg({
               key={id}
               id={`fab-${id}`}
               patternUnits="userSpaceOnUse"
-              x="0" y="0" width={cellPx} height={cellPx}
+              x="0"
+              y="0"
+              width={cellPx}
+              height={cellPx}
             >
               <image
                 href={fabricUrlMap[id]}
-                x="0" y="0" width={cellPx} height={cellPx}
+                x="0"
+                y="0"
+                width={cellPx}
+                height={cellPx}
                 preserveAspectRatio="xMidYMid slice"
               />
             </pattern>

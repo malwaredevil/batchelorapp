@@ -52,7 +52,10 @@ function deepClone<T>(value: T): T {
 }
 
 /** Collect all schema names referenced (transitively) starting from a node. */
-function collectSchemaRefs(node: Json, allSchemas: Record<string, Json>): Set<string> {
+function collectSchemaRefs(
+  node: Json,
+  allSchemas: Record<string, Json>,
+): Set<string> {
   const found = new Set<string>();
 
   const visitRefName = (name: string) => {
@@ -149,7 +152,11 @@ function collectSharedOpIds(paths: Record<string, Json>): Set<string> {
 function applyOpIdRenames(pathItem: Json, renames: Map<string, string>): void {
   for (const [method, op] of Object.entries(pathItem)) {
     if (!HTTP_METHODS.has(method)) continue;
-    if (op && typeof op === "object" && typeof (op as Json).operationId === "string") {
+    if (
+      op &&
+      typeof op === "object" &&
+      typeof (op as Json).operationId === "string"
+    ) {
       const cur = (op as Json).operationId as string;
       if (renames.has(cur)) {
         (op as Json).operationId = renames.get(cur);
@@ -165,7 +172,8 @@ function applyOpIdRenames(pathItem: Json, renames: Map<string, string>): void {
 function remapPotteryPath(p: string): string {
   if (p === "/pottery") return "/pottery/items";
   if (p === "/pottery/stragglers") return "/pottery/items/stragglers";
-  if (p.startsWith("/pottery/")) return "/pottery/items" + p.slice("/pottery".length);
+  if (p.startsWith("/pottery/"))
+    return "/pottery/items" + p.slice("/pottery".length);
   return "/pottery" + p;
 }
 
@@ -185,12 +193,16 @@ function main(): void {
   const pottery = loadSpec("pottery.yaml");
   const quilting = loadSpec("quilting.yaml");
 
-  const potterySchemas: Record<string, Json> = (pottery.components?.schemas ?? {}) as Json;
-  const quiltingSchemas: Record<string, Json> = (quilting.components?.schemas ?? {}) as Json;
+  const potterySchemas: Record<string, Json> = (pottery.components?.schemas ??
+    {}) as Json;
+  const quiltingSchemas: Record<string, Json> = (quilting.components?.schemas ??
+    {}) as Json;
 
   // ----- Shared schema set: transitive closure of refs from quilting shared paths
   const sharedSchemaNames = new Set<string>();
-  for (const [p, item] of Object.entries(quilting.paths as Record<string, Json>)) {
+  for (const [p, item] of Object.entries(
+    quilting.paths as Record<string, Json>,
+  )) {
     if (!SHARED_PATHS.has(p)) continue;
     for (const name of collectSchemaRefs(item, quiltingSchemas)) {
       sharedSchemaNames.add(name);
@@ -249,7 +261,9 @@ function main(): void {
   const outPaths: Record<string, Json> = out.paths;
 
   // Shared paths (from quilting, unchanged)
-  for (const [p, item] of Object.entries(quilting.paths as Record<string, Json>)) {
+  for (const [p, item] of Object.entries(
+    quilting.paths as Record<string, Json>,
+  )) {
     if (!SHARED_PATHS.has(p)) continue;
     if (outPaths[p] !== undefined) {
       throw new Error(`Duplicate shared path key: ${p}`);
@@ -258,7 +272,9 @@ function main(): void {
   }
 
   // Pottery feature paths
-  for (const [p, item] of Object.entries(pottery.paths as Record<string, Json>)) {
+  for (const [p, item] of Object.entries(
+    pottery.paths as Record<string, Json>,
+  )) {
     if (SHARED_PATHS.has(p)) continue;
     const newPath = remapPotteryPath(p);
     const cloned = deepClone(item);
@@ -271,7 +287,9 @@ function main(): void {
   }
 
   // Quilting feature paths
-  for (const [p, item] of Object.entries(quilting.paths as Record<string, Json>)) {
+  for (const [p, item] of Object.entries(
+    quilting.paths as Record<string, Json>,
+  )) {
     if (SHARED_PATHS.has(p)) continue;
     const newPath = remapQuiltingPath(p);
     const cloned = deepClone(item);
@@ -322,8 +340,10 @@ function main(): void {
 
   // ----- Components: parameters (shared once from quilting; pottery has none)
   const outParameters: Record<string, Json> = {};
-  const quiltingParameters: Record<string, Json> = (quilting.components?.parameters ?? {}) as Json;
-  const potteryParameters: Record<string, Json> = (pottery.components?.parameters ?? {}) as Json;
+  const quiltingParameters: Record<string, Json> = (quilting.components
+    ?.parameters ?? {}) as Json;
+  const potteryParameters: Record<string, Json> = (pottery.components
+    ?.parameters ?? {}) as Json;
   for (const [name, param] of Object.entries(quiltingParameters)) {
     outParameters[name] = deepClone(param);
   }

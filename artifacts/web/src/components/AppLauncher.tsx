@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  Menu,
   Search,
   Plus,
   Camera,
@@ -18,6 +17,7 @@ import {
   ChevronDown,
   Info,
 } from "lucide-react";
+import { AppSwitcher } from "@/components/app-switcher";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -181,25 +181,7 @@ export function AppLauncher() {
     <div className="min-h-screen bg-background text-foreground font-sans flex flex-col">
       {/* Top Navigation */}
       <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-foreground"
-            onClick={() => setSearchOpen(true)}
-            aria-label="Open search"
-          >
-            <Menu className="w-5 h-5" />
-          </Button>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded bg-primary flex items-center justify-center text-primary-foreground font-bold text-lg">
-              B
-            </div>
-            <span className="font-semibold text-xl tracking-tight text-primary">
-              Batchelor
-            </span>
-          </div>
-        </div>
+        <AppSwitcher />
 
         <div className="flex items-center gap-3">
           <Button

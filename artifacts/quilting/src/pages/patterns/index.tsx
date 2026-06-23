@@ -36,6 +36,7 @@ import {
   useBulkReanalyzePatterns,
   getListPatternsQueryKey,
   getGetPatternQueryKey,
+  useGetStats,
 } from "@workspace/api-client-react";
 import { downloadCollectionImage } from "@/lib/svg-export";
 
@@ -384,8 +385,27 @@ export default function Patterns() {
     sourceTypeFilter !== null ||
     categoryFilter !== null;
 
+  const { data: stats } = useGetStats();
+
   return (
     <div>
+      {stats && (
+        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[
+            { label: "Fabrics", value: stats.totalFabrics, sub: "in stash" },
+            { label: "Patterns", value: stats.totalPatterns, sub: "saved" },
+            { label: "Quilts", value: stats.totalQuilts, sub: "in collection" },
+            { label: "Layouts", value: stats.totalLayouts, sub: "designs" },
+          ].map(({ label, value, sub }) => (
+            <div key={label} className="rounded-xl border border-card-border bg-card p-4">
+              <p className="text-2xl font-bold text-foreground">{value}</p>
+              <p className="text-sm font-medium text-foreground mt-0.5">{label}</p>
+              <p className="text-xs text-muted-foreground">{sub}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Patterns</h1>

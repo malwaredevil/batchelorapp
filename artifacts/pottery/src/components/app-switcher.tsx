@@ -144,7 +144,7 @@ export function AppSwitcher() {
         <DropdownMenuItem
           className="flex items-center gap-3 px-2 py-2.5 cursor-pointer"
           onSelect={() => {
-            window.location.href = "/quilting";
+            window.location.href = "/quilting/";
           }}
         >
           <QuiltingLogo className="h-8 w-8 shrink-0" />

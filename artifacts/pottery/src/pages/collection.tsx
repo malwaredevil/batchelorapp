@@ -342,11 +342,13 @@ function PieceCard({
 function StatBar({
   filteredItems,
   totalCount,
+  categoriesCount,
 }: {
   filteredItems: PotteryItem[];
   totalCount: number;
+  categoriesCount: number;
 }) {
-  const motifs = useMemo(() => topMotifs(filteredItems, 4), [filteredItems]);
+  const motifs = useMemo(() => topMotifs(filteredItems, 3), [filteredItems]);
   if (totalCount === 0) return null;
 
   const totalQuantity = filteredItems.reduce(
@@ -356,34 +358,41 @@ function StatBar({
   const isFiltered = filteredItems.length !== totalCount;
 
   return (
-    <div className="mb-4 grid grid-cols-3 gap-3">
-      <div className="rounded-xl border border-card-border bg-card p-3">
-        <p className="text-2xl font-semibold" data-testid="text-total-items">
+    <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="rounded-xl border border-card-border bg-card p-4">
+        <p className="text-2xl font-bold" data-testid="text-total-items">
           {totalQuantity}
         </p>
+        <p className="text-sm font-medium mt-0.5">
+          {totalQuantity === 1 ? "Piece" : "Pieces"}
+        </p>
         <p className="text-xs text-muted-foreground">
-          total {totalQuantity === 1 ? "piece" : "pieces"}
+          total owned
           {isFiltered && (
             <span className="ml-1 text-muted-foreground/60">filtered</span>
           )}
         </p>
       </div>
-      <div className="rounded-xl border border-card-border bg-card p-3">
-        <p className="text-2xl font-semibold">
+      <div className="rounded-xl border border-card-border bg-card p-4">
+        <p className="text-2xl font-bold">
           {filteredItems.length}
         </p>
+        <p className="text-sm font-medium mt-0.5">Unique</p>
         <p className="text-xs text-muted-foreground">
-          unique {filteredItems.length === 1 ? "piece" : "pieces"}
+          distinct items
           {isFiltered && (
             <span className="ml-1 text-muted-foreground/60">filtered</span>
           )}
         </p>
       </div>
-      <div className="rounded-xl border border-card-border bg-card p-3">
-        <p className="mb-1 text-xs font-medium text-muted-foreground">
-          Common motifs
-        </p>
-        <p className="truncate text-sm">
+      <div className="rounded-xl border border-card-border bg-card p-4">
+        <p className="text-2xl font-bold">{categoriesCount}</p>
+        <p className="text-sm font-medium mt-0.5">Categories</p>
+        <p className="text-xs text-muted-foreground">in collection</p>
+      </div>
+      <div className="rounded-xl border border-card-border bg-card p-4">
+        <p className="text-sm font-medium mb-1">Top motifs</p>
+        <p className="truncate text-xs text-muted-foreground">
           {motifs.length ? motifs.map((m) => m.label).join(" · ") : "—"}
         </p>
       </div>
@@ -814,9 +823,11 @@ export default function Collection() {
 
       {isLoading ? (
         <>
-          <div className="mb-4 grid grid-cols-3 gap-3">
-            <Skeleton className="h-[68px] rounded-xl" />
-            <Skeleton className="col-span-2 h-[68px] rounded-xl" />
+          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Skeleton className="h-[88px] rounded-xl" />
+            <Skeleton className="h-[88px] rounded-xl" />
+            <Skeleton className="h-[88px] rounded-xl" />
+            <Skeleton className="h-[88px] rounded-xl" />
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -832,7 +843,7 @@ export default function Collection() {
         <EmptyState />
       ) : (
         <>
-          <StatBar filteredItems={filtered} totalCount={data.length} />
+          <StatBar filteredItems={filtered} totalCount={data.length} categoriesCount={usedCategories.length} />
 
           {/* Search + Sort */}
           <div className="mb-3 flex gap-2">

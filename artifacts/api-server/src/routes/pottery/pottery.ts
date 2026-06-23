@@ -338,6 +338,9 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
       );
     }
 
+    // Auto-assign (or remove) the "Duplicate" category based on quantity.
+    await syncDuplicateCategory(row.id, row.quantity);
+
     res.status(201).json(GetPotteryResponse.parse(await serializeItem(row)));
   } catch (err) {
     await deleteImage(imagePath).catch(() => {});
@@ -419,6 +422,11 @@ router.patch("/items/:id", async (req, res) => {
       }
     });
   }
+
+  // Re-sync the "Duplicate" category based on the item's current quantity.
+  // Runs after any category replacement so it always wins, even if the user
+  // didn't include "Duplicate" in their categoryIds list.
+  await syncDuplicateCategory(id, row.quantity);
 
   res.json(UpdatePotteryResponse.parse(await serializeItem(row)));
 });
@@ -687,6 +695,44 @@ router.delete("/items/:id/images/:imageId", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Duplicate-category sync — purely data-driven, no AI needed
+// ---------------------------------------------------------------------------
+
+/**
+ * Ensures the "Duplicate" category (matched case-insensitively by name) is
+ * assigned to or removed from a pottery item based solely on its quantity.
+ *
+ *   quantity > 1  → guarantee the association exists (INSERT … ON CONFLICT DO NOTHING)
+ *   quantity <= 1 → guarantee the association is absent (DELETE if present)
+ *
+ * If no category named "Duplicate" exists, this is a no-op.
+ */
+async function syncDuplicateCategory(itemId: number, quantity: number): Promise<void> {
+  const [dupCat] = await db
+    .select({ id: categories.id })
+    .from(categories)
+    .where(sql`lower(${categories.name}) = 'duplicate'`)
+    .limit(1);
+  if (!dupCat) return;
+
+  if (quantity > 1) {
+    await db
+      .insert(itemCategories)
+      .values({ itemId, categoryId: dupCat.id })
+      .onConflictDoNothing();
+  } else {
+    await db
+      .delete(itemCategories)
+      .where(
+        and(
+          eq(itemCategories.itemId, itemId),
+          eq(itemCategories.categoryId, dupCat.id),
+        ),
+      );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Shared AI analysis pipeline — used by both reanalyze and set-primary-image
 // ---------------------------------------------------------------------------
 
@@ -849,6 +895,10 @@ async function runItemAnalysis(id: number, userId: number): Promise<unknown> {
       .insert(itemCategories)
       .values(newCatIds.map((catId) => ({ itemId: id, categoryId: catId })));
   }
+
+  // Sync the "Duplicate" category based on quantity (unchanged by reanalysis,
+  // but the category may have been manually removed — re-assert it here).
+  await syncDuplicateCategory(id, item.quantity);
 
   return GetPotteryResponse.parse(await serializeItem(updated));
 }

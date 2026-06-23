@@ -3,16 +3,17 @@ import { env } from "./env";
 
 /**
  * Named model pairs for best-of-breed routing.
- * Via OpenRouter → Gemini Flash (fast, cheap, excellent vision).
- * Direct OpenAI fallback when OPENROUTER_API_KEY is absent or on 429/503.
+ * Via OpenRouter → openrouter/auto (OpenRouter picks the best available model
+ * for each request; avoids hardcoding a specific model that may lack access).
+ * Direct OpenAI fallback when OPENROUTER_API_KEY is absent or OpenRouter fails.
  */
 export const MODELS = {
   FAST_VISION: {
-    openrouter: "google/gemini-2.0-flash-001",
+    openrouter: "openrouter/auto",
     openai: "gpt-4o-mini",
   },
   SMART_VISION: {
-    openrouter: "google/gemini-2.0-flash-001",
+    openrouter: "openrouter/auto",
     openai: "gpt-4o",
   },
 } as const;

@@ -277,13 +277,7 @@ export default function FabricDetail() {
     if (!renameValue.trim()) return;
     updateFabric.mutate(
       { id: fabricId, data: { name: renameValue.trim() } },
-      {
-        onSuccess: () => {
-          setRenamingName(false);
-          toast.success("Renamed");
-        },
-        onError: () => toast.error("Failed to rename."),
-      },
+      { onSuccess: () => setRenamingName(false) },
     );
   }
 

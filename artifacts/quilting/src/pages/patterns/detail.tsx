@@ -257,13 +257,7 @@ export default function PatternDetail() {
     if (!renameValue.trim()) return;
     updatePattern.mutate(
       { id: patternId, data: { name: renameValue.trim() } },
-      {
-        onSuccess: () => {
-          setRenamingName(false);
-          toast.success("Renamed");
-        },
-        onError: () => toast.error("Failed to rename."),
-      },
+      { onSuccess: () => setRenamingName(false) },
     );
   }
 

@@ -207,13 +207,7 @@ export default function QuiltDetail() {
     if (!renameValue.trim()) return;
     updateQuilt.mutate(
       { id: quiltId, data: { name: renameValue.trim() } },
-      {
-        onSuccess: () => {
-          setRenamingName(false);
-          toast.success("Renamed");
-        },
-        onError: () => toast.error("Failed to rename."),
-      },
+      { onSuccess: () => setRenamingName(false) },
     );
   }
 

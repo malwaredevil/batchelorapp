@@ -9,6 +9,7 @@ import {
   X,
   ExternalLink,
   Download,
+  Sliders,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -473,6 +474,7 @@ function LayoutGrid({
   selectedCell,
   onCellClick,
   fabricUrlMap = {},
+  imageFilter,
 }: {
   rows: number;
   cols: number;
@@ -487,6 +489,7 @@ function LayoutGrid({
   selectedCell: number | null;
   onCellClick: (idx: number) => void;
   fabricUrlMap?: Record<number, string>;
+  imageFilter?: string;
 }) {
   const totalW = borderPx * 2 + cols * cellPx + (cols - 1) * sashPx;
   const totalH = borderPx * 2 + rows * cellPx + (rows - 1) * sashPx;
@@ -550,6 +553,7 @@ function LayoutGrid({
                 width={tilePx}
                 height={tilePx}
                 preserveAspectRatio="xMidYMid slice"
+                style={imageFilter ? { filter: imageFilter } : undefined}
               />
             </pattern>
           ))}
@@ -809,6 +813,39 @@ export default function LayoutComposer() {
   const [activeFabricPicker, setActiveFabricPicker] = useState<
     null | "sashing" | "border" | "cornerstone"
   >(null);
+
+  // View controls (brightness / contrast / saturation) — preview only, persisted to localStorage
+  const [viewFilter, setViewFilter] = useState<{
+    brightness: number;
+    contrast: number;
+    saturation: number;
+  }>(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem("qlc-view-filter") ?? "{}");
+      return {
+        brightness: typeof v.brightness === "number" ? v.brightness : 100,
+        contrast: typeof v.contrast === "number" ? v.contrast : 100,
+        saturation: typeof v.saturation === "number" ? v.saturation : 100,
+      };
+    } catch {
+      return { brightness: 100, contrast: 100, saturation: 100 };
+    }
+  });
+  const [viewControlsOpen, setViewControlsOpen] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem("qlc-view-filter", JSON.stringify(viewFilter));
+  }, [viewFilter]);
+
+  const imageFilter = useMemo(
+    () =>
+      viewFilter.brightness === 100 &&
+      viewFilter.contrast === 100 &&
+      viewFilter.saturation === 100
+        ? undefined
+        : `brightness(${viewFilter.brightness}%) contrast(${viewFilter.contrast}%) saturate(${viewFilter.saturation}%)`,
+    [viewFilter],
+  );
 
   // Unsaved-changes guard
   const [isDirty, setIsDirty] = useState(false);
@@ -1147,6 +1184,77 @@ export default function LayoutComposer() {
               </Button>
             );
           })()}
+          {/* View adjustments */}
+          <div className="relative">
+            <Button
+              variant={viewControlsOpen ? "secondary" : "outline"}
+              size="sm"
+              onClick={() => setViewControlsOpen((v) => !v)}
+            >
+              <Sliders className="mr-1.5 h-3.5 w-3.5" />
+              View
+              {imageFilter && (
+                <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-primary" />
+              )}
+            </Button>
+            {viewControlsOpen && (
+              <div className="absolute right-0 top-full z-30 mt-1.5 w-64 rounded-xl border border-border bg-popover p-4 shadow-lg">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-xs font-semibold">View adjustments</p>
+                  {imageFilter && (
+                    <button
+                      className="text-[10px] text-muted-foreground hover:text-foreground"
+                      onClick={() =>
+                        setViewFilter({
+                          brightness: 100,
+                          contrast: 100,
+                          saturation: 100,
+                        })
+                      }
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+                {(
+                  [
+                    { key: "brightness", label: "Brightness", min: 50, max: 150 },
+                    { key: "contrast", label: "Contrast", min: 50, max: 150 },
+                    { key: "saturation", label: "Saturation", min: 0, max: 200 },
+                  ] as const
+                ).map(({ key, label, min, max }) => (
+                  <div key={key} className="mb-3 last:mb-0">
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">
+                        {label}
+                      </span>
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {viewFilter[key]}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={min}
+                      max={max}
+                      step={5}
+                      value={viewFilter[key]}
+                      onChange={(e) =>
+                        setViewFilter((prev) => ({
+                          ...prev,
+                          [key]: Number(e.target.value),
+                        }))
+                      }
+                      className="h-1.5 w-full cursor-pointer accent-primary"
+                    />
+                  </div>
+                ))}
+                <p className="mt-1 text-[10px] text-muted-foreground/60">
+                  Preview only — doesn't affect saved images
+                </p>
+              </div>
+            )}
+          </div>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm">
@@ -1559,6 +1667,7 @@ export default function LayoutComposer() {
               selectedCell={selectedCell}
               onCellClick={handleCellClick}
               fabricUrlMap={fabricUrlMap}
+              imageFilter={imageFilter}
             />
           </div>
 

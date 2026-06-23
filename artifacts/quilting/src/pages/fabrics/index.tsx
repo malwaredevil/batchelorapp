@@ -37,7 +37,7 @@ import {
   getGetFabricQueryKey,
 } from "@workspace/api-client-react";
 import { downloadCollectionImage } from "@/lib/svg-export";
-import { colorToHex } from "@workspace/web-core";
+import { colorToHex, getCategoryPalette } from "@workspace/web-core";
 
 type SortOption = "newest" | "oldest" | "az" | "za";
 
@@ -150,11 +150,13 @@ function FabricCard({
                   e.stopPropagation();
                   onFilterByCategory?.(cat.id);
                 }}
-                className="rounded-full px-2 py-0.5 text-[10px] font-medium leading-tight transition-all hover:ring-2 hover:ring-primary/50 cursor-pointer"
-                style={{
-                  backgroundColor: cat.bgColor ?? "#e5e7eb",
-                  color: cat.textColor ?? "#374151",
-                }}
+                className="rounded-full px-2 py-0.5 text-[10px] font-medium leading-tight transition-all hover:opacity-80 cursor-pointer"
+                style={(() => {
+                  const p = cat.bgColor
+                    ? { bgColor: cat.bgColor, textColor: cat.textColor ?? "#fff" }
+                    : getCategoryPalette(cat.name);
+                  return { backgroundColor: p.bgColor, color: p.textColor };
+                })()}
               >
                 {cat.name}
               </button>
@@ -572,22 +574,18 @@ export default function Fabrics() {
                   onClick={() =>
                     setCategoryFilter(categoryFilter === cat.id ? null : cat.id)
                   }
-                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                    categoryFilter === cat.id
-                      ? "ring-2 ring-primary ring-offset-1"
-                      : "opacity-80 hover:opacity-100"
-                  }`}
-                  style={
-                    cat.bgColor
-                      ? {
-                          backgroundColor: cat.bgColor,
-                          color: cat.textColor ?? undefined,
-                        }
-                      : {
-                          backgroundColor: "hsl(var(--muted))",
-                          color: "hsl(var(--muted-foreground))",
-                        }
-                  }
+                  className="rounded-full border px-3 py-1 text-xs font-medium transition"
+                  style={(() => {
+                    const palette = cat.bgColor
+                      ? { bgColor: cat.bgColor, textColor: cat.textColor ?? "#fff" }
+                      : getCategoryPalette(cat.name);
+                    const active = categoryFilter === cat.id;
+                    return {
+                      backgroundColor: active ? palette.bgColor : "transparent",
+                      color: active ? palette.textColor : palette.bgColor,
+                      borderColor: palette.bgColor,
+                    };
+                  })()}
                 >
                   {cat.name}
                 </button>

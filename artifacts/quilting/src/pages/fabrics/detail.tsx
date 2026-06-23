@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { getCategoryPalette } from "@workspace/web-core";
 import { toast } from "sonner";
 import {
   useGetFabric,
@@ -704,14 +705,14 @@ export default function FabricDetail() {
                   {f.categories.map((cat) => (
                     <Badge
                       key={cat.id}
-                      style={
-                        cat.bgColor
-                          ? {
-                              backgroundColor: cat.bgColor,
-                              color: cat.textColor ?? undefined,
-                            }
-                          : undefined
-                      }
+                      variant="outline"
+                      className="border-transparent"
+                      style={(() => {
+                        const p = cat.bgColor
+                          ? { bgColor: cat.bgColor, textColor: cat.textColor ?? "#fff" }
+                          : getCategoryPalette(cat.name);
+                        return { backgroundColor: p.bgColor, color: p.textColor };
+                      })()}
                     >
                       {cat.name}
                     </Badge>

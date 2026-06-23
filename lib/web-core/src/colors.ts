@@ -288,6 +288,23 @@ export function autoTextColor(bgHex: string): string {
 }
 
 /**
+ * Deterministically pick a background + text colour pair for a category that
+ * has no manually-assigned colour. Uses a simple string hash to index into
+ * CATEGORY_BG_PALETTE so the same name always maps to the same colour.
+ */
+export function getCategoryPalette(name: string): {
+  bgColor: string;
+  textColor: string;
+} {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = ((hash * 31) + name.charCodeAt(i)) >>> 0;
+  }
+  const bgColor = CATEGORY_BG_PALETTE[hash % CATEGORY_BG_PALETTE.length];
+  return { bgColor, textColor: autoTextColor(bgColor) };
+}
+
+/**
  * Pick a deterministic-ish but varied background colour for a new category.
  * Uses the category count so successive new categories rotate through the palette.
  */

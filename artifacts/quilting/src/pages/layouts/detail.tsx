@@ -1,6 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, ZoomIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { svgCellStr } from "@/lib/svg-export";
 import { fmtInch } from "@/lib/cell-parser";
 import { buildFabricUrlMap } from "@/components/FabricPicker";
+import { PreviewZoomModal } from "@/components/PreviewZoomModal";
 
 type BlockSeamLine = {
   axis: "h" | "v";
@@ -62,6 +63,7 @@ export default function LayoutDetail() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const layoutId = Number(id);
+  const [zoomOpen, setZoomOpen] = useState(false);
 
   const {
     data: layout,
@@ -191,7 +193,10 @@ export default function LayoutDetail() {
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* Left: layout SVG preview */}
-        <div className="flex aspect-square items-center justify-center overflow-hidden rounded-2xl border border-card-border bg-white p-4">
+        <div
+          className={`relative flex aspect-square items-center justify-center overflow-hidden rounded-2xl border border-card-border bg-white p-4 group${svgDataUrl ? " cursor-zoom-in" : ""}`}
+          onClick={() => svgDataUrl && setZoomOpen(true)}
+        >
           {svgDataUrl ? (
             <img
               src={svgDataUrl}
@@ -200,6 +205,11 @@ export default function LayoutDetail() {
             />
           ) : (
             <div className="text-xs text-muted-foreground">No preview</div>
+          )}
+          {svgDataUrl && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/20 group-hover:opacity-100">
+              <ZoomIn className="h-10 w-10 text-white drop-shadow-lg" />
+            </div>
           )}
         </div>
 
@@ -306,6 +316,16 @@ export default function LayoutDetail() {
           )}
         </div>
       </div>
+      {svgDataUrl && (
+        <PreviewZoomModal open={zoomOpen} onClose={() => setZoomOpen(false)} title={l.name}>
+          <img
+            src={svgDataUrl}
+            alt={l.name}
+            className="max-h-[85vh] max-w-[85vw] object-contain"
+            draggable={false}
+          />
+        </PreviewZoomModal>
+      )}
     </div>
   );
 }

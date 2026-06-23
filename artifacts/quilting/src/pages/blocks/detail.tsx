@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Pencil, Trash2, Scissors } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, Scissors, ZoomIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -15,12 +16,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { buildBlockSvgString } from "@/lib/svg-export";
 import { fmtInch } from "@/lib/cell-parser";
 import { buildFabricUrlMap } from "@/components/FabricPicker";
+import { PreviewZoomModal } from "@/components/PreviewZoomModal";
 
 export default function BlockDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const blockId = Number(id);
+  const [zoomOpen, setZoomOpen] = useState(false);
 
   const {
     data: block,
@@ -103,12 +106,18 @@ export default function BlockDetail() {
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* Left: block SVG preview */}
-        <div className="flex aspect-square items-center justify-center overflow-hidden rounded-2xl border border-card-border bg-white p-4">
+        <div
+          className="relative flex aspect-square cursor-zoom-in items-center justify-center overflow-hidden rounded-2xl border border-card-border bg-white p-4 group"
+          onClick={() => setZoomOpen(true)}
+        >
           <img
             src={svgDataUrl}
             alt={b.name}
             className="max-h-full max-w-full object-contain"
           />
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/20 group-hover:opacity-100">
+            <ZoomIn className="h-10 w-10 text-white drop-shadow-lg" />
+          </div>
         </div>
 
         {/* Right: info + actions */}
@@ -217,6 +226,14 @@ export default function BlockDetail() {
           )}
         </div>
       </div>
+      <PreviewZoomModal open={zoomOpen} onClose={() => setZoomOpen(false)} title={b.name}>
+        <img
+          src={svgDataUrl}
+          alt={b.name}
+          className="max-h-[85vh] max-w-[85vw] object-contain"
+          draggable={false}
+        />
+      </PreviewZoomModal>
     </div>
   );
 }

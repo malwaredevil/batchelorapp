@@ -31,7 +31,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { TagSelector } from "@/components/tag-selector";
-import { ImageLightbox } from "@/components/image-lightbox";
+import { PreviewZoomModal } from "@/components/PreviewZoomModal";
 import { downloadCollectionImage } from "@/lib/svg-export";
 
 type Fabric = {
@@ -348,12 +348,18 @@ export default function FabricDetail() {
             <ZoomIn className="h-10 w-10 text-white drop-shadow-lg" />
           </div>
         </div>
-        <ImageLightbox
-          src={f.imageUrl}
-          alt={f.name}
+        <PreviewZoomModal
           open={lightboxOpen}
           onClose={() => setLightboxOpen(false)}
-        />
+          title={f.name}
+        >
+          <img
+            src={f.imageUrl}
+            alt={f.name}
+            className="max-h-[85vh] max-w-[85vw] rounded object-contain"
+            draggable={false}
+          />
+        </PreviewZoomModal>
 
         <div className="flex flex-col gap-4">
           {/* Title row */}

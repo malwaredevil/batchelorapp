@@ -39,7 +39,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { TagSelector } from "@/components/tag-selector";
-import { ImageLightbox } from "@/components/image-lightbox";
+import { PreviewZoomModal } from "@/components/PreviewZoomModal";
 import { downloadCollectionImage } from "@/lib/svg-export";
 
 type PatternData = {
@@ -329,12 +329,18 @@ export default function PatternDetail() {
           </div>
         )}
         {p.imageUrl && (
-          <ImageLightbox
-            src={p.imageUrl}
-            alt={p.name}
+          <PreviewZoomModal
             open={lightboxOpen}
             onClose={() => setLightboxOpen(false)}
-          />
+            title={p.name}
+          >
+            <img
+              src={p.imageUrl}
+              alt={p.name}
+              className="max-h-[85vh] max-w-[85vw] rounded object-contain"
+              draggable={false}
+            />
+          </PreviewZoomModal>
         )}
 
         <div className="flex flex-col gap-4">

@@ -250,7 +250,9 @@ function ReanalyzePanel({
     setProgress({ done: 0, total: 0 });
   }
 
-  const BATCH_SIZE = 20;
+  // 3 items per batch keeps each HTTP request well under the Replit proxy's
+  // 30-second connection timeout even when AI calls are slow.
+  const BATCH_SIZE = 3;
   async function startRefresh() {
     if (processingRef.current || selectedIds.size === 0) return;
 

@@ -216,7 +216,9 @@ export default function Maintenance() {
   // Sends up to 20 IDs at a time to the bulk endpoint (which is rate-limited
   // separately from single-item reanalyze) and maps succeeded/failed back to
   // the per-item status display.
-  const BATCH_SIZE = 20;
+  // 3 items per batch keeps each HTTP request well under the Replit proxy's
+  // 30-second connection timeout even when AI calls are slow.
+  const BATCH_SIZE = 3;
   async function runReanalyze(ids: number[], source: RunSource) {
     if (processingRef.current || ids.length === 0) return;
 

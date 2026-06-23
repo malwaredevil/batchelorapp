@@ -13,23 +13,22 @@ export const loginLimiter = rateLimit({
 });
 
 // Covers fabric creation (AI cataloguing + embedding) and reanalyze — both
-// invoke OpenAI and are significantly more expensive than a read. Keep well
-// below the compare limiter to reflect total per-IP AI spend across all routes.
+// invoke OpenAI and are significantly more expensive than a read.
+// Set generously because the user owns the API keys and runs the app personally.
 export const aiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
   message: jsonLimitMessage,
 });
 
-// Bulk re-analyze endpoints batch up to 20 individual AI analyses into one
-// HTTP request, making them up to 20× more expensive than a single aiLimiter
-// request. Apply a much stricter cap so one session cannot exhaust OpenAI
-// quota or monopolise the server with a single call.
+// Bulk re-analyze endpoints send small batches (3 items each) due to the
+// 30-second proxy timeout. A full collection of ~200 items needs ~70 requests
+// per run, so the limit must be well above that.
 export const bulkAiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 3,
+  max: 500,
   standardHeaders: true,
   legacyHeaders: false,
   message: jsonLimitMessage,

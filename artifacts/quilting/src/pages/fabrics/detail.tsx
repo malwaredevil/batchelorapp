@@ -110,6 +110,8 @@ export default function FabricDetail() {
   const [isEditing, setIsEditing] = useState(false);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [renamingName, setRenamingName] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
   const rawSearch = useSearch();
   useEffect(() => {
     if (new URLSearchParams(rawSearch).get("edit") === "1") setIsEditing(true);
@@ -271,6 +273,20 @@ export default function FabricDetail() {
     toast.info("Refreshing AI analysis…");
   }
 
+  function handleRename() {
+    if (!renameValue.trim()) return;
+    updateFabric.mutate(
+      { id: fabricId, data: { name: renameValue.trim() } },
+      {
+        onSuccess: () => {
+          setRenamingName(false);
+          toast.success("Renamed");
+        },
+        onError: () => toast.error("Failed to rename."),
+      },
+    );
+  }
+
   if (isLoading) {
     return (
       <div>
@@ -322,14 +338,23 @@ export default function FabricDetail() {
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <h1 className="flex-1 truncate text-xl font-bold">
-          {isEditing ? draft.name || f.name : f.name}
-        </h1>
-        {isEditing ? (
+        {renamingName ? (
           <>
+            <div className="flex flex-1 items-center gap-1.5 min-w-0">
+              <Input
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                className="h-8 flex-1 min-w-0 text-base font-semibold"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleRename();
+                  if (e.key === "Escape") setRenamingName(false);
+                }}
+                autoFocus
+              />
+            </div>
             <Button
               size="sm"
-              onClick={handleSave}
+              onClick={handleRename}
               disabled={updateFabric.isPending}
             >
               <Check className="mr-1.5 h-3.5 w-3.5" />
@@ -338,7 +363,7 @@ export default function FabricDetail() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setIsEditing(false)}
+              onClick={() => setRenamingName(false)}
             >
               <XIcon className="mr-1.5 h-3.5 w-3.5" />
               Cancel
@@ -346,47 +371,109 @@ export default function FabricDetail() {
           </>
         ) : (
           <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefreshAI}
-              disabled={reanalyzeFabric.isPending}
-              title="Re-run AI analysis on this fabric's photo"
-            >
-              <RefreshCw
-                className={`mr-1.5 h-3.5 w-3.5 ${reanalyzeFabric.isPending ? "animate-spin" : ""}`}
-              />
-              <span className="hidden sm:inline">Refresh AI</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={enterEdit}
-              title="Edit"
-            >
-              <Pencil className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              title="Download photo"
-              onClick={() => downloadCollectionImage(f.imageUrl, f.name)}
-            >
-              <Download className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-destructive hover:bg-destructive/10"
-              onClick={() => {
-                if (confirm("Delete this fabric? This cannot be undone.")) {
-                  deleteFabric.mutate({ id: fabricId });
-                }
-              }}
-              disabled={deleteFabric.isPending}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            <div className="flex flex-1 items-center gap-1 min-w-0">
+              <h1 className="truncate text-xl font-bold">
+                {isEditing ? draft.name || f.name : f.name}
+              </h1>
+              {!isEditing && (
+                <button
+                  onClick={() => {
+                    setRenameValue(f.name);
+                    setRenamingName(true);
+                  }}
+                  className="shrink-0 rounded p-0.5 text-muted-foreground/30 hover:text-muted-foreground/70 transition-colors"
+                  title="Rename"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            {isEditing ? (
+              <>
+                <Button
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={updateFabric.isPending}
+                >
+                  <Check className="mr-1.5 h-3.5 w-3.5" />
+                  Save
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsEditing(false)}
+                >
+                  <XIcon className="mr-1.5 h-3.5 w-3.5" />
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefreshAI}
+                  disabled={reanalyzeFabric.isPending}
+                  title="Re-run AI analysis on this fabric's photo"
+                >
+                  <RefreshCw
+                    className={`mr-1.5 h-3.5 w-3.5 ${reanalyzeFabric.isPending ? "animate-spin" : ""}`}
+                  />
+                  <span className="hidden sm:inline">Refresh AI</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => toggleLock("name")}
+                  disabled={updateFabric.isPending}
+                  title={
+                    lockedFields.includes("name")
+                      ? "Name is locked — AI re-analysis will not change it. Click to unlock."
+                      : "Name is unlocked — AI re-analysis may update it. Click to lock."
+                  }
+                  className={
+                    lockedFields.includes("name")
+                      ? "border-red-400 text-red-600 hover:border-red-500 hover:text-red-700"
+                      : "border-green-400 text-green-600 hover:border-green-500 hover:text-green-700"
+                  }
+                >
+                  {lockedFields.includes("name") ? (
+                    <Lock className="h-4 w-4" />
+                  ) : (
+                    <LockOpen className="h-4 w-4" />
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={enterEdit}
+                  title="Edit all fields"
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  title="Download photo"
+                  onClick={() => downloadCollectionImage(f.imageUrl, f.name)}
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-destructive hover:bg-destructive/10"
+                  onClick={() => {
+                    if (confirm("Delete this fabric? This cannot be undone.")) {
+                      deleteFabric.mutate({ id: fabricId });
+                    }
+                  }}
+                  disabled={deleteFabric.isPending}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </>
+            )}
           </>
         )}
       </div>

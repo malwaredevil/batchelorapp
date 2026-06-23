@@ -5,7 +5,6 @@ import {
   ScanSearch,
   Tag,
   Wrench,
-  KeyRound,
 } from "lucide-react";
 
 // ── Main ────────────────────────────────────────────────────────────────────
@@ -67,13 +66,3 @@ registerFeature({
   },
 });
 
-registerFeature({
-  id: "account",
-  nav: {
-    group: "settings",
-    href: "/account",
-    label: "Account",
-    icon: KeyRound,
-    order: 30,
-  },
-});

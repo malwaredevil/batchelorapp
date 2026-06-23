@@ -32,7 +32,6 @@ import LayoutComposer from "@/pages/layouts/composer";
 import WholeQuiltDesigner from "@/pages/blocks/whole-quilt";
 import WholeQuiltList from "@/pages/blocks/whole-quilt-list";
 import Shopping from "@/pages/shopping";
-import Account from "@/pages/account";
 import Maintenance from "@/pages/maintenance";
 import NotFound from "@/pages/not-found";
 
@@ -105,7 +104,6 @@ function Routes() {
         {/* Settings */}
         <Route path="/categories" component={Categories} />
         <Route path="/maintenance" component={Maintenance} />
-        <Route path="/account" component={Account} />
         {/* Auth */}
         <Route path="/login">
           <Redirect to="/fabrics" />

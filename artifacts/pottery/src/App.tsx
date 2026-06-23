@@ -15,7 +15,6 @@ import PieceDetail from "@/pages/detail";
 import Compare from "@/pages/compare";
 import Categories from "@/pages/categories";
 import Maintenance from "@/pages/maintenance";
-import Account from "@/pages/account";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 
@@ -63,7 +62,6 @@ function Routes() {
         <Route path="/piece/:id" component={PieceDetail} />
         <Route path="/categories" component={Categories} />
         <Route path="/maintenance" component={Maintenance} />
-        <Route path="/account" component={Account} />
         <Route path="/settings" component={Settings} />
         <Route path="/login">
           <Redirect to="/" />

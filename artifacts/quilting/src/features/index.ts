@@ -9,7 +9,6 @@ import {
   LayoutGrid,
   ShoppingCart,
   Pencil,
-  UserCog,
   Wrench,
 } from "lucide-react";
 
@@ -131,13 +130,3 @@ registerFeature({
   },
 });
 
-registerFeature({
-  id: "account",
-  nav: {
-    group: "settings",
-    href: "/account",
-    label: "Account",
-    icon: UserCog,
-    order: 20,
-  },
-});

@@ -19,6 +19,7 @@ import {
   Sparkles,
   AlertTriangle,
   Wand2,
+  StopCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -158,6 +159,8 @@ export default function Maintenance() {
   const [progress, setProgress] = useState({ done: 0, total: 0 });
 
   const processingRef = useRef(false);
+  const stopRequestedRef = useRef(false);
+  const [wasStopped, setWasStopped] = useState(false);
 
   // Index pieces by id so we can render straggler thumbnails from the list.
   const itemsById = useMemo(() => {
@@ -222,6 +225,8 @@ export default function Maintenance() {
   async function runReanalyze(ids: number[], source: RunSource) {
     if (processingRef.current || ids.length === 0) return;
 
+    stopRequestedRef.current = false;
+    setWasStopped(false);
     setStatuses(new Map(ids.map((id) => [id, "queued" as RefreshStatus])));
     processingRef.current = true;
     setIsRunning(true);
@@ -230,6 +235,11 @@ export default function Maintenance() {
 
     let done = 0;
     for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+      if (stopRequestedRef.current) {
+        setWasStopped(true);
+        break;
+      }
+
       const batch = ids.slice(i, i + BATCH_SIZE);
 
       // Mark the whole batch as in-progress
@@ -285,6 +295,7 @@ export default function Maintenance() {
     setStatuses(new Map());
     setRunSource(null);
     setProgress({ done: 0, total: 0 });
+    setWasStopped(false);
   }
 
   const totalSelected = selectedIds.size;
@@ -303,7 +314,15 @@ export default function Maintenance() {
               <span>
                 Refreshing {progress.done} of {progress.total} pieces…
               </span>
-              <RefreshCw className="h-4 w-4 animate-spin" />
+              <button
+                type="button"
+                onClick={() => { stopRequestedRef.current = true; }}
+                className="flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                aria-label="Stop after current batch finishes"
+              >
+                <StopCircle className="h-3.5 w-3.5" />
+                Stop
+              </button>
             </div>
             <ProgressBar done={progress.done} total={progress.total} />
           </div>
@@ -313,17 +332,27 @@ export default function Maintenance() {
           <div
             className={cn(
               "mt-4 flex items-center justify-between rounded-xl border px-4 py-3 text-sm",
-              errorCount > 0
-                ? "border-destructive/20 bg-destructive/5"
-                : "border-green-500/20 bg-green-500/5",
+              wasStopped
+                ? "border-amber-500/20 bg-amber-500/5"
+                : errorCount > 0
+                  ? "border-destructive/20 bg-destructive/5"
+                  : "border-green-500/20 bg-green-500/5",
             )}
           >
             <span
-              className={errorCount > 0 ? "text-destructive" : "text-green-700"}
+              className={
+                wasStopped
+                  ? "text-amber-700"
+                  : errorCount > 0
+                    ? "text-destructive"
+                    : "text-green-700"
+              }
             >
-              {errorCount > 0
-                ? `${doneCount} refreshed, ${errorCount} failed — failed items are marked in red.`
-                : `All ${doneCount} piece${doneCount === 1 ? "" : "s"} refreshed successfully.`}
+              {wasStopped
+                ? `Stopped — ${doneCount} piece${doneCount === 1 ? "" : "s"} refreshed, ${progress.total - progress.done} skipped.`
+                : errorCount > 0
+                  ? `${doneCount} refreshed, ${errorCount} failed — failed items are marked in red.`
+                  : `All ${doneCount} piece${doneCount === 1 ? "" : "s"} refreshed successfully.`}
             </span>
             <button
               type="button"

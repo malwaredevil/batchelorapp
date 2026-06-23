@@ -9,6 +9,7 @@ import {
   BookOpen,
   Layers,
   AlertTriangle,
+  StopCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -188,6 +189,8 @@ function ReanalyzePanel({
   const [isRunning, setIsRunning] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const processingRef = useRef(false);
+  const stopRequestedRef = useRef(false);
+  const [wasStopped, setWasStopped] = useState(false);
 
   const displayed = useMemo(() => {
     if (!items) return [];
@@ -248,6 +251,7 @@ function ReanalyzePanel({
   function resetStatuses() {
     setStatuses(new Map());
     setProgress({ done: 0, total: 0 });
+    setWasStopped(false);
   }
 
   // 2 items per batch keeps each HTTP request well under the Replit proxy's
@@ -256,6 +260,8 @@ function ReanalyzePanel({
   async function startRefresh() {
     if (processingRef.current || selectedIds.size === 0) return;
 
+    stopRequestedRef.current = false;
+    setWasStopped(false);
     const ids = Array.from(selectedIds);
     setSelectedIds(new Set());
 
@@ -269,6 +275,11 @@ function ReanalyzePanel({
 
     let done = 0;
     for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+      if (stopRequestedRef.current) {
+        setWasStopped(true);
+        break;
+      }
+
       const batch = ids.slice(i, i + BATCH_SIZE);
 
       setStatuses((prev) => {
@@ -316,9 +327,20 @@ function ReanalyzePanel({
       {/* Progress banner */}
       {isRunning && (
         <div className="mt-4 rounded-lg border border-primary/30 bg-primary/5 p-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-primary">
-            <RefreshCw className="h-4 w-4 animate-spin" />
-            Refreshing {progress.done} of {progress.total} {nounPlural}…
+          <div className="flex items-center justify-between text-sm font-medium text-primary">
+            <div className="flex items-center gap-2">
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              Refreshing {progress.done} of {progress.total} {nounPlural}…
+            </div>
+            <button
+              type="button"
+              onClick={() => { stopRequestedRef.current = true; }}
+              className="flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+              aria-label="Stop after current batch finishes"
+            >
+              <StopCircle className="h-3.5 w-3.5" />
+              Stop
+            </button>
           </div>
           <Progress
             value={progress.total ? (progress.done / progress.total) * 100 : 0}
@@ -331,15 +353,19 @@ function ReanalyzePanel({
       {isFinished && hasStatuses && (
         <div
           className={`mt-4 flex items-start gap-2 rounded-lg border p-3 text-sm ${
-            errorCount === 0
-              ? "border-green-600/30 bg-green-600/5 text-green-700 dark:text-green-400"
-              : "border-destructive/30 bg-destructive/5 text-destructive"
+            wasStopped
+              ? "border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-400"
+              : errorCount === 0
+                ? "border-green-600/30 bg-green-600/5 text-green-700 dark:text-green-400"
+                : "border-destructive/30 bg-destructive/5 text-destructive"
           }`}
         >
           <span className="flex-1">
-            {errorCount === 0
-              ? `All ${doneCount} ${doneCount === 1 ? noun : nounPlural} refreshed successfully.`
-              : `${doneCount} refreshed, ${errorCount} failed — failed items are marked in red.`}
+            {wasStopped
+              ? `Stopped — ${doneCount} ${doneCount === 1 ? noun : nounPlural} refreshed, ${progress.total - progress.done} skipped.`
+              : errorCount === 0
+                ? `All ${doneCount} ${doneCount === 1 ? noun : nounPlural} refreshed successfully.`
+                : `${doneCount} refreshed, ${errorCount} failed — failed items are marked in red.`}
           </span>
           <button
             onClick={resetStatuses}

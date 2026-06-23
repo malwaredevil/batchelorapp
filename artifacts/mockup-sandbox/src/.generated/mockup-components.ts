@@ -4,6 +4,7 @@ export const modules: ModuleMap = {
   "./components/mockups/batchelor-landing/AppLauncher.tsx": () => import("../components/mockups/batchelor-landing/AppLauncher.tsx"),
   "./components/mockups/batchelor-landing/EditorialFieldGuide.tsx": () => import("../components/mockups/batchelor-landing/EditorialFieldGuide.tsx"),
   "./components/mockups/batchelor-landing/WarmStudio.tsx": () => import("../components/mockups/batchelor-landing/WarmStudio.tsx"),
+  "./components/mockups/quilting-theme/NavVariants.tsx": () => import("../components/mockups/quilting-theme/NavVariants.tsx"),
   "./components/mockups/quilting-theme/QDesktop.tsx": () => import("../components/mockups/quilting-theme/QDesktop.tsx"),
   "./components/mockups/quilting-theme/QMobile.tsx": () => import("../components/mockups/quilting-theme/QMobile.tsx")
 };

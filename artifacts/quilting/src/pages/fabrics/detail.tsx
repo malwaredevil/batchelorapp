@@ -517,6 +517,7 @@ export default function FabricDetail() {
               <div className="space-y-2">
                 {(
                   [
+                    "name",
                     "lineName",
                     "designer",
                     "manufacturer",
@@ -526,6 +527,7 @@ export default function FabricDetail() {
                   ] as const
                 ).map((k) => {
                   const labels: Record<string, string> = {
+                    name: "Name",
                     lineName: "Line name",
                     designer: "Designer",
                     manufacturer: "Manufacturer",

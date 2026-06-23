@@ -8,7 +8,6 @@ import {
   Grid2X2,
   LayoutGrid,
   ShoppingCart,
-  Pencil,
   Wrench,
 } from "lucide-react";
 
@@ -95,16 +94,17 @@ registerFeature({
   },
 });
 
-registerFeature({
-  id: "whole-quilt",
-  nav: {
-    group: "design",
-    href: "/whole-quilt",
-    label: "Whole-Quilt Designer",
-    icon: Pencil,
-    order: 30,
-  },
-});
+// Whole-Quilt Designer is hidden from nav for now — routes still exist in App.tsx
+// registerFeature({
+//   id: "whole-quilt",
+//   nav: {
+//     group: "design",
+//     href: "/whole-quilt",
+//     label: "Whole-Quilt Designer",
+//     icon: Pencil,
+//     order: 30,
+//   },
+// });
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 

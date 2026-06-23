@@ -7,7 +7,6 @@ import {
   RotateCw,
   Trash2,
   X,
-  ExternalLink,
   Download,
   Sliders,
 } from "lucide-react";
@@ -1163,27 +1162,6 @@ export default function LayoutComposer() {
           placeholder="Layout name…"
         />
         <div className="ml-auto flex items-center gap-2">
-          {(() => {
-            const gridSize = (() => {
-              for (const cell of cells) {
-                if (cell.blockId !== null) {
-                  const b = blockMap.get(cell.blockId);
-                  if (b) return b.gridSize;
-                }
-              }
-              return 4;
-            })();
-            return (
-              <Button variant="outline" size="sm" asChild>
-                <Link
-                  to={`/whole-quilt/designer?new=1&cols=${cols}&rows=${rows}&blockSize=${gridSize}`}
-                >
-                  <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                  Open in Whole-Quilt Designer
-                </Link>
-              </Button>
-            );
-          })()}
           {/* View adjustments */}
           <div className="relative">
             <Button

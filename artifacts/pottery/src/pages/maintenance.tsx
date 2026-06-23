@@ -2,7 +2,7 @@ import { useState, useRef, useMemo } from "react";
 import {
   useListPottery,
   useGetStragglers,
-  reanalyzePottery,
+  bulkReanalyzePottery,
   getListPotteryQueryKey,
   getGetStragglersQueryKey,
 } from "@workspace/api-client-react";
@@ -213,35 +213,54 @@ export default function Maintenance() {
   }
 
   // Shared re-analyse loop used by both the bulk and straggler sections.
+  // Sends up to 20 IDs at a time to the bulk endpoint (which is rate-limited
+  // separately from single-item reanalyze) and maps succeeded/failed back to
+  // the per-item status display.
+  const BATCH_SIZE = 20;
   async function runReanalyze(ids: number[], source: RunSource) {
     if (processingRef.current || ids.length === 0) return;
 
-    // Reset to a fresh, run-scoped status map so the completion banner's
-    // done/error counts always reflect only the current run.
     setStatuses(new Map(ids.map((id) => [id, "queued" as RefreshStatus])));
-
     processingRef.current = true;
     setIsRunning(true);
     setRunSource(source);
     setProgress({ done: 0, total: ids.length });
 
     let done = 0;
-    for (const id of ids) {
-      setStatuses((prev) => new Map(prev).set(id, "processing"));
+    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+      const batch = ids.slice(i, i + BATCH_SIZE);
+
+      // Mark the whole batch as in-progress
+      setStatuses((prev) => {
+        const next = new Map(prev);
+        for (const id of batch) next.set(id, "processing");
+        return next;
+      });
+
       try {
-        await reanalyzePottery(id);
-        setStatuses((prev) => new Map(prev).set(id, "done"));
+        const result = await bulkReanalyzePottery({ ids: batch });
+        const succeededSet = new Set(result.succeeded);
+        setStatuses((prev) => {
+          const next = new Map(prev);
+          for (const id of batch)
+            next.set(id, succeededSet.has(id) ? "done" : "error");
+          return next;
+        });
         queryClient.invalidateQueries({ queryKey: getListPotteryQueryKey() });
       } catch {
-        setStatuses((prev) => new Map(prev).set(id, "error"));
+        // Network-level failure — mark the whole batch as errored
+        setStatuses((prev) => {
+          const next = new Map(prev);
+          for (const id of batch) next.set(id, "error");
+          return next;
+        });
       }
-      done += 1;
+
+      done += batch.length;
       setProgress({ done, total: ids.length });
     }
 
-    // Refresh the straggler list now that embeddings/attributes were filled in.
     queryClient.invalidateQueries({ queryKey: getGetStragglersQueryKey() });
-
     processingRef.current = false;
     setIsRunning(false);
   }

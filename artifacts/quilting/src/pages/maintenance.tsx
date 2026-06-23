@@ -18,13 +18,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQueryClient, type QueryKey } from "@tanstack/react-query";
 import {
   useListFabrics,
-  useReanalyzeFabric,
+  bulkReanalyzeFabrics,
   getListFabricsQueryKey,
   useListPatterns,
-  useReanalyzePattern,
+  bulkReanalyzePatterns,
   getListPatternsQueryKey,
   useListQuilts,
-  useReanalyzeQuilt,
+  bulkReanalyzeQuilts,
   getListQuiltsQueryKey,
   getGetStaleCountQueryKey,
 } from "@workspace/api-client-react";
@@ -168,7 +168,7 @@ function ReanalyzePanel({
   isError,
   noun,
   nounPlural,
-  reanalyze,
+  bulkReanalyze,
   listQueryKey,
   FallbackIcon,
 }: {
@@ -177,7 +177,7 @@ function ReanalyzePanel({
   isError: boolean;
   noun: string;
   nounPlural: string;
-  reanalyze: (id: number) => Promise<unknown>;
+  bulkReanalyze: (ids: number[]) => Promise<{ succeeded: number[]; failed: number[] }>;
   listQueryKey: QueryKey;
   FallbackIcon: ComponentType<{ className?: string }>;
 }) {
@@ -250,6 +250,7 @@ function ReanalyzePanel({
     setProgress({ done: 0, total: 0 });
   }
 
+  const BATCH_SIZE = 20;
   async function startRefresh() {
     if (processingRef.current || selectedIds.size === 0) return;
 
@@ -265,20 +266,35 @@ function ReanalyzePanel({
     setProgress({ done: 0, total: ids.length });
 
     let done = 0;
-    for (const id of ids) {
-      setStatuses((prev) => new Map(prev).set(id, "processing"));
+    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+      const batch = ids.slice(i, i + BATCH_SIZE);
+
+      setStatuses((prev) => {
+        const next = new Map(prev);
+        for (const id of batch) next.set(id, "processing");
+        return next;
+      });
+
       try {
-        await reanalyze(id);
-        setStatuses((prev) => new Map(prev).set(id, "done"));
-        queryClient.invalidateQueries({ queryKey: listQueryKey });
-        // Refresh the app-shell "needs re-analysis" badge as items clear.
-        queryClient.invalidateQueries({
-          queryKey: getGetStaleCountQueryKey(),
+        const result = await bulkReanalyze(batch);
+        const succeededSet = new Set(result.succeeded);
+        setStatuses((prev) => {
+          const next = new Map(prev);
+          for (const id of batch)
+            next.set(id, succeededSet.has(id) ? "done" : "error");
+          return next;
         });
+        queryClient.invalidateQueries({ queryKey: listQueryKey });
+        queryClient.invalidateQueries({ queryKey: getGetStaleCountQueryKey() });
       } catch {
-        setStatuses((prev) => new Map(prev).set(id, "error"));
+        setStatuses((prev) => {
+          const next = new Map(prev);
+          for (const id of batch) next.set(id, "error");
+          return next;
+        });
       }
-      done += 1;
+
+      done += batch.length;
       setProgress({ done, total: ids.length });
     }
 
@@ -492,7 +508,6 @@ function ReanalyzePanel({
 
 function FabricsPanel() {
   const { data, isLoading, isError } = useListFabrics();
-  const reanalyze = useReanalyzeFabric();
   const items = data?.map((f) => ({
     id: f.id,
     name: f.name,
@@ -507,7 +522,7 @@ function FabricsPanel() {
       isError={isError}
       noun="fabric"
       nounPlural="fabrics"
-      reanalyze={(id) => reanalyze.mutateAsync({ id })}
+      bulkReanalyze={(ids) => bulkReanalyzeFabrics({ ids })}
       listQueryKey={getListFabricsQueryKey()}
       FallbackIcon={Scissors}
     />
@@ -516,7 +531,6 @@ function FabricsPanel() {
 
 function PatternsPanel() {
   const { data, isLoading, isError } = useListPatterns();
-  const reanalyze = useReanalyzePattern();
   const items = data?.map((p) => ({
     id: p.id,
     name: p.name,
@@ -533,7 +547,7 @@ function PatternsPanel() {
       isError={isError}
       noun="pattern"
       nounPlural="patterns"
-      reanalyze={(id) => reanalyze.mutateAsync({ id })}
+      bulkReanalyze={(ids) => bulkReanalyzePatterns({ ids })}
       listQueryKey={getListPatternsQueryKey()}
       FallbackIcon={BookOpen}
     />
@@ -542,7 +556,6 @@ function PatternsPanel() {
 
 function QuiltsPanel() {
   const { data, isLoading, isError } = useListQuilts();
-  const reanalyze = useReanalyzeQuilt();
   const items = data?.map((q) => ({
     id: q.id,
     name: q.name,
@@ -556,7 +569,7 @@ function QuiltsPanel() {
       isError={isError}
       noun="quilt"
       nounPlural="quilts"
-      reanalyze={(id) => reanalyze.mutateAsync({ id })}
+      bulkReanalyze={(ids) => bulkReanalyzeQuilts({ ids })}
       listQueryKey={getListQuiltsQueryKey()}
       FallbackIcon={Layers}
     />

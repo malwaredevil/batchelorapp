@@ -1489,7 +1489,7 @@ export const getBulkReanalyzePotteryUrl = () => {
 
 
 
-  return `/api/pottery/items/items/bulk-reanalyze`
+  return `/api/pottery/items/bulk-reanalyze`
 }
 
 /**

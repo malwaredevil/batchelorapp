@@ -105,11 +105,14 @@ export function AppLauncher() {
             potteryStatsData?.totalItems != null
               ? String(potteryStatsData.totalItems)
               : "—",
-          label: "Pieces",
-          tooltip:
+          label: "Total",
+        },
+        {
+          value:
             potteryStatsData?.uniqueItems != null
-              ? `${potteryStatsData.uniqueItems} unique pieces`
-              : undefined,
+              ? String(potteryStatsData.uniqueItems)
+              : "—",
+          label: "Unique",
         },
         {
           value:

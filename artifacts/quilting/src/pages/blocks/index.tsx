@@ -17,6 +17,7 @@ import {
   FileCode2,
   Upload,
   ZoomIn,
+  Tag,
 } from "lucide-react";
 import {
   buildBlockSvgString,
@@ -47,6 +48,7 @@ import {
   useListBlocks,
   useDeleteBlock,
   useCreateBlock,
+  useUpdateBlock,
   useListQuiltingCategories,
   useListFabrics,
   getListBlocksQueryKey,
@@ -55,6 +57,7 @@ import {
 import type { QuiltingCategory } from "@workspace/api-client-react";
 import { parseCell, fmtInch } from "@/lib/cell-parser";
 import { buildFabricUrlMap } from "@/components/FabricPicker";
+import { CategoryEditDialog } from "@/components/CategoryEditDialog";
 import { cn } from "@/lib/utils";
 import { PreviewZoomModal } from "@/components/PreviewZoomModal";
 
@@ -418,6 +421,7 @@ function BlockCard({
   onFilterByGridSize,
   onFilterByCategory,
   fabricUrlMap = {},
+  onEditCategories,
 }: {
   block: BlockSummary;
   onDelete: (id: number) => void;
@@ -425,6 +429,7 @@ function BlockCard({
   onFilterByGridSize?: (gs: number) => void;
   onFilterByCategory?: (id: number) => void;
   fabricUrlMap?: Record<number, string>;
+  onEditCategories?: () => void;
 }) {
   const [, navigate] = useLocation();
   const [zoomOpen, setZoomOpen] = useState(false);
@@ -549,6 +554,10 @@ function BlockCard({
                 </DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
+            <DropdownMenuItem onClick={() => onEditCategories?.()}>
+              <Tag className="mr-2 h-3.5 w-3.5" />
+              Set categories
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
@@ -657,6 +666,19 @@ export default function Blocks() {
     () => buildFabricUrlMap(fabricsList ?? []),
     [fabricsList],
   );
+
+  const [categoryEditItem, setCategoryEditItem] = useState<BlockSummary | null>(null);
+
+  const updateBlockCategories = useUpdateBlock({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListBlocksQueryKey() });
+        setCategoryEditItem(null);
+        toast.success("Categories saved");
+      },
+      onError: () => toast.error("Failed to save categories"),
+    },
+  });
 
   const [sortBy, setSortBy] = useState<SortKey>("date-desc");
   const [activeCatIds, setActiveCatIds] = useState<Set<number>>(new Set());
@@ -1034,10 +1056,27 @@ export default function Blocks() {
               }
               onFilterByCategory={toggleCat}
               fabricUrlMap={fabricUrlMap}
+              onEditCategories={() => setCategoryEditItem(block)}
             />
           ))}
         </div>
       )}
+      <CategoryEditDialog
+        open={categoryEditItem !== null}
+        onClose={() => setCategoryEditItem(null)}
+        title={categoryEditItem?.name ?? ""}
+        currentCategories={(categoryEditItem?.categories ?? []) as unknown as QuiltingCategory[]}
+        allCategories={allCategories ?? []}
+        onSave={(names) => {
+          if (categoryEditItem) {
+            updateBlockCategories.mutate({
+              id: categoryEditItem.id,
+              data: { categoryNames: names },
+            });
+          }
+        }}
+        isSaving={updateBlockCategories.isPending}
+      />
     </div>
   );
 }

@@ -16,6 +16,7 @@ import {
   Trash2,
   Download,
   ZoomIn,
+  Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,9 +39,13 @@ import {
   getListQuiltsQueryKey,
   getGetQuiltQueryKey,
   useGetStats,
+  useUpdateQuilt,
+  useListQuiltingCategories,
 } from "@workspace/api-client-react";
+import type { QuiltingCategory } from "@workspace/api-client-react";
 import { downloadCollectionImage } from "@/lib/svg-export";
 import { PreviewZoomModal } from "@/components/PreviewZoomModal";
+import { CategoryEditDialog } from "@/components/CategoryEditDialog";
 
 type SortOption = "newest" | "oldest" | "az" | "za";
 
@@ -77,6 +82,7 @@ function QuiltCard({
   onToggleSelect,
   onFilterByRecipient,
   onFilterByCategory,
+  onEditCategories,
 }: {
   quilt: QuiltSummary;
   onDelete: (id: number) => void;
@@ -86,6 +92,7 @@ function QuiltCard({
   onToggleSelect: (id: number) => void;
   onFilterByRecipient?: (r: string) => void;
   onFilterByCategory?: (id: number) => void;
+  onEditCategories?: () => void;
 }) {
   const [, navigate] = useLocation();
   const [zoomOpen, setZoomOpen] = useState(false);
@@ -212,6 +219,10 @@ function QuiltCard({
                 <Download className="mr-2 h-3.5 w-3.5" />
                 Download photo
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onEditCategories?.()}>
+                <Tag className="mr-2 h-3.5 w-3.5" />
+                Set categories
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
@@ -246,6 +257,19 @@ export default function Quilts() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const queryClient = useQueryClient();
   const { data: quilts, isLoading, isError } = useListQuilts();
+  const [categoryEditItem, setCategoryEditItem] = useState<QuiltSummary | null>(null);
+  const { data: categoryApiList } = useListQuiltingCategories();
+
+  const updateQuiltCategories = useUpdateQuilt({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListQuiltsQueryKey() });
+        setCategoryEditItem(null);
+        toast.success("Categories saved");
+      },
+      onError: () => toast.error("Failed to save categories"),
+    },
+  });
 
   const deleteQuilt = useDeleteQuilt({
     mutation: {
@@ -623,10 +647,27 @@ export default function Quilts() {
               onFilterByCategory={(id) =>
                 setCategoryFilter((prev) => (prev === id ? null : id))
               }
+              onEditCategories={() => setCategoryEditItem(quilt)}
             />
           ))}
         </div>
       )}
+      <CategoryEditDialog
+        open={categoryEditItem !== null}
+        onClose={() => setCategoryEditItem(null)}
+        title={categoryEditItem?.name ?? ""}
+        currentCategories={(categoryEditItem?.categories ?? []) as unknown as QuiltingCategory[]}
+        allCategories={categoryApiList ?? []}
+        onSave={(names) => {
+          if (categoryEditItem) {
+            updateQuiltCategories.mutate({
+              id: categoryEditItem.id,
+              data: { categories: names },
+            });
+          }
+        }}
+        isSaving={updateQuiltCategories.isPending}
+      />
     </div>
   );
 }

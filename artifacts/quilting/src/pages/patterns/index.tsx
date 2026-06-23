@@ -16,6 +16,7 @@ import {
   Trash2,
   Download,
   ZoomIn,
+  Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,9 +39,13 @@ import {
   getListPatternsQueryKey,
   getGetPatternQueryKey,
   useGetStats,
+  useUpdatePattern,
+  useListQuiltingCategories,
 } from "@workspace/api-client-react";
+import type { QuiltingCategory } from "@workspace/api-client-react";
 import { downloadCollectionImage } from "@/lib/svg-export";
 import { PreviewZoomModal } from "@/components/PreviewZoomModal";
+import { CategoryEditDialog } from "@/components/CategoryEditDialog";
 
 type SortOption = "newest" | "oldest" | "az" | "za";
 
@@ -78,6 +83,7 @@ function PatternCard({
   onFilterByDifficulty,
   onFilterBySourceType,
   onFilterByCategory,
+  onEditCategories,
 }: {
   pattern: PatternSummary;
   onDelete: (id: number) => void;
@@ -88,6 +94,7 @@ function PatternCard({
   onFilterByDifficulty?: (d: string) => void;
   onFilterBySourceType?: (st: string) => void;
   onFilterByCategory?: (id: number) => void;
+  onEditCategories?: () => void;
 }) {
   const [, navigate] = useLocation();
   const [zoomOpen, setZoomOpen] = useState(false);
@@ -238,6 +245,10 @@ function PatternCard({
                   Download photo
                 </DropdownMenuItem>
               )}
+              <DropdownMenuItem onClick={() => onEditCategories?.()}>
+                <Tag className="mr-2 h-3.5 w-3.5" />
+                Set categories
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
@@ -275,6 +286,19 @@ export default function Patterns() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const queryClient = useQueryClient();
   const { data: patterns, isLoading, isError } = useListPatterns();
+  const [categoryEditItem, setCategoryEditItem] = useState<PatternSummary | null>(null);
+  const { data: categoryApiList } = useListQuiltingCategories();
+
+  const updatePatternCategories = useUpdatePattern({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListPatternsQueryKey() });
+        setCategoryEditItem(null);
+        toast.success("Categories saved");
+      },
+      onError: () => toast.error("Failed to save categories"),
+    },
+  });
 
   const deletePattern = useDeletePattern({
     mutation: {
@@ -684,10 +708,27 @@ export default function Patterns() {
               onFilterByCategory={(id) =>
                 setCategoryFilter((prev) => (prev === id ? null : id))
               }
+              onEditCategories={() => setCategoryEditItem(pattern)}
             />
           ))}
         </div>
       )}
+      <CategoryEditDialog
+        open={categoryEditItem !== null}
+        onClose={() => setCategoryEditItem(null)}
+        title={categoryEditItem?.name ?? ""}
+        currentCategories={(categoryEditItem?.categories ?? []) as unknown as QuiltingCategory[]}
+        allCategories={categoryApiList ?? []}
+        onSave={(names) => {
+          if (categoryEditItem) {
+            updatePatternCategories.mutate({
+              id: categoryEditItem.id,
+              data: { categories: names },
+            });
+          }
+        }}
+        isSaving={updatePatternCategories.isPending}
+      />
     </div>
   );
 }

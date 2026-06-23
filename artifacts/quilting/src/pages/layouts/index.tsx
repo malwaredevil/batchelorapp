@@ -16,6 +16,7 @@ import {
   FileImage,
   FileCode2,
   ZoomIn,
+  Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +48,7 @@ import {
   useListLayouts,
   useDeleteLayout,
   useCreateLayout,
+  useUpdateLayout,
   useListBlocks,
   useListQuiltingCategories,
   useListFabrics,
@@ -55,6 +57,7 @@ import {
 import type { QuiltingCategory } from "@workspace/api-client-react";
 import { buildFabricUrlMap } from "@/components/FabricPicker";
 import { PreviewZoomModal } from "@/components/PreviewZoomModal";
+import { CategoryEditDialog } from "@/components/CategoryEditDialog";
 import { cn } from "@/lib/utils";
 
 type LayoutCell = { blockId: number | null; rotation: 0 | 90 | 180 | 270 };
@@ -584,6 +587,7 @@ function LayoutCard({
   onFilterBySize,
   onFilterByCategory,
   fabricUrlMap = {},
+  onEditCategories,
 }: {
   layout: LayoutSummary;
   blocks: BlockSummary[];
@@ -593,6 +597,7 @@ function LayoutCard({
   onFilterBySize?: (s: string) => void;
   onFilterByCategory?: (id: number) => void;
   fabricUrlMap?: Record<number, string>;
+  onEditCategories?: () => void;
 }) {
   const [, navigate] = useLocation();
   const [zoomOpen, setZoomOpen] = useState(false);
@@ -702,6 +707,10 @@ function LayoutCard({
                 </DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
+            <DropdownMenuItem onClick={() => onEditCategories?.()}>
+              <Tag className="mr-2 h-3.5 w-3.5" />
+              Set categories
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
@@ -740,6 +749,19 @@ export default function Layouts() {
     () => buildFabricUrlMap(fabricsList ?? []),
     [fabricsList],
   );
+
+  const [categoryEditItem, setCategoryEditItem] = useState<LayoutSummary | null>(null);
+
+  const updateLayoutCategories = useUpdateLayout({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListLayoutsQueryKey() });
+        setCategoryEditItem(null);
+        toast.success("Categories saved");
+      },
+      onError: () => toast.error("Failed to save categories"),
+    },
+  });
 
   const [sortBy, setSortBy] = useState<SortKey>("date-desc");
   const [activeCatIds, setActiveCatIds] = useState<Set<number>>(new Set());
@@ -1054,10 +1076,27 @@ export default function Layouts() {
               onFilterBySize={toggleSize}
               onFilterByCategory={toggleCat}
               fabricUrlMap={fabricUrlMap}
+              onEditCategories={() => setCategoryEditItem(layout)}
             />
           ))}
         </div>
       )}
+      <CategoryEditDialog
+        open={categoryEditItem !== null}
+        onClose={() => setCategoryEditItem(null)}
+        title={categoryEditItem?.name ?? ""}
+        currentCategories={(categoryEditItem?.categories ?? []) as unknown as QuiltingCategory[]}
+        allCategories={allCategories ?? []}
+        onSave={(names) => {
+          if (categoryEditItem) {
+            updateLayoutCategories.mutate({
+              id: categoryEditItem.id,
+              data: { categoryNames: names },
+            });
+          }
+        }}
+        isSaving={updateLayoutCategories.isPending}
+      />
     </div>
   );
 }

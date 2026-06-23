@@ -16,6 +16,7 @@ import {
   Trash2,
   Download,
   ZoomIn,
+  Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,10 +38,14 @@ import {
   getListFabricsQueryKey,
   getGetFabricQueryKey,
   useGetStats,
+  useUpdateFabric,
+  useListQuiltingCategories,
 } from "@workspace/api-client-react";
+import type { QuiltingCategory } from "@workspace/api-client-react";
 import { downloadCollectionImage } from "@/lib/svg-export";
 import { colorToHex, getCategoryPalette } from "@workspace/web-core";
 import { PreviewZoomModal } from "@/components/PreviewZoomModal";
+import { CategoryEditDialog } from "@/components/CategoryEditDialog";
 
 type SortOption = "newest" | "oldest" | "az" | "za";
 
@@ -81,6 +86,7 @@ function FabricCard({
   onFilterByCategory,
   onFilterByColor,
   activeColor,
+  onEditCategories,
 }: {
   fabric: FabricSummary;
   onDelete: (id: number) => void;
@@ -92,6 +98,7 @@ function FabricCard({
   onFilterByCategory?: (id: number) => void;
   onFilterByColor?: (c: string) => void;
   activeColor?: string | null;
+  onEditCategories?: () => void;
 }) {
   const [, navigate] = useLocation();
   const [zoomOpen, setZoomOpen] = useState(false);
@@ -241,6 +248,10 @@ function FabricCard({
                 <Download className="mr-2 h-3.5 w-3.5" />
                 Download photo
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onEditCategories?.()}>
+                <Tag className="mr-2 h-3.5 w-3.5" />
+                Set categories
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
@@ -277,6 +288,19 @@ export default function Fabrics() {
   const queryClient = useQueryClient();
   const { data: fabrics, isLoading, isError } = useListFabrics();
   const { data: stats } = useGetStats();
+  const [categoryEditItem, setCategoryEditItem] = useState<FabricSummary | null>(null);
+  const { data: categoryApiList } = useListQuiltingCategories();
+
+  const updateFabricCategories = useUpdateFabric({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListFabricsQueryKey() });
+        setCategoryEditItem(null);
+        toast.success("Categories saved");
+      },
+      onError: () => toast.error("Failed to save categories"),
+    },
+  });
 
   const deleteFabric = useDeleteFabric({
     mutation: {
@@ -713,10 +737,27 @@ export default function Fabrics() {
               onFilterByColor={(c) =>
                 setColorFilter((prev) => (prev === c ? null : c))
               }
+              onEditCategories={() => setCategoryEditItem(fabric as FabricSummary)}
             />
           ))}
         </div>
       )}
+      <CategoryEditDialog
+        open={categoryEditItem !== null}
+        onClose={() => setCategoryEditItem(null)}
+        title={categoryEditItem?.name ?? ""}
+        currentCategories={(categoryEditItem?.categories ?? []) as unknown as QuiltingCategory[]}
+        allCategories={categoryApiList ?? []}
+        onSave={(names) => {
+          if (categoryEditItem) {
+            updateFabricCategories.mutate({
+              id: categoryEditItem.id,
+              data: { categories: names },
+            });
+          }
+        }}
+        isSaving={updateFabricCategories.isPending}
+      />
     </div>
   );
 }

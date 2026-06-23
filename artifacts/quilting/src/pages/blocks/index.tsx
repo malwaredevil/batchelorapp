@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, useId } from "react";
+import { useState, useRef, useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import {
   PlusCircle,
@@ -52,8 +52,8 @@ import {
 } from "@workspace/api-client-react";
 import type { QuiltingCategory } from "@workspace/api-client-react";
 import { parseCell, fmtInch } from "@/lib/cell-parser";
-import { cn } from "@/lib/utils";
 import { buildFabricUrlMap } from "@/components/FabricPicker";
+import { cn } from "@/lib/utils";
 
 type BlockSeamLine = {
   axis: "h" | "v";
@@ -86,7 +86,6 @@ function SvgCell({
   cell,
   id,
   fabricUrlMap = {},
-  patternPrefix = "fab",
 }: {
   x: number;
   y: number;
@@ -95,7 +94,6 @@ function SvgCell({
   cell: string;
   id: string;
   fabricUrlMap?: Record<number, string>;
-  patternPrefix?: string;
 }) {
   const p = parseCell(cell);
   const cx = x + w / 2;
@@ -103,8 +101,8 @@ function SvgCell({
   const sw = Math.max(0.4, w * 0.04); // seam-line stroke width scales with cell size
   const rf = (c: string) => {
     if (c.startsWith("fab:")) {
-      const n = parseInt(c.slice(4), 10);
-      if (!isNaN(n) && fabricUrlMap[n]) return `url(#${patternPrefix}-${n})`;
+      const id = parseInt(c.slice(4), 10);
+      if (!isNaN(id) && fabricUrlMap[id]) return `url(#fab-${id})`;
       return "#D1D5DB";
     }
     return c || "#FFFFFF";
@@ -278,7 +276,6 @@ function BlockPreviewSvg({
   const svgH = gridH * tileCount * cellPx;
   const tiles = Array.from({ length: tileCount * tileCount }, (_, t) => t);
   const sw = Math.max(0.5, cellPx * 0.1);
-  const patternPrefix = `fab-${useId().replace(/:/g, "")}`;
 
   // Collect unique fabric IDs used in this block
   const fabIds = (() => {
@@ -307,19 +304,13 @@ function BlockPreviewSvg({
           {fabIds.map((id) => (
             <pattern
               key={id}
-              id={`${patternPrefix}-${id}`}
+              id={`fab-${id}`}
               patternUnits="userSpaceOnUse"
-              x="0"
-              y="0"
-              width={cellPx}
-              height={cellPx}
+              x="0" y="0" width={cellPx} height={cellPx}
             >
               <image
                 href={fabricUrlMap[id]}
-                x="0"
-                y="0"
-                width={cellPx}
-                height={cellPx}
+                x="0" y="0" width={cellPx} height={cellPx}
                 preserveAspectRatio="xMidYMid slice"
               />
             </pattern>
@@ -347,7 +338,6 @@ function BlockPreviewSvg({
                   h={cellPx}
                   cell={cell}
                   fabricUrlMap={fabricUrlMap}
-                  patternPrefix={patternPrefix}
                 />
               );
             })}
@@ -980,7 +970,6 @@ export default function Blocks() {
             <BlockCard
               key={block.id}
               block={block}
-              fabricUrlMap={fabricUrlMap}
               onDelete={handleDelete}
               onDuplicate={handleDuplicate}
               onFilterByGridSize={(gs) =>
@@ -992,6 +981,7 @@ export default function Blocks() {
                 })
               }
               onFilterByCategory={toggleCat}
+              fabricUrlMap={fabricUrlMap}
             />
           ))}
         </div>

@@ -1,11 +1,4 @@
-import {
-  useState,
-  useEffect,
-  useRef,
-  useMemo,
-  useCallback,
-  useId,
-} from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Link, useLocation, useParams } from "wouter";
 import { useRegisterNavGuard } from "@/lib/nav-guard";
 import {
@@ -319,7 +312,6 @@ function BlockMini({
   const svgH = gridH * tileCount * cellPx;
   const tiles = Array.from({ length: tileCount * tileCount }, (_, t) => t);
   const sw = Math.max(0.3, cellPx * 0.08);
-  const patternPrefix = `mini-fab-${useId().replace(/:/g, "")}`;
 
   const fabIds = (() => {
     const ids = new Set<number>();
@@ -344,22 +336,16 @@ function BlockMini({
     >
       {fabIds.length > 0 && (
         <defs>
-          {fabIds.map((id) => (
+          {fabIds.map((fabId) => (
             <pattern
-              key={id}
-              id={`${patternPrefix}-${id}`}
+              key={fabId}
+              id={`mini-fab-${fabId}`}
               patternUnits="userSpaceOnUse"
-              x="0"
-              y="0"
-              width={cellPx}
-              height={cellPx}
+              x="0" y="0" width={cellPx} height={cellPx}
             >
               <image
-                href={fabricUrlMap[id]}
-                x="0"
-                y="0"
-                width={cellPx}
-                height={cellPx}
+                href={fabricUrlMap[fabId]}
+                x="0" y="0" width={cellPx} height={cellPx}
                 preserveAspectRatio="xMidYMid slice"
               />
             </pattern>
@@ -387,7 +373,7 @@ function BlockMini({
                   h={cellPx}
                   cell={cell}
                   fabricUrlMap={fabricUrlMap}
-                  patternPrefix={patternPrefix}
+                  patternPrefix="mini-fab"
                 />
               );
             })}
@@ -434,14 +420,10 @@ function BlockMini({
 // Layout grid SVG — renders blocks with sashing and border
 // ---------------------------------------------------------------------------
 
-function resolveFabricFill(
-  color: string,
-  map: Record<number, string>,
-  patternPrefix = "layout-fab",
-): string {
+function resolveFabricFill(color: string, map: Record<number, string>): string {
   if (color.startsWith("fab:")) {
     const id = parseInt(color.slice(4), 10);
-    if (!isNaN(id) && map[id]) return `url(#${patternPrefix}-${id})`;
+    if (!isNaN(id) && map[id]) return `url(#layout-fab-${id})`;
     return "#D1D5DB";
   }
   return color;
@@ -480,7 +462,7 @@ function LayoutGrid({
   const totalH = borderPx * 2 + rows * cellPx + (rows - 1) * sashPx;
   const tilePx = Math.max(cellPx, sashPx, 40);
 
-  // Collect unique fabric IDs used in border/sashing/cornerstone
+  // Collect unique fabric IDs used in border/sashing/cornerstone AND block cells
   const fabricPatternIds = (() => {
     const ids = new Set<number>();
     for (const c of [borderColor, sashingColor, cornerstoneColor ?? ""]) {
@@ -489,15 +471,16 @@ function LayoutGrid({
         if (!isNaN(n) && fabricUrlMap[n]) ids.add(n);
       }
     }
+    // Also collect fab IDs from all block cells
     const FAB_RE = /fab:(\d+)/g;
-    for (const cell of cells) {
-      if (cell.blockId === null) continue;
-      const block = blockMap.get(cell.blockId);
+    for (const lc of cells) {
+      if (lc.blockId === null) continue;
+      const block = blockMap.get(lc.blockId);
       if (!block) continue;
-      for (const bc of block.cells) {
+      for (const c of block.cells) {
         let m: RegExpExecArray | null;
         FAB_RE.lastIndex = 0;
-        while ((m = FAB_RE.exec(bc)) !== null) {
+        while ((m = FAB_RE.exec(c)) !== null) {
           const n = parseInt(m[1], 10);
           if (!isNaN(n) && fabricUrlMap[n]) ids.add(n);
         }
@@ -506,8 +489,7 @@ function LayoutGrid({
     return ids;
   })();
 
-  const patternPrefix = `layout-fab-${useId().replace(/:/g, "")}`;
-  const rf = (c: string) => resolveFabricFill(c, fabricUrlMap, patternPrefix);
+  const rf = (c: string) => resolveFabricFill(c, fabricUrlMap);
 
   return (
     <svg
@@ -524,7 +506,7 @@ function LayoutGrid({
           {Array.from(fabricPatternIds).map((id) => (
             <pattern
               key={id}
-              id={`${patternPrefix}-${id}`}
+              id={`layout-fab-${id}`}
               patternUnits="userSpaceOnUse"
               x="0"
               y="0"
@@ -633,7 +615,6 @@ function LayoutGrid({
                       h={bCellPx}
                       cell={blockCell}
                       fabricUrlMap={fabricUrlMap}
-                      patternPrefix={patternPrefix}
                     />
                   );
                 })}
@@ -763,7 +744,7 @@ export default function LayoutComposer() {
     layoutId ?? 0,
   );
   const { data: blockList } = useListBlocks();
-  const { data: fabricsList } = useListFabrics();
+  const { data: fabricsList, isLoading: fabricsLoading } = useListFabrics();
 
   const [name, setName] = useState("Untitled layout");
   const [rows, setRows] = useState(5);
@@ -1589,7 +1570,21 @@ export default function LayoutComposer() {
             </div>
           )}
 
-          {blockList && blockList.length > 0 && (
+          {blockList && blockList.length > 0 && fabricsLoading && (
+            <div className="flex flex-col gap-2">
+              {blockList.map((block) => (
+                <div key={block.id} className="flex items-center gap-3 rounded-lg border border-border p-2">
+                  <Skeleton className="h-10 w-10 shrink-0 rounded" />
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <Skeleton className="h-3.5 w-3/4" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {blockList && blockList.length > 0 && !fabricsLoading && (
             <div className="flex flex-col gap-2">
               {blockList.map((block) => (
                 <button

@@ -1,4 +1,4 @@
-import { useState, useMemo, useId } from "react";
+import { useState, useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import {
   PlusCircle,
@@ -51,8 +51,8 @@ import {
   getListLayoutsQueryKey,
 } from "@workspace/api-client-react";
 import type { QuiltingCategory } from "@workspace/api-client-react";
-import { cn } from "@/lib/utils";
 import { buildFabricUrlMap } from "@/components/FabricPicker";
+import { cn } from "@/lib/utils";
 
 type LayoutCell = { blockId: number | null; rotation: 0 | 90 | 180 | 270 };
 
@@ -97,7 +97,6 @@ function SvgCell({
   h,
   cell,
   fabricUrlMap = {},
-  patternPrefix = "fab",
 }: {
   x: number;
   y: number;
@@ -105,7 +104,6 @@ function SvgCell({
   h: number;
   cell: string;
   fabricUrlMap?: Record<number, string>;
-  patternPrefix?: string;
 }) {
   const p = parseCell(cell);
   const cx = x + w / 2;
@@ -114,7 +112,7 @@ function SvgCell({
   const rf = (c: string) => {
     if (c.startsWith("fab:")) {
       const n = parseInt(c.slice(4), 10);
-      if (!isNaN(n) && fabricUrlMap[n]) return `url(#${patternPrefix}-${n})`;
+      if (!isNaN(n) && fabricUrlMap[n]) return `url(#fab-${n})`;
       return "#D1D5DB";
     }
     return c || "#FFFFFF";
@@ -269,17 +267,8 @@ function LayoutPreview({
   const sashingColor = layout.sashingColor ?? "#d4c5a9";
   const borderColor = layout.borderColor ?? "#8b6f5e";
   const cornerstoneColor = layout.cornerstoneColor ?? null;
-  const patternPrefix = `fab-${useId().replace(/:/g, "")}`;
-  const rf = (c: string) => {
-    if (c.startsWith("fab:")) {
-      const n = parseInt(c.slice(4), 10);
-      if (!isNaN(n) && fabricUrlMap[n]) return `url(#${patternPrefix}-${n})`;
-      return "#D1D5DB";
-    }
-    return c || "#FFFFFF";
-  };
 
-  // Collect all fabric IDs used in all blocks (and the layout trims) in this layout
+  // Collect all fabric IDs used in all blocks in this layout
   const fabIds = (() => {
     const ids = new Set<number>();
     const FAB_RE = /fab:(\d+)/g;
@@ -294,12 +283,6 @@ function LayoutPreview({
           const n = parseInt(m[1], 10);
           if (!isNaN(n) && fabricUrlMap[n]) ids.add(n);
         }
-      }
-    }
-    for (const c of [borderColor, sashingColor, cornerstoneColor ?? ""]) {
-      if (c.startsWith("fab:")) {
-        const n = parseInt(c.slice(4), 10);
-        if (!isNaN(n) && fabricUrlMap[n]) ids.add(n);
       }
     }
     return Array.from(ids);
@@ -327,19 +310,13 @@ function LayoutPreview({
           {fabIds.map((id) => (
             <pattern
               key={id}
-              id={`${patternPrefix}-${id}`}
+              id={`fab-${id}`}
               patternUnits="userSpaceOnUse"
-              x="0"
-              y="0"
-              width={cellPx}
-              height={cellPx}
+              x="0" y="0" width={cellPx} height={cellPx}
             >
               <image
                 href={fabricUrlMap[id]}
-                x="0"
-                y="0"
-                width={cellPx}
-                height={cellPx}
+                x="0" y="0" width={cellPx} height={cellPx}
                 preserveAspectRatio="xMidYMid slice"
               />
             </pattern>
@@ -347,7 +324,7 @@ function LayoutPreview({
         </defs>
       )}
       {borderPx > 0 && (
-        <rect x={0} y={0} width={W} height={H} fill={rf(borderColor)} />
+        <rect x={0} y={0} width={W} height={H} fill={borderColor} />
       )}
       {sashPx > 0 ? (
         <rect
@@ -355,7 +332,7 @@ function LayoutPreview({
           y={borderPx}
           width={W - borderPx * 2}
           height={H - borderPx * 2}
-          fill={rf(sashingColor)}
+          fill={sashingColor}
         />
       ) : (
         <rect
@@ -379,7 +356,7 @@ function LayoutPreview({
                 y={cy2}
                 width={sashPx}
                 height={sashPx}
-                fill={rf(cornerstoneColor)}
+                fill={cornerstoneColor}
               />
             );
           }),
@@ -420,7 +397,6 @@ function LayoutPreview({
                   h={bCellPx}
                   cell={blockCell}
                   fabricUrlMap={fabricUrlMap}
-                  patternPrefix={patternPrefix}
                 />
               );
             })}
@@ -442,14 +418,9 @@ function buildLayoutSvgString(
 ): string {
   const sashW = layout.sashingWidthInches ?? 0;
   const bordW = layout.borderWidthInches ?? 0;
-  // Static export renders block cells as flat placeholders (no fabric images),
-  // so fab-backed trims fall back to a solid swatch rather than an invalid fill.
-  const solid = (c: string) => (c.startsWith("fab:") ? "#D1D5DB" : c);
-  const sashingColor = solid(layout.sashingColor ?? "#d4c5a9");
-  const borderColor = solid(layout.borderColor ?? "#8b6f5e");
-  const cornerstoneColorStr = layout.cornerstoneColor
-    ? solid(layout.cornerstoneColor)
-    : null;
+  const sashingColor = layout.sashingColor ?? "#d4c5a9";
+  const borderColor = layout.borderColor ?? "#8b6f5e";
+  const cornerstoneColorStr = layout.cornerstoneColor ?? null;
 
   const unitW = layout.cols + sashW * (layout.cols - 1) + bordW * 2;
   const unitH = layout.rows + sashW * (layout.rows - 1) + bordW * 2;
@@ -595,12 +566,7 @@ function LayoutCard({
     <div className="group relative overflow-hidden rounded-xl border border-card-border bg-card transition-shadow hover:shadow-md">
       <Link href={`/layouts/${layout.id}`} className="block">
         <div className="flex aspect-square items-center justify-center overflow-hidden bg-white p-2">
-          <LayoutPreview
-            layout={layout}
-            blocks={blocks}
-            size={160}
-            fabricUrlMap={fabricUrlMap}
-          />
+          <LayoutPreview layout={layout} blocks={blocks} size={160} fabricUrlMap={fabricUrlMap} />
         </div>
         <div className="border-t border-card-border px-3 py-2 pr-8">
           <p className="truncate text-sm font-semibold text-foreground">
@@ -1026,11 +992,11 @@ export default function Layouts() {
               layout={layout}
               blocks={blocks}
               blockMap={blockMap}
-              fabricUrlMap={fabricUrlMap}
               onDelete={handleDelete}
               onDuplicate={handleDuplicate}
               onFilterBySize={toggleSize}
               onFilterByCategory={toggleCat}
+              fabricUrlMap={fabricUrlMap}
             />
           ))}
         </div>

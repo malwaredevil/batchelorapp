@@ -362,13 +362,24 @@ function StatBar({
           {totalQuantity}
         </p>
         <p className="text-xs text-muted-foreground">
-          {totalQuantity === 1 ? "piece" : "pieces"}
+          total {totalQuantity === 1 ? "piece" : "pieces"}
           {isFiltered && (
             <span className="ml-1 text-muted-foreground/60">filtered</span>
           )}
         </p>
       </div>
-      <div className="col-span-2 rounded-xl border border-card-border bg-card p-3">
+      <div className="rounded-xl border border-card-border bg-card p-3">
+        <p className="text-2xl font-semibold">
+          {filteredItems.length}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          unique {filteredItems.length === 1 ? "piece" : "pieces"}
+          {isFiltered && (
+            <span className="ml-1 text-muted-foreground/60">filtered</span>
+          )}
+        </p>
+      </div>
+      <div className="rounded-xl border border-card-border bg-card p-3">
         <p className="mb-1 text-xs font-medium text-muted-foreground">
           Common motifs
         </p>

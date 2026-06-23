@@ -586,6 +586,7 @@ export const ComparePotteryResponse = zod.object({
  */
 export const GetCollectionStatsResponse = zod.object({
   "totalItems": zod.number(),
+  "uniqueItems": zod.number(),
   "topMotifs": zod.array(zod.object({
   "label": zod.string(),
   "count": zod.number()

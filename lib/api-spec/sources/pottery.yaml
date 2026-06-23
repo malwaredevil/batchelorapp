@@ -1009,9 +1009,11 @@ components:
           type: integer
     CollectionStats:
       type: object
-      required: [totalItems, topMotifs, topColors]
+      required: [totalItems, uniqueItems, topMotifs, topColors]
       properties:
         totalItems:
+          type: integer
+        uniqueItems:
           type: integer
         topMotifs:
           type: array

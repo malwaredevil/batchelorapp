@@ -275,6 +275,7 @@ export interface PotteryColorCount {
 
 export interface PotteryCollectionStats {
   totalItems: number;
+  uniqueItems: number;
   topMotifs: PotteryMotifCount[];
   topColors: PotteryColorCount[];
 }

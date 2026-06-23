@@ -10,6 +10,7 @@ import type { PotteryMotifCount } from './potteryMotifCount';
 
 export interface PotteryCollectionStats {
   totalItems: number;
+  uniqueItems: number;
   topMotifs: PotteryMotifCount[];
   topColors: PotteryColorCount[];
 }

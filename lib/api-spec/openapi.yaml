@@ -2329,10 +2329,13 @@ components:
       type: object
       required:
         - totalItems
+        - uniqueItems
         - topMotifs
         - topColors
       properties:
         totalItems:
+          type: integer
+        uniqueItems:
           type: integer
         topMotifs:
           type: array

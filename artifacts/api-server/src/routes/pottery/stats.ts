@@ -46,6 +46,7 @@ router.get("/stats", async (req, res) => {
   res.json(
     GetCollectionStatsResponse.parse({
       totalItems,
+      uniqueItems: rows.length,
       topMotifs: topCounts(motifCounts),
       topColors: topCounts(colorCounts),
     }),

@@ -16,6 +16,7 @@ import {
   Check,
   LogOut,
   ChevronDown,
+  Info,
 } from "lucide-react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -105,6 +106,10 @@ export function AppLauncher() {
               ? String(potteryStatsData.totalItems)
               : "—",
           label: "Pieces",
+          tooltip:
+            potteryStatsData?.uniqueItems != null
+              ? `${potteryStatsData.uniqueItems} unique pieces`
+              : undefined,
         },
         {
           value:
@@ -445,8 +450,16 @@ export function AppLauncher() {
                           key={s.label}
                           className="flex-1 flex flex-col space-y-1 p-3 rounded-lg bg-secondary/50"
                         >
-                          <span className="text-2xl font-bold text-primary">
+                          <span className="text-2xl font-bold text-primary flex items-center gap-1">
                             {s.value}
+                            {"tooltip" in s && s.tooltip && (
+                              <span className="relative group/tip inline-flex items-center">
+                                <Info className="w-3.5 h-3.5 text-muted-foreground/50 cursor-help" />
+                                <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tip:block z-20 whitespace-nowrap rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs font-normal text-popover-foreground shadow-md">
+                                  {s.tooltip}
+                                </span>
+                              </span>
+                            )}
                           </span>
                           <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
                             {s.label}

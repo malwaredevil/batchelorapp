@@ -1,5 +1,6 @@
 import { Cloud, Newspaper, Rss, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { StudioWeather } from "@/components/studio-weather";
 
 const base = import.meta.env.BASE_URL;
 
@@ -59,15 +60,7 @@ export const WIDGETS: WidgetEntry[] = [
     id: "weather",
     title: "Studio Weather",
     icon: Cloud,
-    body: (
-      <div className="flex items-end justify-between">
-        <div>
-          <div className="text-3xl font-bold text-foreground">18°</div>
-          <div className="text-sm text-muted-foreground">Cloudy · Bristol</div>
-        </div>
-        <Cloud className="w-10 h-10 text-muted-foreground/60" />
-      </div>
-    ),
+    body: <StudioWeather />,
   },
   {
     id: "news",

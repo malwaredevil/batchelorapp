@@ -8,6 +8,7 @@ import { isIP } from "net";
 import OpenAI from "openai";
 import { env } from "../../lib/env";
 import { requireAuth } from "../../middleware/auth";
+import { aiLimiter } from "../../middleware/rateLimit";
 import { logger } from "../../lib/logger";
 
 const router: IRouter = Router();
@@ -131,6 +132,14 @@ function safeLookup(
 // redirects automatically; 3xx responses are explicitly rejected below.
 // ---------------------------------------------------------------------------
 
+// Absolute wall-clock budget for the entire outbound fetch, including DNS,
+// TCP handshake, TLS, and response streaming.  The per-request socket
+// inactivity timeout (reqOptions.timeout below) only fires when no bytes
+// arrive for N ms, so a slow-drip server can keep a connection open
+// indefinitely without it.  This deadline races the inner Promise and
+// destroys the request regardless of how slowly the remote sends bytes.
+const FETCH_ABSOLUTE_TIMEOUT_MS = 12_000;
+
 async function fetchPageText(url: string): Promise<string> {
   const parsed = new URL(url);
   // hostname includes brackets for IPv6, e.g. "[::1]" — strip them.
@@ -151,7 +160,9 @@ async function fetchPageText(url: string): Promise<string> {
     throw new Error("URL resolves to a private address");
   }
 
-  return new Promise<string>((resolve, reject) => {
+  let destroyReq: (() => void) | null = null;
+
+  const fetchPromise = new Promise<string>((resolve, reject) => {
     const mod = parsed.protocol === "https:" ? https : http;
     const port = parsed.port
       ? Number(parsed.port)
@@ -215,6 +226,9 @@ async function fetchPageText(url: string): Promise<string> {
       res.on("error", reject);
     });
 
+    // Expose destroy so the absolute-deadline race can kill the socket.
+    destroyReq = () => req.destroy();
+
     req.on("timeout", () => {
       req.destroy();
       reject(new Error("Request timed out"));
@@ -222,6 +236,20 @@ async function fetchPageText(url: string): Promise<string> {
     req.on("error", reject);
     req.end();
   });
+
+  // Race the fetch against a hard wall-clock deadline.  The socket inactivity
+  // timeout above fires only when *no bytes arrive* for 10 s; a slow-drip
+  // server that trickles one byte every ~9 s can hold the connection open
+  // indefinitely.  This outer deadline kills the request unconditionally after
+  // FETCH_ABSOLUTE_TIMEOUT_MS regardless of byte-delivery rate.
+  const deadlinePromise = new Promise<never>((_, reject) => {
+    setTimeout(() => {
+      destroyReq?.();
+      reject(new Error("Request timed out"));
+    }, FETCH_ABSOLUTE_TIMEOUT_MS);
+  });
+
+  return Promise.race([fetchPromise, deadlinePromise]);
 }
 
 // ---------------------------------------------------------------------------
@@ -243,7 +271,7 @@ Respond with STRICT JSON only:
 
 If you cannot find a pattern name, use the page title or domain as the name. Never return anything outside the JSON object.`;
 
-router.post("/patterns/import-url", async (req, res) => {
+router.post("/patterns/import-url", aiLimiter, async (req, res) => {
   const { url } = ImportUrlSchema.parse(req.body);
 
   let pageText: string;

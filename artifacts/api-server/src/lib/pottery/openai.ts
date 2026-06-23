@@ -1,5 +1,6 @@
 import OpenAI from "openai";
-import { callWithFallback, getOpenAIClient } from "../ai-client";
+import { callModel, MODELS, getOpenAIClient } from "../ai-client";
+import { classifyGlazeType } from "../visual-embed";
 import {
   asString,
   asStringArray,
@@ -8,13 +9,32 @@ import {
   type Verdict,
 } from "../ai-parse";
 
-const VISION_MODEL = "gpt-4o-mini";
-// Full gpt-4o for the comparison step — visual deduction needs the sharper model.
-const COMPARE_MODEL = "gpt-4o";
 const EMBEDDING_MODEL = "text-embedding-3-small";
 export const EMBEDDING_DIMENSIONS = 1536;
 
 export type { Verdict };
+
+// ---------------------------------------------------------------------------
+// Surface zone analysis types
+// ---------------------------------------------------------------------------
+
+export interface PotterySurfaceZone {
+  name: string;
+  pattern: string | null;
+  motifs: string[];
+  symmetry: string | null;
+}
+
+export interface SurfaceZoneAnalysis {
+  zones: PotterySurfaceZone[];
+  patternComplexity: "plain" | "simple" | "moderate" | "complex";
+  hasRepeatPattern: boolean;
+  dominantZone: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Main cataloguing types
+// ---------------------------------------------------------------------------
 
 export interface VisionAnalysis {
   name: string;
@@ -27,6 +47,7 @@ export interface VisionAnalysis {
   dominantColors: string[];
   motifs: string[];
   aiDescription: string | null;
+  glazeType: string | null;
 }
 
 const ANALYSIS_PROMPT = `You are an expert ceramics and pottery cataloguer. You will be given one or more photos of the same pottery piece — different angles, front and back, or close-ups. Use every photo to build the most accurate assessment you can.
@@ -38,7 +59,7 @@ Respond with STRICT JSON only, using exactly these keys:
 - "shape": the form of the piece (e.g. "Mug", "Dinner Plate", "Vase", "Bowl") in Title Case, or null.
 - "maker": describe exactly what you can see in the maker's mark — any text, numbers, symbols, country of origin text, or stamp shape visible on the piece. Write in Title Case (e.g. "Johnson Brothers England" not "JOHNSON BROTHERS ENGLAND") even if the mark itself is stamped in capitals. Use null if no mark is visible.
 - "makerInfo": using the mark you described in "maker" plus the piece's style, decoration, shape, and any other clues, write 2–5 sentences about the manufacturer: who they were, where and roughly when they operated, what they were known for, and anything notable about this specific pattern or range if you recognise it. Draw on your full knowledge of pottery history, manufacturers, and backstamp dating. Be honest about uncertainty — use "likely", "possibly", or "consistent with" when not certain. Use null only if no mark is visible and the piece gives no useful clues about its origin.
-- "dimensions": if a Fiskars-style self-healing cutting mat is visible in any of the photos, measure the piece using the printed axis numbers. IMPORTANT — a back-of-piece shot (piece lying face-down on the mat, underside up) often shows the full footprint most clearly and is the best photo to use for sizing plates and bowls; prefer it over a face-up shot when both are available. Method: (1) Major grid lines = 1 inch (2.54 cm) apart; fine dot subdivisions = ⅛ inch (0.318 cm). (2) Top-down or bottom-up shot — SHAPE MATTERS: for circular/round pieces (plates, bowls, round platters) report diameter only; for non-circular pieces (rectangular, square, oval, trays, baking dishes, butter dishes, etc.) read the longest edge (length) AND the perpendicular edge (width), report as "L × W". (3) Side-on or front-on shots — apply the rule for the piece type: (a) Upright vessels (mugs, cups, vases, jugs, pitchers): side shot gives height. If a top-shot diameter was already measured, combine as "diameter × H". (b) Non-circular flat pieces (trays, baking dishes, casseroles): side or front shot gives depth — add as the third value so the result is "L × W × H" (depth is typically the smallest of the three). (c) 3D sculptural pieces (figurines, animals, character pieces, busts, statues): a front or side shot gives height (the tallest visible dimension); a second shot at roughly 90° to the first gives depth if it is visibly different from the width already measured from the top. Combine all available measurements: round footprint → "diameter × H"; non-round footprint → "L × W × H" where H is the tallest dimension (often the largest of the three). Ignore any hand visible in the frame — measure the ceramic only. (4) HOW TO MEASURE — a size is ALWAYS the DIFFERENCE between two axis readings, never a single axis number. Procedure: (i) Find the gridline that touches the LEFT (or BOTTOM) edge of the piece and read its axis value — call it A. (ii) Find the gridline that touches the RIGHT (or TOP) edge and read its axis value — call it B. (iii) Size in inches = B − A. Example: left edge at the 2″ axis mark, right edge at the 13″ mark → diameter = 13 − 2 = 11 inches. If only one edge is clearly visible, use the nearest printed number at that edge and the symmetry of the piece to estimate the other edge. After computing the inch difference, multiply by 2.54 to get cm. COMMON MISTAKE TO AVOID: do not report the axis number at one edge as if it were the diameter — always subtract the two edge positions. (5) SANITY CHECK before snapping: dinner plates are almost always 9–12 inches. If your computed diameter for a plate is larger than 13 inches, you have most likely read a single edge position instead of computing the difference — go back and subtract. (6) SNAP RULES — apply to each individual dimension independently. For the snap table (plates/bowls): (a) If a dimension is within 1.5 inches of exactly one table entry, use that entry. (b) If within 1.5 inches of two entries, always choose the LARGER — pieces are frequently cut off at the photo edge so raw readings run small; when in doubt, round up. (c) The ONLY permitted half-inch values are those in the table: 3½″, 4½″, 7½″. Never use any other half-inch value. (d) For dimensions that do not snap to any table entry (including all dimensions of non-circular pieces), round to the nearest whole inch. (e) Report with a descriptive label, e.g. "approx 27.9 cm (11″ dinner plate) diameter" for circular, or "approx 30 cm × 20 cm (12″ × 8″ serving tray)" for rectangular. Snap table (circular pieces only) — Plates: bread/side 6″ (15.2 cm), salad/dessert 7½″ (19.1 cm) or 8″ (20.3 cm), luncheon 9″ (22.9 cm), dinner 10″ (25.4 cm) / 11″ (27.9 cm), charger 12″ (30.5 cm) or 13″ (33.0 cm); Bowls: dip/condiment 3½″ (8.9 cm), small/prep 4½″ (11.4 cm), cereal/soup 6″ (15.2 cm), pasta 8″ (20.3 cm) or 9″ (22.9 cm), serving 11″ (27.9 cm) or 12″ (30.5 cm); Mugs: standard 3½″ tall × 3½″ wide (8.9 cm); Specialty: egg cup 2″ (5.1 cm), ramekin 3½″ (8.9 cm), 6-cup egg tray ~7″ × 4½″ (17.8 × 11.4 cm). Use null if no mat is visible in any photo or the piece covers too much of the grid to measure reliably.
+- "dimensions": if a Fiskars-style self-healing cutting mat is visible in any of the photos, measure the piece using the printed axis numbers. IMPORTANT — a back-of-piece shot (piece lying face-down on the mat, underside up) often shows the full footprint most clearly and is the best photo to use for sizing plates and bowls; prefer it over a face-up shot when both are available. Method: (1) Major grid lines = 1 inch (2.54 cm) apart; fine dot subdivisions = ⅛ inch (0.318 cm). (2) Top-down or bottom-up shot — SHAPE MATTERS: for circular/round pieces (plates, bowls, round platters) report diameter only; for non-circular pieces (rectangular, square, oval, trays, baking dishes, butter dishes, etc.) read the longest edge (length) AND the perpendicular edge (width), report as "L × W". (3) Side-on or front-on shots — apply the rule for the piece type: (a) Upright vessels (mugs, cups, vases, jugs, pitchers): side shot gives height. If a top-shot diameter was already measured, combine as "diameter × H". (b) Non-circular flat pieces (trays, baking dishes, casseroles): side or front shot gives depth — add as the third value so the result is "L × W × H" (depth is typically the smallest of the three). (c) 3D sculptural pieces (figurines, animals, character pieces, busts, statues): a front or side shot gives height (the tallest visible dimension); a second shot at roughly 90° to the first gives depth if it is visibly different from the width already measured from the top. Combine all available measurements: round footprint → "diameter × H"; non-round footprint → "L × W × H" where H is the tallest dimension (often the largest of the three). Ignore any hand visible in the frame — measure the ceramic only. (4) HOW TO MEASURE — a size is ALWAYS the DIFFERENCE between two axis readings, never a single axis number. Use null if no cutting mat is visible.
 - "dominantColors": an array of 2-5 colour names chosen ONLY from this fixed palette: white, cream, ivory, beige, tan, brown, dark brown, terracotta, gold, yellow, orange, red, burgundy, pink, lavender, purple, light blue, sky blue, blue, cobalt blue, navy, teal, turquoise, green, sage, olive, grey, black. Pick the closest match from the palette — do not invent new names or use names not in this list.
 - "motifs": an array of the key recurring decorative elements (e.g. "blue floral", "vine border", "geometric bands"). Empty array if plain.
 - "aiDescription": write 2-4 sentences describing the piece as a whole — its appearance, character, and any notable features — as if writing a catalogue entry for a collector.
@@ -61,9 +82,6 @@ const UNICODE_FRACTIONS: Record<string, number> = {
 /**
  * Finds every inch measurement in a generated name (e.g. `11"`, `10½″`)
  * and ensures it is followed by the correct cm equivalent in parentheses.
- * Idempotent — existing `(N cm)` annotations are replaced with the
- * recalculated value so stale or incorrect figures are always corrected.
- * Uses a plain `"` in output for readability.
  */
 function addMetricToName(name: string): string {
   return name.replace(
@@ -81,7 +99,6 @@ function addMetricToName(name: string): string {
  * user-confirmed ("locked") facts as bedrock context.
  */
 export interface AnalysisContext {
-  /** Field names the user has locked — treated as confirmed hard truths. */
   lockedFields: string[];
   name?: string | null;
   patternDescription?: string | null;
@@ -90,9 +107,9 @@ export interface AnalysisContext {
   maker?: string | null;
   makerInfo?: string | null;
   dimensions?: string | null;
-  /** Stored as JSON in DB; passed as-is and handled defensively. */
   dominantColors?: unknown;
   motifs?: unknown;
+  glazeType?: string | null;
 }
 
 function buildContextBlock(ctx: AnalysisContext): string {
@@ -116,6 +133,7 @@ function buildContextBlock(ctx: AnalysisContext): string {
       raw: ctx.dominantColors,
     },
     { key: "motifs", label: "motifs", raw: ctx.motifs },
+    { key: "glazeType", label: "glaze / decoration type", raw: ctx.glazeType },
   ];
 
   const lockedLines: string[] = [];
@@ -134,7 +152,6 @@ function buildContextBlock(ctx: AnalysisContext): string {
       if (strings.length === 0) continue;
       display = strings.join(", ");
     } else if (typeof raw === "string") {
-      // Truncate long free-text fields to avoid token bloat
       display = raw.length > 600 ? raw.slice(0, 600) + "…" : raw;
     } else {
       continue;
@@ -186,19 +203,26 @@ export async function analyzeImage(
     ? `${contextBlock}\n\n${baseInstruction}`
     : baseInstruction;
 
-  const completion = await callWithFallback((c) =>
-    c.chat.completions.create({
-      model: VISION_MODEL,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: ANALYSIS_PROMPT },
-        {
-          role: "user",
-          content: [{ type: "text", text: userText }, ...imageContent],
-        },
-      ],
-    }),
-  );
+  const glazeIsLocked = context?.lockedFields.includes("glazeType") ?? false;
+
+  const [completion, clipGlazeType] = await Promise.all([
+    callModel(MODELS.FAST_VISION, (c, model) =>
+      c.chat.completions.create({
+        model,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: ANALYSIS_PROMPT },
+          {
+            role: "user",
+            content: [{ type: "text", text: userText }, ...imageContent],
+          },
+        ],
+      }),
+    ),
+    glazeIsLocked
+      ? Promise.resolve(null)
+      : classifyGlazeType(dataUrls[0] ?? "").catch(() => null),
+  ]);
 
   const raw = parseJson(completion.choices[0]?.message?.content ?? null);
   return {
@@ -212,6 +236,7 @@ export async function analyzeImage(
     dominantColors: asStringArray(raw.dominantColors),
     motifs: asStringArray(raw.motifs),
     aiDescription: asString(raw.aiDescription),
+    glazeType: clipGlazeType ?? null,
   };
 }
 
@@ -220,6 +245,7 @@ export function buildEmbeddingText(analysis: VisionAnalysis): string {
     analysis.patternDescription ?? "Plain undecorated pottery",
     analysis.style ? `Style: ${analysis.style}` : "",
     analysis.shape ? `Shape: ${analysis.shape}` : "",
+    analysis.glazeType ? `Glaze: ${analysis.glazeType}` : "",
     analysis.motifs.length ? `Motifs: ${analysis.motifs.join(", ")}` : "",
     analysis.dominantColors.length
       ? `Colours: ${analysis.dominantColors.join(", ")}`
@@ -237,10 +263,187 @@ export async function embedText(text: string): Promise<number[]> {
   return response.data[0].embedding;
 }
 
+// ---------------------------------------------------------------------------
+// Surface zone analysis
+// ---------------------------------------------------------------------------
+
+const ZONE_ANALYSIS_PROMPT = `You are an expert ceramics analyst. Examine this pottery piece and analyse its decorative surface zones.
+
+Identify each distinct zone of the piece that is visible. Only include zones with meaningful decoration or noteworthy characteristics.
+
+Respond with STRICT JSON only:
+{
+  "zones": [
+    {
+      "name": "body",
+      "pattern": "Blue Willow transfer-print scene with willow tree, bridge, and pagoda",
+      "motifs": ["willow tree", "bridge", "pagoda", "birds"],
+      "symmetry": "non-repeating"
+    }
+  ],
+  "patternComplexity": "complex",
+  "hasRepeatPattern": false,
+  "dominantZone": "body"
+}
+
+Rules:
+- "name" must be one of: rim, body, shoulder, foot, interior, handle, spout
+- "pattern" describes the specific decoration in that zone — null if plain/undecorated
+- "motifs" lists the distinct design elements visible in that zone — empty array if none
+- "symmetry" is one of: radial, bilateral, all-over, non-repeating — null if plain
+- "patternComplexity" is one of: plain (undecorated), simple (one motif), moderate (2-3 motifs), complex (intricate scene or dense pattern)
+- "hasRepeatPattern" is true if the same design element repeats around or across the surface
+- "dominantZone" is the zone name with the most significant decoration — null if wholly undecorated
+
+Do not include any commentary outside the JSON.`;
+
+export async function analyzePotteryZones(
+  dataUrls: string[],
+): Promise<SurfaceZoneAnalysis | null> {
+  const imageContent = dataUrls.slice(0, 3).map((url) => ({
+    type: "image_url" as const,
+    image_url: { url },
+  }));
+
+  try {
+    const completion = await callModel(MODELS.SMART_VISION, (c, model) =>
+      c.chat.completions.create({
+        model,
+        response_format: { type: "json_object" },
+        max_tokens: 1024,
+        messages: [
+          { role: "system", content: ZONE_ANALYSIS_PROMPT },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Analyse the decorative zones of this pottery piece. Respond with JSON only.",
+              },
+              ...imageContent,
+            ],
+          },
+        ],
+      }),
+    );
+
+    const raw = parseJson(completion.choices[0]?.message?.content ?? null);
+    if (!raw || typeof raw !== "object") return null;
+
+    const rawZones = Array.isArray(raw.zones) ? raw.zones : [];
+    const zones: PotterySurfaceZone[] = rawZones
+      .filter(
+        (z): z is Record<string, unknown> =>
+          z != null && typeof z === "object",
+      )
+      .map((z) => ({
+        name: asString(z.name) ?? "body",
+        pattern: asString(z.pattern),
+        motifs: asStringArray(z.motifs),
+        symmetry: asString(z.symmetry),
+      }));
+
+    const complexity = asString(raw.patternComplexity);
+    const validComplexities = ["plain", "simple", "moderate", "complex"] as const;
+    const patternComplexity = validComplexities.includes(
+      complexity as (typeof validComplexities)[number],
+    )
+      ? (complexity as SurfaceZoneAnalysis["patternComplexity"])
+      : "simple";
+
+    return {
+      zones,
+      patternComplexity,
+      hasRepeatPattern: raw.hasRepeatPattern === true,
+      dominantZone: asString(raw.dominantZone),
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Backstamp-focused maker identification
+// ---------------------------------------------------------------------------
+
+const BACKSTAMP_PROMPT = `You are an expert ceramics appraiser specialising in pottery maker's marks and backstamps.
+
+Examine all photos carefully — especially any shot showing the underside or bottom of the piece. Focus specifically on:
+- Printed or transfer-printed backstamps
+- Impressed or incised marks in the clay
+- Hand-painted marks or signatures
+- Country of origin text (e.g. "Made in England", "Bavaria")
+- Pattern names, numbers, or series codes
+
+Respond with STRICT JSON only:
+{
+  "backstampFound": true,
+  "maker": "Full description of the mark exactly as it appears — e.g. 'Royal Doulton England' or 'Johnson Brothers Made in England'. Title Case even if the mark is in capitals.",
+  "makerInfo": "2–5 sentences about the manufacturer: who they were, where they operated, roughly when, and anything notable about this specific mark or pattern if identifiable. Use 'likely', 'possibly', or 'consistent with' for uncertainty."
+}
+
+If no mark is visible in any photo, respond:
+{ "backstampFound": false, "maker": null, "makerInfo": null }
+
+Do not include any commentary outside the JSON.`;
+
+/**
+ * Focused backstamp identification pass — runs when the main analysis found
+ * no maker information. Asks the model to concentrate specifically on maker's
+ * marks. Returns null when nothing is identified or on any error.
+ */
+export async function locateBackstampAndEnhanceMaker(
+  dataUrls: string[],
+): Promise<{ maker: string | null; makerInfo: string | null } | null> {
+  const imageContent = dataUrls.map((url) => ({
+    type: "image_url" as const,
+    image_url: { url },
+  }));
+
+  try {
+    const completion = await callModel(MODELS.SMART_VISION, (c, model) =>
+      c.chat.completions.create({
+        model,
+        response_format: { type: "json_object" },
+        max_tokens: 512,
+        messages: [
+          { role: "system", content: BACKSTAMP_PROMPT },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Focus on any maker's mark or backstamp visible on this piece. Respond with JSON only.",
+              },
+              ...imageContent,
+            ],
+          },
+        ],
+      }),
+    );
+
+    const raw = parseJson(completion.choices[0]?.message?.content ?? null);
+    if (!raw || raw.backstampFound !== true) return null;
+
+    const maker = asString(raw.maker);
+    if (!maker) return null;
+
+    return {
+      maker,
+      makerInfo: asString(raw.makerInfo),
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Collection comparison
+// ---------------------------------------------------------------------------
+
 export interface CompareMatchInput {
   index: number;
   imageUrl: string;
-  /** Additional angles of the same collection piece (supplemental photos). */
   extraImageUrls: string[];
   name: string;
   patternDescription: string | null;
@@ -307,6 +510,7 @@ export async function compareWithMatches(params: {
           shape: candidate.shape,
           motifs: candidate.motifs,
           dominantColors: candidate.dominantColors,
+          glazeType: candidate.glazeType,
         },
         null,
         2,
@@ -333,9 +537,9 @@ export async function compareWithMatches(params: {
     }
   }
 
-  const completion = await callWithFallback((c) =>
+  const completion = await callModel(MODELS.SMART_VISION, (c, model) =>
     c.chat.completions.create({
-      model: COMPARE_MODEL,
+      model,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: COMPARE_PROMPT },

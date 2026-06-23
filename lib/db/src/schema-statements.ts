@@ -337,4 +337,15 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE quilting_patterns ADD COLUMN IF NOT EXISTS designer_website TEXT`,
   `ALTER TABLE quilting_patterns ADD COLUMN IF NOT EXISTS publication_name TEXT`,
   `ALTER TABLE quilting_patterns ADD COLUMN IF NOT EXISTS publication_year TEXT`,
+
+  // ── Pottery AI enhancements ──────────────────────────────────────────────────
+  // glaze_type: Jina CLIP zero-shot decoration/glaze classification
+  `ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS glaze_type text`,
+  // surface_zones: JSON breakdown of decorative zones (rim, body, shoulder, foot)
+  `ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS surface_zones jsonb`,
+  // zone_embedding: Jina CLIP embedding of the dominant body zone crop
+  // (third search lane, tuned to surface pattern rather than whole-piece appearance)
+  `ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS zone_embedding vector(1024)`,
+  `CREATE INDEX IF NOT EXISTS pottery_zone_embedding_idx
+     ON pottery_items USING hnsw (zone_embedding vector_cosine_ops)`,
 ];

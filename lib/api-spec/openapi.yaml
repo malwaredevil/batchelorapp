@@ -2119,6 +2119,16 @@ components:
           type:
             - string
             - "null"
+        glazeType:
+          type:
+            - string
+            - "null"
+          description: Jina CLIP zero-shot decoration/glaze type classification
+        surfaceZones:
+          type:
+            - object
+            - "null"
+          description: AI-detected decorative surface zone breakdown (zones, complexity, repeatPattern)
         dominantColors:
           type: array
           items:

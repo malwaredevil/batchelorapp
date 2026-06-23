@@ -1,9 +1,10 @@
+import sharp from "sharp";
 import { env } from "./env";
 
 export const VISUAL_EMBEDDING_DIMENSIONS = 1024;
 
 // ---------------------------------------------------------------------------
-// Print-type classification labels (mirrors ANALYSIS_PROMPT in openai.ts)
+// Print-type classification labels (quilting — mirrors ANALYSIS_PROMPT in openai.ts)
 // ---------------------------------------------------------------------------
 
 const PRINT_TYPE_LABELS = [
@@ -25,6 +26,28 @@ const PRINT_TYPE_LABELS = [
   "other",
 ];
 
+// ---------------------------------------------------------------------------
+// Glaze / decoration type classification labels (pottery)
+// ---------------------------------------------------------------------------
+
+const GLAZE_TYPE_LABELS = [
+  "crystalline",
+  "celadon",
+  "majolica",
+  "wood-fired",
+  "salt-glazed",
+  "raku",
+  "hand-painted",
+  "transfer-print",
+  "lustre",
+  "terracotta",
+  "spongeware",
+  "blue-and-white",
+  "monochrome",
+  "reactive-glaze",
+  "studio-glaze",
+];
+
 type JinaClassifyResponse = {
   data: Array<{
     predictions: Array<{ label: string; score: number }>;
@@ -40,6 +63,25 @@ type JinaClassifyResponse = {
  */
 export async function classifyPrintType(
   imageInput: string | Buffer,
+): Promise<string | null> {
+  return _jinaClassify(imageInput, PRINT_TYPE_LABELS);
+}
+
+/**
+ * Zero-shot classify a pottery image's glaze/decoration type using Jina CLIP v2.
+ * Returns null when JINA_API_KEY is not configured or on API error.
+ *
+ * @param imageInput - base64, data URL, or HTTPS URL
+ */
+export async function classifyGlazeType(
+  imageInput: string | Buffer,
+): Promise<string | null> {
+  return _jinaClassify(imageInput, GLAZE_TYPE_LABELS);
+}
+
+async function _jinaClassify(
+  imageInput: string | Buffer,
+  labels: string[],
 ): Promise<string | null> {
   if (!env.jinaApiKey) return null;
 
@@ -69,7 +111,7 @@ export async function classifyPrintType(
     body: JSON.stringify({
       model: "jina-clip-v2",
       input: [input],
-      labels: PRINT_TYPE_LABELS,
+      labels,
     }),
   });
 
@@ -141,6 +183,40 @@ export async function generateVisualEmbedding(
 
   const data = (await response.json()) as JinaEmbeddingResponse;
   return data.data[0]?.embedding ?? null;
+}
+
+/**
+ * Generate a 1024-dim visual embedding for the dominant body zone of a pottery
+ * piece by cropping the central 70% of the image vertically (top 15%, height
+ * 70%). This approximates the main decorative body, excluding rim text and foot
+ * ring, giving a third embedding lane tuned to surface-pattern similarity rather
+ * than whole-piece appearance.
+ *
+ * Returns null when JINA_API_KEY is not configured or on any error.
+ */
+export async function generateZoneEmbedding(
+  imageBuffer: Buffer,
+): Promise<number[] | null> {
+  if (!env.jinaApiKey) return null;
+  try {
+    const metadata = await sharp(imageBuffer).metadata();
+    const iw = metadata.width ?? 0;
+    const ih = metadata.height ?? 0;
+    if (!iw || !ih) return null;
+
+    const cropTop = Math.round(ih * 0.15);
+    const cropHeight = Math.round(ih * 0.70);
+    if (cropHeight < 20) return null;
+
+    const cropped = await sharp(imageBuffer)
+      .extract({ left: 0, top: cropTop, width: iw, height: cropHeight })
+      .jpeg({ quality: 88 })
+      .toBuffer();
+
+    return generateVisualEmbedding(cropped);
+  } catch {
+    return null;
+  }
 }
 
 /**

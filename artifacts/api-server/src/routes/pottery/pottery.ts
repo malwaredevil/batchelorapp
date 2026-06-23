@@ -53,20 +53,23 @@ import {
 } from "../../lib/pottery/storage";
 import {
   analyzeImage,
+  analyzePotteryZones,
+  locateBackstampAndEnhanceMaker,
   buildEmbeddingText,
   embedText,
   type AnalysisContext,
 } from "../../lib/pottery/openai";
-import { generateVisualEmbedding } from "../../lib/visual-embed";
+import { generateVisualEmbedding, generateZoneEmbedding } from "../../lib/visual-embed";
 import { serializeItem, serializeItems } from "../../lib/pottery/serialize";
 
-// All columns except the two embedding vectors — the 1536-dim text embedding and
-// the 1024-dim visual embedding are only needed in the compare route's
-// similarity search; excluding them from list/detail queries cuts several KB per
-// row from every collection page load.
+// All columns except the three embedding vectors — the 1536-dim text embedding,
+// the 1024-dim whole-piece visual embedding, and the 1024-dim zone embedding are
+// only needed in the compare route's similarity search; excluding them from
+// list/detail queries cuts several KB per row from every collection page load.
 const {
   embedding: _embedding,
   visualEmbedding: _visualEmbedding,
+  zoneEmbedding: _zoneEmbedding,
   ...itemColumns
 } = getTableColumns(potteryItems);
 
@@ -208,14 +211,32 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
   }
 
   const dataUrl = toDataUrl(cleanBuffer, contentType);
-  // Analyse text + generate the visual embedding in parallel. The visual
-  // embedding gracefully returns null when JINA_API_KEY is absent, so the
-  // visual-search lane simply stays empty rather than hard-failing.
-  const [analysis, visualEmbedding] = await Promise.all([
+
+  // Phase 1: main cataloguing analysis, whole-piece visual embed, and zone
+  // analysis all run in parallel. Each gracefully returns null when the
+  // relevant API key is absent rather than hard-failing the upload.
+  const [analysis, visualEmbedding, surfaceZones] = await Promise.all([
     analyzeImage([dataUrl]),
     generateVisualEmbedding(cleanBuffer),
+    analyzePotteryZones([dataUrl]).catch(() => null),
   ]);
-  const embedding = await embedText(buildEmbeddingText(analysis));
+
+  // Phase 2: text embed + zone embed in parallel (zone embed crops the center
+  // 70% of the image to focus on the main decorative body).
+  const [embedding, zoneEmbedding] = await Promise.all([
+    embedText(buildEmbeddingText(analysis)),
+    generateZoneEmbedding(cleanBuffer).catch(() => null),
+  ]);
+
+  // Optional backstamp enhancement: if the main analysis found no maker,
+  // run a focused identification pass concentrated on marks and stamps.
+  if (!analysis.maker) {
+    const backstampResult = await locateBackstampAndEnhanceMaker([dataUrl]).catch(() => null);
+    if (backstampResult?.maker) {
+      analysis.maker = backstampResult.maker;
+      analysis.makerInfo = backstampResult.makerInfo ?? analysis.makerInfo;
+    }
+  }
 
   const nameField = clampField(req.body?.name, MAX_NAME);
   const notesField = clampField(req.body?.notes, MAX_NOTES);
@@ -251,6 +272,9 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
         imagePath,
         embedding,
         visualEmbedding,
+        glazeType: analysis.glazeType,
+        surfaceZones: surfaceZones ?? undefined,
+        ...(zoneEmbedding ? { zoneEmbedding } : {}),
       })
       .returning();
 
@@ -344,7 +368,7 @@ router.patch("/items/:id", async (req, res) => {
   if (body.dimensions !== undefined)
     fieldUpdates.dimensions = clampField(body.dimensions, MAX_TEXT);
 
-  let row: Omit<PotteryItemRow, "embedding" | "visualEmbedding">;
+  let row: Omit<PotteryItemRow, "embedding" | "visualEmbedding" | "zoneEmbedding">;
 
   if (Object.keys(fieldUpdates).length > 0) {
     const [updated] = await db
@@ -711,14 +735,30 @@ async function runItemAnalysis(id: number, userId: number): Promise<unknown> {
     motifs: item.motifs,
   };
 
-  const analysis = await analyzeImage(dataUrls, reanalysisContext);
-  const [embedding, visualEmbedding] = await Promise.all([
-    embedText(buildEmbeddingText(analysis)),
-    // Regenerate the visual embedding from the (possibly swapped) primary image
-    // so it stays in sync with the stored primary photo. Returns null when
-    // JINA_API_KEY is absent — leaving the existing value untouched below.
+  // Phase 1: analysis + visual embed + zone analysis in parallel.
+  const [analysis, visualEmbedding, surfaceZones] = await Promise.all([
+    analyzeImage(dataUrls, reanalysisContext),
+    // Regenerate embeddings from the (possibly swapped) primary image so they
+    // stay in sync with the stored primary photo. Returns null when the
+    // relevant API key is absent — leaving existing values untouched below.
     generateVisualEmbedding(primaryResult.buffer),
+    analyzePotteryZones(dataUrls).catch(() => null),
   ]);
+
+  // Phase 2: text embed + zone embed in parallel.
+  const [embedding, zoneEmbedding] = await Promise.all([
+    embedText(buildEmbeddingText(analysis)),
+    generateZoneEmbedding(primaryResult.buffer).catch(() => null),
+  ]);
+
+  // Optional backstamp enhancement when no maker was found in the main pass.
+  if (!analysis.maker) {
+    const backstampResult = await locateBackstampAndEnhanceMaker(dataUrls).catch(() => null);
+    if (backstampResult?.maker) {
+      analysis.maker = backstampResult.maker;
+      analysis.makerInfo = backstampResult.makerInfo ?? analysis.makerInfo;
+    }
+  }
 
   const locked = new Set(item.lockedFields ?? []);
   const keep = <T>(field: string, aiVal: T, existing: T): T =>
@@ -752,9 +792,12 @@ async function runItemAnalysis(id: number, userId: number): Promise<unknown> {
       item.aiDescription,
     ),
     embedding,
-    // Only overwrite the visual embedding when one was generated — when
-    // JINA_API_KEY is absent the existing column value is left untouched.
+    glazeType: keep("glazeType", analysis.glazeType, item.glazeType ?? null),
+    surfaceZones: surfaceZones ?? item.surfaceZones ?? null,
+    // Only overwrite embeddings when newly generated — leaves existing column
+    // values untouched when JINA_API_KEY is absent.
     ...(visualEmbedding ? { visualEmbedding } : {}),
+    ...(zoneEmbedding ? { zoneEmbedding } : {}),
   };
 
   const [updated] = await db

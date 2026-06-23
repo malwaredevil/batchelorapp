@@ -8,10 +8,11 @@ import {
   potteryImages,
 } from "@workspace/db";
 
-// Embedding is excluded from list/detail queries — serialize only needs the rest.
+// Embedding vectors are excluded from list/detail queries — only needed in
+// the compare route's similarity search.
 type ItemRowForSerialization = Omit<
   PotteryItemRow,
-  "embedding" | "visualEmbedding"
+  "embedding" | "visualEmbedding" | "zoneEmbedding"
 >;
 
 export interface CategoryResult {
@@ -44,6 +45,8 @@ export interface SerializedItem {
   acquiredAt: string | null;
   dominantColors: string[];
   motifs: string[];
+  glazeType: string | null;
+  surfaceZones: unknown;
   categories: CategoryResult[];
   images: PotteryImageResult[];
   imageUrl: string;
@@ -98,7 +101,6 @@ async function fetchImagesForItems(
       position: row.position,
     });
   }
-  // Sort by position within each item
   for (const imgs of map.values()) {
     imgs.sort((a, b) => a.position - b.position || a.id - b.id);
   }
@@ -136,6 +138,8 @@ function toItem(
     acquiredAt: row.acquiredAt,
     dominantColors: row.dominantColors ?? [],
     motifs: row.motifs ?? [],
+    glazeType: row.glazeType ?? null,
+    surfaceZones: row.surfaceZones ?? null,
     categories: itemCats,
     images: itemImgs,
     imageUrl: imageApiUrl(row.id),

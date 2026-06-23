@@ -1,13 +1,29 @@
 import OpenAI from "openai";
 import { env } from "./env";
 
+/**
+ * Named model pairs for best-of-breed routing.
+ * Via OpenRouter → Gemini Flash (fast, cheap, excellent vision).
+ * Direct OpenAI fallback when OPENROUTER_API_KEY is absent or on 429/503.
+ */
+export const MODELS = {
+  FAST_VISION: {
+    openrouter: "google/gemini-2.0-flash-001",
+    openai: "gpt-4o-mini",
+  },
+  SMART_VISION: {
+    openrouter: "google/gemini-2.0-flash-001",
+    openai: "gpt-4o",
+  },
+} as const;
+
 function makeOpenRouterClient(): OpenAI {
   return new OpenAI({
     apiKey: env.openrouterApiKey!,
     baseURL: "https://openrouter.ai/api/v1",
     defaultHeaders: {
-      "HTTP-Referer": "https://quilting.batchelor.app",
-      "X-Title": "Batchelor Quilting App",
+      "HTTP-Referer": "https://app.batchelor.app",
+      "X-Title": "Batchelor App",
     },
   });
 }
@@ -30,6 +46,10 @@ export function getOpenRouterClient(): OpenAI | null {
  * Run fn against OpenRouter when configured, falling back transparently to
  * OpenAI on rate-limit (429) or service-unavailable (503) errors.
  * Falls directly to OpenAI when OPENROUTER_API_KEY is absent.
+ *
+ * NOTE: Both clients receive the same model string passed inside fn.
+ * Prefer callModel() when you want best-of-breed routing with different model
+ * identifiers per provider (e.g. Gemini via OpenRouter, gpt-4o-mini direct).
  */
 export async function callWithFallback<T>(
   fn: (client: OpenAI) => Promise<T>,
@@ -51,8 +71,11 @@ export async function callWithFallback<T>(
 
 /**
  * Call a model that has different identifiers on OpenRouter vs OpenAI.
- * Use this for features that need provider-specific model names (e.g. Perplexity
- * via OpenRouter, which has no OpenAI equivalent).
+ *
+ * Prefer this over callWithFallback() for all vision tasks — it routes to
+ * the best-value model via OpenRouter (e.g. google/gemini-2.0-flash-001)
+ * and falls back to the specified OpenAI model on rate-limit / unavailability.
+ * Use MODELS.FAST_VISION or MODELS.SMART_VISION for standard routing.
  */
 export async function callModel<T>(
   models: { openrouter: string; openai: string },

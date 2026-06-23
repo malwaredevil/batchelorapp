@@ -9,6 +9,7 @@ import {
   index,
   vector,
   primaryKey,
+  jsonb,
 } from "drizzle-orm/pg-core";
 
 export const potteryItems = pgTable(
@@ -44,8 +45,11 @@ export const potteryItems = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
+    glazeType: text("glaze_type"),
+    surfaceZones: jsonb("surface_zones"),
     embedding: vector("embedding", { dimensions: 1536 }),
     visualEmbedding: vector("visual_embedding", { dimensions: 1024 }),
+    zoneEmbedding: vector("zone_embedding", { dimensions: 1024 }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -58,6 +62,10 @@ export const potteryItems = pgTable(
     index("pottery_visual_embedding_idx").using(
       "hnsw",
       table.visualEmbedding.op("vector_cosine_ops"),
+    ),
+    index("pottery_zone_embedding_idx").using(
+      "hnsw",
+      table.zoneEmbedding.op("vector_cosine_ops"),
     ),
     index("pottery_items_user_id_idx").on(table.userId),
   ],

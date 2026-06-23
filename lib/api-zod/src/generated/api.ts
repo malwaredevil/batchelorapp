@@ -114,6 +114,8 @@ export const ListPotteryResponseItem = zod.object({
   "makerInfo": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
   "acquiredAt": zod.string().nullish(),
+  "glazeType": zod.string().nullish(),
+  "surfaceZones": zod.record(zod.string(), zod.unknown()).nullish(),
   "dominantColors": zod.array(zod.string()),
   "motifs": zod.array(zod.string()),
   "categories": zod.array(zod.object({
@@ -171,6 +173,8 @@ export const GetPotteryResponse = zod.object({
   "makerInfo": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
   "acquiredAt": zod.string().nullish(),
+  "glazeType": zod.string().nullish(),
+  "surfaceZones": zod.record(zod.string(), zod.unknown()).nullish(),
   "dominantColors": zod.array(zod.string()),
   "motifs": zod.array(zod.string()),
   "categories": zod.array(zod.object({
@@ -232,6 +236,8 @@ export const UpdatePotteryResponse = zod.object({
   "makerInfo": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
   "acquiredAt": zod.string().nullish(),
+  "glazeType": zod.string().nullish(),
+  "surfaceZones": zod.record(zod.string(), zod.unknown()).nullish(),
   "dominantColors": zod.array(zod.string()),
   "motifs": zod.array(zod.string()),
   "categories": zod.array(zod.object({
@@ -322,6 +328,8 @@ export const ReanalyzePotteryResponse = zod.object({
   "makerInfo": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
   "acquiredAt": zod.string().nullish(),
+  "glazeType": zod.string().nullish(),
+  "surfaceZones": zod.record(zod.string(), zod.unknown()).nullish(),
   "dominantColors": zod.array(zod.string()),
   "motifs": zod.array(zod.string()),
   "categories": zod.array(zod.object({
@@ -387,6 +395,8 @@ export const SetPrimaryImageResponse = zod.object({
   "makerInfo": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
   "acquiredAt": zod.string().nullish(),
+  "glazeType": zod.string().nullish(),
+  "surfaceZones": zod.record(zod.string(), zod.unknown()).nullish(),
   "dominantColors": zod.array(zod.string()),
   "motifs": zod.array(zod.string()),
   "categories": zod.array(zod.object({
@@ -540,6 +550,8 @@ export const ComparePotteryResponse = zod.object({
   "makerInfo": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
   "acquiredAt": zod.string().nullish(),
+  "glazeType": zod.string().nullish(),
+  "surfaceZones": zod.record(zod.string(), zod.unknown()).nullish(),
   "dominantColors": zod.array(zod.string()),
   "motifs": zod.array(zod.string()),
   "categories": zod.array(zod.object({

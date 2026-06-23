@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { callWithFallback, callModel, getOpenAIClient } from "./ai-client";
+import { callModel, callWithFallback, getOpenAIClient, MODELS } from "./ai-client";
 import { classifyPrintType } from "./visual-embed";
 import {
   asString,
@@ -165,9 +165,9 @@ export async function analyzeImage(
   // CLIP result wins when available; GPT extraction is the fallback.
   const clipIsLocked = context?.lockedFields.includes("printType") ?? false;
   const [completion, clipPrintType] = await Promise.all([
-    callWithFallback((c) =>
+    callModel(MODELS.FAST_VISION, (c, model) =>
       c.chat.completions.create({
-        model: VISION_MODEL,
+        model,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: ANALYSIS_PROMPT },
@@ -292,9 +292,9 @@ export async function analyzePatternImage(
       ? `Existing record — use as context:\n${contextLines.join("\n")}\n\n`
       : "";
 
-  const completion = await callWithFallback((c) =>
+  const completion = await callModel(MODELS.FAST_VISION, (c, model) =>
     c.chat.completions.create({
-      model: VISION_MODEL,
+      model,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: PATTERN_ANALYSIS_PROMPT },
@@ -373,9 +373,9 @@ export async function analyzeQuiltImage(
       ? `Existing record:\n${contextLines.join("\n")}\n\n`
       : "";
 
-  const completion = await callWithFallback((c) =>
+  const completion = await callModel(MODELS.FAST_VISION, (c, model) =>
     c.chat.completions.create({
-      model: VISION_MODEL,
+      model,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: QUILT_ANALYSIS_PROMPT },
@@ -509,9 +509,9 @@ export async function compareWithMatches(params: {
     }
   }
 
-  const completion = await callWithFallback((c) =>
+  const completion = await callModel(MODELS.SMART_VISION, (c, model) =>
     c.chat.completions.create({
-      model: COMPARE_MODEL,
+      model,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: COMPARE_PROMPT },
@@ -577,9 +577,9 @@ export async function detectBlockSeams(
   gridW: number,
   gridH: number,
 ): Promise<DetectSeamsResult> {
-  const response = await callWithFallback((c) =>
+  const response = await callModel(MODELS.FAST_VISION, (c, model) =>
     c.chat.completions.create({
-      model: VISION_MODEL,
+      model,
       max_tokens: 1024,
       messages: [
         {
@@ -764,9 +764,9 @@ Respond with STRICT JSON only:
 export async function extractBlockFromImage(
   imageDataUrl: string,
 ): Promise<ExtractedBlockDef> {
-  const completion = await callWithFallback((c) =>
+  const completion = await callModel(MODELS.FAST_VISION, (c, model) =>
     c.chat.completions.create({
-      model: VISION_MODEL,
+      model,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: BLOCK_EXTRACT_PROMPT },

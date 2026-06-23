@@ -17,7 +17,7 @@ import {
   compareWithMatches,
   type CompareMatchInput,
 } from "../../lib/pottery/openai";
-import { generateVisualEmbedding } from "../../lib/visual-embed";
+import { generateVisualEmbedding, generateZoneEmbedding } from "../../lib/visual-embed";
 import { rerankCandidates } from "../../lib/reranker";
 import { downloadAndShrinkImageForAi } from "../../lib/pottery/storage";
 import { serializeItems } from "../../lib/pottery/serialize";
@@ -39,11 +39,13 @@ const MAX_EXTRA_IMAGES = 1;
 // Wider pools feed the Voyage reranker with more signal; the reranker trims to TOP_K.
 const TEXT_SEARCH_POOL = 30;
 const VISUAL_SEARCH_POOL = 30;
+const ZONE_SEARCH_POOL = 30;
 
-// Exclude both embedding vectors — heavy and not needed in API responses.
+// Exclude all three embedding vectors — heavy and not needed in API responses.
 const {
   embedding: _embedding,
   visualEmbedding: _visualEmbedding,
+  zoneEmbedding: _zoneEmbedding,
   ...itemColumns
 } = getTableColumns(potteryItems);
 
@@ -56,6 +58,7 @@ const {
 function reciprocalRankFusion(
   textRanked: Array<{ id: number; similarity: number }>,
   visualRanked: Array<{ id: number; similarity: number }>,
+  zoneRanked: Array<{ id: number; similarity: number }>,
   k = 60,
 ): Array<{ id: number; rrfScore: number; textSimilarity: number }> {
   const scores = new Map<
@@ -69,11 +72,17 @@ function reciprocalRankFusion(
   for (const { id } of visualRanked) {
     if (!scores.has(id)) scores.set(id, { rrfScore: 0, textSimilarity: 0 });
   }
+  for (const { id } of zoneRanked) {
+    if (!scores.has(id)) scores.set(id, { rrfScore: 0, textSimilarity: 0 });
+  }
   for (let i = 0; i < textRanked.length; i++) {
     scores.get(textRanked[i].id)!.rrfScore += 1 / (k + i + 1);
   }
   for (let i = 0; i < visualRanked.length; i++) {
     scores.get(visualRanked[i].id)!.rrfScore += 1 / (k + i + 1);
+  }
+  for (let i = 0; i < zoneRanked.length; i++) {
+    scores.get(zoneRanked[i].id)!.rrfScore += 1 / (k + i + 1);
   }
 
   return Array.from(scores.entries())
@@ -143,9 +152,10 @@ router.post("/compare", aiLimiter, upload.single("image"), async (req, res) => {
   // Analyse text + generate the visual embedding in parallel. The visual
   // embedding gracefully returns null when JINA_API_KEY is absent, so the
   // visual lane simply stays empty rather than hard-failing.
-  const [analysis, visualEmb] = await Promise.all([
+  const [analysis, visualEmb, zoneEmb] = await Promise.all([
     analyzeImage([dataUrl]),
     generateVisualEmbedding(cleanBuffer),
+    generateZoneEmbedding(cleanBuffer).catch(() => null),
   ]);
   const embedding = await embedText(buildEmbeddingText(analysis));
 
@@ -160,10 +170,11 @@ router.post("/compare", aiLimiter, upload.single("image"), async (req, res) => {
   };
 
   const vectorLiteral = `[${embedding.join(",")}]`;
+  const zoneVectorLiteral = zoneEmb ? `[${zoneEmb.join(",")}]` : null;
 
-  // Text vector search (always) + visual vector search (when available) in parallel.
-  // Both searches are scoped to this user's items only.
-  const [textRanked, visualRanked] = await Promise.all([
+  // Three-way vector search: text + whole-piece visual + body-zone visual.
+  // All searches are scoped to this user's items via RLS.
+  const [textRanked, visualRanked, zoneRanked] = await Promise.all([
     db
       .execute<{ id: number; similarity: number }>(
         sql`
@@ -198,11 +209,29 @@ router.post("/compare", aiLimiter, upload.single("image"), async (req, res) => {
             })),
           )
       : Promise.resolve([] as Array<{ id: number; similarity: number }>),
+    zoneVectorLiteral
+      ? db
+          .execute<{ id: number; similarity: number }>(
+            sql`
+            select id, 1 - (zone_embedding <=> ${zoneVectorLiteral}::vector) as similarity
+            from pottery_items
+            where zone_embedding is not null
+            order by zone_embedding <=> ${zoneVectorLiteral}::vector
+            limit ${ZONE_SEARCH_POOL}
+          `,
+          )
+          .then((r) =>
+            r.rows.map((row) => ({
+              id: Number(row.id),
+              similarity: Number(row.similarity),
+            })),
+          )
+      : Promise.resolve([] as Array<{ id: number; similarity: number }>),
   ]);
 
-  // Merge via RRF. Falls back to text-only when the visual lane is empty
-  // (no JINA_API_KEY or no visual embeddings stored yet).
-  const mergedRanking = reciprocalRankFusion(textRanked, visualRanked);
+  // Three-way RRF: text + whole-piece visual + body-zone pattern.
+  // Gracefully degrades to 2-way or text-only when lanes are empty.
+  const mergedRanking = reciprocalRankFusion(textRanked, visualRanked, zoneRanked);
 
   if (mergedRanking.length === 0) {
     res.json(

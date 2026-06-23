@@ -32,6 +32,10 @@ export interface PotteryPotteryItem {
   aiDescription?: string | null;
   /** @nullable */
   acquiredAt?: string | null;
+  /** @nullable */
+  glazeType?: string | null;
+  /** @nullable */
+  surfaceZones?: object | null;
   dominantColors: string[];
   motifs: string[];
   categories: PotteryCategory[];

@@ -724,12 +724,17 @@ export default function Collection() {
     if (!data) return [];
     let result = data;
 
-    // Category filter — OR logic across all selected categories
+    // Category filter — AND logic: item must have every selected category.
+    // "none" is treated as exclusive (show uncategorized items only when it is
+    // the sole selection; real category IDs take precedence when mixed).
     if (filterCategoryIds.size > 0) {
+      const realIds = [...filterCategoryIds].filter(
+        (id): id is number => id !== "none",
+      );
+      const noneOnly = filterCategoryIds.has("none") && realIds.length === 0;
       result = result.filter((item) => {
-        if (filterCategoryIds.has("none") && item.categories.length === 0)
-          return true;
-        return item.categories.some((c) => filterCategoryIds.has(c.id));
+        if (noneOnly) return item.categories.length === 0;
+        return realIds.every((id) => item.categories.some((c) => c.id === id));
       });
     }
 

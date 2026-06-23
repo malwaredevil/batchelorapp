@@ -1,53 +1,65 @@
 ---
 name: Quilting SVG fabric-texture previews
-description: How fab:N fabric cells render as SVG <pattern> fills in quilting block/layout previews, and the STATIC pattern-id scheme that must be kept (useId() scoping breaks it → black blocks).
+description: How fab:N fabric cells render as SVG <pattern> fills, and the cell-parser token-splitting bug that turned fabric half-square-triangles into black blocks.
 ---
 
 # Quilting SVG fabric-texture previews
 
 Block/layout/composer previews encode a fabric-backed cell as the string `fab:N`
 (N = fabric id). That string is NOT a valid SVG color — it must be resolved to a
-`<pattern>` fill, never passed to `fill={...}` raw (raw → renders black).
+`<pattern>` fill. The page-local `SvgCell` resolvers turn `fab:N` into
+`url(#<prefix>-N)` (prefix `fab` in blocks/index & layouts/index, `mini-fab` in
+composer `BlockMini`, `layout-fab` in composer `LayoutGrid`) and each SVG's
+`<defs>` declares the matching `<pattern>`. The defs collectors scan raw cell
+strings with a global `/fab:(\d+)/g` regex, so they always emit the right
+patterns. **An unresolved `url(#missing)` paint ref falls back to the SVG default
+fill, which is BLACK** (not transparent). Black blocks = the resolver emitted a
+`url(#...)` / invalid color that doesn't match any rendered `<pattern>`.
 
-## The pattern-id scheme is STATIC and must stay static
+## The real bug: parseCell mangled fab:N tokens inside composite cells
 
-The shared renderer `components/CellShape.tsx` **hardcodes** `url(#fab-${id})` and
-takes NO `patternPrefix` prop. The page-local `SvgCell` renderers use a static
-`patternPrefix` default per surface: `"fab"` (blocks/index, layouts/index),
-`"mini-fab"` (composer `BlockMini`), `"layout-fab"` (composer `LayoutGrid`, also
-its default). Each SVG's `<defs>` must declare `<pattern id="<prefix>-${id}">`
-matching exactly what its renderer emits:
-- blocks/index & layouts/index thumbnails → defs `fab-${id}` + `SvgCell` default `fab`.
-- composer `BlockMini` → defs `mini-fab-${id}` + `SvgCell patternPrefix="mini-fab"`.
-- composer `LayoutGrid` → defs `layout-fab-${id}` + `SvgCell` default `layout-fab`;
-  trims via `resolveFabricFill` → `url(#layout-fab-${id})`.
+Composite cells store multiple colors joined by `:` —
+e.g. a half-square triangle is `"nesw:fab:19:fab:10"` (two fabric tokens that
+each ALSO contain a colon). The shared `lib/cell-parser.ts` `parseCell()` was
+written assuming every color was a `#hex` value:
+- triangle branch used `cell.indexOf(":", 5)` to find the a/b separator;
+- quad/hsplit/vsplit/xsplit used `split(/:(?=#)/)` (split only before `#`).
 
-**Do NOT introduce `useId()`-scoped pattern ids** (e.g. `fab-${useId()}-N`).
-**Why:** it makes the `<defs>` ids no longer match the `url(#fab-N)` that
-`CellShape` (and the static-default `SvgCell`s) emit → fills reference a
-non-existent pattern → **black blocks**. A 2026-06 in-session "fix" added useId
-scoping to prevent a theoretical cross-preview mis-scale and instead caused the
-black-block regression across composer.tsx + blocks/index.tsx + layouts/index.tsx.
-The duplicate-global-id mis-scale concern did not justify the breakage.
+Both split at the WRONG colon for `fab:N` tokens, yielding e.g. `a="fab"`,
+`b="19:fab:10"` — invalid SVG colors → black fill. Pure `#hex` cells parsed fine,
+which is why the bug only showed on fabric (not solid-color) triangles/splits.
 
-## Canonical source of truth
+**Fix:** a `splitColorTokens(s)` helper that splits on `:` then rejoins any
+`"fab"` segment with its following numeric id, keeping `fab:<id>` intact. Used in
+the triangle, quad, hsplit, vsplit, xsplit branches. Backward-compatible with
+`#hex` cells. Because `parseCell` is shared, this fixes every surface at once
+(Block Designer list, Layout Composer palette, Layout thumbnails, the live
+designer canvas via `CellShape.tsx`, and SVG export).
 
-The standalone repo **`malwaredevil/quilting`** is the reference for this app's
-rendering (the quilting app lives under `artifacts/pottery/` there). When in doubt,
-diff against it. In this monorepo the same code lives under `artifacts/quilting/`,
-and these render files are byte-identical to upstream EXCEPT the merge-required
-`Quilting*` API renames: `useListCategories`→`useListQuiltingCategories`,
-`Category`→`QuiltingCategory`, `CreateBlockInputGridSize`→
-`QuiltingCreateBlockInputGridSize`. `CellShape.tsx`, `cell-parser.ts`,
-`FabricPicker.tsx`, `svg-export.ts` are identical to upstream — never the bug site.
+**Why this took several tries:** an earlier session misdiagnosed it as
+`useId()`-scoped pattern ids and "fixed" it by restoring files to upstream — but
+**upstream `malwaredevil/quilting` has the byte-identical broken parser**, so
+restoring to upstream changed nothing. "Byte-identical to upstream" does NOT mean
+"not the bug site" — upstream can be wrong too. Diagnose from the actual stored
+data, not from a diff against upstream.
 
-## Known non-bug
+## How to debug black blocks next time
 
-Upstream layouts/index `LayoutPreview` + `buildLayoutSvgString` paint layout TRIMS
-(border/sashing/cornerstone) with the raw color string, so a `fab:N` trim would
-render black in list thumbnails/exports. This is a rarely-hit trims-only edge case
-left faithful to upstream; do not re-add a per-instance resolver here just to
-"fix" it — that reintroduces divergence. Block-cell fabric previews are correct.
+1. Query the real cells: `quilting_blocks.cells` via Supabase REST
+   (`$SUPABASE_URL/rest/v1/quilting_blocks?select=cells` with the service-role key
+   as `apikey`+`Authorization` — direct PG is DNS-blocked from dev).
+2. If cells contain composite `fab:N` encodings (`nesw:`/`quad:`/`*split:`),
+   verify `parseCell` returns intact `fab:N` tokens for a/b (not `"fab"` / `"N:..."`).
+3. Zero `/api/quilting/fabrics/:id/image` requests in api-server logs while blocks
+   are black = the `<image>` hrefs are never emitted because the resolver got a
+   mangled token, not because images are missing.
 
-**How to apply:** when adding any new SVG that paints quilt cells, copy the static
-`fab-${id}` / `<prefix>-${id}` resolver and matching `<defs>`; keep ids static.
+## Follow-up (not yet done)
+
+No vitest harness exists in `@workspace/quilting`. A focused parser unit test
+(mixed `fab:` + hex + malformed payloads across all composite kinds) would lock
+this fix against regression.
+
+**How to apply:** when touching cell encoding/decoding, remember a color token may
+be `fab:<id>` (contains a colon) OR `#hex`; never split composite cells with a
+naive `:`/`#`-only split — route through `splitColorTokens`.

@@ -32,6 +32,28 @@ export type ParsedCell =
   | { kind: "midline"; h: boolean; v: boolean }
   | { kind: "qlines"; dirs: QDir[] };
 
+/**
+ * Split a ":"-delimited colour-token list while keeping multi-segment fabric
+ * references ("fab:<id>") intact. A plain colour ("#RRGGBB", named, or empty)
+ * occupies one segment; a fabric reference occupies two ("fab" + the numeric
+ * id) and is rejoined. This replaces the older `split(/:(?=#)/)` / `indexOf`
+ * tricks, which assumed every colour was a `#hex` value and mangled `fab:N`
+ * tokens (turning a half-square-triangle into invalid colours → black fill).
+ */
+function splitColorTokens(s: string): string[] {
+  const raw = s.split(":");
+  const out: string[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i] === "fab" && i + 1 < raw.length) {
+      out.push(`fab:${raw[i + 1]}`);
+      i++;
+    } else {
+      out.push(raw[i]);
+    }
+  }
+  return out;
+}
+
 export function parseCell(cell: string): ParsedCell {
   if (cell === "ne-line") return { kind: "qlines", dirs: ["ne"] };
   if (cell === "se-line") return { kind: "qlines", dirs: ["se"] };
@@ -82,7 +104,7 @@ export function parseCell(cell: string): ParsedCell {
     };
   }
   if (cell.startsWith("quad:")) {
-    const parts = cell.slice(5).split(/:(?=#)/);
+    const parts = splitColorTokens(cell.slice(5));
     if (parts.length === 4)
       return {
         kind: "quad",
@@ -94,19 +116,19 @@ export function parseCell(cell: string): ParsedCell {
     return { kind: "solid", color: "" };
   }
   if (cell.startsWith("hsplit:")) {
-    const parts = cell.slice(7).split(/:(?=#)/);
+    const parts = splitColorTokens(cell.slice(7));
     if (parts.length === 2)
       return { kind: "hsplit", top: parts[0], bottom: parts[1] };
     return { kind: "solid", color: "" };
   }
   if (cell.startsWith("vsplit:")) {
-    const parts = cell.slice(7).split(/:(?=#)/);
+    const parts = splitColorTokens(cell.slice(7));
     if (parts.length === 2)
       return { kind: "vsplit", left: parts[0], right: parts[1] };
     return { kind: "solid", color: "" };
   }
   if (cell.startsWith("xsplit:")) {
-    const parts = cell.slice(7).split(/:(?=#)/);
+    const parts = splitColorTokens(cell.slice(7));
     if (parts.length === 4)
       return {
         kind: "xsplit",
@@ -119,11 +141,9 @@ export function parseCell(cell: string): ParsedCell {
   }
   if (cell.startsWith("nwse:") || cell.startsWith("nesw:")) {
     const type = cell.slice(0, 4) as "nwse" | "nesw";
-    const sepIdx = cell.indexOf(":", 5);
-    if (sepIdx === -1) return { kind: "solid", color: cell };
-    const a = cell.slice(5, sepIdx);
-    const b = cell.slice(sepIdx + 1);
-    return { kind: "triangle", type, a, b };
+    const tokens = splitColorTokens(cell.slice(5));
+    if (tokens.length < 2) return { kind: "solid", color: cell };
+    return { kind: "triangle", type, a: tokens[0], b: tokens[1] };
   }
   return { kind: "solid", color: cell };
 }

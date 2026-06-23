@@ -177,10 +177,6 @@ export default function LayoutDetail() {
 
   const l = layout as unknown as LayoutData;
 
-  const totalW = l.sashingWidthInches != null
-    ? fmtInch(l.cols * (l.sashingWidthInches) + l.sashingWidthInches)
-    : null;
-
   return (
     <div className="mx-auto max-w-3xl">
       <Button

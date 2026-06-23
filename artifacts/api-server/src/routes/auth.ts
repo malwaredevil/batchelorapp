@@ -233,21 +233,30 @@ router.post("/auth/change-password", requireAuth, async (req, res) => {
     .set({ passwordHash: newHash })
     .where(eq(appUsers.id, user.id));
 
-  // Revoke all other sessions for this user so that any previously stolen
-  // session cookie stops working immediately after a password change.
-  // Keep the current session alive so the user stays logged in.
-  const currentSid = req.session.id;
+  // Revoke ALL sessions for this user (including the current one) so that any
+  // stolen session cookie stops working immediately. Then regenerate the
+  // session ID and restore the user's identity so they stay logged in under a
+  // fresh, unguessable session that the attacker does not possess.
+  const savedUserId = req.session.userId!;
   try {
     await pool.query(
-      `DELETE FROM quilting_sessions WHERE sess->>'userId' = $1 AND sid != $2`,
-      [String(user.id), currentSid],
+      `DELETE FROM quilting_sessions WHERE sess->>'userId' = $1`,
+      [String(user.id)],
     );
   } catch (err) {
-    req.log.error(
-      { err },
-      "failed to revoke other sessions on password change",
-    );
+    req.log.error({ err }, "failed to revoke sessions on password change");
   }
+
+  await new Promise<void>((resolve, reject) => {
+    req.session.regenerate((err) => {
+      if (err) return reject(err);
+      req.session.userId = savedUserId;
+      req.session.save((saveErr) => {
+        if (saveErr) return reject(saveErr);
+        resolve();
+      });
+    });
+  });
 
   res.status(204).end();
 });
@@ -299,6 +308,20 @@ router.post("/auth/forgot-password", loginLimiter, async (req, res) => {
         .digest("hex");
 
       const expiresAt = new Date(Date.now() + THIRTY_MINUTES_MS);
+
+      // Revoke any outstanding (unused, unexpired) tokens for this user before
+      // issuing a fresh one. This ensures that only the newest reset link is
+      // valid, so a prior token obtained by an attacker (e.g. from a forwarded
+      // email) cannot be replayed after the victim initiates a new reset.
+      await db
+        .update(passwordResetTokens)
+        .set({ used: true, usedAt: new Date() })
+        .where(
+          and(
+            eq(passwordResetTokens.userId, user.id),
+            eq(passwordResetTokens.used, false),
+          ),
+        );
 
       await db.insert(passwordResetTokens).values({
         userId: user.id,

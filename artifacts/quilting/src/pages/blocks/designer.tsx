@@ -3238,7 +3238,7 @@ export default function BlockDesigner() {
         setIsDirty(false);
         if (exitAfterSaveRef.current) {
           exitAfterSaveRef.current = false;
-          navigate("/blocks");
+          navigate(blockId ? `/blocks/${blockId}` : "/blocks");
         } else {
           toast.success("Block design updated!");
         }
@@ -3659,7 +3659,7 @@ export default function BlockDesigner() {
           variant="ghost"
           size="icon"
           className="h-7 w-7"
-          onClick={() => requestNav("/blocks")}
+          onClick={() => requestNav(blockId ? `/blocks/${blockId}` : "/blocks")}
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>

@@ -247,169 +247,18 @@ export default function QuiltDetail() {
     setDraft((prev) => ({ ...prev, [k]: v }));
 
   return (
-    <div>
-      <div className="mb-6 flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/quilts")}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        {renamingName ? (
-          <>
-            <div className="flex flex-1 items-center gap-1.5 min-w-0">
-              <Input
-                value={renameValue}
-                onChange={(e) => setRenameValue(e.target.value)}
-                className="h-8 flex-1 min-w-0 text-base font-semibold"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleRename();
-                  if (e.key === "Escape") setRenamingName(false);
-                }}
-                autoFocus
-              />
-            </div>
-            <Button
-              size="sm"
-              onClick={handleRename}
-              disabled={updateQuilt.isPending}
-            >
-              <Check className="mr-1.5 h-3.5 w-3.5" />
-              Save
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setRenamingName(false)}
-            >
-              <XIcon className="mr-1.5 h-3.5 w-3.5" />
-              Cancel
-            </Button>
-          </>
-        ) : (
-          <>
-            <div className="flex flex-1 items-center gap-1 min-w-0">
-              <h1 className="truncate text-xl font-bold">
-                {isEditing ? d.name || q.name : q.name}
-              </h1>
-              {!isEditing && (
-                <button
-                  onClick={() => {
-                    setRenameValue(q.name);
-                    setRenamingName(true);
-                  }}
-                  className="shrink-0 rounded p-0.5 text-muted-foreground/30 hover:text-muted-foreground/70 transition-colors"
-                  title="Rename"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-        {isEditing ? (
-          <>
-            <Button
-              size="sm"
-              onClick={handleSave}
-              disabled={updateQuilt.isPending}
-            >
-              <Check className="mr-1.5 h-3.5 w-3.5" />
-              Save
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsEditing(false)}
-            >
-              <XIcon className="mr-1.5 h-3.5 w-3.5" />
-              Cancel
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => toggleLock("name")}
-              disabled={updateQuilt.isPending}
-              title={
-                lockedFields.includes("name")
-                  ? "Name is locked — AI re-analysis will not change it. Click to unlock."
-                  : "Name is unlocked — AI re-analysis may update it. Click to lock."
-              }
-              className={
-                lockedFields.includes("name")
-                  ? "border-red-400 text-red-600 hover:border-red-500 hover:text-red-700"
-                  : "border-green-400 text-green-600 hover:border-green-500 hover:text-green-700"
-              }
-            >
-              {lockedFields.includes("name") ? (
-                <Lock className="h-4 w-4" />
-              ) : (
-                <LockOpen className="h-4 w-4" />
-              )}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefreshAI}
-              disabled={reanalyzeQuilt.isPending}
-              title="Re-run AI analysis on this quilt's photo"
-            >
-              <RefreshCw
-                className={`mr-1.5 h-3.5 w-3.5 ${reanalyzeQuilt.isPending ? "animate-spin" : ""}`}
-              />
-              <span className="hidden sm:inline">Refresh AI</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={enterEdit}
-              title="Edit"
-            >
-              <Pencil className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              title="Download photo"
-              onClick={() => downloadCollectionImage(q.imageUrl, q.name)}
-            >
-              <Download className="h-4 w-4" />
-            </Button>
-            <ShareModal
-              data={{
-                type: "quilt",
-                name: q.name,
-                subtitle: q.recipient ? `Made for ${q.recipient}` : undefined,
-                details: {
-                  Completed: q.dateCompleted ?? undefined,
-                  Size:
-                    q.sizeWidth && q.sizeHeight
-                      ? `${q.sizeWidth}" × ${q.sizeHeight}"`
-                      : undefined,
-                  "Fabrics used":
-                    q.linkedFabrics?.length ?? q.linkedFabricIds.length,
-                },
-                hashtags: ["#finishedquilt", "#handmadequilt"],
-              }}
-            />
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-destructive hover:bg-destructive/10"
-              onClick={() => {
-                if (confirm("Delete this quilt? This cannot be undone.")) {
-                  deleteQuilt.mutate({ id: quiltId });
-                }
-              }}
-              disabled={deleteQuilt.isPending}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </>
-        )}
-          </>
-        )}
-      </div>
+    <div className="mx-auto max-w-3xl">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="mb-4 -ml-2"
+        onClick={() => navigate("/quilts")}
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Quilts
+      </Button>
 
-      <div className="grid gap-8 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2">
         <div
           className="relative overflow-hidden rounded-2xl border border-card-border bg-muted cursor-zoom-in group"
           onClick={() => setLightboxOpen(true)}
@@ -430,7 +279,110 @@ export default function QuiltDetail() {
           onClose={() => setLightboxOpen(false)}
         />
 
-        <div className="space-y-5">
+        <div className="flex flex-col gap-4">
+          {/* Title row */}
+          {renamingName ? (
+            <div className="flex items-center gap-1.5">
+              <Input
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                className="h-9 flex-1 text-lg font-semibold"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleRename();
+                  if (e.key === "Escape") setRenamingName(false);
+                }}
+                autoFocus
+              />
+              <Button size="sm" onClick={handleRename} disabled={updateQuilt.isPending}>
+                <Check className="mr-1.5 h-3.5 w-3.5" />
+                Save
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setRenamingName(false)}>
+                <XIcon className="mr-1.5 h-3.5 w-3.5" />
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-start gap-3">
+              <h1 className="flex-1 text-2xl font-bold tracking-tight leading-tight">
+                {isEditing ? d.name || q.name : q.name}
+              </h1>
+              <div className="flex shrink-0 flex-wrap gap-1">
+                {isEditing ? (
+                  <>
+                    <Button size="sm" onClick={handleSave} disabled={updateQuilt.isPending}>
+                      <Check className="mr-1.5 h-3.5 w-3.5" />
+                      Save
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setIsEditing(false)}>
+                      <XIcon className="mr-1.5 h-3.5 w-3.5" />
+                      Cancel
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={handleRefreshAI}
+                      disabled={reanalyzeQuilt.isPending}
+                      title="Re-run AI analysis"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${reanalyzeQuilt.isPending ? "animate-spin" : ""}`} />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => toggleLock("name")}
+                      disabled={updateQuilt.isPending}
+                      title={lockedFields.includes("name") ? "Name locked — click to unlock." : "Name unlocked — click to lock."}
+                      className={lockedFields.includes("name") ? "border-red-400 text-red-600 hover:border-red-500 hover:text-red-700" : "border-green-400 text-green-600 hover:border-green-500 hover:text-green-700"}
+                    >
+                      {lockedFields.includes("name") ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={enterEdit}
+                      title="Edit"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      title="Download photo"
+                      onClick={() => downloadCollectionImage(q.imageUrl, q.name)}
+                    >
+                      <Download className="h-4 w-4" />
+                    </Button>
+                    <ShareModal
+                      data={{
+                        type: "quilt",
+                        name: q.name,
+                        subtitle: q.recipient ? `Made for ${q.recipient}` : undefined,
+                        details: {
+                          Completed: q.dateCompleted ?? undefined,
+                          Size: q.sizeWidth && q.sizeHeight ? `${q.sizeWidth}" × ${q.sizeHeight}"` : undefined,
+                          "Fabrics used": q.linkedFabrics?.length ?? q.linkedFabricIds.length,
+                        },
+                        hashtags: ["#finishedquilt", "#handmadequilt"],
+                      }}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-destructive hover:bg-destructive/10"
+                      onClick={() => { if (confirm("Delete this quilt? This cannot be undone.")) deleteQuilt.mutate({ id: quiltId }); }}
+                      disabled={deleteQuilt.isPending}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
           <section className="rounded-xl border border-card-border bg-card p-4">
             <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Quilt details

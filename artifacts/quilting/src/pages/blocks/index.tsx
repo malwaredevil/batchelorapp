@@ -521,7 +521,7 @@ function BlockCard({
               <ExternalLink className="mr-2 h-3.5 w-3.5" />
               Open
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate(`/blocks/${block.id}`)}>
+            <DropdownMenuItem onClick={() => navigate(`/blocks/${block.id}/edit`)}>
               <Pencil className="mr-2 h-3.5 w-3.5" />
               Edit
             </DropdownMenuItem>
@@ -714,7 +714,7 @@ export default function Blocks() {
       onSuccess: (data) => {
         queryClient.invalidateQueries({ queryKey: getListBlocksQueryKey() });
         toast.success("Block design imported!");
-        navigate(`/blocks/${String(data.id)}`);
+        navigate(`/blocks/${String(data.id)}/edit`);
       },
       onError: () => toast.error("Failed to import block design."),
     },

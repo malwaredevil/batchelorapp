@@ -1011,7 +1011,7 @@ export default function LayoutComposer() {
         setIsDirty(false);
         if (exitAfterSaveRef.current) {
           exitAfterSaveRef.current = false;
-          navigate("/layouts");
+          navigate(layoutId ? `/layouts/${layoutId}` : "/layouts");
         }
       },
       onError: () => toast.error("Failed to update layout."),
@@ -1150,7 +1150,7 @@ export default function LayoutComposer() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => requestNav("/layouts")}
+          onClick={() => requestNav(layoutId ? `/layouts/${layoutId}` : "/layouts")}
           className="h-8 w-8"
         >
           <ArrowLeft className="h-4 w-4" />

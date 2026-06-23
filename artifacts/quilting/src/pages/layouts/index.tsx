@@ -673,7 +673,7 @@ function LayoutCard({
               <ExternalLink className="mr-2 h-3.5 w-3.5" />
               Open
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate(`/layouts/${layout.id}`)}>
+            <DropdownMenuItem onClick={() => navigate(`/layouts/${layout.id}/edit`)}>
               <Pencil className="mr-2 h-3.5 w-3.5" />
               Edit
             </DropdownMenuItem>

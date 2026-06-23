@@ -297,188 +297,18 @@ export default function PatternDetail() {
     setDraft((prev) => ({ ...prev, [k]: v }));
 
   return (
-    <div>
-      <div className="mb-6 flex items-center gap-3">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => navigate("/patterns")}
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        {renamingName ? (
-          <>
-            <div className="flex flex-1 items-center gap-1.5 min-w-0">
-              <Input
-                value={renameValue}
-                onChange={(e) => setRenameValue(e.target.value)}
-                className="h-8 flex-1 min-w-0 text-base font-semibold"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleRename();
-                  if (e.key === "Escape") setRenamingName(false);
-                }}
-                autoFocus
-              />
-            </div>
-            <Button
-              size="sm"
-              onClick={handleRename}
-              disabled={updatePattern.isPending}
-            >
-              <Check className="mr-1.5 h-3.5 w-3.5" />
-              Save
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setRenamingName(false)}
-            >
-              <XIcon className="mr-1.5 h-3.5 w-3.5" />
-              Cancel
-            </Button>
-          </>
-        ) : (
-          <>
-            <div className="flex flex-1 items-center gap-1 min-w-0">
-              <h1 className="truncate text-xl font-bold">
-                {isEditing ? d.name || p.name : p.name}
-              </h1>
-              {!isEditing && (
-                <button
-                  onClick={() => {
-                    setRenameValue(p.name);
-                    setRenamingName(true);
-                  }}
-                  className="shrink-0 rounded p-0.5 text-muted-foreground/30 hover:text-muted-foreground/70 transition-colors"
-                  title="Rename"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-        {isEditing ? (
-          <>
-            <Button
-              size="sm"
-              onClick={handleSave}
-              disabled={updatePattern.isPending}
-            >
-              <Check className="mr-1.5 h-3.5 w-3.5" />
-              Save
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsEditing(false)}
-            >
-              <XIcon className="mr-1.5 h-3.5 w-3.5" />
-              Cancel
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => toggleLock("name")}
-              disabled={updatePattern.isPending}
-              title={
-                lockedFields.includes("name")
-                  ? "Name is locked — AI re-analysis will not change it. Click to unlock."
-                  : "Name is unlocked — AI re-analysis may update it. Click to lock."
-              }
-              className={
-                lockedFields.includes("name")
-                  ? "border-red-400 text-red-600 hover:border-red-500 hover:text-red-700"
-                  : "border-green-400 text-green-600 hover:border-green-500 hover:text-green-700"
-              }
-            >
-              {lockedFields.includes("name") ? (
-                <Lock className="h-4 w-4" />
-              ) : (
-                <LockOpen className="h-4 w-4" />
-              )}
-            </Button>
-            {p.imageUrl && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRefreshAI}
-                disabled={reanalyzePattern.isPending}
-                title="Re-run AI analysis on this pattern's photo"
-              >
-                <RefreshCw
-                  className={`mr-1.5 h-3.5 w-3.5 ${reanalyzePattern.isPending ? "animate-spin" : ""}`}
-                />
-                <span className="hidden sm:inline">Refresh AI</span>
-              </Button>
-            )}
-            {p.designer && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => enrichPattern.mutate({ id: patternId })}
-                disabled={enrichPattern.isPending}
-                title="Look up designer bio, website and publication info"
-              >
-                <Sparkles
-                  className={`mr-1.5 h-3.5 w-3.5 ${enrichPattern.isPending ? "animate-pulse" : ""}`}
-                />
-                <span className="hidden sm:inline">Enrich</span>
-              </Button>
-            )}
-            {p.imageUrl && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => extractBlocks.mutate({ id: patternId })}
-                disabled={extractBlocks.isPending}
-                title="Extract block grid schema from pattern image"
-              >
-                <Grid3x3
-                  className={`mr-1.5 h-3.5 w-3.5 ${extractBlocks.isPending ? "animate-pulse" : ""}`}
-                />
-                <span className="hidden sm:inline">Extract blocks</span>
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={enterEdit}
-              title="Edit"
-            >
-              <Pencil className="h-4 w-4" />
-            </Button>
-            {p.imageUrl && (
-              <Button
-                variant="outline"
-                size="icon"
-                title="Download photo"
-                onClick={() => downloadCollectionImage(p.imageUrl!, p.name)}
-              >
-                <Download className="h-4 w-4" />
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-destructive hover:bg-destructive/10"
-              onClick={() => {
-                if (confirm("Delete this pattern? This cannot be undone.")) {
-                  deletePattern.mutate({ id: patternId });
-                }
-              }}
-              disabled={deletePattern.isPending}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </>
-        )}
-          </>
-        )}
-      </div>
+    <div className="mx-auto max-w-3xl">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="mb-4 -ml-2"
+        onClick={() => navigate("/patterns")}
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Patterns
+      </Button>
 
-      <div className="grid gap-8 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2">
         {p.imageUrl ? (
           <div
             className="relative overflow-hidden rounded-2xl border border-card-border bg-muted cursor-zoom-in group"
@@ -507,7 +337,123 @@ export default function PatternDetail() {
           />
         )}
 
-        <div className="space-y-5">
+        <div className="flex flex-col gap-4">
+          {/* Title row */}
+          {renamingName ? (
+            <div className="flex items-center gap-1.5">
+              <Input
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                className="h-9 flex-1 text-lg font-semibold"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleRename();
+                  if (e.key === "Escape") setRenamingName(false);
+                }}
+                autoFocus
+              />
+              <Button size="sm" onClick={handleRename} disabled={updatePattern.isPending}>
+                <Check className="mr-1.5 h-3.5 w-3.5" />
+                Save
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setRenamingName(false)}>
+                <XIcon className="mr-1.5 h-3.5 w-3.5" />
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-start gap-3">
+              <h1 className="flex-1 text-2xl font-bold tracking-tight leading-tight">
+                {isEditing ? d.name || p.name : p.name}
+              </h1>
+              <div className="flex shrink-0 flex-wrap gap-1">
+                {isEditing ? (
+                  <>
+                    <Button size="sm" onClick={handleSave} disabled={updatePattern.isPending}>
+                      <Check className="mr-1.5 h-3.5 w-3.5" />
+                      Save
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setIsEditing(false)}>
+                      <XIcon className="mr-1.5 h-3.5 w-3.5" />
+                      Cancel
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    {p.imageUrl && (
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={handleRefreshAI}
+                        disabled={reanalyzePattern.isPending}
+                        title="Re-run AI analysis"
+                      >
+                        <RefreshCw className={`h-4 w-4 ${reanalyzePattern.isPending ? "animate-spin" : ""}`} />
+                      </Button>
+                    )}
+                    {p.designer && (
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => enrichPattern.mutate({ id: patternId })}
+                        disabled={enrichPattern.isPending}
+                        title="Enrich designer info"
+                      >
+                        <Sparkles className={`h-4 w-4 ${enrichPattern.isPending ? "animate-pulse" : ""}`} />
+                      </Button>
+                    )}
+                    {p.imageUrl && (
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => extractBlocks.mutate({ id: patternId })}
+                        disabled={extractBlocks.isPending}
+                        title="Extract block schema from image"
+                      >
+                        <Grid3x3 className={`h-4 w-4 ${extractBlocks.isPending ? "animate-pulse" : ""}`} />
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => toggleLock("name")}
+                      disabled={updatePattern.isPending}
+                      title={lockedFields.includes("name") ? "Name locked — click to unlock." : "Name unlocked — click to lock."}
+                      className={lockedFields.includes("name") ? "border-red-400 text-red-600 hover:border-red-500 hover:text-red-700" : "border-green-400 text-green-600 hover:border-green-500 hover:text-green-700"}
+                    >
+                      {lockedFields.includes("name") ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={enterEdit}
+                      title="Edit"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    {p.imageUrl && (
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        title="Download photo"
+                        onClick={() => downloadCollectionImage(p.imageUrl!, p.name)}
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-destructive hover:bg-destructive/10"
+                      onClick={() => { if (confirm("Delete this pattern? This cannot be undone.")) deletePattern.mutate({ id: patternId }); }}
+                      disabled={deletePattern.isPending}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
           <section className="rounded-xl border border-card-border bg-card p-4">
             <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Pattern details

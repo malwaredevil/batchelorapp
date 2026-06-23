@@ -26,9 +26,11 @@ import Compare from "@/pages/compare";
 import Categories from "@/pages/categories";
 import Blocks from "@/pages/blocks";
 import BlockDesigner from "@/pages/blocks/designer";
+import BlockDetail from "@/pages/blocks/detail";
 import CutPatternPage from "@/pages/blocks/cut-pattern";
 import Layouts from "@/pages/layouts";
 import LayoutComposer from "@/pages/layouts/composer";
+import LayoutDetail from "@/pages/layouts/detail";
 import WholeQuiltDesigner from "@/pages/blocks/whole-quilt";
 import WholeQuiltList from "@/pages/blocks/whole-quilt-list";
 import Shopping from "@/pages/shopping";
@@ -94,10 +96,12 @@ function Routes() {
         <Route path="/blocks" component={Blocks} />
         <Route path="/blocks/new" component={BlockDesigner} />
         <Route path="/blocks/:id/cut-pattern" component={CutPatternPage} />
-        <Route path="/blocks/:id" component={BlockDesigner} />
+        <Route path="/blocks/:id/edit" component={BlockDesigner} />
+        <Route path="/blocks/:id" component={BlockDetail} />
         <Route path="/layouts" component={Layouts} />
         <Route path="/layouts/new" component={LayoutComposer} />
-        <Route path="/layouts/:id" component={LayoutComposer} />
+        <Route path="/layouts/:id/edit" component={LayoutComposer} />
+        <Route path="/layouts/:id" component={LayoutDetail} />
         <Route path="/whole-quilt" component={WholeQuiltList} />
         <Route path="/whole-quilt/designer" component={WholeQuiltDesigner} />
         <Route path="/shopping" component={Shopping} />

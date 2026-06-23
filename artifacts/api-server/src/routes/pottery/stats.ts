@@ -22,14 +22,17 @@ router.get("/stats", async (req, res) => {
     .select({
       motifs: potteryItems.motifs,
       colors: potteryItems.dominantColors,
+      quantity: potteryItems.quantity,
     })
     .from(potteryItems)
     ;
 
   const motifCounts = new Map<string, number>();
   const colorCounts = new Map<string, number>();
+  let totalItems = 0;
 
   for (const row of rows) {
+    totalItems += row.quantity ?? 1;
     for (const motif of row.motifs ?? []) {
       const key = motif.trim().toLowerCase();
       if (key) motifCounts.set(key, (motifCounts.get(key) ?? 0) + 1);
@@ -42,7 +45,7 @@ router.get("/stats", async (req, res) => {
 
   res.json(
     GetCollectionStatsResponse.parse({
-      totalItems: rows.length,
+      totalItems,
       topMotifs: topCounts(motifCounts),
       topColors: topCounts(colorCounts),
     }),

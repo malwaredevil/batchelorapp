@@ -170,7 +170,6 @@ router.post("/compare", aiLimiter, upload.single("image"), async (req, res) => {
         select id, 1 - (embedding <=> ${vectorLiteral}::vector) as similarity
         from pottery_items
         where embedding is not null
-          and user_id = ${userId}
         order by embedding <=> ${vectorLiteral}::vector
         limit ${TEXT_SEARCH_POOL}
       `,
@@ -188,7 +187,6 @@ router.post("/compare", aiLimiter, upload.single("image"), async (req, res) => {
             select id, 1 - (visual_embedding <=> ${`[${visualEmb.join(",")}]`}::vector) as similarity
             from pottery_items
             where visual_embedding is not null
-              and user_id = ${userId}
             order by visual_embedding <=> ${`[${visualEmb.join(",")}]`}::vector
             limit ${VISUAL_SEARCH_POOL}
           `,

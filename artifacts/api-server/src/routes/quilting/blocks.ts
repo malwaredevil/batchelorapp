@@ -109,7 +109,7 @@ async function resolveOrCreateCategories(
     const [existing] = await db
       .select({ id: categories.id })
       .from(categories)
-      .where(and(eq(categories.name, name), eq(categories.userId, userId)))
+      .where(and(eq(categories.name, name)))
       .limit(1);
     if (existing) {
       ids.push(existing.id);
@@ -219,7 +219,7 @@ router.get("/blocks", async (req, res) => {
   const rows = await db
     .select()
     .from(blocks)
-    .where(eq(blocks.userId, userId))
+    
     .orderBy(desc(blocks.createdAt));
   const catMap = await fetchBlockCategories(rows.map((r) => r.id));
   res.json(rows.map((r) => serialize(r, catMap.get(r.id) ?? [])));
@@ -271,7 +271,7 @@ router.get("/blocks/:id", async (req, res) => {
   const [row] = await db
     .select()
     .from(blocks)
-    .where(and(eq(blocks.id, id), eq(blocks.userId, userId)));
+    .where(and(eq(blocks.id, id)));
   if (!row) {
     res.status(404).json({ error: "Block not found" });
     return;
@@ -297,7 +297,7 @@ router.patch("/blocks/:id", async (req, res) => {
       const [existing] = await db
         .select({ gridSize: blocks.gridSize })
         .from(blocks)
-        .where(and(eq(blocks.id, id), eq(blocks.userId, userId)));
+        .where(and(eq(blocks.id, id)));
       gridSize = existing?.gridSize ?? 8;
     }
     update.cells = normalizeCells(data.cells, gridSize);
@@ -311,7 +311,7 @@ router.patch("/blocks/:id", async (req, res) => {
   const [row] = await db
     .update(blocks)
     .set(update)
-    .where(and(eq(blocks.id, id), eq(blocks.userId, userId)))
+    .where(and(eq(blocks.id, id)))
     .returning();
   if (!row) {
     res.status(404).json({ error: "Block not found" });
@@ -360,7 +360,7 @@ router.delete("/blocks/:id", async (req, res) => {
   const [existing] = await db
     .select({ id: blocks.id })
     .from(blocks)
-    .where(and(eq(blocks.id, id), eq(blocks.userId, userId)));
+    .where(and(eq(blocks.id, id)));
   if (!existing) {
     res.status(404).json({ error: "Block not found" });
     return;
@@ -376,7 +376,7 @@ router.delete("/blocks/:id", async (req, res) => {
     );
   await db
     .delete(blocks)
-    .where(and(eq(blocks.id, id), eq(blocks.userId, userId)));
+    .where(and(eq(blocks.id, id)));
   res.status(204).send();
 });
 

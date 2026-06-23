@@ -116,7 +116,7 @@ async function resolveOrCreateCategories(
     const [existing] = await db
       .select({ id: categories.id })
       .from(categories)
-      .where(and(eq(categories.name, trimmed), eq(categories.userId, userId)))
+      .where(and(eq(categories.name, trimmed)))
       .limit(1);
     if (existing) {
       ids.push(existing.id);
@@ -148,7 +148,7 @@ router.get("/fabrics", async (req, res) => {
   const rows = await db
     .select(fabricColumns)
     .from(fabrics)
-    .where(eq(fabrics.userId, userId))
+    
     .orderBy(desc(fabrics.createdAt));
   const items = await serializeFabrics(
     rows as Array<Omit<FabricRow, "embedding" | "visualEmbedding">>,
@@ -166,7 +166,7 @@ router.get("/fabrics/:id", async (req, res) => {
   const [row] = await db
     .select(fabricColumns)
     .from(fabrics)
-    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)))
+    .where(and(eq(fabrics.id, id)))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Fabric not found." });
@@ -292,7 +292,7 @@ router.patch("/fabrics/:id", async (req, res) => {
   const [existing] = await db
     .select({ id: fabrics.id })
     .from(fabrics)
-    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)))
+    .where(and(eq(fabrics.id, id)))
     .limit(1);
   if (!existing) {
     res.status(404).json({ error: "Fabric not found." });
@@ -323,7 +323,7 @@ router.patch("/fabrics/:id", async (req, res) => {
     await db
       .update(fabrics)
       .set(updates)
-      .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)));
+      .where(and(eq(fabrics.id, id)));
   }
 
   if (body.categories !== undefined) {
@@ -348,7 +348,7 @@ router.patch("/fabrics/:id", async (req, res) => {
   const [row] = await db
     .select(fabricColumns)
     .from(fabrics)
-    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)))
+    .where(and(eq(fabrics.id, id)))
     .limit(1);
   res.json(
     UpdateFabricResponse.parse(
@@ -369,7 +369,7 @@ router.delete("/fabrics/:id", async (req, res) => {
   const [row] = await db
     .select({ imagePath: fabrics.imagePath })
     .from(fabrics)
-    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)))
+    .where(and(eq(fabrics.id, id)))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Fabric not found." });
@@ -383,7 +383,7 @@ router.delete("/fabrics/:id", async (req, res) => {
 
   await db
     .delete(fabrics)
-    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)));
+    .where(and(eq(fabrics.id, id)));
   await Promise.allSettled([
     deleteImage(row.imagePath),
     ...supplementalImages.map((img) => deleteImage(img.storagePath)),
@@ -401,7 +401,7 @@ router.get("/fabrics/:id/image", async (req, res) => {
   const [row] = await db
     .select({ imagePath: fabrics.imagePath })
     .from(fabrics)
-    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)))
+    .where(and(eq(fabrics.id, id)))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Fabric not found." });
@@ -423,7 +423,7 @@ router.post("/fabrics/:id/reanalyze", aiLimiter, async (req, res) => {
   const [row] = await db
     .select()
     .from(fabrics)
-    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)))
+    .where(and(eq(fabrics.id, id)))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Fabric not found." });
@@ -515,12 +515,12 @@ router.post("/fabrics/:id/reanalyze", aiLimiter, async (req, res) => {
         ? { visualEmbedding: sql`${`[${visualEmb.join(",")}]`}::vector` }
         : {}),
     })
-    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)));
+    .where(and(eq(fabrics.id, id)));
 
   const [updated] = await db
     .select(fabricColumns)
     .from(fabrics)
-    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)))
+    .where(and(eq(fabrics.id, id)))
     .limit(1);
   res.json(
     ReanalyzeFabricResponse.parse(
@@ -549,7 +549,7 @@ router.post("/fabrics/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
       const [row] = await db
         .select()
         .from(fabrics)
-        .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)))
+        .where(and(eq(fabrics.id, id)))
         .limit(1);
       if (!row) {
         failed.push(id);
@@ -637,7 +637,7 @@ router.post("/fabrics/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
               }
             : {}),
         })
-        .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)));
+        .where(and(eq(fabrics.id, id)));
       succeeded.push(id);
     } catch {
       failed.push(id);
@@ -660,7 +660,7 @@ router.post("/fabrics/:id/images", upload.single("image"), async (req, res) => {
   const [fabric] = await db
     .select({ id: fabrics.id })
     .from(fabrics)
-    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)))
+    .where(and(eq(fabrics.id, id)))
     .limit(1);
   if (!fabric) {
     res.status(404).json({ error: "Fabric not found." });
@@ -721,7 +721,7 @@ router.get("/fabrics/:id/images/:imageId", async (req, res) => {
   const [fabric] = await db
     .select({ id: fabrics.id })
     .from(fabrics)
-    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)))
+    .where(and(eq(fabrics.id, id)))
     .limit(1);
   if (!fabric) {
     res.status(404).json({ error: "Fabric not found." });
@@ -755,7 +755,7 @@ router.patch("/fabrics/:id/images/:imageId", async (req, res) => {
   const [fabric] = await db
     .select({ id: fabrics.id })
     .from(fabrics)
-    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)))
+    .where(and(eq(fabrics.id, id)))
     .limit(1);
   if (!fabric) {
     res.status(404).json({ error: "Fabric not found." });
@@ -795,7 +795,7 @@ router.delete("/fabrics/:id/images/:imageId", async (req, res) => {
   const [fabric] = await db
     .select({ id: fabrics.id })
     .from(fabrics)
-    .where(and(eq(fabrics.id, id), eq(fabrics.userId, userId)))
+    .where(and(eq(fabrics.id, id)))
     .limit(1);
   if (!fabric) {
     res.status(404).json({ error: "Fabric not found." });

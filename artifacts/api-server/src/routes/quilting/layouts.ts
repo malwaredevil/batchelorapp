@@ -97,7 +97,7 @@ async function resolveOrCreateCategories(
     const [existing] = await db
       .select({ id: categories.id })
       .from(categories)
-      .where(and(eq(categories.name, name), eq(categories.userId, userId)))
+      .where(and(eq(categories.name, name)))
       .limit(1);
     if (existing) {
       ids.push(existing.id);
@@ -197,7 +197,7 @@ router.get("/layouts", async (req, res) => {
   const rows = await db
     .select()
     .from(layouts)
-    .where(eq(layouts.userId, userId))
+    
     .orderBy(desc(layouts.createdAt));
   const catMap = await fetchLayoutCategories(rows.map((r) => r.id));
   res.json(rows.map((r) => serialize(r, catMap.get(r.id) ?? [])));
@@ -252,7 +252,7 @@ router.get("/layouts/:id", async (req, res) => {
   const [row] = await db
     .select()
     .from(layouts)
-    .where(and(eq(layouts.id, id), eq(layouts.userId, userId)));
+    .where(and(eq(layouts.id, id)));
   if (!row) {
     res.status(404).json({ error: "Layout not found" });
     return;
@@ -277,7 +277,7 @@ router.patch("/layouts/:id", async (req, res) => {
     const [existing] = await db
       .select({ rows: layouts.rows, cols: layouts.cols })
       .from(layouts)
-      .where(and(eq(layouts.id, id), eq(layouts.userId, userId)));
+      .where(and(eq(layouts.id, id)));
     const rows = data.rows ?? existing?.rows ?? 5;
     const cols = data.cols ?? existing?.cols ?? 5;
     update.cells = normalizeCells(data.cells, rows, cols);
@@ -293,7 +293,7 @@ router.patch("/layouts/:id", async (req, res) => {
   const [row] = await db
     .update(layouts)
     .set(update)
-    .where(and(eq(layouts.id, id), eq(layouts.userId, userId)))
+    .where(and(eq(layouts.id, id)))
     .returning();
   if (!row) {
     res.status(404).json({ error: "Layout not found" });
@@ -342,7 +342,7 @@ router.delete("/layouts/:id", async (req, res) => {
   const [existing] = await db
     .select({ id: layouts.id })
     .from(layouts)
-    .where(and(eq(layouts.id, id), eq(layouts.userId, userId)));
+    .where(and(eq(layouts.id, id)));
   if (!existing) {
     res.status(404).json({ error: "Layout not found" });
     return;
@@ -358,7 +358,7 @@ router.delete("/layouts/:id", async (req, res) => {
     );
   await db
     .delete(layouts)
-    .where(and(eq(layouts.id, id), eq(layouts.userId, userId)));
+    .where(and(eq(layouts.id, id)));
   res.status(204).send();
 });
 

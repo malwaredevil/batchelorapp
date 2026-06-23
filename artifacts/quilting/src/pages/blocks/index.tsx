@@ -448,7 +448,7 @@ function BlockCard({
           />
           <button
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); setZoomOpen(true); }}
-            className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/70"
+            className="absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/70"
             title="Zoom preview"
           >
             <ZoomIn className="h-3.5 w-3.5" />

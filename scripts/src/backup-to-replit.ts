@@ -234,7 +234,7 @@ CREATE TABLE IF NOT EXISTS quilting_shopping_items (
 async function copyTable(
   source: pg.Client,
   dest: pg.Client,
-  opts: { table: string; columns: string[]; orderBy?: string },
+  opts: { table: string; columns: string[]; orderBy?: string; jsonbColumns?: string[] },
 ): Promise<number> {
   const cols = opts.columns.join(", ");
   const order = opts.orderBy ? ` ORDER BY ${opts.orderBy}` : "";
@@ -243,8 +243,15 @@ async function copyTable(
 
   await dest.query(`TRUNCATE ${opts.table} CASCADE`);
   const placeholders = opts.columns.map((_, i) => `$${i + 1}`).join(", ");
+  const jsonbCols = new Set(opts.jsonbColumns ?? []);
   for (const row of rows) {
-    const values = opts.columns.map((c) => row[c] ?? null);
+    const values = opts.columns.map((c) => {
+      const v = row[c] ?? null;
+      if (v !== null && jsonbCols.has(c) && typeof v === "object") {
+        return JSON.stringify(v);
+      }
+      return v;
+    });
     await dest.query(
       `INSERT INTO ${opts.table} (${cols}) VALUES (${placeholders})`,
       values,
@@ -403,6 +410,7 @@ async function main() {
       "seam_allowance_inches", "seams", "created_at",
     ],
     orderBy: "id",
+    jsonbColumns: ["seams"],
   });
   await resetSequence(dest, "quilting_blocks", "id");
 
@@ -414,6 +422,7 @@ async function main() {
       "cornerstone_color", "created_at",
     ],
     orderBy: "id",
+    jsonbColumns: ["cells"],
   });
   await resetSequence(dest, "quilting_layouts", "id");
 

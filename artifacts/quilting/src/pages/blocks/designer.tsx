@@ -39,6 +39,7 @@ import {
   ZoomIn,
   ZoomOut,
   Check,
+  Sliders,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -715,6 +716,7 @@ export function BlockGrid({
   blockBoundaryGridSize,
   blockBoundaryOpacity = 0,
   fabricUrlMap = {},
+  imageFilter,
 }: {
   cells: string[];
   gridW: number;
@@ -757,6 +759,7 @@ export function BlockGrid({
   blockBoundaryGridSize?: number;
   blockBoundaryOpacity?: number;
   fabricUrlMap?: Record<number, string>;
+  imageFilter?: string;
 }) {
   const isPainting = useRef(false);
   const containerRef = useRef<SVGSVGElement>(null);
@@ -1312,6 +1315,7 @@ export function BlockGrid({
                     width="1"
                     height="1"
                     preserveAspectRatio="xMidYMid slice"
+                    style={imageFilter ? { filter: imageFilter } : undefined}
                   />
                 </pattern>
               ))}
@@ -1670,6 +1674,7 @@ function TiledPreview({
   bgOffX = 0,
   bgOffY = 0,
   fabricUrlMap = {},
+  imageFilter,
 }: {
   cells: string[];
   gridW: number;
@@ -1686,6 +1691,7 @@ function TiledPreview({
   bgOffX?: number;
   bgOffY?: number;
   fabricUrlMap?: Record<number, string>;
+  imageFilter?: string;
 }) {
   const cellPx =
     cellPxProp ??
@@ -1761,6 +1767,7 @@ function TiledPreview({
                     width="1"
                     height="1"
                     preserveAspectRatio="xMidYMid slice"
+                    style={imageFilter ? { filter: imageFilter } : undefined}
                   />
                 </pattern>
               ))}
@@ -2268,6 +2275,21 @@ export default function BlockDesigner() {
   const [bgOffX, setBgOffX] = useState(0);
   const [bgOffY, setBgOffY] = useState(0);
   const [bgAdjusting, setBgAdjusting] = useState(false);
+  const [viewControlsOpen, setViewControlsOpen] = useState(false);
+  const [viewFilter, setViewFilter] = useState<{
+    brightness: number;
+    contrast: number;
+    saturation: number;
+  }>({ brightness: 100, contrast: 100, saturation: 100 });
+  const imageFilter = useMemo(
+    () =>
+      viewFilter.brightness === 100 &&
+      viewFilter.contrast === 100 &&
+      viewFilter.saturation === 100
+        ? null
+        : `brightness(${viewFilter.brightness}%) contrast(${viewFilter.contrast}%) saturate(${viewFilter.saturation}%)`,
+    [viewFilter],
+  );
   const prevToolRef = useRef<Tool | null>(null);
   const bgFileRef = useRef<HTMLInputElement>(null);
   const scanImportRef = useRef<HTMLInputElement>(null);
@@ -4089,6 +4111,83 @@ export default function BlockDesigner() {
           )}
           Seams only
         </button>
+
+        <span className="text-muted-foreground/40">|</span>
+
+        {/* View adjustments */}
+        <div className="relative">
+          <button
+            onClick={() => setViewControlsOpen((v) => !v)}
+            className={`flex items-center gap-1.5 rounded px-2 py-1 transition-colors ${
+              viewControlsOpen || imageFilter
+                ? "bg-secondary text-secondary-foreground"
+                : "text-muted-foreground hover:bg-muted"
+            }`}
+            title="View adjustments (brightness / contrast / saturation)"
+          >
+            <Sliders className="h-3.5 w-3.5" />
+            View
+            {imageFilter && (
+              <span className="ml-0.5 inline-block h-1.5 w-1.5 rounded-full bg-primary" />
+            )}
+          </button>
+          {viewControlsOpen && (
+            <div className="absolute right-0 top-full z-30 mt-1.5 w-64 rounded-xl border border-border bg-popover p-4 shadow-lg">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-xs font-semibold">View adjustments</p>
+                {imageFilter && (
+                  <button
+                    className="text-[10px] text-muted-foreground hover:text-foreground"
+                    onClick={() =>
+                      setViewFilter({
+                        brightness: 100,
+                        contrast: 100,
+                        saturation: 100,
+                      })
+                    }
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+              {(
+                [
+                  { key: "brightness", label: "Brightness", min: 50, max: 150 },
+                  { key: "contrast", label: "Contrast", min: 50, max: 150 },
+                  { key: "saturation", label: "Saturation", min: 0, max: 200 },
+                ] as const
+              ).map(({ key, label, min, max }) => (
+                <div key={key} className="mb-3 last:mb-0">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">
+                      {label}
+                    </span>
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {viewFilter[key]}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={min}
+                    max={max}
+                    step={5}
+                    value={viewFilter[key]}
+                    onChange={(e) =>
+                      setViewFilter((prev) => ({
+                        ...prev,
+                        [key]: Number(e.target.value),
+                      }))
+                    }
+                    className="h-1.5 w-full cursor-pointer accent-primary"
+                  />
+                </div>
+              ))}
+              <p className="mt-1 text-[10px] text-muted-foreground/60">
+                Preview only — doesn't affect saved images
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Workspace ─────────────────────────────────────────────────── */}
@@ -4632,6 +4731,7 @@ export default function BlockDesigner() {
                       }
                       seamOnly={seamOnly}
                       fabricUrlMap={fabricUrlMap}
+                      imageFilter={imageFilter ?? undefined}
                     />
                   </div>
                 </div>
@@ -5033,6 +5133,7 @@ export default function BlockDesigner() {
                     bgOffX={bgOffX}
                     bgOffY={bgOffY}
                     fabricUrlMap={fabricUrlMap}
+                    imageFilter={imageFilter ?? undefined}
                   />
                 </div>
               </div>

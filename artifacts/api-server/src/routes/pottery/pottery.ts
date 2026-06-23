@@ -217,7 +217,7 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
   // relevant API key is absent rather than hard-failing the upload.
   const [analysis, visualEmbedding, surfaceZones] = await Promise.all([
     analyzeImage([dataUrl]),
-    generateVisualEmbedding(cleanBuffer),
+    generateVisualEmbedding(cleanBuffer).catch(() => null),
     analyzePotteryZones([dataUrl]).catch(() => null),
   ]);
 
@@ -736,12 +736,12 @@ async function runItemAnalysis(id: number, userId: number): Promise<unknown> {
   };
 
   // Phase 1: analysis + visual embed + zone analysis in parallel.
+  // All three use .catch(() => null) so a single API error (e.g. Jina rate
+  // limit) cannot kill the whole item — the analysis itself still succeeds and
+  // existing embedding values are left untouched (see spread below).
   const [analysis, visualEmbedding, surfaceZones] = await Promise.all([
     analyzeImage(dataUrls, reanalysisContext),
-    // Regenerate embeddings from the (possibly swapped) primary image so they
-    // stay in sync with the stored primary photo. Returns null when the
-    // relevant API key is absent — leaving existing values untouched below.
-    generateVisualEmbedding(primaryResult.buffer),
+    generateVisualEmbedding(primaryResult.buffer).catch(() => null),
     analyzePotteryZones(dataUrls).catch(() => null),
   ]);
 
@@ -881,12 +881,18 @@ router.post("/items/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
   const succeeded: number[] = [];
   const failed: number[] = [];
 
-  for (const id of capped) {
+  for (let i = 0; i < capped.length; i++) {
+    const id = capped[i]!;
     try {
       await runItemAnalysis(id, userId);
       succeeded.push(id);
     } catch {
       failed.push(id);
+    }
+    // Brief pause between items so we don't burst-fire Jina/OpenRouter
+    // requests fast enough to trigger their rate limiters.
+    if (i < capped.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
     }
   }
 

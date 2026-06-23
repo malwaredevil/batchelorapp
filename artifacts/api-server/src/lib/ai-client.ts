@@ -51,6 +51,12 @@ export function getOpenRouterClient(): OpenAI | null {
  * Prefer callModel() when you want best-of-breed routing with different model
  * identifiers per provider (e.g. Gemini via OpenRouter, gpt-4o-mini direct).
  */
+// Status codes from OpenRouter that mean "try the direct OpenAI path instead".
+// 404 = model not available on this account/endpoint (e.g. no credits for that
+//       provider, model deprecated, or key lacks access).
+// 429 = OpenRouter rate-limited; 503 = OpenRouter service unavailable.
+const OPENROUTER_FALLBACK_STATUSES = new Set([404, 429, 503]);
+
 export async function callWithFallback<T>(
   fn: (client: OpenAI) => Promise<T>,
 ): Promise<T> {
@@ -61,7 +67,7 @@ export async function callWithFallback<T>(
   } catch (err) {
     if (
       err instanceof OpenAI.APIError &&
-      (err.status === 429 || err.status === 503)
+      OPENROUTER_FALLBACK_STATUSES.has(err.status)
     ) {
       return fn(getOpenAIClient());
     }
@@ -88,7 +94,7 @@ export async function callModel<T>(
   } catch (err) {
     if (
       err instanceof OpenAI.APIError &&
-      (err.status === 429 || err.status === 503)
+      OPENROUTER_FALLBACK_STATUSES.has(err.status)
     ) {
       return fn(getOpenAIClient(), models.openai);
     }

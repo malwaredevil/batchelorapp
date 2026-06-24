@@ -52,7 +52,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-40 border-b border-card-border bg-background/85 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
           <AppSwitcher />
 
           <div className="flex items-center gap-1">
@@ -126,7 +126,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 pb-28 pt-6 md:pb-12">
+      <main className="mx-auto max-w-6xl px-4 pb-28 pt-6 md:pb-12">
         {children}
       </main>
 

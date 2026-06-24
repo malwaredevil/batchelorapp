@@ -691,6 +691,14 @@ export default function CutPatternPage() {
     return map;
   }, [fabricsList]);
 
+  const fabricNameMap = useMemo<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    for (const f of fabricsList ?? []) {
+      map[`fab:${f.id}`] = f.name;
+    }
+    return map;
+  }, [fabricsList]);
+
   if (isLoading) {
     return (
       <div className="mx-auto max-w-3xl space-y-4 p-6">
@@ -785,7 +793,11 @@ export default function CutPatternPage() {
                 ["Grid", `${gridSize} × ${gridH}`],
                 [
                   "Cell (finished)",
-                  hasDimensions ? fmtInch(blockSizeInches! / gridSize) : "—",
+                  hasDimensions
+                    ? gridSize === gridH
+                      ? fmtInch(blockSizeInches! / gridSize)
+                      : `${fmtInch(blockSizeInches! / gridSize)} × ${fmtInch(blockSizeInches! / gridH)}`
+                    : "—",
                 ],
                 ["Seam allowance", fmtInch(seamAllowance)],
                 ["Skill", level],
@@ -866,7 +878,14 @@ export default function CutPatternPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {fabrics.map((f) => (
+                  {fabrics.map((f) => {
+                    const swatchBg = f.color.startsWith("fab:")
+                      ? (fabricColorMap[f.color] ?? "#d4c5a9")
+                      : f.color;
+                    const colorLabel = f.color.startsWith("fab:")
+                      ? (fabricNameMap[f.color] ?? f.color)
+                      : f.color;
+                    return (
                     <tr key={f.color} className="border-b border-foreground/10">
                       <td className="py-2 pr-2 font-mono font-semibold">
                         Fabric {f.letter}
@@ -874,11 +893,11 @@ export default function CutPatternPage() {
                       <td className="py-2 px-2">
                         <span
                           className="inline-block h-5 w-8 rounded-sm border border-foreground/30"
-                          style={{ background: f.color }}
+                          style={{ background: swatchBg }}
                         />
                       </td>
-                      <td className="py-2 px-2 font-mono text-xs text-muted-foreground">
-                        {f.color}
+                      <td className="py-2 px-2 text-xs text-muted-foreground">
+                        {colorLabel}
                       </td>
                       <td className="py-2 px-2 text-right font-medium">
                         {f.pieceCount}
@@ -889,7 +908,8 @@ export default function CutPatternPage() {
                         </td>
                       )}
                     </tr>
-                  ))}
+                  );
+                  })}
                 </tbody>
               </table>
               {hasDimensions && (
@@ -918,13 +938,19 @@ export default function CutPatternPage() {
                   <div className="mb-1.5 flex items-center gap-2 border-b border-foreground/15 pb-1">
                     <span
                       className="inline-block h-4 w-4 rounded-sm border border-foreground/30"
-                      style={{ background: f.color }}
+                      style={{
+                        background: f.color.startsWith("fab:")
+                          ? (fabricColorMap[f.color] ?? "#d4c5a9")
+                          : f.color,
+                      }}
                     />
                     <span className="font-mono text-sm font-semibold">
                       Fabric {f.letter}
                     </span>
                     <span className="font-mono text-xs text-muted-foreground">
-                      {f.color}
+                      {f.color.startsWith("fab:")
+                        ? (fabricNameMap[f.color] ?? f.color)
+                        : f.color}
                     </span>
                   </div>
                   <ul className="space-y-2">
@@ -987,8 +1013,9 @@ export default function CutPatternPage() {
                       Quarter-square triangles (QST)
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Cut the listed square, then slice <strong>twice</strong>{" "}
-                      on both diagonals (an X). Each square yields 4 triangles.
+                      Cut the listed square, then slice <strong>once</strong>{" "}
+                      on each diagonal (forming an X). Each square yields 4
+                      triangles. Press seams in a pinwheel to reduce bulk.
                     </p>
                   </div>
                 </div>
@@ -996,8 +1023,10 @@ export default function CutPatternPage() {
             </div>
             <p className="mt-3 text-xs text-muted-foreground">
               Triangle source squares are cut <strong>oversize</strong>{" "}
-              (HST&nbsp;+⅞&quot;, QST&nbsp;+1¼&quot; at a ¼&quot; seam); piece,
-              then trim each finished unit square and true before assembly.
+              (HST&nbsp;+{fmtInch(0.875 * (seamAllowance / 0.25))},{" "}
+              QST&nbsp;+{fmtInch(1.25 * (seamAllowance / 0.25))}{" "}
+              at a {fmtInch(seamAllowance)} seam); piece, then trim each
+              finished unit square and true up before assembly.
             </p>
           </section>
         )}
@@ -1049,17 +1078,18 @@ export default function CutPatternPage() {
               </thead>
               <tbody>
                 {fabrics.map((f, i) => {
-                  const thread = suggestThread(f.color);
+                  const resolvedColor = f.color.startsWith("fab:")
+                    ? (fabricColorMap[f.color] ?? "#d4c5a9")
+                    : f.color;
+                  const thread = suggestThread(resolvedColor);
                   return (
                     <tr key={i} className="border-b border-foreground/10">
                       <td className="py-1.5 pr-4">
                         <div className="flex items-center gap-2">
-                          {!f.color.startsWith("fab:") && (
-                            <span
-                              className="inline-block h-4 w-4 shrink-0 rounded-sm border border-foreground/20"
-                              style={{ background: f.color }}
-                            />
-                          )}
+                          <span
+                            className="inline-block h-4 w-4 shrink-0 rounded-sm border border-foreground/20"
+                            style={{ background: resolvedColor }}
+                          />
                           <span className="text-xs text-muted-foreground">
                             Fabric {f.letter}
                           </span>

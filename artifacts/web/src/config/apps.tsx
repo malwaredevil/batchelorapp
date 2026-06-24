@@ -1,5 +1,5 @@
 import {
-  Wind, Newspaper, Rss, Package, Shirt, ShoppingBag, Activity,
+  Wind, Package, Shirt, ShoppingBag, Activity,
   FlaskConical, Scissors, Layers, Zap, Camera, FileText, Clock,
   Target, Star, Image, BookOpen, Link, type LucideIcon,
 } from "lucide-react";
@@ -20,8 +20,6 @@ import {
   CountdownWidget,
   GlazeTipWidget,
   PatternIdeaWidget,
-  CraftNewsWidget,
-  RssFeedsWidget,
   ActivityWidget,
   GoalsWidget,
   InspirationWidget,
@@ -234,22 +232,6 @@ export const WIDGETS: WidgetEntry[] = [
     icon: Wind,
     category: "media",
     body: <StudioWeather />,
-  },
-  {
-    id: "craft-news",
-    title: "Craft News",
-    description: "Curated recent articles on pottery, ceramics, and quilting.",
-    icon: Newspaper,
-    category: "media",
-    body: <CraftNewsWidget />,
-  },
-  {
-    id: "rss",
-    title: "RSS · Craft Feeds",
-    description: "Latest posts from Studio Pottery Weekly, Modern Quilting Blog, and more.",
-    icon: Rss,
-    category: "media",
-    body: <RssFeedsWidget />,
   },
 
   // ── Inspiration ────────────────────────────────────────────────────────────

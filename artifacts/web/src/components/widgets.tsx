@@ -377,59 +377,6 @@ export function PatternIdeaWidget() {
   );
 }
 
-// ── Static: Craft News ────────────────────────────────────────────────────────
-export function CraftNewsWidget() {
-  const articles = [
-    { title: "Glaze chemistry: reduction firing basics", cat: "Pottery", time: "2h ago", href: "https://ceramicartsnetwork.org/ceramics-technical/glaze-chemistry/" },
-    { title: "5 quilt-binding techniques compared", cat: "Quilting", time: "1d ago", href: "https://www.quiltingdaily.com/binding-techniques/" },
-    { title: "Choosing clay bodies for outdoor sculpture", cat: "Pottery", time: "3d ago", href: "https://digitalfire.com/glossary/outdoor+clay+body" },
-    { title: "English paper piecing revival — hexagons return", cat: "Quilting", time: "5d ago", href: "https://missouriquiltco.com/blog/english-paper-piecing" },
-  ];
-  return (
-    <ul className="space-y-2.5">
-      {articles.map((a, i) => (
-        <li key={i}>
-          <a href={a.href} target="_blank" rel="noopener noreferrer"
-            className="flex items-start gap-2 hover:opacity-80 transition-opacity group">
-            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 mt-0.5 ${a.cat === "Pottery" ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300" : "bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300"}`}>
-              {a.cat.charAt(0)}
-            </span>
-            <span className="text-xs leading-snug text-foreground flex-1 group-hover:underline">{a.title}</span>
-            <span className="text-[10px] text-muted-foreground flex-shrink-0">{a.time}</span>
-          </a>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-// ── Static: RSS Feeds ────────────────────────────────────────────────────────
-export function RssFeedsWidget() {
-  const posts = [
-    { feed: "Studio Pottery Weekly", title: "New issue: Soda-firing special", time: "Today", href: "https://studiopottery.com" },
-    { feed: "Modern Quilting Blog", title: "3 posts this week", time: "Today", href: "https://www.quilts.com/blogs/news" },
-    { feed: "Ceramic Arts Network", title: "Glaze calculation tools reviewed", time: "Yesterday", href: "https://ceramicartsnetwork.org" },
-    { feed: "The Quilt Show", title: "Free pattern: Tumbling Blocks", time: "2d ago", href: "https://www.thequiltshow.com" },
-  ];
-  return (
-    <ul className="space-y-2">
-      {posts.map((p, i) => (
-        <li key={i}>
-          <a href={p.href} target="_blank" rel="noopener noreferrer"
-            className="flex items-start gap-2 hover:opacity-80 transition-opacity group">
-            <span className="w-1.5 h-1.5 rounded-full bg-orange-400 flex-shrink-0 mt-1.5" />
-            <div className="flex-1 min-w-0">
-              <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide truncate">{p.feed}</div>
-              <div className="text-xs text-foreground leading-snug truncate group-hover:underline">{p.title}</div>
-            </div>
-            <span className="text-[10px] text-muted-foreground flex-shrink-0">{p.time}</span>
-          </a>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 // ── Static: Collection Activity ──────────────────────────────────────────────
 export function ActivityWidget() {
   const items = [

@@ -133,6 +133,7 @@ export default function BlockDetail() {
     seams?: QuiltingBlockSeamLine[];
     blockSizeInches?: number | null;
     seamAllowanceInches?: number | null;
+    dominantColors?: string[];
     categories: Array<{ id: number; name: string; bgColor: string | null; textColor: string | null }>;
   };
 
@@ -257,6 +258,25 @@ export default function BlockDetail() {
               </div>
             </div>
           </section>
+
+          {/* Colours */}
+          {(b.dominantColors ?? []).length > 0 && (
+            <section className="rounded-xl border border-card-border bg-card p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Colours
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {(b.dominantColors ?? []).map((color, i) => (
+                  <span
+                    key={i}
+                    className="h-6 w-6 rounded-full border border-border/30 shadow-sm"
+                    style={{ backgroundColor: color }}
+                    title={color}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Categories */}
           <section className="rounded-xl border border-card-border bg-card p-4">

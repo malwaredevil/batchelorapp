@@ -19,6 +19,8 @@ export interface QuiltingBlock {
   blockSizeInches?: number | null;
   /** Seam allowance per side in inches (e.g. 0.25 for standard 1/4") */
   seamAllowanceInches?: number | null;
+  /** Hex colours extracted from the block's cell data, sorted by frequency */
+  dominantColors: string[];
   categories: QuiltingCategory[];
   createdAt: Date;
 }

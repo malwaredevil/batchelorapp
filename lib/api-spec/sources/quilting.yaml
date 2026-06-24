@@ -2534,7 +2534,7 @@ components:
 
     Block:
       type: object
-      required: [id, name, gridSize, cells, seams, categories, createdAt]
+      required: [id, name, gridSize, cells, seams, dominantColors, categories, createdAt]
       properties:
         id:
           type: integer
@@ -2559,6 +2559,11 @@ components:
           type: number
           nullable: true
           description: Seam allowance per side in inches (e.g. 0.25 for standard 1/4")
+        dominantColors:
+          type: array
+          items:
+            type: string
+          description: Hex colours extracted from the block's cell data, sorted by frequency
         categories:
           type: array
           items:

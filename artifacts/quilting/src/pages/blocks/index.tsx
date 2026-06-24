@@ -77,6 +77,7 @@ type BlockSummary = {
   seams: BlockSeamLine[];
   blockSizeInches?: number | null;
   seamAllowanceInches?: number | null;
+  dominantColors?: string[];
   categories: QuiltingCategory[];
   createdAt: string;
 };
@@ -503,6 +504,18 @@ function BlockCard({
               </button>
             ))}
           </div>
+          {(block.dominantColors ?? []).length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {(block.dominantColors ?? []).slice(0, 6).map((color, i) => (
+                <span
+                  key={i}
+                  className="h-3.5 w-3.5 rounded-full border border-border/30 inline-block"
+                  style={{ backgroundColor: color }}
+                  title={color}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </Link>
 
@@ -688,6 +701,7 @@ export default function Blocks() {
     new Set(),
   );
   const [search, setSearch] = useState("");
+  const [colorFilter, setColorFilter] = useState<string | null>(null);
 
   const importFileRef = useRef<HTMLInputElement>(null);
 
@@ -802,6 +816,8 @@ export default function Blocks() {
         !b.categories.some((c) => activeCatIds.has(c.id))
       )
         return false;
+      if (colorFilter !== null && !(b.dominantColors ?? []).includes(colorFilter))
+        return false;
       return true;
     })
     .sort((a, b) => {
@@ -828,16 +844,32 @@ export default function Blocks() {
     new Set((blockList ?? []).map((b) => b.gridSize)),
   ).sort((a, b) => a - b);
 
+  // Colours that appear on at least one block, sorted by frequency across collection
+  const usedColors = useMemo(() => {
+    if (!blockList || blockList.length === 0) return [];
+    const freq = new Map<string, number>();
+    for (const b of blockList as BlockSummary[]) {
+      for (const c of b.dominantColors ?? []) {
+        freq.set(c, (freq.get(c) ?? 0) + 1);
+      }
+    }
+    return Array.from(freq.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([color]) => color);
+  }, [blockList]);
+
   const totalCount = blockList?.length ?? 0;
   const hasFilter =
     search.trim().length > 0 ||
     activeCatIds.size > 0 ||
-    activeGridSizes.size > 0;
+    activeGridSizes.size > 0 ||
+    colorFilter !== null;
 
   function clearFilters() {
     setSearch("");
     setActiveCatIds(new Set());
     setActiveGridSizes(new Set());
+    setColorFilter(null);
   }
 
   return (
@@ -929,6 +961,36 @@ export default function Blocks() {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+
+          {/* Colour palette filter */}
+          {usedColors.length > 0 && (
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+              {usedColors.map((color) => (
+                <button
+                  key={color}
+                  onClick={() => setColorFilter(colorFilter === color ? null : color)}
+                  title={color}
+                  aria-label={color}
+                  aria-pressed={colorFilter === color}
+                  className={`h-6 w-6 shrink-0 rounded-full border transition-transform hover:scale-110 ${
+                    colorFilter === color
+                      ? "ring-2 ring-primary ring-offset-2 scale-110"
+                      : "border-border/40"
+                  }`}
+                  style={{ backgroundColor: color }}
+                />
+              ))}
+              {colorFilter !== null && (
+                <button
+                  onClick={() => setColorFilter(null)}
+                  className="shrink-0 text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                >
+                  <X className="h-3 w-3" />
+                  Clear color
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Grid size + category filter pills */}
           {(filterableGridSizes.length > 1 || filterableCats.length > 0) && (

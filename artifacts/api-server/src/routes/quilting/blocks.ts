@@ -164,6 +164,23 @@ async function fetchBlockCategories(
   return map;
 }
 
+/** Extract unique hex colours from a block's cell array, sorted by frequency. */
+function extractBlockColors(cells: string[]): string[] {
+  const freq = new Map<string, number>();
+  const hexRe = /#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?/g;
+  for (const cell of cells) {
+    if (!cell) continue;
+    for (const m of cell.matchAll(hexRe)) {
+      const c = m[0].toLowerCase();
+      freq.set(c, (freq.get(c) ?? 0) + 1);
+    }
+  }
+  return Array.from(freq.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([c]) => c)
+    .slice(0, 10);
+}
+
 function serialize(
   row: typeof blocks.$inferSelect,
   cats: CategoryResult[] = [],
@@ -176,6 +193,7 @@ function serialize(
     seams: (row.seams as object[]) ?? [],
     blockSizeInches: row.blockSizeInches ?? null,
     seamAllowanceInches: row.seamAllowanceInches ?? null,
+    dominantColors: extractBlockColors(row.cells),
     categories: cats,
     createdAt: row.createdAt.toISOString(),
   };

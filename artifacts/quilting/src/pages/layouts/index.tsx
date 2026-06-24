@@ -37,7 +37,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { getCategoryPalette } from "@workspace/web-core";
 import { toast } from "sonner";
-import { parseCell } from "@/lib/cell-parser";
+import { parseCell, fmtInch } from "@/lib/cell-parser";
 import {
   svgCellStr,
   downloadSvgAsPng,
@@ -82,7 +82,32 @@ type BlockSummary = {
   id: number;
   gridSize: number;
   cells: string[];
+  blockSizeInches?: number | null;
 };
+
+/** Returns the finished quilt size in inches, or null if no block sizes known. */
+function computeQuiltSize(
+  layout: LayoutSummary,
+  blockMap: Map<number, BlockSummary>,
+): { w: number; h: number; mixed: boolean } | null {
+  const sizes: number[] = [];
+  for (const cell of layout.cells) {
+    if (cell.blockId === null) continue;
+    const block = blockMap.get(cell.blockId);
+    if (block?.blockSizeInches != null) sizes.push(block.blockSizeInches);
+  }
+  if (sizes.length === 0) return null;
+  const freq = new Map<number, number>();
+  for (const s of sizes) freq.set(s, (freq.get(s) ?? 0) + 1);
+  const blockSz = Array.from(freq.entries()).sort((a, b) => b[1] - a[1])[0][0];
+  const sash = layout.sashingWidthInches ?? 0;
+  const border = layout.borderWidthInches ?? 0;
+  return {
+    w: layout.cols * blockSz + sash * (layout.cols - 1) + border * 2,
+    h: layout.rows * blockSz + sash * (layout.rows - 1) + border * 2,
+    mixed: freq.size > 1,
+  };
+}
 
 type SortKey = "date-desc" | "date-asc" | "name-asc" | "name-desc";
 
@@ -638,6 +663,15 @@ function LayoutCard({
             >
               {layout.rows}×{layout.cols} blocks
             </button>
+            {(() => {
+              const qs = computeQuiltSize(layout, blockMap);
+              if (!qs) return null;
+              return (
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  {fmtInch(qs.w)} × {fmtInch(qs.h)}{qs.mixed ? " (approx)" : ""}
+                </span>
+              );
+            })()}
             {layout.categories.map((cat) => (
               <button
                 key={cat.id}

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Pencil, Trash2, ZoomIn } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, ZoomIn, Tag, Check, X as XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -9,15 +9,20 @@ import { toast } from "sonner";
 import {
   useGetLayout,
   useDeleteLayout,
+  useUpdateLayout,
   useListBlocks,
   useListFabrics,
+  useListQuiltingCategories,
   getListLayoutsQueryKey,
+  getGetLayoutQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { fmtInch } from "@/lib/cell-parser";
 import { buildFabricUrlMap } from "@/components/FabricPicker";
 import { LayoutPreviewSvg } from "@/components/LayoutPreviewSvg";
 import { PreviewZoomModal } from "@/components/PreviewZoomModal";
+import { TagSelector } from "@/components/tag-selector";
+import type { QuiltingCategory } from "@workspace/api-client-react";
 
 type LayoutCellData = { blockId: number | null; rotation: 0 | 90 | 180 | 270 };
 
@@ -47,6 +52,9 @@ export default function LayoutDetail() {
   const queryClient = useQueryClient();
   const layoutId = Number(id);
   const [zoomOpen, setZoomOpen] = useState(false);
+  const [catEditing, setCatEditing] = useState(false);
+  const [selectedCatIds, setSelectedCatIds] = useState<number[]>([]);
+  const [localNewCats, setLocalNewCats] = useState<QuiltingCategory[]>([]);
 
   const {
     data: layout,
@@ -56,6 +64,7 @@ export default function LayoutDetail() {
 
   const { data: allBlocks = [] } = useListBlocks();
   const { data: fabrics = [] } = useListFabrics();
+  const { data: allCategories } = useListQuiltingCategories();
   const numMap = buildFabricUrlMap(fabrics as Parameters<typeof buildFabricUrlMap>[0]);
 
   const deleteLayout = useDeleteLayout({
@@ -69,6 +78,35 @@ export default function LayoutDetail() {
     },
   });
 
+  const updateLayoutCategories = useUpdateLayout({
+    mutation: {
+      onSuccess: (data) => {
+        queryClient.setQueryData(getGetLayoutQueryKey(layoutId), data);
+        queryClient.invalidateQueries({ queryKey: getListLayoutsQueryKey() });
+        toast.success("Categories saved");
+        setCatEditing(false);
+      },
+      onError: () => toast.error("Failed to save categories"),
+    },
+  });
+
+  function enterCatEdit() {
+    const l = layout as unknown as LayoutData;
+    setSelectedCatIds(l.categories?.map((c) => c.id) ?? []);
+    setLocalNewCats([]);
+    setCatEditing(true);
+  }
+
+  function handleSaveCategories() {
+    const merged = [
+      ...(allCategories ?? []),
+      ...localNewCats.filter((nc) => !(allCategories ?? []).some((a) => a.id === nc.id)),
+    ];
+    const categoryNames = merged
+      .filter((c) => selectedCatIds.includes(c.id))
+      .map((c) => c.name);
+    updateLayoutCategories.mutate({ id: layoutId, data: { categoryNames } });
+  }
 
   if (isLoading) {
     return (
@@ -199,36 +237,84 @@ export default function LayoutDetail() {
           </section>
 
           {/* Categories */}
-          {l.categories.length > 0 && (
-            <section className="rounded-xl border border-card-border bg-card p-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Categories
+          <section className="rounded-xl border border-card-border bg-card p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <Tag className="h-3 w-3" /> Categories
               </p>
+              {!catEditing && (
+                <button
+                  onClick={enterCatEdit}
+                  className="rounded p-0.5 text-muted-foreground/40 transition-colors hover:text-muted-foreground"
+                  title="Edit categories"
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+
+            {catEditing ? (
+              <>
+                <TagSelector
+                  allCategories={allCategories ?? []}
+                  selectedIds={selectedCatIds}
+                  onToggle={(id) =>
+                    setSelectedCatIds((prev) =>
+                      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+                    )
+                  }
+                  onCreated={(cat) => {
+                    setSelectedCatIds((prev) => [...prev, cat.id]);
+                    setLocalNewCats((prev) =>
+                      prev.some((c) => c.id === cat.id) ? prev : [...prev, cat],
+                    );
+                  }}
+                  disabled={updateLayoutCategories.isPending}
+                />
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={handleSaveCategories}
+                    disabled={updateLayoutCategories.isPending}
+                  >
+                    <Check className="mr-1.5 h-3.5 w-3.5" />
+                    {updateLayoutCategories.isPending ? "Saving…" : "Save"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setCatEditing(false)}
+                    disabled={updateLayoutCategories.isPending}
+                  >
+                    <XIcon className="mr-1.5 h-3.5 w-3.5" />
+                    Cancel
+                  </Button>
+                </div>
+              </>
+            ) : l.categories.length > 0 ? (
               <div className="flex flex-wrap gap-1.5">
                 {l.categories.map((cat) => {
                   const palette = cat.bgColor
-                    ? {
-                        bgColor: cat.bgColor,
-                        textColor: cat.textColor ?? "#fff",
-                      }
+                    ? { bgColor: cat.bgColor, textColor: cat.textColor ?? "#fff" }
                     : getCategoryPalette(cat.name);
                   return (
                     <Badge
                       key={cat.id}
                       variant="outline"
                       className="border-transparent"
-                      style={{
-                        backgroundColor: palette.bgColor,
-                        color: palette.textColor,
-                      }}
+                      style={{ backgroundColor: palette.bgColor, color: palette.textColor }}
                     >
                       {cat.name}
                     </Badge>
                   );
                 })}
               </div>
-            </section>
-          )}
+            ) : (
+              <p className="text-xs italic text-muted-foreground">
+                No categories — click <Pencil className="inline h-2.5 w-2.5" /> to add
+              </p>
+            )}
+          </section>
         </div>
       </div>
       <PreviewZoomModal open={zoomOpen} onClose={() => setZoomOpen(false)} title={l.name}>

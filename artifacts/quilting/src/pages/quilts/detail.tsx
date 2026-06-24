@@ -29,6 +29,7 @@ import {
   useListQuiltingCategories,
   getListQuiltsQueryKey,
   getGetQuiltQueryKey,
+  type QuiltingCategory,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { TagSelector } from "@/components/tag-selector";
@@ -96,6 +97,8 @@ export default function QuiltDetail() {
 
   const [isEditing, setIsEditing] = useState(false);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
+  const [catEditing, setCatEditing] = useState(false);
+  const [localNewCats, setLocalNewCats] = useState<QuiltingCategory[]>([]);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [renamingName, setRenamingName] = useState(false);
   const [renameValue, setRenameValue] = useState("");
@@ -208,6 +211,35 @@ export default function QuiltDetail() {
     updateQuilt.mutate(
       { id: quiltId, data: { name: renameValue.trim() } },
       { onSuccess: () => setRenamingName(false) },
+    );
+  }
+
+  function enterCatEdit() {
+    const q = quilt as unknown as QuiltData;
+    setSelectedCategoryIds(q.categories?.map((c) => c.id) ?? []);
+    setLocalNewCats([]);
+    setCatEditing(true);
+  }
+
+  function handleSaveCategories() {
+    const merged = [
+      ...(allCategories ?? []),
+      ...localNewCats.filter((nc) => !(allCategories ?? []).some((a) => a.id === nc.id)),
+    ];
+    const categoryNames = merged
+      .filter((c) => selectedCategoryIds.includes(c.id))
+      .map((c) => c.name);
+    updateQuilt.mutate(
+      { id: quiltId, data: { categories: categoryNames } },
+      {
+        onSuccess: (data) => {
+          queryClient.setQueryData(getGetQuiltQueryKey(quiltId), data);
+          queryClient.invalidateQueries({ queryKey: getListQuiltsQueryKey() });
+          toast.success("Categories saved");
+          setCatEditing(false);
+        },
+        onError: () => toast.error("Failed to save categories"),
+      },
     );
   }
 
@@ -482,48 +514,88 @@ export default function QuiltDetail() {
             )}
           </section>
 
-          {(isEditing || q.categories.length > 0) && (
-            <section className="rounded-xl border border-card-border bg-card p-4">
-              <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <section className="rounded-xl border border-card-border bg-card p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <Tag className="h-3 w-3" /> Categories
               </p>
-              {isEditing ? (
+              {!catEditing && !isEditing && (
+                <button
+                  onClick={enterCatEdit}
+                  className="rounded p-0.5 text-muted-foreground/40 transition-colors hover:text-muted-foreground"
+                  title="Edit categories"
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+            {isEditing ? (
+              <TagSelector
+                allCategories={allCategories ?? []}
+                selectedIds={selectedCategoryIds}
+                onToggle={(id) =>
+                  setSelectedCategoryIds((prev) =>
+                    prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+                  )
+                }
+                onCreated={(cat) =>
+                  setSelectedCategoryIds((prev) => [...prev, cat.id])
+                }
+                disabled={updateQuilt.isPending}
+              />
+            ) : catEditing ? (
+              <>
                 <TagSelector
                   allCategories={allCategories ?? []}
                   selectedIds={selectedCategoryIds}
                   onToggle={(id) =>
                     setSelectedCategoryIds((prev) =>
-                      prev.includes(id)
-                        ? prev.filter((x) => x !== id)
-                        : [...prev, id],
+                      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
                     )
                   }
-                  onCreated={(cat) =>
-                    setSelectedCategoryIds((prev) => [...prev, cat.id])
-                  }
+                  onCreated={(cat) => {
+                    setSelectedCategoryIds((prev) => [...prev, cat.id]);
+                    setLocalNewCats((prev) =>
+                      prev.some((c) => c.id === cat.id) ? prev : [...prev, cat],
+                    );
+                  }}
                   disabled={updateQuilt.isPending}
                 />
-              ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {q.categories.map((cat) => (
-                    <Badge
-                      key={cat.id}
-                      variant="outline"
-                      className="border-transparent"
-                      style={(() => {
-                        const palette = cat.bgColor
-                          ? { bgColor: cat.bgColor, textColor: cat.textColor ?? "#fff" }
-                          : getCategoryPalette(cat.name);
-                        return { backgroundColor: palette.bgColor, color: palette.textColor };
-                      })()}
-                    >
-                      {cat.name}
-                    </Badge>
-                  ))}
+                <div className="mt-3 flex gap-2">
+                  <Button size="sm" onClick={handleSaveCategories} disabled={updateQuilt.isPending}>
+                    <Check className="mr-1.5 h-3.5 w-3.5" />
+                    {updateQuilt.isPending ? "Saving…" : "Save"}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setCatEditing(false)} disabled={updateQuilt.isPending}>
+                    <XIcon className="mr-1.5 h-3.5 w-3.5" />
+                    Cancel
+                  </Button>
                 </div>
-              )}
-            </section>
-          )}
+              </>
+            ) : q.categories.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {q.categories.map((cat) => (
+                  <Badge
+                    key={cat.id}
+                    variant="outline"
+                    className="border-transparent"
+                    style={(() => {
+                      const palette = cat.bgColor
+                        ? { bgColor: cat.bgColor, textColor: cat.textColor ?? "#fff" }
+                        : getCategoryPalette(cat.name);
+                      return { backgroundColor: palette.bgColor, color: palette.textColor };
+                    })()}
+                  >
+                    {cat.name}
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs italic text-muted-foreground">
+                No categories — click <Pencil className="inline h-2.5 w-2.5" /> to add
+              </p>
+            )}
+          </section>
 
           {q.linkedFabrics && q.linkedFabrics.length > 0 && (
             <section className="rounded-xl border border-card-border bg-card p-4">

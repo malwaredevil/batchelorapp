@@ -28,6 +28,7 @@ import {
   useListQuiltingCategories,
   getListFabricsQueryKey,
   getGetFabricQueryKey,
+  type QuiltingCategory,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { TagSelector } from "@/components/tag-selector";
@@ -109,6 +110,8 @@ export default function FabricDetail() {
 
   const [isEditing, setIsEditing] = useState(false);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
+  const [catEditing, setCatEditing] = useState(false);
+  const [localNewCats, setLocalNewCats] = useState<QuiltingCategory[]>([]);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [renamingName, setRenamingName] = useState(false);
   const [renameValue, setRenameValue] = useState("");
@@ -278,6 +281,35 @@ export default function FabricDetail() {
     updateFabric.mutate(
       { id: fabricId, data: { name: renameValue.trim() } },
       { onSuccess: () => setRenamingName(false) },
+    );
+  }
+
+  function enterCatEdit() {
+    const f = fabric as unknown as Fabric;
+    setSelectedCategoryIds(f.categories?.map((c) => c.id) ?? []);
+    setLocalNewCats([]);
+    setCatEditing(true);
+  }
+
+  function handleSaveCategories() {
+    const merged = [
+      ...(allCategories ?? []),
+      ...localNewCats.filter((nc) => !(allCategories ?? []).some((a) => a.id === nc.id)),
+    ];
+    const categoryNames = merged
+      .filter((c) => selectedCategoryIds.includes(c.id))
+      .map((c) => c.name);
+    updateFabric.mutate(
+      { id: fabricId, data: { categories: categoryNames } },
+      {
+        onSuccess: (data) => {
+          queryClient.setQueryData(getGetFabricQueryKey(fabricId), data);
+          queryClient.invalidateQueries({ queryKey: getListFabricsQueryKey() });
+          toast.success("Categories saved");
+          setCatEditing(false);
+        },
+        onError: () => toast.error("Failed to save categories"),
+      },
     );
   }
 
@@ -720,48 +752,88 @@ export default function FabricDetail() {
           </section>
 
           {/* Categories */}
-          {(isEditing || f.categories.length > 0) && (
-            <section className="rounded-xl border border-card-border bg-card p-4">
-              <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <section className="rounded-xl border border-card-border bg-card p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <Tag className="h-3 w-3" /> Categories
               </p>
-              {isEditing ? (
+              {!catEditing && !isEditing && (
+                <button
+                  onClick={enterCatEdit}
+                  className="rounded p-0.5 text-muted-foreground/40 transition-colors hover:text-muted-foreground"
+                  title="Edit categories"
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+            {isEditing ? (
+              <TagSelector
+                allCategories={allCategories ?? []}
+                selectedIds={selectedCategoryIds}
+                onToggle={(id) =>
+                  setSelectedCategoryIds((prev) =>
+                    prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+                  )
+                }
+                onCreated={(cat) =>
+                  setSelectedCategoryIds((prev) => [...prev, cat.id])
+                }
+                disabled={updateFabric.isPending}
+              />
+            ) : catEditing ? (
+              <>
                 <TagSelector
                   allCategories={allCategories ?? []}
                   selectedIds={selectedCategoryIds}
                   onToggle={(id) =>
                     setSelectedCategoryIds((prev) =>
-                      prev.includes(id)
-                        ? prev.filter((x) => x !== id)
-                        : [...prev, id],
+                      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
                     )
                   }
-                  onCreated={(cat) =>
-                    setSelectedCategoryIds((prev) => [...prev, cat.id])
-                  }
+                  onCreated={(cat) => {
+                    setSelectedCategoryIds((prev) => [...prev, cat.id]);
+                    setLocalNewCats((prev) =>
+                      prev.some((c) => c.id === cat.id) ? prev : [...prev, cat],
+                    );
+                  }}
                   disabled={updateFabric.isPending}
                 />
-              ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {f.categories.map((cat) => (
-                    <Badge
-                      key={cat.id}
-                      variant="outline"
-                      className="border-transparent"
-                      style={(() => {
-                        const p = cat.bgColor
-                          ? { bgColor: cat.bgColor, textColor: cat.textColor ?? "#fff" }
-                          : getCategoryPalette(cat.name);
-                        return { backgroundColor: p.bgColor, color: p.textColor };
-                      })()}
-                    >
-                      {cat.name}
-                    </Badge>
-                  ))}
+                <div className="mt-3 flex gap-2">
+                  <Button size="sm" onClick={handleSaveCategories} disabled={updateFabric.isPending}>
+                    <Check className="mr-1.5 h-3.5 w-3.5" />
+                    {updateFabric.isPending ? "Saving…" : "Save"}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setCatEditing(false)} disabled={updateFabric.isPending}>
+                    <XIcon className="mr-1.5 h-3.5 w-3.5" />
+                    Cancel
+                  </Button>
                 </div>
-              )}
-            </section>
-          )}
+              </>
+            ) : f.categories.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {f.categories.map((cat) => (
+                  <Badge
+                    key={cat.id}
+                    variant="outline"
+                    className="border-transparent"
+                    style={(() => {
+                      const palette = cat.bgColor
+                        ? { bgColor: cat.bgColor, textColor: cat.textColor ?? "#fff" }
+                        : getCategoryPalette(cat.name);
+                      return { backgroundColor: palette.bgColor, color: palette.textColor };
+                    })()}
+                  >
+                    {cat.name}
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs italic text-muted-foreground">
+                No categories — click <Pencil className="inline h-2.5 w-2.5" /> to add
+              </p>
+            )}
+          </section>
 
           {/* AI description */}
           {f.aiDescription && (

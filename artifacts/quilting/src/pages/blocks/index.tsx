@@ -492,10 +492,12 @@ function BlockCard({
                   onFilterByCategory?.(cat.id);
                 }}
                 className="rounded-full px-2 py-0.5 text-[10px] font-medium leading-tight transition-all hover:ring-2 hover:ring-primary/50 cursor-pointer"
-                style={{
-                  backgroundColor: cat.bgColor ?? "#e5e7eb",
-                  color: cat.textColor ?? "#374151",
-                }}
+                style={(() => {
+                  const palette = cat.bgColor
+                    ? { bgColor: cat.bgColor, textColor: cat.textColor ?? "#fff" }
+                    : getCategoryPalette(cat.name);
+                  return { backgroundColor: palette.bgColor, color: palette.textColor };
+                })()}
               >
                 {cat.name}
               </button>

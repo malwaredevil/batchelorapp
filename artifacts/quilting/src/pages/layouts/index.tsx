@@ -74,6 +74,7 @@ type LayoutSummary = {
   borderWidthInches?: number | null;
   borderColor?: string | null;
   cornerstoneColor?: string | null;
+  dominantColors?: string[];
   createdAt: string;
 };
 
@@ -586,6 +587,7 @@ function LayoutCard({
   onDuplicate,
   onFilterBySize,
   onFilterByCategory,
+  onFilterByColor,
   fabricUrlMap = {},
   onEditCategories,
 }: {
@@ -596,6 +598,7 @@ function LayoutCard({
   onDuplicate: (layout: LayoutSummary) => void;
   onFilterBySize?: (s: string) => void;
   onFilterByCategory?: (id: number) => void;
+  onFilterByColor?: (hex: string) => void;
   fabricUrlMap?: Record<number, string>;
   onEditCategories?: () => void;
 }) {
@@ -655,6 +658,23 @@ function LayoutCard({
               </button>
             ))}
           </div>
+          {(layout.dominantColors ?? []).length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {(layout.dominantColors ?? []).map((hex) => (
+                <button
+                  key={hex}
+                  title={hex}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onFilterByColor?.(hex);
+                  }}
+                  className="h-4 w-4 rounded-full border border-black/10 transition-transform hover:scale-110"
+                  style={{ backgroundColor: hex }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </Link>
 
@@ -768,6 +788,7 @@ export default function Layouts() {
   const [sortBy, setSortBy] = useState<SortKey>("date-desc");
   const [activeCatIds, setActiveCatIds] = useState<Set<number>>(new Set());
   const [search, setSearch] = useState("");
+  const [colorFilter, setColorFilter] = useState<string | null>(null);
 
   const deleteLayout = useDeleteLayout({
     mutation: {
@@ -833,6 +854,17 @@ export default function Layouts() {
   const blocks: BlockSummary[] = (blockList ?? []) as BlockSummary[];
   const blockMap = new Map(blocks.map((b) => [b.id, b]));
 
+  const usedColors = useMemo(() => {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const l of (layoutList ?? []) as LayoutSummary[]) {
+      for (const c of l.dominantColors ?? []) {
+        if (!seen.has(c)) { seen.add(c); result.push(c); }
+      }
+    }
+    return result;
+  }, [layoutList]);
+
   // Filter then sort
   const displayed = ((layoutList ?? []) as LayoutSummary[])
     .filter((l) => {
@@ -844,6 +876,8 @@ export default function Layouts() {
         activeCatIds.size > 0 &&
         !l.categories.some((c) => activeCatIds.has(c.id))
       )
+        return false;
+      if (colorFilter && !(l.dominantColors ?? []).includes(colorFilter))
         return false;
       return true;
     })
@@ -878,12 +912,14 @@ export default function Layouts() {
   const hasFilter =
     search.trim().length > 0 ||
     activeCatIds.size > 0 ||
-    activeSizes.size > 0;
+    activeSizes.size > 0 ||
+    colorFilter !== null;
 
   function clearFilters() {
     setSearch("");
     setActiveCatIds(new Set());
     setActiveSizes(new Set());
+    setColorFilter(null);
   }
 
   return (
@@ -959,6 +995,34 @@ export default function Layouts() {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+
+          {/* Color filter palette */}
+          {usedColors.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {usedColors.map((hex) => (
+                <button
+                  key={hex}
+                  title={hex}
+                  onClick={() => setColorFilter(colorFilter === hex ? null : hex)}
+                  className={cn(
+                    "h-7 w-7 rounded-full border-2 transition-transform hover:scale-110",
+                    colorFilter === hex
+                      ? "border-primary scale-110 ring-2 ring-primary/40"
+                      : "border-transparent",
+                  )}
+                  style={{ backgroundColor: hex }}
+                />
+              ))}
+              {colorFilter && (
+                <button
+                  onClick={() => setColorFilter(null)}
+                  className="ml-1 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Clear colour
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Size + category filter pills */}
           {(filterableSizes.length > 1 || filterableCats.length > 0) && (
@@ -1075,6 +1139,7 @@ export default function Layouts() {
               onDuplicate={handleDuplicate}
               onFilterBySize={toggleSize}
               onFilterByCategory={toggleCat}
+              onFilterByColor={(hex) => setColorFilter(colorFilter === hex ? null : hex)}
               fabricUrlMap={fabricUrlMap}
               onEditCategories={() => setCategoryEditItem(layout)}
             />

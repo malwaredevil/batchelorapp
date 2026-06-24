@@ -37,6 +37,7 @@ type LayoutData = {
   borderWidthInches?: number | null;
   borderColor?: string | null;
   cornerstoneColor?: string | null;
+  dominantColors?: string[];
   categories: Array<{
     id: number;
     name: string;
@@ -235,6 +236,25 @@ export default function LayoutDetail() {
               )}
             </div>
           </section>
+
+          {/* Colours */}
+          {(l.dominantColors ?? []).length > 0 && (
+            <section className="rounded-xl border border-card-border bg-card p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Colours
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {(l.dominantColors ?? []).map((hex) => (
+                  <div
+                    key={hex}
+                    title={hex}
+                    className="h-7 w-7 rounded-full border border-black/10 shadow-sm"
+                    style={{ backgroundColor: hex }}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Categories */}
           <section className="rounded-xl border border-card-border bg-card p-4">

@@ -742,6 +742,8 @@ export interface QuiltingQuiltLayout {
   borderColor?: string | null;
   /** Hex colour for cornerstone squares at sashing intersections (null = no cornerstones) */
   cornerstoneColor?: string | null;
+  /** Hex colours extracted from sashing/border/block cells, sorted by frequency */
+  dominantColors: string[];
   createdAt: string;
   categories: QuiltingCategory[];
 }

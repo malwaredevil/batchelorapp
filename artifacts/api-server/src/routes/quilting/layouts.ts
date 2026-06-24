@@ -4,6 +4,7 @@ import { and, eq, desc, inArray } from "drizzle-orm";
 import {
   db,
   layouts,
+  blocks,
   entityCategories,
   quiltingCategories as categories,
 } from "@workspace/db";
@@ -172,9 +173,58 @@ function parseCells(raw: unknown): LayoutCell[] {
   }));
 }
 
+const HEX_RE = /#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?/g;
+
+async function fetchBlockCellsMap(
+  blockIds: number[],
+): Promise<Map<number, string[]>> {
+  if (blockIds.length === 0) return new Map();
+  const rows = await db
+    .select({ id: blocks.id, cells: blocks.cells })
+    .from(blocks)
+    .where(inArray(blocks.id, blockIds));
+  const m = new Map<number, string[]>();
+  for (const r of rows) {
+    m.set(r.id, Array.isArray(r.cells) ? (r.cells as string[]) : []);
+  }
+  return m;
+}
+
+function extractLayoutColors(
+  row: typeof layouts.$inferSelect,
+  blockCellsMap: Map<number, string[]>,
+): string[] {
+  const freq = new Map<string, number>();
+
+  function addStr(s: string | null | undefined, weight = 1) {
+    if (!s) return;
+    for (const m of s.matchAll(HEX_RE)) {
+      const c = m[0].toLowerCase();
+      freq.set(c, (freq.get(c) ?? 0) + weight);
+    }
+  }
+
+  addStr(row.sashingColor, 3);
+  addStr(row.borderColor, 3);
+  addStr(row.cornerstoneColor, 3);
+
+  for (const cell of parseCells(row.cells)) {
+    if (cell.blockId === null) continue;
+    for (const cellStr of blockCellsMap.get(cell.blockId) ?? []) {
+      addStr(cellStr);
+    }
+  }
+
+  return Array.from(freq.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([c]) => c)
+    .slice(0, 10);
+}
+
 function serialize(
   row: typeof layouts.$inferSelect,
   cats: CategoryResult[] = [],
+  dominantColors: string[] = [],
 ) {
   return {
     id: row.id,
@@ -183,6 +233,7 @@ function serialize(
     cols: row.cols,
     cells: parseCells(row.cells),
     categories: cats,
+    dominantColors,
     sashingWidthInches: row.sashingWidthInches ?? null,
     sashingColor: row.sashingColor ?? null,
     borderWidthInches: row.borderWidthInches ?? null,
@@ -197,10 +248,22 @@ router.get("/layouts", async (req, res) => {
   const rows = await db
     .select()
     .from(layouts)
-    
     .orderBy(desc(layouts.createdAt));
   const catMap = await fetchLayoutCategories(rows.map((r) => r.id));
-  res.json(rows.map((r) => serialize(r, catMap.get(r.id) ?? [])));
+
+  const allBlockIds = new Set<number>();
+  for (const row of rows) {
+    for (const cell of parseCells(row.cells)) {
+      if (cell.blockId !== null) allBlockIds.add(cell.blockId);
+    }
+  }
+  const blockCellsMap = await fetchBlockCellsMap([...allBlockIds]);
+
+  res.json(
+    rows.map((r) =>
+      serialize(r, catMap.get(r.id) ?? [], extractLayoutColors(r, blockCellsMap)),
+    ),
+  );
 });
 
 router.post("/layouts", async (req, res) => {
@@ -258,7 +321,15 @@ router.get("/layouts/:id", async (req, res) => {
     return;
   }
   const catMap = await fetchLayoutCategories([id]);
-  res.json(serialize(row, catMap.get(id) ?? []));
+  const blockIds = [
+    ...new Set(
+      parseCells(row.cells)
+        .map((c) => c.blockId)
+        .filter((bid): bid is number => bid !== null),
+    ),
+  ];
+  const blockCellsMap = await fetchBlockCellsMap(blockIds);
+  res.json(serialize(row, catMap.get(id) ?? [], extractLayoutColors(row, blockCellsMap)));
 });
 
 router.patch("/layouts/:id", async (req, res) => {

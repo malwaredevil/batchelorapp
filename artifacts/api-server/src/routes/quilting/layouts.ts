@@ -290,11 +290,21 @@ router.patch("/layouts/:id", async (req, res) => {
   if ("borderColor" in data) update.borderColor = data.borderColor ?? null;
   if ("cornerstoneColor" in data)
     update.cornerstoneColor = data.cornerstoneColor ?? null;
-  const [row] = await db
-    .update(layouts)
-    .set(update)
-    .where(and(eq(layouts.id, id)))
-    .returning();
+  let row: (typeof layouts.$inferSelect) | undefined;
+  if (Object.keys(update).length > 0) {
+    const [updated] = await db
+      .update(layouts)
+      .set(update)
+      .where(and(eq(layouts.id, id)))
+      .returning();
+    row = updated;
+  } else {
+    const [existing] = await db
+      .select()
+      .from(layouts)
+      .where(and(eq(layouts.id, id)));
+    row = existing;
+  }
   if (!row) {
     res.status(404).json({ error: "Layout not found" });
     return;

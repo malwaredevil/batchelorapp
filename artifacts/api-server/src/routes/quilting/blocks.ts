@@ -308,11 +308,21 @@ router.patch("/blocks/:id", async (req, res) => {
   if ("seamAllowanceInches" in data)
     update.seamAllowanceInches = data.seamAllowanceInches ?? null;
 
-  const [row] = await db
-    .update(blocks)
-    .set(update)
-    .where(and(eq(blocks.id, id)))
-    .returning();
+  let row: (typeof blocks.$inferSelect) | undefined;
+  if (Object.keys(update).length > 0) {
+    const [updated] = await db
+      .update(blocks)
+      .set(update)
+      .where(and(eq(blocks.id, id)))
+      .returning();
+    row = updated;
+  } else {
+    const [existing] = await db
+      .select()
+      .from(blocks)
+      .where(and(eq(blocks.id, id)));
+    row = existing;
+  }
   if (!row) {
     res.status(404).json({ error: "Block not found" });
     return;

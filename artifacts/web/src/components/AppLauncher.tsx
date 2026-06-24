@@ -603,14 +603,6 @@ export function AppLauncher() {
               expanded={quiltingExpanded}
               onToggle={() => setQuiltingExpanded((e) => !e)}
             />
-
-            <button className="min-h-[280px] rounded-xl border-2 border-dashed border-border bg-transparent flex flex-col items-center justify-center gap-3 text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-muted/30 transition-colors">
-              <PlusCircle className="w-10 h-10" />
-              <span className="font-medium">Add an app</span>
-              <span className="text-xs max-w-[180px] text-center">
-                Plug in another collection or tool
-              </span>
-            </button>
           </div>
         </section>
 

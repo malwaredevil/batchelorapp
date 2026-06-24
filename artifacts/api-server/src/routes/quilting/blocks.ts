@@ -4,6 +4,7 @@ import { and, eq, desc, asc, inArray } from "drizzle-orm";
 import {
   db,
   blocks,
+  fabrics,
   entityCategories,
   quiltingCategories as categories,
 } from "@workspace/db";
@@ -164,15 +165,49 @@ async function fetchBlockCategories(
   return map;
 }
 
-/** Extract unique hex colours from a block's cell array, sorted by frequency. */
-function extractBlockColors(cells: string[]): string[] {
+const FAB_RE = /\bfab:(\d+)/g;
+const HEX_RE = /#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?/g;
+
+async function buildFabricColorMap(
+  allCells: string[][],
+): Promise<Map<number, string[]>> {
+  const ids = new Set<number>();
+  for (const cells of allCells) {
+    for (const cell of cells) {
+      for (const m of cell.matchAll(FAB_RE)) ids.add(Number(m[1]));
+    }
+  }
+  const map = new Map<number, string[]>();
+  if (ids.size === 0) return map;
+  const rows = await db
+    .select({ id: fabrics.id, dominantColors: fabrics.dominantColors })
+    .from(fabrics)
+    .where(inArray(fabrics.id, [...ids]));
+  for (const r of rows) map.set(r.id, r.dominantColors ?? []);
+  return map;
+}
+
+/** Extract unique hex colours from a block's cell array, resolving fab:N tokens. */
+function extractBlockColors(
+  cells: string[],
+  fabricColorMap: Map<number, string[]>,
+): string[] {
   const freq = new Map<string, number>();
-  const hexRe = /#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?/g;
   for (const cell of cells) {
     if (!cell) continue;
-    for (const m of cell.matchAll(hexRe)) {
-      const c = m[0].toLowerCase();
-      freq.set(c, (freq.get(c) ?? 0) + 1);
+    let matched = false;
+    for (const m of cell.matchAll(FAB_RE)) {
+      matched = true;
+      for (const hex of fabricColorMap.get(Number(m[1])) ?? []) {
+        const c = hex.toLowerCase();
+        freq.set(c, (freq.get(c) ?? 0) + 1);
+      }
+    }
+    if (!matched) {
+      for (const m of cell.matchAll(HEX_RE)) {
+        const c = m[0].toLowerCase();
+        freq.set(c, (freq.get(c) ?? 0) + 1);
+      }
     }
   }
   return Array.from(freq.entries())
@@ -184,6 +219,7 @@ function extractBlockColors(cells: string[]): string[] {
 function serialize(
   row: typeof blocks.$inferSelect,
   cats: CategoryResult[] = [],
+  fabricColorMap: Map<number, string[]> = new Map(),
 ) {
   return {
     id: row.id,
@@ -193,7 +229,7 @@ function serialize(
     seams: (row.seams as object[]) ?? [],
     blockSizeInches: row.blockSizeInches ?? null,
     seamAllowanceInches: row.seamAllowanceInches ?? null,
-    dominantColors: extractBlockColors(row.cells),
+    dominantColors: extractBlockColors(row.cells, fabricColorMap),
     categories: cats,
     createdAt: row.createdAt.toISOString(),
   };
@@ -233,14 +269,15 @@ router.post("/blocks/detect-seams", aiLimiter, async (req, res) => {
 // ---------------------------------------------------------------------------
 
 router.get("/blocks", async (req, res) => {
-  const userId = req.session.userId!;
   const rows = await db
     .select()
     .from(blocks)
-    
     .orderBy(desc(blocks.createdAt));
-  const catMap = await fetchBlockCategories(rows.map((r) => r.id));
-  res.json(rows.map((r) => serialize(r, catMap.get(r.id) ?? [])));
+  const [catMap, fabricColorMap] = await Promise.all([
+    fetchBlockCategories(rows.map((r) => r.id)),
+    buildFabricColorMap(rows.map((r) => r.cells)),
+  ]);
+  res.json(rows.map((r) => serialize(r, catMap.get(r.id) ?? [], fabricColorMap)));
 });
 
 router.post("/blocks", async (req, res) => {
@@ -294,8 +331,11 @@ router.get("/blocks/:id", async (req, res) => {
     res.status(404).json({ error: "Block not found" });
     return;
   }
-  const catMap = await fetchBlockCategories([id]);
-  res.json(serialize(row, catMap.get(id) ?? []));
+  const [catMap, fabricColorMap] = await Promise.all([
+    fetchBlockCategories([id]),
+    buildFabricColorMap([row.cells]),
+  ]);
+  res.json(serialize(row, catMap.get(id) ?? [], fabricColorMap));
 });
 
 router.patch("/blocks/:id", async (req, res) => {

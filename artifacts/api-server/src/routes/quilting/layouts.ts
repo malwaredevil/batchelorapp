@@ -5,6 +5,7 @@ import {
   db,
   layouts,
   blocks,
+  fabrics,
   entityCategories,
   quiltingCategories as categories,
 } from "@workspace/db";
@@ -183,9 +184,36 @@ async function fetchBlockCellsMap(
     .select({ id: blocks.id, cells: blocks.cells })
     .from(blocks)
     .where(inArray(blocks.id, blockIds));
+
+  const FAB_RE = /\bfab:(\d+)/g;
+  const allFabricIds = new Set<number>();
+  for (const r of rows) {
+    for (const cell of r.cells) {
+      for (const m of cell.matchAll(FAB_RE)) allFabricIds.add(Number(m[1]));
+    }
+  }
+
+  const fabricColorMap = new Map<number, string[]>();
+  if (allFabricIds.size > 0) {
+    const fabRows = await db
+      .select({ id: fabrics.id, dominantColors: fabrics.dominantColors })
+      .from(fabrics)
+      .where(inArray(fabrics.id, [...allFabricIds]));
+    for (const fr of fabRows) fabricColorMap.set(fr.id, fr.dominantColors ?? []);
+  }
+
   const m = new Map<number, string[]>();
   for (const r of rows) {
-    m.set(r.id, Array.isArray(r.cells) ? (r.cells as string[]) : []);
+    const effective: string[] = [];
+    for (const cell of r.cells) {
+      let matched = false;
+      for (const match of cell.matchAll(FAB_RE)) {
+        matched = true;
+        effective.push(...(fabricColorMap.get(Number(match[1])) ?? []));
+      }
+      if (!matched) effective.push(cell);
+    }
+    m.set(r.id, effective);
   }
   return m;
 }

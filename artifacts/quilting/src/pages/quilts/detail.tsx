@@ -52,6 +52,7 @@ type QuiltData = {
     textColor: string | null;
   }>;
   imageUrl: string;
+  dominantColors?: string[];
   linkedFabricIds: number[];
   linkedFabrics?: Array<{
     id: number;
@@ -513,6 +514,25 @@ export default function QuiltDetail() {
               </div>
             )}
           </section>
+
+          {(q.dominantColors?.length ?? 0) > 0 && (
+            <section className="rounded-xl border border-card-border bg-card p-4">
+              <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Colours
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {q.dominantColors!.map((hex) => (
+                  <div key={hex} className="flex items-center gap-1.5">
+                    <span
+                      className="h-6 w-6 rounded-full border border-black/10 shadow-sm"
+                      style={{ backgroundColor: hex }}
+                    />
+                    <span className="font-mono text-xs text-muted-foreground">{hex}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           <section className="rounded-xl border border-card-border bg-card p-4">
             <div className="mb-3 flex items-center justify-between">

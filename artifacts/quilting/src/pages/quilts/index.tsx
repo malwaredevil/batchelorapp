@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import {
   PlusCircle,
@@ -46,6 +46,7 @@ import type { QuiltingCategory } from "@workspace/api-client-react";
 import { downloadCollectionImage } from "@/lib/svg-export";
 import { PreviewZoomModal } from "@/components/PreviewZoomModal";
 import { CategoryEditDialog } from "@/components/CategoryEditDialog";
+import { cn } from "@/lib/utils";
 
 type SortOption = "newest" | "oldest" | "az" | "za";
 
@@ -64,6 +65,7 @@ type QuiltSummary = {
   sizeWidth?: number | null;
   sizeHeight?: number | null;
   recipient?: string | null;
+  dominantColors?: string[];
   categories: Array<{
     id: number;
     name: string;
@@ -82,6 +84,7 @@ function QuiltCard({
   onToggleSelect,
   onFilterByRecipient,
   onFilterByCategory,
+  onFilterByColor,
   onEditCategories,
 }: {
   quilt: QuiltSummary;
@@ -92,6 +95,7 @@ function QuiltCard({
   onToggleSelect: (id: number) => void;
   onFilterByRecipient?: (r: string) => void;
   onFilterByCategory?: (id: number) => void;
+  onFilterByColor?: (hex: string) => void;
   onEditCategories?: () => void;
 }) {
   const [, navigate] = useLocation();
@@ -180,6 +184,23 @@ function QuiltCard({
               </button>
             ))}
           </div>
+          {(quilt.dominantColors ?? []).length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {(quilt.dominantColors ?? []).map((hex) => (
+                <button
+                  key={hex}
+                  title={hex}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onFilterByColor?.(hex);
+                  }}
+                  className="h-4 w-4 rounded-full border border-black/10 transition-transform hover:scale-110"
+                  style={{ backgroundColor: hex }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </Link>
 
@@ -252,6 +273,7 @@ export default function Quilts() {
   const [search, setSearch] = useState("");
   const [recipientFilter, setRecipientFilter] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
+  const [colorFilter, setColorFilter] = useState<string | null>(null);
   const [sort, setSort] = useState<SortOption>("newest");
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -357,6 +379,17 @@ export default function Quilts() {
       )
     : [];
 
+  const usedColors = useMemo(() => {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const q of (quilts ?? []) as QuiltSummary[]) {
+      for (const c of q.dominantColors ?? []) {
+        if (!seen.has(c)) { seen.add(c); result.push(c); }
+      }
+    }
+    return result;
+  }, [quilts]);
+
   const filtered = quilts
     ? (quilts as QuiltSummary[]).filter((q) => {
         const query = search.trim().toLowerCase();
@@ -369,7 +402,9 @@ export default function Quilts() {
         const matchesCat =
           categoryFilter === null ||
           (q.categories ?? []).some((c) => c.id === categoryFilter);
-        return matchesSearch && matchesRecipient && matchesCat;
+        const matchesColor =
+          colorFilter === null || (q.dominantColors ?? []).includes(colorFilter);
+        return matchesSearch && matchesRecipient && matchesCat && matchesColor;
       })
     : null;
 
@@ -386,7 +421,8 @@ export default function Quilts() {
   const hasFilter =
     search.trim().length > 0 ||
     recipientFilter !== null ||
-    categoryFilter !== null;
+    categoryFilter !== null ||
+    colorFilter !== null;
 
   const { data: stats } = useGetStats();
 
@@ -527,6 +563,33 @@ export default function Quilts() {
             </DropdownMenu>
           </div>
 
+          {usedColors.length > 0 && (
+            <div className="flex flex-wrap gap-2 rounded-xl border border-card-border bg-card px-3 py-2.5">
+              {usedColors.map((hex) => (
+                <button
+                  key={hex}
+                  title={hex}
+                  onClick={() => setColorFilter(colorFilter === hex ? null : hex)}
+                  className={cn(
+                    "h-7 w-7 rounded-full border-2 transition-transform hover:scale-110",
+                    colorFilter === hex
+                      ? "border-foreground scale-110"
+                      : "border-transparent",
+                  )}
+                  style={{ backgroundColor: hex }}
+                />
+              ))}
+              {colorFilter && (
+                <button
+                  onClick={() => setColorFilter(null)}
+                  className="ml-1 self-center rounded-full px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Clear colour
+                </button>
+              )}
+            </div>
+          )}
+
           {(recipients.length > 1 || allCategories.length > 0) && (
             <div className="flex flex-wrap gap-2">
               {recipients.length > 1 &&
@@ -624,6 +687,7 @@ export default function Quilts() {
               setSearch("");
               setRecipientFilter(null);
               setCategoryFilter(null);
+              setColorFilter(null);
             }}
             className="text-xs font-medium text-primary hover:underline"
           >
@@ -648,6 +712,9 @@ export default function Quilts() {
               }
               onFilterByCategory={(id) =>
                 setCategoryFilter((prev) => (prev === id ? null : id))
+              }
+              onFilterByColor={(hex) =>
+                setColorFilter((prev) => (prev === hex ? null : hex))
               }
               onEditCategories={() => setCategoryEditItem(quilt)}
             />

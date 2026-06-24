@@ -1,5 +1,6 @@
 import { useParams, useLocation } from "wouter";
-import { useGetBlock } from "@workspace/api-client-react";
+import { useMemo } from "react";
+import { useGetBlock, useListFabrics } from "@workspace/api-client-react";
 import { ArrowLeft, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -9,6 +10,7 @@ import {
   skillLevel,
   fmtInch,
   fmtYards,
+  parseCell,
   type CutPiece,
   type FabricRequirement,
 } from "@/lib/cell-parser";
@@ -25,56 +27,41 @@ function CellShape({
   x,
   y,
   size,
+  fabricColorMap = {},
 }: {
   cell: string;
   x: number;
   y: number;
   size: number;
+  fabricColorMap?: Record<string, string>;
 }) {
   if (!cell)
     return <rect x={x} y={y} width={size} height={size} fill="white" />;
 
-  function getColors(): [string, string?, string?, string?] {
-    if (cell.startsWith("nwse:") || cell.startsWith("nesw:")) {
-      const sep = cell.indexOf(":", 5);
-      if (sep !== -1) return [cell.slice(5, sep), cell.slice(sep + 1)];
-    }
-    if (cell.startsWith("quad:")) {
-      const parts = cell.slice(5).split(/:(?=#)/);
-      if (parts.length === 4) return [parts[0], parts[1], parts[2], parts[3]];
-    }
-    if (cell.startsWith("hsplit:")) {
-      const parts = cell.slice(7).split(/:(?=#)/);
-      if (parts.length === 2) return [parts[0], parts[1]];
-    }
-    if (cell.startsWith("vsplit:")) {
-      const parts = cell.slice(7).split(/:(?=#)/);
-      if (parts.length === 2) return [parts[0], parts[1]];
-    }
-    if (cell.startsWith("xsplit:")) {
-      const parts = cell.slice(7).split(/:(?=#)/);
-      if (parts.length === 4) return [parts[0], parts[1], parts[2], parts[3]];
-    }
-    return [cell];
+  function resolve(token: string): string {
+    if (token.startsWith("fab:")) return fabricColorMap[token] ?? "#d4c5a9";
+    return token || "#eeeeee";
   }
 
-  if (cell.startsWith("nwse:")) {
-    const [a, b] = getColors();
-    return (
-      <g>
-        <polygon
-          points={`${x},${y} ${x + size},${y} ${x + size},${y + size}`}
-          fill={a}
-        />
-        <polygon
-          points={`${x},${y} ${x},${y + size} ${x + size},${y + size}`}
-          fill={b ?? "#eee"}
-        />
-      </g>
-    );
-  }
-  if (cell.startsWith("nesw:")) {
-    const [a, b] = getColors();
+  const parsed = parseCell(cell);
+
+  if (parsed.kind === "triangle") {
+    const a = resolve(parsed.a);
+    const b = resolve(parsed.b);
+    if (parsed.type === "nwse") {
+      return (
+        <g>
+          <polygon
+            points={`${x},${y} ${x + size},${y} ${x + size},${y + size}`}
+            fill={a}
+          />
+          <polygon
+            points={`${x},${y} ${x},${y + size} ${x + size},${y + size}`}
+            fill={b}
+          />
+        </g>
+      );
+    }
     return (
       <g>
         <polygon
@@ -83,85 +70,78 @@ function CellShape({
         />
         <polygon
           points={`${x + size},${y} ${x + size},${y + size} ${x},${y + size}`}
-          fill={b ?? "#eee"}
+          fill={b}
         />
       </g>
     );
   }
-  if (cell.startsWith("quad:")) {
-    const [t, r, b, l] = getColors();
+  if (parsed.kind === "quad") {
     const cx = x + size / 2,
       cy = y + size / 2;
     return (
       <g>
         <polygon
           points={`${x},${y} ${x + size},${y} ${cx},${cy}`}
-          fill={t ?? "#eee"}
+          fill={resolve(parsed.top)}
         />
         <polygon
           points={`${x + size},${y} ${x + size},${y + size} ${cx},${cy}`}
-          fill={r ?? "#eee"}
+          fill={resolve(parsed.right)}
         />
         <polygon
           points={`${x},${y + size} ${x + size},${y + size} ${cx},${cy}`}
-          fill={b ?? "#eee"}
+          fill={resolve(parsed.bottom)}
         />
         <polygon
           points={`${x},${y} ${x},${y + size} ${cx},${cy}`}
-          fill={l ?? "#eee"}
+          fill={resolve(parsed.left)}
         />
       </g>
     );
   }
-  if (cell.startsWith("hsplit:")) {
-    const [top, bot] = getColors();
+  if (parsed.kind === "hsplit") {
     return (
       <g>
-        <rect x={x} y={y} width={size} height={size / 2} fill={top ?? "#eee"} />
+        <rect x={x} y={y} width={size} height={size / 2} fill={resolve(parsed.top)} />
         <rect
           x={x}
           y={y + size / 2}
           width={size}
           height={size / 2}
-          fill={bot ?? "#eee"}
+          fill={resolve(parsed.bottom)}
         />
       </g>
     );
   }
-  if (cell.startsWith("vsplit:")) {
-    const [left, right] = getColors();
+  if (parsed.kind === "vsplit") {
     return (
       <g>
-        <rect
-          x={x}
-          y={y}
-          width={size / 2}
-          height={size}
-          fill={left ?? "#eee"}
-        />
+        <rect x={x} y={y} width={size / 2} height={size} fill={resolve(parsed.left)} />
         <rect
           x={x + size / 2}
           y={y}
           width={size / 2}
           height={size}
-          fill={right ?? "#eee"}
+          fill={resolve(parsed.right)}
         />
       </g>
     );
   }
-  if (cell.startsWith("xsplit:")) {
-    const [tl, tr, bl, br] = getColors();
+  if (parsed.kind === "xsplit") {
     const h = size / 2;
     return (
       <g>
-        <rect x={x} y={y} width={h} height={h} fill={tl ?? "#eee"} />
-        <rect x={x + h} y={y} width={h} height={h} fill={tr ?? "#eee"} />
-        <rect x={x} y={y + h} width={h} height={h} fill={bl ?? "#eee"} />
-        <rect x={x + h} y={y + h} width={h} height={h} fill={br ?? "#eee"} />
+        <rect x={x} y={y} width={h} height={h} fill={resolve(parsed.tl)} />
+        <rect x={x + h} y={y} width={h} height={h} fill={resolve(parsed.tr)} />
+        <rect x={x} y={y + h} width={h} height={h} fill={resolve(parsed.bl)} />
+        <rect x={x + h} y={y + h} width={h} height={h} fill={resolve(parsed.br)} />
       </g>
     );
   }
-  return <rect x={x} y={y} width={size} height={size} fill={cell || "white"} />;
+  if (parsed.kind === "solid") {
+    return <rect x={x} y={y} width={size} height={size} fill={resolve(parsed.color)} />;
+  }
+  return <rect x={x} y={y} width={size} height={size} fill="white" />;
 }
 
 // ---------------------------------------------------------------------------
@@ -281,11 +261,13 @@ function TechnicalBlockDiagram({
   gridW,
   gridH,
   blockSizeInches,
+  fabricColorMap = {},
 }: {
   cells: string[];
   gridW: number;
   gridH: number;
   blockSizeInches: number | null;
+  fabricColorMap?: Record<string, string>;
 }) {
   const CELL = 48;
   const M = 46;
@@ -319,6 +301,7 @@ function TechnicalBlockDiagram({
             x={ox + col * CELL}
             y={oy + row * CELL}
             size={CELL}
+            fabricColorMap={fabricColorMap}
           />
         );
       })}
@@ -384,11 +367,13 @@ function RepeatPreview({
   gridW,
   gridH,
   repeat = 3,
+  fabricColorMap = {},
 }: {
   cells: string[];
   gridW: number;
   gridH: number;
   repeat?: number;
+  fabricColorMap?: Record<string, string>;
 }) {
   const CELL = 9;
   const bw = CELL * gridW;
@@ -418,6 +403,7 @@ function RepeatPreview({
                   x={col * CELL}
                   y={row * CELL}
                   size={CELL}
+                  fabricColorMap={fabricColorMap}
                 />
               );
             })}
@@ -694,6 +680,16 @@ export default function CutPatternPage() {
   const blockId = Number(id);
 
   const { data: block, isLoading } = useGetBlock(blockId);
+  const { data: fabricsList } = useListFabrics();
+
+  const fabricColorMap = useMemo<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    for (const f of fabricsList ?? []) {
+      const color = f.dominantColors?.[0] ?? "#d4c5a9";
+      map[`fab:${f.id}`] = color;
+    }
+    return map;
+  }, [fabricsList]);
 
   if (isLoading) {
     return (
@@ -829,13 +825,14 @@ export default function CutPatternPage() {
                 gridW={gridSize}
                 gridH={gridH}
                 blockSizeInches={blockSizeInches}
+                fabricColorMap={fabricColorMap}
               />
               <figcaption className="mt-1 text-center text-xs text-muted-foreground">
                 One block — sewn, finished size shown.
               </figcaption>
             </figure>
             <figure className="m-0">
-              <RepeatPreview cells={cells} gridW={gridSize} gridH={gridH} />
+              <RepeatPreview cells={cells} gridW={gridSize} gridH={gridH} fabricColorMap={fabricColorMap} />
               <figcaption className="mt-1 text-center text-xs text-muted-foreground">
                 3 × 3 repeat (secondary pattern preview).
               </figcaption>

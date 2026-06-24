@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { NavGuardProvider } from "@/lib/nav-guard";
+import { ThemeProvider } from "@/hooks/use-theme";
 import { AppShell } from "@/components/app-shell";
 
 // Register all features before the shell renders
@@ -121,16 +122,18 @@ function Routes() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <NavGuardProvider>
-            <AuthProvider>
-              <Routes />
-            </AuthProvider>
-          </NavGuardProvider>
-        </WouterRouter>
-        <Toaster />
-      </TooltipProvider>
+      <ThemeProvider>
+        <TooltipProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <NavGuardProvider>
+              <AuthProvider>
+                <Routes />
+              </AuthProvider>
+            </NavGuardProvider>
+          </WouterRouter>
+          <Toaster />
+        </TooltipProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

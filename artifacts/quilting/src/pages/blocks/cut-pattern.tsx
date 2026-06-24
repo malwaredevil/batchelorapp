@@ -28,18 +28,23 @@ function CellShape({
   y,
   size,
   fabricColorMap = {},
+  fabricImageMap = {},
 }: {
   cell: string;
   x: number;
   y: number;
   size: number;
   fabricColorMap?: Record<string, string>;
+  fabricImageMap?: Record<string, string>;
 }) {
   if (!cell)
     return <rect x={x} y={y} width={size} height={size} fill="white" />;
 
   function resolve(token: string): string {
-    if (token.startsWith("fab:")) return fabricColorMap[token] ?? "#d4c5a9";
+    if (token.startsWith("fab:")) {
+      if (fabricImageMap[token]) return `url(#fp-${token.replace(":", "-")})`;
+      return fabricColorMap[token] ?? "#d4c5a9";
+    }
     return token || "#eeeeee";
   }
 
@@ -262,15 +267,17 @@ function TechnicalBlockDiagram({
   gridH,
   blockSizeInches,
   fabricColorMap = {},
+  fabricImageMap = {},
 }: {
   cells: string[];
   gridW: number;
   gridH: number;
   blockSizeInches: number | null;
   fabricColorMap?: Record<string, string>;
+  fabricImageMap?: Record<string, string>;
 }) {
-  const CELL = 48;
-  const M = 46;
+  const CELL = 80;
+  const M = 52;
   const w = CELL * gridW;
   const h = CELL * gridH;
   const totalW = w + M * 2;
@@ -284,6 +291,16 @@ function TechnicalBlockDiagram({
       ? fmtInch(blockSizeInches * (gridH / gridW))
       : `${gridH} cells`;
 
+  // Collect unique fab: tokens across all cells that have an image URL
+  const fabTokensWithImages = useMemo(() => {
+    const seen = new Set<string>();
+    for (const cell of cells) {
+      const matches = cell.match(/fab:\d+/g) ?? [];
+      for (const t of matches) if (fabricImageMap[t]) seen.add(t);
+    }
+    return [...seen];
+  }, [cells, fabricImageMap]);
+
   return (
     <svg
       width={totalW}
@@ -291,6 +308,30 @@ function TechnicalBlockDiagram({
       viewBox={`0 0 ${totalW} ${totalH}`}
       style={{ maxWidth: "100%", height: "auto" }}
     >
+      {fabTokensWithImages.length > 0 && (
+        <defs>
+          {fabTokensWithImages.map((token) => (
+            <pattern
+              key={token}
+              id={`fp-${token.replace(":", "-")}`}
+              patternUnits="userSpaceOnUse"
+              x={ox}
+              y={oy}
+              width={w}
+              height={h}
+            >
+              <image
+                href={fabricImageMap[token]}
+                x="0"
+                y="0"
+                width={w}
+                height={h}
+                preserveAspectRatio="xMidYMid slice"
+              />
+            </pattern>
+          ))}
+        </defs>
+      )}
       {cells.map((cell, idx) => {
         const col = idx % gridW;
         const row = Math.floor(idx / gridW);
@@ -302,6 +343,7 @@ function TechnicalBlockDiagram({
             y={oy + row * CELL}
             size={CELL}
             fabricColorMap={fabricColorMap}
+            fabricImageMap={fabricImageMap}
           />
         );
       })}
@@ -835,29 +877,22 @@ export default function CutPatternPage() {
           </div>
         )}
 
-        {/* ---- 01 Diagram + repeat ---- */}
+        {/* ---- 01 Diagram ---- */}
         <section className="pattern-section mb-7">
           <SectionTitle no={1}>Block diagram &amp; layout</SectionTitle>
-          <div className="flex flex-wrap items-start gap-8">
-            <figure className="m-0">
-              <TechnicalBlockDiagram
-                cells={cells}
-                gridW={gridSize}
-                gridH={gridH}
-                blockSizeInches={blockSizeInches}
-                fabricColorMap={fabricColorMap}
-              />
-              <figcaption className="mt-1 text-center text-xs text-muted-foreground">
-                One block — sewn, finished size shown.
-              </figcaption>
-            </figure>
-            <figure className="m-0">
-              <RepeatPreview cells={cells} gridW={gridSize} gridH={gridH} fabricColorMap={fabricColorMap} />
-              <figcaption className="mt-1 text-center text-xs text-muted-foreground">
-                3 × 3 repeat (secondary pattern preview).
-              </figcaption>
-            </figure>
-          </div>
+          <figure className="m-0 inline-block">
+            <TechnicalBlockDiagram
+              cells={cells}
+              gridW={gridSize}
+              gridH={gridH}
+              blockSizeInches={blockSizeInches}
+              fabricColorMap={fabricColorMap}
+              fabricImageMap={fabricImageMap}
+            />
+            <figcaption className="mt-1 text-center text-xs text-muted-foreground">
+              One block — sewn, finished size shown.
+            </figcaption>
+          </figure>
         </section>
 
         {/* ---- 02 Fabric requirements ---- */}

@@ -15,6 +15,11 @@ import {
   Check,
   LogOut,
   ChevronDown,
+  Package,
+  Scissors,
+  Layers,
+  FlaskConical,
+  Shirt,
 } from "lucide-react";
 import { AppSwitcher } from "@/components/app-switcher";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -76,6 +81,142 @@ const ADD_ACTIONS = [
   { label: "Quilt", href: `${base}quilting/quilts/add` },
 ];
 
+const POTTERY_QUICK_LINKS = [
+  { label: "Collection", icon: Package, href: `${base}pottery/` },
+  { label: "Compare", icon: Camera, href: `${base}pottery/compare` },
+  { label: "Maintenance", icon: FlaskConical, href: `${base}pottery/maintenance` },
+];
+
+const QUILTING_QUICK_LINKS = [
+  { label: "Fabrics", icon: Shirt, href: `${base}quilting/fabrics` },
+  { label: "Blocks", icon: Scissors, href: `${base}quilting/blocks` },
+  { label: "Layouts", icon: Layers, href: `${base}quilting/layouts` },
+];
+
+// ── App hero card ─────────────────────────────────────────────────────────────
+function AppHeroCard({
+  app,
+  stats,
+  quickLinks,
+  accentBorderColor,
+  accentSectionBg,
+  accentIconColor,
+  expanded,
+  onToggle,
+}: {
+  app: { id: string; name: string; href: string; image: string; updated: string; description: string };
+  stats: { value: string; label: string }[];
+  quickLinks: { label: string; icon: React.FC<{ className?: string }>; href: string }[];
+  accentBorderColor: string;
+  accentSectionBg: string;
+  accentIconColor: string;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <a
+      href={app.href}
+      className="group block"
+      onClick={(e) => {
+        // Allow accordion button clicks to bubble without navigating
+        const t = e.target as HTMLElement;
+        if (t.closest("[data-accordion]")) e.preventDefault();
+      }}
+    >
+      <Card className="h-full overflow-hidden border-border bg-card shadow-sm hover:shadow-md transition-all duration-200 flex flex-col cursor-pointer">
+        {/* Hero image */}
+        <div className="h-48 w-full relative overflow-hidden bg-muted flex-shrink-0">
+          <img
+            src={app.image}
+            alt={`${app.name} Collection`}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+          <div className="absolute bottom-4 left-6 right-6 flex justify-between items-end">
+            <h2 className="text-3xl font-bold text-white tracking-tight">
+              {app.name}
+            </h2>
+            <Badge className="bg-white/20 hover:bg-white/30 text-white backdrop-blur-md border-0">
+              {app.updated}
+            </Badge>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <CardContent className="p-6 pb-4 flex-1">
+          <div className="flex gap-3">
+            {stats.map((s) => (
+              <div
+                key={s.label}
+                className="flex-1 flex flex-col space-y-1 p-3 rounded-lg bg-secondary/50"
+              >
+                <span className="text-2xl font-bold text-primary">{s.value}</span>
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                  {s.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+
+        {/* Accordion toggle */}
+        <button
+          data-accordion
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onToggle();
+          }}
+          className="flex items-center justify-between px-6 py-3 border-t border-border hover:bg-muted/30 transition-colors text-xs font-medium text-muted-foreground"
+        >
+          <span>{expanded ? "Hide quick links" : "Quick links →"}</span>
+          <ChevronDown
+            className={`w-3.5 h-3.5 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+          />
+        </button>
+
+        {/* Quick links (expanded) */}
+        {expanded && (
+          <div
+            className={`px-5 pb-5 pt-3 border-t ${accentBorderColor} ${accentSectionBg}`}
+            data-accordion
+            onClick={(e) => e.preventDefault()}
+          >
+            <div className="grid grid-cols-3 gap-2">
+              {quickLinks.map((link) => (
+                <a
+                  key={link.label}
+                  href={link.href}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.location.href = link.href;
+                  }}
+                  className={`flex flex-col items-center gap-1.5 p-2.5 rounded-lg border bg-card hover:bg-background transition-all text-center ${accentBorderColor}`}
+                >
+                  <link.icon className={`w-4 h-4 ${accentIconColor}`} />
+                  <div className="text-xs font-semibold leading-none">
+                    {link.label}
+                  </div>
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        {!expanded && (
+          <CardFooter className="p-6 pt-0 border-t border-border mt-auto bg-muted/20">
+            <div className="w-full flex items-center justify-between text-primary font-medium pt-4 group-hover:text-primary/80 transition-colors">
+              <span>Open collection</span>
+              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </CardFooter>
+        )}
+      </Card>
+    </a>
+  );
+}
+
 export function AppLauncher() {
   const { isDark, toggleTheme } = useTheme();
   const { enabled, available, addWidget, removeWidget } = useWidgets();
@@ -90,13 +231,15 @@ export function AppLauncher() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [customizing, setCustomizing] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [potteryExpanded, setPotteryExpanded] = useState(false);
+  const [quiltingExpanded, setQuiltingExpanded] = useState(false);
 
   // Live stats from the API
   const { data: potteryStatsData } = useGetCollectionStats();
   const { data: potteryCategoriesData } = useListPotteryCategories();
   const { data: quiltingStatsData } = useGetStats();
 
-  function liveStats(appId: string) {
+  function liveStats(appId: string): { value: string; label: string }[] {
     if (appId === "pottery") {
       return [
         {
@@ -147,7 +290,6 @@ export function AppLauncher() {
         },
       ];
     }
-    // Fallback to static config for unknown apps
     const app = APPS.find((a) => a.id === appId);
     return app?.stats ?? [];
   }
@@ -181,81 +323,83 @@ export function AppLauncher() {
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans flex flex-col">
-      {/* Top Navigation */}
-      <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border px-6 py-4 flex items-center justify-between">
-        <AppSwitcher />
+      {/* Top Navigation — max-w-6xl matches pottery/quilting shells */}
+      <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+          <AppSwitcher />
 
-        <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setSearchOpen(true)}
-            className="hidden md:flex items-center gap-2 text-muted-foreground border-border"
-          >
-            <Search className="w-4 h-4" />
-            <span>Global search...</span>
-            <kbd className="hidden lg:inline-flex h-5 items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium ml-2">
-              <span className="text-xs">⌘</span>K
-            </kbd>
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSearchOpen(true)}
+              className="hidden md:flex items-center gap-2 text-muted-foreground border-border"
+            >
+              <Search className="w-4 h-4" />
+              <span>Global search...</span>
+              <kbd className="hidden lg:inline-flex h-5 items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium ml-2">
+                <span className="text-xs">⌘</span>K
+              </kbd>
+            </Button>
 
-          {/* Dark mode toggle */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleTheme}
-            aria-label="Toggle dark mode"
-            className="text-muted-foreground hover:text-foreground"
-          >
-            {isDark ? (
-              <Sun className="w-5 h-5" />
-            ) : (
-              <Moon className="w-5 h-5" />
-            )}
-          </Button>
+            {/* Dark mode toggle */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleTheme}
+              aria-label="Toggle dark mode"
+              className="text-muted-foreground hover:text-foreground"
+            >
+              {isDark ? (
+                <Sun className="w-5 h-5" />
+              ) : (
+                <Moon className="w-5 h-5" />
+              )}
+            </Button>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-3 pl-3 border-l border-border outline-none">
-                <div className="flex-col items-end hidden sm:flex">
-                  <span className="text-sm font-medium leading-none">
-                    {displayName}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {user?.email}
-                  </span>
-                </div>
-                <Avatar className="h-9 w-9 border border-border">
-                  <AvatarFallback className="bg-primary text-primary-foreground">
-                    {initials}
-                  </AvatarFallback>
-                </Avatar>
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>
-                <div className="flex flex-col">
-                  <span className="font-medium">{displayName}</span>
-                  <span className="text-xs font-normal text-muted-foreground">
-                    {user?.email}
-                  </span>
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => navigate(`${base}account`)}>
-                <Settings className="w-4 h-4 mr-2" />
-                Account settings
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onSelect={signOut}
-                className="text-destructive focus:text-destructive"
-              >
-                <LogOut className="w-4 h-4 mr-2" />
-                Sign out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="flex items-center gap-3 pl-3 border-l border-border outline-none">
+                  <div className="flex-col items-end hidden sm:flex">
+                    <span className="text-sm font-medium leading-none">
+                      {displayName}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {user?.email}
+                    </span>
+                  </div>
+                  <Avatar className="h-9 w-9 border border-border">
+                    <AvatarFallback className="bg-primary text-primary-foreground">
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>
+                  <div className="flex flex-col">
+                    <span className="font-medium">{displayName}</span>
+                    <span className="text-xs font-normal text-muted-foreground">
+                      {user?.email}
+                    </span>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => navigate(`${base}account`)}>
+                  <Settings className="w-4 h-4 mr-2" />
+                  Account settings
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={signOut}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </header>
 
@@ -324,20 +468,21 @@ export function AppLauncher() {
         </CommandList>
       </CommandDialog>
 
-      <main className="flex-1 w-full max-w-[1280px] mx-auto p-6 md:p-8 lg:p-12 space-y-12">
+      {/* Main content — max-w-6xl matches the header */}
+      <main className="flex-1 mx-auto w-full max-w-6xl px-4 pb-12 pt-6 space-y-10">
         {/* Brand Intro & Quick Actions */}
         <div className="flex flex-col lg:flex-row gap-8 justify-between items-start">
-          <div className="max-w-2xl space-y-2">
-            <h1 className="text-4xl font-bold tracking-tight text-foreground">
+          <div className="max-w-2xl space-y-1">
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">
               Welcome back, {firstName}.
             </h1>
-            <p className="text-lg text-muted-foreground">
+            <p className="text-base text-muted-foreground">
               One account, every collection.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-3">
-            {/* Add Item — dropdown to choose which collection */}
+            {/* Add Item */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm">
@@ -359,7 +504,7 @@ export function AppLauncher() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Do I own this? — dropdown for pottery or quilting compare */}
+            {/* Do I own this? */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -387,7 +532,7 @@ export function AppLauncher() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Shopping List — quilting shopping */}
+            {/* Shopping List */}
             <Button
               variant="outline"
               className="shadow-sm"
@@ -399,67 +544,37 @@ export function AppLauncher() {
           </div>
         </div>
 
-        {/* Apps — rendered from APPS config (modular) */}
+        {/* Apps */}
         <section className="space-y-4">
           <div className="flex items-center gap-2 text-foreground font-semibold">
             <LayoutGrid className="w-5 h-5 text-primary" />
             <h3 className="text-lg">Your apps</h3>
           </div>
 
-          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {APPS.map((app) => (
-              <a key={app.id} href={app.href} className="group block">
-                <Card className="h-full overflow-hidden border-border bg-card shadow-sm hover:shadow-md transition-all duration-200 flex flex-col cursor-pointer">
-                  <div className="h-48 w-full relative overflow-hidden bg-muted">
-                    <img
-                      src={app.image}
-                      alt={`${app.name} Collection`}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
-                    <div className="absolute bottom-4 left-6 right-6 flex justify-between items-end">
-                      <h2 className="text-3xl font-bold text-white tracking-tight">
-                        {app.name}
-                      </h2>
-                      <Badge className="bg-white/20 hover:bg-white/30 text-white backdrop-blur-md border-0">
-                        {app.updated}
-                      </Badge>
-                    </div>
-                  </div>
-
-                  <CardContent className="p-6 flex-1">
-                    <div className="flex gap-3 mb-5">
-                      {liveStats(app.id).map((s) => (
-                        <div
-                          key={s.label}
-                          className="flex-1 flex flex-col space-y-1 p-3 rounded-lg bg-secondary/50"
-                        >
-                          <span className="text-2xl font-bold text-primary">
-                            {s.value}
-                          </span>
-                          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                            {s.label}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      {app.description}
-                    </p>
-                  </CardContent>
-
-                  <CardFooter className="p-6 pt-0 border-t border-border mt-auto bg-muted/20">
-                    <div className="w-full flex items-center justify-between text-primary font-medium pt-4 group-hover:text-primary/80 transition-colors">
-                      <span>Open collection</span>
-                      <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                    </div>
-                  </CardFooter>
-                </Card>
-              </a>
-            ))}
+          <div className="grid md:grid-cols-2 gap-6">
+            <AppHeroCard
+              app={APPS.find((a) => a.id === "pottery")!}
+              stats={liveStats("pottery")}
+              quickLinks={POTTERY_QUICK_LINKS}
+              accentBorderColor="border-amber-200/60 dark:border-amber-800/40"
+              accentSectionBg="bg-amber-50/60 dark:bg-amber-900/10"
+              accentIconColor="text-amber-600 dark:text-amber-400"
+              expanded={potteryExpanded}
+              onToggle={() => setPotteryExpanded((e) => !e)}
+            />
+            <AppHeroCard
+              app={APPS.find((a) => a.id === "quilting")!}
+              stats={liveStats("quilting")}
+              quickLinks={QUILTING_QUICK_LINKS}
+              accentBorderColor="border-violet-200/60 dark:border-violet-800/40"
+              accentSectionBg="bg-violet-50/60 dark:bg-violet-900/10"
+              accentIconColor="text-violet-600 dark:text-violet-400"
+              expanded={quiltingExpanded}
+              onToggle={() => setQuiltingExpanded((e) => !e)}
+            />
 
             {/* Add-app affordance */}
-            <button className="min-h-[320px] rounded-xl border-2 border-dashed border-border bg-transparent flex flex-col items-center justify-center gap-3 text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-muted/30 transition-colors">
+            <button className="min-h-[280px] rounded-xl border-2 border-dashed border-border bg-transparent flex flex-col items-center justify-center gap-3 text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-muted/30 transition-colors">
               <PlusCircle className="w-10 h-10" />
               <span className="font-medium">Add an app</span>
               <span className="text-xs max-w-[180px] text-center">
@@ -469,7 +584,7 @@ export function AppLauncher() {
           </div>
         </section>
 
-        {/* Widgets — rendered from useWidgets (modular, persisted) */}
+        {/* Widgets */}
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-foreground font-semibold">
@@ -519,7 +634,7 @@ export function AppLauncher() {
               );
             })}
 
-            {/* Add-widget affordance */}
+            {/* Add widget */}
             <Popover open={addOpen} onOpenChange={setAddOpen}>
               <PopoverTrigger asChild>
                 <button
@@ -568,7 +683,7 @@ export function AppLauncher() {
           </div>
         </section>
 
-        {/* Recent Activity Strip */}
+        {/* Recent Activity */}
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-foreground font-semibold">
@@ -593,60 +708,16 @@ export function AppLauncher() {
                   <p className="text-sm font-medium text-foreground truncate">
                     {item.title}
                   </p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs font-medium text-primary">
-                      {item.cat}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground">
-                      • {item.time}
-                    </span>
-                  </div>
+                  <p className="text-xs text-muted-foreground">{item.cat}</p>
                 </div>
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  {item.time}
+                </span>
               </div>
             ))}
           </div>
         </section>
       </main>
-
-      {/* Footer */}
-      <footer className="border-t border-border bg-muted/30 py-6 mt-auto">
-        <div className="max-w-[1280px] mx-auto px-6 md:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-sm bg-primary/20 flex items-center justify-center text-primary font-bold text-[10px]">
-              B
-            </div>
-            <span>Batchelor · one account, every collection</span>
-          </div>
-
-          <div className="flex items-center gap-6">
-            <button
-              onClick={() => setSearchOpen(true)}
-              className="hover:text-foreground transition-colors flex items-center gap-1"
-            >
-              <Search className="w-3.5 h-3.5" />
-              Global Search
-            </button>
-            <button
-              onClick={() => navigate(`${base}account`)}
-              className="hover:text-foreground transition-colors flex items-center gap-1"
-            >
-              <Settings className="w-3.5 h-3.5" />
-              Account Settings
-            </button>
-            <button
-              onClick={toggleTheme}
-              className="hover:text-foreground transition-colors flex items-center gap-1"
-            >
-              {isDark ? (
-                <Sun className="w-3.5 h-3.5" />
-              ) : (
-                <Moon className="w-3.5 h-3.5" />
-              )}
-              {isDark ? "Light Mode" : "Dark Mode"}
-            </button>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

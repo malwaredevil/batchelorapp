@@ -256,4 +256,64 @@ router.get("/hub/rss", requireAuth, async (req, res) => {
   }
 });
 
+// ── Weather config ────────────────────────────────────────────────────────────
+const WeatherConfigBody = z.object({
+  city: z.string().max(200),
+  country: z.string().max(100),
+  lat: z.number().min(-90).max(90),
+  lon: z.number().min(-180).max(180),
+  unit: z.enum(["celsius", "fahrenheit"]),
+});
+
+router.get("/hub/weather-config", requireAuth, async (req, res) => {
+  const userId = req.session.userId!;
+  try {
+    const [user] = await db
+      .select({ hubWeatherConfig: appUsers.hubWeatherConfig })
+      .from(appUsers)
+      .where(eq(appUsers.id, userId))
+      .limit(1);
+
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    let config = null;
+    if (user.hubWeatherConfig) {
+      try {
+        config = JSON.parse(user.hubWeatherConfig) as unknown;
+      } catch {
+        config = null;
+      }
+    }
+
+    res.json({ config });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch weather config");
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.put("/hub/weather-config", requireAuth, async (req, res) => {
+  const userId = req.session.userId!;
+  const parsed = WeatherConfigBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
+    return;
+  }
+
+  try {
+    await db
+      .update(appUsers)
+      .set({ hubWeatherConfig: JSON.stringify(parsed.data) })
+      .where(eq(appUsers.id, userId));
+
+    res.json({ config: parsed.data });
+  } catch (err) {
+    req.log.error({ err }, "Failed to save weather config");
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 export default router;

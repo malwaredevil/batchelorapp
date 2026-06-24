@@ -34,6 +34,8 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS theme_preference text`,
   // Per-user hub dashboard widget configuration (JSON array of widget IDs in order).
   `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS hub_widget_ids text`,
+  // Per-user weather widget location config (JSON: { city, country, lat, lon, unit }).
+  `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS hub_weather_config text`,
 
   // ── Shared password reset tokens (superset of both apps' definitions) ──────
   `CREATE TABLE IF NOT EXISTS password_reset_tokens (

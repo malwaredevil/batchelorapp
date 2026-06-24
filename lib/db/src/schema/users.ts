@@ -17,6 +17,8 @@ export const appUsers = pgTable("app_users", {
   themePreference: text("theme_preference"),
   // Per-user hub dashboard widget config — JSON-serialised string[] of widget IDs in order.
   hubWidgetIds: text("hub_widget_ids"),
+  // Per-user weather widget location — JSON { city, country, lat, lon, unit }.
+  hubWeatherConfig: text("hub_weather_config"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

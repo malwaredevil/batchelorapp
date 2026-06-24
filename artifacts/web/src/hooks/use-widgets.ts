@@ -3,21 +3,26 @@ import { WIDGETS, type WidgetEntry } from "@/config/apps";
 
 const STORAGE_KEY = "batchelor-widgets";
 
+// IDs enabled by default on first visit — a curated starter set.
+// Users can add or remove any widget from the full catalogue.
+const DEFAULT_IDS = ["pottery-stats", "quilting-stats", "weather", "shopping-list"];
+
 const ALL_IDS = WIDGETS.map((w) => w.id);
 
 function getInitialIds(): string[] {
-  if (typeof window === "undefined") return ALL_IDS;
+  if (typeof window === "undefined") return DEFAULT_IDS;
   const stored = window.localStorage.getItem(STORAGE_KEY);
-  if (!stored) return ALL_IDS;
+  if (!stored) return DEFAULT_IDS;
   try {
     const parsed = JSON.parse(stored) as unknown;
-    if (!Array.isArray(parsed)) return ALL_IDS;
+    if (!Array.isArray(parsed)) return DEFAULT_IDS;
+    // Keep only IDs that still exist in the catalogue
     const ids = parsed.filter(
       (id): id is string => typeof id === "string" && ALL_IDS.includes(id),
     );
     return ids;
   } catch {
-    return ALL_IDS;
+    return DEFAULT_IDS;
   }
 }
 
@@ -26,6 +31,7 @@ function getInitialIds(): string[] {
  *
  * The full catalogue lives in `WIDGETS` (config/apps). This hook tracks the
  * subset the user has enabled and their order, so add/remove survive reloads.
+ * There is no cap on how many can be enabled.
  */
 export function useWidgets() {
   const [ids, setIds] = useState<string[]>(getInitialIds);
@@ -48,9 +54,11 @@ export function useWidgets() {
     [ids, byId],
   );
 
-  const available = useMemo(
-    () => WIDGETS.filter((w) => !ids.includes(w.id)),
-    [ids],
+  const enabledIds = useMemo(() => new Set(ids), [ids]);
+
+  const isEnabled = useCallback(
+    (id: string) => enabledIds.has(id),
+    [enabledIds],
   );
 
   const removeWidget = useCallback((id: string) => {
@@ -61,9 +69,15 @@ export function useWidgets() {
     setIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
   }, []);
 
-  const resetWidgets = useCallback(() => {
-    setIds(ALL_IDS);
+  const toggleWidget = useCallback((id: string) => {
+    setIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
   }, []);
 
-  return { enabled, available, addWidget, removeWidget, resetWidgets };
+  const resetWidgets = useCallback(() => {
+    setIds(DEFAULT_IDS);
+  }, []);
+
+  return { enabled, isEnabled, addWidget, removeWidget, toggleWidget, resetWidgets };
 }

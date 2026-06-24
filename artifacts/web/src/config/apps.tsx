@@ -1,6 +1,33 @@
-import { Cloud, Newspaper, Rss, type LucideIcon } from "lucide-react";
+import {
+  Wind, Newspaper, Rss, Package, Shirt, ShoppingBag, Activity,
+  FlaskConical, Scissors, Layers, Zap, Camera, FileText, Clock,
+  Target, Star, Image, BookOpen, Link, type LucideIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
-import { StudioWeather } from "@/components/studio-weather";
+import {
+  StudioWeather,
+  PotteryStatsWidget,
+  QuiltingStatsWidget,
+  ShoppingListWidget,
+  RandomPieceWidget,
+  MaintenanceWidget,
+  FabricStashWidget,
+  BlockDesignerWidget,
+  LayoutsWidget,
+  QuickAddWidget,
+  AiSearchWidget,
+  NotesWidget,
+  CountdownWidget,
+  GlazeTipWidget,
+  PatternIdeaWidget,
+  CraftNewsWidget,
+  RssFeedsWidget,
+  ActivityWidget,
+  GoalsWidget,
+  InspirationWidget,
+  PhotoOfDayWidget,
+  MakerLinksWidget,
+} from "@/components/widgets";
 
 const base = import.meta.env.BASE_URL;
 
@@ -16,7 +43,22 @@ export type AppEntry = {
   description: string;
 };
 
-/* Modular config: apps render from this array, so a new app is one entry here. */
+export type WidgetCategory =
+  | "collections"
+  | "tools"
+  | "media"
+  | "inspiration";
+
+export type WidgetEntry = {
+  id: string;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  category: WidgetCategory;
+  body: ReactNode;
+};
+
+/* Modular config: apps render from this array. */
 export const APPS: AppEntry[] = [
   {
     id: "pottery",
@@ -47,51 +89,192 @@ export const APPS: AppEntry[] = [
   },
 ];
 
-export type WidgetEntry = {
-  id: string;
-  title: string;
-  icon: LucideIcon;
-  body: ReactNode;
-};
-
-/* Modular config: dashboard widgets render from this array. */
+/* ── Widget catalogue ──────────────────────────────────────────────────────── *
+ * Add new widgets here. The dashboard picks them up automatically.
+ * Default-enabled IDs are controlled separately in use-widgets.ts.
+ * ─────────────────────────────────────────────────────────────────────────── */
 export const WIDGETS: WidgetEntry[] = [
+  // ── Collections ────────────────────────────────────────────────────────────
+  {
+    id: "pottery-stats",
+    title: "Pottery Stats",
+    description: "Live piece counts, unique items, and category breakdown from your pottery collection.",
+    icon: Package,
+    category: "collections",
+    body: <PotteryStatsWidget />,
+  },
+  {
+    id: "quilting-stats",
+    title: "Quilting Stats",
+    description: "Fabrics, blocks, and layouts at a glance — live from your quilting collection.",
+    icon: Shirt,
+    category: "collections",
+    body: <QuiltingStatsWidget />,
+  },
+  {
+    id: "shopping-list",
+    title: "Shopping List",
+    description: "Top wanted and ordered items from your quilting shopping list.",
+    icon: ShoppingBag,
+    category: "collections",
+    body: <ShoppingListWidget />,
+  },
+  {
+    id: "activity",
+    title: "Recent Activity",
+    description: "Latest additions and edits across both your pottery and quilting collections.",
+    icon: Activity,
+    category: "collections",
+    body: <ActivityWidget />,
+  },
+  {
+    id: "random-piece",
+    title: "Random Piece",
+    description: "A surprise item from your pottery collection each visit.",
+    icon: Star,
+    category: "collections",
+    body: <RandomPieceWidget />,
+  },
+  {
+    id: "maintenance",
+    title: "Maintenance Log",
+    description: "Upcoming and recent care tasks for your ceramics.",
+    icon: FlaskConical,
+    category: "collections",
+    body: <MaintenanceWidget />,
+  },
+  {
+    id: "fabric-stash",
+    title: "Fabric Stash",
+    description: "A quick count of your fabric stash with a direct link to browse or add.",
+    icon: Shirt,
+    category: "collections",
+    body: <FabricStashWidget />,
+  },
+  {
+    id: "blocks",
+    title: "Block Designer",
+    description: "How many blocks you've designed, with quick access to create a new one.",
+    icon: Scissors,
+    category: "collections",
+    body: <BlockDesignerWidget />,
+  },
+  {
+    id: "layouts",
+    title: "Quilt Layouts",
+    description: "Number of layouts planned, with a direct link to the layout composer.",
+    icon: Layers,
+    category: "collections",
+    body: <LayoutsWidget />,
+  },
+  {
+    id: "photo-of-day",
+    title: "Photo of the Day",
+    description: "A random piece from your pottery collection as daily inspiration.",
+    icon: Image,
+    category: "collections",
+    body: <PhotoOfDayWidget />,
+  },
+
+  // ── Tools ──────────────────────────────────────────────────────────────────
+  {
+    id: "quick-add",
+    title: "Quick Add",
+    description: "One-tap buttons to add a pottery piece, fabric, block, or use the AI camera.",
+    icon: Zap,
+    category: "tools",
+    body: <QuickAddWidget />,
+  },
+  {
+    id: "ai-search",
+    title: "AI Search",
+    description: '"Do I own this?" — photo or text search across both your pottery and fabric collections.',
+    icon: Camera,
+    category: "tools",
+    body: <AiSearchWidget />,
+  },
+  {
+    id: "notes",
+    title: "Sticky Notes",
+    description: "A small scratchpad — jot ideas, reminders, or glaze recipes on the hub. Saved locally.",
+    icon: FileText,
+    category: "tools",
+    body: <NotesWidget />,
+  },
+  {
+    id: "countdown",
+    title: "Countdown",
+    description: "Count down to an upcoming craft fair or project deadline.",
+    icon: Clock,
+    category: "tools",
+    body: <CountdownWidget />,
+  },
+  {
+    id: "goals",
+    title: "Goals",
+    description: "Track personal goals — items to add, yardage to use, layouts to complete.",
+    icon: Target,
+    category: "tools",
+    body: <GoalsWidget />,
+  },
+  {
+    id: "maker-links",
+    title: "Maker Links",
+    description: "A pinned list of your favourite craft websites, suppliers, and references.",
+    icon: Link,
+    category: "tools",
+    body: <MakerLinksWidget />,
+  },
+
+  // ── Media ──────────────────────────────────────────────────────────────────
   {
     id: "weather",
     title: "Studio Weather",
-    icon: Cloud,
+    description: "Current conditions at your studio location — useful for kiln and drying decisions.",
+    icon: Wind,
+    category: "media",
     body: <StudioWeather />,
   },
   {
-    id: "news",
-    title: "Maker News",
+    id: "craft-news",
+    title: "Craft News",
+    description: "Curated recent articles on pottery, ceramics, and quilting.",
     icon: Newspaper,
-    body: (
-      <ul className="space-y-2 text-sm">
-        <li className="text-foreground leading-snug">
-          Glaze chemistry: reduction firing basics
-        </li>
-        <li className="text-muted-foreground leading-snug">
-          5 quilt-binding techniques compared
-        </li>
-      </ul>
-    ),
+    category: "media",
+    body: <CraftNewsWidget />,
   },
   {
     id: "rss",
     title: "RSS · Craft Feeds",
+    description: "Latest posts from Studio Pottery Weekly, Modern Quilting Blog, and more.",
     icon: Rss,
-    body: (
-      <ul className="space-y-2 text-sm">
-        <li className="flex items-center gap-2 text-foreground leading-snug">
-          <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
-          Studio Pottery Weekly — new issue
-        </li>
-        <li className="flex items-center gap-2 text-muted-foreground leading-snug">
-          <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 shrink-0" />
-          Modern Quilting Blog — 3 posts
-        </li>
-      </ul>
-    ),
+    category: "media",
+    body: <RssFeedsWidget />,
+  },
+
+  // ── Inspiration ────────────────────────────────────────────────────────────
+  {
+    id: "glaze-tip",
+    title: "Glaze Tip",
+    description: "A rotating ceramic technique tip from a curated library — something new each visit.",
+    icon: FlaskConical,
+    category: "inspiration",
+    body: <GlazeTipWidget />,
+  },
+  {
+    id: "pattern-idea",
+    title: "Pattern Idea",
+    description: "A curated quilt pattern suggestion — with difficulty level and a link to try it.",
+    icon: Scissors,
+    category: "inspiration",
+    body: <PatternIdeaWidget />,
+  },
+  {
+    id: "inspiration",
+    title: "Daily Inspiration",
+    description: "A short rotating quote about pottery and quilting craft to start your session.",
+    icon: BookOpen,
+    category: "inspiration",
+    body: <InspirationWidget />,
   },
 ];

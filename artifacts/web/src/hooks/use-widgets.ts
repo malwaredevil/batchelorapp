@@ -1,44 +1,120 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { WIDGETS, type WidgetEntry } from "@/config/apps";
 
 const STORAGE_KEY = "batchelor-widgets";
 
-// IDs enabled by default on first visit — a curated starter set.
-// Users can add or remove any widget from the full catalogue.
 const DEFAULT_IDS = ["pottery-stats", "quilting-stats", "weather", "shopping-list"];
 
 const ALL_IDS = WIDGETS.map((w) => w.id);
 
-function getInitialIds(): string[] {
-  if (typeof window === "undefined") return DEFAULT_IDS;
-  const stored = window.localStorage.getItem(STORAGE_KEY);
-  if (!stored) return DEFAULT_IDS;
+function readLocalStorage(): string[] | null {
+  if (typeof window === "undefined") return null;
   try {
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    if (!stored) return null;
     const parsed = JSON.parse(stored) as unknown;
-    if (!Array.isArray(parsed)) return DEFAULT_IDS;
-    // Keep only IDs that still exist in the catalogue
+    if (!Array.isArray(parsed)) return null;
     const ids = parsed.filter(
       (id): id is string => typeof id === "string" && ALL_IDS.includes(id),
     );
-    return ids;
+    return ids.length > 0 ? ids : null;
   } catch {
-    return DEFAULT_IDS;
+    return null;
+  }
+}
+
+function writeLocalStorage(ids: string[]) {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
+  } catch {
+    // storage quota full — ignore
+  }
+}
+
+const PREFS_URL = `${import.meta.env.BASE_URL}api/hub/preferences`.replace(
+  /\/\//g,
+  "/",
+);
+
+async function fetchServerPrefs(): Promise<string[] | null> {
+  try {
+    const res = await fetch(PREFS_URL, { credentials: "include" });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { widgetIds: string[] | null };
+    if (!Array.isArray(data.widgetIds)) return null;
+    return data.widgetIds.filter((id) => ALL_IDS.includes(id));
+  } catch {
+    return null;
+  }
+}
+
+async function saveServerPrefs(ids: string[]): Promise<void> {
+  try {
+    await fetch(PREFS_URL, {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ widgetIds: ids }),
+    });
+  } catch {
+    // silent — localStorage already saved locally
   }
 }
 
 /**
- * Manages which dashboard widgets are enabled, persisted in localStorage.
+ * Manages which dashboard widgets are enabled.
  *
- * The full catalogue lives in `WIDGETS` (config/apps). This hook tracks the
- * subset the user has enabled and their order, so add/remove survive reloads.
- * There is no cap on how many can be enabled.
+ * Persistence strategy (per-user, server-authoritative):
+ *  1. On mount, show localStorage immediately so there's no flash.
+ *  2. Fetch from server — if found, override (server is authoritative; this means
+ *     two people using the same browser each keep their own layout).
+ *  3. Every change writes localStorage (instant) and debounces a server PUT (800 ms).
+ *
+ * If the user is not logged in the server returns 401, which is silently ignored —
+ * the hook continues working purely from localStorage in that case.
  */
 export function useWidgets() {
-  const [ids, setIds] = useState<string[]>(getInitialIds);
+  const [ids, setIdsRaw] = useState<string[]>(
+    () => readLocalStorage() ?? DEFAULT_IDS,
+  );
 
+  // True once the server fetch has resolved (success or failure).
+  const [serverReady, setServerReady] = useState(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // Step 1: hydrate from server on mount.
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
-  }, [ids]);
+    fetchServerPrefs().then((serverIds) => {
+      if (serverIds !== null) {
+        setIdsRaw(serverIds);
+        writeLocalStorage(serverIds);
+      }
+      setServerReady(true);
+    });
+  }, []);
+
+  // Wrapped setter: always updates localStorage and schedules a server save.
+  const setIds = useCallback(
+    (updater: string[] | ((prev: string[]) => string[])) => {
+      setIdsRaw((prev) => {
+        const next =
+          typeof updater === "function" ? updater(prev) : updater;
+        writeLocalStorage(next);
+
+        // Debounce server write — only after first server response so we don't
+        // accidentally overwrite server data with stale localStorage on mount.
+        if (serverReady) {
+          clearTimeout(saveTimer.current);
+          saveTimer.current = setTimeout(() => {
+            void saveServerPrefs(next);
+          }, 800);
+        }
+
+        return next;
+      });
+    },
+    [serverReady],
+  );
 
   const byId = useMemo(() => {
     const map = new Map<string, WidgetEntry>();
@@ -61,23 +137,40 @@ export function useWidgets() {
     [enabledIds],
   );
 
-  const removeWidget = useCallback((id: string) => {
-    setIds((prev) => prev.filter((x) => x !== id));
-  }, []);
+  const removeWidget = useCallback(
+    (id: string) => {
+      setIds((prev) => prev.filter((x) => x !== id));
+    },
+    [setIds],
+  );
 
-  const addWidget = useCallback((id: string) => {
-    setIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
-  }, []);
+  const addWidget = useCallback(
+    (id: string) => {
+      setIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    },
+    [setIds],
+  );
 
-  const toggleWidget = useCallback((id: string) => {
-    setIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
-  }, []);
+  const toggleWidget = useCallback(
+    (id: string) => {
+      setIds((prev) =>
+        prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+      );
+    },
+    [setIds],
+  );
 
   const resetWidgets = useCallback(() => {
     setIds(DEFAULT_IDS);
-  }, []);
+  }, [setIds]);
 
-  return { enabled, isEnabled, addWidget, removeWidget, toggleWidget, resetWidgets };
+  return {
+    enabled,
+    isEnabled,
+    addWidget,
+    removeWidget,
+    toggleWidget,
+    resetWidgets,
+    serverReady,
+  };
 }

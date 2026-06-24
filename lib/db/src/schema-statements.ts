@@ -32,6 +32,8 @@ export const STATEMENTS: string[] = [
   // Account settings (shared across both apps): per-user display name + theme.
   `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS display_name text`,
   `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS theme_preference text`,
+  // Per-user hub dashboard widget configuration (JSON array of widget IDs in order).
+  `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS hub_widget_ids text`,
 
   // ── Shared password reset tokens (superset of both apps' definitions) ──────
   `CREATE TABLE IF NOT EXISTS password_reset_tokens (

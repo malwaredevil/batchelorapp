@@ -3,6 +3,7 @@ import healthRouter from "./health";
 import authRouter from "./auth";
 import potteryRouter from "./pottery";
 import quiltingRouter from "./quilting";
+import hubRouter from "./hub";
 
 const router: IRouter = Router();
 
@@ -10,5 +11,6 @@ router.use(healthRouter);
 router.use(authRouter);
 router.use("/pottery", potteryRouter);
 router.use("/quilting", quiltingRouter);
+router.use(hubRouter);
 
 export default router;

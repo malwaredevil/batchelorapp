@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import {
   PlusCircle,
@@ -46,6 +46,7 @@ import type { QuiltingCategory } from "@workspace/api-client-react";
 import { downloadCollectionImage } from "@/lib/svg-export";
 import { PreviewZoomModal } from "@/components/PreviewZoomModal";
 import { CategoryEditDialog } from "@/components/CategoryEditDialog";
+import { cn } from "@/lib/utils";
 
 type SortOption = "newest" | "oldest" | "az" | "za";
 
@@ -64,6 +65,7 @@ type PatternSummary = {
   difficulty?: string | null;
   blockSize?: string | null;
   sourceType?: string | null;
+  dominantColors?: string[];
   categories: Array<{
     id: number;
     name: string;
@@ -83,6 +85,7 @@ function PatternCard({
   onFilterByDifficulty,
   onFilterBySourceType,
   onFilterByCategory,
+  onFilterByColor,
   onEditCategories,
 }: {
   pattern: PatternSummary;
@@ -94,6 +97,7 @@ function PatternCard({
   onFilterByDifficulty?: (d: string) => void;
   onFilterBySourceType?: (st: string) => void;
   onFilterByCategory?: (id: number) => void;
+  onFilterByColor?: (hex: string) => void;
   onEditCategories?: () => void;
 }) {
   const [, navigate] = useLocation();
@@ -202,6 +206,23 @@ function PatternCard({
               </button>
             ))}
           </div>
+          {(pattern.dominantColors ?? []).length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {(pattern.dominantColors ?? []).map((hex) => (
+                <button
+                  key={hex}
+                  title={hex}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onFilterByColor?.(hex);
+                  }}
+                  className="h-4 w-4 rounded-full border border-black/10 transition-transform hover:scale-110"
+                  style={{ backgroundColor: hex }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </Link>
 
@@ -281,6 +302,7 @@ export default function Patterns() {
   const [difficultyFilter, setDifficultyFilter] = useState<string | null>(null);
   const [sourceTypeFilter, setSourceTypeFilter] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
+  const [colorFilter, setColorFilter] = useState<string | null>(null);
   const [sort, setSort] = useState<SortOption>("newest");
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -397,6 +419,17 @@ export default function Patterns() {
       )
     : [];
 
+  const usedColors = useMemo(() => {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const p of (patterns ?? []) as PatternSummary[]) {
+      for (const c of p.dominantColors ?? []) {
+        if (!seen.has(c)) { seen.add(c); result.push(c); }
+      }
+    }
+    return result;
+  }, [patterns]);
+
   const filtered = patterns
     ? (patterns as PatternSummary[]).filter((p) => {
         const q = search.trim().toLowerCase();
@@ -411,8 +444,10 @@ export default function Patterns() {
         const matchesCat =
           categoryFilter === null ||
           (p.categories ?? []).some((c) => c.id === categoryFilter);
+        const matchesColor =
+          colorFilter === null || (p.dominantColors ?? []).includes(colorFilter);
         return (
-          matchesSearch && matchesDifficulty && matchesSourceType && matchesCat
+          matchesSearch && matchesDifficulty && matchesSourceType && matchesCat && matchesColor
         );
       })
     : null;
@@ -431,7 +466,8 @@ export default function Patterns() {
     search.trim().length > 0 ||
     difficultyFilter !== null ||
     sourceTypeFilter !== null ||
-    categoryFilter !== null;
+    categoryFilter !== null ||
+    colorFilter !== null;
 
   const { data: stats } = useGetStats();
 
@@ -572,6 +608,33 @@ export default function Patterns() {
             </DropdownMenu>
           </div>
 
+          {usedColors.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {usedColors.map((hex) => (
+                <button
+                  key={hex}
+                  title={hex}
+                  onClick={() => setColorFilter(colorFilter === hex ? null : hex)}
+                  className={cn(
+                    "h-7 w-7 rounded-full border-2 transition-transform hover:scale-110",
+                    colorFilter === hex
+                      ? "border-primary scale-110 ring-2 ring-primary/40"
+                      : "border-transparent",
+                  )}
+                  style={{ backgroundColor: hex }}
+                />
+              ))}
+              {colorFilter && (
+                <button
+                  onClick={() => setColorFilter(null)}
+                  className="ml-1 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Clear colour
+                </button>
+              )}
+            </div>
+          )}
+
           {(difficulties.length > 1 ||
             sourceTypes.length > 1 ||
             allCategories.length > 0) && (
@@ -682,6 +745,7 @@ export default function Patterns() {
               setDifficultyFilter(null);
               setSourceTypeFilter(null);
               setCategoryFilter(null);
+              setColorFilter(null);
             }}
             className="text-xs font-medium text-primary hover:underline"
           >
@@ -709,6 +773,9 @@ export default function Patterns() {
               }
               onFilterByCategory={(id) =>
                 setCategoryFilter((prev) => (prev === id ? null : id))
+              }
+              onFilterByColor={(hex) =>
+                setColorFilter((prev) => (prev === hex ? null : hex))
               }
               onEditCategories={() => setCategoryEditItem(pattern)}
             />

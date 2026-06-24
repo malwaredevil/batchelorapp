@@ -57,6 +57,7 @@ type PatternData = {
   designerWebsite?: string | null;
   publicationName?: string | null;
   publicationYear?: string | null;
+  dominantColors?: string[];
   lockedFields: string[];
   categories: Array<{
     id: number;
@@ -696,6 +697,24 @@ export default function PatternDetail() {
                   </pre>
                 </div>
               )}
+            </section>
+          )}
+
+          {(p.dominantColors ?? []).length > 0 && (
+            <section className="rounded-xl border border-card-border bg-card p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Colours
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {(p.dominantColors ?? []).map((hex) => (
+                  <div
+                    key={hex}
+                    title={hex}
+                    className="h-7 w-7 rounded-full border border-black/10 shadow-sm"
+                    style={{ backgroundColor: hex }}
+                  />
+                ))}
+              </div>
             </section>
           )}
 

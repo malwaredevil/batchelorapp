@@ -450,18 +450,23 @@ export default function Fabrics() {
   return (
     <div>
       {stats && (
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {[
-            { label: "Fabrics", value: stats.totalFabrics, sub: "in your stash" },
-            { label: "Patterns", value: stats.totalPatterns, sub: "saved" },
-            { label: "Quilts", value: stats.totalQuilts, sub: "in collection" },
-            { label: "Layouts", value: stats.totalLayouts, sub: "designs" },
-          ].map(({ label, value, sub }) => (
-            <div key={label} className="rounded-xl border border-card-border bg-card p-4">
+            { label: "Fabrics", value: stats.totalFabrics, sub: "in your stash", href: "/fabrics" },
+            { label: "Patterns", value: stats.totalPatterns, sub: "saved", href: "/patterns" },
+            { label: "Quilts", value: stats.totalQuilts, sub: "in collection", href: "/quilts" },
+            { label: "Blocks", value: stats.totalBlocks, sub: "designed", href: "/blocks" },
+            { label: "Layouts", value: stats.totalLayouts, sub: "arranged", href: "/layouts" },
+          ].map(({ label, value, sub, href }) => (
+            <Link
+              key={label}
+              href={href}
+              className="rounded-xl border border-card-border bg-card p-4 block hover:shadow-sm hover:border-primary/30 transition-all"
+            >
               <p className="text-2xl font-bold text-foreground">{value}</p>
               <p className="text-sm font-medium text-foreground mt-0.5">{label}</p>
               <p className="text-xs text-muted-foreground">{sub}</p>
-            </div>
+            </Link>
           ))}
         </div>
       )}

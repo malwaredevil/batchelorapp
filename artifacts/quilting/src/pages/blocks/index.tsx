@@ -52,6 +52,7 @@ import {
   useUpdateBlock,
   useListQuiltingCategories,
   useListFabrics,
+  useGetStats,
   getListBlocksQueryKey,
   QuiltingCreateBlockInputGridSize,
 } from "@workspace/api-client-react";
@@ -682,6 +683,7 @@ export default function Blocks() {
   const { data: blockList, isLoading, isError } = useListBlocks();
   const { data: allCategories } = useListQuiltingCategories();
   const { data: fabricsList } = useListFabrics();
+  const { data: stats } = useGetStats();
   const fabricUrlMap = useMemo(
     () => buildFabricUrlMap(fabricsList ?? []),
     [fabricsList],
@@ -879,6 +881,28 @@ export default function Blocks() {
 
   return (
     <div>
+      {stats && (
+        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {[
+            { label: "Fabrics", value: stats.totalFabrics, sub: "in your stash", href: "/fabrics" },
+            { label: "Patterns", value: stats.totalPatterns, sub: "saved", href: "/patterns" },
+            { label: "Quilts", value: stats.totalQuilts, sub: "in collection", href: "/quilts" },
+            { label: "Blocks", value: stats.totalBlocks, sub: "designed", href: "/blocks" },
+            { label: "Layouts", value: stats.totalLayouts, sub: "arranged", href: "/layouts" },
+          ].map(({ label, value, sub, href }) => (
+            <Link
+              key={label}
+              href={href}
+              className="rounded-xl border border-card-border bg-card p-4 block hover:shadow-sm hover:border-primary/30 transition-all"
+            >
+              <p className="text-2xl font-bold text-foreground">{value}</p>
+              <p className="text-sm font-medium text-foreground mt-0.5">{label}</p>
+              <p className="text-xs text-muted-foreground">{sub}</p>
+            </Link>
+          ))}
+        </div>
+      )}
+
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Block Designer</h1>

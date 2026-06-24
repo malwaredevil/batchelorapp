@@ -788,7 +788,7 @@ export default function Layouts() {
   const [sortBy, setSortBy] = useState<SortKey>("date-desc");
   const [activeCatIds, setActiveCatIds] = useState<Set<number>>(new Set());
   const [search, setSearch] = useState("");
-  const [colorFilter, setColorFilter] = useState<string | null>(null);
+  const [colorFilter, setColorFilter] = useState<string[]>([]);
 
   const deleteLayout = useDeleteLayout({
     mutation: {
@@ -877,7 +877,7 @@ export default function Layouts() {
         !l.categories.some((c) => activeCatIds.has(c.id))
       )
         return false;
-      if (colorFilter && !(l.dominantColors ?? []).includes(colorFilter))
+      if (colorFilter.length > 0 && !colorFilter.every((c) => (l.dominantColors ?? []).includes(c)))
         return false;
       return true;
     })
@@ -913,13 +913,13 @@ export default function Layouts() {
     search.trim().length > 0 ||
     activeCatIds.size > 0 ||
     activeSizes.size > 0 ||
-    colorFilter !== null;
+    colorFilter.length > 0;
 
   function clearFilters() {
     setSearch("");
     setActiveCatIds(new Set());
     setActiveSizes(new Set());
-    setColorFilter(null);
+    setColorFilter([]);
   }
 
   return (
@@ -1003,19 +1003,23 @@ export default function Layouts() {
                 <button
                   key={hex}
                   title={hex}
-                  onClick={() => setColorFilter(colorFilter === hex ? null : hex)}
+                  onClick={() =>
+                    setColorFilter((prev) =>
+                      prev.includes(hex) ? prev.filter((c) => c !== hex) : [...prev, hex]
+                    )
+                  }
                   className={cn(
                     "h-7 w-7 rounded-full border-2 transition-transform hover:scale-110",
-                    colorFilter === hex
+                    colorFilter.includes(hex)
                       ? "border-primary scale-110 ring-2 ring-primary/40"
                       : "border-transparent",
                   )}
                   style={{ backgroundColor: hex }}
                 />
               ))}
-              {colorFilter && (
+              {colorFilter.length > 0 && (
                 <button
-                  onClick={() => setColorFilter(null)}
+                  onClick={() => setColorFilter([])}
                   className="ml-1 text-xs text-muted-foreground hover:text-foreground"
                 >
                   Clear colour
@@ -1139,7 +1143,11 @@ export default function Layouts() {
               onDuplicate={handleDuplicate}
               onFilterBySize={toggleSize}
               onFilterByCategory={toggleCat}
-              onFilterByColor={(hex) => setColorFilter(colorFilter === hex ? null : hex)}
+              onFilterByColor={(hex) =>
+                setColorFilter((prev) =>
+                  prev.includes(hex) ? prev.filter((c) => c !== hex) : [...prev, hex]
+                )
+              }
               fabricUrlMap={fabricUrlMap}
               onEditCategories={() => setCategoryEditItem(layout)}
             />

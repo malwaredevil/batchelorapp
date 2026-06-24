@@ -97,7 +97,7 @@ function FabricCard({
   onFilterByPrintType?: (pt: string) => void;
   onFilterByCategory?: (id: number) => void;
   onFilterByColor?: (c: string) => void;
-  activeColor?: string | null;
+  activeColor?: string[];
   onEditCategories?: () => void;
 }) {
   const [, navigate] = useLocation();
@@ -196,9 +196,9 @@ function FabricCard({
                   }}
                   title={c}
                   aria-label={`Filter by ${c}`}
-                  aria-pressed={activeColor === c}
+                  aria-pressed={(activeColor ?? []).includes(c)}
                   className={`h-4 w-4 rounded-full border transition-transform hover:scale-110 ${
-                    activeColor === c
+                    (activeColor ?? []).includes(c)
                       ? "ring-2 ring-primary ring-offset-1 scale-110"
                       : "border-border/40"
                   }`}
@@ -281,7 +281,7 @@ export default function Fabrics() {
   const [search, setSearch] = useState("");
   const [printTypeFilter, setPrintTypeFilter] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
-  const [colorFilter, setColorFilter] = useState<string | null>(null);
+  const [colorFilter, setColorFilter] = useState<string[]>([]);
   const [sort, setSort] = useState<SortOption>("newest");
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -418,8 +418,8 @@ export default function Fabrics() {
           categoryFilter === null ||
           (f.categories ?? []).some((c) => c.id === categoryFilter);
         const matchesColor =
-          colorFilter === null ||
-          (f.dominantColors ?? []).includes(colorFilter);
+          colorFilter.length === 0 ||
+          colorFilter.every((c) => (f.dominantColors ?? []).includes(c));
         return matchesSearch && matchesType && matchesCat && matchesColor;
       })
     : null;
@@ -438,13 +438,13 @@ export default function Fabrics() {
     search.trim().length > 0 ||
     printTypeFilter !== null ||
     categoryFilter !== null ||
-    colorFilter !== null;
+    colorFilter.length > 0;
 
   function clearFilters() {
     setSearch("");
     setPrintTypeFilter(null);
     setCategoryFilter(null);
-    setColorFilter(null);
+    setColorFilter([]);
   }
 
   return (
@@ -588,22 +588,24 @@ export default function Fabrics() {
                 <button
                   key={color}
                   onClick={() =>
-                    setColorFilter(colorFilter === color ? null : color)
+                    setColorFilter((prev) =>
+                      prev.includes(color) ? prev.filter((c) => c !== color) : [...prev, color]
+                    )
                   }
                   title={color}
                   aria-label={color}
-                  aria-pressed={colorFilter === color}
+                  aria-pressed={colorFilter.includes(color)}
                   className={`h-6 w-6 shrink-0 rounded-full border transition-transform hover:scale-110 ${
-                    colorFilter === color
+                    colorFilter.includes(color)
                       ? "ring-2 ring-primary ring-offset-2 scale-110"
                       : "border-border/40"
                   }`}
                   style={{ backgroundColor: colorToHex(color) }}
                 />
               ))}
-              {colorFilter !== null && (
+              {colorFilter.length > 0 && (
                 <button
-                  onClick={() => setColorFilter(null)}
+                  onClick={() => setColorFilter([])}
                   className="shrink-0 text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
                 >
                   <X className="h-3 w-3" />
@@ -735,7 +737,9 @@ export default function Fabrics() {
                 setCategoryFilter((prev) => (prev === id ? null : id))
               }
               onFilterByColor={(c) =>
-                setColorFilter((prev) => (prev === c ? null : c))
+                setColorFilter((prev) =>
+                  prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]
+                )
               }
               onEditCategories={() => setCategoryEditItem(fabric as FabricSummary)}
             />

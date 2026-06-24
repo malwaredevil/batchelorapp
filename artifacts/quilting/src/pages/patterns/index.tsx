@@ -302,7 +302,7 @@ export default function Patterns() {
   const [difficultyFilter, setDifficultyFilter] = useState<string | null>(null);
   const [sourceTypeFilter, setSourceTypeFilter] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
-  const [colorFilter, setColorFilter] = useState<string | null>(null);
+  const [colorFilter, setColorFilter] = useState<string[]>([]);
   const [sort, setSort] = useState<SortOption>("newest");
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -445,7 +445,7 @@ export default function Patterns() {
           categoryFilter === null ||
           (p.categories ?? []).some((c) => c.id === categoryFilter);
         const matchesColor =
-          colorFilter === null || (p.dominantColors ?? []).includes(colorFilter);
+          colorFilter.length === 0 || colorFilter.every((c) => (p.dominantColors ?? []).includes(c));
         return (
           matchesSearch && matchesDifficulty && matchesSourceType && matchesCat && matchesColor
         );
@@ -467,7 +467,7 @@ export default function Patterns() {
     difficultyFilter !== null ||
     sourceTypeFilter !== null ||
     categoryFilter !== null ||
-    colorFilter !== null;
+    colorFilter.length > 0;
 
   const { data: stats } = useGetStats();
 
@@ -614,19 +614,23 @@ export default function Patterns() {
                 <button
                   key={hex}
                   title={hex}
-                  onClick={() => setColorFilter(colorFilter === hex ? null : hex)}
+                  onClick={() =>
+                    setColorFilter((prev) =>
+                      prev.includes(hex) ? prev.filter((c) => c !== hex) : [...prev, hex]
+                    )
+                  }
                   className={cn(
                     "h-7 w-7 rounded-full border-2 transition-transform hover:scale-110",
-                    colorFilter === hex
+                    colorFilter.includes(hex)
                       ? "border-primary scale-110 ring-2 ring-primary/40"
                       : "border-transparent",
                   )}
                   style={{ backgroundColor: hex }}
                 />
               ))}
-              {colorFilter && (
+              {colorFilter.length > 0 && (
                 <button
-                  onClick={() => setColorFilter(null)}
+                  onClick={() => setColorFilter([])}
                   className="ml-1 text-xs text-muted-foreground hover:text-foreground"
                 >
                   Clear colour
@@ -745,7 +749,7 @@ export default function Patterns() {
               setDifficultyFilter(null);
               setSourceTypeFilter(null);
               setCategoryFilter(null);
-              setColorFilter(null);
+              setColorFilter([]);
             }}
             className="text-xs font-medium text-primary hover:underline"
           >
@@ -775,7 +779,9 @@ export default function Patterns() {
                 setCategoryFilter((prev) => (prev === id ? null : id))
               }
               onFilterByColor={(hex) =>
-                setColorFilter((prev) => (prev === hex ? null : hex))
+                setColorFilter((prev) =>
+                  prev.includes(hex) ? prev.filter((c) => c !== hex) : [...prev, hex]
+                )
               }
               onEditCategories={() => setCategoryEditItem(pattern)}
             />

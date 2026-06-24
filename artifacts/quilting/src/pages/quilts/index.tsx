@@ -273,7 +273,7 @@ export default function Quilts() {
   const [search, setSearch] = useState("");
   const [recipientFilter, setRecipientFilter] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
-  const [colorFilter, setColorFilter] = useState<string | null>(null);
+  const [colorFilter, setColorFilter] = useState<string[]>([]);
   const [sort, setSort] = useState<SortOption>("newest");
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -403,7 +403,7 @@ export default function Quilts() {
           categoryFilter === null ||
           (q.categories ?? []).some((c) => c.id === categoryFilter);
         const matchesColor =
-          colorFilter === null || (q.dominantColors ?? []).includes(colorFilter);
+          colorFilter.length === 0 || colorFilter.every((c) => (q.dominantColors ?? []).includes(c));
         return matchesSearch && matchesRecipient && matchesCat && matchesColor;
       })
     : null;
@@ -422,7 +422,7 @@ export default function Quilts() {
     search.trim().length > 0 ||
     recipientFilter !== null ||
     categoryFilter !== null ||
-    colorFilter !== null;
+    colorFilter.length > 0;
 
   const { data: stats } = useGetStats();
 
@@ -569,19 +569,23 @@ export default function Quilts() {
                 <button
                   key={hex}
                   title={hex}
-                  onClick={() => setColorFilter(colorFilter === hex ? null : hex)}
+                  onClick={() =>
+                    setColorFilter((prev) =>
+                      prev.includes(hex) ? prev.filter((c) => c !== hex) : [...prev, hex]
+                    )
+                  }
                   className={cn(
                     "h-7 w-7 rounded-full border-2 transition-transform hover:scale-110",
-                    colorFilter === hex
+                    colorFilter.includes(hex)
                       ? "border-foreground scale-110"
                       : "border-transparent",
                   )}
                   style={{ backgroundColor: hex }}
                 />
               ))}
-              {colorFilter && (
+              {colorFilter.length > 0 && (
                 <button
-                  onClick={() => setColorFilter(null)}
+                  onClick={() => setColorFilter([])}
                   className="ml-1 self-center rounded-full px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground"
                 >
                   Clear colour
@@ -687,7 +691,7 @@ export default function Quilts() {
               setSearch("");
               setRecipientFilter(null);
               setCategoryFilter(null);
-              setColorFilter(null);
+              setColorFilter([]);
             }}
             className="text-xs font-medium text-primary hover:underline"
           >
@@ -714,7 +718,9 @@ export default function Quilts() {
                 setCategoryFilter((prev) => (prev === id ? null : id))
               }
               onFilterByColor={(hex) =>
-                setColorFilter((prev) => (prev === hex ? null : hex))
+                setColorFilter((prev) =>
+                  prev.includes(hex) ? prev.filter((c) => c !== hex) : [...prev, hex]
+                )
               }
               onEditCategories={() => setCategoryEditItem(quilt)}
             />

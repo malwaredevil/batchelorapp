@@ -701,7 +701,7 @@ export default function Blocks() {
     new Set(),
   );
   const [search, setSearch] = useState("");
-  const [colorFilter, setColorFilter] = useState<string | null>(null);
+  const [colorFilter, setColorFilter] = useState<string[]>([]);
 
   const importFileRef = useRef<HTMLInputElement>(null);
 
@@ -816,7 +816,7 @@ export default function Blocks() {
         !b.categories.some((c) => activeCatIds.has(c.id))
       )
         return false;
-      if (colorFilter !== null && !(b.dominantColors ?? []).includes(colorFilter))
+      if (colorFilter.length > 0 && !colorFilter.every((c) => (b.dominantColors ?? []).includes(c)))
         return false;
       return true;
     })
@@ -863,13 +863,13 @@ export default function Blocks() {
     search.trim().length > 0 ||
     activeCatIds.size > 0 ||
     activeGridSizes.size > 0 ||
-    colorFilter !== null;
+    colorFilter.length > 0;
 
   function clearFilters() {
     setSearch("");
     setActiveCatIds(new Set());
     setActiveGridSizes(new Set());
-    setColorFilter(null);
+    setColorFilter([]);
   }
 
   return (
@@ -968,21 +968,25 @@ export default function Blocks() {
               {usedColors.map((color) => (
                 <button
                   key={color}
-                  onClick={() => setColorFilter(colorFilter === color ? null : color)}
+                  onClick={() =>
+                    setColorFilter((prev) =>
+                      prev.includes(color) ? prev.filter((c) => c !== color) : [...prev, color]
+                    )
+                  }
                   title={color}
                   aria-label={color}
-                  aria-pressed={colorFilter === color}
+                  aria-pressed={colorFilter.includes(color)}
                   className={`h-6 w-6 shrink-0 rounded-full border transition-transform hover:scale-110 ${
-                    colorFilter === color
+                    colorFilter.includes(color)
                       ? "ring-2 ring-primary ring-offset-2 scale-110"
                       : "border-border/40"
                   }`}
                   style={{ backgroundColor: color }}
                 />
               ))}
-              {colorFilter !== null && (
+              {colorFilter.length > 0 && (
                 <button
-                  onClick={() => setColorFilter(null)}
+                  onClick={() => setColorFilter([])}
                   className="shrink-0 text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
                 >
                   <X className="h-3 w-3" />

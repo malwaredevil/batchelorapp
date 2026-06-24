@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Pencil, Trash2, Scissors, ZoomIn } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, Scissors, ZoomIn, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -9,8 +9,11 @@ import { toast } from "sonner";
 import {
   useGetBlock,
   useDeleteBlock,
+  useCreateBlock,
   useListFabrics,
   getListBlocksQueryKey,
+  QuiltingCreateBlockInputGridSize,
+  QuiltingBlockSeamLine,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { fmtInch } from "@/lib/cell-parser";
@@ -42,6 +45,17 @@ export default function BlockDetail() {
         navigate("/blocks");
       },
       onError: () => toast.error("Could not delete this block."),
+    },
+  });
+
+  const duplicateBlock = useCreateBlock({
+    mutation: {
+      onSuccess: (data) => {
+        queryClient.invalidateQueries({ queryKey: getListBlocksQueryKey() });
+        toast.success("Block duplicated.");
+        navigate(`/blocks/${String(data.id)}`);
+      },
+      onError: () => toast.error("Could not duplicate this block."),
     },
   });
 
@@ -77,6 +91,7 @@ export default function BlockDetail() {
     name: string;
     gridSize: number;
     cells: string[];
+    seams?: QuiltingBlockSeamLine[];
     blockSizeInches?: number | null;
     seamAllowanceInches?: number | null;
     categories: Array<{ id: number; name: string; bgColor: string | null; textColor: string | null }>;
@@ -133,6 +148,25 @@ export default function BlockDetail() {
                 title="Cut pattern"
               >
                 <Scissors className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() =>
+                  duplicateBlock.mutate({
+                    data: {
+                      name: `${b.name} (copy)`,
+                      gridSize: b.gridSize as QuiltingCreateBlockInputGridSize,
+                      cells: b.cells,
+                      seams: b.seams ?? [],
+                      categoryNames: b.categories.map((c) => c.name),
+                    },
+                  })
+                }
+                disabled={duplicateBlock.isPending}
+                title="Duplicate block"
+              >
+                <Copy className="h-4 w-4" />
               </Button>
               <Button
                 variant="ghost"

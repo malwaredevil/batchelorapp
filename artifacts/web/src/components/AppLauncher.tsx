@@ -20,6 +20,7 @@ import {
   Layers,
   FlaskConical,
   Shirt,
+  Rss,
 } from "lucide-react";
 import { AppSwitcher } from "@/components/app-switcher";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -44,7 +45,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useTheme } from "@/hooks/use-theme";
-import { useWidgets } from "@/hooks/use-widgets";
+import { useWidgets, type WidgetSlot, type RssSlot } from "@/hooks/use-widgets";
+import { RssFeedWidget } from "@/components/widgets";
 import { useAuth } from "@/lib/auth";
 import { APPS, WIDGETS, type WidgetCategory } from "@/config/apps";
 import {
@@ -91,12 +93,14 @@ const CATEGORY_LABELS: { id: "all" | WidgetCategory; label: string }[] = [
 
 // ── Widget library modal ──────────────────────────────────────────────────────
 function WidgetLibraryModal({
-  isEnabled,
+  isStaticEnabled,
   onToggle,
+  onAddRss,
   onClose,
 }: {
-  isEnabled: (id: string) => boolean;
+  isStaticEnabled: (id: string) => boolean;
   onToggle: (id: string) => void;
+  onAddRss: () => void;
   onClose: () => void;
 }) {
   const [cat, setCat] = useState<"all" | WidgetCategory>("all");
@@ -112,7 +116,7 @@ function WidgetLibraryModal({
     return matchCat && matchSearch;
   });
 
-  const enabledCount = WIDGETS.filter((w) => isEnabled(w.id)).length;
+  const staticEnabledCount = WIDGETS.filter((w) => !w.multi && isStaticEnabled(w.id)).length;
 
   return (
     <div
@@ -128,7 +132,7 @@ function WidgetLibraryModal({
           <div>
             <h2 className="text-sm font-semibold">Widget library</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {enabledCount} active · {WIDGETS.length - enabledCount} available to add
+              {staticEnabledCount} active · RSS feeds are unlimited
             </p>
           </div>
           <button
@@ -179,7 +183,8 @@ function WidgetLibraryModal({
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {visible.map((w) => {
-                const added = isEnabled(w.id);
+                const isMulti = !!w.multi;
+                const added = !isMulti && isStaticEnabled(w.id);
                 const Icon = w.icon;
                 return (
                   <div
@@ -195,8 +200,15 @@ function WidgetLibraryModal({
                         <Icon className="w-4 h-4 text-primary" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold leading-tight">
-                          {w.title}
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-semibold leading-tight">
+                            {w.title}
+                          </span>
+                          {isMulti && (
+                            <span className="text-[9px] font-bold uppercase tracking-wider bg-primary/10 text-primary px-1.5 py-0.5 rounded-full leading-none">
+                              Multi
+                            </span>
+                          )}
                         </div>
                         <div className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium mt-0.5">
                           {w.category}
@@ -210,7 +222,14 @@ function WidgetLibraryModal({
                       {w.description}
                     </p>
                     <button
-                      onClick={() => onToggle(w.id)}
+                      onClick={() => {
+                        if (isMulti) {
+                          onAddRss();
+                          onClose();
+                        } else {
+                          onToggle(w.id);
+                        }
+                      }}
                       className={`w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                         added
                           ? "bg-primary/10 text-primary hover:bg-destructive/10 hover:text-destructive"
@@ -219,6 +238,8 @@ function WidgetLibraryModal({
                     >
                       {added ? (
                         <><Check className="w-3 h-3" /> Added — click to remove</>
+                      ) : isMulti ? (
+                        <><Plus className="w-3 h-3" /> Add another RSS feed</>
                       ) : (
                         <><Plus className="w-3 h-3" /> Add to dashboard</>
                       )}
@@ -356,8 +377,21 @@ function AppHeroCard({
 // ── Main ──────────────────────────────────────────────────────────────────────
 export function AppLauncher() {
   const { isDark, toggleTheme } = useTheme();
-  const { enabled, isEnabled, toggleWidget, resetWidgets } = useWidgets();
+  const {
+    slots,
+    byId,
+    isStaticEnabled,
+    toggleStatic,
+    addRss,
+    updateRss,
+    removeSlot,
+    resetWidgets,
+    totalCount,
+  } = useWidgets();
   const { user } = useAuth();
+
+  // Cast helper so the grid render is type-safe
+  const asRss = (s: WidgetSlot): RssSlot => s as RssSlot;
 
   const displayName = user?.displayName?.trim() || user?.email || "there";
   const firstName = displayName.split(/[\s@]/)[0] || displayName;
@@ -612,9 +646,9 @@ export function AppLauncher() {
             <div className="flex items-center gap-2 text-foreground font-semibold">
               <LayoutGrid className="w-5 h-5 text-primary" />
               <h3 className="text-lg">Widgets</h3>
-              {enabled.length > 0 && (
+              {totalCount > 0 && (
                 <span className="text-xs text-muted-foreground font-normal">
-                  ({enabled.length} active)
+                  ({totalCount} active)
                 </span>
               )}
             </div>
@@ -653,7 +687,7 @@ export function AppLauncher() {
             </div>
           </div>
 
-          {enabled.length === 0 ? (
+          {slots.length === 0 ? (
             <button
               onClick={() => setLibraryOpen(true)}
               className="w-full rounded-xl border-2 border-dashed border-border py-10 flex flex-col items-center justify-center gap-3 text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-muted/20 transition-colors"
@@ -661,13 +695,43 @@ export function AppLauncher() {
               <PlusCircle className="w-8 h-8" />
               <span className="font-medium">Add your first widget</span>
               <span className="text-xs max-w-[200px] text-center">
-                Choose from {WIDGETS.length} widgets — stats, tools, news, and more
+                Choose from {WIDGETS.length} widgets — stats, tools, RSS feeds, and more
               </span>
             </button>
           ) : (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {enabled.map((w) => {
+                {slots.map((slot) => {
+                  // ── RSS instance ─────────────────────────────────────────
+                  if (slot.t === "r") {
+                    const rss = asRss(slot);
+                    return (
+                      <div
+                        key={rss.iid}
+                        className="relative rounded-xl border border-border bg-card p-4 hover:shadow-sm transition-shadow"
+                      >
+                        {customizing && (
+                          <button
+                            onClick={() => removeSlot(rss.iid)}
+                            aria-label="Remove RSS feed"
+                            className="absolute -top-2 -right-2 z-10 w-6 h-6 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow hover:scale-110 transition-transform"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <RssFeedWidget
+                          iid={rss.iid}
+                          title={rss.title}
+                          url={rss.url}
+                          onUpdate={(cfg) => updateRss(rss.iid, cfg)}
+                        />
+                      </div>
+                    );
+                  }
+
+                  // ── Static catalogue widget ──────────────────────────────
+                  const w = byId.get(slot.id);
+                  if (!w) return null;
                   const Icon = w.icon;
                   return (
                     <div
@@ -676,7 +740,7 @@ export function AppLauncher() {
                     >
                       {customizing && (
                         <button
-                          onClick={() => toggleWidget(w.id)}
+                          onClick={() => removeSlot(w.id)}
                           aria-label={`Remove ${w.title}`}
                           className="absolute -top-2 -right-2 z-10 w-6 h-6 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow hover:scale-110 transition-transform"
                         >
@@ -700,7 +764,9 @@ export function AppLauncher() {
                   className="w-full rounded-xl border-2 border-dashed border-border py-5 flex items-center justify-center gap-2 text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-muted/20 transition-colors text-sm"
                 >
                   <PlusCircle className="w-4 h-4" />
-                  Add widget ({WIDGETS.length - enabled.length} more available)
+                  <span>Add widget</span>
+                  <Rss className="w-3.5 h-3.5 opacity-60" />
+                  <span className="text-muted-foreground/60 text-xs">+ RSS feeds</span>
                 </button>
               )}
             </>
@@ -747,8 +813,9 @@ export function AppLauncher() {
       {/* Widget library modal */}
       {libraryOpen && (
         <WidgetLibraryModal
-          isEnabled={isEnabled}
-          onToggle={toggleWidget}
+          isStaticEnabled={isStaticEnabled}
+          onToggle={toggleStatic}
+          onAddRss={addRss}
           onClose={() => setLibraryOpen(false)}
         />
       )}

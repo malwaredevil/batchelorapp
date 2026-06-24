@@ -1,7 +1,7 @@
 import {
   Wind, Package, Shirt, ShoppingBag, Activity,
   FlaskConical, Scissors, Layers, Zap, Camera, FileText, Clock,
-  Target, Star, Image, BookOpen, Link, type LucideIcon,
+  Target, Star, Image, BookOpen, Link, Rss, type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import {
@@ -53,7 +53,14 @@ export type WidgetEntry = {
   description: string;
   icon: LucideIcon;
   category: WidgetCategory;
-  body: ReactNode;
+  /** Static body to render. Omit for multi-instance widgets (e.g. RSS). */
+  body?: ReactNode;
+  /**
+   * When true, the widget can be added multiple times with independent configs.
+   * Adding one from the library always creates a new instance — it is never
+   * "already added".
+   */
+  multi?: boolean;
 };
 
 /* Modular config: apps render from this array. */
@@ -232,6 +239,16 @@ export const WIDGETS: WidgetEntry[] = [
     icon: Wind,
     category: "media",
     body: <StudioWeather />,
+  },
+  {
+    id: "rss-feed",
+    title: "RSS Feed",
+    description:
+      "Pull in any RSS or Atom feed — pottery news, quilting blogs, technique tutorials. Add as many as you like, each with its own title.",
+    icon: Rss,
+    category: "media",
+    multi: true,
+    // body is omitted — each instance is rendered from RssSlot config in AppLauncher
   },
 
   // ── Inspiration ────────────────────────────────────────────────────────────

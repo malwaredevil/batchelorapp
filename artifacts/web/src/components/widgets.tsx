@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   ArrowRight, ShoppingBag, Package, Shirt, FlaskConical,
-  Scissors, Layers, Plus, Camera, Zap, Star,
+  Scissors, Layers, Plus, Camera, Zap, Star, Rss, Settings, ExternalLink,
+  AlertCircle, Loader2, RefreshCw,
 } from "lucide-react";
 import {
   useGetCollectionStats,
@@ -498,3 +499,247 @@ export function MakerLinksWidget() {
 
 // ── Static: Studio weather (re-export) ────────────────────────────────────────
 export { StudioWeather } from "@/components/studio-weather";
+
+// ── Configurable: RSS Feed ────────────────────────────────────────────────────
+interface RssFeedItem {
+  title: string;
+  link: string;
+  pubDate: string;
+  description: string;
+  relativeDate?: string;
+}
+interface RssFeedData {
+  feedTitle: string;
+  items: RssFeedItem[];
+}
+
+const RSS_URL = `${base}api/hub/rss`.replace(/\/\//g, "/");
+
+/**
+ * A configurable RSS/Atom feed widget. The user sets a custom title and feed
+ * URL via the gear icon; config is persisted by the parent through `onUpdate`.
+ * The API server proxies the actual fetch to avoid browser CORS restrictions.
+ */
+export function RssFeedWidget({
+  iid,
+  title,
+  url,
+  onUpdate,
+}: {
+  iid: string;
+  title: string;
+  url: string;
+  onUpdate: (config: { title?: string; url?: string }) => void;
+}) {
+  const [configOpen, setConfigOpen] = useState(!url);
+  const [editTitle, setEditTitle] = useState(title);
+  const [editUrl, setEditUrl] = useState(url);
+  const [feed, setFeed] = useState<RssFeedData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | undefined>(undefined);
+
+  // Sync local edit state when parent updates (e.g. after server hydration)
+  useEffect(() => { setEditTitle(title); }, [title]);
+  useEffect(() => { setEditUrl(url); }, [url]);
+
+  // Auto-close config if we now have a URL
+  useEffect(() => {
+    if (url && configOpen && !error) {
+      // keep config open if there was an error so user can fix the URL
+    }
+  }, [url, configOpen, error]);
+
+  const fetchFeed = (feedUrl: string) => {
+    if (!feedUrl) return;
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    setLoading(true);
+    setError(null);
+
+    fetch(`${RSS_URL}?url=${encodeURIComponent(feedUrl)}`, {
+      credentials: "include",
+      signal: ctrl.signal,
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({})) as { error?: string };
+          throw new Error(body.error ?? `HTTP ${res.status}`);
+        }
+        return res.json() as Promise<RssFeedData>;
+      })
+      .then((data) => {
+        setFeed(data);
+        setLoading(false);
+        setConfigOpen(false);
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.name === "AbortError") return;
+        setError(err instanceof Error ? err.message : "Failed to load feed");
+        setLoading(false);
+      });
+  };
+
+  // Fetch on mount (and when url changes) if we have a URL
+  useEffect(() => {
+    if (url && !configOpen) fetchFeed(url);
+    return () => { abortRef.current?.abort(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url]);
+
+  const handleSave = () => {
+    const trimmedUrl = editUrl.trim();
+    const trimmedTitle = editTitle.trim();
+    onUpdate({ title: trimmedTitle, url: trimmedUrl });
+    if (trimmedUrl) fetchFeed(trimmedUrl);
+  };
+
+  const displayTitle = title || "RSS Feed";
+
+  return (
+    <div className="space-y-3">
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wider min-w-0">
+          <Rss className="w-4 h-4 text-orange-500 flex-shrink-0" />
+          <span className="truncate">{displayTitle}</span>
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {url && !configOpen && (
+            <button
+              onClick={() => fetchFeed(url)}
+              className="p-1 rounded hover:bg-muted text-muted-foreground transition-colors"
+              title="Refresh feed"
+            >
+              <RefreshCw className="w-3 h-3" />
+            </button>
+          )}
+          <button
+            onClick={() => setConfigOpen((o) => !o)}
+            className={`p-1 rounded transition-colors ${
+              configOpen
+                ? "bg-primary/10 text-primary"
+                : "hover:bg-muted text-muted-foreground"
+            }`}
+            title={configOpen ? "Close settings" : "Configure feed"}
+          >
+            <Settings className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Config panel */}
+      {configOpen && (
+        <div className="space-y-2 pt-0.5">
+          <div>
+            <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+              Widget name
+            </label>
+            <input
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              placeholder="e.g. Pottery News"
+              className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+              Feed URL
+            </label>
+            <input
+              value={editUrl}
+              onChange={(e) => setEditUrl(e.target.value)}
+              placeholder="https://example.com/feed.xml"
+              className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-background text-sm font-mono placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+              onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
+            />
+          </div>
+          {error && (
+            <div className="flex items-start gap-1.5 text-xs text-destructive">
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
+          <div className="flex gap-2 pt-0.5">
+            <button
+              onClick={handleSave}
+              disabled={!editUrl.trim()}
+              className="flex-1 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold disabled:opacity-40 hover:bg-primary/90 transition-colors"
+            >
+              {loading ? "Loading…" : "Save & load"}
+            </button>
+            {url && (
+              <button
+                onClick={() => { setConfigOpen(false); setError(null); }}
+                className="px-3 py-1.5 rounded-lg bg-muted text-muted-foreground text-xs font-semibold hover:bg-muted/80 transition-colors"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Feed content */}
+      {!configOpen && (
+        <>
+          {loading && (
+            <div className="flex items-center justify-center py-4 text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              <span className="text-xs">Loading feed…</span>
+            </div>
+          )}
+          {error && !loading && (
+            <div className="space-y-2">
+              <div className="flex items-start gap-1.5 text-xs text-destructive">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </div>
+              <button
+                onClick={() => setConfigOpen(true)}
+                className="text-xs text-primary underline"
+              >
+                Fix URL in settings
+              </button>
+            </div>
+          )}
+          {!loading && !error && feed && (
+            <ul className="space-y-2">
+              {feed.items.slice(0, 5).map((item, i) => (
+                <li key={`${iid}-${i}`}>
+                  <a
+                    href={item.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group flex items-start gap-1.5 hover:text-primary transition-colors"
+                  >
+                    <ExternalLink className="w-3 h-3 mt-0.5 flex-shrink-0 text-muted-foreground group-hover:text-primary transition-colors" />
+                    <div className="min-w-0">
+                      <div className="text-xs font-medium leading-snug line-clamp-2 group-hover:underline">
+                        {item.title || "Untitled"}
+                      </div>
+                      {item.relativeDate && (
+                        <div className="text-[10px] text-muted-foreground mt-0.5">
+                          {item.relativeDate}
+                        </div>
+                      )}
+                    </div>
+                  </a>
+                </li>
+              ))}
+              {feed.items.length === 0 && (
+                <li className="text-xs text-muted-foreground">No items in feed.</li>
+              )}
+            </ul>
+          )}
+          {!loading && !error && !feed && !url && (
+            <p className="text-xs text-muted-foreground">
+              Click the gear icon to set a feed URL.
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}

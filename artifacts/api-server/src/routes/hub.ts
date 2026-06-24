@@ -227,7 +227,18 @@ router.get("/hub/rss", requireAuth, async (req, res) => {
       return;
     }
 
+    const MAX_BYTES = 2 * 1024 * 1024; // 2 MB
+    const contentLength = response.headers.get("content-length");
+    if (contentLength && parseInt(contentLength, 10) > MAX_BYTES) {
+      res.status(413).json({ error: "Feed response too large (max 2 MB)" });
+      return;
+    }
+
     const xml = await response.text();
+    if (xml.length > MAX_BYTES) {
+      res.status(413).json({ error: "Feed response too large (max 2 MB)" });
+      return;
+    }
     if (!xml.includes("<item") && !xml.includes("<entry")) {
       res
         .status(422)

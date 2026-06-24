@@ -332,7 +332,7 @@ export function AppLauncher() {
               Welcome back, {firstName}.
             </h1>
             <p className="text-lg text-muted-foreground">
-              Your maker's field guide. One login, all your collections.
+              One account, every collection.
             </p>
           </div>
 

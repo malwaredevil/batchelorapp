@@ -113,7 +113,7 @@ export function AppSwitcher() {
               Batchelor Hub
             </p>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              Your maker&apos;s field guide
+              One account, every collection.
             </p>
           </div>
           <Check className="h-4 w-4 text-primary shrink-0" />

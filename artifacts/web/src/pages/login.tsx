@@ -197,7 +197,7 @@ export default function Login() {
         </form>
 
         <p className="text-center text-xs font-medium text-muted-foreground">
-          One login for every collection.
+          One account, every collection.
         </p>
       </div>
     </div>

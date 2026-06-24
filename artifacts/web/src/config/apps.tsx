@@ -227,7 +227,7 @@ export const WIDGETS: WidgetEntry[] = [
   // ── Media ──────────────────────────────────────────────────────────────────
   {
     id: "weather",
-    title: "Studio Weather",
+    title: "Local Weather",
     description: "Current conditions at your studio location — useful for kiln and drying decisions.",
     icon: Wind,
     category: "media",

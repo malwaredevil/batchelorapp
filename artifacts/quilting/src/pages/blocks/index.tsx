@@ -18,6 +18,7 @@ import {
   Upload,
   ZoomIn,
   Tag,
+  Scissors,
 } from "lucide-react";
 import {
   buildBlockSvgString,
@@ -539,6 +540,10 @@ function BlockCard({
             <DropdownMenuItem onClick={() => navigate(`/blocks/${block.id}/edit`)}>
               <Pencil className="mr-2 h-3.5 w-3.5" />
               Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate(`/blocks/${block.id}/cut-pattern`)}>
+              <Scissors className="mr-2 h-3.5 w-3.5" />
+              Cut guide
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onDuplicate(block)}>
               <Copy className="mr-2 h-3.5 w-3.5" />

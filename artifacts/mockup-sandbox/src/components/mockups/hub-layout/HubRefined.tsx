@@ -3,123 +3,102 @@ import {
   Sun, Moon, Search, Plus, Settings, ArrowRight, LayoutGrid,
   ChevronDown, ShoppingBag, Activity, Package, Shirt, Wind,
   X, Check, GripVertical, Maximize2, Scissors, BookOpen,
-  FlaskConical, Layers, Star, RefreshCw
+  FlaskConical, Layers, Star, Camera
 } from "lucide-react";
 
-// ── shared types ────────────────────────────────────────────────────────────
-type WidgetId = "pottery" | "quilting" | "activity" | "weather" | "shopping";
+const DOMAIN = "e530e43e-c322-42ad-b85d-db16d192d043-00-1mxd7zwrznofn.riker.replit.dev";
 
-// ── pottery nav links ────────────────────────────────────────────────────────
 const POTTERY_LINKS = [
   { label: "Collection", icon: Package, desc: "Browse all pieces" },
   { label: "Compare", icon: Layers, desc: "Side-by-side view" },
   { label: "Maintenance", icon: FlaskConical, desc: "Care & repairs log" },
 ];
 
-// ── quilting nav links ───────────────────────────────────────────────────────
 const QUILTING_LINKS = [
   { label: "Fabrics", icon: Shirt, desc: "Your fabric stash" },
   { label: "Blocks", icon: Scissors, desc: "Block designs" },
   { label: "Layouts", icon: Layers, desc: "Quilt plans" },
 ];
 
-// ── fake image thumbnails for pottery ───────────────────────────────────────
-const POTTERY_ITEMS = [
-  { label: "Blue celadon bowl", color: "bg-sky-200 dark:bg-sky-800" },
-  { label: "Raku-fired vase", color: "bg-stone-300 dark:bg-stone-700" },
-  { label: "Speckled mug", color: "bg-amber-200 dark:bg-amber-800" },
-];
-
-// ── fake image thumbnails for quilting ──────────────────────────────────────
-const QUILTING_ITEMS = [
-  { label: "Kona Cotton — Navy", color: "bg-blue-300 dark:bg-blue-800" },
-  { label: "Floral print", color: "bg-rose-200 dark:bg-rose-800" },
-  { label: "Teal geometric", color: "bg-teal-200 dark:bg-teal-800" },
-];
-
-// ── Pottery card ─────────────────────────────────────────────────────────────
-function PotteryCard({
+// ── App hero card (Pottery / Quilting) ───────────────────────────────────────
+function AppHeroCard({
+  title, image, badge, stats, links,
+  accentBg, accentText, accentBorderColor, accentSectionBg,
   expanded, onToggle, edit,
 }: {
-  expanded: boolean; onToggle: () => void; edit: boolean;
+  title: string;
+  image: string;
+  badge: string;
+  stats: { v: string; l: string }[];
+  links: { label: string; icon: any; desc: string }[];
+  accentBg: string;
+  accentText: string;
+  accentBorderColor: string;
+  accentSectionBg: string;
+  expanded: boolean;
+  onToggle: () => void;
+  edit: boolean;
 }) {
   return (
-    <div
-      className={`relative bg-card border border-border rounded-xl flex flex-col h-full overflow-hidden group transition-all
-        ${edit ? "ring-2 ring-primary/20" : ""}`}
-    >
-      {/* Edit handles */}
+    <div className={`relative bg-card border border-border rounded-xl overflow-hidden flex flex-col h-full group transition-all ${edit ? "ring-2 ring-primary/20" : ""}`}>
       {edit && (
         <div className="absolute top-3 right-3 flex gap-1.5 z-10">
-          <button className="p-1 rounded hover:bg-muted cursor-grab text-muted-foreground">
-            <GripVertical className="w-4 h-4" />
-          </button>
-          <button className="p-1 rounded hover:bg-destructive/10 hover:text-destructive text-muted-foreground">
-            <X className="w-4 h-4" />
-          </button>
+          <button className="p-1 rounded hover:bg-black/30 cursor-grab text-white/80"><GripVertical className="w-4 h-4" /></button>
+          <button className="p-1 rounded hover:bg-black/30 text-white/80"><X className="w-4 h-4" /></button>
         </div>
       )}
 
-      {/* Always-visible top section */}
-      <div className="p-5 flex flex-col gap-4">
-        {/* Header row */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
-              <Package className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-            </div>
-            <span className="font-semibold text-sm">Pottery</span>
-          </div>
-          {!edit && (
-            <button className="text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-              <Maximize2 className="w-3.5 h-3.5" />
-            </button>
-          )}
+      {/* Hero image — same as live app: h-48, gradient overlay, title + badge */}
+      <div className="h-48 w-full relative overflow-hidden bg-muted flex-shrink-0">
+        <img
+          src={image}
+          alt={title}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+        <div className="absolute bottom-4 left-5 right-5 flex justify-between items-end">
+          <h2 className="text-2xl font-bold text-white tracking-tight">{title}</h2>
+          <span className="text-xs bg-white/20 text-white backdrop-blur-md border-0 px-2 py-1 rounded-full font-medium">{badge}</span>
         </div>
+        {!edit && (
+          <button className="absolute top-3 right-3 p-1.5 rounded-lg bg-black/20 text-white/70 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/40">
+            <Maximize2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
 
-        {/* Stats */}
+      {/* Stats */}
+      <div className="p-4 pb-3">
         <div className="grid grid-cols-3 gap-2">
-          {[{ v: "163", l: "Total" }, { v: "158", l: "Unique" }, { v: "12", l: "Categories" }].map(s => (
+          {stats.map(s => (
             <div key={s.l} className="bg-muted/50 rounded-lg p-2.5 text-center">
-              <div className="text-xl font-bold">{s.v}</div>
-              <div className="text-xs text-muted-foreground mt-0.5">{s.l}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Image thumbnails */}
-        <div className="space-y-1.5">
-          {POTTERY_ITEMS.map((item, i) => (
-            <div key={i} className="flex items-center gap-2.5 text-sm group/item hover:bg-muted/40 rounded-lg px-1 py-0.5 transition-colors cursor-pointer">
-              <div className={`w-8 h-8 rounded-md flex-shrink-0 ${item.color}`} />
-              <span className="text-muted-foreground truncate flex-1">{item.label}</span>
-              <ArrowRight className="w-3 h-3 text-muted-foreground/40 opacity-0 group-hover/item:opacity-100 transition-opacity flex-shrink-0" />
+              <div className="text-xl font-bold text-primary">{s.v}</div>
+              <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mt-0.5">{s.l}</div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Accordion divider + toggle */}
+      {/* Accordion toggle */}
       <button
         onClick={onToggle}
-        className="flex items-center justify-between px-5 py-2.5 border-t border-border hover:bg-muted/30 transition-colors text-xs font-medium text-muted-foreground"
+        className="flex items-center justify-between px-4 py-2.5 border-t border-border hover:bg-muted/30 transition-colors text-xs font-medium text-muted-foreground mt-auto"
       >
-        <span>{expanded ? "Hide quick links" : "Show quick links"}</span>
+        <span>{expanded ? "Hide quick links" : "Quick links →"}</span>
         <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
       </button>
 
-      {/* Expanded: nav links */}
+      {/* Expanded quick-nav */}
       {expanded && (
-        <div className="px-5 pb-5 pt-3 border-t border-amber-100 dark:border-amber-900/30 bg-amber-50/40 dark:bg-amber-900/10 space-y-2">
-          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Go to</div>
+        <div className={`px-4 pb-4 pt-3 border-t ${accentBorderColor} ${accentSectionBg}`}>
           <div className="grid grid-cols-3 gap-2">
-            {POTTERY_LINKS.map(link => (
+            {links.map(link => (
               <a
                 key={link.label}
                 href="#"
-                className="flex flex-col gap-1.5 p-2.5 rounded-lg border border-amber-200/60 dark:border-amber-800/40 bg-white/60 dark:bg-amber-900/20 hover:border-amber-300 dark:hover:border-amber-700 hover:bg-white dark:hover:bg-amber-900/30 transition-all text-center group/link"
+                className={`flex flex-col items-center gap-1.5 p-2.5 rounded-lg border bg-white/60 dark:bg-black/20 hover:bg-white dark:hover:bg-black/30 transition-all text-center ${accentBorderColor}`}
               >
-                <link.icon className="w-4 h-4 text-amber-500 mx-auto" />
+                <link.icon className={`w-4 h-4 ${accentText}`} />
                 <div className="text-xs font-semibold leading-none">{link.label}</div>
               </a>
             ))}
@@ -127,102 +106,10 @@ function PotteryCard({
         </div>
       )}
 
-      {/* Footer */}
+      {/* Footer link — only when collapsed */}
       {!expanded && (
-        <a href="#" className="px-5 pb-4 mt-auto flex items-center gap-1 text-xs font-medium text-primary hover:underline">
-          Open collection <ArrowRight className="w-3 h-3" />
-        </a>
-      )}
-    </div>
-  );
-}
-
-// ── Quilting card ────────────────────────────────────────────────────────────
-function QuiltingCard({
-  expanded, onToggle, edit,
-}: {
-  expanded: boolean; onToggle: () => void; edit: boolean;
-}) {
-  return (
-    <div
-      className={`relative bg-card border border-border rounded-xl flex flex-col h-full overflow-hidden group transition-all
-        ${edit ? "ring-2 ring-primary/20" : ""}`}
-    >
-      {edit && (
-        <div className="absolute top-3 right-3 flex gap-1.5 z-10">
-          <button className="p-1 rounded hover:bg-muted cursor-grab text-muted-foreground">
-            <GripVertical className="w-4 h-4" />
-          </button>
-          <button className="p-1 rounded hover:bg-destructive/10 hover:text-destructive text-muted-foreground">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
-      <div className="p-5 flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center">
-              <Shirt className="w-4 h-4 text-violet-600 dark:text-violet-400" />
-            </div>
-            <span className="font-semibold text-sm">Quilting</span>
-          </div>
-          {!edit && (
-            <button className="text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-              <Maximize2 className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-
-        <div className="grid grid-cols-3 gap-2">
-          {[{ v: "46", l: "Fabrics" }, { v: "13", l: "Blocks" }, { v: "1", l: "Layout" }].map(s => (
-            <div key={s.l} className="bg-muted/50 rounded-lg p-2.5 text-center">
-              <div className="text-xl font-bold">{s.v}</div>
-              <div className="text-xs text-muted-foreground mt-0.5">{s.l}</div>
-            </div>
-          ))}
-        </div>
-
-        <div className="space-y-1.5">
-          {QUILTING_ITEMS.map((item, i) => (
-            <div key={i} className="flex items-center gap-2.5 text-sm group/item hover:bg-muted/40 rounded-lg px-1 py-0.5 transition-colors cursor-pointer">
-              <div className={`w-8 h-8 rounded-md flex-shrink-0 ${item.color}`} />
-              <span className="text-muted-foreground truncate flex-1">{item.label}</span>
-              <ArrowRight className="w-3 h-3 text-muted-foreground/40 opacity-0 group-hover/item:opacity-100 transition-opacity flex-shrink-0" />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <button
-        onClick={onToggle}
-        className="flex items-center justify-between px-5 py-2.5 border-t border-border hover:bg-muted/30 transition-colors text-xs font-medium text-muted-foreground"
-      >
-        <span>{expanded ? "Hide quick links" : "Show quick links"}</span>
-        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
-      </button>
-
-      {expanded && (
-        <div className="px-5 pb-5 pt-3 border-t border-violet-100 dark:border-violet-900/30 bg-violet-50/40 dark:bg-violet-900/10 space-y-2">
-          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Go to</div>
-          <div className="grid grid-cols-3 gap-2">
-            {QUILTING_LINKS.map(link => (
-              <a
-                key={link.label}
-                href="#"
-                className="flex flex-col gap-1.5 p-2.5 rounded-lg border border-violet-200/60 dark:border-violet-800/40 bg-white/60 dark:bg-violet-900/20 hover:border-violet-300 dark:hover:border-violet-700 hover:bg-white dark:hover:bg-violet-900/30 transition-all text-center group/link"
-              >
-                <link.icon className="w-4 h-4 text-violet-500 mx-auto" />
-                <div className="text-xs font-semibold leading-none">{link.label}</div>
-              </a>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {!expanded && (
-        <a href="#" className="px-5 pb-4 mt-auto flex items-center gap-1 text-xs font-medium text-primary hover:underline">
-          Open quilting <ArrowRight className="w-3 h-3" />
+        <a href="#" className="px-4 pb-4 flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+          Open {title.toLowerCase()} <ArrowRight className="w-3 h-3" />
         </a>
       )}
     </div>
@@ -353,6 +240,7 @@ function ShoppingWidget({ edit }: { edit: boolean }) {
 const AVAILABLE_WIDGETS = [
   { id: "weather", label: "Studio Weather", icon: Wind },
   { id: "random", label: "Random Piece", icon: Star },
+  { id: "camera", label: "Do I own this?", icon: Camera },
   { id: "rss", label: "RSS / News feed", icon: BookOpen },
   { id: "inspiration", label: "Inspiration board", icon: Layers },
 ];
@@ -384,7 +272,7 @@ function AddWidgetPanel({ onClose }: { onClose: () => void }) {
   );
 }
 
-// ── Main component ───────────────────────────────────────────────────────────
+// ── Main ─────────────────────────────────────────────────────────────────────
 export default function HubRefined() {
   const [dark, setDark] = useState(false);
   const [edit, setEdit] = useState(false);
@@ -436,86 +324,110 @@ export default function HubRefined() {
                 <Plus className="w-4 h-4" /> Add item
               </button>
               <button className="flex items-center gap-2 border border-border px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors text-muted-foreground">
+                <Camera className="w-4 h-4" /> Do I own this?
+              </button>
+              <button className="flex items-center gap-2 border border-border px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors text-muted-foreground">
                 <ShoppingBag className="w-4 h-4" /> Shopping list
               </button>
             </div>
           </div>
 
-          {/* Dashboard toolbar */}
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Dashboard</h2>
-            <div className="flex items-center gap-2">
-              {edit && (
-                <button
-                  onClick={() => setAddOpen(true)}
-                  className="flex items-center gap-1.5 text-sm text-primary border border-primary/30 px-3 py-1.5 rounded-lg hover:bg-primary/5 transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Add widget
-                </button>
-              )}
-              <button
-                onClick={() => setEdit(e => !e)}
-                className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors
-                  ${edit ? "bg-primary text-primary-foreground border-transparent" : "border-border text-muted-foreground hover:bg-muted"}`}
-              >
-                {edit ? <><Check className="w-3.5 h-3.5" /> Done</> : <><Settings className="w-3.5 h-3.5" /> Customize</>}
-              </button>
+          {/* Your apps section */}
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <LayoutGrid className="w-5 h-5 text-primary" />
+                <h3 className="text-base font-semibold">Your apps</h3>
+              </div>
             </div>
-          </div>
 
-          {edit && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 border border-border rounded-lg px-3 py-2">
-              <GripVertical className="w-3.5 h-3.5" />
-              Drag to reorder · click <X className="w-3 h-3 inline mx-0.5" /> to remove a widget
-            </div>
-          )}
-
-          {/* Widget grid — mirrors DashboardGrid but Pottery/Quilting cards are accordion-aware */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Row 1, col 1: Pottery */}
-            <div className={edit ? "ring-2 ring-primary/20 rounded-xl" : ""}>
-              <PotteryCard
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <AppHeroCard
+                title="Pottery"
+                image={`https://${DOMAIN}/images/pottery-collection.png`}
+                badge="Updated 2h ago"
+                stats={[{ v: "163", l: "Total" }, { v: "158", l: "Unique" }, { v: "12", l: "Categories" }]}
+                links={POTTERY_LINKS}
+                accentBg="bg-amber-100 dark:bg-amber-900/40"
+                accentText="text-amber-600 dark:text-amber-400"
+                accentBorderColor="border-amber-200/60 dark:border-amber-800/40"
+                accentSectionBg="bg-amber-50/60 dark:bg-amber-900/10"
                 expanded={potteryExpanded}
                 onToggle={() => setPotteryExpanded(e => !e)}
                 edit={edit}
               />
-            </div>
-
-            {/* Row 1, col 2: Quilting */}
-            <div className={edit ? "ring-2 ring-primary/20 rounded-xl" : ""}>
-              <QuiltingCard
+              <AppHeroCard
+                title="Quilting"
+                image={`https://${DOMAIN}/images/quilting-collection.png`}
+                badge="Updated 1d ago"
+                stats={[{ v: "46", l: "Fabrics" }, { v: "13", l: "Blocks" }, { v: "1", l: "Layout" }]}
+                links={QUILTING_LINKS}
+                accentBg="bg-violet-100 dark:bg-violet-900/40"
+                accentText="text-violet-600 dark:text-violet-400"
+                accentBorderColor="border-violet-200/60 dark:border-violet-800/40"
+                accentSectionBg="bg-violet-50/60 dark:bg-violet-900/10"
                 expanded={quiltingExpanded}
                 onToggle={() => setQuiltingExpanded(e => !e)}
                 edit={edit}
               />
             </div>
+          </section>
 
-            {/* Col 3, rows 1–2: Recent Activity */}
-            <div className={`row-span-2 ${edit ? "ring-2 ring-primary/20 rounded-xl" : ""}`}>
-              <RecentActivityWidget edit={edit} />
+          {/* Widgets section */}
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <LayoutGrid className="w-5 h-5 text-primary" />
+                <h3 className="text-base font-semibold">Widgets</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                {edit && (
+                  <button
+                    onClick={() => setAddOpen(true)}
+                    className="flex items-center gap-1.5 text-sm text-primary border border-primary/30 px-3 py-1.5 rounded-lg hover:bg-primary/5 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add widget
+                  </button>
+                )}
+                <button
+                  onClick={() => setEdit(e => !e)}
+                  className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors
+                    ${edit ? "bg-primary text-primary-foreground border-transparent" : "border-border text-muted-foreground hover:bg-muted"}`}
+                >
+                  {edit ? <><Check className="w-3.5 h-3.5" /> Done</> : <><Settings className="w-3.5 h-3.5" /> Customize</>}
+                </button>
+              </div>
             </div>
 
-            {/* Row 2, col 1: Weather */}
-            <div className={edit ? "ring-2 ring-primary/20 rounded-xl" : ""}>
-              <WeatherWidget edit={edit} />
+            {edit && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 border border-border rounded-lg px-3 py-2">
+                <GripVertical className="w-3.5 h-3.5" />
+                Drag to reorder · click <X className="w-3 h-3 inline mx-0.5" /> to remove
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className={`md:col-span-1 ${edit ? "ring-2 ring-primary/20 rounded-xl" : ""}`}>
+                <WeatherWidget edit={edit} />
+              </div>
+              <div className={`md:col-span-1 ${edit ? "ring-2 ring-primary/20 rounded-xl" : ""}`}>
+                <ShoppingWidget edit={edit} />
+              </div>
+              <div className={`md:col-span-1 ${edit ? "ring-2 ring-primary/20 rounded-xl" : ""}`}>
+                <RecentActivityWidget edit={edit} />
+              </div>
             </div>
 
-            {/* Row 2, col 2: Shopping */}
-            <div className={edit ? "ring-2 ring-primary/20 rounded-xl" : ""}>
-              <ShoppingWidget edit={edit} />
-            </div>
-          </div>
-
-          {/* Add widget CTA */}
-          {!edit && (
-            <div
-              className="border-2 border-dashed border-border rounded-xl py-6 flex flex-col items-center justify-center gap-2 hover:border-primary/40 hover:bg-muted/20 cursor-pointer transition-colors group"
-              onClick={() => { setEdit(true); setAddOpen(true); }}
-            >
-              <Plus className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-              <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">Add a widget</span>
-            </div>
-          )}
+            {!edit && (
+              <div
+                className="border-2 border-dashed border-border rounded-xl py-5 flex flex-col items-center justify-center gap-2 hover:border-primary/40 hover:bg-muted/20 cursor-pointer transition-colors group"
+                onClick={() => { setEdit(true); setAddOpen(true); }}
+              >
+                <Plus className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">Add a widget</span>
+              </div>
+            )}
+          </section>
         </main>
 
         {addOpen && <AddWidgetPanel onClose={() => setAddOpen(false)} />}

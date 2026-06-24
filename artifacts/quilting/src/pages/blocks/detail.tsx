@@ -360,7 +360,7 @@ export default function BlockDetail() {
         </div>
       </div>
       <PreviewZoomModal open={zoomOpen} onClose={() => setZoomOpen(false)} title={b.name}>
-        <BlockPreviewSvg cells={cells} gridSize={gridSize} size={500} tileCount={3} fabricUrlMap={numMap} />
+        <BlockPreviewSvg cells={cells} gridSize={gridSize} size={500} tileCount={1} fabricUrlMap={numMap} />
       </PreviewZoomModal>
     </div>
   );

@@ -591,7 +591,7 @@ function BlockCard({
         gridSize={block.gridSize}
         seams={block.seams}
         size={500}
-        tileCount={3}
+        tileCount={1}
         fabricUrlMap={fabricUrlMap}
       />
     </PreviewZoomModal>

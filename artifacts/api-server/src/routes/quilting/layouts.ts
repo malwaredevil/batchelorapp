@@ -202,6 +202,7 @@ async function fetchBlockCellsMap(
     for (const fr of fabRows) fabricColorMap.set(fr.id, fr.dominantColors ?? []);
   }
 
+  const HEX_RE_LOCAL = /#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?/g;
   const m = new Map<number, string[]>();
   for (const r of rows) {
     const effective: string[] = [];
@@ -209,9 +210,13 @@ async function fetchBlockCellsMap(
       let matched = false;
       for (const match of cell.matchAll(FAB_RE)) {
         matched = true;
+        // Fabric dominantColors may be CSS color names OR hex — push as-is.
         effective.push(...(fabricColorMap.get(Number(match[1])) ?? []));
       }
-      if (!matched) effective.push(cell);
+      if (!matched) {
+        // Non-fabric cell: extract hex colour codes (handles "nwse:#xxx:#yyy" etc.)
+        for (const hm of cell.matchAll(HEX_RE_LOCAL)) effective.push(hm[0].toLowerCase());
+      }
     }
     m.set(r.id, effective);
   }
@@ -238,8 +243,12 @@ function extractLayoutColors(
 
   for (const cell of parseCells(row.cells)) {
     if (cell.blockId === null) continue;
-    for (const cellStr of blockCellsMap.get(cell.blockId) ?? []) {
-      addStr(cellStr);
+    for (const colorStr of blockCellsMap.get(cell.blockId) ?? []) {
+      if (!colorStr) continue;
+      // Effective strings may be CSS color names (e.g. "light blue") or hex codes.
+      // Add them directly — HEX_RE would miss named colors.
+      const c = colorStr.toLowerCase();
+      freq.set(c, (freq.get(c) ?? 0) + 1);
     }
   }
 

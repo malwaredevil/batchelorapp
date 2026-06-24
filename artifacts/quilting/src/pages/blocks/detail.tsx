@@ -198,6 +198,8 @@ export default function BlockDetail() {
                       gridSize: b.gridSize as QuiltingCreateBlockInputGridSize,
                       cells: b.cells,
                       seams: b.seams ?? [],
+                      blockSizeInches: b.blockSizeInches ?? undefined,
+                      seamAllowanceInches: b.seamAllowanceInches ?? undefined,
                       categoryNames: b.categories.map((c) => c.name),
                     },
                   })

@@ -61,6 +61,7 @@ export const STATEMENTS: string[] = [
   ) WITH (OIDS=FALSE)`,
   `CREATE INDEX IF NOT EXISTS pottery_sessions_expire_idx
      ON pottery_sessions (expire)`,
+  `ALTER TABLE pottery_sessions ENABLE ROW LEVEL SECURITY`,
   `CREATE TABLE IF NOT EXISTS quilting_sessions (
     sid    VARCHAR   NOT NULL COLLATE "default",
     sess   JSON      NOT NULL,

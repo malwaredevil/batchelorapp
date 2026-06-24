@@ -4,6 +4,7 @@ import {
   useListPottery,
   useListPotteryCategories as useListCategories,
   useBulkReanalyzePottery,
+  useReanalyzePottery,
   getListPotteryQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -20,12 +21,21 @@ import {
   GitCompare,
   Check,
   RefreshCw,
+  MoreVertical,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { QuickEditSheet } from "@/components/quick-edit-sheet";
 import { colorToHex } from "@/lib/colors";
 
@@ -180,6 +190,7 @@ function PieceCard({
   selected,
   onToggleSelect,
   onQuickEdit,
+  onReanalyze,
   onColorFilter,
   activeColor,
 }: {
@@ -188,6 +199,7 @@ function PieceCard({
   selected: boolean;
   onToggleSelect: (id: number) => void;
   onQuickEdit: (item: PotteryItem) => void;
+  onReanalyze: (id: number) => void;
   onColorFilter: (color: string) => void;
   activeColor: string | null;
 }) {
@@ -210,20 +222,41 @@ function PieceCard({
         </button>
       )}
 
-      {/* Quick-edit button */}
+      {/* Card actions menu */}
       {!selecting && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            onQuickEdit(item);
-          }}
-          className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-background/85 text-foreground shadow-sm backdrop-blur opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
-          aria-label="Quick edit"
-          data-testid={`button-quick-edit-${item.id}`}
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </button>
+        <div className="absolute right-2 top-2 z-10 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="grid h-8 w-8 place-items-center rounded-full bg-background/85 text-foreground shadow-sm backdrop-blur"
+                aria-label="Options"
+              >
+                <MoreVertical className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem asChild>
+                <a href={`/piece/${item.id}`}>
+                  <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                  Open
+                </a>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => { e.preventDefault(); onQuickEdit(item); }}
+                data-testid={`button-quick-edit-${item.id}`}
+              >
+                <Pencil className="mr-2 h-3.5 w-3.5" />
+                Quick edit
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => onReanalyze(item.id)}>
+                <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                Refresh AI
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       )}
 
       <Link
@@ -686,6 +719,18 @@ export default function Collection() {
   const { mutateAsync: bulkReanalyze, isPending: isBulkPending } =
     useBulkReanalyzePottery();
 
+  const { mutate: reanalyzeItem } = useReanalyzePottery({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListPotteryQueryKey() });
+      },
+    },
+  });
+
+  function handleReanalyze(id: number) {
+    reanalyzeItem({ id });
+  }
+
   function toggleBulkSelect(id: number) {
     setBulkSelectedIds((prev) => {
       const next = new Set(prev);
@@ -1092,6 +1137,7 @@ export default function Collection() {
                   }
                   onToggleSelect={bulkMode ? toggleBulkSelect : toggleSelect}
                   onQuickEdit={setQuickEditItem}
+                  onReanalyze={handleReanalyze}
                   onColorFilter={(c) =>
                     setFilterColor(filterColor === c ? null : c)
                   }

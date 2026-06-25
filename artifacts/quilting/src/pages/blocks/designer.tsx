@@ -1492,18 +1492,19 @@ export function BlockGrid({
                 <pattern
                   key={id}
                   id={`fab-${id}`}
-                  patternUnits="userSpaceOnUse"
+                  patternUnits="objectBoundingBox"
+                  patternContentUnits="objectBoundingBox"
                   x="0"
                   y="0"
-                  width={CELL_PX * gridW}
-                  height={CELL_PX * gridH}
+                  width="1"
+                  height="1"
                 >
                   <image
                     href={fabricUrlMap[id]}
                     x="0"
                     y="0"
-                    width={CELL_PX * gridW}
-                    height={CELL_PX * gridH}
+                    width="1"
+                    height="1"
                     preserveAspectRatio="xMidYMid slice"
                     style={imageFilter ? { filter: imageFilter } : undefined}
                   />
@@ -1943,18 +1944,19 @@ function TiledPreview({
                 <pattern
                   key={id}
                   id={`fab-${id}`}
-                  patternUnits="userSpaceOnUse"
+                  patternUnits="objectBoundingBox"
+                  patternContentUnits="objectBoundingBox"
                   x="0"
                   y="0"
-                  width={tileW}
-                  height={tileH}
+                  width="1"
+                  height="1"
                 >
                   <image
                     href={fabricUrlMap[id]}
                     x="0"
                     y="0"
-                    width={tileW}
-                    height={tileH}
+                    width="1"
+                    height="1"
                     preserveAspectRatio="xMidYMid slice"
                     style={imageFilter ? { filter: imageFilter } : undefined}
                   />

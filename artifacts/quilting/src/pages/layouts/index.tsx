@@ -359,6 +359,7 @@ function LayoutPreview({
       width={W}
       height={H}
       xmlns="http://www.w3.org/2000/svg"
+      shapeRendering="crispEdges"
       className="bg-white"
     >
       {fabIds.length > 0 && (
@@ -370,15 +371,15 @@ function LayoutPreview({
               patternUnits="userSpaceOnUse"
               x="0"
               y="0"
-              width={W}
-              height={H}
+              width={cellPx}
+              height={cellPx}
             >
               <image
                 href={fabricUrlMap[id]}
                 x="0"
                 y="0"
-                width={W}
-                height={H}
+                width={cellPx}
+                height={cellPx}
                 preserveAspectRatio="xMidYMid slice"
               />
             </pattern>

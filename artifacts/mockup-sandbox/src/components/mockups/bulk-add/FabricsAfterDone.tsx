@@ -117,9 +117,9 @@ export function FabricsAfterDone() {
                   className="relative aspect-square"
                   style={{ backgroundColor: fabric.color + (isProcessing ? "80" : "60") }}
                 >
-                  {/* Spinning badge — top-left, same as maintenance page */}
+                  {/* Spinning badge — top-right, same as bulk-analyze maintenance page */}
                   {isProcessing && (
-                    <span className="absolute left-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
+                    <span className="absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
                       <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                     </span>
                   )}

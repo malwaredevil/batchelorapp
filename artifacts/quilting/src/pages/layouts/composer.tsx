@@ -356,7 +356,6 @@ function BlockMini({
       width={size}
       height={svgH}
       xmlns="http://www.w3.org/2000/svg"
-      shapeRendering="crispEdges"
     >
       {fabIds.length > 0 && (
         <defs>
@@ -367,15 +366,15 @@ function BlockMini({
               patternUnits="userSpaceOnUse"
               x="0"
               y="0"
-              width={cellPx}
-              height={cellPx}
+              width={size}
+              height={svgH}
             >
               <image
                 href={fabricUrlMap[fabId]}
                 x="0"
                 y="0"
-                width={cellPx}
-                height={cellPx}
+                width={size}
+                height={svgH}
                 preserveAspectRatio="xMidYMid slice"
               />
             </pattern>

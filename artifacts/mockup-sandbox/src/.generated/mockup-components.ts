@@ -6,6 +6,7 @@ export const modules: ModuleMap = {
   "./components/mockups/batchelor-landing/WarmStudio.tsx": () => import("../components/mockups/batchelor-landing/WarmStudio.tsx"),
   "./components/mockups/bulk-add/BulkCapture.tsx": () => import("../components/mockups/bulk-add/BulkCapture.tsx"),
   "./components/mockups/bulk-add/EntryPoint.tsx": () => import("../components/mockups/bulk-add/EntryPoint.tsx"),
+  "./components/mockups/bulk-add/FabricsAfterDone.tsx": () => import("../components/mockups/bulk-add/FabricsAfterDone.tsx"),
   "./components/mockups/hub-layout/DashboardGrid.tsx": () => import("../components/mockups/hub-layout/DashboardGrid.tsx"),
   "./components/mockups/hub-layout/FocusCards.tsx": () => import("../components/mockups/hub-layout/FocusCards.tsx"),
   "./components/mockups/hub-layout/HubRefined.tsx": () => import("../components/mockups/hub-layout/HubRefined.tsx"),

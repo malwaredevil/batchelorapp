@@ -7,13 +7,13 @@ export const modules: ModuleMap = {
   "./components/mockups/bulk-add/BulkCapture.tsx": () => import("../components/mockups/bulk-add/BulkCapture.tsx"),
   "./components/mockups/bulk-add/EntryPoint.tsx": () => import("../components/mockups/bulk-add/EntryPoint.tsx"),
   "./components/mockups/bulk-add/FabricsAfterDone.tsx": () => import("../components/mockups/bulk-add/FabricsAfterDone.tsx"),
+  "./components/mockups/quilting-theme/NavVariants.tsx": () => import("../components/mockups/quilting-theme/NavVariants.tsx"),
+  "./components/mockups/quilting-theme/QDesktop.tsx": () => import("../components/mockups/quilting-theme/QDesktop.tsx"),
+  "./components/mockups/quilting-theme/QMobile.tsx": () => import("../components/mockups/quilting-theme/QMobile.tsx"),
   "./components/mockups/hub-layout/DashboardGrid.tsx": () => import("../components/mockups/hub-layout/DashboardGrid.tsx"),
   "./components/mockups/hub-layout/FocusCards.tsx": () => import("../components/mockups/hub-layout/FocusCards.tsx"),
   "./components/mockups/hub-layout/HubRefined.tsx": () => import("../components/mockups/hub-layout/HubRefined.tsx"),
   "./components/mockups/hub-layout/MagazineLayout.tsx": () => import("../components/mockups/hub-layout/MagazineLayout.tsx"),
   "./components/mockups/hub-layout/WidgetLibrary.tsx": () => import("../components/mockups/hub-layout/WidgetLibrary.tsx"),
-  "./components/mockups/hub-layout/WidgetSettings.tsx": () => import("../components/mockups/hub-layout/WidgetSettings.tsx"),
-  "./components/mockups/quilting-theme/NavVariants.tsx": () => import("../components/mockups/quilting-theme/NavVariants.tsx"),
-  "./components/mockups/quilting-theme/QDesktop.tsx": () => import("../components/mockups/quilting-theme/QDesktop.tsx"),
-  "./components/mockups/quilting-theme/QMobile.tsx": () => import("../components/mockups/quilting-theme/QMobile.tsx")
+  "./components/mockups/hub-layout/WidgetSettings.tsx": () => import("../components/mockups/hub-layout/WidgetSettings.tsx")
 };

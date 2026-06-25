@@ -48,7 +48,6 @@ export function BlockPreviewSvg({
       width={size}
       height={svgH}
       xmlns="http://www.w3.org/2000/svg"
-      shapeRendering="crispEdges"
     >
       {fabIds.length > 0 && (
         <defs>
@@ -59,15 +58,15 @@ export function BlockPreviewSvg({
               patternUnits="userSpaceOnUse"
               x="0"
               y="0"
-              width={cellPx}
-              height={cellPx}
+              width={size}
+              height={svgH}
             >
               <image
                 href={fabricUrlMap[id]}
                 x="0"
                 y="0"
-                width={cellPx}
-                height={cellPx}
+                width={size}
+                height={svgH}
                 preserveAspectRatio="xMidYMid slice"
               />
             </pattern>

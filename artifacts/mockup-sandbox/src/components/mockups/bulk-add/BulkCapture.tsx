@@ -54,7 +54,7 @@ export function BulkCapture() {
             <Camera className="h-7 w-7 text-primary" />
           </div>
           <p className="text-sm font-semibold text-foreground">Tap to capture</p>
-          <p className="mt-1 text-xs text-muted-foreground">Point at the fabric and shoot</p>
+          <p className="mt-1 text-xs text-muted-foreground">Tap again after each shot to add more</p>
 
           {/* Count badge */}
           <div className="absolute right-3 top-3 rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-bold text-primary-foreground">
@@ -63,12 +63,9 @@ export function BulkCapture() {
         </div>
       </div>
 
-      {/* ── Action buttons ── */}
-      <div className="mx-4 mb-5 flex gap-3 shrink-0">
-        <button className="flex-1 rounded-xl border border-border/70 bg-card py-3 text-sm font-medium text-foreground shadow-sm">
-          Add Another
-        </button>
-        <button className="flex-1 rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground shadow-sm">
+      {/* ── Action button ── */}
+      <div className="mx-4 mb-5 shrink-0">
+        <button className="w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground shadow-sm">
           Done
         </button>
       </div>

@@ -398,7 +398,7 @@ export default function Shopping() {
 
       {/* Budget summary */}
       {stats && stats.totalItems > 0 && (
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mb-6 hidden sm:grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
             {
               label: "Est. remaining",

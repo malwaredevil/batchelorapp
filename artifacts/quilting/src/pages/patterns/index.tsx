@@ -474,7 +474,7 @@ export default function Patterns() {
   return (
     <div>
       {stats && (
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="mb-6 hidden sm:grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {[
             { label: "Fabrics", value: stats.totalFabrics, sub: "in your stash", href: "/fabrics" },
             { label: "Patterns", value: stats.totalPatterns, sub: "saved", href: "/patterns" },

@@ -391,7 +391,7 @@ function StatBar({
   const isFiltered = filteredItems.length !== totalCount;
 
   return (
-    <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div className="mb-4 hidden sm:grid grid-cols-2 gap-3 sm:grid-cols-4">
       <div className="rounded-xl border border-card-border bg-card p-4">
         <p className="text-2xl font-bold" data-testid="text-total-items">
           {totalQuantity}
@@ -873,7 +873,7 @@ export default function Collection() {
 
       {isLoading ? (
         <>
-          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="mb-4 hidden sm:grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Skeleton className="h-[88px] rounded-xl" />
             <Skeleton className="h-[88px] rounded-xl" />
             <Skeleton className="h-[88px] rounded-xl" />

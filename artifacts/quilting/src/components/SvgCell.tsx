@@ -28,58 +28,93 @@ export function SvgCell({
     return c || "#FFFFFF";
   };
 
+  // 0.5 px bleed: expand every filled shape by half a pixel on each side so
+  // adjacent cells overlap rather than leaving a sub-pixel gap that the browser
+  // anti-aliases against the white background (which shows as a visible seam).
+  const B = 0.5;
+
   switch (p.kind) {
     case "solid":
-      return <rect x={x} y={y} width={w} height={h} fill={rf(p.color)} />;
+      return (
+        <rect
+          x={x - B}
+          y={y - B}
+          width={w + B * 2}
+          height={h + B * 2}
+          fill={rf(p.color)}
+        />
+      );
 
     case "triangle":
       if (p.type === "nwse")
         return (
           <g>
-            <polygon points={`${x},${y} ${x + w},${y} ${x + w},${y + h}`} fill={rf(p.a)} />
-            <polygon points={`${x},${y} ${x},${y + h} ${x + w},${y + h}`} fill={rf(p.b)} />
+            {/* b fills the whole cell as background with bleed */}
+            <rect x={x - B} y={y - B} width={w + B * 2} height={h + B * 2} fill={rf(p.b)} />
+            {/* a = top-right triangle, expanded to corners so it covers the bleed zone */}
+            <polygon
+              points={`${x - B},${y - B} ${x + w + B},${y - B} ${x + w + B},${y + h + B}`}
+              fill={rf(p.a)}
+            />
           </g>
         );
       return (
         <g>
-          <polygon points={`${x},${y} ${x + w},${y} ${x},${y + h}`} fill={rf(p.a)} />
-          <polygon points={`${x + w},${y} ${x},${y + h} ${x + w},${y + h}`} fill={rf(p.b)} />
+          {/* b fills the whole cell as background with bleed */}
+          <rect x={x - B} y={y - B} width={w + B * 2} height={h + B * 2} fill={rf(p.b)} />
+          {/* a = top-left triangle */}
+          <polygon
+            points={`${x - B},${y - B} ${x + w + B},${y - B} ${x - B},${y + h + B}`}
+            fill={rf(p.a)}
+          />
         </g>
       );
 
     case "quad":
       return (
         <g>
-          <polygon points={`${x},${y} ${x + w},${y} ${cx},${cy}`} fill={rf(p.top)} />
-          <polygon points={`${x + w},${y} ${x + w},${y + h} ${cx},${cy}`} fill={rf(p.right)} />
-          <polygon points={`${x + w},${y + h} ${x},${y + h} ${cx},${cy}`} fill={rf(p.bottom)} />
-          <polygon points={`${x},${y + h} ${x},${y} ${cx},${cy}`} fill={rf(p.left)} />
+          <polygon
+            points={`${x - B},${y - B} ${x + w + B},${y - B} ${cx},${cy}`}
+            fill={rf(p.top)}
+          />
+          <polygon
+            points={`${x + w + B},${y - B} ${x + w + B},${y + h + B} ${cx},${cy}`}
+            fill={rf(p.right)}
+          />
+          <polygon
+            points={`${x + w + B},${y + h + B} ${x - B},${y + h + B} ${cx},${cy}`}
+            fill={rf(p.bottom)}
+          />
+          <polygon
+            points={`${x - B},${y + h + B} ${x - B},${y - B} ${cx},${cy}`}
+            fill={rf(p.left)}
+          />
         </g>
       );
 
     case "hsplit":
       return (
         <g>
-          <rect x={x} y={y} width={w} height={h / 2} fill={rf(p.top)} />
-          <rect x={x} y={y + h / 2} width={w} height={h / 2} fill={rf(p.bottom)} />
+          <rect x={x - B} y={y - B} width={w + B * 2} height={h / 2 + B} fill={rf(p.top)} />
+          <rect x={x - B} y={y + h / 2 - B} width={w + B * 2} height={h / 2 + B} fill={rf(p.bottom)} />
         </g>
       );
 
     case "vsplit":
       return (
         <g>
-          <rect x={x} y={y} width={w / 2} height={h} fill={rf(p.left)} />
-          <rect x={x + w / 2} y={y} width={w / 2} height={h} fill={rf(p.right)} />
+          <rect x={x - B} y={y - B} width={w / 2 + B} height={h + B * 2} fill={rf(p.left)} />
+          <rect x={x + w / 2 - B} y={y - B} width={w / 2 + B} height={h + B * 2} fill={rf(p.right)} />
         </g>
       );
 
     case "xsplit":
       return (
         <g>
-          <rect x={x} y={y} width={w / 2} height={h / 2} fill={rf(p.tl)} />
-          <rect x={x + w / 2} y={y} width={w / 2} height={h / 2} fill={rf(p.tr)} />
-          <rect x={x} y={y + h / 2} width={w / 2} height={h / 2} fill={rf(p.bl)} />
-          <rect x={x + w / 2} y={y + h / 2} width={w / 2} height={h / 2} fill={rf(p.br)} />
+          <rect x={x - B} y={y - B} width={w / 2 + B} height={h / 2 + B} fill={rf(p.tl)} />
+          <rect x={x + w / 2 - B} y={y - B} width={w / 2 + B} height={h / 2 + B} fill={rf(p.tr)} />
+          <rect x={x - B} y={y + h / 2 - B} width={w / 2 + B} height={h / 2 + B} fill={rf(p.bl)} />
+          <rect x={x + w / 2 - B} y={y + h / 2 - B} width={w / 2 + B} height={h / 2 + B} fill={rf(p.br)} />
         </g>
       );
 

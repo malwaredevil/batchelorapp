@@ -457,7 +457,7 @@ export default function Quilts() {
             {sorted
               ? hasFilter
                 ? `${sorted.length} of ${quilts!.length} quilt${quilts!.length !== 1 ? "s" : ""}`
-                : `${sorted.length} quilt${sorted.length !== 1 ? "s" : ""} in your collection`
+                : `${sorted.length} quilt${sorted.length !== 1 ? "s" : ""}`
               : "Your finished quilts"}
           </p>
         </div>
@@ -473,8 +473,8 @@ export default function Quilts() {
           )}
           <Button asChild>
             <Link href="/quilts/add">
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Add quilt
+              <PlusCircle className="mr-0 sm:mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">Add quilt</span>
             </Link>
           </Button>
         </div>

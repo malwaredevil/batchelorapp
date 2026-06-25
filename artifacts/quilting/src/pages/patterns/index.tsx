@@ -502,7 +502,7 @@ export default function Patterns() {
             {sorted
               ? hasFilter
                 ? `${sorted.length} of ${patterns!.length} pattern${patterns!.length !== 1 ? "s" : ""}`
-                : `${sorted.length} pattern${sorted.length !== 1 ? "s" : ""} in your collection`
+                : `${sorted.length} pattern${sorted.length !== 1 ? "s" : ""}`
               : "Your pattern library"}
           </p>
         </div>
@@ -518,8 +518,8 @@ export default function Patterns() {
           )}
           <Button asChild>
             <Link href="/patterns/add">
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Add pattern
+              <PlusCircle className="mr-0 sm:mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">Add pattern</span>
             </Link>
           </Button>
         </div>

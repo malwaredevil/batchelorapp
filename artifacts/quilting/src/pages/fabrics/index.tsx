@@ -482,7 +482,7 @@ export default function Fabrics() {
             {sorted
               ? hasFilter
                 ? `${sorted.length} of ${fabrics!.length} fabric${fabrics!.length !== 1 ? "s" : ""}`
-                : `${sorted.length} fabric${sorted.length !== 1 ? "s" : ""} in your collection`
+                : `${sorted.length} fabric${sorted.length !== 1 ? "s" : ""}`
               : "Your fabric collection"}
           </p>
         </div>
@@ -498,14 +498,14 @@ export default function Fabrics() {
           )}
           <Button variant="outline" size="sm" asChild>
             <Link href="/fabrics/bulk-add">
-              <Camera className="mr-2 h-4 w-4" />
-              Bulk Add
+              <Camera className="mr-0 sm:mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">Bulk Add</span>
             </Link>
           </Button>
           <Button asChild>
             <Link href="/fabrics/add">
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Add fabric
+              <PlusCircle className="mr-0 sm:mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">Add fabric</span>
             </Link>
           </Button>
         </div>

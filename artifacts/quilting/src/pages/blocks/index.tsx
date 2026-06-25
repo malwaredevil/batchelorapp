@@ -921,8 +921,8 @@ export default function Blocks() {
             className="h-9"
             onClick={() => importFileRef.current?.click()}
           >
-            <Upload className="mr-2 h-4 w-4" />
-            Import
+            <Upload className="mr-0 sm:mr-2 h-4 w-4" />
+            <span className="hidden sm:inline">Import</span>
           </Button>
           <input
             ref={importFileRef}
@@ -933,8 +933,8 @@ export default function Blocks() {
           />
           <Button asChild>
             <Link href="/blocks/new">
-              <PlusCircle className="mr-2 h-4 w-4" />
-              New design
+              <PlusCircle className="mr-0 sm:mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">New design</span>
             </Link>
           </Button>
         </div>

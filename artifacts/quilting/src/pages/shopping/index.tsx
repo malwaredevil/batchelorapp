@@ -391,8 +391,8 @@ export default function Shopping() {
           </p>
         </div>
         <Button onClick={() => setShowAdd(true)}>
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Add item
+          <PlusCircle className="mr-0 sm:mr-2 h-4 w-4" />
+          <span className="hidden sm:inline">Add item</span>
         </Button>
       </div>
 

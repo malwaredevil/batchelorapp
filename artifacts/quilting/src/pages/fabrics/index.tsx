@@ -17,7 +17,9 @@ import {
   Download,
   ZoomIn,
   Tag,
+  Camera,
 } from "lucide-react";
+import { useBulkAdd } from "@/contexts/bulk-add-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -286,6 +288,8 @@ export default function Fabrics() {
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const queryClient = useQueryClient();
+  const { pendingItems } = useBulkAdd();
+  const uploadingItems = pendingItems.filter((i) => i.status === "uploading");
   const { data: fabrics, isLoading, isError } = useListFabrics();
   const { data: stats } = useGetStats();
   const [categoryEditItem, setCategoryEditItem] = useState<FabricSummary | null>(null);
@@ -492,6 +496,12 @@ export default function Fabrics() {
               {isBulkMode ? "Done" : "Select"}
             </Button>
           )}
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/fabrics/bulk-add">
+              <Camera className="mr-2 h-4 w-4" />
+              Bulk Add
+            </Link>
+          </Button>
           <Button asChild>
             <Link href="/fabrics/add">
               <PlusCircle className="mr-2 h-4 w-4" />
@@ -500,6 +510,15 @@ export default function Fabrics() {
           </Button>
         </div>
       </div>
+
+      {uploadingItems.length > 0 && (
+        <div className="mb-4 flex items-center gap-2.5 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5">
+          <RefreshCw className="h-4 w-4 shrink-0 animate-spin text-primary" />
+          <p className="text-sm font-medium text-primary">
+            Adding {uploadingItems.length} fabric{uploadingItems.length !== 1 ? "s" : ""} — AI cataloguing in progress…
+          </p>
+        </div>
+      )}
 
       {isBulkMode && (
         <div className="mb-4 flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5">
@@ -723,9 +742,30 @@ export default function Fabrics() {
         </div>
       )}
 
-      {sorted && sorted.length > 0 && (
+      {(uploadingItems.length > 0 || (sorted && sorted.length > 0)) && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-          {sorted.map((fabric) => (
+          {uploadingItems.map((item) => (
+            <div
+              key={item.clientId}
+              className="relative animate-pulse overflow-hidden rounded-xl border border-primary/40 bg-card"
+            >
+              <div className="aspect-square overflow-hidden bg-muted">
+                <img
+                  src={item.preview}
+                  alt=""
+                  className="h-full w-full object-cover opacity-60"
+                />
+              </div>
+              <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+              </span>
+              <div className="p-3">
+                <div className="mb-1.5 h-3 w-3/4 rounded-full bg-muted" />
+                <div className="h-2.5 w-1/2 rounded-full bg-muted/60" />
+              </div>
+            </div>
+          ))}
+          {sorted && sorted.map((fabric) => (
             <FabricCard
               key={fabric.id}
               fabric={fabric as FabricSummary}

@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import { NavGuardProvider } from "@/lib/nav-guard";
 import { ThemeProvider } from "@/hooks/use-theme";
 import { AppShell } from "@/components/app-shell";
+import { BulkAddProvider } from "@/contexts/bulk-add-context";
 
 // Register all features before the shell renders
 import "@/features/index";
@@ -16,6 +17,7 @@ import ForgotPassword from "@/pages/forgot-password";
 import ResetPassword from "@/pages/reset-password";
 import Fabrics from "@/pages/fabrics";
 import AddFabric from "@/pages/fabrics/add";
+import BulkAddFabric from "@/pages/fabrics/bulk-add";
 import FabricDetail from "@/pages/fabrics/detail";
 import Patterns from "@/pages/patterns";
 import AddPattern from "@/pages/patterns/add";
@@ -82,6 +84,7 @@ function Routes() {
         {/* Fabrics */}
         <Route path="/fabrics" component={Fabrics} />
         <Route path="/fabrics/add" component={AddFabric} />
+        <Route path="/fabrics/bulk-add" component={BulkAddFabric} />
         <Route path="/fabrics/:id" component={FabricDetail} />
         {/* Patterns */}
         <Route path="/patterns" component={Patterns} />
@@ -124,14 +127,16 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <TooltipProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <NavGuardProvider>
-              <AuthProvider>
-                <Routes />
-              </AuthProvider>
-            </NavGuardProvider>
-          </WouterRouter>
-          <Toaster />
+          <BulkAddProvider>
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <NavGuardProvider>
+                <AuthProvider>
+                  <Routes />
+                </AuthProvider>
+              </NavGuardProvider>
+            </WouterRouter>
+            <Toaster />
+          </BulkAddProvider>
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>

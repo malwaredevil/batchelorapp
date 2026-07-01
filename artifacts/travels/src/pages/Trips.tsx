@@ -208,7 +208,13 @@ export default function Trips() {
 
   const grouped = ALL_STATUSES.reduce<Record<TripStatus, typeof trips>>(
     (acc, s) => {
-      acc[s] = filtered.filter((t) => t.status === s);
+      const bucket = filtered.filter((t) => t.status === s);
+      if (s === "completed") {
+        bucket.sort((a, b) =>
+          (b.startDate ?? "").localeCompare(a.startDate ?? ""),
+        );
+      }
+      acc[s] = bucket;
       return acc;
     },
     { active: [], booked: [], planning: [], wishlist: [], completed: [] },

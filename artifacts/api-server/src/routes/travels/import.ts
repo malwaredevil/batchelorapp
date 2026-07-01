@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod/v4";
 import { db, travelsTrips, travelsWishlist } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
@@ -52,13 +52,13 @@ router.post("/import", async (req, res) => {
   const results = { tripsCreated: 0, tripsSkipped: 0, wishlistCreated: 0, wishlistSkipped: 0 };
 
   for (const trip of body.trips) {
-    // Deduplicate across all users by destination + startDate
+    // Deduplicate by destination + startDate (both must match when startDate present)
     const [existing] = await db
       .select({ id: travelsTrips.id })
       .from(travelsTrips)
       .where(
         trip.startDate
-          ? eq(travelsTrips.startDate, trip.startDate)
+          ? and(eq(travelsTrips.destination, trip.destination), eq(travelsTrips.startDate, trip.startDate))
           : eq(travelsTrips.destination, trip.destination),
       );
     if (existing) { results.tripsSkipped++; continue; }

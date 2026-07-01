@@ -1,8 +1,9 @@
 import { Router, type IRouter } from "express";
 import { and, eq, asc } from "drizzle-orm";
 import { z } from "zod/v4";
-import { db, travelsTrips, travelsTripDocuments } from "@workspace/db";
+import { db, travelsTrips, travelsTripDocuments, travelsTripPhotos, travelsReminders } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
+import { deleteTripPhoto } from "../../lib/travels/storage";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -205,9 +206,18 @@ router.delete("/trips/:id", async (req, res) => {
     return;
   }
 
-  await db
-    .delete(travelsTrips)
-    .where(and(eq(travelsTrips.id, id), eq(travelsTrips.userId, userId)));
+  // Clean up photos from Supabase Storage before deleting DB rows
+  const photos = await db
+    .select({ storagePath: travelsTripPhotos.storagePath })
+    .from(travelsTripPhotos)
+    .where(and(eq(travelsTripPhotos.tripId, id), eq(travelsTripPhotos.userId, userId)));
+
+  await Promise.allSettled(photos.map((p) => deleteTripPhoto(p.storagePath)));
+
+  // Delete child rows first, then the trip
+  await db.delete(travelsTripPhotos).where(and(eq(travelsTripPhotos.tripId, id), eq(travelsTripPhotos.userId, userId)));
+  await db.delete(travelsReminders).where(and(eq(travelsReminders.tripId, id), eq(travelsReminders.userId, userId)));
+  await db.delete(travelsTrips).where(and(eq(travelsTrips.id, id), eq(travelsTrips.userId, userId)));
 
   res.status(204).send();
 });

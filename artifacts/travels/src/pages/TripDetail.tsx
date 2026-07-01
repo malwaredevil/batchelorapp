@@ -1509,7 +1509,7 @@ export default function TripDetail({ id }: { id: number }) {
             <DialogTitle>Delete trip?</DialogTitle>
           </DialogHeader>
           <p className="text-muted-foreground text-sm">
-            This will permanently delete "{trip.title}" and all its documents. This cannot be undone.
+            This will permanently delete "{trip.title}" and all its documents, photos, and reminders. This cannot be undone.
           </p>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setShowDeleteConfirm(false)}>

@@ -1,102 +1,134 @@
+import { type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { Map, Plane, Compass, LogOut } from "lucide-react";
-import { useAuth } from "@/lib/auth";
-import { useLogout } from "@workspace/api-client-react";
+import { Map, Plane, Compass, LogOut, ChevronDown } from "lucide-react";
+import { AppSwitcher } from "@/components/AppSwitcher";
+import { useLogout, getGetCurrentUserQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { queryClient } from "@/lib/query-client";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/lib/auth";
 
-export function Layout({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
+const NAV_ITEMS = [
+  { href: "/", label: "Journal", icon: Map },
+  { href: "/trips", label: "Trips", icon: Plane },
+  { href: "/explore", label: "Explore", icon: Compass },
+];
+
+function isActive(current: string, href: string) {
+  if (href === "/") return current === "/";
+  return current === href || current.startsWith(href + "/");
+}
+
+export function Layout({ children }: { children: ReactNode }) {
+  const [location, navigate] = useLocation();
   const { user } = useAuth();
-  const logout = useLogout();
-
-  const handleLogout = () => {
-    logout.mutate(undefined, {
+  const queryClient = useQueryClient();
+  const logout = useLogout({
+    mutation: {
+      onMutate: async () => {
+        await queryClient.cancelQueries();
+      },
       onSuccess: () => {
-        queryClient.clear();
-        window.location.href = "/login";
-      }
-    });
-  };
+        queryClient.setQueryData(getGetCurrentUserQueryKey(), null);
+        navigate("/login");
+      },
+      onError: () => toast.error("Could not sign out. Please try again."),
+    },
+  });
 
   if (!user) {
     return <>{children}</>;
   }
 
-  const navItems = [
-    { href: "/", label: "Journal", icon: Map },
-    { href: "/trips", label: "Trips", icon: Plane },
-    { href: "/explore", label: "Explore", icon: Compass },
-  ];
-
   return (
-    <div className="min-h-[100dvh] flex flex-col md:flex-row bg-background">
-      {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 border-r border-border bg-card p-6 gap-8">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center font-serif text-xl italic">T</div>
-          <span className="font-serif text-xl tracking-tight text-foreground font-medium">Travels</span>
-        </div>
-        
-        <nav className="flex-1 flex flex-col gap-2">
-          {navItems.map((item) => {
-            const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
-            return (
-              <Link 
-                key={item.href} 
-                href={item.href}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                  isActive 
-                    ? "bg-secondary text-secondary-foreground font-medium" 
-                    : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
-                }`}
-              >
-                <item.icon className="w-5 h-5" />
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
+    <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-40 border-b border-card-border bg-background/85 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+          <AppSwitcher />
 
-        <div className="mt-auto pt-6 border-t border-border">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium truncate px-2">{user.displayName || user.email}</span>
-            <Button variant="ghost" size="icon" onClick={handleLogout} className="text-muted-foreground hover:text-destructive">
-              <LogOut className="w-4 h-4" />
-            </Button>
+          <div className="flex items-center gap-1">
+            <nav className="mr-1 hidden items-center gap-1 md:flex">
+              {NAV_ITEMS.map((item) => {
+                const active = isActive(location, item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-medium transition-colors",
+                      active
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                    )}
+                  >
+                    <item.icon className="h-4 w-4" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-muted-foreground"
+                >
+                  <span className="hidden sm:inline text-sm font-medium">
+                    {user.displayName || user.email}
+                  </span>
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive cursor-pointer"
+                  onSelect={() => logout.mutate(undefined)}
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
-      </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-y-auto pb-20 md:pb-0">
-        <div className="flex-1 w-full max-w-5xl mx-auto p-4 md:p-8">
-          {children}
-        </div>
+        {/* Mobile bottom nav */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-card-border bg-background/90 backdrop-blur">
+          <div className="flex items-center justify-around py-2">
+            {NAV_ITEMS.map((item) => {
+              const active = isActive(location, item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "flex flex-col items-center gap-1 px-4 py-1 rounded-xl transition-colors",
+                    active
+                      ? "text-primary"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <item.icon className="h-5 w-5" />
+                  <span className="text-[10px] font-medium">{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+      </header>
+
+      <main className="mx-auto w-full max-w-5xl px-4 pb-24 pt-6 md:pb-8">
+        {children}
       </main>
-
-      {/* Mobile Bottom Nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 border-t border-border bg-card/80 backdrop-blur-md pb-safe">
-        <div className="flex items-center justify-around p-2">
-          {navItems.map((item) => {
-            const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
-            return (
-              <Link 
-                key={item.href} 
-                href={item.href}
-                className={`flex flex-col items-center gap-1 p-2 min-w-[4.5rem] rounded-xl transition-colors ${
-                  isActive 
-                    ? "text-primary" 
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <item.icon className={`w-6 h-6 ${isActive ? "fill-primary/20" : ""}`} />
-                <span className="text-[10px] font-medium">{item.label}</span>
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
     </div>
   );
 }

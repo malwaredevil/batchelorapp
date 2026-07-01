@@ -8,12 +8,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  useGetStats,
-  useGetCollectionStats,
   useGetTravelsStats,
+  useGetCollectionStats,
+  useGetStats,
 } from "@workspace/api-client-react";
 
-function TravelsLogo({ className }: { className?: string }) {
+function PotteryLogo({ className }: { className?: string }) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -21,23 +21,31 @@ function TravelsLogo({ className }: { className?: string }) {
       className={className}
       aria-hidden="true"
     >
-      <rect width="100" height="100" rx="22" fill="#1B4E6B" />
-      <polygon
-        points="18,50 82,22 56,78"
+      <rect width="100" height="100" rx="22" fill="#1B3A5C" />
+      <ellipse
+        cx="50"
+        cy="41"
+        rx="30"
+        ry="8"
         stroke="#F0E8D8"
         strokeWidth="3.5"
         fill="none"
-        strokeLinejoin="round"
+      />
+      <path
+        d="M20 41 Q20 72 50 74 Q80 72 80 41"
+        stroke="#F0E8D8"
+        strokeWidth="3.5"
+        fill="none"
+        strokeLinecap="round"
       />
       <line
-        x1="18"
-        y1="50"
-        x2="56"
-        y2="78"
+        x1="38"
+        y1="74"
+        x2="62"
+        y2="74"
         stroke="#F0E8D8"
-        strokeWidth="2.5"
+        strokeWidth="3.5"
         strokeLinecap="round"
-        opacity="0.8"
       />
     </svg>
   );
@@ -51,72 +59,26 @@ function QuiltingLogo({ className }: { className?: string }) {
       className={className}
       aria-hidden="true"
     >
-      <rect width="100" height="100" rx="22" fill="#1B3A5C" />
-      <g transform="rotate(30, 74, 50)">
-        <rect x="71.5" y="16" width="5" height="68" rx="2.5" fill="#D8D8D8" />
-        <ellipse
-          cx="74"
-          cy="22"
-          rx="2"
-          ry="3.5"
-          fill="none"
-          stroke="#1B3A5C"
-          strokeWidth="1.5"
-        />
-        <polygon points="74,84 70,76 78,76" fill="#A8A8A8" />
-      </g>
-      <path
-        d="M80 28 Q70 20 52 28"
-        stroke="#F0E8D8"
-        strokeWidth="1.8"
-        fill="none"
-        strokeLinecap="round"
-      />
-      <rect x="22" y="22" width="48" height="12" rx="5" fill="#3D2010" />
-      <rect x="30" y="34" width="32" height="32" fill="#C17A3E" />
-      <line
-        x1="30"
-        y1="41"
-        x2="62"
-        y2="41"
-        stroke="#F0E8D8"
-        strokeWidth="2.2"
-        opacity="0.75"
-      />
-      <line
-        x1="30"
-        y1="49"
-        x2="62"
-        y2="49"
-        stroke="#F0E8D8"
-        strokeWidth="2.2"
-        opacity="0.75"
-      />
-      <line
-        x1="30"
-        y1="57"
-        x2="62"
-        y2="57"
-        stroke="#F0E8D8"
-        strokeWidth="2.2"
-        opacity="0.75"
-      />
-      <rect x="22" y="66" width="48" height="12" rx="5" fill="#3D2010" />
+      <rect width="100" height="100" rx="22" fill="#2D5A27" />
+      <rect x="14" y="14" width="30" height="30" rx="4" fill="#F0E8D8" fillOpacity="0.9" />
+      <rect x="56" y="14" width="30" height="30" rx="4" fill="#F0E8D8" fillOpacity="0.55" />
+      <rect x="14" y="56" width="30" height="30" rx="4" fill="#F0E8D8" fillOpacity="0.55" />
+      <rect x="56" y="56" width="30" height="30" rx="4" fill="#F0E8D8" fillOpacity="0.9" />
     </svg>
   );
 }
 
 export function AppSwitcher() {
-  const { data: quiltingStats } = useGetStats();
-  const { data: potteryStats } = useGetCollectionStats();
   const { data: travelsStats } = useGetTravelsStats();
+  const { data: potteryStats } = useGetCollectionStats();
+  const { data: quiltingStats } = useGetStats();
 
+  const tripCount = travelsStats?.totalTrips;
   const potteryCount = potteryStats?.totalItems;
   const fabricCount = quiltingStats?.totalFabrics;
-  const tripCount = travelsStats?.totalTrips;
 
   const pillSubtitle =
-    potteryCount != null ? `${potteryCount} pieces` : "Pottery Studio";
+    tripCount != null ? `${tripCount} trips` : "Travel Journal";
 
   return (
     <DropdownMenu>
@@ -126,8 +88,8 @@ export function AppSwitcher() {
           data-testid="app-switcher"
         >
           <AppLogo className="h-7 w-7 shrink-0" />
-          <div className="text-left leading-tight">
-            <p className="text-sm font-bold leading-none">Batchelor Pottery</p>
+          <div className="text-left leading-tight hidden sm:block">
+            <p className="text-sm font-bold leading-none">Batchelor Travels</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">
               {pillSubtitle}
             </p>
@@ -157,21 +119,20 @@ export function AppSwitcher() {
         <DropdownMenuSeparator />
 
         <DropdownMenuItem
-          className="flex items-center gap-3 px-2 py-2.5"
-          onSelect={() => {}}
+          className="flex items-center gap-3 px-2 py-2.5 cursor-pointer"
+          onSelect={() => {
+            window.location.href = "/pottery/";
+          }}
         >
-          <AppLogo className="h-8 w-8 shrink-0" />
+          <PotteryLogo className="h-8 w-8 shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold leading-none">
               Batchelor Pottery
             </p>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              {potteryCount != null
-                ? `${potteryCount} pieces`
-                : "Pottery Studio"}
+              {potteryCount != null ? `${potteryCount} pieces` : "Pottery Studio"}
             </p>
           </div>
-          <Check className="h-4 w-4 text-primary shrink-0" />
         </DropdownMenuItem>
 
         <DropdownMenuItem
@@ -186,20 +147,16 @@ export function AppSwitcher() {
               Ashley's Quilting
             </p>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              {fabricCount != null
-                ? `${fabricCount} fabrics`
-                : "Quilting Studio"}
+              {fabricCount != null ? `${fabricCount} fabrics` : "Quilting Studio"}
             </p>
           </div>
         </DropdownMenuItem>
 
         <DropdownMenuItem
-          className="flex items-center gap-3 px-2 py-2.5 cursor-pointer"
-          onSelect={() => {
-            window.location.href = "/travels/";
-          }}
+          className="flex items-center gap-3 px-2 py-2.5"
+          onSelect={() => {}}
         >
-          <TravelsLogo className="h-8 w-8 shrink-0" />
+          <AppLogo className="h-8 w-8 shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold leading-none">
               Batchelor Travels
@@ -208,6 +165,7 @@ export function AppSwitcher() {
               {tripCount != null ? `${tripCount} trips` : "Travel Journal"}
             </p>
           </div>
+          <Check className="h-4 w-4 text-primary shrink-0" />
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

@@ -92,6 +92,16 @@ export const APPS: AppEntry[] = [
     description:
       "Manage your fabric stash, organize patterns, plan layouts, and track finished projects.",
   },
+  {
+    id: "travels",
+    name: "Travels",
+    href: `${base}travels/`,
+    image: `${base}images/travels-collection.svg`,
+    updated: "Plan your next trip",
+    stats: [],
+    description:
+      "Plan trips, build AI itineraries, explore destinations, and keep a travel journal.",
+  },
 ];
 
 /* ── Widget catalogue ──────────────────────────────────────────────────────── *

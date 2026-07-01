@@ -53,6 +53,7 @@ import {
   useGetCollectionStats,
   useListPotteryCategories,
   useGetStats,
+  useGetTravelsStats,
 } from "@workspace/api-client-react";
 
 const base = import.meta.env.BASE_URL;
@@ -81,6 +82,12 @@ const QUILTING_QUICK_LINKS = [
   { label: "Fabrics", icon: Shirt, href: `${base}quilting/fabrics` },
   { label: "Blocks", icon: Scissors, href: `${base}quilting/blocks` },
   { label: "Layouts", icon: Layers, href: `${base}quilting/layouts` },
+];
+
+const TRAVELS_QUICK_LINKS = [
+  { label: "Journal", icon: Activity, href: `${base}travels/` },
+  { label: "Trips", icon: Layers, href: `${base}travels/trips` },
+  { label: "Explore", icon: Rss, href: `${base}travels/explore` },
 ];
 
 const CATEGORY_LABELS: { id: "all" | WidgetCategory; label: string }[] = [
@@ -404,11 +411,13 @@ export function AppLauncher() {
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [potteryExpanded, setPotteryExpanded] = useState(false);
   const [quiltingExpanded, setQuiltingExpanded] = useState(false);
+  const [travelsExpanded, setTravelsExpanded] = useState(false);
 
   // Live stats
   const { data: potteryStatsData } = useGetCollectionStats();
   const { data: potteryCategoriesData } = useListPotteryCategories();
   const { data: quiltingStatsData } = useGetStats();
+  const { data: travelsStatsData } = useGetTravelsStats();
 
   function liveStats(appId: string): { value: string; label: string }[] {
     if (appId === "pottery") {
@@ -423,6 +432,13 @@ export function AppLauncher() {
         { value: quiltingStatsData?.totalFabrics != null ? String(quiltingStatsData.totalFabrics) : "—", label: "Fabrics" },
         { value: quiltingStatsData?.totalBlocks != null ? String(quiltingStatsData.totalBlocks) : "—", label: "Blocks" },
         { value: quiltingStatsData?.totalLayouts != null ? String(quiltingStatsData.totalLayouts) : "—", label: "Layouts" },
+      ];
+    }
+    if (appId === "travels") {
+      return [
+        { value: travelsStatsData?.totalTrips != null ? String(travelsStatsData.totalTrips) : "—", label: "Trips" },
+        { value: travelsStatsData?.completedTrips != null ? String(travelsStatsData.completedTrips) : "—", label: "Done" },
+        { value: travelsStatsData?.upcomingTrips != null ? String(travelsStatsData.upcomingTrips) : "—", label: "Upcoming" },
       ];
     }
     const app = APPS.find((a) => a.id === appId);
@@ -616,7 +632,7 @@ export function AppLauncher() {
             <h3 className="text-lg">Your apps</h3>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             <AppHeroCard
               app={APPS.find((a) => a.id === "pottery")!}
               stats={liveStats("pottery")}
@@ -636,6 +652,16 @@ export function AppLauncher() {
               accentIconColor="text-violet-600 dark:text-violet-400"
               expanded={quiltingExpanded}
               onToggle={() => setQuiltingExpanded((e) => !e)}
+            />
+            <AppHeroCard
+              app={APPS.find((a) => a.id === "travels")!}
+              stats={liveStats("travels")}
+              quickLinks={TRAVELS_QUICK_LINKS}
+              accentBorderColor="border-sky-200/60 dark:border-sky-800/40"
+              accentSectionBg="bg-sky-50/60 dark:bg-sky-900/10"
+              accentIconColor="text-sky-600 dark:text-sky-400"
+              expanded={travelsExpanded}
+              onToggle={() => setTravelsExpanded((e) => !e)}
             />
           </div>
         </section>

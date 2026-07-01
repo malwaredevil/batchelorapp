@@ -8,6 +8,7 @@ import {
 import {
   useGetCollectionStats,
   useGetStats,
+  useGetTravelsStats,
 } from "@workspace/api-client-react";
 
 function BLogo({ className }: { className?: string }) {
@@ -75,12 +76,44 @@ function QuiltingLogo({ className }: { className?: string }) {
   );
 }
 
+function TravelsLogo({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 100 100"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect width="100" height="100" rx="22" fill="#1B4E6B" />
+      <polygon
+        points="18,50 82,22 56,78"
+        stroke="#F0E8D8"
+        strokeWidth="3.5"
+        fill="none"
+        strokeLinejoin="round"
+      />
+      <line
+        x1="18"
+        y1="50"
+        x2="56"
+        y2="78"
+        stroke="#F0E8D8"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        opacity="0.8"
+      />
+    </svg>
+  );
+}
+
 export function AppSwitcher() {
   const { data: potteryStats } = useGetCollectionStats();
   const { data: quiltingStats } = useGetStats();
+  const { data: travelsStats } = useGetTravelsStats();
 
   const potteryCount = potteryStats?.totalItems;
   const fabricCount = quiltingStats?.totalFabrics;
+  const tripCount = travelsStats?.totalTrips;
 
   return (
     <DropdownMenu>
@@ -151,6 +184,23 @@ export function AppSwitcher() {
             </p>
             <p className="text-[11px] text-muted-foreground mt-0.5">
               {fabricCount != null ? `${fabricCount} fabrics` : "Quilting Studio"}
+            </p>
+          </div>
+        </DropdownMenuItem>
+
+        <DropdownMenuItem
+          className="flex items-center gap-3 px-2 py-2.5 cursor-pointer"
+          onSelect={() => {
+            window.location.href = "/travels/";
+          }}
+        >
+          <TravelsLogo className="h-8 w-8 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold leading-none">
+              Batchelor Travels
+            </p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {tripCount != null ? `${tripCount} trips` : "Travel Journal"}
             </p>
           </div>
         </DropdownMenuItem>

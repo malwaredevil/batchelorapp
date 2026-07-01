@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" width="800" height="400">
+  <defs>
+    <linearGradient id="sky" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0d3b5e;stop-opacity:1" />
+      <stop offset="60%" style="stop-color:#1a5c7a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2d8a8a;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="water" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a5c7a;stop-opacity:0.8" />
+      <stop offset="100%" style="stop-color:#0d3b5e;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Sky background -->
+  <rect width="800" height="400" fill="url(#sky)" />
+
+  <!-- Stars -->
+  <circle cx="80" cy="40" r="1.5" fill="white" opacity="0.7" />
+  <circle cx="180" cy="25" r="1" fill="white" opacity="0.5" />
+  <circle cx="320" cy="55" r="1.5" fill="white" opacity="0.6" />
+  <circle cx="450" cy="30" r="1" fill="white" opacity="0.5" />
+  <circle cx="600" cy="45" r="1.5" fill="white" opacity="0.7" />
+  <circle cx="720" cy="20" r="1" fill="white" opacity="0.4" />
+  <circle cx="670" cy="65" r="1" fill="white" opacity="0.6" />
+  <circle cx="140" cy="80" r="1" fill="white" opacity="0.4" />
+
+  <!-- Moon / sun glow -->
+  <circle cx="680" cy="90" r="55" fill="#f0c060" opacity="0.12" />
+  <circle cx="680" cy="90" r="38" fill="#f0c060" opacity="0.14" />
+  <circle cx="680" cy="90" r="26" fill="#f5d080" opacity="0.25" />
+
+  <!-- Mountain range - back layer -->
+  <path d="M0 280 L80 160 L170 220 L260 120 L370 200 L460 100 L570 190 L680 110 L800 180 L800 400 L0 400 Z"
+    fill="#0a2e46" opacity="0.85" />
+
+  <!-- Mountain range - front layer -->
+  <path d="M0 380 L60 280 L130 330 L230 250 L320 300 L410 240 L510 310 L610 260 L720 320 L800 290 L800 400 L0 400 Z"
+    fill="#071e2e" opacity="0.9" />
+
+  <!-- Water reflection strip -->
+  <path d="M0 370 Q200 360 400 375 Q600 390 800 370 L800 400 L0 400 Z"
+    fill="url(#water)" opacity="0.6" />
+
+  <!-- Paper plane -->
+  <g transform="translate(120, 130) rotate(-15)">
+    <polygon points="0,0 90,-25 60,20" fill="none" stroke="#F0E8D8" stroke-width="2.5" stroke-linejoin="round" />
+    <line x1="0" y1="0" x2="60" y2="20" stroke="#F0E8D8" stroke-width="2" stroke-linecap="round" opacity="0.7" />
+    <!-- Dashed trail -->
+    <line x1="-10" y1="5" x2="-60" y2="28" stroke="#F0E8D8" stroke-width="1.5" stroke-dasharray="5 6" stroke-linecap="round" opacity="0.4" />
+  </g>
+
+  <!-- Distant city lights - small dots near horizon -->
+  <circle cx="200" cy="255" r="1.5" fill="#f0d060" opacity="0.5" />
+  <circle cx="215" cy="260" r="1" fill="#f0d060" opacity="0.4" />
+  <circle cx="235" cy="258" r="1" fill="#f0d060" opacity="0.5" />
+  <circle cx="500" cy="235" r="1.5" fill="#f0d060" opacity="0.4" />
+  <circle cx="520" cy="240" r="1" fill="#f0d060" opacity="0.5" />
+</svg>

@@ -98,7 +98,13 @@ export default function Dashboard() {
 
   const groupedTrips = STATUS_ORDER.reduce<Record<TripStatus, Trip[]>>(
     (acc, status) => {
-      acc[status] = trips.filter((t) => t.status === status);
+      const bucket = trips.filter((t) => t.status === status);
+      if (status === "completed") {
+        bucket.sort((a, b) =>
+          (b.startDate ?? "").localeCompare(a.startDate ?? ""),
+        );
+      }
+      acc[status] = bucket;
       return acc;
     },
     { active: [], booked: [], planning: [], wishlist: [], completed: [] },

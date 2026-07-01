@@ -14,24 +14,28 @@ import {
 } from "@workspace/api-client-react";
 import { Globe, MapPin } from "lucide-react";
 
-const PIN_COLOR: Record<TripStatus, string> = {
-  completed: "#22c55e",
-  booked:    "#f97316",
-  active:    "#f97316",
-  planning:  "#f97316",
-  wishlist:  "#eab308",
-};
 const WISH_COLOR = "#eab308";
+const MAP_COLORS = {
+  booked: "#f97316",
+  completed: "#22c55e",
+  wishlist: WISH_COLOR,
+} as const;
 
-const STATUS_LABELS: Record<TripStatus, string> = {
-  wishlist: "Wishlist trip",
-  planning: "Planning",
-  booked: "Booked",
-  active: "Active",
-  completed: "Completed",
-};
+type MapStatus = "booked" | "completed" | "wishlist";
 
-const STATUS_ORDER: TripStatus[] = ["active", "booked", "planning", "wishlist", "completed"];
+// Derive what status to DISPLAY on the map (independent of the stored trip.status).
+// - wishlist trips → star icon
+// - end date in the past → completed (green)
+// - end date in the future → booked (orange)
+// - no end date and not wishlist → omit from map
+function getMapStatus(trip: Trip): MapStatus | null {
+  if (trip.status === "wishlist") return "wishlist";
+  if (!trip.endDate) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const end = new Date(trip.endDate);
+  return end < today ? "completed" : "booked";
+}
 
 function makeStarIcon(color: string, size = 28) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="${size}" height="${size}"><polygon points="14,2 17.5,11 27,11 19.5,16.5 22.5,26 14,20.5 5.5,26 8.5,16.5 1,11 10.5,11" fill="${color}" stroke="white" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
@@ -53,9 +57,15 @@ function makePinIcon(color: string) {
   });
 }
 
-function tripPopupHtml(trip: Trip): string {
-  const statusColor = PIN_COLOR[trip.status];
-  const statusLabel = STATUS_LABELS[trip.status];
+const MAP_STATUS_LABELS: Record<MapStatus, string> = {
+  booked: "Booked",
+  completed: "Completed",
+  wishlist: "Wishlist trip",
+};
+
+function tripPopupHtml(trip: Trip, mapStatus: MapStatus): string {
+  const color = MAP_COLORS[mapStatus];
+  const label = MAP_STATUS_LABELS[mapStatus];
   const dateStr = trip.startDate
     ? new Date(trip.startDate).toLocaleDateString("en-GB", { month: "short", year: "numeric" })
     : "";
@@ -68,7 +78,7 @@ function tripPopupHtml(trip: Trip): string {
       <p style="font-weight:600;font-size:13px;margin:0 0 2px;line-height:1.3">${trip.title}</p>
       <p style="font-size:11px;color:#9ca3af;margin:0 0 6px">${trip.destination}</p>
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-        <span style="font-size:11px;padding:1px 7px;border-radius:999px;font-weight:500;background:${statusColor}22;color:${statusColor};border:1px solid ${statusColor}44">${statusLabel}</span>
+        <span style="font-size:11px;padding:1px 7px;border-radius:999px;font-weight:500;background:${color}22;color:${color};border:1px solid ${color}44">${label}</span>
         ${dateStr ? `<span style="font-size:11px;color:#9ca3af">${dateStr}</span>` : ""}
       </div>
       ${oneThing}
@@ -134,13 +144,17 @@ function MapPanel({ trips, wishlistItems, isLoading, onNavigate }: MapPanelProps
 
     const markers: L.Marker[] = [];
 
-    // Trip markers
+    // Trip markers — only those with a computable map status
     trips
       .filter((t) => t.lat != null && t.lng != null)
       .forEach((trip) => {
-        const icon = trip.status === "wishlist" ? makeStarIcon(PIN_COLOR.wishlist) : makePinIcon(PIN_COLOR[trip.status]);
+        const mapStatus = getMapStatus(trip);
+        if (!mapStatus) return; // planning/active with no end date → skip
+        const icon = mapStatus === "wishlist"
+          ? makeStarIcon(MAP_COLORS.wishlist)
+          : makePinIcon(MAP_COLORS[mapStatus]);
         const marker = L.marker([trip.lat!, trip.lng!], { icon });
-        marker.bindPopup(tripPopupHtml(trip), { maxWidth: 260 });
+        marker.bindPopup(tripPopupHtml(trip, mapStatus), { maxWidth: 260 });
         marker.addTo(map);
         markers.push(marker);
       });
@@ -246,16 +260,18 @@ export default function WorldMap() {
 
         {/* Legend */}
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 items-center">
-          {STATUS_ORDER.map((s) => (
-            <div key={s} className="flex items-center gap-1.5">
-              {s === "wishlist" ? (
-                <span className="text-sm leading-none" style={{ color: PIN_COLOR[s] }}>★</span>
-              ) : (
-                <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: PIN_COLOR[s] }} />
-              )}
-              <span className="text-xs text-muted-foreground">{STATUS_LABELS[s]}</span>
-            </div>
-          ))}
+          <div className="flex items-center gap-1.5">
+            <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: MAP_COLORS.booked }} />
+            <span className="text-xs text-muted-foreground">Booked</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: MAP_COLORS.completed }} />
+            <span className="text-xs text-muted-foreground">Completed</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm leading-none" style={{ color: WISH_COLOR }}>★</span>
+            <span className="text-xs text-muted-foreground">Wishlist trip</span>
+          </div>
           <div className="flex items-center gap-1.5">
             <span className="text-sm leading-none" style={{ color: WISH_COLOR }}>★</span>
             <span className="text-xs text-muted-foreground">Wishlist destination</span>
@@ -304,7 +320,7 @@ export default function WorldMap() {
                 onClick={() => navigate(`/trips/${t.id}`)}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-muted hover:bg-muted/70 text-sm transition-colors"
               >
-                <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: PIN_COLOR[t.status] }} />
+                <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: MAP_COLORS[getMapStatus(t) ?? "booked"] }} />
                 {t.title}
               </button>
             ))}

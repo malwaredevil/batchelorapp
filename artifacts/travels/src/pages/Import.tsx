@@ -187,7 +187,7 @@ export default function Import() {
     reader.onload = (e) => {
       try {
         const data = e.target?.result;
-        const wb = XLSX.read(data, { type: "binary", cellDates: false });
+        const wb = XLSX.read(data, { type: "array", cellDates: false });
         const result = parseWorkbook(wb);
         if (result.trips.length === 0 && result.wishlistItems.length === 0) {
           toast.error("No trips or wishlist items found. Check the spreadsheet format.");
@@ -200,7 +200,7 @@ export default function Import() {
         toast.error("Failed to parse spreadsheet. Check the file format.");
       }
     };
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
   }, []);
 
   function handleDrop(e: React.DragEvent) {

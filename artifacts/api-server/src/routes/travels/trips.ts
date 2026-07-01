@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 import { db, travelsTrips, travelsTripDocuments, travelsTripPhotos, travelsReminders } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { deleteTripPhoto } from "../../lib/travels/storage";
+import { deleteDocument } from "../../lib/travels-storage";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -209,16 +210,25 @@ router.delete("/trips/:id", async (req, res) => {
     return;
   }
 
-  // Clean up photos from Supabase Storage before deleting DB rows
+  // Clean up photos and documents from Supabase Storage before deleting DB rows
   const photos = await db
     .select({ storagePath: travelsTripPhotos.storagePath })
     .from(travelsTripPhotos)
     .where(and(eq(travelsTripPhotos.tripId, id), eq(travelsTripPhotos.userId, userId)));
 
-  await Promise.allSettled(photos.map((p) => deleteTripPhoto(p.storagePath)));
+  const docs = await db
+    .select({ storagePath: travelsTripDocuments.storagePath })
+    .from(travelsTripDocuments)
+    .where(and(eq(travelsTripDocuments.tripId, id), eq(travelsTripDocuments.userId, userId)));
+
+  await Promise.allSettled([
+    ...photos.map((p) => deleteTripPhoto(p.storagePath)),
+    ...docs.map((d) => deleteDocument(d.storagePath)),
+  ]);
 
   // Delete child rows first, then the trip
   await db.delete(travelsTripPhotos).where(and(eq(travelsTripPhotos.tripId, id), eq(travelsTripPhotos.userId, userId)));
+  await db.delete(travelsTripDocuments).where(and(eq(travelsTripDocuments.tripId, id), eq(travelsTripDocuments.userId, userId)));
   await db.delete(travelsReminders).where(and(eq(travelsReminders.tripId, id), eq(travelsReminders.userId, userId)));
   await db.delete(travelsTrips).where(and(eq(travelsTrips.id, id), eq(travelsTrips.userId, userId)));
 

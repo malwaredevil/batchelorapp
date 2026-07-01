@@ -117,7 +117,8 @@ const INTERESTS_OPTIONS = [
 
 function formatDate(d: string | null | undefined) {
   if (!d) return null;
-  return new Date(d).toLocaleDateString("en-GB", {
+  // Append noon to avoid UTC-to-local-timezone shift flipping the date by one day
+  return new Date(d + "T12:00:00").toLocaleDateString("en-GB", {
     day: "numeric",
     month: "long",
     year: "numeric",

@@ -10,7 +10,7 @@ router.use(requireAuth);
 async function geocodeDestination(destination: string): Promise<{ lat: number; lng: number } | null> {
   try {
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(destination)}&format=json&limit=1`;
-    const res = await fetch(url, { headers: { "User-Agent": "batchelor-travels/1.0" } });
+    const res = await fetch(url, { headers: { "User-Agent": "Batchelor-App/1.0" } });
     const data = (await res.json()) as Array<{ lat: string; lon: string }>;
     if (data[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
   } catch {}

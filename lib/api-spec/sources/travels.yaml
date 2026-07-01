@@ -1,0 +1,572 @@
+openapi: 3.1.0
+info:
+  title: Api
+  version: 0.1.0
+  description: Travels module API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: travels
+    description: Travel planning operations
+paths:
+  /trips:
+    get:
+      operationId: listTrips
+      tags: [travels]
+      summary: List all trips for the current user
+      responses:
+        "200":
+          description: List of trips
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListTripsResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      operationId: createTrip
+      tags: [travels]
+      summary: Create a new trip
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTripBody"
+      responses:
+        "201":
+          description: Trip created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trip"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /trips/{id}:
+    get:
+      operationId: getTrip
+      tags: [travels]
+      summary: Get a trip by ID
+      parameters:
+        - $ref: "#/components/parameters/TripId"
+      responses:
+        "200":
+          description: Trip detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TripDetail"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      operationId: updateTrip
+      tags: [travels]
+      summary: Update a trip
+      parameters:
+        - $ref: "#/components/parameters/TripId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTripBody"
+      responses:
+        "200":
+          description: Trip updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trip"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deleteTrip
+      tags: [travels]
+      summary: Delete a trip
+      parameters:
+        - $ref: "#/components/parameters/TripId"
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /trips/{id}/itinerary:
+    post:
+      operationId: generateItinerary
+      tags: [travels]
+      summary: Generate or regenerate AI itinerary for a trip
+      parameters:
+        - $ref: "#/components/parameters/TripId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateItineraryBody"
+      responses:
+        "200":
+          description: Itinerary generated and saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItineraryResult"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /trips/{id}/documents:
+    get:
+      operationId: listTripDocuments
+      tags: [travels]
+      summary: List documents for a trip
+      parameters:
+        - $ref: "#/components/parameters/TripId"
+      responses:
+        "200":
+          description: List of documents
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListDocumentsResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      operationId: uploadTripDocument
+      tags: [travels]
+      summary: Upload a travel document (PDF or image) with OCR extraction
+      parameters:
+        - $ref: "#/components/parameters/TripId"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Document uploaded and OCR extracted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TripDocument"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /trips/{id}/documents/{docId}:
+    delete:
+      operationId: deleteTripDocument
+      tags: [travels]
+      summary: Delete a trip document
+      parameters:
+        - $ref: "#/components/parameters/TripId"
+        - $ref: "#/components/parameters/DocId"
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /trips/{id}/documents/{docId}/download:
+    get:
+      operationId: downloadTripDocument
+      tags: [travels]
+      summary: Download/view a trip document
+      parameters:
+        - $ref: "#/components/parameters/TripId"
+        - $ref: "#/components/parameters/DocId"
+      responses:
+        "200":
+          description: Document file
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /explore:
+    post:
+      operationId: exploreDestination
+      tags: [travels]
+      summary: Get a map location and AI overview for a destination
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExploreDestinationBody"
+      responses:
+        "200":
+          description: Destination overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExploreDestinationResult"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /stats:
+    get:
+      operationId: getTravelsStats
+      tags: [travels]
+      summary: Get travel statistics for the current user
+      responses:
+        "200":
+          description: Travel statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TravelsStatsResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  parameters:
+    TripId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+    DocId:
+      name: docId
+      in: path
+      required: true
+      schema:
+        type: integer
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    Trip:
+      type: object
+      required:
+        - id
+        - userId
+        - title
+        - destination
+        - status
+        - travellerCount
+        - hasRentalCar
+        - createdAt
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        title:
+          type: string
+        destination:
+          type: string
+        lat:
+          type: number
+          nullable: true
+        lng:
+          type: number
+          nullable: true
+        status:
+          type: string
+          enum: [wishlist, planning, booked, active, completed]
+        startDate:
+          type: string
+          format: date
+          nullable: true
+        endDate:
+          type: string
+          format: date
+          nullable: true
+        transportTo:
+          type: string
+          nullable: true
+        hasRentalCar:
+          type: boolean
+        accommodationName:
+          type: string
+          nullable: true
+        accommodationArea:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        travellerCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    TripDetail:
+      allOf:
+        - $ref: "#/components/schemas/Trip"
+        - type: object
+          properties:
+            itinerary:
+              nullable: true
+            packingList:
+              nullable: true
+            documents:
+              type: array
+              items:
+                $ref: "#/components/schemas/TripDocument"
+
+    CreateTripBody:
+      type: object
+      required: [title, destination, status]
+      properties:
+        title:
+          type: string
+        destination:
+          type: string
+        lat:
+          type: number
+        lng:
+          type: number
+        status:
+          type: string
+          enum: [wishlist, planning, booked, active, completed]
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        transportTo:
+          type: string
+          enum: [drove, flew, train]
+        hasRentalCar:
+          type: boolean
+        accommodationName:
+          type: string
+        accommodationArea:
+          type: string
+        notes:
+          type: string
+        travellerCount:
+          type: integer
+
+    UpdateTripBody:
+      type: object
+      properties:
+        title:
+          type: string
+        destination:
+          type: string
+        lat:
+          type: number
+        lng:
+          type: number
+        status:
+          type: string
+          enum: [wishlist, planning, booked, active, completed]
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        transportTo:
+          type: string
+          enum: [drove, flew, train]
+        hasRentalCar:
+          type: boolean
+        accommodationName:
+          type: string
+        accommodationArea:
+          type: string
+        notes:
+          type: string
+        travellerCount:
+          type: integer
+        itinerary:
+          nullable: true
+        packingList:
+          nullable: true
+
+    ListTripsResponse:
+      type: array
+      items:
+        $ref: "#/components/schemas/Trip"
+
+    GenerateItineraryBody:
+      type: object
+      required: [style, interests]
+      properties:
+        style:
+          type: string
+          enum: [relaxed, balanced, packed]
+        interests:
+          type: array
+          items:
+            type: string
+        regenerateDay:
+          type: integer
+          nullable: true
+          description: If set, regenerate only this day index (0-based)
+
+    ItineraryResult:
+      type: object
+      required: [itinerary]
+      properties:
+        itinerary:
+          type: object
+
+    TripDocument:
+      type: object
+      required: [id, tripId, userId, storagePath, createdAt]
+      properties:
+        id:
+          type: integer
+        tripId:
+          type: integer
+        userId:
+          type: integer
+        storagePath:
+          type: string
+        documentType:
+          type: string
+          nullable: true
+        originalFilename:
+          type: string
+          nullable: true
+        extractedData:
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    ListDocumentsResponse:
+      type: array
+      items:
+        $ref: "#/components/schemas/TripDocument"
+
+    ExploreDestinationBody:
+      type: object
+      required: [destination]
+      properties:
+        destination:
+          type: string
+
+    ExploreDestinationResult:
+      type: object
+      required: [destination, lat, lng, overview]
+      properties:
+        destination:
+          type: string
+        lat:
+          type: number
+        lng:
+          type: number
+        overview:
+          type: object
+
+    TravelsStatsResponse:
+      type: object
+      required: [totalTrips, completedTrips, upcomingTrips, uniqueDestinations, nextTrip]
+      properties:
+        totalTrips:
+          type: integer
+        completedTrips:
+          type: integer
+        upcomingTrips:
+          type: integer
+        uniqueDestinations:
+          type: integer
+        nextTrip:
+          nullable: true

@@ -1,0 +1,73 @@
+import { Switch, Route, Router as WouterRouter } from "wouter";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { Toaster } from "sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { AuthProvider, ProtectedRoute } from "@/lib/auth";
+import { Layout } from "@/components/Layout";
+import { queryClient } from "@/lib/query-client";
+
+import Login from "@/pages/Login";
+import Dashboard from "@/pages/Dashboard";
+import Trips from "@/pages/Trips";
+import TripDetail from "@/pages/TripDetail";
+import Explore from "@/pages/Explore";
+import NotFound from "@/pages/not-found";
+
+function Router() {
+  return (
+    <Switch>
+      <Route path="/login" component={Login} />
+
+      <Route path="/">
+        <ProtectedRoute>
+          <Layout>
+            <Dashboard />
+          </Layout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/trips">
+        <ProtectedRoute>
+          <Layout>
+            <Trips />
+          </Layout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/trips/:id">
+        {(params) => (
+          <ProtectedRoute>
+            <Layout>
+              <TripDetail id={Number(params.id)} />
+            </Layout>
+          </ProtectedRoute>
+        )}
+      </Route>
+
+      <Route path="/explore">
+        <ProtectedRoute>
+          <Layout>
+            <Explore />
+          </Layout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
+
+export default function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <TooltipProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <Router />
+          </WouterRouter>
+          <Toaster richColors position="top-right" />
+        </TooltipProvider>
+      </AuthProvider>
+    </QueryClientProvider>
+  );
+}

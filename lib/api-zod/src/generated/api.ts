@@ -2208,3 +2208,37 @@ export const GetStaleCountResponse = zod.object({
 })
 
 
+
+
+// ==================== TRAVELS (manually added — codegen broken) ====================
+
+export const TravelsTripInputSchema = zod.object({
+  title: zod.string().min(1),
+  destination: zod.string().min(1),
+  lat: zod.number().optional(),
+  lng: zod.number().optional(),
+  status: zod.enum(['wishlist', 'planning', 'booked', 'active', 'completed']).optional(),
+  startDate: zod.string().optional(),
+  endDate: zod.string().optional(),
+  transportTo: zod.enum(['drove', 'flew', 'train']).optional(),
+  hasRentalCar: zod.boolean().optional(),
+  accommodationName: zod.string().optional(),
+  accommodationArea: zod.string().optional(),
+  notes: zod.string().optional(),
+  travellerCount: zod.number().int().min(1).optional(),
+})
+
+export const TravelsTripUpdateSchema = TravelsTripInputSchema.partial().extend({
+  itinerary: zod.unknown().optional(),
+  packingList: zod.unknown().optional(),
+})
+
+export const TravelsGenerateItineraryInputSchema = zod.object({
+  style: zod.enum(['relaxed', 'balanced', 'packed']),
+  interests: zod.array(zod.string()),
+  regenerateDay: zod.number().int().optional(),
+})
+
+export const TravelsExploreInputSchema = zod.object({
+  destination: zod.string().min(1),
+})

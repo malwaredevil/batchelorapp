@@ -1,10 +1,10 @@
 /**
  * Deterministic build script that composes the unified OpenAPI contract for the
- * merged pottery + quilting monorepo.
+ * merged pottery + quilting + travels monorepo.
  *
- * Reads the two in-repo source specs (lib/api-spec/sources/{pottery,quilting}.yaml)
- * and emits lib/api-spec/openapi.yaml applying the namespacing / collision rules
- * documented in the merge task. The script self-validates before writing.
+ * Reads the three in-repo source specs (lib/api-spec/sources/{pottery,quilting,travels}.yaml)
+ * and emits lib/api-spec/openapi.yaml applying the namespacing / collision rules.
+ * The script self-validates before writing.
  */
 
 import fs from "fs";
@@ -181,6 +181,10 @@ function remapQuiltingPath(p: string): string {
   return "/quilting" + p;
 }
 
+function remapTravelsPath(p: string): string {
+  return "/travels" + p;
+}
+
 // ---------------------------------------------------------------------------
 // Build
 // ---------------------------------------------------------------------------
@@ -192,10 +196,13 @@ function loadSpec(file: string): Json {
 function main(): void {
   const pottery = loadSpec("pottery.yaml");
   const quilting = loadSpec("quilting.yaml");
+  const travels = loadSpec("travels.yaml");
 
   const potterySchemas: Record<string, Json> = (pottery.components?.schemas ??
     {}) as Json;
   const quiltingSchemas: Record<string, Json> = (quilting.components?.schemas ??
+    {}) as Json;
+  const travelsSchemas: Record<string, Json> = (travels.components?.schemas ??
     {}) as Json;
 
   // ----- Shared schema set: transitive closure of refs from quilting shared paths
@@ -224,22 +231,52 @@ function main(): void {
     }
   }
 
+  const travelsSchemaRename = new Map<string, string>();
+  for (const name of Object.keys(travelsSchemas)) {
+    if (!sharedSchemaNames.has(name)) {
+      travelsSchemaRename.set(name, "Travels" + name);
+    }
+  }
+
   // ----- OperationId collision detection
   const sharedOpIds = collectSharedOpIds(quilting.paths as Json);
   const potteryFeatureOps = collectFeatureOpIds(pottery.paths as Json);
   const quiltingFeatureOps = collectFeatureOpIds(quilting.paths as Json);
+  const travelsFeatureOps = collectFeatureOpIds(travels.paths as Json);
 
+  const allOtherOps = new Set([
+    ...sharedOpIds,
+    ...quiltingFeatureOps,
+    ...travelsFeatureOps,
+  ]);
   const potteryOpRename = new Map<string, string>();
   for (const op of potteryFeatureOps) {
-    if (quiltingFeatureOps.has(op) || sharedOpIds.has(op)) {
+    if (allOtherOps.has(op)) {
       potteryOpRename.set(op, renameOpId(op, "pottery"));
     }
   }
 
+  const allOtherOpsForQuilting = new Set([
+    ...sharedOpIds,
+    ...potteryFeatureOps,
+    ...travelsFeatureOps,
+  ]);
   const quiltingOpRename = new Map<string, string>();
   for (const op of quiltingFeatureOps) {
-    if (potteryFeatureOps.has(op) || sharedOpIds.has(op)) {
+    if (allOtherOpsForQuilting.has(op)) {
       quiltingOpRename.set(op, renameOpId(op, "quilting"));
+    }
+  }
+
+  const allOtherOpsForTravels = new Set([
+    ...sharedOpIds,
+    ...potteryFeatureOps,
+    ...quiltingFeatureOps,
+  ]);
+  const travelsOpRename = new Map<string, string>();
+  for (const op of travelsFeatureOps) {
+    if (allOtherOpsForTravels.has(op)) {
+      travelsOpRename.set(op, renameOpId(op, "travels"));
     }
   }
 
@@ -247,11 +284,9 @@ function main(): void {
   const out: Json = {
     openapi: "3.1.0",
     info: {
-      // orval forces the title to "Api" anyway; we set it explicitly so orval's
-      // input validation (which requires info.title) passes.
       title: "Api",
       version: "0.1.0",
-      description: "Unified API specification (pottery + quilting)",
+      description: "Unified API specification (pottery + quilting + travels)",
     },
     servers: [{ url: "/api", description: "Base API path" }],
     paths: {},
@@ -301,6 +336,21 @@ function main(): void {
     outPaths[newPath] = cloned;
   }
 
+  // Travels feature paths
+  for (const [p, item] of Object.entries(
+    travels.paths as Record<string, Json>,
+  )) {
+    if (SHARED_PATHS.has(p)) continue;
+    const newPath = remapTravelsPath(p);
+    const cloned = deepClone(item);
+    rewriteSchemaRefs(cloned, travelsSchemaRename);
+    applyOpIdRenames(cloned, travelsOpRename);
+    if (outPaths[newPath] !== undefined) {
+      throw new Error(`Duplicate path key after travels remap: ${newPath}`);
+    }
+    outPaths[newPath] = cloned;
+  }
+
   // ----- Components: schemas
   const outSchemas: Record<string, Json> = {};
 
@@ -336,21 +386,42 @@ function main(): void {
     outSchemas[newName] = cloned;
   }
 
+  // Travels non-shared schemas, prefixed + internal refs rewritten
+  for (const [name, schema] of Object.entries(travelsSchemas)) {
+    if (sharedSchemaNames.has(name)) continue;
+    const newName = travelsSchemaRename.get(name)!;
+    const cloned = deepClone(schema);
+    rewriteSchemaRefs(cloned, travelsSchemaRename);
+    if (outSchemas[newName] !== undefined) {
+      throw new Error(`Duplicate schema key: ${newName}`);
+    }
+    outSchemas[newName] = cloned;
+  }
+
   out.components.schemas = outSchemas;
 
-  // ----- Components: parameters (shared once from quilting; pottery has none)
+  // ----- Components: parameters
   const outParameters: Record<string, Json> = {};
   const quiltingParameters: Record<string, Json> = (quilting.components
     ?.parameters ?? {}) as Json;
   const potteryParameters: Record<string, Json> = (pottery.components
     ?.parameters ?? {}) as Json;
+  const travelsParameters: Record<string, Json> = (travels.components
+    ?.parameters ?? {}) as Json;
+
   for (const [name, param] of Object.entries(quiltingParameters)) {
     outParameters[name] = deepClone(param);
   }
   for (const [name, param] of Object.entries(potteryParameters)) {
     if (outParameters[name] !== undefined) {
-      // collision -> prefix the pottery-specific one
       outParameters["Pottery" + name] = deepClone(param);
+    } else {
+      outParameters[name] = deepClone(param);
+    }
+  }
+  for (const [name, param] of Object.entries(travelsParameters)) {
+    if (outParameters[name] !== undefined) {
+      outParameters["Travels" + name] = deepClone(param);
     } else {
       outParameters[name] = deepClone(param);
     }
@@ -369,10 +440,8 @@ function main(): void {
 }
 
 function validate(spec: Json): void {
-  // 1. No duplicate path keys (object keys are unique by construction; sanity log)
   const pathKeys = Object.keys(spec.paths);
 
-  // 2. No operationId appears twice
   const seenOps = new Set<string>();
   for (const item of Object.values(spec.paths) as Json[]) {
     for (const [method, op] of Object.entries(item)) {
@@ -387,7 +456,6 @@ function validate(spec: Json): void {
     }
   }
 
-  // 3. Every schema $ref target exists in components.schemas
   const definedSchemas = new Set(Object.keys(spec.components?.schemas ?? {}));
   const definedParams = new Set(Object.keys(spec.components?.parameters ?? {}));
 

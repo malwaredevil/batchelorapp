@@ -343,6 +343,56 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE quilting_patterns ADD COLUMN IF NOT EXISTS publication_name TEXT`,
   `ALTER TABLE quilting_patterns ADD COLUMN IF NOT EXISTS publication_year TEXT`,
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TRAVELS TABLES
+  // ═══════════════════════════════════════════════════════════════════════════
+  `CREATE TABLE IF NOT EXISTS travels_sessions (
+    sid    VARCHAR   NOT NULL COLLATE "default",
+    sess   JSON      NOT NULL,
+    expire TIMESTAMP(6) NOT NULL,
+    CONSTRAINT travels_sessions_pkey PRIMARY KEY (sid)
+  )`,
+  `CREATE INDEX IF NOT EXISTS IDX_travels_session_expire ON travels_sessions (expire)`,
+  `ALTER TABLE travels_sessions ENABLE ROW LEVEL SECURITY`,
+
+  `CREATE TABLE IF NOT EXISTS travels_trips (
+    id               SERIAL PRIMARY KEY,
+    user_id          INTEGER NOT NULL,
+    title            TEXT NOT NULL,
+    destination      TEXT NOT NULL,
+    lat              REAL,
+    lng              REAL,
+    status           TEXT NOT NULL DEFAULT 'wishlist',
+    start_date       DATE,
+    end_date         DATE,
+    transport_to     TEXT,
+    has_rental_car   BOOLEAN NOT NULL DEFAULT false,
+    accommodation_name TEXT,
+    accommodation_area TEXT,
+    notes            TEXT,
+    traveller_count  INTEGER NOT NULL DEFAULT 2,
+    itinerary        JSONB,
+    packing_list     JSONB,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_trips ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travels_trips_user_id_idx ON travels_trips (user_id)`,
+  `CREATE INDEX IF NOT EXISTS travels_trips_status_idx ON travels_trips (status)`,
+
+  `CREATE TABLE IF NOT EXISTS travels_trip_documents (
+    id                SERIAL PRIMARY KEY,
+    trip_id           INTEGER NOT NULL,
+    user_id           INTEGER NOT NULL,
+    storage_path      TEXT NOT NULL,
+    document_type     TEXT,
+    original_filename TEXT,
+    extracted_data    JSONB,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_trip_documents ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travels_trip_documents_trip_id_idx ON travels_trip_documents (trip_id)`,
+  `CREATE INDEX IF NOT EXISTS travels_trip_documents_user_id_idx ON travels_trip_documents (user_id)`,
+
   // ── Pottery AI enhancements ──────────────────────────────────────────────────
   // glaze_type: Jina CLIP zero-shot decoration/glaze classification
   `ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS glaze_type text`,

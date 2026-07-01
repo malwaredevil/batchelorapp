@@ -127,7 +127,7 @@ Return ONLY valid JSON, no extra text.`,
   }
 }
 
-router.get("/travels/trips/:id/documents", async (req, res) => {
+router.get("/trips/:id/documents", async (req, res) => {
   const userId = req.session.userId!;
   const tripId = parseInt(req.params.id, 10);
   if (isNaN(tripId)) {
@@ -160,7 +160,7 @@ router.get("/travels/trips/:id/documents", async (req, res) => {
 });
 
 router.post(
-  "/travels/trips/:id/documents",
+  "/trips/:id/documents",
   upload.single("file"),
   async (req, res) => {
     const userId = req.session.userId!;
@@ -226,7 +226,7 @@ router.post(
   },
 );
 
-router.delete("/travels/trips/:id/documents/:docId", async (req, res) => {
+router.delete("/trips/:id/documents/:docId", async (req, res) => {
   const userId = req.session.userId!;
   const tripId = parseInt(req.params.id, 10);
   const docId = parseInt(req.params.docId, 10);
@@ -265,7 +265,7 @@ router.delete("/travels/trips/:id/documents/:docId", async (req, res) => {
 });
 
 router.get(
-  "/travels/trips/:id/documents/:docId/download",
+  "/trips/:id/documents/:docId/download",
   async (req, res) => {
     const userId = req.session.userId!;
     const tripId = parseInt(req.params.id, 10);

@@ -30,7 +30,7 @@ const UpdateTripBody = CreateTripBody.partial().extend({
   packingList: z.unknown().optional(),
 });
 
-router.get("/travels/trips", async (req, res) => {
+router.get("/trips", async (req, res) => {
   const userId = req.session.userId!;
   const rows = await db
     .select()
@@ -40,7 +40,7 @@ router.get("/travels/trips", async (req, res) => {
   res.json(rows);
 });
 
-router.post("/travels/trips", async (req, res) => {
+router.post("/trips", async (req, res) => {
   const userId = req.session.userId!;
   const body = CreateTripBody.parse(req.body);
   const [row] = await db
@@ -50,7 +50,7 @@ router.post("/travels/trips", async (req, res) => {
   res.status(201).json(row);
 });
 
-router.get("/travels/trips/:id", async (req, res) => {
+router.get("/trips/:id", async (req, res) => {
   const userId = req.session.userId!;
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
@@ -82,7 +82,7 @@ router.get("/travels/trips/:id", async (req, res) => {
   res.json({ ...trip, documents });
 });
 
-router.patch("/travels/trips/:id", async (req, res) => {
+router.patch("/trips/:id", async (req, res) => {
   const userId = req.session.userId!;
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
@@ -111,7 +111,7 @@ router.patch("/travels/trips/:id", async (req, res) => {
   res.json(updated);
 });
 
-router.delete("/travels/trips/:id", async (req, res) => {
+router.delete("/trips/:id", async (req, res) => {
   const userId = req.session.userId!;
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {

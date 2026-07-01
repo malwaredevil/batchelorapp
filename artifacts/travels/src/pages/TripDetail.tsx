@@ -638,16 +638,16 @@ export default function TripDetail({ id }: { id: number }) {
               <div className="space-y-2">
                 <Label>Transport to destination</Label>
                 <Select
-                  value={editForm.transportTo ?? ""}
+                  value={editForm.transportTo ?? "none"}
                   onValueChange={(v) =>
-                    setEditForm((f) => ({ ...f, transportTo: (v as TransportTo) || undefined }))
+                    setEditForm((f) => ({ ...f, transportTo: v === "none" ? undefined : (v as TransportTo) }))
                   }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Not set" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Not set</SelectItem>
+                    <SelectItem value="none">Not set</SelectItem>
                     <SelectItem value="flew">Flight</SelectItem>
                     <SelectItem value="drove">Drove</SelectItem>
                     <SelectItem value="train">Train</SelectItem>

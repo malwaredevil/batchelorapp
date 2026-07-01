@@ -50,7 +50,7 @@ function proximityGuide(trip: {
 🚫 Avoid: suggestions that require a car or driving`;
 }
 
-router.post("/travels/trips/:id/itinerary", async (req, res) => {
+router.post("/trips/:id/itinerary", async (req, res) => {
   const userId = req.session.userId!;
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
@@ -195,7 +195,7 @@ If dates are unspecified, create 5 days labelled Day 1, Day 2, etc. Return ONLY 
   res.json({ itinerary: newItinerary });
 });
 
-router.post("/travels/explore", async (req, res) => {
+router.post("/explore", async (req, res) => {
   const body = ExploreBody.parse(req.body);
   const { destination } = body;
 
@@ -267,7 +267,7 @@ Include 6-8 highlights. Return ONLY valid JSON, no extra text.`,
   res.json({ destination, lat, lng, overview });
 });
 
-router.get("/travels/stats", async (req, res) => {
+router.get("/stats", async (req, res) => {
   const userId = req.session.userId!;
   const rows = await db
     .select({

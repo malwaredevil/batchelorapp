@@ -150,14 +150,14 @@ function CreateTripDialog({
           <div className="space-y-2">
             <Label>Transport to destination</Label>
             <Select
-              value={form.transportTo ?? ""}
-              onValueChange={(v) => set("transportTo", v || undefined)}
+              value={form.transportTo ?? "none"}
+              onValueChange={(v) => set("transportTo", v === "none" ? undefined : v)}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Not set" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Not set</SelectItem>
+                <SelectItem value="none">Not set</SelectItem>
                 <SelectItem value="flew">Flight</SelectItem>
                 <SelectItem value="drove">Drove</SelectItem>
                 <SelectItem value="train">Train</SelectItem>

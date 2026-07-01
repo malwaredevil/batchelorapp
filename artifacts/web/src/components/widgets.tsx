@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   ArrowRight, ShoppingBag, Package, Shirt, FlaskConical,
   Scissors, Layers, Plus, Camera, Zap, Star, Rss, Settings, ExternalLink,
-  AlertCircle, Loader2, RefreshCw,
+  AlertCircle, Loader2, RefreshCw, Plane, Globe, Bell, MapPin, List,
 } from "lucide-react";
 import {
   useGetCollectionStats,
@@ -10,6 +10,9 @@ import {
   useGetStats,
   useListShoppingItems,
   useListPottery,
+  useGetTravelsStats,
+  useListAllReminders,
+  useListWishlist,
 } from "@workspace/api-client-react";
 
 const base = import.meta.env.BASE_URL;
@@ -740,6 +743,158 @@ export function RssFeedWidget({
           )}
         </>
       )}
+    </div>
+  );
+}
+
+// ── Live: Travel Stats ────────────────────────────────────────────────────────
+export function TravelStatsWidget() {
+  const { data: stats } = useGetTravelsStats();
+  const items = [
+    { v: stats?.totalTrips     != null ? String(stats.totalTrips)          : "—", l: "Trips" },
+    { v: stats?.uniqueDestinations != null ? String(stats.uniqueDestinations) : "—", l: "Destinations" },
+    { v: stats?.completedTrips != null ? String(stats.completedTrips)      : "—", l: "Completed" },
+    { v: stats?.upcomingTrips  != null ? String(stats.upcomingTrips)       : "—", l: "Upcoming" },
+  ];
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-4 gap-1.5">
+        {items.map(s => (
+          <div key={s.l} className="bg-sky-50 dark:bg-sky-900/20 rounded-lg p-2 text-center">
+            <div className="text-lg font-bold text-sky-700 dark:text-sky-300">{s.v}</div>
+            <div className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide leading-tight mt-0.5">{s.l}</div>
+          </div>
+        ))}
+      </div>
+      <a href={`${base}travels/`} className="flex items-center gap-1 text-xs font-medium text-sky-600 dark:text-sky-400 hover:underline">
+        Open travels <ArrowRight className="w-3 h-3" />
+      </a>
+    </div>
+  );
+}
+
+// ── Live: Next Trip ───────────────────────────────────────────────────────────
+export function NextTripWidget() {
+  const { data: stats } = useGetTravelsStats();
+  const next = stats?.nextTrip ?? null;
+
+  const daysAway = next?.startDate
+    ? Math.max(0, Math.ceil((new Date(next.startDate).getTime() - Date.now()) / 86_400_000))
+    : null;
+
+  const dateLabel = next?.startDate
+    ? new Date(next.startDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+    : null;
+
+  if (!next) {
+    return (
+      <div className="space-y-2">
+        <p className="text-xs text-muted-foreground italic">No upcoming trips planned.</p>
+        <a href={`${base}travels/trips`} className="flex items-center gap-1 text-xs font-medium text-sky-600 dark:text-sky-400 hover:underline">
+          <Plane className="w-3 h-3" /> Plan a trip
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-lg bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center flex-shrink-0">
+          <Plane className="w-5 h-5 text-sky-600 dark:text-sky-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold truncate">{next.destination.split(",")[0]}</div>
+          <div className="text-[10px] text-muted-foreground">{dateLabel}</div>
+        </div>
+        {daysAway !== null && (
+          <div className="text-center flex-shrink-0">
+            <div className="text-2xl font-bold text-sky-600 dark:text-sky-400 tabular-nums leading-none">
+              {daysAway === 0 ? "Today" : daysAway}
+            </div>
+            {daysAway > 0 && <div className="text-[9px] text-muted-foreground uppercase tracking-wide">days</div>}
+          </div>
+        )}
+      </div>
+      <a href={`${base}travels/trips`} className="flex items-center gap-1 text-xs font-medium text-sky-600 dark:text-sky-400 hover:underline">
+        View all trips <ArrowRight className="w-3 h-3" />
+      </a>
+    </div>
+  );
+}
+
+// ── Live: Trip Reminders ──────────────────────────────────────────────────────
+export function TripRemindersWidget() {
+  const { data: reminders = [] } = useListAllReminders();
+
+  const upcoming = reminders
+    .filter(r => !r.done)
+    .sort((a, b) => {
+      if (!a.dueDate && !b.dueDate) return 0;
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+      return a.dueDate.localeCompare(b.dueDate);
+    })
+    .slice(0, 4);
+
+  return (
+    <div className="space-y-2">
+      {upcoming.length === 0 && (
+        <p className="text-xs text-muted-foreground italic">No pending reminders.</p>
+      )}
+      {upcoming.map(r => {
+        const dateStr = r.dueDate
+          ? new Date(r.dueDate).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+          : null;
+        return (
+          <div key={r.id} className="flex items-center gap-2 text-sm">
+            <Bell className="w-3 h-3 text-sky-500 flex-shrink-0" />
+            <span className="flex-1 truncate text-xs">{r.title}</span>
+            {dateStr && (
+              <span className="text-[10px] text-muted-foreground flex-shrink-0 whitespace-nowrap">{dateStr}</span>
+            )}
+          </div>
+        );
+      })}
+      <a href={`${base}travels/`} className="flex items-center gap-1 text-xs font-medium text-sky-600 dark:text-sky-400 hover:underline">
+        <Bell className="w-3 h-3" /> All reminders
+      </a>
+    </div>
+  );
+}
+
+// ── Live: Travel Wishlist ─────────────────────────────────────────────────────
+export function TravelWishlistWidget() {
+  const { data: wishlist = [] } = useListWishlist();
+  const pending = wishlist.filter(w => !w.done).slice(0, 5);
+
+  return (
+    <div className="space-y-2">
+      {pending.length === 0 && (
+        <p className="text-xs text-muted-foreground italic">Your wishlist is empty.</p>
+      )}
+      {pending.map(w => {
+        const yearStr = w.targetDate
+          ? new Date(w.targetDate).getFullYear().toString()
+          : null;
+        return (
+          <div key={w.id} className="flex items-center gap-2">
+            <MapPin className="w-3 h-3 text-sky-500 flex-shrink-0" />
+            <span className="flex-1 text-xs truncate">{w.destination}</span>
+            {yearStr && (
+              <span className="text-[10px] text-muted-foreground flex-shrink-0">{yearStr}</span>
+            )}
+          </div>
+        );
+      })}
+      <div className="flex items-center justify-between pt-0.5">
+        <a href={`${base}travels/wishlist`} className="flex items-center gap-1 text-xs font-medium text-sky-600 dark:text-sky-400 hover:underline">
+          <List className="w-3 h-3" /> View wishlist
+        </a>
+        {wishlist.length > 5 && (
+          <span className="text-[10px] text-muted-foreground">+{wishlist.length - 5} more</span>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import {
   Wind, Package, Shirt, ShoppingBag, Activity,
   FlaskConical, Scissors, Layers, Zap, Camera, FileText, Clock,
-  Target, Star, Image, BookOpen, Link, Rss, type LucideIcon,
+  Target, Star, Image, BookOpen, Link, Rss, Globe, Plane, Bell, MapPin,
+  type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import {
@@ -25,6 +26,10 @@ import {
   InspirationWidget,
   PhotoOfDayWidget,
   MakerLinksWidget,
+  TravelStatsWidget,
+  NextTripWidget,
+  TripRemindersWidget,
+  TravelWishlistWidget,
 } from "@/components/widgets";
 
 const base = import.meta.env.BASE_URL;
@@ -133,6 +138,40 @@ export const WIDGETS: WidgetEntry[] = [
     icon: ShoppingBag,
     category: "collections",
     body: <ShoppingListWidget />,
+  },
+
+  // ── Travels ────────────────────────────────────────────────────────────────
+  {
+    id: "travel-stats",
+    title: "Travel Stats",
+    description: "Live counts of trips, destinations, completed and upcoming — straight from your travels.",
+    icon: Globe,
+    category: "collections",
+    body: <TravelStatsWidget />,
+  },
+  {
+    id: "next-trip",
+    title: "Next Trip",
+    description: "Your next upcoming trip with destination and a live day countdown.",
+    icon: Plane,
+    category: "collections",
+    body: <NextTripWidget />,
+  },
+  {
+    id: "trip-reminders",
+    title: "Trip Reminders",
+    description: "Upcoming pre-departure reminders across all your planned trips.",
+    icon: Bell,
+    category: "collections",
+    body: <TripRemindersWidget />,
+  },
+  {
+    id: "travel-wishlist",
+    title: "Travel Wishlist",
+    description: "Your top bucket-list destinations from the travel wishlist.",
+    icon: MapPin,
+    category: "collections",
+    body: <TravelWishlistWidget />,
   },
   {
     id: "activity",

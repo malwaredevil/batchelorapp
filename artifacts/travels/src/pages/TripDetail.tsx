@@ -213,13 +213,33 @@ function DocumentRow({
   );
 }
 
-function DayCard({ day, index, onRefresh, refreshing }: {
+function DayCard({
+  day,
+  index,
+  onRefresh,
+  refreshing,
+  onAddActivity,
+  onDeleteActivity,
+  onDeleteDay,
+}: {
   day: ItineraryDay;
   index: number;
   onRefresh: (dayIndex: number) => void;
   refreshing: boolean;
+  onAddActivity?: (activity: ItineraryActivity) => void;
+  onDeleteActivity?: (activityIndex: number) => void;
+  onDeleteDay?: () => void;
 }) {
   const [open, setOpen] = useState(index === 0);
+  const [addingActivity, setAddingActivity] = useState(false);
+  const [actForm, setActForm] = useState({ time: "", name: "", description: "", proximity: "", tip: "" });
+
+  const submitActivity = () => {
+    if (!actForm.name.trim()) return;
+    onAddActivity?.({ ...actForm, name: actForm.name.trim(), description: actForm.description.trim(), tip: actForm.tip.trim(), proximity: actForm.proximity.trim() });
+    setActForm({ time: "", name: "", description: "", proximity: "", tip: "" });
+    setAddingActivity(false);
+  };
 
   return (
     <div className="border border-border/60 rounded-xl overflow-hidden">
@@ -232,18 +252,24 @@ function DayCard({ day, index, onRefresh, refreshing }: {
             Day {index + 1} — {day.title}
           </p>
           <p className="text-xs text-muted-foreground">
-            {formatDate(day.date)} · {day.activities.length} activities
+            {formatDate(day.date)} · {day.activities.length} {day.activities.length === 1 ? "activity" : "activities"}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0 ml-4">
+          {onDeleteDay && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onDeleteDay(); }}
+              className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+              title="Delete this day"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onRefresh(index);
-            }}
+            onClick={(e) => { e.stopPropagation(); onRefresh(index); }}
             disabled={refreshing}
             className="p-1 text-muted-foreground hover:text-primary transition-colors"
-            title="Regenerate this day"
+            title="Regenerate this day with AI"
           >
             <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
           </button>
@@ -256,26 +282,92 @@ function DayCard({ day, index, onRefresh, refreshing }: {
       </button>
 
       {open && (
-        <div className="divide-y divide-border/50 bg-card/50">
-          {day.activities.map((a, ai) => (
-            <div key={ai} className="px-4 py-3 space-y-1">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-foreground">{a.name}</p>
-                  <p className="text-xs text-muted-foreground">{a.time}</p>
+        <div className="bg-card/50">
+          <div className="divide-y divide-border/50">
+            {day.activities.map((a, ai) => (
+              <div key={ai} className="px-4 py-3 space-y-1 group relative">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground">{a.name}</p>
+                    {a.time && <p className="text-xs text-muted-foreground">{a.time}</p>}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {a.proximity && <span className="text-sm">{a.proximity}</span>}
+                    {onDeleteActivity && (
+                      <button
+                        onClick={() => onDeleteActivity(ai)}
+                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all"
+                        title="Remove activity"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-                {a.proximity && (
-                  <span className="text-sm shrink-0">{a.proximity}</span>
+                {a.description && <p className="text-sm text-muted-foreground">{a.description}</p>}
+                {a.tip && (
+                  <p className="text-xs italic text-muted-foreground border-l-2 border-primary/30 pl-2">{a.tip}</p>
                 )}
               </div>
-              <p className="text-sm text-muted-foreground">{a.description}</p>
-              {a.tip && (
-                <p className="text-xs italic text-muted-foreground border-l-2 border-primary/30 pl-2">
-                  {a.tip}
-                </p>
+            ))}
+          </div>
+
+          {/* Add activity form */}
+          {onAddActivity && (
+            <div className="px-4 py-3 border-t border-border/50">
+              {addingActivity ? (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      placeholder="Activity name *"
+                      value={actForm.name}
+                      onChange={(e) => setActForm((f) => ({ ...f, name: e.target.value }))}
+                      onKeyDown={(e) => e.key === "Enter" && submitActivity()}
+                    />
+                    <Input
+                      placeholder="Time (e.g. 9:00 AM)"
+                      value={actForm.time}
+                      onChange={(e) => setActForm((f) => ({ ...f, time: e.target.value }))}
+                    />
+                  </div>
+                  <Input
+                    placeholder="Description"
+                    value={actForm.description}
+                    onChange={(e) => setActForm((f) => ({ ...f, description: e.target.value }))}
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      placeholder="Tip (optional)"
+                      value={actForm.tip}
+                      onChange={(e) => setActForm((f) => ({ ...f, tip: e.target.value }))}
+                    />
+                    <Input
+                      placeholder="Proximity (optional)"
+                      value={actForm.proximity}
+                      onChange={(e) => setActForm((f) => ({ ...f, proximity: e.target.value }))}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={submitActivity} disabled={!actForm.name.trim()}>
+                      <Plus className="w-3.5 h-3.5 mr-1" />
+                      Add
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => { setAddingActivity(false); setActForm({ time: "", name: "", description: "", proximity: "", tip: "" }); }}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setAddingActivity(true)}
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add activity
+                </button>
               )}
             </div>
-          ))}
+          )}
         </div>
       )}
     </div>
@@ -791,6 +883,10 @@ export default function TripDetail({ id }: { id: number }) {
   const [itinStyle, setItinStyle] = useState<"relaxed" | "balanced" | "packed">("balanced");
   const [itinInterests, setItinInterests] = useState<string[]>(["food", "history", "culture"]);
   const [refreshingDay, setRefreshingDay] = useState<number | null>(null);
+  const [localItinerary, setLocalItinerary] = useState<Itinerary | null>(null);
+  const [itineraryDirty, setItineraryDirty] = useState(false);
+  const [addingDay, setAddingDay] = useState(false);
+  const [dayForm, setDayForm] = useState({ date: "", title: "" });
   const [chatInput, setChatInput] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInitialized, setChatInitialized] = useState(false);
@@ -976,6 +1072,61 @@ export default function TripDetail({ id }: { id: number }) {
     );
   };
 
+  // Keep localItinerary in sync when trip data first loads (or after AI generation)
+  useEffect(() => {
+    if (trip) {
+      const loaded = trip.itinerary as Itinerary | null;
+      setLocalItinerary(loaded ?? null);
+      setItineraryDirty(false);
+    }
+  }, [trip?.itinerary]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSaveItinerary = () => {
+    updateTrip.mutate(
+      { id, body: { itinerary: localItinerary } },
+      {
+        onSuccess: () => { invalidate(); toast.success("Itinerary saved"); setItineraryDirty(false); },
+        onError: () => toast.error("Failed to save itinerary"),
+      },
+    );
+  };
+
+  const handleAddDay = () => {
+    if (!dayForm.title.trim()) return;
+    const newDay: ItineraryDay = { date: dayForm.date, title: dayForm.title.trim(), activities: [] };
+    setLocalItinerary((prev) => ({ days: [...(prev?.days ?? []), newDay] }));
+    setDayForm({ date: "", title: "" });
+    setAddingDay(false);
+    setItineraryDirty(true);
+  };
+
+  const handleDeleteDay = (dayIndex: number) => {
+    setLocalItinerary((prev) => prev ? { days: prev.days.filter((_, i) => i !== dayIndex) } : prev);
+    setItineraryDirty(true);
+  };
+
+  const handleAddActivity = (dayIndex: number, activity: ItineraryActivity) => {
+    setLocalItinerary((prev) => {
+      if (!prev) return prev;
+      const days = prev.days.map((d, i) =>
+        i === dayIndex ? { ...d, activities: [...d.activities, activity] } : d,
+      );
+      return { days };
+    });
+    setItineraryDirty(true);
+  };
+
+  const handleDeleteActivity = (dayIndex: number, activityIndex: number) => {
+    setLocalItinerary((prev) => {
+      if (!prev) return prev;
+      const days = prev.days.map((d, i) =>
+        i === dayIndex ? { ...d, activities: d.activities.filter((_, ai) => ai !== activityIndex) } : d,
+      );
+      return { days };
+    });
+    setItineraryDirty(true);
+  };
+
   const toggleInterest = (interest: string) => {
     setItinInterests((prev) =>
       prev.includes(interest) ? prev.filter((i) => i !== interest) : [...prev, interest],
@@ -1003,7 +1154,6 @@ export default function TripDetail({ id }: { id: number }) {
     );
   }
 
-  const itinerary = trip.itinerary as Itinerary | null;
   const packingList = (trip.packingList ?? []) as PackingItem[];
   const todoList = (trip.todoList ?? []) as TodoItem[];
   const documents = trip.documents ?? [];
@@ -1365,86 +1515,157 @@ export default function TripDetail({ id }: { id: number }) {
 
       {/* Itinerary Builder */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <h2 className="font-serif text-xl text-foreground">Itinerary</h2>
-          {itinerary && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {itineraryDirty && (
+              <Button
+                size="sm"
+                onClick={handleSaveItinerary}
+                disabled={updateTrip.isPending}
+              >
+                Save itinerary
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
-              onClick={handleGenerateItinerary}
-              disabled={generateItinerary.isPending}
+              onClick={() => setAddingDay(true)}
+              disabled={addingDay}
             >
-              <RefreshCw className={`w-4 h-4 mr-1.5 ${generateItinerary.isPending ? "animate-spin" : ""}`} />
-              Regenerate
+              <Plus className="w-4 h-4 mr-1" />
+              Add day
             </Button>
-          )}
+            {localItinerary && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleGenerateItinerary}
+                disabled={generateItinerary.isPending}
+              >
+                <RefreshCw className={`w-4 h-4 mr-1.5 ${generateItinerary.isPending ? "animate-spin" : ""}`} />
+                AI regenerate
+              </Button>
+            )}
+          </div>
         </div>
 
-        {/* Generator controls */}
-        <Card className="border-border/50">
-          <CardContent className="py-4 space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Trip style</Label>
-                <Select
-                  value={itinStyle}
-                  onValueChange={(v) => setItinStyle(v as typeof itinStyle)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="relaxed">Relaxed — slow, few activities</SelectItem>
-                    <SelectItem value="balanced">Balanced — good mix</SelectItem>
-                    <SelectItem value="packed">Packed — see everything</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Interests</Label>
-                <div className="flex flex-wrap gap-1.5">
-                  {INTERESTS_OPTIONS.map((interest) => (
-                    <button
-                      key={interest}
-                      onClick={() => toggleInterest(interest)}
-                      className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors capitalize ${
-                        itinInterests.includes(interest)
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "bg-card text-muted-foreground border-border hover:border-primary/50"
-                      }`}
-                    >
-                      {interest}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <Button
-              onClick={handleGenerateItinerary}
-              disabled={generateItinerary.isPending}
-              className="w-full sm:w-auto"
-            >
-              <Sparkles className={`w-4 h-4 mr-2 ${generateItinerary.isPending ? "animate-pulse" : ""}`} />
-              {generateItinerary.isPending
-                ? "Building your itinerary..."
-                : itinerary
-                  ? "Regenerate itinerary"
-                  : "Generate itinerary"}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {itinerary?.days && itinerary.days.length > 0 && (
+        {/* Days list */}
+        {localItinerary?.days && localItinerary.days.length > 0 && (
           <div className="space-y-2">
-            {itinerary.days.map((day, i) => (
+            {localItinerary.days.map((day, i) => (
               <DayCard
                 key={i}
                 day={day}
                 index={i}
                 onRefresh={handleRefreshDay}
                 refreshing={refreshingDay === i}
+                onAddActivity={(act) => handleAddActivity(i, act)}
+                onDeleteActivity={(ai) => handleDeleteActivity(i, ai)}
+                onDeleteDay={() => handleDeleteDay(i)}
               />
             ))}
+          </div>
+        )}
+
+        {/* Add day inline form */}
+        {addingDay && (
+          <Card className="border-border/50">
+            <CardContent className="py-4 space-y-3">
+              <p className="text-sm font-medium text-foreground">New day</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Title *</Label>
+                  <Input
+                    placeholder="e.g. Arrival & Old Town"
+                    value={dayForm.title}
+                    onChange={(e) => setDayForm((f) => ({ ...f, title: e.target.value }))}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddDay()}
+                    autoFocus
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Date (optional)</Label>
+                  <Input
+                    type="date"
+                    value={dayForm.date}
+                    onChange={(e) => setDayForm((f) => ({ ...f, date: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleAddDay} disabled={!dayForm.title.trim()}>
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  Add day
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => { setAddingDay(false); setDayForm({ date: "", title: "" }); }}>
+                  Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* AI generator — shown when no itinerary yet */}
+        {!localItinerary && !addingDay && (
+          <Card className="border-border/50">
+            <CardContent className="py-4 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Generate a day-by-day itinerary with AI, or add days manually with the button above.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Trip style</Label>
+                  <Select
+                    value={itinStyle}
+                    onValueChange={(v) => setItinStyle(v as typeof itinStyle)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="relaxed">Relaxed — slow, few activities</SelectItem>
+                      <SelectItem value="balanced">Balanced — good mix</SelectItem>
+                      <SelectItem value="packed">Packed — see everything</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Interests</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {INTERESTS_OPTIONS.map((interest) => (
+                      <button
+                        key={interest}
+                        onClick={() => toggleInterest(interest)}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors capitalize ${
+                          itinInterests.includes(interest)
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-card text-muted-foreground border-border hover:border-primary/50"
+                        }`}
+                      >
+                        {interest}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <Button
+                onClick={handleGenerateItinerary}
+                disabled={generateItinerary.isPending}
+                className="w-full sm:w-auto"
+              >
+                <Sparkles className={`w-4 h-4 mr-2 ${generateItinerary.isPending ? "animate-pulse" : ""}`} />
+                {generateItinerary.isPending ? "Building your itinerary..." : "Generate itinerary"}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Style/interests controls when AI-generated itinerary exists but user wants to regenerate */}
+        {localItinerary && !addingDay && generateItinerary.isPending && (
+          <div className="text-sm text-muted-foreground flex items-center gap-2">
+            <RefreshCw className="w-4 h-4 animate-spin" />
+            Building your itinerary…
           </div>
         )}
       </div>

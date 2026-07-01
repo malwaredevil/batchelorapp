@@ -129,20 +129,22 @@ Return ONLY valid JSON, no extra text.`,
   }
 }
 
+async function tripExists(tripId: number): Promise<boolean> {
+  const [row] = await db
+    .select({ id: travelsTrips.id })
+    .from(travelsTrips)
+    .where(eq(travelsTrips.id, tripId));
+  return !!row;
+}
+
 router.get("/trips/:id/documents", async (req, res) => {
-  const userId = req.session.userId!;
   const tripId = parseInt(req.params.id, 10);
   if (isNaN(tripId)) {
     res.status(400).json({ error: "Invalid id" });
     return;
   }
 
-  const [trip] = await db
-    .select({ id: travelsTrips.id })
-    .from(travelsTrips)
-    .where(and(eq(travelsTrips.id, tripId), eq(travelsTrips.userId, userId)));
-
-  if (!trip) {
+  if (!(await tripExists(tripId))) {
     res.status(404).json({ error: "Trip not found" });
     return;
   }
@@ -150,12 +152,7 @@ router.get("/trips/:id/documents", async (req, res) => {
   const docs = await db
     .select()
     .from(travelsTripDocuments)
-    .where(
-      and(
-        eq(travelsTripDocuments.tripId, tripId),
-        eq(travelsTripDocuments.userId, userId),
-      ),
-    )
+    .where(eq(travelsTripDocuments.tripId, tripId))
     .orderBy(asc(travelsTripDocuments.createdAt));
 
   res.json(docs);
@@ -172,12 +169,7 @@ router.post(
       return;
     }
 
-    const [trip] = await db
-      .select({ id: travelsTrips.id })
-      .from(travelsTrips)
-      .where(and(eq(travelsTrips.id, tripId), eq(travelsTrips.userId, userId)));
-
-    if (!trip) {
+    if (!(await tripExists(tripId))) {
       res.status(404).json({ error: "Trip not found" });
       return;
     }
@@ -229,7 +221,6 @@ router.post(
 );
 
 router.delete("/trips/:id/documents/:docId", async (req, res) => {
-  const userId = req.session.userId!;
   const tripId = parseInt(req.params.id, 10);
   const docId = parseInt(req.params.docId, 10);
   if (isNaN(tripId) || isNaN(docId)) {
@@ -244,7 +235,6 @@ router.delete("/trips/:id/documents/:docId", async (req, res) => {
       and(
         eq(travelsTripDocuments.id, docId),
         eq(travelsTripDocuments.tripId, tripId),
-        eq(travelsTripDocuments.userId, userId),
       ),
     );
 
@@ -265,7 +255,6 @@ router.delete("/trips/:id/documents/:docId", async (req, res) => {
       and(
         eq(travelsTripDocuments.id, docId),
         eq(travelsTripDocuments.tripId, tripId),
-        eq(travelsTripDocuments.userId, userId),
       ),
     );
 
@@ -275,7 +264,6 @@ router.delete("/trips/:id/documents/:docId", async (req, res) => {
 router.get(
   "/trips/:id/documents/:docId/download",
   async (req, res) => {
-    const userId = req.session.userId!;
     const tripId = parseInt(req.params.id, 10);
     const docId = parseInt(req.params.docId, 10);
     if (isNaN(tripId) || isNaN(docId)) {
@@ -290,7 +278,6 @@ router.get(
         and(
           eq(travelsTripDocuments.id, docId),
           eq(travelsTripDocuments.tripId, tripId),
-          eq(travelsTripDocuments.userId, userId),
         ),
       );
 

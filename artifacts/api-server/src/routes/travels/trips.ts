@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, asc } from "drizzle-orm";
+import { eq, asc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { db, travelsTrips, travelsTripDocuments, travelsTripPhotos, travelsReminders } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
@@ -63,12 +63,10 @@ const UpdateTripBody = CreateTripBody.partial().extend({
 });
 
 // Must be before /:id routes to avoid Express routing conflict
-router.get("/highlights", async (req, res) => {
-  const userId = req.session.userId!;
+router.get("/highlights", async (_req, res) => {
   const rows = await db
     .select({ theOneThing: travelsTrips.theOneThing })
-    .from(travelsTrips)
-    .where(eq(travelsTrips.userId, userId));
+    .from(travelsTrips);
 
   const values = new Set<string>();
   for (const row of rows) {
@@ -78,12 +76,10 @@ router.get("/highlights", async (req, res) => {
   res.json([...values].sort());
 });
 
-router.get("/trips", async (req, res) => {
-  const userId = req.session.userId!;
+router.get("/trips", async (_req, res) => {
   const rows = await db
     .select()
     .from(travelsTrips)
-    .where(eq(travelsTrips.userId, userId))
     .orderBy(asc(travelsTrips.createdAt));
   res.json(rows);
 });
@@ -110,7 +106,6 @@ router.post("/trips", async (req, res) => {
 });
 
 router.get("/trips/:id", async (req, res) => {
-  const userId = req.session.userId!;
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
@@ -120,7 +115,7 @@ router.get("/trips/:id", async (req, res) => {
   const [trip] = await db
     .select()
     .from(travelsTrips)
-    .where(and(eq(travelsTrips.id, id), eq(travelsTrips.userId, userId)));
+    .where(eq(travelsTrips.id, id));
 
   if (!trip) {
     res.status(404).json({ error: "Not found" });
@@ -130,19 +125,13 @@ router.get("/trips/:id", async (req, res) => {
   const documents = await db
     .select()
     .from(travelsTripDocuments)
-    .where(
-      and(
-        eq(travelsTripDocuments.tripId, id),
-        eq(travelsTripDocuments.userId, userId),
-      ),
-    )
+    .where(eq(travelsTripDocuments.tripId, id))
     .orderBy(asc(travelsTripDocuments.createdAt));
 
   res.json({ ...trip, documents });
 });
 
 router.patch("/trips/:id", async (req, res) => {
-  const userId = req.session.userId!;
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
@@ -155,7 +144,7 @@ router.patch("/trips/:id", async (req, res) => {
   const [existing] = await db
     .select({ id: travelsTrips.id, destination: travelsTrips.destination })
     .from(travelsTrips)
-    .where(and(eq(travelsTrips.id, id), eq(travelsTrips.userId, userId)));
+    .where(eq(travelsTrips.id, id));
 
   if (!existing) {
     res.status(404).json({ error: "Not found" });
@@ -186,14 +175,13 @@ router.patch("/trips/:id", async (req, res) => {
   const [updated] = await db
     .update(travelsTrips)
     .set(updateData)
-    .where(and(eq(travelsTrips.id, id), eq(travelsTrips.userId, userId)))
+    .where(eq(travelsTrips.id, id))
     .returning();
 
   res.json(updated);
 });
 
 router.delete("/trips/:id", async (req, res) => {
-  const userId = req.session.userId!;
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
@@ -203,7 +191,7 @@ router.delete("/trips/:id", async (req, res) => {
   const [existing] = await db
     .select({ id: travelsTrips.id })
     .from(travelsTrips)
-    .where(and(eq(travelsTrips.id, id), eq(travelsTrips.userId, userId)));
+    .where(eq(travelsTrips.id, id));
 
   if (!existing) {
     res.status(404).json({ error: "Not found" });
@@ -214,12 +202,12 @@ router.delete("/trips/:id", async (req, res) => {
   const photos = await db
     .select({ storagePath: travelsTripPhotos.storagePath })
     .from(travelsTripPhotos)
-    .where(and(eq(travelsTripPhotos.tripId, id), eq(travelsTripPhotos.userId, userId)));
+    .where(eq(travelsTripPhotos.tripId, id));
 
   const docs = await db
     .select({ storagePath: travelsTripDocuments.storagePath })
     .from(travelsTripDocuments)
-    .where(and(eq(travelsTripDocuments.tripId, id), eq(travelsTripDocuments.userId, userId)));
+    .where(eq(travelsTripDocuments.tripId, id));
 
   await Promise.allSettled([
     ...photos.map((p) => deleteTripPhoto(p.storagePath)),
@@ -227,10 +215,10 @@ router.delete("/trips/:id", async (req, res) => {
   ]);
 
   // Delete child rows first, then the trip
-  await db.delete(travelsTripPhotos).where(and(eq(travelsTripPhotos.tripId, id), eq(travelsTripPhotos.userId, userId)));
-  await db.delete(travelsTripDocuments).where(and(eq(travelsTripDocuments.tripId, id), eq(travelsTripDocuments.userId, userId)));
-  await db.delete(travelsReminders).where(and(eq(travelsReminders.tripId, id), eq(travelsReminders.userId, userId)));
-  await db.delete(travelsTrips).where(and(eq(travelsTrips.id, id), eq(travelsTrips.userId, userId)));
+  await db.delete(travelsTripPhotos).where(eq(travelsTripPhotos.tripId, id));
+  await db.delete(travelsTripDocuments).where(eq(travelsTripDocuments.tripId, id));
+  await db.delete(travelsReminders).where(eq(travelsReminders.tripId, id));
+  await db.delete(travelsTrips).where(eq(travelsTrips.id, id));
 
   res.status(204).send();
 });

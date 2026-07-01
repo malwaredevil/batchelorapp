@@ -18,27 +18,22 @@ const UpdateReminderBody = z.object({
   done: z.boolean().optional(),
 });
 
-async function ownsTrip(userId: number, tripId: number): Promise<boolean> {
+async function tripExists(tripId: number): Promise<boolean> {
   const [row] = await db
     .select({ id: travelsTrips.id })
     .from(travelsTrips)
-    .where(and(eq(travelsTrips.id, tripId), eq(travelsTrips.userId, userId)));
+    .where(eq(travelsTrips.id, tripId));
   return !!row;
 }
 
 // GET /reminders — all pending (or all) reminders across all trips (for Dashboard)
 router.get("/reminders", async (req, res) => {
-  const userId = req.session.userId!;
   const pending = req.query.pending === "true";
 
   const rows = await db
     .select()
     .from(travelsReminders)
-    .where(
-      pending
-        ? and(eq(travelsReminders.userId, userId), eq(travelsReminders.done, false))
-        : eq(travelsReminders.userId, userId),
-    )
+    .where(pending ? eq(travelsReminders.done, false) : undefined)
     .orderBy(asc(travelsReminders.dueDate), asc(travelsReminders.createdAt));
 
   res.json(rows);
@@ -46,15 +41,14 @@ router.get("/reminders", async (req, res) => {
 
 // GET /trips/:id/reminders
 router.get("/trips/:id/reminders", async (req, res) => {
-  const userId = req.session.userId!;
   const tripId = parseInt(req.params.id, 10);
   if (isNaN(tripId)) { res.status(400).json({ error: "Invalid id" }); return; }
-  if (!(await ownsTrip(userId, tripId))) { res.status(404).json({ error: "Not found" }); return; }
+  if (!(await tripExists(tripId))) { res.status(404).json({ error: "Not found" }); return; }
 
   const rows = await db
     .select()
     .from(travelsReminders)
-    .where(and(eq(travelsReminders.tripId, tripId), eq(travelsReminders.userId, userId)))
+    .where(eq(travelsReminders.tripId, tripId))
     .orderBy(asc(travelsReminders.dueDate), asc(travelsReminders.createdAt));
 
   res.json(rows);
@@ -65,7 +59,7 @@ router.post("/trips/:id/reminders", async (req, res) => {
   const userId = req.session.userId!;
   const tripId = parseInt(req.params.id, 10);
   if (isNaN(tripId)) { res.status(400).json({ error: "Invalid id" }); return; }
-  if (!(await ownsTrip(userId, tripId))) { res.status(404).json({ error: "Not found" }); return; }
+  if (!(await tripExists(tripId))) { res.status(404).json({ error: "Not found" }); return; }
 
   const body = CreateReminderBody.parse(req.body);
   const [row] = await db
@@ -84,7 +78,6 @@ router.post("/trips/:id/reminders", async (req, res) => {
 
 // PATCH /trips/:id/reminders/:reminderId
 router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
-  const userId = req.session.userId!;
   const tripId = parseInt(req.params.id, 10);
   const reminderId = parseInt(req.params.reminderId, 10);
   if (isNaN(tripId) || isNaN(reminderId)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -101,7 +94,6 @@ router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
     .where(
       and(
         eq(travelsReminders.id, reminderId),
-        eq(travelsReminders.userId, userId),
         eq(travelsReminders.tripId, tripId),
       ),
     )
@@ -113,7 +105,6 @@ router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
 
 // DELETE /trips/:id/reminders/:reminderId
 router.delete("/trips/:id/reminders/:reminderId", async (req, res) => {
-  const userId = req.session.userId!;
   const tripId = parseInt(req.params.id, 10);
   const reminderId = parseInt(req.params.reminderId, 10);
   if (isNaN(tripId) || isNaN(reminderId)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -124,7 +115,6 @@ router.delete("/trips/:id/reminders/:reminderId", async (req, res) => {
     .where(
       and(
         eq(travelsReminders.id, reminderId),
-        eq(travelsReminders.userId, userId),
         eq(travelsReminders.tripId, tripId),
       ),
     );
@@ -136,7 +126,6 @@ router.delete("/trips/:id/reminders/:reminderId", async (req, res) => {
     .where(
       and(
         eq(travelsReminders.id, reminderId),
-        eq(travelsReminders.userId, userId),
         eq(travelsReminders.tripId, tripId),
       ),
     );

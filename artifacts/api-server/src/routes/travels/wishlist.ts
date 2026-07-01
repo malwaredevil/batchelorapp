@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, asc } from "drizzle-orm";
+import { eq, asc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { db, travelsWishlist } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
@@ -34,12 +34,10 @@ const UpdateBody = z.object({
   sortOrder: z.number().int().optional(),
 });
 
-router.get("/wishlist", async (req, res) => {
-  const userId = req.session.userId!;
+router.get("/wishlist", async (_req, res) => {
   const rows = await db
     .select()
     .from(travelsWishlist)
-    .where(eq(travelsWishlist.userId, userId))
     .orderBy(asc(travelsWishlist.sortOrder), asc(travelsWishlist.createdAt));
   res.json(rows);
 });
@@ -56,7 +54,6 @@ router.post("/wishlist", async (req, res) => {
 });
 
 router.patch("/wishlist/:id", async (req, res) => {
-  const userId = req.session.userId!;
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const body = UpdateBody.parse(req.body);
@@ -64,10 +61,9 @@ router.patch("/wishlist/:id", async (req, res) => {
   const [existing] = await db
     .select()
     .from(travelsWishlist)
-    .where(and(eq(travelsWishlist.id, id), eq(travelsWishlist.userId, userId)));
+    .where(eq(travelsWishlist.id, id));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
 
-  // If destination changed and no explicit coords provided, re-geocode
   let extraCoords: { lat?: number; lng?: number } = {};
   if (body.destination && body.destination !== existing.destination && body.lat == null && body.lng == null) {
     const coords = await geocodeDestination(body.destination);
@@ -77,23 +73,20 @@ router.patch("/wishlist/:id", async (req, res) => {
   const [updated] = await db
     .update(travelsWishlist)
     .set({ ...body, ...extraCoords } as Record<string, unknown>)
-    .where(and(eq(travelsWishlist.id, id), eq(travelsWishlist.userId, userId)))
+    .where(eq(travelsWishlist.id, id))
     .returning();
   res.json(updated);
 });
 
 router.delete("/wishlist/:id", async (req, res) => {
-  const userId = req.session.userId!;
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [existing] = await db
     .select({ id: travelsWishlist.id })
     .from(travelsWishlist)
-    .where(and(eq(travelsWishlist.id, id), eq(travelsWishlist.userId, userId)));
+    .where(eq(travelsWishlist.id, id));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
-  await db
-    .delete(travelsWishlist)
-    .where(and(eq(travelsWishlist.id, id), eq(travelsWishlist.userId, userId)));
+  await db.delete(travelsWishlist).where(eq(travelsWishlist.id, id));
   res.status(204).send();
 });
 

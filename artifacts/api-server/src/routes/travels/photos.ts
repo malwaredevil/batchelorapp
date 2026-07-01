@@ -22,25 +22,24 @@ const upload = multer({
   },
 });
 
-async function ownsTrip(userId: number, tripId: number): Promise<boolean> {
+async function tripExists(tripId: number): Promise<boolean> {
   const [row] = await db
     .select({ id: travelsTrips.id })
     .from(travelsTrips)
-    .where(and(eq(travelsTrips.id, tripId), eq(travelsTrips.userId, userId)));
+    .where(eq(travelsTrips.id, tripId));
   return !!row;
 }
 
 // GET /trips/:id/photos
 router.get("/trips/:id/photos", async (req, res) => {
-  const userId = req.session.userId!;
   const tripId = parseInt(String(req.params["id"]), 10);
   if (isNaN(tripId)) { res.status(400).json({ error: "Invalid id" }); return; }
-  if (!(await ownsTrip(userId, tripId))) { res.status(404).json({ error: "Not found" }); return; }
+  if (!(await tripExists(tripId))) { res.status(404).json({ error: "Not found" }); return; }
 
   const photos = await db
     .select()
     .from(travelsTripPhotos)
-    .where(and(eq(travelsTripPhotos.tripId, tripId), eq(travelsTripPhotos.userId, userId)))
+    .where(eq(travelsTripPhotos.tripId, tripId))
     .orderBy(asc(travelsTripPhotos.sortOrder), asc(travelsTripPhotos.createdAt));
 
   res.json(photos);
@@ -52,7 +51,7 @@ router.post("/trips/:id/photos", upload.single("photo"), async (req, res) => {
   const tripId = parseInt(String(req.params["id"]), 10);
   if (isNaN(tripId)) { res.status(400).json({ error: "Invalid id" }); return; }
   if (!req.file) { res.status(400).json({ error: "No photo file provided" }); return; }
-  if (!(await ownsTrip(userId, tripId))) { res.status(404).json({ error: "Not found" }); return; }
+  if (!(await tripExists(tripId))) { res.status(404).json({ error: "Not found" }); return; }
 
   const contentType = req.file.mimetype as "image/jpeg" | "image/png" | "image/webp";
   const storagePath = await uploadTripPhoto(req.file.buffer, contentType);
@@ -60,7 +59,7 @@ router.post("/trips/:id/photos", upload.single("photo"), async (req, res) => {
   const maxOrderRow = await db
     .select({ sortOrder: travelsTripPhotos.sortOrder })
     .from(travelsTripPhotos)
-    .where(and(eq(travelsTripPhotos.tripId, tripId), eq(travelsTripPhotos.userId, userId)))
+    .where(eq(travelsTripPhotos.tripId, tripId))
     .orderBy(asc(travelsTripPhotos.sortOrder));
 
   const nextOrder = maxOrderRow.length > 0 ? maxOrderRow[maxOrderRow.length - 1].sortOrder + 1 : 0;
@@ -82,7 +81,6 @@ router.post("/trips/:id/photos", upload.single("photo"), async (req, res) => {
 
 // PATCH /trips/:id/photos/:photoId  (update caption)
 router.patch("/trips/:id/photos/:photoId", async (req, res) => {
-  const userId = req.session.userId!;
   const tripId = parseInt(String(req.params["id"]), 10);
   const photoId = parseInt(String(req.params["photoId"]), 10);
   if (isNaN(tripId) || isNaN(photoId)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -90,7 +88,7 @@ router.patch("/trips/:id/photos/:photoId", async (req, res) => {
   const [updated] = await db
     .update(travelsTripPhotos)
     .set({ caption: (req.body["caption"] as string | null) ?? null })
-    .where(and(eq(travelsTripPhotos.id, photoId), eq(travelsTripPhotos.userId, userId), eq(travelsTripPhotos.tripId, tripId)))
+    .where(and(eq(travelsTripPhotos.id, photoId), eq(travelsTripPhotos.tripId, tripId)))
     .returning();
 
   if (!updated) { res.status(404).json({ error: "Not found" }); return; }
@@ -99,7 +97,6 @@ router.patch("/trips/:id/photos/:photoId", async (req, res) => {
 
 // DELETE /trips/:id/photos/:photoId
 router.delete("/trips/:id/photos/:photoId", async (req, res) => {
-  const userId = req.session.userId!;
   const tripId = parseInt(String(req.params["id"]), 10);
   const photoId = parseInt(String(req.params["photoId"]), 10);
   if (isNaN(tripId) || isNaN(photoId)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -107,7 +104,7 @@ router.delete("/trips/:id/photos/:photoId", async (req, res) => {
   const [row] = await db
     .select()
     .from(travelsTripPhotos)
-    .where(and(eq(travelsTripPhotos.id, photoId), eq(travelsTripPhotos.userId, userId), eq(travelsTripPhotos.tripId, tripId)));
+    .where(and(eq(travelsTripPhotos.id, photoId), eq(travelsTripPhotos.tripId, tripId)));
 
   if (!row) { res.status(404).json({ error: "Not found" }); return; }
 
@@ -118,7 +115,6 @@ router.delete("/trips/:id/photos/:photoId", async (req, res) => {
 
 // GET /trips/:id/photos/:photoId/image
 router.get("/trips/:id/photos/:photoId/image", async (req, res) => {
-  const userId = req.session.userId!;
   const tripId = parseInt(String(req.params["id"]), 10);
   const photoId = parseInt(String(req.params["photoId"]), 10);
   if (isNaN(tripId) || isNaN(photoId)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -126,7 +122,7 @@ router.get("/trips/:id/photos/:photoId/image", async (req, res) => {
   const [row] = await db
     .select()
     .from(travelsTripPhotos)
-    .where(and(eq(travelsTripPhotos.id, photoId), eq(travelsTripPhotos.userId, userId), eq(travelsTripPhotos.tripId, tripId)));
+    .where(and(eq(travelsTripPhotos.id, photoId), eq(travelsTripPhotos.tripId, tripId)));
 
   if (!row) { res.status(404).json({ error: "Not found" }); return; }
 

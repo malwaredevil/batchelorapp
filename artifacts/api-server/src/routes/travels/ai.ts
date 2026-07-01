@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod/v4";
 import { db, travelsTrips } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
@@ -71,7 +71,6 @@ function proximityGuide(trip: {
 }
 
 router.post("/trips/:id/itinerary", async (req, res) => {
-  const userId = req.session.userId!;
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
@@ -81,7 +80,7 @@ router.post("/trips/:id/itinerary", async (req, res) => {
   const [trip] = await db
     .select()
     .from(travelsTrips)
-    .where(and(eq(travelsTrips.id, id), eq(travelsTrips.userId, userId)));
+    .where(eq(travelsTrips.id, id));
 
   if (!trip) {
     res.status(404).json({ error: "Not found" });
@@ -210,7 +209,7 @@ If dates are unspecified, create 5 days labelled Day 1, Day 2, etc. Return ONLY 
   await db
     .update(travelsTrips)
     .set({ itinerary: newItinerary as Record<string, unknown> })
-    .where(and(eq(travelsTrips.id, id), eq(travelsTrips.userId, userId)));
+    .where(eq(travelsTrips.id, id));
 
   res.json({ itinerary: newItinerary });
 });
@@ -318,8 +317,7 @@ Example: ["Old Town Square", "Sunset Tram Ride", "Castle Tour", "Local Food Mark
   res.json({ suggestions: suggestions.map(String).slice(0, 10) });
 });
 
-router.get("/stats", async (req, res) => {
-  const userId = req.session.userId!;
+router.get("/stats", async (_req, res) => {
   const rows = await db
     .select({
       status: travelsTrips.status,
@@ -327,8 +325,7 @@ router.get("/stats", async (req, res) => {
       startDate: travelsTrips.startDate,
       endDate: travelsTrips.endDate,
     })
-    .from(travelsTrips)
-    .where(eq(travelsTrips.userId, userId));
+    .from(travelsTrips);
 
   const totalTrips = rows.length;
   const completedTrips = rows.filter((r) => r.status === "completed").length;
@@ -363,7 +360,6 @@ type ChatMessage = { role: "user" | "assistant"; content: string };
 const ChatBody = z.object({ message: z.string().min(1).max(2000) });
 
 router.post("/trips/:id/chat", async (req, res) => {
-  const userId = req.session.userId!;
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
@@ -373,7 +369,7 @@ router.post("/trips/:id/chat", async (req, res) => {
   const [trip] = await db
     .select()
     .from(travelsTrips)
-    .where(and(eq(travelsTrips.id, id), eq(travelsTrips.userId, userId)));
+    .where(eq(travelsTrips.id, id));
   if (!trip) {
     res.status(404).json({ error: "Not found" });
     return;
@@ -427,13 +423,12 @@ Answer questions about ${trip.destination}: things to do, local food, customs, t
   await db
     .update(travelsTrips)
     .set({ chatHistory: updatedHistory })
-    .where(and(eq(travelsTrips.id, id), eq(travelsTrips.userId, userId)));
+    .where(eq(travelsTrips.id, id));
 
   res.json({ role: "assistant", content: aiContent, history: updatedHistory });
 });
 
 router.delete("/trips/:id/chat", async (req, res) => {
-  const userId = req.session.userId!;
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
@@ -443,7 +438,7 @@ router.delete("/trips/:id/chat", async (req, res) => {
   const [existing] = await db
     .select({ id: travelsTrips.id })
     .from(travelsTrips)
-    .where(and(eq(travelsTrips.id, id), eq(travelsTrips.userId, userId)));
+    .where(eq(travelsTrips.id, id));
   if (!existing) {
     res.status(404).json({ error: "Not found" });
     return;
@@ -452,7 +447,7 @@ router.delete("/trips/:id/chat", async (req, res) => {
   await db
     .update(travelsTrips)
     .set({ chatHistory: [] })
-    .where(and(eq(travelsTrips.id, id), eq(travelsTrips.userId, userId)));
+    .where(eq(travelsTrips.id, id));
 
   res.json({ history: [] });
 });

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod/v4";
 import { db, travelsTrips, travelsWishlist } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
@@ -52,10 +52,15 @@ router.post("/import", async (req, res) => {
   const results = { tripsCreated: 0, tripsSkipped: 0, wishlistCreated: 0, wishlistSkipped: 0 };
 
   for (const trip of body.trips) {
-    const conditions = trip.startDate
-      ? and(eq(travelsTrips.userId, userId), eq(travelsTrips.destination, trip.destination), eq(travelsTrips.startDate, trip.startDate))
-      : and(eq(travelsTrips.userId, userId), eq(travelsTrips.destination, trip.destination));
-    const [existing] = await db.select({ id: travelsTrips.id }).from(travelsTrips).where(conditions);
+    // Deduplicate across all users by destination + startDate
+    const [existing] = await db
+      .select({ id: travelsTrips.id })
+      .from(travelsTrips)
+      .where(
+        trip.startDate
+          ? eq(travelsTrips.startDate, trip.startDate)
+          : eq(travelsTrips.destination, trip.destination),
+      );
     if (existing) { results.tripsSkipped++; continue; }
 
     const coords = (trip.lat != null && trip.lng != null)
@@ -84,7 +89,7 @@ router.post("/import", async (req, res) => {
     const [existing] = await db
       .select({ id: travelsWishlist.id })
       .from(travelsWishlist)
-      .where(and(eq(travelsWishlist.userId, userId), eq(travelsWishlist.destination, item.destination)));
+      .where(eq(travelsWishlist.destination, item.destination));
     if (existing) { results.wishlistSkipped++; continue; }
     await db.insert(travelsWishlist).values({
       userId, destination: item.destination, targetDate: item.targetDate,

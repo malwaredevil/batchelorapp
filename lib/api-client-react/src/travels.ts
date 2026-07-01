@@ -147,6 +147,8 @@ export interface WishlistItem {
   destination: string;
   targetDate?: string | null;
   notes?: string | null;
+  lat?: number | null;
+  lng?: number | null;
   done: boolean;
   sortOrder: number;
   createdAt: string;
@@ -163,6 +165,8 @@ export interface UpdateWishlistItemBody {
   destination?: string;
   targetDate?: string | null;
   notes?: string | null;
+  lat?: number | null;
+  lng?: number | null;
   done?: boolean;
   sortOrder?: number;
 }

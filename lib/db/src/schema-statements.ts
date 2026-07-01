@@ -461,6 +461,10 @@ export const STATEMENTS: string[] = [
   // travels_trips.transport_details: free-text carrier name / number (airline, train line, etc.)
   `ALTER TABLE travels_trips ADD COLUMN IF NOT EXISTS transport_details TEXT`,
 
+  // travels_wishlist lat/lng for map pins
+  `ALTER TABLE travels_wishlist ADD COLUMN IF NOT EXISTS lat REAL`,
+  `ALTER TABLE travels_wishlist ADD COLUMN IF NOT EXISTS lng REAL`,
+
   // ── Travels reminder email alerts ─────────────────────────────────────────
   // Per-user email address to receive trip-reminder alerts (14-day, 7-day, 3-day).
   `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS travels_reminder_email TEXT`,

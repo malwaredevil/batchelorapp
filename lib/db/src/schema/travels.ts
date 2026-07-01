@@ -126,6 +126,8 @@ export const travelsWishlist = pgTable(
     destination: text("destination").notNull(),
     targetDate: date("target_date"),
     notes: text("notes"),
+    lat: real("lat"),
+    lng: real("lng"),
     done: boolean("done").notNull().default(false),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })

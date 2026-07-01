@@ -44,6 +44,7 @@
     "@tailwindcss/typography": "^0.5.15",
     "@tailwindcss/vite": "catalog:",
     "@tanstack/react-query": "catalog:",
+    "@types/leaflet": "^1.9.21",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
@@ -75,7 +76,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
-    "react-simple-maps": "^3.0.0",
+    "leaflet": "^1.9.4",
     "xlsx": "^0.18.5"
   }
 }

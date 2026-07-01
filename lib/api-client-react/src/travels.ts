@@ -71,6 +71,7 @@ export interface ChatResponse {
 export interface TripDetail extends Trip {
   itinerary?: unknown | null;
   packingList?: unknown | null;
+  todoList?: unknown | null;
   chatHistory?: ChatMessage[] | null;
   documents: TripDocument[];
 }
@@ -97,6 +98,7 @@ export interface CreateTripBody {
 export type UpdateTripBody = Partial<CreateTripBody> & {
   itinerary?: unknown;
   packingList?: unknown;
+  todoList?: unknown;
 };
 
 export interface GenerateItineraryBody {

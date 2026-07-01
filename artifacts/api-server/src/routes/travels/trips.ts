@@ -57,6 +57,7 @@ const CreateTripBody = z.object({
 const UpdateTripBody = CreateTripBody.partial().extend({
   itinerary: z.unknown().optional(),
   packingList: z.unknown().optional(),
+  todoList: z.unknown().optional(),
 });
 
 // Must be before /:id routes to avoid Express routing conflict

@@ -90,6 +90,7 @@ type ItineraryDay = {
 type Itinerary = { days: ItineraryDay[] };
 
 type PackingItem = { item: string; packed: boolean };
+type TodoItem = { item: string; done: boolean };
 
 const ALL_STATUSES: TripStatus[] = ["wishlist", "planning", "booked", "active", "completed"];
 const STATUS_LABELS: Record<TripStatus, string> = {
@@ -368,6 +369,99 @@ function PackingList({
         >
           <Save className="w-3.5 h-3.5 mr-1.5" />
           Save packing list
+        </Button>
+      )}
+    </div>
+  );
+}
+
+// ─── Todo List ────────────────────────────────────────────────────────────────
+
+function TodoList({
+  items,
+  onSave,
+}: {
+  items: TodoItem[];
+  onSave: (items: TodoItem[]) => void;
+}) {
+  const [list, setList] = useState<TodoItem[]>(items);
+  const [newItem, setNewItem] = useState("");
+  const [dirty, setDirty] = useState(false);
+
+  const toggle = (i: number) => {
+    setList((l) => l.map((it, idx) => (idx === i ? { ...it, done: !it.done } : it)));
+    setDirty(true);
+  };
+  const add = () => {
+    if (!newItem.trim()) return;
+    setList((l) => [...l, { item: newItem.trim(), done: false }]);
+    setNewItem("");
+    setDirty(true);
+  };
+  const remove = (i: number) => {
+    setList((l) => l.filter((_, idx) => idx !== i));
+    setDirty(true);
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2">
+        <Input
+          placeholder="Add task..."
+          value={newItem}
+          onChange={(e) => setNewItem(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), add())}
+          className="flex-1"
+        />
+        <Button variant="outline" size="icon" onClick={add}>
+          <Plus className="w-4 h-4" />
+        </Button>
+      </div>
+
+      {list.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-4">
+          Nothing on the to-do list yet.
+        </p>
+      ) : (
+        <div className="space-y-1">
+          {list.map((it, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors group"
+            >
+              <button onClick={() => toggle(i)} className="shrink-0">
+                {it.done ? (
+                  <CheckSquare className="w-4 h-4 text-primary" />
+                ) : (
+                  <Square className="w-4 h-4 text-muted-foreground" />
+                )}
+              </button>
+              <span
+                className={`flex-1 text-sm ${it.done ? "line-through text-muted-foreground" : "text-foreground"}`}
+              >
+                {it.item}
+              </span>
+              <button
+                onClick={() => remove(i)}
+                className="shrink-0 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {dirty && (
+        <Button
+          size="sm"
+          onClick={() => {
+            onSave(list);
+            setDirty(false);
+          }}
+        >
+          <Save className="w-3.5 h-3.5 mr-1.5" />
+          Save to-do list
         </Button>
       )}
     </div>
@@ -869,6 +963,19 @@ export default function TripDetail({ id }: { id: number }) {
     );
   };
 
+  const handleSaveTodoList = (items: TodoItem[]) => {
+    updateTrip.mutate(
+      { id, body: { todoList: items } },
+      {
+        onSuccess: () => {
+          invalidate();
+          toast.success("To-do list saved");
+        },
+        onError: () => toast.error("Failed to save to-do list"),
+      },
+    );
+  };
+
   const toggleInterest = (interest: string) => {
     setItinInterests((prev) =>
       prev.includes(interest) ? prev.filter((i) => i !== interest) : [...prev, interest],
@@ -898,6 +1005,7 @@ export default function TripDetail({ id }: { id: number }) {
 
   const itinerary = trip.itinerary as Itinerary | null;
   const packingList = (trip.packingList ?? []) as PackingItem[];
+  const todoList = (trip.todoList ?? []) as TodoItem[];
   const documents = trip.documents ?? [];
   const canCalendar =
     (trip.status === "booked" || trip.status === "active") &&
@@ -1389,18 +1497,32 @@ export default function TripDetail({ id }: { id: number }) {
         </Card>
       </div>
 
-      {/* Packing List */}
-      <div className="space-y-4">
-        <h2 className="font-serif text-xl text-foreground">Packing List</h2>
-        <Card className="border-border/50">
-          <CardContent className="py-4">
-            <PackingList
-              items={packingList}
-              tripId={id}
-              onSave={handleSavePackingList}
-            />
-          </CardContent>
-        </Card>
+      {/* Packing List + To-Do List side by side */}
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+        <div className="space-y-4">
+          <h2 className="font-serif text-xl text-foreground">Packing List</h2>
+          <Card className="border-border/50">
+            <CardContent className="py-4">
+              <PackingList
+                items={packingList}
+                tripId={id}
+                onSave={handleSavePackingList}
+              />
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="space-y-4">
+          <h2 className="font-serif text-xl text-foreground">To-Do List</h2>
+          <Card className="border-border/50">
+            <CardContent className="py-4">
+              <TodoList
+                items={todoList}
+                onSave={handleSaveTodoList}
+              />
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* AI Chat Assistant */}

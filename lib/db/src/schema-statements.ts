@@ -455,6 +455,9 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS pottery_zone_embedding_idx
      ON pottery_items USING hnsw (zone_embedding vector_cosine_ops)`,
 
+  // travels_trips.todo_list: JSON array of { item, done } objects
+  `ALTER TABLE travels_trips ADD COLUMN IF NOT EXISTS todo_list JSONB`,
+
   // ── Travels reminder email alerts ─────────────────────────────────────────
   // Per-user email address to receive trip-reminder alerts (14-day, 7-day, 3-day).
   `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS travels_reminder_email TEXT`,

@@ -2231,6 +2231,7 @@ export const TravelsTripInputSchema = zod.object({
 export const TravelsTripUpdateSchema = TravelsTripInputSchema.partial().extend({
   itinerary: zod.unknown().optional(),
   packingList: zod.unknown().optional(),
+  todoList: zod.unknown().optional(),
 })
 
 export const TravelsGenerateItineraryInputSchema = zod.object({

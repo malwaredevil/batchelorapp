@@ -68,38 +68,54 @@ function parseNotes(raw: string | null | undefined): WishlistNotes {
   return { html: raw, dates: [] };
 }
 
-function countLis(html: string): number {
-  try {
-    const doc = new DOMParser().parseFromString(html, "text/html");
-    return doc.querySelectorAll("li").length;
-  } catch {
-    return 0;
+/**
+ * Walk the body's direct children and collect content "blocks":
+ * - top-level <p> elements count as one block each
+ * - <ul>/<ol> contribute one block per <li>
+ * Returns an ordered flat array of the DOM elements to be dated.
+ */
+function getContentBlocks(doc: Document): Element[] {
+  const blocks: Element[] = [];
+  for (const child of Array.from(doc.body.children)) {
+    const tag = child.tagName.toLowerCase();
+    if (tag === "p") {
+      blocks.push(child);
+    } else if (tag === "ul" || tag === "ol") {
+      child.querySelectorAll("li").forEach((li) => blocks.push(li));
+    }
+    // headings, hr, etc. are intentionally ignored
   }
+  return blocks;
 }
 
-/** Merge saved dates with new HTML: keep old dates by index, assign today to new bullets. */
+/** Merge saved dates with new HTML: keep old dates by index, assign today to new blocks. */
 function mergeDates(newHtml: string, oldDates: (string | null)[]): (string | null)[] {
-  const count = countLis(newHtml);
-  const today = todayLabel();
-  const result: (string | null)[] = [];
-  for (let i = 0; i < count; i++) {
-    result.push(oldDates[i] ?? today);
+  if (!newHtml?.trim()) return [];
+  try {
+    const doc = new DOMParser().parseFromString(newHtml, "text/html");
+    const blocks = getContentBlocks(doc);
+    const today = todayLabel();
+    return blocks.map((_, i) => oldDates[i] ?? today);
+  } catch {
+    return [];
   }
-  return result;
 }
 
-/** Inject date spans into HTML at display time. Does not modify the stored HTML. */
+/** Inject date spans into HTML at display time (never modifies stored HTML). */
 function buildDisplayHtml(notes: WishlistNotes): string {
   const { html, dates } = notes;
   if (!html?.trim()) return "";
-  if (!dates.some(Boolean)) return html; // no dates yet — show as-is
+  if (!dates.some(Boolean)) return html;
   try {
     const doc = new DOMParser().parseFromString(html, "text/html");
-    doc.querySelectorAll("li").forEach((li, i) => {
+    const blocks = getContentBlocks(doc);
+    blocks.forEach((block, i) => {
       const d = dates[i];
       if (!d) return;
-      // append inside the <p> if present, else directly into <li>
-      const target = li.querySelector("p") ?? li;
+      // For <li>, append inside its inner <p> so the span stays inline
+      const target = block.tagName.toLowerCase() === "li"
+        ? (block.querySelector("p") ?? block)
+        : block;
       const span = doc.createElement("span");
       span.className = "note-date";
       span.textContent = ` (${d})`;

@@ -18,6 +18,79 @@ export function resendConfigured(): boolean {
   return !!process.env.RESEND_API_KEY && !!process.env.RESEND_FROM_EMAIL;
 }
 
+export type ReminderAlertType = "14_day" | "7_day" | "3_day";
+
+const ALERT_LABEL: Record<ReminderAlertType, string> = {
+  "14_day": "2 weeks",
+  "7_day":  "1 week",
+  "3_day":  "3 days",
+};
+
+export async function sendReminderAlertEmail(
+  toEmail: string,
+  reminderTitle: string,
+  tripTitle: string,
+  tripDestination: string,
+  alertType: ReminderAlertType,
+  dueDate: string,
+): Promise<void> {
+  const from = process.env.RESEND_FROM_EMAIL;
+  if (!from) throw new Error("RESEND_FROM_EMAIL environment variable is not set.");
+
+  const label = ALERT_LABEL[alertType];
+  const formatted = new Date(dueDate + "T12:00:00Z").toLocaleDateString("en-GB", {
+    day: "numeric", month: "long", year: "numeric",
+  });
+
+  const { error } = await getResend().emails.send({
+    from,
+    to: toEmail,
+    subject: `Reminder in ${label}: ${reminderTitle} — ${tripTitle}`,
+    html: `
+<!DOCTYPE html>
+<html>
+  <head><meta charset="utf-8" /></head>
+  <body style="font-family: sans-serif; background: #f9f9f9; padding: 40px 0; margin: 0;">
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td align="center">
+          <table width="480" cellpadding="0" cellspacing="0"
+            style="background: #ffffff; border-radius: 8px; padding: 40px;
+                   box-shadow: 0 1px 4px rgba(0,0,0,0.08);">
+            <tr>
+              <td>
+                <p style="margin: 0 0 4px; font-size: 12px; color: #0ea5e9; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
+                  Trip reminder — ${label} to go
+                </p>
+                <h2 style="margin: 0 0 8px; font-size: 22px; color: #111;">
+                  ${reminderTitle}
+                </h2>
+                <p style="margin: 0 0 24px; font-size: 14px; color: #555;">
+                  This reminder is due on <strong>${formatted}</strong>, which is
+                  <strong>${label}</strong> away. It's linked to your trip
+                  <em>${tripTitle}</em> to <strong>${tripDestination}</strong>.
+                </p>
+                <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+                <p style="margin: 0; font-size: 11px; color: #bbb;">
+                  Batchelor Travels &mdash; reminder alerts
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`,
+    text: `Trip reminder — ${label} to go\n\n${reminderTitle}\n\nDue: ${formatted}\nTrip: ${tripTitle} → ${tripDestination}\n\nBatchelor Travels`,
+  });
+
+  if (error) {
+    logger.error({ err: error }, "resend reminder alert send failed");
+    throw new Error(`Failed to send reminder alert: ${error.message}`);
+  }
+}
+
 export async function sendPasswordResetEmail(
   toEmail: string,
   resetUrl: string,

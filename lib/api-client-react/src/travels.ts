@@ -902,3 +902,41 @@ export function useGetHighlights<
   const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
   return { ...query, queryKey: queryOpts.queryKey };
 }
+
+// ---------------------------------------------------------------------------
+// Travels Settings (reminder email)
+// ---------------------------------------------------------------------------
+
+export interface TravelsSettings {
+  reminderEmail: string | null;
+}
+
+const getTravelsSettings = (options?: RequestInit): Promise<TravelsSettings> =>
+  customFetch<TravelsSettings>("/api/travels/settings", { ...options, method: "GET" });
+
+export const getGetTravelsSettingsQueryKey = () => [`/api/travels/settings`] as const;
+
+export function useGetTravelsSettings<TData = TravelsSettings, TError = unknown>(
+  options?: { query?: UseQueryOptions<TravelsSettings, TError, TData> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetTravelsSettingsQueryKey();
+  const queryFn: QueryFunction<TravelsSettings> = ({ signal }) => getTravelsSettings({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<TravelsSettings, TError, TData> & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const putTravelsSettingsFn = (body: { reminderEmail: string | null }): Promise<TravelsSettings> =>
+  customFetch<TravelsSettings>("/api/travels/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export function useUpdateTravelsSettings(
+  options?: { mutation?: UseMutationOptions<TravelsSettings, unknown, { reminderEmail: string | null }> },
+) {
+  const mutationFn = (body: { reminderEmail: string | null }) => putTravelsSettingsFn(body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}

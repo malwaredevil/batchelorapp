@@ -454,4 +454,21 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS zone_embedding vector(1024)`,
   `CREATE INDEX IF NOT EXISTS pottery_zone_embedding_idx
      ON pottery_items USING hnsw (zone_embedding vector_cosine_ops)`,
+
+  // ── Travels reminder email alerts ─────────────────────────────────────────
+  // Per-user email address to receive trip-reminder alerts (14-day, 7-day, 3-day).
+  `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS travels_reminder_email TEXT`,
+  // Audit log so each (reminder, threshold) is emailed exactly once.
+  `CREATE TABLE IF NOT EXISTS travels_reminder_alert_log (
+    id          SERIAL PRIMARY KEY,
+    reminder_id INTEGER NOT NULL,
+    user_id     INTEGER NOT NULL,
+    alert_type  TEXT    NOT NULL,
+    sent_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_reminder_alert_log ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travels_reminder_alert_log_reminder_id_idx
+     ON travels_reminder_alert_log (reminder_id)`,
+  `CREATE INDEX IF NOT EXISTS travels_reminder_alert_log_user_id_idx
+     ON travels_reminder_alert_log (user_id)`,
 ];

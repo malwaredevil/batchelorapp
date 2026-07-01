@@ -19,6 +19,8 @@ export const appUsers = pgTable("app_users", {
   hubWidgetIds: text("hub_widget_ids"),
   // Per-user weather widget location — JSON { city, country, lat, lon, unit }.
   hubWeatherConfig: text("hub_weather_config"),
+  // Email address for travels trip-reminder alerts (14-day, 7-day, 3-day).
+  travelsReminderEmail: text("travels_reminder_email"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

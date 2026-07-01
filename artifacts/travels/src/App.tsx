@@ -17,6 +17,7 @@ import Explore from "@/pages/Explore";
 import Wishlist from "@/pages/Wishlist";
 import Import from "@/pages/Import";
 import Destinations from "@/pages/Destinations";
+import Settings from "@/pages/Settings";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -86,6 +87,14 @@ function Router() {
         <ProtectedRoute>
           <Layout>
             <Destinations />
+          </Layout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/settings">
+        <ProtectedRoute>
+          <Layout>
+            <Settings />
           </Layout>
         </ProtectedRoute>
       </Route>

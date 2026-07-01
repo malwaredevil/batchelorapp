@@ -135,3 +135,21 @@ export const travelsWishlist = pgTable(
 
 export type TravelsWishlistRow = typeof travelsWishlist.$inferSelect;
 export type InsertTravelsWishlist = typeof travelsWishlist.$inferInsert;
+
+export const travelsReminderAlertLog = pgTable(
+  "travels_reminder_alert_log",
+  {
+    id: serial("id").primaryKey(),
+    reminderId: integer("reminder_id").notNull(),
+    userId: integer("user_id").notNull(),
+    alertType: text("alert_type").notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("travels_reminder_alert_log_reminder_id_idx").on(table.reminderId),
+    index("travels_reminder_alert_log_user_id_idx").on(table.userId),
+  ],
+).enableRLS();
+
+export type TravelsReminderAlertLogRow =
+  typeof travelsReminderAlertLog.$inferSelect;

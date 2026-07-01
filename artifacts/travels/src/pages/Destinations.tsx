@@ -131,13 +131,198 @@ function extractCountry(destination: string): string {
   return parts.length > 1 ? parts[parts.length - 1].trim() : destination.trim();
 }
 
-/** Initials avatar colour — stable per name */
-const AVATAR_COLORS = [
-  "bg-orange-100 text-orange-700",
-  "bg-green-100 text-green-700",
-  "bg-yellow-100 text-yellow-700",
-  "bg-sky-100 text-sky-700",
-] as const;
+// ─── Cat portrait SVGs ───────────────────────────────────────────────────────
+
+/** John — Dad orange tabby. Broad brow, confident look. */
+function JohnCat() {
+  return (
+    <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" width="52" height="52">
+      {/* Ears */}
+      <polygon points="7,17 12,4 17,17" fill="#f97316" />
+      <polygon points="23,17 28,4 33,17" fill="#f97316" />
+      <polygon points="9,16 12,7 15,16" fill="#fda4af" />
+      <polygon points="25,16 28,7 31,16" fill="#fda4af" />
+      {/* Head */}
+      <circle cx="20" cy="24" r="13" fill="#f97316" />
+      {/* Tabby forehead stripes */}
+      <path d="M14,16 Q17,14 20,16" stroke="#c2410c" strokeWidth="1.3" fill="none" strokeLinecap="round" />
+      <path d="M16,13 Q19,11 22,13" stroke="#c2410c" strokeWidth="1" fill="none" strokeLinecap="round" />
+      <path d="M13,18.5 Q16,17 19,18.5" stroke="#c2410c" strokeWidth="0.9" fill="none" strokeLinecap="round" />
+      {/* Dad brows — straight and a bit heavy */}
+      <path d="M11.5,19.5 Q14.5,18 17.5,19.5" stroke="#c2410c" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+      <path d="M22.5,19.5 Q25.5,18 28.5,19.5" stroke="#c2410c" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+      {/* Eyes — slightly narrowed */}
+      <ellipse cx="14.5" cy="22.5" rx="2.8" ry="2.4" fill="#1c0a00" />
+      <ellipse cx="25.5" cy="22.5" rx="2.8" ry="2.4" fill="#1c0a00" />
+      <circle cx="15.2" cy="21.8" r="0.9" fill="white" />
+      <circle cx="26.2" cy="21.8" r="0.9" fill="white" />
+      {/* Muzzle */}
+      <ellipse cx="20" cy="28" rx="5" ry="3.5" fill="#fb923c" opacity="0.45" />
+      {/* Nose */}
+      <polygon points="20,26 18.8,27.8 21.2,27.8" fill="#e879a0" />
+      {/* Mouth */}
+      <path d="M18.8,27.8 Q20,29.5 21.2,27.8" fill="none" stroke="#7c2d12" strokeWidth="0.8" strokeLinecap="round" />
+      {/* Whiskers */}
+      <line x1="3" y1="25.5" x2="14.5" y2="27" stroke="#7c2d12" strokeWidth="0.6" opacity="0.6" />
+      <line x1="3" y1="27.5" x2="14.5" y2="28" stroke="#7c2d12" strokeWidth="0.6" opacity="0.6" />
+      <line x1="3" y1="29.5" x2="14.5" y2="29" stroke="#7c2d12" strokeWidth="0.6" opacity="0.6" />
+      <line x1="25.5" y1="27" x2="37" y2="25.5" stroke="#7c2d12" strokeWidth="0.6" opacity="0.6" />
+      <line x1="25.5" y1="28" x2="37" y2="27.5" stroke="#7c2d12" strokeWidth="0.6" opacity="0.6" />
+      <line x1="25.5" y1="29" x2="37" y2="29.5" stroke="#7c2d12" strokeWidth="0.6" opacity="0.6" />
+    </svg>
+  );
+}
+
+/** Ashley — Mom orange tabby. Softer eyes, eyelashes, warm smile. */
+function AshleyCat() {
+  return (
+    <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" width="52" height="52">
+      {/* Ears */}
+      <polygon points="7,17 12,4 17,17" fill="#fb923c" />
+      <polygon points="23,17 28,4 33,17" fill="#fb923c" />
+      <polygon points="9,16 12,7 15,16" fill="#fecdd3" />
+      <polygon points="25,16 28,7 31,16" fill="#fecdd3" />
+      {/* Head */}
+      <circle cx="20" cy="24" r="13" fill="#fb923c" />
+      {/* Light tabby stripes */}
+      <path d="M15,15 Q18,13.5 21,15" stroke="#ea580c" strokeWidth="1" fill="none" strokeLinecap="round" />
+      <path d="M16.5,12.5 Q19,11 21.5,12.5" stroke="#ea580c" strokeWidth="0.8" fill="none" strokeLinecap="round" />
+      {/* Gentle curved brows */}
+      <path d="M11.5,20 Q14.5,18.5 17.5,20" stroke="#ea580c" strokeWidth="1.1" fill="none" strokeLinecap="round" />
+      <path d="M22.5,20 Q25.5,18.5 28.5,20" stroke="#ea580c" strokeWidth="1.1" fill="none" strokeLinecap="round" />
+      {/* Eyes — rounder */}
+      <ellipse cx="14.5" cy="22.5" rx="2.8" ry="3" fill="#1c0a00" />
+      <ellipse cx="25.5" cy="22.5" rx="2.8" ry="3" fill="#1c0a00" />
+      <circle cx="15.2" cy="21.6" r="1" fill="white" />
+      <circle cx="26.2" cy="21.6" r="1" fill="white" />
+      {/* Eyelashes — left eye */}
+      <line x1="12" y1="20.2" x2="11" y2="19" stroke="#1c0a00" strokeWidth="0.8" strokeLinecap="round" />
+      <line x1="14" y1="19.6" x2="13.5" y2="18.2" stroke="#1c0a00" strokeWidth="0.8" strokeLinecap="round" />
+      <line x1="16.5" y1="20" x2="17" y2="18.7" stroke="#1c0a00" strokeWidth="0.8" strokeLinecap="round" />
+      {/* Eyelashes — right eye */}
+      <line x1="23" y1="20" x2="22.5" y2="18.7" stroke="#1c0a00" strokeWidth="0.8" strokeLinecap="round" />
+      <line x1="25.5" y1="19.6" x2="25" y2="18.2" stroke="#1c0a00" strokeWidth="0.8" strokeLinecap="round" />
+      <line x1="28" y1="20.2" x2="29" y2="19" stroke="#1c0a00" strokeWidth="0.8" strokeLinecap="round" />
+      {/* Cheek blush */}
+      <ellipse cx="11.5" cy="27" rx="3.5" ry="2" fill="#fca5a5" opacity="0.45" />
+      <ellipse cx="28.5" cy="27" rx="3.5" ry="2" fill="#fca5a5" opacity="0.45" />
+      {/* Muzzle */}
+      <ellipse cx="20" cy="28" rx="5" ry="3.5" fill="#fdba74" opacity="0.5" />
+      {/* Nose */}
+      <polygon points="20,26 18.8,27.6 21.2,27.6" fill="#e879a0" />
+      {/* Smile */}
+      <path d="M18.8,27.6 Q20,29.8 21.2,27.6" fill="none" stroke="#7c2d12" strokeWidth="0.8" strokeLinecap="round" />
+      {/* Whiskers */}
+      <line x1="3" y1="25.5" x2="14.5" y2="26.8" stroke="#7c2d12" strokeWidth="0.55" opacity="0.55" />
+      <line x1="3" y1="27.5" x2="14.5" y2="28" stroke="#7c2d12" strokeWidth="0.55" opacity="0.55" />
+      <line x1="3" y1="29.5" x2="14.5" y2="29.2" stroke="#7c2d12" strokeWidth="0.55" opacity="0.55" />
+      <line x1="25.5" y1="26.8" x2="37" y2="25.5" stroke="#7c2d12" strokeWidth="0.55" opacity="0.55" />
+      <line x1="25.5" y1="28" x2="37" y2="27.5" stroke="#7c2d12" strokeWidth="0.55" opacity="0.55" />
+      <line x1="25.5" y1="29.2" x2="37" y2="29.5" stroke="#7c2d12" strokeWidth="0.55" opacity="0.55" />
+    </svg>
+  );
+}
+
+/** Karis — Teen girl calico. White base, orange + dark patches, bow. */
+function KarisCat() {
+  return (
+    <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" width="52" height="52">
+      {/* Ears — left calico orange, right dark */}
+      <polygon points="7,17 12,4 17,17" fill="#f97316" />
+      <polygon points="23,17 28,4 33,17" fill="#292524" />
+      <polygon points="9,16 12,7 15,16" fill="#fecdd3" />
+      <polygon points="25,16 28,7 31,16" fill="#78716c" />
+      {/* Head base — white */}
+      <circle cx="20" cy="24" r="13" fill="#fafaf9" />
+      {/* Orange patch — right side */}
+      <path d="M20,11 Q33,14 33,24 Q33,31 26,35 Q20,37 20,37 L20,11 Z" fill="#f97316" opacity="0.85" />
+      {/* Dark patch — left eye area */}
+      <ellipse cx="12" cy="21" rx="5.5" ry="4.5" fill="#292524" opacity="0.75" />
+      {/* Head outline */}
+      <circle cx="20" cy="24" r="13" fill="none" stroke="#d4d4d0" strokeWidth="0.5" />
+      {/* Brows — arched */}
+      <path d="M11,19.5 Q13.5,17.5 16,19" stroke="#292524" strokeWidth="1" fill="none" strokeLinecap="round" />
+      <path d="M23,19 Q25.5,17.5 28,19.5" stroke="#c2410c" strokeWidth="1" fill="none" strokeLinecap="round" />
+      {/* Eyes — wide, bright */}
+      <ellipse cx="14" cy="22.5" rx="3" ry="3.2" fill="#fafaf9" />
+      <ellipse cx="14" cy="22.5" rx="2.2" ry="2.5" fill="#0c4a6e" />
+      <ellipse cx="14" cy="22.5" rx="1.2" ry="1.6" fill="#0a0a0a" />
+      <circle cx="14.6" cy="21.6" r="0.8" fill="white" />
+      <ellipse cx="26" cy="22.5" rx="3" ry="3.2" fill="#fafaf9" />
+      <ellipse cx="26" cy="22.5" rx="2.2" ry="2.5" fill="#b45309" />
+      <ellipse cx="26" cy="22.5" rx="1.2" ry="1.6" fill="#0a0a0a" />
+      <circle cx="26.6" cy="21.6" r="0.8" fill="white" />
+      {/* Muzzle — white */}
+      <ellipse cx="20" cy="28.5" rx="5" ry="3.5" fill="white" opacity="0.9" />
+      {/* Nose */}
+      <polygon points="20,26.5 18.8,28 21.2,28" fill="#e879a0" />
+      {/* Mouth */}
+      <path d="M18.8,28 Q20,30 21.2,28" fill="none" stroke="#78716c" strokeWidth="0.8" strokeLinecap="round" />
+      {/* Whiskers */}
+      <line x1="3" y1="26" x2="14.5" y2="27.5" stroke="#78716c" strokeWidth="0.55" opacity="0.6" />
+      <line x1="3" y1="28" x2="14.5" y2="28.5" stroke="#78716c" strokeWidth="0.55" opacity="0.6" />
+      <line x1="25.5" y1="27.5" x2="37" y2="26" stroke="#78716c" strokeWidth="0.55" opacity="0.6" />
+      <line x1="25.5" y1="28.5" x2="37" y2="28" stroke="#78716c" strokeWidth="0.55" opacity="0.6" />
+      {/* Bow — between ears, pink */}
+      <polygon points="14,5.5 17,8 14,10.5 11,8" fill="#f9a8d4" />
+      <circle cx="14" cy="8" r="1.3" fill="#ec4899" />
+      <polygon points="14,5.5 11,8 14,10.5 17,8" fill="#fbcfe8" opacity="0.6" />
+    </svg>
+  );
+}
+
+/** Angela — Orange and white teen tabby. Orange top, white muzzle, bright eyes. */
+function AngelaCat() {
+  return (
+    <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" width="52" height="52">
+      {/* Ears */}
+      <polygon points="7,17 12,4 17,17" fill="#f97316" />
+      <polygon points="23,17 28,4 33,17" fill="#f97316" />
+      <polygon points="9,16 12,7 15,16" fill="#fecdd3" />
+      <polygon points="25,16 28,7 31,16" fill="#fecdd3" />
+      {/* Head base — orange */}
+      <circle cx="20" cy="24" r="13" fill="#f97316" />
+      {/* White chest/muzzle patch */}
+      <ellipse cx="20" cy="30" rx="9" ry="7" fill="#fafaf9" />
+      {/* Tabby stripes on forehead */}
+      <path d="M14,15.5 Q17,14 20,15.5" stroke="#c2410c" strokeWidth="1.2" fill="none" strokeLinecap="round" />
+      <path d="M15.5,12.5 Q18.5,11 21.5,12.5" stroke="#c2410c" strokeWidth="1" fill="none" strokeLinecap="round" />
+      {/* Tabby cheek marks */}
+      <path d="M8,24 Q10,22.5 12,24" stroke="#c2410c" strokeWidth="0.9" fill="none" strokeLinecap="round" />
+      <path d="M28,24 Q30,22.5 32,24" stroke="#c2410c" strokeWidth="0.9" fill="none" strokeLinecap="round" />
+      {/* Brows — gentle teen arch */}
+      <path d="M11.5,20 Q14.5,18 17.5,20" stroke="#c2410c" strokeWidth="1.1" fill="none" strokeLinecap="round" />
+      <path d="M22.5,20 Q25.5,18 28.5,20" stroke="#c2410c" strokeWidth="1.1" fill="none" strokeLinecap="round" />
+      {/* Eyes — round, bright green-hazel */}
+      <ellipse cx="14.5" cy="22.5" rx="3" ry="3.2" fill="#fafaf9" />
+      <ellipse cx="14.5" cy="22.5" rx="2.2" ry="2.5" fill="#15803d" />
+      <ellipse cx="14.5" cy="22.5" rx="1.2" ry="1.6" fill="#0a0a0a" />
+      <circle cx="15.2" cy="21.5" r="0.9" fill="white" />
+      <ellipse cx="25.5" cy="22.5" rx="3" ry="3.2" fill="#fafaf9" />
+      <ellipse cx="25.5" cy="22.5" rx="2.2" ry="2.5" fill="#15803d" />
+      <ellipse cx="25.5" cy="22.5" rx="1.2" ry="1.6" fill="#0a0a0a" />
+      <circle cx="26.2" cy="21.5" r="0.9" fill="white" />
+      {/* Nose */}
+      <polygon points="20,26.5 18.8,28.2 21.2,28.2" fill="#e879a0" />
+      {/* Mouth */}
+      <path d="M18.8,28.2 Q20,30.2 21.2,28.2" fill="none" stroke="#7c2d12" strokeWidth="0.8" strokeLinecap="round" />
+      {/* Whiskers */}
+      <line x1="3" y1="26" x2="14.5" y2="27.5" stroke="#7c2d12" strokeWidth="0.55" opacity="0.55" />
+      <line x1="3" y1="28" x2="14.5" y2="28.5" stroke="#7c2d12" strokeWidth="0.55" opacity="0.55" />
+      <line x1="3" y1="30" x2="14.5" y2="29.5" stroke="#7c2d12" strokeWidth="0.55" opacity="0.55" />
+      <line x1="25.5" y1="27.5" x2="37" y2="26" stroke="#7c2d12" strokeWidth="0.55" opacity="0.55" />
+      <line x1="25.5" y1="28.5" x2="37" y2="28" stroke="#7c2d12" strokeWidth="0.55" opacity="0.55" />
+      <line x1="25.5" y1="29.5" x2="37" y2="30" stroke="#7c2d12" strokeWidth="0.55" opacity="0.55" />
+    </svg>
+  );
+}
+
+const CAT_AVATARS: Record<string, React.FC> = {
+  John: JohnCat,
+  Ashley: AshleyCat,
+  Karis: KarisCat,
+  Angela: AngelaCat,
+};
 
 function FamilyCountrySummary({ groups }: { groups: DestinationGroup[] }) {
   const completedGroups = groups.map((g) => ({
@@ -145,7 +330,7 @@ function FamilyCountrySummary({ groups }: { groups: DestinationGroup[] }) {
     trips: g.trips.filter((t) => t.status === "completed"),
   })).filter((g) => g.trips.length > 0);
 
-  const stats = FAMILY_MEMBERS.map((name, i) => {
+  const stats = FAMILY_MEMBERS.map((name) => {
     const countries = new Set<string>();
     const destinations = new Set<string>();
     completedGroups.forEach((g) => {
@@ -157,29 +342,32 @@ function FamilyCountrySummary({ groups }: { groups: DestinationGroup[] }) {
         }
       });
     });
-    return { name, countries: countries.size, destinations: destinations.size, colorClass: AVATAR_COLORS[i % AVATAR_COLORS.length] };
+    return { name, countries: countries.size, destinations: destinations.size };
   });
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-      {stats.map(({ name, countries, destinations, colorClass }) => (
-        <Card key={name} className="border-border/50">
-          <CardContent className="py-4 px-4 flex flex-col items-center text-center gap-2">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold text-sm ${colorClass}`}>
-              {name.slice(0, 2)}
-            </div>
-            <p className="font-medium text-foreground text-sm leading-tight">{name}</p>
-            <div className="flex items-center gap-1 text-2xl font-bold text-foreground leading-none">
-              <Globe className="w-4 h-4 text-muted-foreground mb-0.5" />
-              {countries}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {countries === 1 ? "country" : "countries"}
-              {destinations > 0 && ` · ${destinations} ${destinations === 1 ? "place" : "places"}`}
-            </p>
-          </CardContent>
-        </Card>
-      ))}
+      {stats.map(({ name, countries, destinations }) => {
+        const CatIcon = CAT_AVATARS[name];
+        return (
+          <Card key={name} className="border-border/50">
+            <CardContent className="py-4 px-4 flex flex-col items-center text-center gap-1.5">
+              <div className="w-14 h-14 flex items-center justify-center">
+                {CatIcon && <CatIcon />}
+              </div>
+              <p className="font-medium text-foreground text-sm leading-tight">{name}</p>
+              <div className="flex items-center gap-1 text-2xl font-bold text-foreground leading-none">
+                <Globe className="w-4 h-4 text-muted-foreground mb-0.5" />
+                {countries}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {countries === 1 ? "country" : "countries"}
+                {destinations > 0 && ` · ${destinations} ${destinations === 1 ? "place" : "places"}`}
+              </p>
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 }

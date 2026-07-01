@@ -54,9 +54,21 @@ export interface TripDocument {
   createdAt: string;
 }
 
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ChatResponse {
+  role: "assistant";
+  content: string;
+  history: ChatMessage[];
+}
+
 export interface TripDetail extends Trip {
   itinerary?: unknown | null;
   packingList?: unknown | null;
+  chatHistory?: ChatMessage[] | null;
   documents: TripDocument[];
 }
 
@@ -203,6 +215,27 @@ export const exploreDestination = (
     method: "POST",
     headers: { "Content-Type": "application/json", ...options?.headers },
     body: JSON.stringify(body),
+  });
+
+export const sendTripMessage = (
+  tripId: number,
+  body: { message: string },
+  options?: RequestInit,
+): Promise<ChatResponse> =>
+  customFetch<ChatResponse>(`/api/travels/trips/${tripId}/chat`, {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(body),
+  });
+
+export const clearTripChat = (
+  tripId: number,
+  options?: RequestInit,
+): Promise<{ history: ChatMessage[] }> =>
+  customFetch<{ history: ChatMessage[] }>(`/api/travels/trips/${tripId}/chat`, {
+    ...options,
+    method: "DELETE",
   });
 
 export const getTravelsStatsUrl = () => `/api/travels/stats`;
@@ -426,6 +459,33 @@ export const getGetTravelsStatsQueryOptions = <
     TData
   > & { queryKey: QueryKey };
 };
+
+export function useSendTripMessage<TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      ChatResponse,
+      TError,
+      { tripId: number; message: string },
+      TContext
+    >;
+  },
+): UseMutationResult<ChatResponse, TError, { tripId: number; message: string }, TContext> {
+  const mutationFn: MutationFunction<
+    ChatResponse,
+    { tripId: number; message: string }
+  > = ({ tripId, message }) => sendTripMessage(tripId, { message });
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+export function useClearTripChat<TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<{ history: ChatMessage[] }, TError, number, TContext>;
+  },
+): UseMutationResult<{ history: ChatMessage[] }, TError, number, TContext> {
+  const mutationFn: MutationFunction<{ history: ChatMessage[] }, number> = (tripId) =>
+    clearTripChat(tripId);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
 
 export function useGetTravelsStats<
   TData = Awaited<ReturnType<typeof getTravelsStats>>,

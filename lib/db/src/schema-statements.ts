@@ -393,6 +393,10 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS travels_trip_documents_trip_id_idx ON travels_trip_documents (trip_id)`,
   `CREATE INDEX IF NOT EXISTS travels_trip_documents_user_id_idx ON travels_trip_documents (user_id)`,
 
+  // ── Travels enhancements ────────────────────────────────────────────────────
+  // chat_history: per-trip AI conversation (array of {role, content} objects)
+  `ALTER TABLE travels_trips ADD COLUMN IF NOT EXISTS chat_history JSONB`,
+
   // ── Pottery AI enhancements ──────────────────────────────────────────────────
   // glaze_type: Jina CLIP zero-shot decoration/glaze classification
   `ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS glaze_type text`,

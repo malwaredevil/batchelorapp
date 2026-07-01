@@ -7,6 +7,23 @@ import { requireAuth } from "../../middleware/auth";
 const router: IRouter = Router();
 router.use(requireAuth);
 
+async function geocodeDestination(
+  destination: string,
+): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(destination)}&format=json&limit=1`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Batchelor-App/1.0" },
+      signal: AbortSignal.timeout(5000),
+    });
+    const data = (await res.json()) as Array<{ lat: string; lon: string }>;
+    if (data[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 const CreateTripBody = z.object({
   title: z.string().min(1),
   destination: z.string().min(1),
@@ -43,9 +60,13 @@ router.get("/trips", async (req, res) => {
 router.post("/trips", async (req, res) => {
   const userId = req.session.userId!;
   const body = CreateTripBody.parse(req.body);
+  const coords =
+    body.lat == null && body.lng == null
+      ? await geocodeDestination(body.destination)
+      : null;
   const [row] = await db
     .insert(travelsTrips)
-    .values({ ...body, userId })
+    .values({ ...body, userId, ...(coords ?? {}) })
     .returning();
   res.status(201).json(row);
 });
@@ -93,7 +114,7 @@ router.patch("/trips/:id", async (req, res) => {
   const body = UpdateTripBody.parse(req.body);
 
   const [existing] = await db
-    .select({ id: travelsTrips.id })
+    .select({ id: travelsTrips.id, destination: travelsTrips.destination })
     .from(travelsTrips)
     .where(and(eq(travelsTrips.id, id), eq(travelsTrips.userId, userId)));
 
@@ -102,9 +123,19 @@ router.patch("/trips/:id", async (req, res) => {
     return;
   }
 
+  let geocoded: { lat: number; lng: number } | null = null;
+  if (
+    body.destination != null &&
+    body.destination !== existing.destination &&
+    body.lat == null &&
+    body.lng == null
+  ) {
+    geocoded = await geocodeDestination(body.destination);
+  }
+
   const [updated] = await db
     .update(travelsTrips)
-    .set(body as Record<string, unknown>)
+    .set({ ...(body as Record<string, unknown>), ...(geocoded ?? {}) })
     .where(and(eq(travelsTrips.id, id), eq(travelsTrips.userId, userId)))
     .returning();
 

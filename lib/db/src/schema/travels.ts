@@ -31,6 +31,7 @@ export const travelsTrips = pgTable(
     travellerCount: integer("traveller_count").notNull().default(2),
     itinerary: jsonb("itinerary"),
     packingList: jsonb("packing_list"),
+    chatHistory: jsonb("chat_history"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

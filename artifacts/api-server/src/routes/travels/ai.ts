@@ -310,4 +310,105 @@ router.get("/stats", async (req, res) => {
   });
 });
 
+// ── Per-trip AI chat ─────────────────────────────────────────────────────────
+
+type ChatMessage = { role: "user" | "assistant"; content: string };
+
+const ChatBody = z.object({ message: z.string().min(1).max(2000) });
+
+router.post("/trips/:id/chat", async (req, res) => {
+  const userId = req.session.userId!;
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  const [trip] = await db
+    .select()
+    .from(travelsTrips)
+    .where(and(eq(travelsTrips.id, id), eq(travelsTrips.userId, userId)));
+  if (!trip) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  const { message } = ChatBody.parse(req.body);
+  const history = (trip.chatHistory as ChatMessage[] | null) ?? [];
+
+  const startDate = trip.startDate ?? "TBD";
+  const endDate = trip.endDate ?? "TBD";
+  const durationMs =
+    trip.startDate && trip.endDate
+      ? new Date(trip.endDate).getTime() - new Date(trip.startDate).getTime()
+      : null;
+  const duration =
+    durationMs != null
+      ? `${Math.ceil(durationMs / (1000 * 60 * 60 * 24))} nights`
+      : "unknown duration";
+
+  const systemPrompt = `You are a friendly, knowledgeable travel assistant for a trip to ${trip.destination}.
+
+Trip: "${trip.title}"
+Dates: ${startDate} → ${endDate} (${duration})
+Travellers: ${trip.travellerCount} people
+Transport: ${transportSummary(trip)}${trip.accommodationName ? `\nStaying at: ${trip.accommodationName}${trip.accommodationArea ? ` (${trip.accommodationArea})` : ""}` : ""}${trip.notes ? `\nNotes: ${trip.notes}` : ""}
+${trip.itinerary ? "An itinerary has already been planned for this trip." : "No itinerary planned yet."}
+
+Answer questions about ${trip.destination}: things to do, local food, customs, transport, packing, day trips, weather, safety tips, and anything else useful. Be concise, practical, and friendly.`;
+
+  const messages = [
+    { role: "system" as const, content: systemPrompt },
+    ...history.map((m) => ({ role: m.role, content: m.content })),
+    { role: "user" as const, content: message },
+  ];
+
+  const aiContent = await callModel(MODELS.FAST_VISION, async (client, model) => {
+    const response = await client.chat.completions.create({
+      model,
+      messages,
+      max_tokens: 600,
+    });
+    return response.choices[0].message.content ?? "";
+  });
+
+  const updatedHistory: ChatMessage[] = [
+    ...history,
+    { role: "user", content: message },
+    { role: "assistant", content: aiContent },
+  ];
+
+  await db
+    .update(travelsTrips)
+    .set({ chatHistory: updatedHistory })
+    .where(and(eq(travelsTrips.id, id), eq(travelsTrips.userId, userId)));
+
+  res.json({ role: "assistant", content: aiContent, history: updatedHistory });
+});
+
+router.delete("/trips/:id/chat", async (req, res) => {
+  const userId = req.session.userId!;
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  const [existing] = await db
+    .select({ id: travelsTrips.id })
+    .from(travelsTrips)
+    .where(and(eq(travelsTrips.id, id), eq(travelsTrips.userId, userId)));
+  if (!existing) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  await db
+    .update(travelsTrips)
+    .set({ chatHistory: [] })
+    .where(and(eq(travelsTrips.id, id), eq(travelsTrips.userId, userId)));
+
+  res.json({ history: [] });
+});
+
 export default router;

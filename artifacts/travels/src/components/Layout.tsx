@@ -1,6 +1,6 @@
 import { type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { Map, Plane, Compass, LogOut, ChevronDown } from "lucide-react";
+import { Home, Globe, Plane, Compass, LogOut, ChevronDown } from "lucide-react";
 import { AppSwitcher } from "@/components/AppSwitcher";
 import { useLogout, getGetCurrentUserQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -16,8 +16,9 @@ import {
 import { useAuth } from "@/lib/auth";
 
 const NAV_ITEMS = [
-  { href: "/", label: "Home", icon: Map },
+  { href: "/", label: "Home", icon: Home },
   { href: "/trips", label: "Trips", icon: Plane },
+  { href: "/map", label: "Map", icon: Globe },
   { href: "/explore", label: "Explore", icon: Compass },
 ];
 

@@ -11,6 +11,7 @@ import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import Trips from "@/pages/Trips";
 import TripDetail from "@/pages/TripDetail";
+import WorldMap from "@/pages/WorldMap";
 import Explore from "@/pages/Explore";
 import NotFound from "@/pages/not-found";
 
@@ -43,6 +44,14 @@ function Router() {
             </Layout>
           </ProtectedRoute>
         )}
+      </Route>
+
+      <Route path="/map">
+        <ProtectedRoute>
+          <Layout>
+            <WorldMap />
+          </Layout>
+        </ProtectedRoute>
       </Route>
 
       <Route path="/explore">

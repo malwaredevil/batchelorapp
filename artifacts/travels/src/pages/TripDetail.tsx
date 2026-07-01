@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import {
   useGetTrip,
@@ -6,6 +6,8 @@ import {
   useDeleteTrip,
   useGenerateItinerary,
   useDeleteTripDocument,
+  useSendTripMessage,
+  useClearTripChat,
   getTripDocumentDownloadUrl,
   getListTripsQueryKey,
   getGetTripQueryKey,
@@ -14,6 +16,7 @@ import {
   type TripStatus,
   type TransportTo,
   type TripDocument,
+  type ChatMessage,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,6 +48,9 @@ import {
   Square,
   Plus,
   ExternalLink,
+  MessageCircle,
+  Bot,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -362,6 +368,8 @@ export default function TripDetail({ id }: { id: number }) {
   const deleteTrip = useDeleteTrip();
   const generateItinerary = useGenerateItinerary();
   const deleteTripDocument = useDeleteTripDocument();
+  const sendMessage = useSendTripMessage();
+  const clearChat = useClearTripChat();
 
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<UpdateTripBody>>({});
@@ -370,6 +378,21 @@ export default function TripDetail({ id }: { id: number }) {
   const [itinStyle, setItinStyle] = useState<"relaxed" | "balanced" | "packed">("balanced");
   const [itinInterests, setItinInterests] = useState<string[]>(["food", "history", "culture"]);
   const [refreshingDay, setRefreshingDay] = useState<number | null>(null);
+  const [chatInput, setChatInput] = useState("");
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInitialized, setChatInitialized] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (trip && !chatInitialized) {
+      setChatMessages((trip.chatHistory as ChatMessage[] | null) ?? []);
+      setChatInitialized(true);
+    }
+  }, [trip, chatInitialized]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages]);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: getGetTripQueryKey(id) });
@@ -440,6 +463,34 @@ export default function TripDetail({ id }: { id: number }) {
       setUploadingDoc(false);
       e.target.value = "";
     }
+  };
+
+  const handleSendMessage = () => {
+    const text = chatInput.trim();
+    if (!text || sendMessage.isPending) return;
+    setChatInput("");
+    const withUser: ChatMessage[] = [...chatMessages, { role: "user", content: text }];
+    setChatMessages(withUser);
+    sendMessage.mutate(
+      { tripId: id, message: text },
+      {
+        onSuccess: (data) => setChatMessages(data.history),
+        onError: () => {
+          setChatMessages(chatMessages);
+          toast.error("Failed to get a response. Please try again.");
+        },
+      },
+    );
+  };
+
+  const handleClearChat = () => {
+    clearChat.mutate(id, {
+      onSuccess: () => {
+        setChatMessages([]);
+        toast.success("Chat cleared");
+      },
+      onError: () => toast.error("Failed to clear chat"),
+    });
   };
 
   const handleDeleteDocument = (docId: number) => {
@@ -944,6 +995,105 @@ export default function TripDetail({ id }: { id: number }) {
               tripId={id}
               onSave={handleSavePackingList}
             />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* AI Chat Assistant */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-serif text-xl text-foreground flex items-center gap-2">
+            <MessageCircle className="w-5 h-5 text-primary" />
+            AI Travel Assistant
+          </h2>
+          {chatMessages.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground h-8"
+              onClick={handleClearChat}
+              disabled={clearChat.isPending}
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+              Clear chat
+            </Button>
+          )}
+        </div>
+
+        <Card className="border-border/50">
+          <CardContent className="p-0">
+            <div className="max-h-96 overflow-y-auto px-4 py-4 space-y-3">
+              {chatMessages.length === 0 && !sendMessage.isPending && (
+                <div className="flex flex-col items-center gap-2 py-8 text-center">
+                  <Bot className="w-8 h-8 text-muted-foreground/40" />
+                  <p className="text-sm text-muted-foreground">
+                    Ask me anything about {trip.destination} — things to do, local customs, transport, packing tips, and more.
+                  </p>
+                </div>
+              )}
+
+              {chatMessages.map((msg, i) => (
+                <div
+                  key={i}
+                  className={`flex gap-2.5 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                >
+                  {msg.role === "assistant" && (
+                    <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                      <Bot className="w-4 h-4 text-primary" />
+                    </div>
+                  )}
+                  <div
+                    className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
+                      msg.role === "user"
+                        ? "bg-primary text-primary-foreground rounded-tr-sm"
+                        : "bg-muted text-foreground rounded-tl-sm"
+                    }`}
+                  >
+                    {msg.content}
+                  </div>
+                </div>
+              ))}
+
+              {sendMessage.isPending && (
+                <div className="flex gap-2.5 justify-start">
+                  <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                    <Bot className="w-4 h-4 text-primary" />
+                  </div>
+                  <div className="bg-muted rounded-2xl rounded-tl-sm px-3.5 py-3 text-muted-foreground">
+                    <span className="inline-flex gap-1 text-lg leading-none">
+                      <span className="animate-bounce" style={{ animationDelay: "0ms" }}>·</span>
+                      <span className="animate-bounce" style={{ animationDelay: "150ms" }}>·</span>
+                      <span className="animate-bounce" style={{ animationDelay: "300ms" }}>·</span>
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div ref={chatEndRef} />
+            </div>
+
+            <div className="border-t border-border/50 p-3 flex gap-2">
+              <Input
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder={`Ask about ${trip.destination}…`}
+                className="flex-1"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+                disabled={sendMessage.isPending}
+              />
+              <Button
+                size="icon"
+                onClick={handleSendMessage}
+                disabled={!chatInput.trim() || sendMessage.isPending}
+              >
+                <Send className="w-4 h-4" />
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

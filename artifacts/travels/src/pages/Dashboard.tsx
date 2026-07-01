@@ -33,9 +33,9 @@ const STATUS_COLORS: Record<TripStatus, string> = {
   completed: "bg-gray-100 text-gray-500 border-gray-200",
 };
 
-function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string | number }) {
-  return (
-    <Card className="border-border/50">
+function StatCard({ icon, label, value, href }: { icon: React.ReactNode; label: string; value: string | number; href?: string }) {
+  const inner = (
+    <Card className={`border-border/50 transition-colors ${href ? "hover:bg-muted/50 cursor-pointer" : ""}`}>
       <CardContent className="flex items-center gap-4 py-5">
         <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center text-primary shrink-0">
           {icon}
@@ -47,6 +47,8 @@ function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string
       </CardContent>
     </Card>
   );
+  if (href) return <Link href={href}>{inner}</Link>;
+  return inner;
 }
 
 function TripRow({ trip }: { trip: Trip }) {
@@ -123,21 +125,25 @@ export default function Dashboard() {
           icon={<Plane className="w-5 h-5" />}
           label="Total trips"
           value={statsLoading ? "—" : (stats?.totalTrips ?? 0)}
+          href="/trips"
         />
         <StatCard
           icon={<CheckCircle className="w-5 h-5" />}
           label="Completed"
           value={statsLoading ? "—" : (stats?.completedTrips ?? 0)}
+          href="/trips?status=completed"
         />
         <StatCard
           icon={<Calendar className="w-5 h-5" />}
           label="Upcoming"
           value={statsLoading ? "—" : (stats?.upcomingTrips ?? 0)}
+          href="/trips?status=booked"
         />
         <StatCard
           icon={<MapPin className="w-5 h-5" />}
           label="Destinations"
           value={statsLoading ? "—" : (stats?.uniqueDestinations ?? 0)}
+          href="/destinations"
         />
       </div>
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import {
   useListTrips,
   useCreateTrip,
@@ -181,8 +181,10 @@ function CreateTripDialog({
 const FAMILY_MEMBERS = ["John", "Ashley", "Karis", "Angela"] as const;
 
 export default function Trips() {
+  const search = useSearch();
+  const initialStatus = (new URLSearchParams(search).get("status") ?? "all") as TripStatus | "all";
   const { data: trips = [], isLoading } = useListTrips();
-  const [filterStatus, setFilterStatus] = useState<TripStatus | "all">("all");
+  const [filterStatus, setFilterStatus] = useState<TripStatus | "all">(initialStatus);
   const [filterYear, setFilterYear] = useState<number | "all">("all");
   const [filterPerson, setFilterPerson] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);

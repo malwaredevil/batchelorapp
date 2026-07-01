@@ -9,7 +9,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Search, Plane, Users, ChevronDown, ChevronUp } from "lucide-react";
+import { MapPin, Search, Plane, Users, ChevronDown, ChevronUp, Globe } from "lucide-react";
 
 const STATUS_COLORS: Record<TripStatus, string> = {
   wishlist:  "bg-yellow-50 text-yellow-700 border-yellow-200",
@@ -125,6 +125,65 @@ function DestinationCard({ group }: { group: DestinationGroup }) {
 
 const FAMILY_MEMBERS = ["John", "Ashley", "Karis", "Angela"] as const;
 
+/** Extract the country from "City, Country" — falls back to the full string. */
+function extractCountry(destination: string): string {
+  const parts = destination.split(",");
+  return parts.length > 1 ? parts[parts.length - 1].trim() : destination.trim();
+}
+
+/** Initials avatar colour — stable per name */
+const AVATAR_COLORS = [
+  "bg-orange-100 text-orange-700",
+  "bg-green-100 text-green-700",
+  "bg-yellow-100 text-yellow-700",
+  "bg-sky-100 text-sky-700",
+] as const;
+
+function FamilyCountrySummary({ groups }: { groups: DestinationGroup[] }) {
+  const completedGroups = groups.map((g) => ({
+    ...g,
+    trips: g.trips.filter((t) => t.status === "completed"),
+  })).filter((g) => g.trips.length > 0);
+
+  const stats = FAMILY_MEMBERS.map((name, i) => {
+    const countries = new Set<string>();
+    const destinations = new Set<string>();
+    completedGroups.forEach((g) => {
+      g.trips.forEach((t) => {
+        const travelers = t.travelers as string[] | null;
+        if (travelers?.includes(name)) {
+          countries.add(extractCountry(g.destination));
+          destinations.add(g.destination);
+        }
+      });
+    });
+    return { name, countries: countries.size, destinations: destinations.size, colorClass: AVATAR_COLORS[i % AVATAR_COLORS.length] };
+  });
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {stats.map(({ name, countries, destinations, colorClass }) => (
+        <Card key={name} className="border-border/50">
+          <CardContent className="py-4 px-4 flex flex-col items-center text-center gap-2">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold text-sm ${colorClass}`}>
+              {name.slice(0, 2)}
+            </div>
+            <p className="font-medium text-foreground text-sm leading-tight">{name}</p>
+            <div className="flex items-center gap-1 text-2xl font-bold text-foreground leading-none">
+              <Globe className="w-4 h-4 text-muted-foreground mb-0.5" />
+              {countries}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {countries === 1 ? "country" : "countries"}
+              {destinations > 0 && ` · ${destinations} ${destinations === 1 ? "place" : "places"}`}
+            </p>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
 export default function Destinations() {
   const { data: groups = [], isLoading } = useListDestinations();
   const [search, setSearch] = useState("");
@@ -164,6 +223,9 @@ export default function Destinations() {
             : `${groups.length} destination${groups.length !== 1 ? "s" : ""} · ${totalVisits} total visits`}
         </p>
       </div>
+
+      {/* Family country summary */}
+      {!isLoading && groups.length > 0 && <FamilyCountrySummary groups={groups} />}
 
       {/* Filters */}
       <div className="space-y-3">

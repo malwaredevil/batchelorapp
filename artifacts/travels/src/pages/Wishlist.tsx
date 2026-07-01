@@ -1,9 +1,8 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Plus, Trash2, Star, Calendar } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Card, CardContent } from "../components/ui/card";
-import { Textarea } from "../components/ui/textarea";
 import { toast } from "sonner";
 import {
   useListWishlist,
@@ -15,34 +14,118 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { getListWishlistQueryKey } from "@workspace/api-client-react";
 
+// ─── Note storage model ───────────────────────────────────────────────────────
+// notes column stores JSON: [{text: string, date: string}]
+// Legacy plain-text notes are migrated transparently on first edit.
+
+type NoteEntry = { text: string; date: string };
+
+function parseNotes(raw: string | null | undefined): NoteEntry[] {
+  if (!raw?.trim()) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      Array.isArray(parsed) &&
+      parsed.every(
+        (e) => e && typeof (e as Record<string, unknown>).text === "string",
+      )
+    ) {
+      return parsed as NoteEntry[];
+    }
+  } catch { /* not JSON */ }
+  // Legacy plain text — treat each line as an entry (no date yet)
+  return raw
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((text) => ({ text, date: "" }));
+}
+
+function todayLabel(): string {
+  return new Date().toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+/** Merge edited lines against existing entries, preserving original dates. */
+function mergeLines(existing: NoteEntry[], rawLines: string[]): NoteEntry[] {
+  const today = todayLabel();
+  const dateByText = new Map(existing.map((e) => [e.text.trim(), e.date]));
+  return rawLines
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((text) => ({ text, date: dateByText.get(text) ?? today }));
+}
+
+// ─── Editor helpers ───────────────────────────────────────────────────────────
+
+/** Extract plain-text lines from a contentEditable div. */
+function linesFromDiv(el: HTMLElement): string[] {
+  // Normalise: each block element = one line; <br> = line break
+  const html = el.innerHTML
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/?(div|p|li)[^>]*>/gi, "\n")
+    .replace(/<[^>]+>/g, "");
+  const txt = new DOMParser().parseFromString(html, "text/html").body.textContent ?? "";
+  return txt.split("\n");
+}
+
+/** Build the innerHTML for the editor from a list of entry texts. */
+function buildEditorHtml(entries: NoteEntry[]): string {
+  const lines = entries.length ? entries.map((e) => e.text) : [""];
+  return lines.map((l) => `<div>${l || "<br>"}</div>`).join("");
+}
+
+// ─── WishlistRow ─────────────────────────────────────────────────────────────
+
 function WishlistRow({ item }: { item: WishlistItem }) {
   const qc = useQueryClient();
   const updateItem = useUpdateWishlistItem();
   const removeItem = useDeleteWishlistItem();
 
-  const [editingNotes, setEditingNotes] = useState(false);
-  const [draft, setDraft] = useState(item.notes ?? "");
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const entries = parseNotes(item.notes);
+  const [editing, setEditing] = useState(false);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const savingRef = useRef(false);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: getListWishlistQueryKey() });
 
-  function openNotes() {
-    setDraft(item.notes ?? "");
-    setEditingNotes(true);
-    setTimeout(() => textareaRef.current?.focus(), 0);
-  }
+  const openEditor = useCallback(() => {
+    setEditing(true);
+    setTimeout(() => {
+      if (!editorRef.current) return;
+      editorRef.current.innerHTML = buildEditorHtml(entries);
+      // Place cursor at end
+      const range = document.createRange();
+      const sel = window.getSelection();
+      range.selectNodeContents(editorRef.current);
+      range.collapse(false);
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+      editorRef.current.focus();
+    }, 0);
+  }, [entries]);
 
-  function saveNotes() {
-    const trimmed = draft.trim();
-    if (trimmed === (item.notes ?? "").trim()) {
-      setEditingNotes(false);
+  function saveEditor() {
+    if (savingRef.current || !editorRef.current) return;
+    savingRef.current = true;
+    const lines = linesFromDiv(editorRef.current);
+    const merged = mergeLines(entries, lines);
+    const serialized = merged.length ? JSON.stringify(merged) : null;
+    const currentSerialized = item.notes ?? null;
+    if (serialized === currentSerialized) {
+      setEditing(false);
+      savingRef.current = false;
       return;
     }
     updateItem.mutate(
-      { id: item.id, body: { notes: trimmed || null } },
+      { id: item.id, body: { notes: serialized } },
       {
-        onSuccess: () => { invalidate(); setEditingNotes(false); },
+        onSuccess: () => { invalidate(); setEditing(false); },
         onError: () => toast.error("Failed to save note"),
+        onSettled: () => { savingRef.current = false; },
       },
     );
   }
@@ -54,11 +137,22 @@ function WishlistRow({ item }: { item: WishlistItem }) {
     });
   }
 
+  function handleEditorKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key === "Escape") {
+      setEditing(false);
+    }
+    // Prevent Shift+Enter from doing anything special
+    if (e.key === "Enter" && e.shiftKey) {
+      e.preventDefault();
+    }
+  }
+
   return (
     <div className="group flex gap-3 px-4 py-4 rounded-xl border border-border/50 bg-card hover:bg-muted/20 transition-colors">
       <Star className="w-4 h-4 text-yellow-500 shrink-0 mt-0.5" />
 
-      <div className="flex-1 min-w-0 space-y-1.5">
+      <div className="flex-1 min-w-0 space-y-2">
+        {/* Header row */}
         <div className="flex items-start justify-between gap-2">
           <p className="font-medium text-foreground leading-snug">{item.destination}</p>
           <button
@@ -79,30 +173,51 @@ function WishlistRow({ item }: { item: WishlistItem }) {
           </p>
         )}
 
-        {/* Notes */}
-        {editingNotes ? (
-          <Textarea
-            ref={textareaRef}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={saveNotes}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") { setEditingNotes(false); setDraft(item.notes ?? ""); }
-            }}
-            placeholder="Add a note…"
-            className="mt-1 text-sm resize-none min-h-[72px]"
-            rows={3}
-          />
-        ) : item.notes ? (
-          <p
-            onClick={openNotes}
-            className="text-sm text-muted-foreground whitespace-pre-wrap cursor-text hover:text-foreground transition-colors"
+        {/* ── Rich-text notes ── */}
+        {editing ? (
+          <div className="mt-1 rounded-lg border border-primary/40 bg-background shadow-sm focus-within:ring-1 focus-within:ring-primary/30">
+            {/* Toolbar hint */}
+            <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border/40 text-[10px] text-muted-foreground select-none">
+              <span className="font-medium">Notes</span>
+              <span>·</span>
+              <span>Each line becomes a bullet</span>
+              <span>·</span>
+              <span>Enter = new line</span>
+              <span>·</span>
+              <span>Esc = cancel</span>
+            </div>
+            <div
+              ref={editorRef}
+              contentEditable
+              suppressContentEditableWarning
+              onBlur={saveEditor}
+              onKeyDown={handleEditorKeyDown}
+              className="min-h-[80px] px-3 py-2.5 text-sm text-foreground outline-none leading-relaxed"
+              style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}
+            />
+          </div>
+        ) : entries.length > 0 ? (
+          <ul
+            onClick={openEditor}
+            className="space-y-1 cursor-text pl-1"
           >
-            {item.notes}
-          </p>
+            {entries.map((entry, i) => (
+              <li key={i} className="flex items-baseline gap-2 text-sm text-foreground group/bullet">
+                <span className="text-yellow-500 shrink-0 text-base leading-none select-none">•</span>
+                <span className="leading-snug">
+                  {entry.text}
+                  {entry.date && (
+                    <span className="ml-1.5 text-[11px] text-muted-foreground font-normal">
+                      ({entry.date})
+                    </span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
         ) : (
           <button
-            onClick={openNotes}
+            onClick={openEditor}
             className="text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors italic"
           >
             Add a note…
@@ -112,6 +227,8 @@ function WishlistRow({ item }: { item: WishlistItem }) {
     </div>
   );
 }
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Wishlist() {
   const qc = useQueryClient();

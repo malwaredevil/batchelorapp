@@ -39,7 +39,7 @@ export default function Wishlist() {
           setNewDest("");
           setNewDate("");
           invalidate();
-          toast.success("Added to bucket list");
+          toast.success("Added to wishlist");
         },
         onError: () => toast.error("Failed to add"),
       },
@@ -85,7 +85,7 @@ export default function Wishlist() {
       <div>
         <h1 className="font-serif text-2xl text-foreground flex items-center gap-2">
           <Star className="w-6 h-6 text-amber-500" />
-          Bucket List
+          Wishlist
         </h1>
         <p className="text-muted-foreground mt-1">
           {pendingCount} places to visit · {doneCount} visited

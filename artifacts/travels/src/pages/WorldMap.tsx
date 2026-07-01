@@ -25,12 +25,17 @@ const STATUS_ORDER: TripStatus[] = ["active", "booked", "planning", "wishlist", 
 
 function makeIcon(status: TripStatus) {
   const color = PIN_COLOR[status];
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 32" width="24" height="32"><path d="M12 0C7.6 0 4 3.6 4 8c0 5.4 8 24 8 24s8-18.6 8-24c0-4.4-3.6-8-8-8z" fill="${color}" stroke="white" stroke-width="1.5"/><circle cx="12" cy="8" r="3.5" fill="white"/></svg>`;
+
+  const svg = status === "wishlist"
+    ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28"><polygon points="14,2 17.5,11 27,11 19.5,16.5 22.5,26 14,20.5 5.5,26 8.5,16.5 1,11 10.5,11" fill="${color}" stroke="white" stroke-width="1.5" stroke-linejoin="round"/></svg>`
+    : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 32" width="24" height="32"><path d="M12 0C7.6 0 4 3.6 4 8c0 5.4 8 24 8 24s8-18.6 8-24c0-4.4-3.6-8-8-8z" fill="${color}" stroke="white" stroke-width="1.5"/><circle cx="12" cy="8" r="3.5" fill="white"/></svg>`;
+
+  const isWishlist = status === "wishlist";
   return L.icon({
     iconUrl: `data:image/svg+xml;base64,${btoa(svg)}`,
-    iconSize: [24, 32],
-    iconAnchor: [12, 32],
-    popupAnchor: [0, -34],
+    iconSize:    isWishlist ? [28, 28] : [24, 32],
+    iconAnchor:  isWishlist ? [14, 14] : [12, 32],
+    popupAnchor: [0, isWishlist ? -16 : -34],
   });
 }
 

@@ -24,6 +24,7 @@ export const travelsTrips = pgTable(
     startDate: date("start_date"),
     endDate: date("end_date"),
     transportTo: text("transport_to"),
+    transportDetails: text("transport_details"),
     hasRentalCar: boolean("has_rental_car").notNull().default(false),
     accommodationName: text("accommodation_name"),
     accommodationArea: text("accommodation_area"),

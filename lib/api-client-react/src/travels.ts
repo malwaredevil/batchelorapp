@@ -35,6 +35,7 @@ export interface Trip {
   startDate?: string | null;
   endDate?: string | null;
   transportTo?: TransportTo | null;
+  transportDetails?: string | null;
   hasRentalCar: boolean;
   accommodationName?: string | null;
   accommodationArea?: string | null;
@@ -85,6 +86,7 @@ export interface CreateTripBody {
   startDate?: string;
   endDate?: string;
   transportTo?: TransportTo;
+  transportDetails?: string;
   hasRentalCar?: boolean;
   accommodationName?: string;
   accommodationArea?: string;

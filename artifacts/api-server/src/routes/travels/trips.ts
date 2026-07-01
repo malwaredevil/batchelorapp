@@ -44,6 +44,7 @@ const CreateTripBody = z.object({
   startDate: z.string().optional(),
   endDate: z.string().optional(),
   transportTo: z.enum(["drove", "flew", "train"]).optional(),
+  transportDetails: z.string().optional(),
   hasRentalCar: z.boolean().default(false),
   accommodationName: z.string().optional(),
   accommodationArea: z.string().optional(),

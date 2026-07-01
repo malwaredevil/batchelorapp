@@ -2221,6 +2221,7 @@ export const TravelsTripInputSchema = zod.object({
   startDate: zod.string().optional(),
   endDate: zod.string().optional(),
   transportTo: zod.enum(['drove', 'flew', 'train']).optional(),
+  transportDetails: zod.string().optional(),
   hasRentalCar: zod.boolean().optional(),
   accommodationName: zod.string().optional(),
   accommodationArea: zod.string().optional(),

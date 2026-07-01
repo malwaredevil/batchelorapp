@@ -918,6 +918,7 @@ export default function TripDetail({ id }: { id: number }) {
       startDate: trip.startDate ?? undefined,
       endDate: trip.endDate ?? undefined,
       transportTo: trip.transportTo ?? undefined,
+      transportDetails: trip.transportDetails ?? undefined,
       hasRentalCar: trip.hasRentalCar,
       accommodationName: trip.accommodationName ?? undefined,
       accommodationArea: trip.accommodationArea ?? undefined,
@@ -1314,6 +1315,20 @@ export default function TripDetail({ id }: { id: number }) {
                   </SelectContent>
                 </Select>
               </div>
+              {editForm.transportTo && editForm.transportTo !== "drove" && (
+                <div className="space-y-2">
+                  <Label>
+                    {editForm.transportTo === "flew" ? "Airline & flight number" : "Train line & train number"}
+                  </Label>
+                  <Input
+                    placeholder={editForm.transportTo === "flew" ? "e.g. Delta DL 405" : "e.g. Eurostar 9025"}
+                    value={editForm.transportDetails ?? ""}
+                    onChange={(e) =>
+                      setEditForm((f) => ({ ...f, transportDetails: e.target.value || undefined }))
+                    }
+                  />
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>Rental car?</Label>
                 <Select
@@ -1442,6 +1457,9 @@ export default function TripDetail({ id }: { id: number }) {
                     {trip.transportTo === "flew" ? "Flying" : trip.transportTo === "train" ? "Train" : "Driving"}
                     {trip.hasRentalCar ? " + rental car" : ""}
                   </p>
+                  {trip.transportDetails && (
+                    <p className="text-xs text-muted-foreground mt-0.5">{trip.transportDetails}</p>
+                  )}
                 </div>
               </div>
             )}

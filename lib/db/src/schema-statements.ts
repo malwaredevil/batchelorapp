@@ -458,6 +458,9 @@ export const STATEMENTS: string[] = [
   // travels_trips.todo_list: JSON array of { item, done } objects
   `ALTER TABLE travels_trips ADD COLUMN IF NOT EXISTS todo_list JSONB`,
 
+  // travels_trips.transport_details: free-text carrier name / number (airline, train line, etc.)
+  `ALTER TABLE travels_trips ADD COLUMN IF NOT EXISTS transport_details TEXT`,
+
   // ── Travels reminder email alerts ─────────────────────────────────────────
   // Per-user email address to receive trip-reminder alerts (14-day, 7-day, 3-day).
   `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS travels_reminder_email TEXT`,

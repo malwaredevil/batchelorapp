@@ -34,7 +34,18 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { getListWishlistQueryKey } from "@workspace/api-client-react";
 
-// ─── Date injection ───────────────────────────────────────────────────────────
+// ─── Notes JSON format ────────────────────────────────────────────────────────
+//
+// Stored in the `notes` TEXT column as:
+//   {"html":"<clean tiptap html>","dates":["Jul 1, 2026", null, "Jun 15, 2026"]}
+//
+// `dates` is indexed by <li> position. null = no date yet.
+// Dates are injected into HTML only at display time, keeping TipTap content clean.
+
+interface WishlistNotes {
+  html: string;
+  dates: (string | null)[];
+}
 
 function todayLabel() {
   return new Date().toLocaleDateString("en-US", {
@@ -44,36 +55,71 @@ function todayLabel() {
   });
 }
 
-/**
- * Walk all <li> elements in the saved HTML. If one doesn't already end with
- * a .note-date span, append today's date.
- */
-function injectDates(html: string): string {
-  if (!html?.trim()) return html;
-  const doc = new DOMParser().parseFromString(html, "text/html");
+function parseNotes(raw: string | null | undefined): WishlistNotes {
+  if (!raw?.trim()) return { html: "", dates: [] };
+  try {
+    const p = JSON.parse(raw);
+    if (p && typeof p.html === "string" && Array.isArray(p.dates)) {
+      return p as WishlistNotes;
+    }
+  } catch {
+    // legacy: raw value is plain HTML (or old [{text,date}] JSON) — load as html, no dates
+  }
+  return { html: raw, dates: [] };
+}
+
+function countLis(html: string): number {
+  try {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    return doc.querySelectorAll("li").length;
+  } catch {
+    return 0;
+  }
+}
+
+/** Merge saved dates with new HTML: keep old dates by index, assign today to new bullets. */
+function mergeDates(newHtml: string, oldDates: (string | null)[]): (string | null)[] {
+  const count = countLis(newHtml);
   const today = todayLabel();
-  doc.querySelectorAll("li").forEach((li) => {
-    if (!li.querySelector(".note-date") && li.textContent?.trim()) {
+  const result: (string | null)[] = [];
+  for (let i = 0; i < count; i++) {
+    result.push(oldDates[i] ?? today);
+  }
+  return result;
+}
+
+/** Inject date spans into HTML at display time. Does not modify the stored HTML. */
+function buildDisplayHtml(notes: WishlistNotes): string {
+  const { html, dates } = notes;
+  if (!html?.trim()) return "";
+  if (!dates.some(Boolean)) return html; // no dates yet — show as-is
+  try {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    doc.querySelectorAll("li").forEach((li, i) => {
+      const d = dates[i];
+      if (!d) return;
+      // append inside the <p> if present, else directly into <li>
+      const target = li.querySelector("p") ?? li;
       const span = doc.createElement("span");
       span.className = "note-date";
-      span.textContent = `(${today})`;
-      li.appendChild(span);
-    }
-  });
-  return doc.body.innerHTML;
+      span.textContent = ` (${d})`;
+      target.appendChild(span);
+    });
+    return doc.body.innerHTML;
+  } catch {
+    return html;
+  }
 }
 
 // ─── Toolbar button ───────────────────────────────────────────────────────────
 
 function ToolBtn({
   active,
-  disabled,
   onClick,
   title,
   children,
 }: {
   active?: boolean;
-  disabled?: boolean;
   onClick: () => void;
   title: string;
   children: React.ReactNode;
@@ -82,14 +128,12 @@ function ToolBtn({
     <button
       type="button"
       title={title}
-      disabled={disabled}
       onClick={onClick}
       className={`flex items-center justify-center w-7 h-7 rounded text-sm transition-colors
         ${active
           ? "bg-primary text-primary-foreground"
           : "text-muted-foreground hover:text-foreground hover:bg-muted"
-        }
-        ${disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
+        }`}
     >
       {children}
     </button>
@@ -100,15 +144,15 @@ function Divider() {
   return <div className="w-px h-5 bg-border/60 mx-0.5" />;
 }
 
-// ─── The TipTap editor panel ──────────────────────────────────────────────────
+// ─── TipTap editor panel ──────────────────────────────────────────────────────
 
 function NoteEditor({
-  initialHtml,
+  initialNotes,
   onSave,
   onCancel,
 }: {
-  initialHtml: string;
-  onSave: (html: string) => void;
+  initialNotes: WishlistNotes;
+  onSave: (notes: WishlistNotes) => void;
   onCancel: () => void;
 }) {
   const editor = useEditor({
@@ -119,15 +163,16 @@ function NoteEditor({
       TextAlign.configure({ types: ["paragraph", "listItem"] }),
       Placeholder.configure({ placeholder: "Add your notes here…" }),
     ],
-    content: initialHtml || "",
+    content: initialNotes.html || "",
     autofocus: "end",
   });
 
   function handleSave() {
     if (!editor) return;
     const raw = editor.getHTML();
-    const withDates = injectDates(raw === "<p></p>" ? "" : raw);
-    onSave(withDates || "");
+    const html = raw === "<p></p>" ? "" : raw;
+    const dates = mergeDates(html, initialNotes.dates);
+    onSave({ html, dates });
   }
 
   if (!editor) return null;
@@ -170,7 +215,6 @@ function NoteEditor({
           <AlignRight className="w-3.5 h-3.5" />
         </ToolBtn>
 
-        {/* Save / Cancel pushed to the right */}
         <div className="flex-1" />
         <button
           type="button"
@@ -188,7 +232,6 @@ function NoteEditor({
         </button>
       </div>
 
-      {/* Editor body */}
       <EditorContent editor={editor} />
     </div>
   );
@@ -204,9 +247,13 @@ function WishlistRow({ item }: { item: WishlistItem }) {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: getListWishlistQueryKey() });
 
+  const notes = parseNotes(item.notes);
+  const displayHtml = buildDisplayHtml(notes);
+  const hasNotes = !!notes.html.trim();
+
   const handleSave = useCallback(
-    (html: string) => {
-      const value = html.trim() || null;
+    (updated: WishlistNotes) => {
+      const value = updated.html.trim() ? JSON.stringify(updated) : null;
       updateItem.mutate(
         { id: item.id, body: { notes: value } },
         {
@@ -225,14 +272,11 @@ function WishlistRow({ item }: { item: WishlistItem }) {
     });
   }
 
-  const hasNotes = !!item.notes?.trim();
-
   return (
     <div className="group flex gap-3 px-4 py-4 rounded-xl border border-border/50 bg-card hover:bg-muted/20 transition-colors">
       <Star className="w-4 h-4 text-yellow-500 shrink-0 mt-0.5" />
 
       <div className="flex-1 min-w-0 space-y-2">
-        {/* Header */}
         <div className="flex items-start justify-between gap-2">
           <p className="font-medium text-foreground leading-snug">{item.destination}</p>
           <button
@@ -253,10 +297,9 @@ function WishlistRow({ item }: { item: WishlistItem }) {
           </p>
         )}
 
-        {/* Notes */}
         {editing ? (
           <NoteEditor
-            initialHtml={item.notes ?? ""}
+            initialNotes={notes}
             onSave={handleSave}
             onCancel={() => setEditing(false)}
           />
@@ -264,7 +307,7 @@ function WishlistRow({ item }: { item: WishlistItem }) {
           <div
             className="wishlist-note-display cursor-text text-foreground"
             onClick={() => setEditing(true)}
-            dangerouslySetInnerHTML={{ __html: item.notes! }}
+            dangerouslySetInnerHTML={{ __html: displayHtml }}
           />
         ) : (
           <button
@@ -310,7 +353,6 @@ export default function Wishlist() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="font-serif text-2xl text-foreground flex items-center gap-2">
           <Star className="w-6 h-6 text-yellow-500" />
@@ -321,7 +363,6 @@ export default function Wishlist() {
         </p>
       </div>
 
-      {/* Add form */}
       <Card className="border-border/50">
         <CardContent className="pt-4">
           <div className="flex gap-2 flex-col sm:flex-row">
@@ -346,7 +387,6 @@ export default function Wishlist() {
         </CardContent>
       </Card>
 
-      {/* List */}
       {isLoading ? (
         <div className="space-y-2">
           {[1, 2, 3].map((i) => (

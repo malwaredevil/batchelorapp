@@ -131,7 +131,15 @@ router.delete("/trips/:id/reminders/:reminderId", async (req, res) => {
 
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
 
-  await db.delete(travelsReminders).where(eq(travelsReminders.id, reminderId));
+  await db
+    .delete(travelsReminders)
+    .where(
+      and(
+        eq(travelsReminders.id, reminderId),
+        eq(travelsReminders.userId, userId),
+        eq(travelsReminders.tripId, tripId),
+      ),
+    );
   res.status(204).send();
 });
 

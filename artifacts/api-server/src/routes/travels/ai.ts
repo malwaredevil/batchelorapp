@@ -415,7 +415,7 @@ Answer questions about ${trip.destination}: things to do, local food, customs, t
       messages,
       max_tokens: 600,
     });
-    return response.choices[0].message.content ?? "";
+    return response.choices[0]?.message?.content ?? "";
   });
 
   const updatedHistory: ChatMessage[] = [

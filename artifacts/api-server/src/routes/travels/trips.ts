@@ -24,6 +24,7 @@ async function geocodeDestination(
       headers: { "User-Agent": "Batchelor-App/1.0" },
       signal: AbortSignal.timeout(5000),
     });
+    if (!res.ok) return null;
     const data = (await res.json()) as Array<{ lat: string; lon: string }>;
     if (data[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
     return null;

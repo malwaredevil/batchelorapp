@@ -261,7 +261,13 @@ router.delete("/trips/:id/documents/:docId", async (req, res) => {
 
   await db
     .delete(travelsTripDocuments)
-    .where(eq(travelsTripDocuments.id, docId));
+    .where(
+      and(
+        eq(travelsTripDocuments.id, docId),
+        eq(travelsTripDocuments.tripId, tripId),
+        eq(travelsTripDocuments.userId, userId),
+      ),
+    );
 
   res.status(204).send();
 });

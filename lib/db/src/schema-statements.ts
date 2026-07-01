@@ -414,6 +414,36 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE travels_wishlist ENABLE ROW LEVEL SECURITY`,
   `CREATE INDEX IF NOT EXISTS travels_wishlist_user_id_idx ON travels_wishlist (user_id)`,
 
+  // ── Travels 2.0 enhancements ────────────────────────────────────────────────
+  // fun_fact: memorable fact or story from the trip
+  `ALTER TABLE travels_trips ADD COLUMN IF NOT EXISTS fun_fact text`,
+  // travels_trip_photos: multiple photos per trip stored in Supabase Storage
+  `CREATE TABLE IF NOT EXISTS travels_trip_photos (
+    id          SERIAL PRIMARY KEY,
+    trip_id     INTEGER NOT NULL,
+    user_id     INTEGER NOT NULL,
+    storage_path TEXT NOT NULL,
+    caption     TEXT,
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_trip_photos ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travels_trip_photos_trip_id_idx ON travels_trip_photos (trip_id)`,
+  `CREATE INDEX IF NOT EXISTS travels_trip_photos_user_id_idx ON travels_trip_photos (user_id)`,
+  // travels_reminders: per-trip alerts/reminders with due dates
+  `CREATE TABLE IF NOT EXISTS travels_reminders (
+    id          SERIAL PRIMARY KEY,
+    trip_id     INTEGER NOT NULL,
+    user_id     INTEGER NOT NULL,
+    title       TEXT NOT NULL,
+    due_date    DATE,
+    done        BOOLEAN NOT NULL DEFAULT false,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_reminders ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travels_reminders_trip_id_idx ON travels_reminders (trip_id)`,
+  `CREATE INDEX IF NOT EXISTS travels_reminders_user_id_idx ON travels_reminders (user_id)`,
+
   // ── Pottery AI enhancements ──────────────────────────────────────────────────
   // glaze_type: Jina CLIP zero-shot decoration/glaze classification
   `ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS glaze_type text`,

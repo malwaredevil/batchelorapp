@@ -28,6 +28,7 @@ export const travelsTrips = pgTable(
     accommodationName: text("accommodation_name"),
     accommodationArea: text("accommodation_area"),
     notes: text("notes"),
+    funFact: text("fun_fact"),
     travellerCount: integer("traveller_count").notNull().default(2),
     travelers: jsonb("travelers"),
     theOneThing: jsonb("the_one_thing"),
@@ -70,6 +71,50 @@ export const travelsTripDocuments = pgTable(
 export type TravelsTripDocumentRow = typeof travelsTripDocuments.$inferSelect;
 export type InsertTravelsTripDocument =
   typeof travelsTripDocuments.$inferInsert;
+
+export const travelsTripPhotos = pgTable(
+  "travels_trip_photos",
+  {
+    id: serial("id").primaryKey(),
+    tripId: integer("trip_id").notNull(),
+    userId: integer("user_id").notNull(),
+    storagePath: text("storage_path").notNull(),
+    caption: text("caption"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("travels_trip_photos_trip_id_idx").on(table.tripId),
+    index("travels_trip_photos_user_id_idx").on(table.userId),
+  ],
+).enableRLS();
+
+export type TravelsTripPhotoRow = typeof travelsTripPhotos.$inferSelect;
+export type InsertTravelsTripPhoto = typeof travelsTripPhotos.$inferInsert;
+
+export const travelsReminders = pgTable(
+  "travels_reminders",
+  {
+    id: serial("id").primaryKey(),
+    tripId: integer("trip_id").notNull(),
+    userId: integer("user_id").notNull(),
+    title: text("title").notNull(),
+    dueDate: date("due_date"),
+    done: boolean("done").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("travels_reminders_trip_id_idx").on(table.tripId),
+    index("travels_reminders_user_id_idx").on(table.userId),
+  ],
+).enableRLS();
+
+export type TravelsReminderRow = typeof travelsReminders.$inferSelect;
+export type InsertTravelsReminder = typeof travelsReminders.$inferInsert;
 
 export const travelsWishlist = pgTable(
   "travels_wishlist",

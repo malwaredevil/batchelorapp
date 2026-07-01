@@ -4,6 +4,9 @@ import documentsRouter from "./documents";
 import aiRouter from "./ai";
 import wishlistRouter from "./wishlist";
 import importRouter from "./import";
+import photosRouter from "./photos";
+import remindersRouter from "./reminders";
+import destinationsRouter from "./destinations";
 
 const router: IRouter = Router();
 
@@ -12,5 +15,8 @@ router.use(documentsRouter);
 router.use(aiRouter);
 router.use(wishlistRouter);
 router.use(importRouter);
+router.use(photosRouter);
+router.use(remindersRouter);
+router.use(destinationsRouter);
 
 export default router;

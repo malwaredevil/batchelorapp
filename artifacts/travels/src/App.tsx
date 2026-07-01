@@ -15,6 +15,7 @@ import WorldMap from "@/pages/WorldMap";
 import Explore from "@/pages/Explore";
 import Wishlist from "@/pages/Wishlist";
 import Import from "@/pages/Import";
+import Destinations from "@/pages/Destinations";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -76,6 +77,14 @@ function Router() {
         <ProtectedRoute>
           <Layout>
             <Import />
+          </Layout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/destinations">
+        <ProtectedRoute>
+          <Layout>
+            <Destinations />
           </Layout>
         </ProtectedRoute>
       </Route>

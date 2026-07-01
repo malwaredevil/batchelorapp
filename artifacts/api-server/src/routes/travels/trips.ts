@@ -46,6 +46,7 @@ const CreateTripBody = z.object({
   accommodationName: z.string().optional(),
   accommodationArea: z.string().optional(),
   notes: z.string().optional(),
+  funFact: z.string().optional(),
   travellerCount: z.number().int().min(1).default(2),
   travelers: z.array(z.string()).optional(),
   theOneThing: z.array(z.string()).optional(),

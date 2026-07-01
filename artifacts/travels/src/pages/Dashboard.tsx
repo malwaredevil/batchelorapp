@@ -1,9 +1,19 @@
 import { Link } from "wouter";
-import { useGetTravelsStats, useListTrips, type Trip, type TripStatus } from "@workspace/api-client-react";
+import {
+  useGetTravelsStats,
+  useListTrips,
+  useListAllReminders,
+  useUpdateReminder,
+  getListAllRemindersQueryKey,
+  type Trip,
+  type TripStatus,
+  type Reminder,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Plane, MapPin, CheckCircle, Calendar, Clock, ArrowRight, Moon } from "lucide-react";
+import { Plane, MapPin, CheckCircle, Calendar, Clock, ArrowRight, Moon, Bell, Check } from "lucide-react";
 
 const STATUS_ORDER: TripStatus[] = ["active", "booked", "planning", "wishlist", "completed"];
 
@@ -77,8 +87,11 @@ function daysUntil(dateStr: string): number {
 }
 
 export default function Dashboard() {
+  const qc = useQueryClient();
   const { data: stats, isLoading: statsLoading } = useGetTravelsStats();
   const { data: trips = [], isLoading: tripsLoading } = useListTrips();
+  const { data: pendingReminders = [] } = useListAllReminders(true);
+  const updateReminder = useUpdateReminder();
 
   const groupedTrips = STATUS_ORDER.reduce<Record<TripStatus, Trip[]>>(
     (acc, status) => {
@@ -127,6 +140,60 @@ export default function Dashboard() {
           value={statsLoading ? "—" : (stats?.uniqueDestinations ?? 0)}
         />
       </div>
+
+      {/* Reminders alert */}
+      {pendingReminders.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50/60 dark:border-amber-900/40 dark:bg-amber-950/20">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-amber-800 dark:text-amber-300">
+              <Bell className="w-4 h-4" />
+              {pendingReminders.length} pending reminder{pendingReminders.length !== 1 ? "s" : ""}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3 space-y-1.5">
+            {pendingReminders.slice(0, 5).map((r: Reminder) => {
+              const trip = trips.find((t) => t.id === r.tripId);
+              const overdue = r.dueDate && new Date(r.dueDate) < new Date();
+              return (
+                <div key={r.id} className="flex items-center gap-2 group">
+                  <button
+                    className="w-4 h-4 rounded border border-amber-400 shrink-0 flex items-center justify-center hover:bg-amber-200 transition-colors"
+                    onClick={() => {
+                      updateReminder.mutate(
+                        { tripId: r.tripId, reminderId: r.id, body: { done: true } },
+                        { onSuccess: () => qc.invalidateQueries({ queryKey: getListAllRemindersQueryKey(true) }) },
+                      );
+                    }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <span className={`text-sm ${overdue ? "text-red-700 font-medium" : "text-amber-900 dark:text-amber-200"}`}>
+                      {r.title}
+                    </span>
+                    {trip && (
+                      <Link href={`/trips/${trip.id}`}>
+                        <span className="text-xs text-muted-foreground ml-2 hover:text-primary hover:underline">
+                          {trip.destination}
+                        </span>
+                      </Link>
+                    )}
+                  </div>
+                  {r.dueDate && (
+                    <span className={`text-xs shrink-0 ${overdue ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
+                      {overdue ? "Overdue · " : ""}
+                      {new Date(r.dueDate).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+            {pendingReminders.length > 5 && (
+              <p className="text-xs text-muted-foreground pt-1">
+                +{pendingReminders.length - 5} more — check individual trips
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Next trip countdown */}
       {stats?.nextTrip && nextTripCountdown !== null && (

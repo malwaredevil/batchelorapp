@@ -9,15 +9,27 @@ import {
   useSendTripMessage,
   useClearTripChat,
   useGetHighlights,
+  useListTripPhotos,
+  useUploadTripPhoto,
+  useDeleteTripPhoto,
+  useListReminders,
+  useCreateReminder,
+  useUpdateReminder,
+  useDeleteReminder,
   getTripDocumentDownloadUrl,
+  getTripPhotoImageUrl,
   getListTripsQueryKey,
   getGetTripQueryKey,
   getGetTravelsStatsQueryKey,
+  getListTripPhotosQueryKey,
+  getListRemindersQueryKey,
   type UpdateTripBody,
   type TripStatus,
   type TransportTo,
   type TripDocument,
   type ChatMessage,
+  type TripPhoto,
+  type Reminder,
 } from "@workspace/api-client-react";
 import { OneThingInput } from "@/components/OneThingInput";
 import { useQueryClient } from "@tanstack/react-query";
@@ -53,6 +65,9 @@ import {
   MessageCircle,
   Bot,
   Send,
+  Camera,
+  Bell,
+  Image as ImageIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -359,6 +374,307 @@ function PackingList({
   );
 }
 
+// ─── Photos Section ───────────────────────────────────────────────────────────
+
+function PhotosSection({ tripId }: { tripId: number }) {
+  const qc = useQueryClient();
+  const { data: photos = [], isLoading } = useListTripPhotos(tripId);
+  const uploadPhoto = useUploadTripPhoto({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListTripPhotosQueryKey(tripId) });
+        toast.success("Photo uploaded");
+      },
+      onError: () => toast.error("Upload failed"),
+    },
+  });
+  const deletePhoto = useDeleteTripPhoto({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListTripPhotosQueryKey(tripId) });
+        toast.success("Photo deleted");
+      },
+      onError: () => toast.error("Failed to delete photo"),
+    },
+  });
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [lightbox, setLightbox] = useState<TripPhoto | null>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append("photo", file);
+    uploadPhoto.mutate({ tripId, formData });
+    e.target.value = "";
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="font-serif text-xl text-foreground flex items-center gap-2">
+          <Camera className="w-5 h-5" />
+          Photos
+          {photos.length > 0 && (
+            <span className="text-sm font-sans font-normal text-muted-foreground">({photos.length})</span>
+          )}
+        </h2>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => fileRef.current?.click()}
+          disabled={uploadPhoto.isPending}
+        >
+          <Plus className="w-3.5 h-3.5 mr-1.5" />
+          {uploadPhoto.isPending ? "Uploading..." : "Add photo"}
+        </Button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+      </div>
+
+      {isLoading ? (
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="aspect-square rounded-lg bg-muted animate-pulse" />
+          ))}
+        </div>
+      ) : photos.length === 0 ? (
+        <Card className="border-dashed border-2 border-border/60">
+          <CardContent className="flex flex-col items-center gap-2 py-8 text-center">
+            <ImageIcon className="w-8 h-8 text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">No photos yet — add some memories</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+          {photos.map((photo) => (
+            <div key={photo.id} className="relative group aspect-square">
+              <img
+                src={getTripPhotoImageUrl(tripId, photo.id)}
+                alt={photo.caption ?? "Trip photo"}
+                className="w-full h-full object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                onClick={() => setLightbox(photo)}
+              />
+              <button
+                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={(e) => { e.stopPropagation(); deletePhoto.mutate({ tripId, photoId: photo.id }); }}
+              >
+                <X className="w-3 h-3" />
+              </button>
+              {photo.caption && (
+                <p className="absolute bottom-0 left-0 right-0 text-[10px] text-white bg-black/50 px-1 py-0.5 rounded-b-lg truncate">
+                  {photo.caption}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Lightbox */}
+      <Dialog open={!!lightbox} onOpenChange={(open) => { if (!open) setLightbox(null); }}>
+        <DialogContent className="max-w-3xl">
+          {lightbox && (
+            <>
+              <img
+                src={getTripPhotoImageUrl(tripId, lightbox.id)}
+                alt={lightbox.caption ?? "Trip photo"}
+                className="w-full rounded-lg max-h-[70vh] object-contain"
+              />
+              {lightbox.caption && (
+                <p className="text-sm text-muted-foreground text-center">{lightbox.caption}</p>
+              )}
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ─── Reminders Section ────────────────────────────────────────────────────────
+
+function RemindersSection({ tripId }: { tripId: number }) {
+  const qc = useQueryClient();
+  const { data: reminders = [], isLoading } = useListReminders(tripId);
+  const createReminder = useCreateReminder({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListRemindersQueryKey(tripId) });
+        setNewTitle("");
+        setNewDue("");
+        setAdding(false);
+        toast.success("Reminder added");
+      },
+      onError: () => toast.error("Failed to add reminder"),
+    },
+  });
+  const updateReminder = useUpdateReminder({
+    mutation: {
+      onSuccess: () => qc.invalidateQueries({ queryKey: getListRemindersQueryKey(tripId) }),
+      onError: () => toast.error("Failed to update"),
+    },
+  });
+  const deleteReminder = useDeleteReminder({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListRemindersQueryKey(tripId) });
+        toast.success("Reminder deleted");
+      },
+      onError: () => toast.error("Failed to delete"),
+    },
+  });
+
+  const [adding, setAdding] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newDue, setNewDue] = useState("");
+
+  const pending = reminders.filter((r) => !r.done);
+  const done = reminders.filter((r) => r.done);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="font-serif text-xl text-foreground flex items-center gap-2">
+          <Bell className="w-5 h-5" />
+          Reminders
+          {pending.length > 0 && (
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white text-[10px] font-bold">
+              {pending.length}
+            </span>
+          )}
+        </h2>
+        <Button size="sm" variant="outline" onClick={() => setAdding((v) => !v)}>
+          <Plus className="w-3.5 h-3.5 mr-1.5" />
+          Add
+        </Button>
+      </div>
+
+      {adding && (
+        <Card className="border-border/50">
+          <CardContent className="py-3 space-y-2">
+            <Input
+              placeholder="Reminder title"
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <Input
+                type="date"
+                value={newDue}
+                onChange={(e) => setNewDue(e.target.value)}
+                className="flex-1"
+                placeholder="Due date (optional)"
+              />
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (!newTitle.trim()) return;
+                  createReminder.mutate({
+                    tripId,
+                    body: { title: newTitle.trim(), dueDate: newDue || undefined },
+                  });
+                }}
+                disabled={!newTitle.trim() || createReminder.isPending}
+              >
+                <Save className="w-3.5 h-3.5 mr-1.5" />
+                Save
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setAdding(false)}>
+                <X className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {isLoading ? (
+        <div className="space-y-2">
+          {[1, 2].map((i) => <div key={i} className="h-10 rounded-lg bg-muted animate-pulse" />)}
+        </div>
+      ) : reminders.length === 0 && !adding ? (
+        <p className="text-sm text-muted-foreground">No reminders yet.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {pending.map((r: Reminder) => (
+            <ReminderRow
+              key={r.id}
+              reminder={r}
+              tripId={tripId}
+              onToggle={() => updateReminder.mutate({ tripId, reminderId: r.id, body: { done: true } })}
+              onDelete={() => deleteReminder.mutate({ tripId, reminderId: r.id })}
+            />
+          ))}
+          {done.length > 0 && (
+            <details className="mt-2">
+              <summary className="text-xs text-muted-foreground cursor-pointer select-none">
+                {done.length} completed
+              </summary>
+              <div className="space-y-1 mt-1.5">
+                {done.map((r: Reminder) => (
+                  <ReminderRow
+                    key={r.id}
+                    reminder={r}
+                    tripId={tripId}
+                    onToggle={() => updateReminder.mutate({ tripId, reminderId: r.id, body: { done: false } })}
+                    onDelete={() => deleteReminder.mutate({ tripId, reminderId: r.id })}
+                  />
+                ))}
+              </div>
+            </details>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReminderRow({
+  reminder,
+  tripId,
+  onToggle,
+  onDelete,
+}: {
+  reminder: Reminder;
+  tripId: number;
+  onToggle: () => void;
+  onDelete: () => void;
+}) {
+  const overdue = !reminder.done && reminder.dueDate && new Date(reminder.dueDate) < new Date();
+  return (
+    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border group ${reminder.done ? "bg-muted/30 border-border/30" : "bg-card border-border/50"}`}>
+      <button onClick={onToggle} className="shrink-0">
+        {reminder.done ? (
+          <CheckSquare className="w-4 h-4 text-muted-foreground" />
+        ) : (
+          <Square className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+        )}
+      </button>
+      <p className={`flex-1 text-sm ${reminder.done ? "line-through text-muted-foreground" : overdue ? "text-red-700 font-medium" : "text-foreground"}`}>
+        {reminder.title}
+      </p>
+      {reminder.dueDate && (
+        <span className={`text-xs shrink-0 ${overdue ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
+          {overdue ? "Overdue · " : ""}
+          {new Date(reminder.dueDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+        </span>
+      )}
+      <button
+        onClick={onDelete}
+        className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 text-muted-foreground hover:text-destructive"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function TripDetail({ id }: { id: number }) {
@@ -416,6 +732,7 @@ export default function TripDetail({ id }: { id: number }) {
       accommodationName: trip.accommodationName ?? undefined,
       accommodationArea: trip.accommodationArea ?? undefined,
       notes: trip.notes ?? undefined,
+      funFact: trip.funFact ?? undefined,
       travellerCount: trip.travellerCount,
       travelers: (trip.travelers as string[] | null) ?? [],
       theOneThing: (trip.theOneThing as string[] | null) ?? [],
@@ -791,6 +1108,17 @@ export default function TripDetail({ id }: { id: number }) {
                   destination={editForm.destination ?? trip.destination}
                 />
               </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Fun fact / memory</Label>
+                <Textarea
+                  rows={2}
+                  placeholder="A memorable fact, story, or highlight about this trip..."
+                  value={editForm.funFact ?? ""}
+                  onChange={(e) =>
+                    setEditForm((f) => ({ ...f, funFact: e.target.value || undefined }))
+                  }
+                />
+              </div>
             </div>
             <div className="flex justify-between pt-2">
               <Button
@@ -892,9 +1220,21 @@ export default function TripDetail({ id }: { id: number }) {
                 </div>
               </div>
             ) : null}
+            {trip.funFact && (
+              <div className="col-span-2 sm:col-span-3 pt-2 border-t border-border/50">
+                <p className="text-xs text-muted-foreground mb-1">Fun fact / memory</p>
+                <p className="text-sm text-foreground italic whitespace-pre-wrap">"{trip.funFact}"</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
+
+      {/* Photos */}
+      {!editing && trip && <PhotosSection tripId={trip.id} />}
+
+      {/* Reminders */}
+      {!editing && trip && <RemindersSection tripId={trip.id} />}
 
       {/* Google Calendar link */}
       {canCalendar && (

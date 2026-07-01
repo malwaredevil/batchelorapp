@@ -178,15 +178,31 @@ function CreateTripDialog({
   );
 }
 
+const FAMILY_MEMBERS = ["John", "Ashley", "Karis", "Angela"] as const;
+
 export default function Trips() {
   const { data: trips = [], isLoading } = useListTrips();
   const [filterStatus, setFilterStatus] = useState<TripStatus | "all">("all");
+  const [filterYear, setFilterYear] = useState<number | "all">("all");
+  const [filterPerson, setFilterPerson] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
 
-  const filtered =
-    filterStatus === "all"
-      ? trips
-      : trips.filter((t) => t.status === filterStatus);
+  const availableYears = Array.from(
+    new Set(trips.filter((t) => t.startDate).map((t) => new Date(t.startDate!).getFullYear())),
+  ).sort((a, b) => b - a);
+
+  const filtered = trips.filter((t) => {
+    if (filterStatus !== "all" && t.status !== filterStatus) return false;
+    if (filterYear !== "all") {
+      if (!t.startDate) return false;
+      if (new Date(t.startDate).getFullYear() !== filterYear) return false;
+    }
+    if (filterPerson.length > 0) {
+      const travelers = t.travelers as string[] | null;
+      if (!filterPerson.every((p) => travelers?.includes(p))) return false;
+    }
+    return true;
+  });
 
   const grouped = ALL_STATUSES.reduce<Record<TripStatus, typeof trips>>(
     (acc, s) => {
@@ -195,6 +211,9 @@ export default function Trips() {
     },
     { active: [], booked: [], planning: [], wishlist: [], completed: [] },
   );
+
+  const hasActiveFilters = filterStatus !== "all" || filterYear !== "all" || filterPerson.length > 0;
+  const clearFilters = () => { setFilterStatus("all"); setFilterYear("all"); setFilterPerson([]); };
 
   return (
     <div className="space-y-6">
@@ -209,35 +228,88 @@ export default function Trips() {
         </Button>
       </div>
 
-      {/* Filter pills */}
-      <div className="flex gap-2 flex-wrap">
-        <button
-          onClick={() => setFilterStatus("all")}
-          className={`px-3 py-1 rounded-full text-sm font-medium border transition-colors ${
-            filterStatus === "all"
-              ? "bg-primary text-primary-foreground border-primary"
-              : "bg-card text-muted-foreground border-border hover:border-primary/50"
-          }`}
-        >
-          All ({trips.length})
-        </button>
-        {ALL_STATUSES.map((s) => {
-          const count = trips.filter((t) => t.status === s).length;
-          if (count === 0) return null;
-          return (
-            <button
-              key={s}
-              onClick={() => setFilterStatus(s)}
-              className={`px-3 py-1 rounded-full text-sm font-medium border transition-colors ${
-                filterStatus === s
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-card text-muted-foreground border-border hover:border-primary/50"
-              }`}
+      {/* Filter bar */}
+      <div className="space-y-2">
+        {/* Status pills */}
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={() => setFilterStatus("all")}
+            className={`px-3 py-1 rounded-full text-sm font-medium border transition-colors ${
+              filterStatus === "all"
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-card text-muted-foreground border-border hover:border-primary/50"
+            }`}
+          >
+            All ({trips.length})
+          </button>
+          {ALL_STATUSES.map((s) => {
+            const count = trips.filter((t) => t.status === s).length;
+            if (count === 0) return null;
+            return (
+              <button
+                key={s}
+                onClick={() => setFilterStatus(s)}
+                className={`px-3 py-1 rounded-full text-sm font-medium border transition-colors ${
+                  filterStatus === s
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-card text-muted-foreground border-border hover:border-primary/50"
+                }`}
+              >
+                {STATUS_LABELS[s]} ({count})
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Year + Person filters */}
+        <div className="flex flex-wrap items-center gap-2">
+          {availableYears.length > 0 && (
+            <Select
+              value={String(filterYear)}
+              onValueChange={(v) => setFilterYear(v === "all" ? "all" : Number(v))}
             >
-              {STATUS_LABELS[s]} ({count})
+              <SelectTrigger className="h-8 w-32 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All years</SelectItem>
+                {availableYears.map((y) => (
+                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <div className="flex flex-wrap gap-1.5">
+            {FAMILY_MEMBERS.map((name) => {
+              const active = filterPerson.includes(name);
+              return (
+                <button
+                  key={name}
+                  onClick={() =>
+                    setFilterPerson((prev) =>
+                      active ? prev.filter((n) => n !== name) : [...prev, name],
+                    )
+                  }
+                  className={`h-8 px-2.5 rounded-md text-xs font-medium border transition-colors ${
+                    active
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-card text-muted-foreground border-border hover:border-primary/50"
+                  }`}
+                >
+                  {name}
+                </button>
+              );
+            })}
+          </div>
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Clear all
             </button>
-          );
-        })}
+          )}
+        </div>
       </div>
 
       {isLoading ? (

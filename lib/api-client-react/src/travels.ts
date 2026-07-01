@@ -39,6 +39,7 @@ export interface Trip {
   accommodationName?: string | null;
   accommodationArea?: string | null;
   notes?: string | null;
+  funFact?: string | null;
   travellerCount: number;
   travelers?: string[] | null;
   theOneThing?: string[] | null;
@@ -87,6 +88,7 @@ export interface CreateTripBody {
   accommodationName?: string;
   accommodationArea?: string;
   notes?: string;
+  funFact?: string;
   travellerCount?: number;
   travelers?: string[];
   theOneThing?: string[];
@@ -660,6 +662,215 @@ export function useDeleteWishlistItem<TError = unknown, TContext = unknown>(
 ): UseMutationResult<void, TError, number, TContext> {
   const mutationFn: MutationFunction<void, number> = (id) => deleteWishlistItem(id);
   return useMutation({ mutationFn, ...options?.mutation });
+}
+
+// ---------------------------------------------------------------------------
+// Trip Photos
+// ---------------------------------------------------------------------------
+
+export interface TripPhoto {
+  id: number;
+  tripId: number;
+  userId: number;
+  storagePath: string;
+  caption?: string | null;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface UpdatePhotoBody {
+  caption?: string | null;
+}
+
+export const getTripPhotoImageUrl = (tripId: number, photoId: number): string =>
+  `/api/travels/trips/${tripId}/photos/${photoId}/image`;
+
+const listTripPhotos = (tripId: number, options?: RequestInit): Promise<TripPhoto[]> =>
+  customFetch<TripPhoto[]>(`/api/travels/trips/${tripId}/photos`, { ...options, method: "GET" });
+
+export const getListTripPhotosQueryKey = (tripId: number) =>
+  [`/api/travels/trips/${tripId}/photos`] as const;
+
+export function useListTripPhotos<TData = TripPhoto[], TError = unknown>(
+  tripId: number,
+  options?: { query?: UseQueryOptions<TripPhoto[], TError, TData> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getListTripPhotosQueryKey(tripId);
+  const queryFn: QueryFunction<TripPhoto[]> = ({ signal }) => listTripPhotos(tripId, { signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<TripPhoto[], TError, TData> & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+export const uploadTripPhoto = (tripId: number, formData: FormData): Promise<TripPhoto> =>
+  fetch(`/api/travels/trips/${tripId}/photos`, { method: "POST", body: formData, credentials: "include" })
+    .then((res) => {
+      if (!res.ok) throw new Error("Upload failed");
+      return res.json() as Promise<TripPhoto>;
+    });
+
+export function useUploadTripPhoto<TError = unknown, TContext = unknown>(
+  options?: { mutation?: UseMutationOptions<TripPhoto, TError, { tripId: number; formData: FormData }, TContext> },
+): UseMutationResult<TripPhoto, TError, { tripId: number; formData: FormData }, TContext> {
+  const mutationFn: MutationFunction<TripPhoto, { tripId: number; formData: FormData }> = ({ tripId, formData }) =>
+    uploadTripPhoto(tripId, formData);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const deleteTripPhotoFn = (tripId: number, photoId: number, options?: RequestInit): Promise<void> =>
+  customFetch<void>(`/api/travels/trips/${tripId}/photos/${photoId}`, { ...options, method: "DELETE" });
+
+export function useDeleteTripPhoto<TError = unknown, TContext = unknown>(
+  options?: { mutation?: UseMutationOptions<void, TError, { tripId: number; photoId: number }, TContext> },
+): UseMutationResult<void, TError, { tripId: number; photoId: number }, TContext> {
+  const mutationFn: MutationFunction<void, { tripId: number; photoId: number }> = ({ tripId, photoId }) =>
+    deleteTripPhotoFn(tripId, photoId);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const updateTripPhotoFn = (tripId: number, photoId: number, body: UpdatePhotoBody, options?: RequestInit): Promise<TripPhoto> =>
+  customFetch<TripPhoto>(`/api/travels/trips/${tripId}/photos/${photoId}`, {
+    ...options, method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export function useUpdateTripPhoto<TError = unknown, TContext = unknown>(
+  options?: { mutation?: UseMutationOptions<TripPhoto, TError, { tripId: number; photoId: number; body: UpdatePhotoBody }, TContext> },
+): UseMutationResult<TripPhoto, TError, { tripId: number; photoId: number; body: UpdatePhotoBody }, TContext> {
+  const mutationFn: MutationFunction<TripPhoto, { tripId: number; photoId: number; body: UpdatePhotoBody }> = ({ tripId, photoId, body }) =>
+    updateTripPhotoFn(tripId, photoId, body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+// ---------------------------------------------------------------------------
+// Reminders
+// ---------------------------------------------------------------------------
+
+export interface Reminder {
+  id: number;
+  tripId: number;
+  userId: number;
+  title: string;
+  dueDate?: string | null;
+  done: boolean;
+  createdAt: string;
+}
+
+export interface CreateReminderBody {
+  title: string;
+  dueDate?: string;
+}
+
+export interface UpdateReminderBody {
+  title?: string;
+  dueDate?: string | null;
+  done?: boolean;
+}
+
+const listReminders = (tripId: number, options?: RequestInit): Promise<Reminder[]> =>
+  customFetch<Reminder[]>(`/api/travels/trips/${tripId}/reminders`, { ...options, method: "GET" });
+
+export const getListRemindersQueryKey = (tripId: number) =>
+  [`/api/travels/trips/${tripId}/reminders`] as const;
+
+export function useListReminders<TData = Reminder[], TError = unknown>(
+  tripId: number,
+  options?: { query?: UseQueryOptions<Reminder[], TError, TData> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getListRemindersQueryKey(tripId);
+  const queryFn: QueryFunction<Reminder[]> = ({ signal }) => listReminders(tripId, { signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<Reminder[], TError, TData> & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const listAllReminders = (pending: boolean, options?: RequestInit): Promise<Reminder[]> =>
+  customFetch<Reminder[]>(`/api/travels/reminders${pending ? "?pending=true" : ""}`, { ...options, method: "GET" });
+
+export const getListAllRemindersQueryKey = (pending = false) =>
+  [`/api/travels/reminders`, { pending }] as const;
+
+export function useListAllReminders<TData = Reminder[], TError = unknown>(
+  pending = false,
+  options?: { query?: UseQueryOptions<Reminder[], TError, TData> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getListAllRemindersQueryKey(pending);
+  const queryFn: QueryFunction<Reminder[]> = ({ signal }) => listAllReminders(pending, { signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<Reminder[], TError, TData> & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const createReminderFn = (tripId: number, body: CreateReminderBody, options?: RequestInit): Promise<Reminder> =>
+  customFetch<Reminder>(`/api/travels/trips/${tripId}/reminders`, {
+    ...options, method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export function useCreateReminder<TError = unknown, TContext = unknown>(
+  options?: { mutation?: UseMutationOptions<Reminder, TError, { tripId: number; body: CreateReminderBody }, TContext> },
+): UseMutationResult<Reminder, TError, { tripId: number; body: CreateReminderBody }, TContext> {
+  const mutationFn: MutationFunction<Reminder, { tripId: number; body: CreateReminderBody }> = ({ tripId, body }) =>
+    createReminderFn(tripId, body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const updateReminderFn = (tripId: number, reminderId: number, body: UpdateReminderBody, options?: RequestInit): Promise<Reminder> =>
+  customFetch<Reminder>(`/api/travels/trips/${tripId}/reminders/${reminderId}`, {
+    ...options, method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export function useUpdateReminder<TError = unknown, TContext = unknown>(
+  options?: { mutation?: UseMutationOptions<Reminder, TError, { tripId: number; reminderId: number; body: UpdateReminderBody }, TContext> },
+): UseMutationResult<Reminder, TError, { tripId: number; reminderId: number; body: UpdateReminderBody }, TContext> {
+  const mutationFn: MutationFunction<Reminder, { tripId: number; reminderId: number; body: UpdateReminderBody }> = ({ tripId, reminderId, body }) =>
+    updateReminderFn(tripId, reminderId, body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const deleteReminderFn = (tripId: number, reminderId: number, options?: RequestInit): Promise<void> =>
+  customFetch<void>(`/api/travels/trips/${tripId}/reminders/${reminderId}`, { ...options, method: "DELETE" });
+
+export function useDeleteReminder<TError = unknown, TContext = unknown>(
+  options?: { mutation?: UseMutationOptions<void, TError, { tripId: number; reminderId: number }, TContext> },
+): UseMutationResult<void, TError, { tripId: number; reminderId: number }, TContext> {
+  const mutationFn: MutationFunction<void, { tripId: number; reminderId: number }> = ({ tripId, reminderId }) =>
+    deleteReminderFn(tripId, reminderId);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+// ---------------------------------------------------------------------------
+// Destinations (grouped timeline)
+// ---------------------------------------------------------------------------
+
+export interface DestinationGroup {
+  destination: string;
+  lat?: number | null;
+  lng?: number | null;
+  trips: Trip[];
+}
+
+const listDestinations = (options?: RequestInit): Promise<DestinationGroup[]> =>
+  customFetch<DestinationGroup[]>("/api/travels/destinations", { ...options, method: "GET" });
+
+export const getListDestinationsQueryKey = () => [`/api/travels/destinations`] as const;
+
+export function useListDestinations<TData = DestinationGroup[], TError = unknown>(
+  options?: { query?: UseQueryOptions<DestinationGroup[], TError, TData> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getListDestinationsQueryKey();
+  const queryFn: QueryFunction<DestinationGroup[]> = ({ signal }) => listDestinations({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<DestinationGroup[], TError, TData> & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
 }
 
 // ---------------------------------------------------------------------------

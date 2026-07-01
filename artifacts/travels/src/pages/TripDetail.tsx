@@ -101,11 +101,11 @@ const STATUS_LABELS: Record<TripStatus, string> = {
   completed: "Completed",
 };
 const STATUS_COLORS: Record<TripStatus, string> = {
-  wishlist: "bg-slate-100 text-slate-700 border-slate-200",
-  planning: "bg-blue-50 text-blue-700 border-blue-200",
-  booked: "bg-green-50 text-green-700 border-green-200",
-  active: "bg-amber-50 text-amber-700 border-amber-200",
-  completed: "bg-gray-100 text-gray-500 border-gray-200",
+  wishlist:  "bg-yellow-50 text-yellow-700 border-yellow-200",
+  planning:  "bg-yellow-50 text-yellow-700 border-yellow-200",
+  booked:    "bg-orange-50 text-orange-700 border-orange-200",
+  active:    "bg-orange-50 text-orange-700 border-orange-200",
+  completed: "bg-green-50  text-green-700  border-green-200",
 };
 
 const INTERESTS_OPTIONS = [
@@ -730,7 +730,7 @@ function RemindersSection({ tripId }: { tripId: number }) {
           <Bell className="w-5 h-5" />
           Reminders
           {pending.length > 0 && (
-            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white text-[10px] font-bold">
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-orange-500 text-white text-[10px] font-bold">
               {pending.length}
             </span>
           )}

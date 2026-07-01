@@ -12,11 +12,11 @@ const PADDING_X = 16;      // left/right padding
 
 // ─── Colours ─────────────────────────────────────────────────────────────────
 const STATUS_COLORS: Record<TripStatus, { bg: string; border: string; text: string }> = {
-  completed: { bg: "#e0e7ff", border: "#818cf8", text: "#3730a3" },
-  booked:    { bg: "#dcfce7", border: "#4ade80", text: "#15803d" },
-  active:    { bg: "#fef9c3", border: "#facc15", text: "#854d0e" },
-  planning:  { bg: "#dbeafe", border: "#60a5fa", text: "#1d4ed8" },
-  wishlist:  { bg: "#f1f5f9", border: "#94a3b8", text: "#475569" },
+  completed: { bg: "#f0fdf4", border: "#22c55e", text: "#14532d" },
+  booked:    { bg: "#fff7ed", border: "#f97316", text: "#7c2d12" },
+  active:    { bg: "#fff7ed", border: "#f97316", text: "#7c2d12" },
+  planning:  { bg: "#fefce8", border: "#eab308", text: "#713f12" },
+  wishlist:  { bg: "#fefce8", border: "#eab308", text: "#713f12" },
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

@@ -30,11 +30,11 @@ const STATUS_LABELS: Record<TripStatus, string> = {
 };
 
 const STATUS_COLORS: Record<TripStatus, string> = {
-  wishlist: "bg-slate-100 text-slate-700 border-slate-200",
-  planning: "bg-blue-50 text-blue-700 border-blue-200",
-  booked: "bg-green-50 text-green-700 border-green-200",
-  active: "bg-amber-50 text-amber-700 border-amber-200",
-  completed: "bg-gray-100 text-gray-500 border-gray-200",
+  wishlist:  "bg-yellow-50 text-yellow-700 border-yellow-200",
+  planning:  "bg-yellow-50 text-yellow-700 border-yellow-200",
+  booked:    "bg-orange-50 text-orange-700 border-orange-200",
+  active:    "bg-orange-50 text-orange-700 border-orange-200",
+  completed: "bg-green-50  text-green-700  border-green-200",
 };
 
 function CreateTripDialog({

@@ -27,11 +27,11 @@ const STATUS_LABELS: Record<TripStatus, string> = {
 };
 
 const STATUS_COLORS: Record<TripStatus, string> = {
-  wishlist: "bg-slate-100 text-slate-700 border-slate-200",
-  planning: "bg-blue-50 text-blue-700 border-blue-200",
-  booked: "bg-green-50 text-green-700 border-green-200",
-  active: "bg-amber-50 text-amber-700 border-amber-200",
-  completed: "bg-gray-100 text-gray-500 border-gray-200",
+  wishlist:  "bg-yellow-50 text-yellow-700 border-yellow-200",
+  planning:  "bg-yellow-50 text-yellow-700 border-yellow-200",
+  booked:    "bg-orange-50 text-orange-700 border-orange-200",
+  active:    "bg-orange-50 text-orange-700 border-orange-200",
+  completed: "bg-green-50  text-green-700  border-green-200",
 };
 
 function StatCard({ icon, label, value, href }: { icon: React.ReactNode; label: string; value: string | number; href?: string }) {
@@ -156,9 +156,9 @@ export default function Dashboard() {
 
       {/* Reminders alert */}
       {pendingReminders.length > 0 && (
-        <Card className="border-amber-200 bg-amber-50/60 dark:border-amber-900/40 dark:bg-amber-950/20">
+        <Card className="border-yellow-200 bg-yellow-50/60 dark:border-yellow-900/40 dark:bg-yellow-950/20">
           <CardHeader className="pb-2 pt-4 px-4">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-amber-800 dark:text-amber-300">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-yellow-800 dark:text-yellow-300">
               <Bell className="w-4 h-4" />
               {pendingReminders.length} pending reminder{pendingReminders.length !== 1 ? "s" : ""}
             </CardTitle>
@@ -170,7 +170,7 @@ export default function Dashboard() {
               return (
                 <div key={r.id} className="flex items-center gap-2 group">
                   <button
-                    className="w-4 h-4 rounded border border-amber-400 shrink-0 flex items-center justify-center hover:bg-amber-200 transition-colors"
+                    className="w-4 h-4 rounded border border-yellow-400 shrink-0 flex items-center justify-center hover:bg-yellow-200 transition-colors"
                     onClick={() => {
                       updateReminder.mutate(
                         { tripId: r.tripId, reminderId: r.id, body: { done: true } },
@@ -179,7 +179,7 @@ export default function Dashboard() {
                     }}
                   />
                   <div className="flex-1 min-w-0">
-                    <span className={`text-sm ${overdue ? "text-red-700 font-medium" : "text-amber-900 dark:text-amber-200"}`}>
+                    <span className={`text-sm ${overdue ? "text-red-700 font-medium" : "text-yellow-900 dark:text-yellow-200"}`}>
                       {r.title}
                     </span>
                     {trip && (

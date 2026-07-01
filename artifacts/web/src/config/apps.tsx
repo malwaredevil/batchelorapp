@@ -96,7 +96,7 @@ export const APPS: AppEntry[] = [
     id: "travels",
     name: "Travels",
     href: `${base}travels/`,
-    image: `${base}images/travels-collection.svg`,
+    image: `${base}images/travels-collection.png`,
     updated: "Plan your next trip",
     stats: [],
     description:

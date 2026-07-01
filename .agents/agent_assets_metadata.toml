@@ -36,3 +36,9 @@ id = "AgYwV2TH6mpFVmLEjLlEY"
 uri = "file://artifacts/mockup-sandbox/public/images/quilting-collection.png"
 type = "image"
 title = "folded quilting fabrics"
+
+[[generated]]
+id = "WtF3VVsJjyloNI11X_tME"
+uri = "file://artifacts/web/public/images/travels-collection.png"
+type = "image"
+title = "realistic travel flatlay photo"

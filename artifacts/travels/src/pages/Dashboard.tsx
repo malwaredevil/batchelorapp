@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Plane, MapPin, CheckCircle, Calendar, Clock, ArrowRight, Moon, Bell, Check } from "lucide-react";
+import TripTimeline from "@/components/TripTimeline";
 
 const STATUS_ORDER: TripStatus[] = ["active", "booked", "planning", "wishlist", "completed"];
 
@@ -361,6 +362,11 @@ export default function Dashboard() {
           </div>
         );
       })()}
+
+      {/* ── Trip Timeline ───────────────────────────── */}
+      {!tripsLoading && trips.length > 0 && (
+        <TripTimeline trips={trips} />
+      )}
     </div>
   );
 }

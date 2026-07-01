@@ -6,11 +6,11 @@ import { useListTrips, type Trip, type TripStatus } from "@workspace/api-client-
 import { Globe, MapPin } from "lucide-react";
 
 const PIN_COLOR: Record<TripStatus, string> = {
-  wishlist: "#94a3b8",
-  planning: "#3b82f6",
-  booked: "#22c55e",
-  active: "#f59e0b",
-  completed: "#6366f1",
+  completed: "#22c55e",
+  booked:    "#f97316",
+  active:    "#f97316",
+  planning:  "#f97316",
+  wishlist:  "#eab308",
 };
 
 const STATUS_LABELS: Record<TripStatus, string> = {

@@ -8,6 +8,11 @@ import { callModel, MODELS } from "../../lib/ai-client";
 const router: IRouter = Router();
 router.use(requireAuth);
 
+function parseAiJson(raw: string): unknown {
+  const stripped = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  return JSON.parse(stripped);
+}
+
 const GenerateItineraryBody = z.object({
   style: z.enum(["relaxed", "balanced", "packed"]),
   interests: z.array(z.string()),
@@ -172,7 +177,7 @@ If dates are unspecified, create 5 days labelled Day 1, Day 2, etc. Return ONLY 
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    parsed = parseAiJson(raw);
   } catch {
     res.status(500).json({ error: "AI returned invalid JSON" });
     return;
@@ -259,7 +264,7 @@ Include 6-8 highlights. Return ONLY valid JSON, no extra text.`,
 
   let overview: unknown;
   try {
-    overview = JSON.parse(overviewRaw);
+    overview = parseAiJson(overviewRaw);
   } catch {
     overview = { description: overviewRaw };
   }

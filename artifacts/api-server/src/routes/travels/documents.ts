@@ -65,7 +65,8 @@ Return ONLY valid JSON, no extra text.`,
   });
 
   try {
-    return JSON.parse(result);
+    const stripped = result.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+    return JSON.parse(stripped);
   } catch {
     return { notes: result };
   }
@@ -121,7 +122,8 @@ Return ONLY valid JSON, no extra text.`,
   });
 
   try {
-    return JSON.parse(result);
+    const stripped = result.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+    return JSON.parse(stripped);
   } catch {
     return { notes: result };
   }
@@ -164,7 +166,7 @@ router.post(
   upload.single("file"),
   async (req, res) => {
     const userId = req.session.userId!;
-    const tripId = parseInt(req.params.id, 10);
+    const tripId = parseInt(req.params.id as string, 10);
     if (isNaN(tripId)) {
       res.status(400).json({ error: "Invalid id" });
       return;

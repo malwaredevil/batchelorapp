@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc } from "drizzle-orm";
+import { desc } from "drizzle-orm";
 import { db, travelsTrips } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 
@@ -8,13 +8,10 @@ router.use(requireAuth);
 
 // GET /destinations — group all trips by destination, newest visit first within each group.
 // Returns destinations sorted by most recent trip (descending).
-router.get("/destinations", async (req, res) => {
-  const userId = req.session.userId!;
-
+router.get("/destinations", async (_req, res) => {
   const trips = await db
     .select()
     .from(travelsTrips)
-    .where(eq(travelsTrips.userId, userId))
     .orderBy(desc(travelsTrips.startDate));
 
   // Group by normalized destination key

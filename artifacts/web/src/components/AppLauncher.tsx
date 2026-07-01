@@ -85,7 +85,7 @@ const QUILTING_QUICK_LINKS = [
 ];
 
 const TRAVELS_QUICK_LINKS = [
-  { label: "Journal", icon: Activity, href: `${base}travels/` },
+  { label: "Home", icon: Activity, href: `${base}travels/` },
   { label: "Trips", icon: Layers, href: `${base}travels/trips` },
   { label: "Explore", icon: Rss, href: `${base}travels/explore` },
 ];

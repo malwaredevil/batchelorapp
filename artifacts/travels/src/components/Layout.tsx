@@ -16,7 +16,7 @@ import {
 import { useAuth } from "@/lib/auth";
 
 const NAV_ITEMS = [
-  { href: "/", label: "Journal", icon: Map },
+  { href: "/", label: "Home", icon: Map },
   { href: "/trips", label: "Trips", icon: Plane },
   { href: "/explore", label: "Explore", icon: Compass },
 ];

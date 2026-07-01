@@ -23,6 +23,21 @@ const ExploreBody = z.object({
   destination: z.string().min(1),
 });
 
+const SuggestBody = z.object({ destination: z.string().min(1) });
+
+const HOME_LAT = 48.7178;
+const HOME_LNG = 9.4853;
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 function transportSummary(trip: {
   transportTo: string | null;
   hasRentalCar: boolean;
@@ -269,7 +284,38 @@ Include 6-8 highlights. Return ONLY valid JSON, no extra text.`,
     overview = { description: overviewRaw };
   }
 
-  res.json({ destination, lat, lng, overview });
+  const distanceKm =
+    lat && lng ? Math.round(haversineKm(HOME_LAT, HOME_LNG, lat, lng)) : null;
+  const mapsUrl = `https://www.google.com/maps/dir/Reichenbach+an+der+Fils,+Germany/${encodeURIComponent(destination)}`;
+
+  res.json({ destination, lat, lng, overview, distanceKm, mapsUrl });
+});
+
+router.post("/highlights/suggest", async (req, res) => {
+  const { destination } = SuggestBody.parse(req.body);
+  const raw = await callModel(MODELS.FAST_VISION, async (client, model) => {
+    const resp = await client.chat.completions.create({
+      model,
+      messages: [
+        {
+          role: "user",
+          content: `List 10 top must-do experiences, attractions, and highlights for a trip to ${destination}.
+Return ONLY a JSON array of short, specific names (2-5 words each). No descriptions or explanations.
+Example: ["Old Town Square", "Sunset Tram Ride", "Castle Tour", "Local Food Market", "River Cruise"]`,
+        },
+      ],
+      max_tokens: 300,
+    });
+    return resp.choices[0]?.message?.content ?? "[]";
+  });
+  let suggestions: string[];
+  try {
+    suggestions = parseAiJson(raw) as string[];
+    if (!Array.isArray(suggestions)) suggestions = [];
+  } catch {
+    suggestions = [];
+  }
+  res.json({ suggestions: suggestions.map(String).slice(0, 10) });
 });
 
 router.get("/stats", async (req, res) => {

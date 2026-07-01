@@ -40,6 +40,8 @@ export interface Trip {
   accommodationArea?: string | null;
   notes?: string | null;
   travellerCount: number;
+  travelers?: string[] | null;
+  theOneThing?: string[] | null;
   createdAt: string;
 }
 
@@ -86,6 +88,8 @@ export interface CreateTripBody {
   accommodationArea?: string;
   notes?: string;
   travellerCount?: number;
+  travelers?: string[];
+  theOneThing?: string[];
 }
 
 export type UpdateTripBody = Partial<CreateTripBody> & {
@@ -111,6 +115,8 @@ export interface ExploreDestinationResult {
   destination: string;
   lat: number;
   lng: number;
+  distanceKm?: number | null;
+  mapsUrl?: string;
   overview: {
     description?: string;
     highlights?: Array<{
@@ -127,6 +133,64 @@ export interface ExploreDestinationResult {
       transit?: string;
     };
   };
+}
+
+export interface WishlistItem {
+  id: number;
+  userId: number;
+  destination: string;
+  targetDate?: string | null;
+  notes?: string | null;
+  done: boolean;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface CreateWishlistItemBody {
+  destination: string;
+  targetDate?: string;
+  notes?: string;
+  sortOrder?: number;
+}
+
+export interface UpdateWishlistItemBody {
+  destination?: string;
+  targetDate?: string | null;
+  notes?: string | null;
+  done?: boolean;
+  sortOrder?: number;
+}
+
+export interface ImportBody {
+  trips: Array<{
+    title: string;
+    destination: string;
+    status?: "wishlist" | "planning" | "booked" | "active" | "completed";
+    startDate?: string;
+    endDate?: string;
+    travelers?: string[];
+    theOneThing?: string[];
+    notes?: string;
+    travellerCount?: number;
+    lat?: number;
+    lng?: number;
+    transportTo?: "drove" | "flew" | "train";
+    accommodationName?: string;
+  }>;
+  wishlistItems: Array<{
+    destination: string;
+    targetDate?: string;
+    notes?: string;
+    done?: boolean;
+  }>;
+}
+
+export interface ImportResult {
+  success: boolean;
+  tripsCreated: number;
+  tripsSkipped: number;
+  wishlistCreated: number;
+  wishlistSkipped: number;
 }
 
 export interface TravelsStats {
@@ -504,4 +568,126 @@ export function useGetTravelsStats<
     queryKey: QueryKey;
   };
   return { ...query, queryKey: queryOptions.queryKey };
+}
+
+// ---------------------------------------------------------------------------
+// Wishlist
+// ---------------------------------------------------------------------------
+
+export const getListWishlistUrl = () => `/api/travels/wishlist`;
+export const listWishlist = (options?: RequestInit): Promise<WishlistItem[]> =>
+  customFetch<WishlistItem[]>(getListWishlistUrl(), { ...options, method: "GET" });
+export const getListWishlistQueryKey = () => [`/api/travels/wishlist`] as const;
+
+export const createWishlistItem = (
+  body: CreateWishlistItemBody,
+  options?: RequestInit,
+): Promise<WishlistItem> =>
+  customFetch<WishlistItem>(getListWishlistUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(body),
+  });
+
+export const updateWishlistItem = (
+  id: number,
+  body: UpdateWishlistItemBody,
+  options?: RequestInit,
+): Promise<WishlistItem> =>
+  customFetch<WishlistItem>(`/api/travels/wishlist/${id}`, {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(body),
+  });
+
+export const deleteWishlistItem = (id: number, options?: RequestInit): Promise<void> =>
+  customFetch<void>(`/api/travels/wishlist/${id}`, { ...options, method: "DELETE" });
+
+export function useListWishlist<
+  TData = Awaited<ReturnType<typeof listWishlist>>,
+  TError = unknown,
+>(
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof listWishlist>>, TError, TData>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getListWishlistQueryKey();
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listWishlist>>> = ({ signal }) =>
+    listWishlist({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listWishlist>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+export function useCreateWishlistItem<TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<WishlistItem, TError, CreateWishlistItemBody, TContext>;
+  },
+): UseMutationResult<WishlistItem, TError, CreateWishlistItemBody, TContext> {
+  const mutationFn: MutationFunction<WishlistItem, CreateWishlistItemBody> = (body) =>
+    createWishlistItem(body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+export function useUpdateWishlistItem<TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      WishlistItem,
+      TError,
+      { id: number; body: UpdateWishlistItemBody },
+      TContext
+    >;
+  },
+): UseMutationResult<WishlistItem, TError, { id: number; body: UpdateWishlistItemBody }, TContext> {
+  const mutationFn: MutationFunction<
+    WishlistItem,
+    { id: number; body: UpdateWishlistItemBody }
+  > = ({ id, body }) => updateWishlistItem(id, body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+export function useDeleteWishlistItem<TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<void, TError, number, TContext>;
+  },
+): UseMutationResult<void, TError, number, TContext> {
+  const mutationFn: MutationFunction<void, number> = (id) => deleteWishlistItem(id);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+// ---------------------------------------------------------------------------
+// Highlights (one-thing autocomplete)
+// ---------------------------------------------------------------------------
+
+export const getHighlightsUrl = () => `/api/travels/highlights`;
+export const getHighlights = (options?: RequestInit): Promise<string[]> =>
+  customFetch<string[]>(getHighlightsUrl(), { ...options, method: "GET" });
+export const getGetHighlightsQueryKey = () => [`/api/travels/highlights`] as const;
+
+export function useGetHighlights<
+  TData = Awaited<ReturnType<typeof getHighlights>>,
+  TError = unknown,
+>(
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getHighlights>>, TError, TData>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetHighlightsQueryKey();
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHighlights>>> = ({ signal }) =>
+    getHighlights({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHighlights>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
 }

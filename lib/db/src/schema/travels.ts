@@ -29,6 +29,8 @@ export const travelsTrips = pgTable(
     accommodationArea: text("accommodation_area"),
     notes: text("notes"),
     travellerCount: integer("traveller_count").notNull().default(2),
+    travelers: jsonb("travelers"),
+    theOneThing: jsonb("the_one_thing"),
     itinerary: jsonb("itinerary"),
     packingList: jsonb("packing_list"),
     chatHistory: jsonb("chat_history"),
@@ -68,3 +70,23 @@ export const travelsTripDocuments = pgTable(
 export type TravelsTripDocumentRow = typeof travelsTripDocuments.$inferSelect;
 export type InsertTravelsTripDocument =
   typeof travelsTripDocuments.$inferInsert;
+
+export const travelsWishlist = pgTable(
+  "travels_wishlist",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull(),
+    destination: text("destination").notNull(),
+    targetDate: date("target_date"),
+    notes: text("notes"),
+    done: boolean("done").notNull().default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("travels_wishlist_user_id_idx").on(table.userId)],
+).enableRLS();
+
+export type TravelsWishlistRow = typeof travelsWishlist.$inferSelect;
+export type InsertTravelsWishlist = typeof travelsWishlist.$inferInsert;

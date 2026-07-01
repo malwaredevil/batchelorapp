@@ -11,7 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Compass, Search, MapPin, Clock, Globe, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
+import { Compass, Search, MapPin, Clock, Globe, Sparkles, ChevronDown, ChevronUp, Navigation, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 
 function HighlightCard({ h }: { h: { name: string; description: string; category: string } }) {
@@ -63,11 +63,25 @@ function ExploreResult({ result }: { result: ExploreDestinationResult }) {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h2 className="font-serif text-2xl text-foreground">{result.destination}</h2>
-          {(result.lat || result.lng) && (
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {result.lat?.toFixed(4)}, {result.lng?.toFixed(4)}
-            </p>
-          )}
+          <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+            {result.distanceKm != null && (
+              <p className="text-sm text-muted-foreground flex items-center gap-1">
+                <Navigation className="w-3.5 h-3.5 shrink-0" />
+                {result.distanceKm.toLocaleString()} km from home
+              </p>
+            )}
+            {result.mapsUrl && (
+              <a
+                href={result.mapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary hover:underline flex items-center gap-1"
+              >
+                <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                Directions from Reichenbach
+              </a>
+            )}
+          </div>
         </div>
         <Button onClick={handleAddToWishlist} disabled={createTrip.isPending} variant="outline">
           <MapPin className="w-4 h-4 mr-2" />

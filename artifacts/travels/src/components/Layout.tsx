@@ -1,6 +1,6 @@
 import { type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { Home, Globe, Plane, Compass, LogOut, ChevronDown } from "lucide-react";
+import { Home, Globe, Plane, Compass, Star, Upload, LogOut, ChevronDown } from "lucide-react";
 import { AppSwitcher } from "@/components/AppSwitcher";
 import { useLogout, getGetCurrentUserQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -20,6 +20,8 @@ const NAV_ITEMS = [
   { href: "/trips", label: "Trips", icon: Plane },
   { href: "/map", label: "Map", icon: Globe },
   { href: "/explore", label: "Explore", icon: Compass },
+  { href: "/wishlist", label: "Wishlist", icon: Star },
+  { href: "/import", label: "Import", icon: Upload },
 ];
 
 function isActive(current: string, href: string) {

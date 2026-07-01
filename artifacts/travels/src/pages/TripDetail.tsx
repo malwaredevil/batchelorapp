@@ -8,6 +8,7 @@ import {
   useDeleteTripDocument,
   useSendTripMessage,
   useClearTripChat,
+  useGetHighlights,
   getTripDocumentDownloadUrl,
   getListTripsQueryKey,
   getGetTripQueryKey,
@@ -18,6 +19,7 @@ import {
   type TripDocument,
   type ChatMessage,
 } from "@workspace/api-client-react";
+import { OneThingInput } from "@/components/OneThingInput";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -370,6 +372,7 @@ export default function TripDetail({ id }: { id: number }) {
   const deleteTripDocument = useDeleteTripDocument();
   const sendMessage = useSendTripMessage();
   const clearChat = useClearTripChat();
+  const { data: allHighlights = [] } = useGetHighlights();
 
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<UpdateTripBody>>({});
@@ -414,6 +417,8 @@ export default function TripDetail({ id }: { id: number }) {
       accommodationArea: trip.accommodationArea ?? undefined,
       notes: trip.notes ?? undefined,
       travellerCount: trip.travellerCount,
+      travelers: (trip.travelers as string[] | null) ?? [],
+      theOneThing: (trip.theOneThing as string[] | null) ?? [],
     });
     setEditing(true);
   };
@@ -656,7 +661,7 @@ export default function TripDetail({ id }: { id: number }) {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Travellers</Label>
+                <Label>Travellers (count)</Label>
                 <Input
                   type="number"
                   min={1}
@@ -665,6 +670,35 @@ export default function TripDetail({ id }: { id: number }) {
                     setEditForm((f) => ({ ...f, travellerCount: Number(e.target.value) }))
                   }
                 />
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Who came along</Label>
+                <div className="flex flex-wrap gap-3">
+                  {(["John", "Ashley", "Karis", "Angela"] as const).map((name) => {
+                    const checked = ((editForm.travelers as string[] | undefined) ?? []).includes(name);
+                    return (
+                      <label key={name} className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          className="w-4 h-4 rounded border-border accent-primary"
+                          onChange={(e) =>
+                            setEditForm((f) => {
+                              const cur = (f.travelers as string[] | undefined) ?? [];
+                              return {
+                                ...f,
+                                travelers: e.target.checked
+                                  ? [...cur, name]
+                                  : cur.filter((n) => n !== name),
+                              };
+                            })
+                          }
+                        />
+                        <span className="text-sm">{name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
               <div className="space-y-2">
                 <Label>Start date</Label>
@@ -748,6 +782,15 @@ export default function TripDetail({ id }: { id: number }) {
                   }
                 />
               </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label>The One Thing (highlights)</Label>
+                <OneThingInput
+                  value={(editForm.theOneThing as string[] | undefined) ?? []}
+                  onChange={(tags) => setEditForm((f) => ({ ...f, theOneThing: tags }))}
+                  existingValues={allHighlights}
+                  destination={editForm.destination ?? trip.destination}
+                />
+              </div>
             </div>
             <div className="flex justify-between pt-2">
               <Button
@@ -793,7 +836,13 @@ export default function TripDetail({ id }: { id: number }) {
               <Users className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
               <div>
                 <p className="text-xs text-muted-foreground">Travellers</p>
-                <p className="text-sm text-foreground">{trip.travellerCount}</p>
+                {(trip.travelers as string[] | null)?.length ? (
+                  <p className="text-sm text-foreground">
+                    {(trip.travelers as string[]).join(", ")}
+                  </p>
+                ) : (
+                  <p className="text-sm text-foreground">{trip.travellerCount}</p>
+                )}
               </div>
             </div>
             {trip.transportTo && (
@@ -828,6 +877,21 @@ export default function TripDetail({ id }: { id: number }) {
                 <p className="text-sm text-foreground whitespace-pre-wrap">{trip.notes}</p>
               </div>
             )}
+            {(trip.theOneThing as string[] | null)?.length ? (
+              <div className="col-span-2 sm:col-span-3 pt-2 border-t border-border/50">
+                <p className="text-xs text-muted-foreground mb-2">The One Thing</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(trip.theOneThing as string[]).map((tag) => (
+                    <span
+                      key={tag}
+                      className="text-xs px-2.5 py-1 rounded-full border border-primary/30 bg-primary/5 text-primary font-medium"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       )}

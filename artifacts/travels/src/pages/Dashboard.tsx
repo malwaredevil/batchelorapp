@@ -3,7 +3,7 @@ import { useGetTravelsStats, useListTrips, type Trip, type TripStatus } from "@w
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Plane, MapPin, CheckCircle, Calendar, Clock, ArrowRight } from "lucide-react";
+import { Plane, MapPin, CheckCircle, Calendar, Clock, ArrowRight, Moon } from "lucide-react";
 
 const STATUS_ORDER: TripStatus[] = ["active", "booked", "planning", "wishlist", "completed"];
 
@@ -223,6 +223,71 @@ export default function Dashboard() {
           )}
         </div>
       )}
+
+      {/* Year-by-year summary */}
+      {(() => {
+        const completed = trips.filter((t) => t.status === "completed" && t.startDate);
+        if (completed.length === 0) return null;
+
+        const byYear: Record<number, { trips: Trip[]; nights: number }> = {};
+        for (const t of completed) {
+          const year = new Date(t.startDate!).getFullYear();
+          if (!byYear[year]) byYear[year] = { trips: [], nights: 0 };
+          byYear[year].trips.push(t);
+          if (t.endDate && t.startDate) {
+            const nights = Math.round(
+              (new Date(t.endDate).getTime() - new Date(t.startDate).getTime()) / 86400000,
+            );
+            if (nights > 0) byYear[year].nights += nights;
+          }
+        }
+        const years = Object.keys(byYear)
+          .map(Number)
+          .sort((a, b) => b - a);
+
+        return (
+          <div className="space-y-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Year in Review
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {years.map((year) => {
+                const { trips: yTrips, nights } = byYear[year];
+                const destinations = [...new Set(yTrips.map((t) => t.destination))];
+                return (
+                  <Card key={year} className="border-border/50">
+                    <CardContent className="py-4">
+                      <p className="font-semibold text-foreground text-lg">{year}</p>
+                      <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <Plane className="w-3.5 h-3.5" />
+                          {yTrips.length} {yTrips.length === 1 ? "trip" : "trips"}
+                        </span>
+                        {nights > 0 && (
+                          <span className="flex items-center gap-1">
+                            <Moon className="w-3.5 h-3.5" />
+                            {nights} {nights === 1 ? "night" : "nights"}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1 mt-2.5">
+                        {destinations.map((d) => (
+                          <span
+                            key={d}
+                            className="text-xs px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground border border-border/50"
+                          >
+                            {d}
+                          </span>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

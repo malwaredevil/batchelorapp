@@ -7,6 +7,13 @@ import { requireAuth } from "../../middleware/auth";
 const router: IRouter = Router();
 router.use(requireAuth);
 
+function toTitleCase(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/(?:^|\s)\S/g, (c) => c.toUpperCase())
+    .trim();
+}
+
 async function geocodeDestination(
   destination: string,
 ): Promise<{ lat: number; lng: number } | null> {
@@ -40,11 +47,29 @@ const CreateTripBody = z.object({
   accommodationArea: z.string().optional(),
   notes: z.string().optional(),
   travellerCount: z.number().int().min(1).default(2),
+  travelers: z.array(z.string()).optional(),
+  theOneThing: z.array(z.string()).optional(),
 });
 
 const UpdateTripBody = CreateTripBody.partial().extend({
   itinerary: z.unknown().optional(),
   packingList: z.unknown().optional(),
+});
+
+// Must be before /:id routes to avoid Express routing conflict
+router.get("/highlights", async (req, res) => {
+  const userId = req.session.userId!;
+  const rows = await db
+    .select({ theOneThing: travelsTrips.theOneThing })
+    .from(travelsTrips)
+    .where(eq(travelsTrips.userId, userId));
+
+  const values = new Set<string>();
+  for (const row of rows) {
+    const arr = row.theOneThing as string[] | null;
+    if (Array.isArray(arr)) arr.forEach((v) => values.add(v));
+  }
+  res.json([...values].sort());
 });
 
 router.get("/trips", async (req, res) => {
@@ -60,13 +85,20 @@ router.get("/trips", async (req, res) => {
 router.post("/trips", async (req, res) => {
   const userId = req.session.userId!;
   const body = CreateTripBody.parse(req.body);
+  const normalizedOneThing = body.theOneThing?.map(toTitleCase);
   const coords =
     body.lat == null && body.lng == null
       ? await geocodeDestination(body.destination)
       : null;
   const [row] = await db
     .insert(travelsTrips)
-    .values({ ...body, userId, ...(coords ?? {}) })
+    .values({
+      ...body,
+      theOneThing: (normalizedOneThing ?? null) as unknown as Record<string, unknown>,
+      travelers: (body.travelers ?? null) as unknown as Record<string, unknown>,
+      userId,
+      ...(coords ?? {}),
+    })
     .returning();
   res.status(201).json(row);
 });
@@ -112,6 +144,7 @@ router.patch("/trips/:id", async (req, res) => {
   }
 
   const body = UpdateTripBody.parse(req.body);
+  const normalizedOneThing = body.theOneThing?.map(toTitleCase);
 
   const [existing] = await db
     .select({ id: travelsTrips.id, destination: travelsTrips.destination })
@@ -133,9 +166,20 @@ router.patch("/trips/:id", async (req, res) => {
     geocoded = await geocodeDestination(body.destination);
   }
 
+  const updateData: Record<string, unknown> = {
+    ...(body as Record<string, unknown>),
+    ...(geocoded ?? {}),
+  };
+  if (normalizedOneThing !== undefined) {
+    updateData.theOneThing = normalizedOneThing;
+  }
+  if (body.travelers !== undefined) {
+    updateData.travelers = body.travelers ?? null;
+  }
+
   const [updated] = await db
     .update(travelsTrips)
-    .set({ ...(body as Record<string, unknown>), ...(geocoded ?? {}) })
+    .set(updateData)
     .where(and(eq(travelsTrips.id, id), eq(travelsTrips.userId, userId)))
     .returning();
 

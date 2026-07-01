@@ -396,6 +396,23 @@ export const STATEMENTS: string[] = [
   // ── Travels enhancements ────────────────────────────────────────────────────
   // chat_history: per-trip AI conversation (array of {role, content} objects)
   `ALTER TABLE travels_trips ADD COLUMN IF NOT EXISTS chat_history JSONB`,
+  // travelers: named family members who went on the trip (string[])
+  `ALTER TABLE travels_trips ADD COLUMN IF NOT EXISTS travelers JSONB`,
+  // the_one_thing: memorable highlights of the trip (string[])
+  `ALTER TABLE travels_trips ADD COLUMN IF NOT EXISTS the_one_thing JSONB`,
+  // travels_wishlist: bucket-list destinations
+  `CREATE TABLE IF NOT EXISTS travels_wishlist (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER NOT NULL,
+    destination TEXT NOT NULL,
+    target_date DATE,
+    notes       TEXT,
+    done        BOOLEAN NOT NULL DEFAULT false,
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_wishlist ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travels_wishlist_user_id_idx ON travels_wishlist (user_id)`,
 
   // ── Pottery AI enhancements ──────────────────────────────────────────────────
   // glaze_type: Jina CLIP zero-shot decoration/glaze classification

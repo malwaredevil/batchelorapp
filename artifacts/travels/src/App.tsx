@@ -13,6 +13,8 @@ import Trips from "@/pages/Trips";
 import TripDetail from "@/pages/TripDetail";
 import WorldMap from "@/pages/WorldMap";
 import Explore from "@/pages/Explore";
+import Wishlist from "@/pages/Wishlist";
+import Import from "@/pages/Import";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -58,6 +60,22 @@ function Router() {
         <ProtectedRoute>
           <Layout>
             <Explore />
+          </Layout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/wishlist">
+        <ProtectedRoute>
+          <Layout>
+            <Wishlist />
+          </Layout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/import">
+        <ProtectedRoute>
+          <Layout>
+            <Import />
           </Layout>
         </ProtectedRoute>
       </Route>

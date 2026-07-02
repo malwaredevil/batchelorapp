@@ -80,6 +80,9 @@ type ItineraryActivity = {
   description: string;
   proximity: string;
   tip: string;
+  status?: "tentative" | "confirmed";
+  sourceDocumentId?: number;
+  sourceField?: string;
 };
 
 type ItineraryDay = {
@@ -307,6 +310,7 @@ function DayCard({
   onAddActivity,
   onDeleteActivity,
   onDeleteDay,
+  onConfirmActivity,
 }: {
   day: ItineraryDay;
   index: number;
@@ -315,6 +319,7 @@ function DayCard({
   onAddActivity?: (activity: ItineraryActivity) => void;
   onDeleteActivity?: (activityIndex: number) => void;
   onDeleteDay?: () => void;
+  onConfirmActivity?: (activityIndex: number) => void;
 }) {
   const [open, setOpen] = useState(index === 0);
   const [addingActivity, setAddingActivity] = useState(false);
@@ -374,11 +379,27 @@ function DayCard({
               <div key={ai} className="px-4 py-3 space-y-1 group relative">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-foreground">{a.name}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium text-foreground">{a.name}</p>
+                      {a.status === "tentative" && (
+                        <span className="text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-yellow-50 text-yellow-700 border border-yellow-200">
+                          Tentative
+                        </span>
+                      )}
+                    </div>
                     {a.time && <p className="text-xs text-muted-foreground">{a.time}</p>}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {a.proximity && <span className="text-sm">{a.proximity}</span>}
+                    {a.status === "tentative" && onConfirmActivity && (
+                      <button
+                        onClick={() => onConfirmActivity(ai)}
+                        className="text-xs font-medium text-primary hover:underline whitespace-nowrap"
+                        title="Mark this as firm/confirmed"
+                      >
+                        Mark as firm
+                      </button>
+                    )}
                     {onDeleteActivity && (
                       <button
                         onClick={() => onDeleteActivity(ai)}
@@ -1214,6 +1235,30 @@ export default function TripDetail({ id }: { id: number }) {
     setItineraryDirty(true);
   };
 
+  const handleConfirmActivity = (dayIndex: number, activityIndex: number) => {
+    const base = localItinerary ?? (trip?.itinerary as Itinerary | null);
+    if (!base) return;
+    const days = base.days.map((d, i) =>
+      i === dayIndex
+        ? {
+            ...d,
+            activities: d.activities.map((a, ai) =>
+              ai === activityIndex ? { ...a, status: "confirmed" as const } : a,
+            ),
+          }
+        : d,
+    );
+    const updated: Itinerary = { days };
+    setLocalItinerary(updated);
+    updateTrip.mutate(
+      { id, body: { itinerary: updated } },
+      {
+        onSuccess: () => { invalidate(); toast.success("Marked as firm"); },
+        onError: () => toast.error("Failed to update activity"),
+      },
+    );
+  };
+
   const toggleInterest = (interest: string) => {
     setItinInterests((prev) =>
       prev.includes(interest) ? prev.filter((i) => i !== interest) : [...prev, interest],
@@ -1667,6 +1712,7 @@ export default function TripDetail({ id }: { id: number }) {
                 onAddActivity={(act) => handleAddActivity(i, act)}
                 onDeleteActivity={(ai) => handleDeleteActivity(i, ai)}
                 onDeleteDay={() => handleDeleteDay(i)}
+                onConfirmActivity={(ai) => handleConfirmActivity(i, ai)}
               />
             ))}
           </div>

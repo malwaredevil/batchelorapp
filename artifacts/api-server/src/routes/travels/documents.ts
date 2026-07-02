@@ -55,7 +55,9 @@ Return a JSON object with these fields (include only the ones that are present i
   "seatNumbers": ["seat numbers"],
   "vehicleClass": "car class if rental",
   "pickupLocation": "rental pickup location",
+  "pickupDateTime": "ISO date-time string for rental pickup if present",
   "dropoffLocation": "rental dropoff location",
+  "dropoffDateTime": "ISO date-time string for rental drop-off if present",
   "notes": "any other important information, including any date ambiguity or additional legs"
 }
 
@@ -121,7 +123,9 @@ Return a JSON object with these fields (include only the ones that are present):
   "seatNumbers": ["seat numbers"],
   "vehicleClass": "car class if rental",
   "pickupLocation": "rental pickup location",
+  "pickupDateTime": "ISO date-time string for rental pickup if present",
   "dropoffLocation": "rental dropoff location",
+  "dropoffDateTime": "ISO date-time string for rental drop-off if present",
   "notes": "any other important information, including any date ambiguity or additional legs"
 }
 
@@ -147,6 +151,198 @@ async function tripExists(tripId: number): Promise<boolean> {
     .from(travelsTrips)
     .where(eq(travelsTrips.id, tripId));
   return !!row;
+}
+
+type ItineraryActivity = {
+  time: string;
+  name: string;
+  description: string;
+  proximity: string;
+  tip: string;
+  status?: "tentative" | "confirmed";
+  sourceDocumentId?: number;
+  sourceField?: string;
+};
+
+type ItineraryDay = {
+  date: string;
+  title: string;
+  activities: ItineraryActivity[];
+};
+
+type Itinerary = { days: ItineraryDay[] };
+
+function parseDateTime(raw: string): { dateStr: string; timeStr: string } | null {
+  const isoMatch = raw.match(/^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2})(?::\d{2})?)?/);
+  if (isoMatch) {
+    return { dateStr: isoMatch[1]!, timeStr: isoMatch[2] ?? "" };
+  }
+  const parsed = new Date(raw);
+  if (!isNaN(parsed.getTime())) {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const dateStr = `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}`;
+    const timeStr =
+      parsed.getHours() || parsed.getMinutes()
+        ? `${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`
+        : "";
+    return { dateStr, timeStr };
+  }
+  return null;
+}
+
+type DocumentActivityCandidate = {
+  sourceField: string;
+  dateStr: string;
+  time: string;
+  name: string;
+  description: string;
+  proximity: string;
+  tip: string;
+};
+
+function computeDocumentActivities(
+  ed: Record<string, unknown>,
+): DocumentActivityCandidate[] {
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : "");
+  const provider = str(ed.providerName);
+  const flightNumber = str(ed.flightNumber);
+  const from = str(ed.fromLocation);
+  const to = str(ed.toLocation);
+  const hotelName = str(ed.hotelName) || provider;
+  const notes = str(ed.notes);
+  const arrival = str(ed.arrivalDateTime);
+
+  const candidates: DocumentActivityCandidate[] = [];
+
+  const dep = str(ed.departureDateTime) ? parseDateTime(str(ed.departureDateTime)) : null;
+  if (dep) {
+    const label = flightNumber ? `Flight ${flightNumber}` : provider ? `Departure — ${provider}` : "Departure";
+    const tipParts = [arrival ? `Arrives ${arrival}` : "", notes].filter(Boolean);
+    candidates.push({
+      sourceField: "departureDateTime",
+      dateStr: dep.dateStr,
+      time: dep.timeStr,
+      name: from && to ? `${label}: ${from} → ${to}` : label,
+      description: provider,
+      proximity: "✈️",
+      tip: tipParts.join(" — "),
+    });
+  }
+
+  const checkIn = str(ed.checkInDate) ? parseDateTime(str(ed.checkInDate)) : null;
+  if (checkIn) {
+    candidates.push({
+      sourceField: "checkInDate",
+      dateStr: checkIn.dateStr,
+      time: checkIn.timeStr,
+      name: `Hotel check-in${hotelName ? `: ${hotelName}` : ""}`,
+      description: provider,
+      proximity: "🏨",
+      tip: notes,
+    });
+  }
+
+  const checkOut = str(ed.checkOutDate) ? parseDateTime(str(ed.checkOutDate)) : null;
+  if (checkOut) {
+    candidates.push({
+      sourceField: "checkOutDate",
+      dateStr: checkOut.dateStr,
+      time: checkOut.timeStr,
+      name: `Hotel check-out${hotelName ? `: ${hotelName}` : ""}`,
+      description: provider,
+      proximity: "🏨",
+      tip: notes,
+    });
+  }
+
+  const pickup = str(ed.pickupDateTime) ? parseDateTime(str(ed.pickupDateTime)) : null;
+  if (pickup) {
+    candidates.push({
+      sourceField: "pickupDateTime",
+      dateStr: pickup.dateStr,
+      time: pickup.timeStr,
+      name: `Rental car pickup${provider ? `: ${provider}` : ""}`,
+      description: str(ed.pickupLocation),
+      proximity: "🚗",
+      tip: notes,
+    });
+  }
+
+  const dropoff = str(ed.dropoffDateTime) ? parseDateTime(str(ed.dropoffDateTime)) : null;
+  if (dropoff) {
+    candidates.push({
+      sourceField: "dropoffDateTime",
+      dateStr: dropoff.dateStr,
+      time: dropoff.timeStr,
+      name: `Rental car drop-off${provider ? `: ${provider}` : ""}`,
+      description: str(ed.dropoffLocation),
+      proximity: "🚗",
+      tip: notes,
+    });
+  }
+
+  return candidates;
+}
+
+function isItinerary(value: unknown): value is Itinerary {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    Array.isArray((value as { days?: unknown }).days)
+  );
+}
+
+async function syncItineraryFromDocument(
+  tripId: number,
+  docId: number,
+  extractedData: Record<string, unknown>,
+): Promise<void> {
+  const candidates = computeDocumentActivities(extractedData);
+
+  const [trip] = await db
+    .select({ itinerary: travelsTrips.itinerary })
+    .from(travelsTrips)
+    .where(eq(travelsTrips.id, tripId));
+  if (!trip) return;
+
+  const itinerary: Itinerary = isItinerary(trip.itinerary)
+    ? trip.itinerary
+    : { days: [] };
+
+  itinerary.days = itinerary.days.map((day) => ({
+    ...day,
+    activities: (day.activities ?? []).filter(
+      (a) => a.sourceDocumentId !== docId,
+    ),
+  }));
+
+  for (const c of candidates) {
+    let day = itinerary.days.find((d) => d.date === c.dateStr);
+    if (!day) {
+      day = { date: c.dateStr, title: "Travel Day", activities: [] };
+      itinerary.days.push(day);
+    }
+    day.activities.push({
+      time: c.time,
+      name: c.name,
+      description: c.description,
+      proximity: c.proximity,
+      tip: c.tip,
+      status: "tentative",
+      sourceDocumentId: docId,
+      sourceField: c.sourceField,
+    });
+  }
+
+  itinerary.days = itinerary.days.filter(
+    (d) => !(d.title === "Travel Day" && d.activities.length === 0),
+  );
+  itinerary.days.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+
+  await db
+    .update(travelsTrips)
+    .set({ itinerary })
+    .where(eq(travelsTrips.id, tripId));
 }
 
 router.get("/trips/:id/documents", async (req, res) => {
@@ -228,6 +424,12 @@ router.post(
       })
       .returning();
 
+    try {
+      await syncItineraryFromDocument(tripId, doc!.id, extractedData);
+    } catch (err) {
+      req.log.warn({ err }, "Failed to sync itinerary from document");
+    }
+
     res.status(201).json(doc);
   },
 );
@@ -277,6 +479,12 @@ router.patch("/trips/:id/documents/:docId", async (req, res) => {
     )
     .returning();
 
+  try {
+    await syncItineraryFromDocument(tripId, docId, merged);
+  } catch (err) {
+    req.log.warn({ err }, "Failed to re-sync itinerary from corrected document");
+  }
+
   res.json(updated);
 });
 
@@ -317,6 +525,12 @@ router.delete("/trips/:id/documents/:docId", async (req, res) => {
         eq(travelsTripDocuments.tripId, tripId),
       ),
     );
+
+  try {
+    await syncItineraryFromDocument(tripId, docId, {});
+  } catch (err) {
+    req.log.warn({ err }, "Failed to purge itinerary entries for deleted document");
+  }
 
   res.status(204).send();
 });

@@ -14,6 +14,7 @@ import {
   useListTripPhotos,
   useUploadTripPhoto,
   useDeleteTripPhoto,
+  useSetTripIcon,
   useListReminders,
   useCreateReminder,
   useUpdateReminder,
@@ -31,6 +32,7 @@ import {
   type TripDocument,
   type ChatMessage,
   type TripPhoto,
+  type PhotoType,
   type Reminder,
 } from "@workspace/api-client-react";
 import { OneThingInput } from "@/components/OneThingInput";
@@ -73,6 +75,7 @@ import {
   Lock,
   LockOpen,
   ScanSearch,
+  Magnet,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -790,16 +793,36 @@ function TodoList({
   );
 }
 
-// ─── Photos Section ───────────────────────────────────────────────────────────
+// ─── Photos / Magnets Section ─────────────────────────────────────────────────
 
-function PhotosSection({ tripId }: { tripId: number }) {
+function PhotoGridSection({
+  tripId,
+  photoType,
+  title,
+  icon,
+  emptyText,
+  addLabel,
+  iconPhotoId,
+  onSetIcon,
+  settingIcon,
+}: {
+  tripId: number;
+  photoType: PhotoType;
+  title: string;
+  icon: React.ReactNode;
+  emptyText: string;
+  addLabel: string;
+  iconPhotoId?: number | null;
+  onSetIcon?: (photoId: number) => void;
+  settingIcon?: boolean;
+}) {
   const qc = useQueryClient();
-  const { data: photos = [], isLoading } = useListTripPhotos(tripId);
+  const { data: photos = [], isLoading } = useListTripPhotos(tripId, photoType);
   const uploadPhoto = useUploadTripPhoto({
     mutation: {
       onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getListTripPhotosQueryKey(tripId) });
-        toast.success("Photo uploaded");
+        qc.invalidateQueries({ queryKey: getListTripPhotosQueryKey(tripId, photoType) });
+        toast.success(`${photoType === "magnet" ? "Magnet" : "Photo"} uploaded`);
       },
       onError: () => toast.error("Upload failed"),
     },
@@ -807,10 +830,11 @@ function PhotosSection({ tripId }: { tripId: number }) {
   const deletePhoto = useDeleteTripPhoto({
     mutation: {
       onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getListTripPhotosQueryKey(tripId) });
-        toast.success("Photo deleted");
+        qc.invalidateQueries({ queryKey: getListTripPhotosQueryKey(tripId, photoType) });
+        qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
+        toast.success("Deleted");
       },
-      onError: () => toast.error("Failed to delete photo"),
+      onError: () => toast.error("Failed to delete"),
     },
   });
   const fileRef = useRef<HTMLInputElement>(null);
@@ -821,6 +845,7 @@ function PhotosSection({ tripId }: { tripId: number }) {
     if (!file) return;
     const formData = new FormData();
     formData.append("photo", file);
+    formData.append("type", photoType);
     uploadPhoto.mutate({ tripId, formData });
     e.target.value = "";
   };
@@ -829,8 +854,8 @@ function PhotosSection({ tripId }: { tripId: number }) {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="font-serif text-xl text-foreground flex items-center gap-2">
-          <Camera className="w-5 h-5" />
-          Photos
+          {icon}
+          {title}
           {photos.length > 0 && (
             <span className="text-sm font-sans font-normal text-muted-foreground">({photos.length})</span>
           )}
@@ -842,7 +867,7 @@ function PhotosSection({ tripId }: { tripId: number }) {
           disabled={uploadPhoto.isPending}
         >
           <Plus className="w-3.5 h-3.5 mr-1.5" />
-          {uploadPhoto.isPending ? "Uploading..." : "Add photo"}
+          {uploadPhoto.isPending ? "Uploading..." : addLabel}
         </Button>
         <input
           ref={fileRef}
@@ -863,32 +888,49 @@ function PhotosSection({ tripId }: { tripId: number }) {
         <Card className="border-dashed border-2 border-border/60">
           <CardContent className="flex flex-col items-center gap-2 py-8 text-center">
             <ImageIcon className="w-8 h-8 text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground">No photos yet — add some memories</p>
+            <p className="text-sm text-muted-foreground">{emptyText}</p>
           </CardContent>
         </Card>
       ) : (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
-          {photos.map((photo) => (
-            <div key={photo.id} className="relative group aspect-square">
-              <img
-                src={getTripPhotoImageUrl(tripId, photo.id)}
-                alt={photo.caption ?? "Trip photo"}
-                className="w-full h-full object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-                onClick={() => setLightbox(photo)}
-              />
-              <button
-                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                onClick={(e) => { e.stopPropagation(); deletePhoto.mutate({ tripId, photoId: photo.id }); }}
-              >
-                <X className="w-3 h-3" />
-              </button>
-              {photo.caption && (
-                <p className="absolute bottom-0 left-0 right-0 text-[10px] text-white bg-black/50 px-1 py-0.5 rounded-b-lg truncate">
-                  {photo.caption}
-                </p>
-              )}
-            </div>
-          ))}
+          {photos.map((photo) => {
+            const isIcon = onSetIcon && iconPhotoId === photo.id;
+            return (
+              <div key={photo.id} className="relative group aspect-square">
+                <img
+                  src={getTripPhotoImageUrl(tripId, photo.id)}
+                  alt={photo.caption ?? title}
+                  className={`w-full h-full object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity ${isIcon ? "ring-2 ring-primary ring-offset-2" : ""}`}
+                  onClick={() => setLightbox(photo)}
+                />
+                <button
+                  className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={(e) => { e.stopPropagation(); deletePhoto.mutate({ tripId, photoId: photo.id }); }}
+                >
+                  <X className="w-3 h-3" />
+                </button>
+                {onSetIcon && (
+                  <button
+                    className={`absolute top-1 left-1 w-5 h-5 rounded-full flex items-center justify-center transition-opacity ${
+                      isIcon
+                        ? "bg-primary text-primary-foreground opacity-100"
+                        : "bg-black/60 text-white opacity-0 group-hover:opacity-100"
+                    }`}
+                    disabled={settingIcon}
+                    title={isIcon ? "Current trip icon" : "Use as trip icon"}
+                    onClick={(e) => { e.stopPropagation(); onSetIcon(photo.id); }}
+                  >
+                    <Magnet className="w-3 h-3" />
+                  </button>
+                )}
+                {photo.caption && (
+                  <p className="absolute bottom-0 left-0 right-0 text-[10px] text-white bg-black/50 px-1 py-0.5 rounded-b-lg truncate">
+                    {photo.caption}
+                  </p>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -899,11 +941,22 @@ function PhotosSection({ tripId }: { tripId: number }) {
             <>
               <img
                 src={getTripPhotoImageUrl(tripId, lightbox.id)}
-                alt={lightbox.caption ?? "Trip photo"}
+                alt={lightbox.caption ?? title}
                 className="w-full rounded-lg max-h-[70vh] object-contain"
               />
               {lightbox.caption && (
                 <p className="text-sm text-muted-foreground text-center">{lightbox.caption}</p>
+              )}
+              {onSetIcon && (
+                <Button
+                  size="sm"
+                  variant={iconPhotoId === lightbox.id ? "secondary" : "outline"}
+                  disabled={settingIcon || iconPhotoId === lightbox.id}
+                  onClick={() => onSetIcon(lightbox.id)}
+                >
+                  <Magnet className="w-3.5 h-3.5 mr-1.5" />
+                  {iconPhotoId === lightbox.id ? "Current trip icon" : "Use as trip icon"}
+                </Button>
               )}
             </>
           )}
@@ -1099,6 +1152,7 @@ export default function TripDetail({ id }: { id: number }) {
 
   const { data: trip, isLoading } = useGetTrip(id);
   const updateTrip = useUpdateTrip();
+  const setTripIcon = useSetTripIcon();
   const deleteTrip = useDeleteTrip();
   const generateItinerary = useGenerateItinerary();
   const deleteTripDocument = useDeleteTripDocument();
@@ -1430,6 +1484,13 @@ export default function TripDetail({ id }: { id: number }) {
         </Button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 flex-wrap">
+            {trip.iconPhotoId != null && (
+              <img
+                src={getTripPhotoImageUrl(trip.id, trip.iconPhotoId)}
+                alt=""
+                className="w-8 h-8 rounded-full object-cover border border-border shrink-0"
+              />
+            )}
             <h1 className="font-serif text-2xl text-foreground">{trip.title}</h1>
             <span
               className={`text-xs px-2 py-0.5 rounded-full border font-medium shrink-0 ${STATUS_COLORS[trip.status]}`}
@@ -1761,7 +1822,42 @@ export default function TripDetail({ id }: { id: number }) {
       )}
 
       {/* Photos */}
-      {!editing && trip && <PhotosSection tripId={trip.id} />}
+      {!editing && trip && (
+        <PhotoGridSection
+          tripId={trip.id}
+          photoType="photo"
+          title="Photos"
+          icon={<Camera className="w-5 h-5" />}
+          emptyText="No photos yet — add some memories"
+          addLabel="Add photo"
+        />
+      )}
+
+      {/* Magnets */}
+      {!editing && trip && (
+        <PhotoGridSection
+          tripId={trip.id}
+          photoType="magnet"
+          title="Magnets"
+          icon={<Magnet className="w-5 h-5" />}
+          emptyText="No magnets yet — add a photo to use as the trip icon"
+          addLabel="Add magnet"
+          iconPhotoId={trip.iconPhotoId}
+          settingIcon={setTripIcon.isPending}
+          onSetIcon={(photoId) =>
+            setTripIcon.mutate(
+              { tripId: trip.id, photoId },
+              {
+                onSuccess: () => {
+                  qc.invalidateQueries({ queryKey: getGetTripQueryKey(trip.id) });
+                  toast.success("Trip icon updated");
+                },
+                onError: () => toast.error("Failed to set trip icon"),
+              },
+            )
+          }
+        />
+      )}
 
       {/* Reminders */}
       {!editing && trip && <RemindersSection tripId={trip.id} />}

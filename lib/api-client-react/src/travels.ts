@@ -44,6 +44,7 @@ export interface Trip {
   travellerCount: number;
   travelers?: string[] | null;
   theOneThing?: string[] | null;
+  iconPhotoId?: number | null;
   createdAt: string;
 }
 
@@ -759,12 +760,15 @@ export function useDeleteWishlistItem<TError = unknown, TContext = unknown>(
 // Trip Photos
 // ---------------------------------------------------------------------------
 
+export type PhotoType = "photo" | "magnet";
+
 export interface TripPhoto {
   id: number;
   tripId: number;
   userId: number;
   storagePath: string;
   caption?: string | null;
+  photoType: PhotoType;
   sortOrder: number;
   createdAt: string;
 }
@@ -776,22 +780,41 @@ export interface UpdatePhotoBody {
 export const getTripPhotoImageUrl = (tripId: number, photoId: number): string =>
   `/api/travels/trips/${tripId}/photos/${photoId}/image`;
 
-const listTripPhotos = (tripId: number, options?: RequestInit): Promise<TripPhoto[]> =>
-  customFetch<TripPhoto[]>(`/api/travels/trips/${tripId}/photos`, { ...options, method: "GET" });
+const listTripPhotos = (tripId: number, photoType?: PhotoType, options?: RequestInit): Promise<TripPhoto[]> =>
+  customFetch<TripPhoto[]>(
+    `/api/travels/trips/${tripId}/photos${photoType ? `?type=${photoType}` : ""}`,
+    { ...options, method: "GET" },
+  );
 
-export const getListTripPhotosQueryKey = (tripId: number) =>
-  [`/api/travels/trips/${tripId}/photos`] as const;
+export const getListTripPhotosQueryKey = (tripId: number, photoType?: PhotoType) =>
+  [`/api/travels/trips/${tripId}/photos`, photoType] as const;
 
 export function useListTripPhotos<TData = TripPhoto[], TError = unknown>(
   tripId: number,
+  photoType?: PhotoType,
   options?: { query?: UseQueryOptions<TripPhoto[], TError, TData> },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const { query: queryOptions } = options ?? {};
-  const queryKey = queryOptions?.queryKey ?? getListTripPhotosQueryKey(tripId);
-  const queryFn: QueryFunction<TripPhoto[]> = ({ signal }) => listTripPhotos(tripId, { signal });
+  const queryKey = queryOptions?.queryKey ?? getListTripPhotosQueryKey(tripId, photoType);
+  const queryFn: QueryFunction<TripPhoto[]> = ({ signal }) => listTripPhotos(tripId, photoType, { signal });
   const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<TripPhoto[], TError, TData> & { queryKey: QueryKey };
   const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
   return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const setTripIconFn = (tripId: number, photoId: number | null, options?: RequestInit): Promise<{ iconPhotoId: number | null }> =>
+  customFetch<{ iconPhotoId: number | null }>(`/api/travels/trips/${tripId}/icon`, {
+    ...options, method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ photoId }),
+  });
+
+export function useSetTripIcon<TError = unknown, TContext = unknown>(
+  options?: { mutation?: UseMutationOptions<{ iconPhotoId: number | null }, TError, { tripId: number; photoId: number | null }, TContext> },
+): UseMutationResult<{ iconPhotoId: number | null }, TError, { tripId: number; photoId: number | null }, TContext> {
+  const mutationFn: MutationFunction<{ iconPhotoId: number | null }, { tripId: number; photoId: number | null }> = ({ tripId, photoId }) =>
+    setTripIconFn(tripId, photoId);
+  return useMutation({ mutationFn, ...options?.mutation });
 }
 
 export const uploadTripPhoto = (tripId: number, formData: FormData): Promise<TripPhoto> =>

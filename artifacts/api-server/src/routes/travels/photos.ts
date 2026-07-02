@@ -30,16 +30,27 @@ async function tripExists(tripId: number): Promise<boolean> {
   return !!row;
 }
 
+function parsePhotoType(raw: unknown): "photo" | "magnet" {
+  const value = typeof raw === "string" ? raw : Array.isArray(raw) ? raw[0] : undefined;
+  return value === "magnet" ? "magnet" : "photo";
+}
+
 // GET /trips/:id/photos
 router.get("/trips/:id/photos", async (req, res) => {
   const tripId = parseInt(String(req.params["id"]), 10);
   if (isNaN(tripId)) { res.status(400).json({ error: "Invalid id" }); return; }
   if (!(await tripExists(tripId))) { res.status(404).json({ error: "Not found" }); return; }
 
+  const typeFilter = typeof req.query["type"] === "string" ? req.query["type"] : undefined;
+
   const photos = await db
     .select()
     .from(travelsTripPhotos)
-    .where(eq(travelsTripPhotos.tripId, tripId))
+    .where(
+      typeFilter
+        ? and(eq(travelsTripPhotos.tripId, tripId), eq(travelsTripPhotos.photoType, typeFilter))
+        : eq(travelsTripPhotos.tripId, tripId),
+    )
     .orderBy(asc(travelsTripPhotos.sortOrder), asc(travelsTripPhotos.createdAt));
 
   res.json(photos);
@@ -56,10 +67,12 @@ router.post("/trips/:id/photos", upload.single("photo"), async (req, res) => {
   const contentType = req.file.mimetype as "image/jpeg" | "image/png" | "image/webp";
   const storagePath = await uploadTripPhoto(req.file.buffer, contentType);
 
+  const photoType = parsePhotoType(req.body["type"]);
+
   const maxOrderRow = await db
     .select({ sortOrder: travelsTripPhotos.sortOrder })
     .from(travelsTripPhotos)
-    .where(eq(travelsTripPhotos.tripId, tripId))
+    .where(and(eq(travelsTripPhotos.tripId, tripId), eq(travelsTripPhotos.photoType, photoType)))
     .orderBy(asc(travelsTripPhotos.sortOrder));
 
   const nextOrder = maxOrderRow.length > 0 ? maxOrderRow[maxOrderRow.length - 1].sortOrder + 1 : 0;
@@ -73,7 +86,7 @@ router.post("/trips/:id/photos", upload.single("photo"), async (req, res) => {
 
   const [photo] = await db
     .insert(travelsTripPhotos)
-    .values({ tripId, userId, storagePath, caption, sortOrder: nextOrder })
+    .values({ tripId, userId, storagePath, caption, photoType, sortOrder: nextOrder })
     .returning();
 
   res.status(201).json(photo);
@@ -110,7 +123,46 @@ router.delete("/trips/:id/photos/:photoId", async (req, res) => {
 
   await deleteTripPhoto(row.storagePath).catch(() => {});
   await db.delete(travelsTripPhotos).where(eq(travelsTripPhotos.id, photoId));
+
+  const [trip] = await db
+    .select({ iconPhotoId: travelsTrips.iconPhotoId })
+    .from(travelsTrips)
+    .where(eq(travelsTrips.id, tripId));
+  if (trip?.iconPhotoId === photoId) {
+    await db.update(travelsTrips).set({ iconPhotoId: null }).where(eq(travelsTrips.id, tripId));
+  }
+
   res.status(204).send();
+});
+
+// PUT /trips/:id/icon  (set or clear the trip icon; must be a magnet photo on this trip)
+router.put("/trips/:id/icon", async (req, res) => {
+  const tripId = parseInt(String(req.params["id"]), 10);
+  if (isNaN(tripId)) { res.status(400).json({ error: "Invalid id" }); return; }
+  if (!(await tripExists(tripId))) { res.status(404).json({ error: "Not found" }); return; }
+
+  const rawPhotoId = req.body["photoId"];
+  if (rawPhotoId === null || rawPhotoId === undefined) {
+    await db.update(travelsTrips).set({ iconPhotoId: null }).where(eq(travelsTrips.id, tripId));
+    res.json({ iconPhotoId: null });
+    return;
+  }
+
+  const photoId = parseInt(String(rawPhotoId), 10);
+  if (isNaN(photoId)) { res.status(400).json({ error: "Invalid photoId" }); return; }
+
+  const [photo] = await db
+    .select()
+    .from(travelsTripPhotos)
+    .where(and(eq(travelsTripPhotos.id, photoId), eq(travelsTripPhotos.tripId, tripId)));
+
+  if (!photo || photo.photoType !== "magnet") {
+    res.status(400).json({ error: "Photo must be a magnet belonging to this trip" });
+    return;
+  }
+
+  await db.update(travelsTrips).set({ iconPhotoId: photoId }).where(eq(travelsTrips.id, tripId));
+  res.json({ iconPhotoId: photoId });
 });
 
 // GET /trips/:id/photos/:photoId/image

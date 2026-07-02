@@ -431,6 +431,10 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE travels_trip_photos ENABLE ROW LEVEL SECURITY`,
   `CREATE INDEX IF NOT EXISTS travels_trip_photos_trip_id_idx ON travels_trip_photos (trip_id)`,
   `CREATE INDEX IF NOT EXISTS travels_trip_photos_user_id_idx ON travels_trip_photos (user_id)`,
+  // photo_type: distinguishes regular memory photos from "magnet" photos usable as the trip icon
+  `ALTER TABLE travels_trip_photos ADD COLUMN IF NOT EXISTS photo_type TEXT NOT NULL DEFAULT 'photo'`,
+  // icon_photo_id: id of a travels_trip_photos row (photo_type = 'magnet') shown beside the trip title
+  `ALTER TABLE travels_trips ADD COLUMN IF NOT EXISTS icon_photo_id INTEGER`,
   // travels_reminders: per-trip alerts/reminders with due dates
   `CREATE TABLE IF NOT EXISTS travels_reminders (
     id          SERIAL PRIMARY KEY,

@@ -38,6 +38,7 @@ export const travelsTrips = pgTable(
     packingList: jsonb("packing_list"),
     chatHistory: jsonb("chat_history"),
     todoList: jsonb("todo_list"),
+    iconPhotoId: integer("icon_photo_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -87,6 +88,7 @@ export const travelsTripPhotos = pgTable(
     userId: integer("user_id").notNull(),
     storagePath: text("storage_path").notNull(),
     caption: text("caption"),
+    photoType: text("photo_type").notNull().default("photo"),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()

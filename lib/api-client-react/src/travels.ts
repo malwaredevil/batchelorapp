@@ -55,6 +55,7 @@ export interface TripDocument {
   documentType?: string | null;
   originalFilename?: string | null;
   extractedData?: Record<string, unknown> | null;
+  lockedFields?: string[];
   createdAt: string;
 }
 
@@ -280,7 +281,7 @@ export const deleteTripDocument = (
 export const updateTripDocument = (
   tripId: number,
   docId: number,
-  body: { extractedData: Record<string, unknown> },
+  body: { extractedData?: Record<string, unknown>; lockedFields?: string[] },
   options?: RequestInit,
 ): Promise<TripDocument> =>
   customFetch<TripDocument>(`/api/travels/trips/${tripId}/documents/${docId}`, {
@@ -289,6 +290,19 @@ export const updateTripDocument = (
     headers: { "Content-Type": "application/json", ...options?.headers },
     body: JSON.stringify(body),
   });
+
+export const rescanTripDocument = (
+  tripId: number,
+  docId: number,
+  options?: RequestInit,
+): Promise<TripDocument> =>
+  customFetch<TripDocument>(
+    `/api/travels/trips/${tripId}/documents/${docId}/rescan`,
+    {
+      ...options,
+      method: "POST",
+    },
+  );
 
 export const getTripDocumentDownloadUrl = (tripId: number, docId: number) =>
   `/api/travels/trips/${tripId}/documents/${docId}/download`;
@@ -506,20 +520,54 @@ export function useUpdateTripDocument<TError = unknown, TContext = unknown>(
     mutation?: UseMutationOptions<
       TripDocument,
       TError,
-      { tripId: number; docId: number; body: { extractedData: Record<string, unknown> } },
+      {
+        tripId: number;
+        docId: number;
+        body: { extractedData?: Record<string, unknown>; lockedFields?: string[] };
+      },
       TContext
     >;
   },
 ): UseMutationResult<
   TripDocument,
   TError,
-  { tripId: number; docId: number; body: { extractedData: Record<string, unknown> } },
+  {
+    tripId: number;
+    docId: number;
+    body: { extractedData?: Record<string, unknown>; lockedFields?: string[] };
+  },
   TContext
 > {
   const mutationFn: MutationFunction<
     TripDocument,
-    { tripId: number; docId: number; body: { extractedData: Record<string, unknown> } }
+    {
+      tripId: number;
+      docId: number;
+      body: { extractedData?: Record<string, unknown>; lockedFields?: string[] };
+    }
   > = ({ tripId, docId, body }) => updateTripDocument(tripId, docId, body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+export function useRescanTripDocument<TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      TripDocument,
+      TError,
+      { tripId: number; docId: number },
+      TContext
+    >;
+  },
+): UseMutationResult<
+  TripDocument,
+  TError,
+  { tripId: number; docId: number },
+  TContext
+> {
+  const mutationFn: MutationFunction<
+    TripDocument,
+    { tripId: number; docId: number }
+  > = ({ tripId, docId }) => rescanTripDocument(tripId, docId);
   return useMutation({ mutationFn, ...options?.mutation });
 }
 

@@ -8,7 +8,7 @@ const ALERT_THRESHOLDS: { type: ReminderAlertType; days: number }[] = [
   { type: "3_day",  days: 3 },
 ];
 
-async function runReminderAlerts(): Promise<void> {
+export async function runReminderAlerts(): Promise<void> {
   if (!resendConfigured()) {
     logger.debug("reminder-scheduler: Resend not configured, skipping");
     return;
@@ -41,7 +41,8 @@ async function runReminderAlerts(): Promise<void> {
            FROM travels_reminders r
            JOIN travels_trips  t ON t.id  = r.trip_id
           WHERE r.done = false
-            AND r.due_date = CURRENT_DATE + $1::integer
+            AND r.due_date >= CURRENT_DATE
+            AND r.due_date <= CURRENT_DATE + $1::integer
             AND array_length(r.recipient_emails, 1) > 0
             AND NOT EXISTS (
               SELECT 1 FROM travels_reminder_alert_log al
@@ -52,8 +53,11 @@ async function runReminderAlerts(): Promise<void> {
       );
 
       for (const row of rows) {
-        try {
-          for (const toEmail of row.recipient_emails) {
+        const failures: { toEmail: string; err: unknown }[] = [];
+        let successCount = 0;
+
+        for (const toEmail of row.recipient_emails) {
+          try {
             await sendReminderAlertEmail(
               toEmail,
               row.reminder_title,
@@ -62,8 +66,21 @@ async function runReminderAlerts(): Promise<void> {
               type,
               row.due_date,
             );
+            successCount++;
+          } catch (err) {
+            failures.push({ toEmail, err });
+            logger.error(
+              { err, reminderId: row.reminder_id, alertType: type, toEmail },
+              "reminder-scheduler: failed to send alert to recipient",
+            );
           }
+        }
 
+        // Only mark the alert as sent once every recipient has actually
+        // received it. If even one recipient failed (e.g. Resend rejecting
+        // an unverified address), leave the log row absent so the next run
+        // retries the whole reminder rather than silently dropping it.
+        if (failures.length === 0) {
           await client.query(
             `INSERT INTO travels_reminder_alert_log (reminder_id, user_id, alert_type)
              VALUES ($1, $2, $3)`,
@@ -71,13 +88,18 @@ async function runReminderAlerts(): Promise<void> {
           );
 
           logger.info(
-            { reminderId: row.reminder_id, alertType: type, recipientCount: row.recipient_emails.length },
+            { reminderId: row.reminder_id, alertType: type, recipientCount: successCount },
             "reminder-scheduler: alert email(s) sent",
           );
-        } catch (err) {
-          logger.error(
-            { err, reminderId: row.reminder_id, alertType: type },
-            "reminder-scheduler: failed to send alert",
+        } else {
+          logger.warn(
+            {
+              reminderId: row.reminder_id,
+              alertType: type,
+              successCount,
+              failedRecipients: failures.map((f) => f.toEmail),
+            },
+            "reminder-scheduler: alert not fully delivered, will retry next run",
           );
         }
       }
@@ -87,6 +109,18 @@ async function runReminderAlerts(): Promise<void> {
   }
 }
 
+const IN_PROCESS_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+
+/**
+ * Best-effort, in-process fallback: runs on startup and hourly while this
+ * server instance happens to be warm. This alone is NOT sufficient to
+ * guarantee delivery — on `autoscale` deployments the instance can be fully
+ * asleep for long stretches. Reliable delivery is provided by a separate
+ * Replit Scheduled Deployment invoking `pnpm run send-reminder-alerts`
+ * (see scripts/send-reminder-alerts.ts), which runs independently of
+ * whether the web server instance is awake. The alert log table makes both
+ * paths safely idempotent, so running them alongside each other is safe.
+ */
 export function startReminderScheduler(): void {
   runReminderAlerts().catch((err: unknown) =>
     logger.error({ err }, "reminder-scheduler: initial run failed"),
@@ -96,9 +130,9 @@ export function startReminderScheduler(): void {
     runReminderAlerts().catch((err: unknown) =>
       logger.error({ err }, "reminder-scheduler: scheduled run failed"),
     );
-  }, 24 * 60 * 60 * 1000);
+  }, IN_PROCESS_INTERVAL_MS);
 
   interval.unref();
 
-  logger.info("reminder-scheduler: started (runs every 24 h)");
+  logger.info("reminder-scheduler: started (in-process fallback, runs hourly)");
 }

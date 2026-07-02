@@ -277,6 +277,19 @@ export const deleteTripDocument = (
     method: "DELETE",
   });
 
+export const updateTripDocument = (
+  tripId: number,
+  docId: number,
+  body: { extractedData: Record<string, unknown> },
+  options?: RequestInit,
+): Promise<TripDocument> =>
+  customFetch<TripDocument>(`/api/travels/trips/${tripId}/documents/${docId}`, {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(body),
+  });
+
 export const getTripDocumentDownloadUrl = (tripId: number, docId: number) =>
   `/api/travels/trips/${tripId}/documents/${docId}/download`;
 
@@ -485,6 +498,28 @@ export function useDeleteTripDocument<TError = unknown, TContext = unknown>(
     void,
     { tripId: number; docId: number }
   > = ({ tripId, docId }) => deleteTripDocument(tripId, docId);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+export function useUpdateTripDocument<TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      TripDocument,
+      TError,
+      { tripId: number; docId: number; body: { extractedData: Record<string, unknown> } },
+      TContext
+    >;
+  },
+): UseMutationResult<
+  TripDocument,
+  TError,
+  { tripId: number; docId: number; body: { extractedData: Record<string, unknown> } },
+  TContext
+> {
+  const mutationFn: MutationFunction<
+    TripDocument,
+    { tripId: number; docId: number; body: { extractedData: Record<string, unknown> } }
+  > = ({ tripId, docId, body }) => updateTripDocument(tripId, docId, body);
   return useMutation({ mutationFn, ...options?.mutation });
 }
 

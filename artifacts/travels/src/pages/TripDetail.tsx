@@ -6,6 +6,7 @@ import {
   useDeleteTrip,
   useGenerateItinerary,
   useDeleteTripDocument,
+  useUpdateTripDocument,
   useSendTripMessage,
   useClearTripChat,
   useGetHighlights,
@@ -159,6 +160,11 @@ function DocumentRow({
   tripId: number;
   onDelete: (docId: number) => void;
 }) {
+  const qc = useQueryClient();
+  const updateTripDocument = useUpdateTripDocument();
+  const [editingFields, setEditingFields] = useState(false);
+  const [fieldForm, setFieldForm] = useState<Record<string, string>>({});
+
   const ext = doc.originalFilename?.split(".").pop()?.toLowerCase();
   const ed = doc.extractedData as Record<string, unknown> | null;
 
@@ -173,6 +179,34 @@ function DocumentRow({
     { key: "hotelName", label: "Hotel" },
   ];
 
+  const startEditFields = () => {
+    const initial: Record<string, string> = {};
+    for (const { key } of keyFields) {
+      initial[key] = ed?.[key] != null ? String(ed[key]) : "";
+    }
+    setFieldForm(initial);
+    setEditingFields(true);
+  };
+
+  const saveFields = () => {
+    const extractedData: Record<string, unknown> = {};
+    for (const { key } of keyFields) {
+      const value = fieldForm[key]?.trim();
+      extractedData[key] = value ? value : null;
+    }
+    updateTripDocument.mutate(
+      { tripId, docId: doc.id, body: { extractedData } },
+      {
+        onSuccess: () => {
+          qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
+          setEditingFields(false);
+          toast.success("Document details updated");
+        },
+        onError: () => toast.error("Failed to update document details"),
+      },
+    );
+  };
+
   return (
     <div className="flex items-start gap-3 py-3 border-b border-border/50 last:border-0">
       <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center shrink-0 text-muted-foreground text-xs font-mono uppercase">
@@ -185,16 +219,67 @@ function DocumentRow({
         {doc.documentType && (
           <p className="text-xs text-muted-foreground capitalize">{doc.documentType}</p>
         )}
-        {ed &&
+        {editingFields ? (
+          <div className="mt-2 space-y-2">
+            {keyFields.map(({ key, label }) => (
+              <div key={key} className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground w-24 shrink-0">{label}</Label>
+                <Input
+                  value={fieldForm[key] ?? ""}
+                  onChange={(e) =>
+                    setFieldForm((f) => ({ ...f, [key]: e.target.value }))
+                  }
+                  className="h-7 text-xs"
+                  placeholder={
+                    key === "departureDateTime" || key.toLowerCase().includes("date")
+                      ? "e.g. 2026-08-14T10:30:00"
+                      : undefined
+                  }
+                />
+              </div>
+            ))}
+            <div className="flex items-center gap-2 pt-1">
+              <Button
+                size="sm"
+                className="h-7 px-2"
+                onClick={saveFields}
+                disabled={updateTripDocument.isPending}
+              >
+                <Save className="w-3 h-3 mr-1" />
+                Save
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-2"
+                onClick={() => setEditingFields(false)}
+              >
+                <X className="w-3 h-3 mr-1" />
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          ed &&
           keyFields
             .filter(({ key }) => ed[key] != null)
             .map(({ key, label }) => (
               <p key={key} className="text-xs text-muted-foreground">
                 {label}: <span className="text-foreground">{String(ed[key])}</span>
               </p>
-            ))}
+            ))
+        )}
       </div>
       <div className="flex items-center gap-1 shrink-0">
+        {!editingFields && (
+          <button
+            onClick={startEditFields}
+            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+            title="Correct extracted details"
+          >
+            <Edit2 className="w-4 h-4" />
+          </button>
+        )}
         <a
           href={getTripDocumentDownloadUrl(tripId, doc.id)}
           target="_blank"

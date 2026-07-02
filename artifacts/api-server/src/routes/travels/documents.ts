@@ -33,6 +33,12 @@ async function extractFromImage(buffer: Buffer, mimeType: string) {
               type: "text",
               text: `You are extracting structured information from a travel document (ticket, confirmation, rental agreement, boarding pass, hotel voucher, etc).
 
+IMPORTANT date-extraction rules:
+- Many documents show several dates: the date the ticket/booking was ISSUED or PURCHASED, and the date(s) travel actually OCCURS. "departureDateTime" must be the actual travel departure date/time of the FIRST outbound leg — never the issue date, purchase date, or booking date. If the document has separate "Issued on"/"Booked on" and "Departure"/"Travel date" fields, always prefer the travel date.
+- If there are multiple flight legs/segments (e.g. a connection or a multi-city itinerary), use the departure date/time of the very first segment for "departureDateTime", and note any later legs in "notes".
+- Dates can be written ambiguously (e.g. "03/04/2026"). Use surrounding context (day-of-week labels, month names spelled out, airport/country of origin) to disambiguate DD/MM vs MM/DD. If genuinely ambiguous, state your best guess in "departureDateTime" and mention the ambiguity in "notes".
+- Always output "departureDateTime" (and any other date/time field) as a full ISO 8601 string including year, e.g. "2026-08-14T10:30:00". Never omit the year or leave it as the current year by assumption if a different year is printed on the document.
+
 Return a JSON object with these fields (include only the ones that are present in the document):
 {
   "documentType": "flight_ticket | hotel_confirmation | car_rental | train_ticket | boarding_pass | travel_insurance | other",
@@ -41,7 +47,7 @@ Return a JSON object with these fields (include only the ones that are present i
   "passengerNames": ["name1", "name2"],
   "fromLocation": "departure city/airport",
   "toLocation": "destination city/airport",
-  "departureDateTime": "ISO date-time string if present",
+  "departureDateTime": "ISO date-time string of the actual first-leg travel departure (NOT the issue/booking date)",
   "arrivalDateTime": "ISO date-time string if present",
   "checkInDate": "date string for hotels",
   "checkOutDate": "date string for hotels",
@@ -50,7 +56,7 @@ Return a JSON object with these fields (include only the ones that are present i
   "vehicleClass": "car class if rental",
   "pickupLocation": "rental pickup location",
   "dropoffLocation": "rental dropoff location",
-  "notes": "any other important information"
+  "notes": "any other important information, including any date ambiguity or additional legs"
 }
 
 Return ONLY valid JSON, no extra text.`,
@@ -93,6 +99,12 @@ async function extractFromPdf(buffer: Buffer) {
 Document text:
 ${text}
 
+IMPORTANT date-extraction rules:
+- Many documents show several dates: the date the ticket/booking was ISSUED or PURCHASED, and the date(s) travel actually OCCURS. "departureDateTime" must be the actual travel departure date/time of the FIRST outbound leg — never the issue date, purchase date, or booking date. If the text has separate "Issued on"/"Booked on" and "Departure"/"Travel date" fields, always prefer the travel date.
+- If there are multiple flight legs/segments (e.g. a connection or a multi-city itinerary), use the departure date/time of the very first segment for "departureDateTime", and note any later legs in "notes".
+- Dates can be written ambiguously (e.g. "03/04/2026"). Use surrounding context (day-of-week labels, month names spelled out, airport/country of origin) to disambiguate DD/MM vs MM/DD. If genuinely ambiguous, state your best guess in "departureDateTime" and mention the ambiguity in "notes".
+- Always output "departureDateTime" (and any other date/time field) as a full ISO 8601 string including year, e.g. "2026-08-14T10:30:00". Never omit the year or leave it as the current year by assumption if a different year is printed in the text.
+
 Return a JSON object with these fields (include only the ones that are present):
 {
   "documentType": "flight_ticket | hotel_confirmation | car_rental | train_ticket | boarding_pass | travel_insurance | other",
@@ -101,7 +113,7 @@ Return a JSON object with these fields (include only the ones that are present):
   "passengerNames": ["name1", "name2"],
   "fromLocation": "departure city/airport",
   "toLocation": "destination city/airport",
-  "departureDateTime": "ISO date-time string if present",
+  "departureDateTime": "ISO date-time string of the actual first-leg travel departure (NOT the issue/booking date)",
   "arrivalDateTime": "ISO date-time string if present",
   "checkInDate": "date string for hotels",
   "checkOutDate": "date string for hotels",
@@ -110,7 +122,7 @@ Return a JSON object with these fields (include only the ones that are present):
   "vehicleClass": "car class if rental",
   "pickupLocation": "rental pickup location",
   "dropoffLocation": "rental dropoff location",
-  "notes": "any other important information"
+  "notes": "any other important information, including any date ambiguity or additional legs"
 }
 
 Return ONLY valid JSON, no extra text.`,
@@ -219,6 +231,54 @@ router.post(
     res.status(201).json(doc);
   },
 );
+
+router.patch("/trips/:id/documents/:docId", async (req, res) => {
+  const tripId = parseInt(req.params.id, 10);
+  const docId = parseInt(req.params.docId, 10);
+  if (isNaN(tripId) || isNaN(docId)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  const { extractedData } = req.body as { extractedData?: Record<string, unknown> };
+  if (!extractedData || typeof extractedData !== "object") {
+    res.status(400).json({ error: "extractedData object is required" });
+    return;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(travelsTripDocuments)
+    .where(
+      and(
+        eq(travelsTripDocuments.id, docId),
+        eq(travelsTripDocuments.tripId, tripId),
+      ),
+    );
+
+  if (!existing) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  const merged = {
+    ...(existing.extractedData as Record<string, unknown> | null),
+    ...extractedData,
+  };
+
+  const [updated] = await db
+    .update(travelsTripDocuments)
+    .set({ extractedData: merged })
+    .where(
+      and(
+        eq(travelsTripDocuments.id, docId),
+        eq(travelsTripDocuments.tripId, tripId),
+      ),
+    )
+    .returning();
+
+  res.json(updated);
+});
 
 router.delete("/trips/:id/documents/:docId", async (req, res) => {
   const tripId = parseInt(req.params.id, 10);

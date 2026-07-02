@@ -2061,6 +2061,45 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
   /travels/trips/{id}/documents/{docId}:
+    patch:
+      operationId: updateTripDocument
+      tags:
+        - travels
+      summary: Correct/update the extracted data for a trip document
+      parameters:
+        - $ref: "#/components/parameters/TripId"
+        - $ref: "#/components/parameters/DocId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - extractedData
+              properties:
+                extractedData:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "200":
+          description: Updated document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TravelsTripDocument"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
     delete:
       operationId: deleteTripDocument
       tags:

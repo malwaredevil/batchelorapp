@@ -486,4 +486,9 @@ export const STATEMENTS: string[] = [
      ON travels_reminder_alert_log (reminder_id)`,
   `CREATE INDEX IF NOT EXISTS travels_reminder_alert_log_user_id_idx
      ON travels_reminder_alert_log (user_id)`,
+
+  // travels_reminders.recipient_emails: per-reminder list of email addresses to
+  // alert (picked from app_users' login emails, or freeform custom addresses).
+  // Replaces the old single per-user travels_reminder_email as the alert target.
+  `ALTER TABLE travels_reminders ADD COLUMN IF NOT EXISTS recipient_emails TEXT[] NOT NULL DEFAULT '{}'`,
 ];

@@ -156,6 +156,20 @@ function formatExtractedValue(raw: string): string {
   return `${dateStr}, ${timeStr}`;
 }
 
+// Formats a bare "HH:MM" (24-hour) time string into the same 12-hour style
+// used for documents' extracted date/time values (e.g. "10:30" -> "10:30 AM").
+function formatTimeOfDay(time: string): string {
+  const match = time.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return time;
+  const parsed = new Date(`2000-01-01T${match[1]!.padStart(2, "0")}:${match[2]}:00`);
+  if (isNaN(parsed.getTime())) return time;
+  return parsed.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 function buildCalendarUrl(
   title: string,
   destination: string,
@@ -412,6 +426,7 @@ function DocumentRow({
 function DayCard({
   day,
   index,
+  dayNumber,
   onRefresh,
   refreshing,
   onAddActivity,
@@ -421,6 +436,7 @@ function DayCard({
 }: {
   day: ItineraryDay;
   index: number;
+  dayNumber: number;
   onRefresh: (dayIndex: number) => void;
   refreshing: boolean;
   onAddActivity?: (activity: ItineraryActivity) => void;
@@ -447,7 +463,7 @@ function DayCard({
       >
         <div>
           <p className="font-medium text-foreground">
-            Day {index + 1} — {day.title}
+            Day {dayNumber} — {day.title}
           </p>
           <p className="text-xs text-muted-foreground">
             {formatDate(day.date)} · {day.activities.length} {day.activities.length === 1 ? "activity" : "activities"}
@@ -494,7 +510,7 @@ function DayCard({
                         </span>
                       )}
                     </div>
-                    {a.time && <p className="text-xs text-muted-foreground">{a.time}</p>}
+                    {a.time && <p className="text-xs text-muted-foreground">{formatTimeOfDay(a.time)}</p>}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {a.proximity && <span className="text-sm">{a.proximity}</span>}
@@ -1809,19 +1825,36 @@ export default function TripDetail({ id }: { id: number }) {
         {/* Days list */}
         {localItinerary?.days && localItinerary.days.length > 0 && (
           <div className="space-y-2">
-            {localItinerary.days.map((day, i) => (
-              <DayCard
-                key={i}
-                day={day}
-                index={i}
-                onRefresh={handleRefreshDay}
-                refreshing={refreshingDay === i}
-                onAddActivity={(act) => handleAddActivity(i, act)}
-                onDeleteActivity={(ai) => handleDeleteActivity(i, ai)}
-                onDeleteDay={() => handleDeleteDay(i)}
-                onConfirmActivity={(ai) => handleConfirmActivity(i, ai)}
-              />
-            ))}
+            {(() => {
+              const validDates = localItinerary.days
+                .map((d) => d.date)
+                .filter((d): d is string => !!d)
+                .sort();
+              const earliestDate = validDates[0];
+              return localItinerary.days.map((day, i) => {
+                const dayNumber = day.date && earliestDate
+                  ? Math.round(
+                      (new Date(`${day.date}T12:00:00`).getTime() -
+                        new Date(`${earliestDate}T12:00:00`).getTime()) /
+                        86400000,
+                    ) + 1
+                  : i + 1;
+                return (
+                  <DayCard
+                    key={i}
+                    day={day}
+                    index={i}
+                    dayNumber={dayNumber}
+                    onRefresh={handleRefreshDay}
+                    refreshing={refreshingDay === i}
+                    onAddActivity={(act) => handleAddActivity(i, act)}
+                    onDeleteActivity={(ai) => handleDeleteActivity(i, ai)}
+                    onDeleteDay={() => handleDeleteDay(i)}
+                    onConfirmActivity={(ai) => handleConfirmActivity(i, ai)}
+                  />
+                );
+              });
+            })()}
           </div>
         )}
 

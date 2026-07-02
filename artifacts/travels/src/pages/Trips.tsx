@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Plus, Plane, ArrowRight, Filter } from "lucide-react";
+import { MapPin, Plus, Plane, ArrowRight, Filter, X } from "lucide-react";
 import { toast } from "sonner";
 import { MagnetCheckDialog } from "@/components/MagnetCheckDialog";
 
@@ -184,11 +184,19 @@ const FAMILY_MEMBERS = ["John", "Ashley", "Karis", "Angela"] as const;
 
 export default function Trips() {
   const search = useSearch();
-  const initialStatus = (new URLSearchParams(search).get("status") ?? "all") as TripStatus | "all";
+  const searchParams = new URLSearchParams(search);
+  const initialStatus = (searchParams.get("status") ?? "all") as TripStatus | "all";
+  const initialYear = searchParams.get("year");
+  const initialDestination = searchParams.get("destination");
   const { data: trips = [], isLoading } = useListTrips();
   const [filterStatus, setFilterStatus] = useState<TripStatus | "all">(initialStatus);
-  const [filterYear, setFilterYear] = useState<number | "all">("all");
+  const [filterYear, setFilterYear] = useState<number | "all">(
+    initialYear ? Number(initialYear) : "all",
+  );
   const [filterPerson, setFilterPerson] = useState<string[]>([]);
+  const [filterDestination, setFilterDestination] = useState<string | null>(
+    initialDestination,
+  );
   const [creating, setCreating] = useState(false);
 
   const availableYears = Array.from(
@@ -201,6 +209,7 @@ export default function Trips() {
       if (!t.startDate) return false;
       if (new Date(t.startDate).getFullYear() !== filterYear) return false;
     }
+    if (filterDestination && t.destination !== filterDestination) return false;
     if (filterPerson.length > 0) {
       const travelers = t.travelers as string[] | null;
       if (!filterPerson.every((p) => travelers?.includes(p))) return false;
@@ -222,8 +231,14 @@ export default function Trips() {
     { active: [], booked: [], planning: [], wishlist: [], completed: [] },
   );
 
-  const hasActiveFilters = filterStatus !== "all" || filterYear !== "all" || filterPerson.length > 0;
-  const clearFilters = () => { setFilterStatus("all"); setFilterYear("all"); setFilterPerson([]); };
+  const hasActiveFilters =
+    filterStatus !== "all" || filterYear !== "all" || filterPerson.length > 0 || !!filterDestination;
+  const clearFilters = () => {
+    setFilterStatus("all");
+    setFilterYear("all");
+    setFilterPerson([]);
+    setFilterDestination(null);
+  };
 
   return (
     <div className="space-y-6">
@@ -314,6 +329,19 @@ export default function Trips() {
               );
             })}
           </div>
+          {filterDestination && (
+            <span className="h-8 flex items-center gap-1.5 px-2.5 rounded-md text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+              <MapPin className="w-3 h-3" />
+              {filterDestination}
+              <button
+                onClick={() => setFilterDestination(null)}
+                className="ml-0.5 hover:text-primary/70"
+                aria-label="Clear destination filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
           {hasActiveFilters && (
             <button
               onClick={clearFilters}

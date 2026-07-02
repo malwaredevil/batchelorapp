@@ -389,14 +389,20 @@ export default function Dashboard() {
                         )}
                       </div>
                       <div className="flex flex-wrap gap-1 mt-2.5">
-                        {destinations.map((d) => (
-                          <span
-                            key={d}
-                            className="text-xs px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground border border-border/50"
-                          >
-                            {d}
-                          </span>
-                        ))}
+                        {destinations.map((d) => {
+                          const tripsForTag = yTrips.filter((t) => t.destination === d);
+                          const href =
+                            tripsForTag.length === 1
+                              ? `/trips/${tripsForTag[0]!.id}`
+                              : `/trips?year=${year}&destination=${encodeURIComponent(d)}`;
+                          return (
+                            <Link key={d} href={href}>
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground border border-border/50 hover:bg-secondary/70 hover:border-primary/40 cursor-pointer transition-colors">
+                                {d}
+                              </span>
+                            </Link>
+                          );
+                        })}
                       </div>
                     </CardContent>
                   </Card>

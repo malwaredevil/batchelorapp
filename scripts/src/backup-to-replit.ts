@@ -1,9 +1,10 @@
 /**
  * backup-to-replit.ts
  *
- * Copies all Supabase tables (pottery + quilting + shared) to the Replit
- * built-in PostgreSQL database.  Safe to run at any time; uses TRUNCATE +
- * INSERT inside a transaction so the destination is always a consistent snapshot.
+ * Copies all Supabase tables (pottery + quilting + travels + shared) to the
+ * Replit built-in PostgreSQL database.  Safe to run at any time; uses
+ * TRUNCATE + INSERT inside a transaction so the destination is always a
+ * consistent snapshot.
  *
  * What is backed up:
  *   Shared:  app_users
@@ -14,6 +15,8 @@
  *             quilting_finished_quilts, quilting_fabric_links, quilting_pattern_links,
  *             quilting_entity_categories, quilting_images, quilting_blocks,
  *             quilting_layouts, quilting_shopping_items
+ *   Travels:  travels_trips, travels_trip_documents, travels_trip_photos,
+ *             travels_wishlist, travels_reminders, travels_reminder_alert_log
  *
  * What is intentionally skipped:
  *   - embedding / visual_embedding columns (require pgvector, unavailable on Replit DB)
@@ -46,6 +49,9 @@ CREATE TABLE IF NOT EXISTS app_users (
 );
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS display_name TEXT;
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS theme_preference TEXT;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS hub_widget_ids TEXT;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS hub_weather_config TEXT;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS travels_reminder_email TEXT;
 
 -- Pottery
 CREATE TABLE IF NOT EXISTS pottery_categories (
@@ -229,6 +235,90 @@ CREATE TABLE IF NOT EXISTS quilting_shopping_items (
   priority             INTEGER NOT NULL DEFAULT 0,
   created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Travels
+CREATE TABLE IF NOT EXISTS travels_trips (
+  id                 SERIAL PRIMARY KEY,
+  user_id            INTEGER NOT NULL,
+  title              TEXT NOT NULL,
+  destination        TEXT NOT NULL,
+  lat                REAL,
+  lng                REAL,
+  status             TEXT NOT NULL DEFAULT 'wishlist',
+  start_date         DATE,
+  end_date           DATE,
+  transport_to       TEXT,
+  transport_details  TEXT,
+  has_rental_car     BOOLEAN NOT NULL DEFAULT false,
+  accommodation_name TEXT,
+  accommodation_area TEXT,
+  notes              TEXT,
+  fun_fact           TEXT,
+  traveller_count    INTEGER NOT NULL DEFAULT 2,
+  travelers          JSONB,
+  the_one_thing      JSONB,
+  itinerary          JSONB,
+  packing_list       JSONB,
+  chat_history       JSONB,
+  todo_list          JSONB,
+  icon_photo_id      INTEGER,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS travels_trip_documents (
+  id                SERIAL PRIMARY KEY,
+  trip_id           INTEGER NOT NULL,
+  user_id           INTEGER NOT NULL,
+  storage_path      TEXT NOT NULL,
+  document_type     TEXT,
+  original_filename TEXT,
+  extracted_data    JSONB,
+  locked_fields     TEXT[] NOT NULL DEFAULT '{}',
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS travels_trip_photos (
+  id           SERIAL PRIMARY KEY,
+  trip_id      INTEGER NOT NULL,
+  user_id      INTEGER NOT NULL,
+  storage_path TEXT NOT NULL,
+  caption      TEXT,
+  photo_type   TEXT NOT NULL DEFAULT 'photo',
+  sort_order   INTEGER NOT NULL DEFAULT 0,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS travels_wishlist (
+  id          SERIAL PRIMARY KEY,
+  user_id     INTEGER NOT NULL,
+  destination TEXT NOT NULL,
+  target_date DATE,
+  notes       TEXT,
+  lat         REAL,
+  lng         REAL,
+  done        BOOLEAN NOT NULL DEFAULT false,
+  sort_order  INTEGER NOT NULL DEFAULT 0,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS travels_reminders (
+  id               SERIAL PRIMARY KEY,
+  trip_id          INTEGER NOT NULL,
+  user_id          INTEGER NOT NULL,
+  title            TEXT NOT NULL,
+  due_date         DATE,
+  done             BOOLEAN NOT NULL DEFAULT false,
+  recipient_emails TEXT[] NOT NULL DEFAULT '{}',
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS travels_reminder_alert_log (
+  id          SERIAL PRIMARY KEY,
+  reminder_id INTEGER NOT NULL,
+  user_id     INTEGER NOT NULL,
+  alert_type  TEXT NOT NULL,
+  sent_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 `;
 
 async function copyTable(
@@ -313,6 +403,9 @@ async function main() {
       "password_hash",
       "display_name",
       "theme_preference",
+      "hub_widget_ids",
+      "hub_weather_config",
+      "travels_reminder_email",
       "created_at",
     ],
     orderBy: "id",
@@ -540,6 +633,123 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "quilting_shopping_items", "id");
+
+  // ── Travels ───────────────────────────────────────────────────────────────
+  summary["travels_trips"] = await copyTable(source, dest, {
+    table: "travels_trips",
+    columns: [
+      "id",
+      "user_id",
+      "title",
+      "destination",
+      "lat",
+      "lng",
+      "status",
+      "start_date",
+      "end_date",
+      "transport_to",
+      "transport_details",
+      "has_rental_car",
+      "accommodation_name",
+      "accommodation_area",
+      "notes",
+      "fun_fact",
+      "traveller_count",
+      "travelers",
+      "the_one_thing",
+      "itinerary",
+      "packing_list",
+      "chat_history",
+      "todo_list",
+      "icon_photo_id",
+      "created_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: [
+      "travelers",
+      "the_one_thing",
+      "itinerary",
+      "packing_list",
+      "chat_history",
+      "todo_list",
+    ],
+  });
+  await resetSequence(dest, "travels_trips", "id");
+
+  summary["travels_trip_documents"] = await copyTable(source, dest, {
+    table: "travels_trip_documents",
+    columns: [
+      "id",
+      "trip_id",
+      "user_id",
+      "storage_path",
+      "document_type",
+      "original_filename",
+      "extracted_data",
+      "locked_fields",
+      "created_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["extracted_data"],
+  });
+  await resetSequence(dest, "travels_trip_documents", "id");
+
+  summary["travels_trip_photos"] = await copyTable(source, dest, {
+    table: "travels_trip_photos",
+    columns: [
+      "id",
+      "trip_id",
+      "user_id",
+      "storage_path",
+      "caption",
+      "photo_type",
+      "sort_order",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_trip_photos", "id");
+
+  summary["travels_wishlist"] = await copyTable(source, dest, {
+    table: "travels_wishlist",
+    columns: [
+      "id",
+      "user_id",
+      "destination",
+      "target_date",
+      "notes",
+      "lat",
+      "lng",
+      "done",
+      "sort_order",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_wishlist", "id");
+
+  summary["travels_reminders"] = await copyTable(source, dest, {
+    table: "travels_reminders",
+    columns: [
+      "id",
+      "trip_id",
+      "user_id",
+      "title",
+      "due_date",
+      "done",
+      "recipient_emails",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_reminders", "id");
+
+  summary["travels_reminder_alert_log"] = await copyTable(source, dest, {
+    table: "travels_reminder_alert_log",
+    columns: ["id", "reminder_id", "user_id", "alert_type", "sent_at"],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_reminder_alert_log", "id");
 
   // ── Record backup history ─────────────────────────────────────────────────
   const note = Object.entries(summary)

@@ -12,3 +12,4 @@
 - [Travels itinerary auto-sync from documents](travels-itinerary-doc-sync.md) — doc-derived dates become tentative itinerary activities tagged sourceDocumentId; one idempotent sync fn handles create/correct/delete.
 - [Per-field locked_fields pattern](locked-fields-pattern.md) — recurring convention across pottery/quilting/travels: text[] column on the record, AI merge skips keys in the set, UI shows a lock/unlock icon per field.
 - [Travels reminder email delivery](travels-reminder-delivery.md) — Resend sandbox mode only delivers to the account owner's own address; autoscale sleep means in-process schedulers alone can't guarantee delivery, pair with a Scheduled Deployment.
+- [Backup/restore scripts drift from schema](backup-script-schema-drift.md) — backup/restore scripts hardcode table lists, silently skip new tables added later; verify new table names appear in the row-count summary, don't trust exit 0 alone.

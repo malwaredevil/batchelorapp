@@ -1,9 +1,9 @@
 /**
  * restore-from-replit.ts
  *
- * Restores all pottery + quilting data from the Replit built-in PostgreSQL
- * backup database back into Supabase. Use this only when Supabase data has
- * been accidentally wiped or corrupted by a bad migration.
+ * Restores all pottery + quilting + travels data from the Replit built-in
+ * PostgreSQL backup database back into Supabase. Use this only when Supabase
+ * data has been accidentally wiped or corrupted by a bad migration.
  *
  * USAGE:
  *   pnpm --filter @workspace/scripts run restore-from-replit -- --confirm
@@ -104,7 +104,17 @@ async function main() {
   await dest.query("TRUNCATE app_users CASCADE");
   await copyTable(source, dest, {
     table: "app_users",
-    columns: ["id", "email", "password_hash", "created_at"],
+    columns: [
+      "id",
+      "email",
+      "password_hash",
+      "display_name",
+      "theme_preference",
+      "hub_widget_ids",
+      "hub_weather_config",
+      "travels_reminder_email",
+      "created_at",
+    ],
     orderBy: "id",
   });
   await resetSequence(dest, "app_users", "id");
@@ -339,6 +349,119 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "quilting_shopping_items", "id");
+
+  // ── Travels ───────────────────────────────────────────────────────────────
+  await dest.query(
+    "TRUNCATE travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_trip_photos, travels_trip_documents CASCADE",
+  );
+  await dest.query("TRUNCATE travels_trips CASCADE");
+
+  await copyTable(source, dest, {
+    table: "travels_trips",
+    columns: [
+      "id",
+      "user_id",
+      "title",
+      "destination",
+      "lat",
+      "lng",
+      "status",
+      "start_date",
+      "end_date",
+      "transport_to",
+      "transport_details",
+      "has_rental_car",
+      "accommodation_name",
+      "accommodation_area",
+      "notes",
+      "fun_fact",
+      "traveller_count",
+      "travelers",
+      "the_one_thing",
+      "itinerary",
+      "packing_list",
+      "chat_history",
+      "todo_list",
+      "icon_photo_id",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_trips", "id");
+
+  await copyTable(source, dest, {
+    table: "travels_trip_documents",
+    columns: [
+      "id",
+      "trip_id",
+      "user_id",
+      "storage_path",
+      "document_type",
+      "original_filename",
+      "extracted_data",
+      "locked_fields",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_trip_documents", "id");
+
+  await copyTable(source, dest, {
+    table: "travels_trip_photos",
+    columns: [
+      "id",
+      "trip_id",
+      "user_id",
+      "storage_path",
+      "caption",
+      "photo_type",
+      "sort_order",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_trip_photos", "id");
+
+  await copyTable(source, dest, {
+    table: "travels_wishlist",
+    columns: [
+      "id",
+      "user_id",
+      "destination",
+      "target_date",
+      "notes",
+      "lat",
+      "lng",
+      "done",
+      "sort_order",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_wishlist", "id");
+
+  await copyTable(source, dest, {
+    table: "travels_reminders",
+    columns: [
+      "id",
+      "trip_id",
+      "user_id",
+      "title",
+      "due_date",
+      "done",
+      "recipient_emails",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_reminders", "id");
+
+  await copyTable(source, dest, {
+    table: "travels_reminder_alert_log",
+    columns: ["id", "reminder_id", "user_id", "alert_type", "sent_at"],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_reminder_alert_log", "id");
 
   await dest.query("SET session_replication_role = DEFAULT");
 

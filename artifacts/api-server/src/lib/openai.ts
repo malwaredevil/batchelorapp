@@ -2,8 +2,7 @@ import OpenAI from "openai";
 import {
   callModel,
   callModelWithAdvisor,
-  callWithFallback,
-  getOpenAIClient,
+  getOpenRouterClient,
   MODELS,
 } from "./ai-client";
 import { classifyPrintType } from "./visual-embed";
@@ -15,9 +14,6 @@ import {
   type Verdict,
 } from "./ai-parse";
 
-const VISION_MODEL = "gpt-4o-mini";
-const COMPARE_MODEL = "gpt-4o";
-const EMBEDDING_MODEL = "text-embedding-3-small";
 export const EMBEDDING_DIMENSIONS = 1536;
 
 export type { Verdict };
@@ -226,8 +222,8 @@ export function buildEmbeddingText(analysis: VisionAnalysis): string {
 }
 
 export async function embedText(text: string): Promise<number[]> {
-  const response = await getOpenAIClient().embeddings.create({
-    model: EMBEDDING_MODEL,
+  const response = await getOpenRouterClient().embeddings.create({
+    model: MODELS.EMBEDDING,
     input: text,
   });
   return response.data[0].embedding;
@@ -715,7 +711,7 @@ export async function enrichPatternMetadata(
     : `Quilt pattern: "${patternName}". Find the designer biography, website, and publication details.`;
 
   const raw = await callModel(
-    { openrouter: "perplexity/sonar", openai: "gpt-4o-mini" },
+    MODELS.RESEARCH,
     async (client, model) => {
       const completion = await client.chat.completions.create({
         model,

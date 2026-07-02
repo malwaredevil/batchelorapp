@@ -11,6 +11,7 @@
 - [OpenRouter server tools (advisor/subagent)](openrouter-server-tools.md) — wrap callModel() call sites with callModelWithAdvisor/callModelWithSubagent; cast tools and omit them on the direct-OpenAI fallback path.
 - [Travels itinerary auto-sync from documents](travels-itinerary-doc-sync.md) — doc-derived dates become tentative itinerary activities tagged sourceDocumentId; one idempotent sync fn handles create/correct/delete.
 - [Per-field locked_fields pattern](locked-fields-pattern.md) — recurring convention across pottery/quilting/travels: text[] column on the record, AI merge skips keys in the set, UI shows a lock/unlock icon per field.
+- [Zod .partial() + .default() clobber](zod-partial-default-clobber.md) — `Schema.partial()` doesn't strip `.default()`; single-field PATCH bodies silently reset omitted defaulted fields — verify with a live curl diff, not just typecheck.
 - [Travels reminder email delivery](travels-reminder-delivery.md) — Resend sandbox mode only delivers to the account owner's own address; autoscale sleep means in-process schedulers alone can't guarantee delivery, pair with a Scheduled Deployment.
 - [Backup/restore scripts drift from schema](backup-script-schema-drift.md) — backup/restore scripts hardcode table lists, silently skip new tables added later; verify new table names appear in the row-count summary, don't trust exit 0 alone.
 - [Travels app is household-shared](travels-shared-household-scoping.md) — trips have no per-user filter on GET; new search/query features must span all users, not just req.session.userId.

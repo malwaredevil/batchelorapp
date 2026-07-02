@@ -1,5 +1,10 @@
 import OpenAI from "openai";
-import { callModel, callModelWithAdvisor, MODELS, getOpenAIClient } from "../ai-client";
+import {
+  callModel,
+  callModelWithAdvisor,
+  getOpenRouterClient,
+  MODELS,
+} from "../ai-client";
 import { classifyGlazeType } from "../visual-embed";
 import {
   asString,
@@ -9,7 +14,6 @@ import {
   type Verdict,
 } from "../ai-parse";
 
-const EMBEDDING_MODEL = "text-embedding-3-small";
 export const EMBEDDING_DIMENSIONS = 1536;
 
 export type { Verdict };
@@ -256,8 +260,8 @@ export function buildEmbeddingText(analysis: VisionAnalysis): string {
 }
 
 export async function embedText(text: string): Promise<number[]> {
-  const response = await getOpenAIClient().embeddings.create({
-    model: EMBEDDING_MODEL,
+  const response = await getOpenRouterClient().embeddings.create({
+    model: MODELS.EMBEDDING,
     input: text,
   });
   return response.data[0].embedding;

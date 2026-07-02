@@ -1,35 +1,26 @@
 ---
 name: OpenRouter model routing
-description: How vision AI calls are routed through OpenRouter (Gemini Flash) with OpenAI fallback; which functions to use and which to avoid.
+description: All AI calls (chat, vision, embeddings) go through OpenRouter exclusively — no direct OpenAI fallback. Which functions to use.
 ---
 
 ## The rule
 
-All vision tasks in both pottery and quilting use `callModel(MODELS.FAST_VISION, ...)` or `callModel(MODELS.SMART_VISION, ...)` from `artifacts/api-server/src/lib/ai-client.ts`.
-
-Never use the raw `callWithFallback()` for new vision work — that passes the same model string to both providers.
+Every AI call in the API server — chat, vision, and embeddings — routes through OpenRouter using `artifacts/api-server/src/lib/ai-client.ts`. There is no direct-provider fallback: `OPENROUTER_API_KEY` is a required env var, and `OPENAI_API_KEY` is not used anywhere in the app.
 
 ```typescript
 import { callModel, MODELS } from "../ai-client";
 
-// Fast/cheap vision (most tasks):
-const completion = await callModel(MODELS.FAST_VISION, (c, model) =>
-  c.chat.completions.create({ model, ... })
-);
-
-// Smart vision (comparison, complex analysis):
-const completion = await callModel(MODELS.SMART_VISION, (c, model) =>
-  c.chat.completions.create({ model, ... })
+const completion = await callModel(MODELS.FAST_VISION, (client, model) =>
+  client.chat.completions.create({ model, ... })
 );
 ```
 
-## MODELS constants
+`MODELS` values are plain OpenRouter model identifier strings (e.g. `"google/gemini-2.5-flash"`), not `{openrouter, openai}` pairs — that dual-provider shape was removed. `callModelWithAdvisor`/`callModelWithSubagent` follow the same one-provider pattern and always pass their OpenRouter server-tool array (never `undefined`).
 
-```typescript
-MODELS.FAST_VISION  = { openrouter: "google/gemini-2.0-flash-001", openai: "gpt-4o-mini" }
-MODELS.SMART_VISION = { openrouter: "google/gemini-2.0-flash-001", openai: "gpt-4o" }
-```
+Embeddings also go through OpenRouter's unified embeddings endpoint (`MODELS.EMBEDDING = "openai/text-embedding-3-small"`), called via `getOpenRouterClient().embeddings.create(...)` — OpenRouter proxies OpenAI's embedding models too, so no direct OpenAI key is needed for that either.
 
-**Why:** OpenRouter routes to Gemini Flash (cheaper, supports json_object response_format) and falls back to OpenAI gpt-4o-mini/gpt-4o on 429/503. `callWithFallback` passes the same model to both providers, which breaks when provider model identifiers differ.
+**Why:** User wants all AI token spend/billing tracked in one place (OpenRouter) instead of split across OpenAI/Gemini/OpenRouter accounts. Direct-OpenAI fallback was removed entirely — if OpenRouter is unavailable, calls now fail rather than silently billing a different provider.
 
-**How to apply:** Any new vision call (image analysis, comparison, zone analysis, backstamp ID) should use `callModel(MODELS.FAST_VISION, ...)`. Use `SMART_VISION` only for multi-image comparison or complex multi-step reasoning.
+**Exceptions (left untouched, not OpenRouter-routable):** Voyage AI reranking (`lib/reranker.ts`) and Jina visual/CLIP embeddings (`lib/visual-embed.ts`) remain direct API calls — OpenRouter doesn't offer either capability.
+
+**How to apply:** Any new AI call site must use `callModel`/`callModelWithAdvisor`/`callModelWithSubagent` with a `MODELS.*` OpenRouter identifier. Never instantiate a raw `new OpenAI({apiKey: ...})` client pointed at OpenAI's API directly — add a new `MODELS` entry with an OpenRouter model string instead.

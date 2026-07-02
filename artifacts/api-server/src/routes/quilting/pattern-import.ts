@@ -5,16 +5,13 @@ import * as https from "https";
 import * as net from "net";
 import { lookup as dnsLookup } from "dns";
 import { isIP } from "net";
-import OpenAI from "openai";
-import { env } from "../../lib/env";
 import { requireAuth } from "../../middleware/auth";
 import { aiLimiter } from "../../middleware/rateLimit";
 import { logger } from "../../lib/logger";
+import { callModel, MODELS } from "../../lib/ai-client";
 
 const router: IRouter = Router();
 router.use(requireAuth);
-
-const client = new OpenAI({ apiKey: env.openaiApiKey });
 
 const ImportUrlSchema = z.object({
   url: z
@@ -297,16 +294,18 @@ router.post("/patterns/import-url", aiLimiter, async (req, res) => {
     return;
   }
 
-  const completion = await client.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      { role: "system", content: IMPORT_PROMPT },
-      { role: "user", content: `URL: ${url}\n\nPage text:\n${pageText}` },
-    ],
-    temperature: 0,
-    max_tokens: 400,
-    response_format: { type: "json_object" },
-  });
+  const completion = await callModel(MODELS.FAST_VISION, (client, model) =>
+    client.chat.completions.create({
+      model,
+      messages: [
+        { role: "system", content: IMPORT_PROMPT },
+        { role: "user", content: `URL: ${url}\n\nPage text:\n${pageText}` },
+      ],
+      temperature: 0,
+      max_tokens: 400,
+      response_format: { type: "json_object" },
+    }),
+  );
 
   const raw = completion.choices[0]?.message?.content ?? "{}";
   let parsed: Record<string, unknown>;

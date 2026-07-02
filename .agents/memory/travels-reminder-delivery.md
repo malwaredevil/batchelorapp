@@ -25,6 +25,21 @@ use it. This requires the user's own domain/DNS access — not something the
 agent can complete unilaterally. Until verified, treat any "email delivered
 to a non-owner address" claim as unverified.
 
+## Sender addresses / env vars
+Reminder alerts send from `RESEND_REMINDER_FROM_EMAIL` (default
+`Batchelor Travels <travel.alert@app.batchelor.app>`); password-reset emails
+send from `RESEND_FROM_EMAIL` (`Batchelor <noreply@app.batchelor.app>`). Both
+require the `app.batchelor.app` domain to be **verified** in Resend.
+
+**Verification is not automatic.** Adding a domain in Resend only registers it
+(`status: not_started`); it does NOT deliver until the DNS records are added at
+the registrar (GoDaddy) and Resend detects them. Check status any time with
+`curl -H "Authorization: Bearer $RESEND_API_KEY" https://api.resend.com/domains`.
+Required records for `app.batchelor.app` (host names are relative to the
+`batchelor.app` zone): DKIM TXT `resend._domainkey.app`, SPF MX `send.app` →
+`feedback-smtp.us-east-1.amazonses.com` (priority 10), SPF TXT `send.app` →
+`v=spf1 include:amazonses.com ~all`. Region is us-east-1.
+
 ## Delivery must not depend on the web server staying awake
 The Travels app deploys as an `autoscale` deployment, which can be fully
 asleep for long stretches. An in-process `setInterval` scheduler inside the

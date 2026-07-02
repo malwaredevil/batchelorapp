@@ -5,6 +5,7 @@ import {
   useCreateTrip,
   getListTripsQueryKey,
   getGetTravelsStatsQueryKey,
+  getTripPhotoImageUrl,
   type TripStatus,
   type CreateTripBody,
 } from "@workspace/api-client-react";
@@ -350,6 +351,19 @@ export default function Trips() {
                   <Link key={trip.id} href={`/trips/${trip.id}`}>
                     <Card className="border-border/50 hover:border-primary/30 hover:shadow-sm transition-all cursor-pointer group">
                       <CardContent className="flex items-center gap-4 py-4 px-4">
+                        {(status === "active" || status === "completed") && (
+                          trip.iconPhotoId != null ? (
+                            <img
+                              src={getTripPhotoImageUrl(trip.id, trip.iconPhotoId)}
+                              alt=""
+                              className="w-12 h-12 rounded-lg object-cover shrink-0"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                              <Plane className="w-5 h-5 text-muted-foreground/40" />
+                            </div>
+                          )
+                        )}
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-foreground truncate">{trip.title}</p>
                           <p className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5">

@@ -38,6 +38,7 @@ Today's date is ${new Date().toISOString().slice(0, 10)}. Use this only to sanit
 IMPORTANT date-extraction rules:
 - Many documents show several dates: the date the ticket/booking was ISSUED or PURCHASED, and the date(s) travel actually OCCURS. "departureDateTime" must be the actual travel departure date/time of the FIRST outbound leg — never the issue date, purchase date, or booking date. If the document has separate "Issued on"/"Booked on" and "Departure"/"Travel date" fields, always prefer the travel date.
 - If there are multiple flight legs/segments (e.g. a connection or a multi-city itinerary), use the departure date/time of the very first segment for "departureDateTime", and note any later legs in "notes".
+- ROUND-TRIP TICKETS: if the document shows BOTH an outbound flight and a separate return/inbound flight (a different flight number, and/or "from"/"to" reversed, and/or a later date), you MUST extract the return leg into the separate "returnFlightNumber", "returnFromLocation", "returnToLocation", "returnDepartureDateTime", and "returnArrivalDateTime" fields below — do not leave it only in "notes". Only fill these fields if a genuinely separate return leg is present; leave them out entirely for one-way tickets.
 - Read every digit of the date and time carefully, character by character, before writing it out — transposed digits (e.g. reading "10:30" as "01:30", or "14" as "41") are a common and costly mistake. Double-check your extracted value against the source text before finalizing it.
 - Dates can be written ambiguously (e.g. "03/04/2026"). Use surrounding context (day-of-week labels, month names spelled out, airport/country of origin) to disambiguate DD/MM vs MM/DD. If genuinely ambiguous, state your best guess in "departureDateTime" and mention the ambiguity in "notes".
 - Always output "departureDateTime" (and any other date/time field) as a full ISO 8601 string including year, e.g. "2026-08-14T10:30:00". Never omit the year or leave it as the current year by assumption if a different year is printed on the document.
@@ -61,6 +62,11 @@ Return a JSON object with these fields (include only the ones that are present i
   "pickupDateTime": "ISO date-time string for rental pickup if present",
   "dropoffLocation": "rental dropoff location",
   "dropoffDateTime": "ISO date-time string for rental drop-off if present",
+  "returnFlightNumber": "return/inbound flight number, ONLY if a separate return leg is present",
+  "returnFromLocation": "return leg departure city/airport, ONLY if a separate return leg is present",
+  "returnToLocation": "return leg destination city/airport, ONLY if a separate return leg is present",
+  "returnDepartureDateTime": "ISO date-time string of the return leg departure, ONLY if a separate return leg is present",
+  "returnArrivalDateTime": "ISO date-time string of the return leg arrival, ONLY if a separate return leg is present",
   "notes": "any other important information, including any date ambiguity or additional legs"
 }
 
@@ -109,6 +115,7 @@ Today's date is ${new Date().toISOString().slice(0, 10)}. Use this only to sanit
 IMPORTANT date-extraction rules:
 - Many documents show several dates: the date the ticket/booking was ISSUED or PURCHASED, and the date(s) travel actually OCCURS. "departureDateTime" must be the actual travel departure date/time of the FIRST outbound leg — never the issue date, purchase date, or booking date. If the text has separate "Issued on"/"Booked on" and "Departure"/"Travel date" fields, always prefer the travel date.
 - If there are multiple flight legs/segments (e.g. a connection or a multi-city itinerary), use the departure date/time of the very first segment for "departureDateTime", and note any later legs in "notes".
+- ROUND-TRIP TICKETS: if the text shows BOTH an outbound flight and a separate return/inbound flight (a different flight number, and/or "from"/"to" reversed, and/or a later date), you MUST extract the return leg into the separate "returnFlightNumber", "returnFromLocation", "returnToLocation", "returnDepartureDateTime", and "returnArrivalDateTime" fields below — do not leave it only in "notes". Only fill these fields if a genuinely separate return leg is present; leave them out entirely for one-way tickets.
 - Read every digit of the date and time carefully, character by character, before writing it out — transposed digits (e.g. reading "10:30" as "01:30", or "14" as "41") are a common and costly mistake. Double-check your extracted value against the source text before finalizing it.
 - Dates can be written ambiguously (e.g. "03/04/2026"). Use surrounding context (day-of-week labels, month names spelled out, airport/country of origin) to disambiguate DD/MM vs MM/DD. If genuinely ambiguous, state your best guess in "departureDateTime" and mention the ambiguity in "notes".
 - Always output "departureDateTime" (and any other date/time field) as a full ISO 8601 string including year, e.g. "2026-08-14T10:30:00". Never omit the year or leave it as the current year by assumption if a different year is printed in the text.
@@ -132,6 +139,11 @@ Return a JSON object with these fields (include only the ones that are present):
   "pickupDateTime": "ISO date-time string for rental pickup if present",
   "dropoffLocation": "rental dropoff location",
   "dropoffDateTime": "ISO date-time string for rental drop-off if present",
+  "returnFlightNumber": "return/inbound flight number, ONLY if a separate return leg is present",
+  "returnFromLocation": "return leg departure city/airport, ONLY if a separate return leg is present",
+  "returnToLocation": "return leg destination city/airport, ONLY if a separate return leg is present",
+  "returnDepartureDateTime": "ISO date-time string of the return leg departure, ONLY if a separate return leg is present",
+  "returnArrivalDateTime": "ISO date-time string of the return leg arrival, ONLY if a separate return leg is present",
   "notes": "any other important information, including any date ambiguity or additional legs"
 }
 
@@ -284,6 +296,35 @@ function computeDocumentActivities(
       description: str(ed.dropoffLocation),
       proximity: "🚗",
       tip: notes,
+    });
+  }
+
+  const returnFlightNumber = str(ed.returnFlightNumber);
+  const returnFrom = str(ed.returnFromLocation);
+  const returnTo = str(ed.returnToLocation);
+  const returnArrival = str(ed.returnArrivalDateTime);
+
+  const returnDep = str(ed.returnDepartureDateTime)
+    ? parseDateTime(str(ed.returnDepartureDateTime))
+    : null;
+  if (returnDep) {
+    const label = returnFlightNumber
+      ? `Return flight ${returnFlightNumber}`
+      : provider
+        ? `Return — ${provider}`
+        : "Return flight";
+    const tipParts = [returnArrival ? `Arrives ${returnArrival}` : "", notes].filter(Boolean);
+    candidates.push({
+      sourceField: "returnDepartureDateTime",
+      dateStr: returnDep.dateStr,
+      time: returnDep.timeStr,
+      name:
+        returnFrom && returnTo
+          ? `${label}: ${returnFrom} → ${returnTo}`
+          : label,
+      description: provider,
+      proximity: "✈️",
+      tip: tipParts.join(" — "),
     });
   }
 

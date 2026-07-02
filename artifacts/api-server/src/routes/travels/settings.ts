@@ -11,6 +11,16 @@ const UpdateSettingsBody = z.object({
   reminderEmail: z.email().nullable(),
 });
 
+// GET /api/travels/users — app_users' emails, for picking reminder recipients
+router.get("/users", async (_req, res) => {
+  const rows = await db
+    .select({ id: appUsers.id, email: appUsers.email })
+    .from(appUsers)
+    .orderBy(appUsers.email);
+
+  res.json(rows);
+});
+
 // GET /api/travels/settings
 router.get("/settings", async (req, res) => {
   const userId = req.session.userId!;

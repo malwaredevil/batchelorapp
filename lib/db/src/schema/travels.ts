@@ -112,6 +112,12 @@ export const travelsReminders = pgTable(
     title: text("title").notNull(),
     dueDate: date("due_date"),
     done: boolean("done").notNull().default(false),
+    // Email addresses that receive alerts for this reminder — either picked from
+    // app_users' login emails, or freeform custom addresses added by the user.
+    recipientEmails: text("recipient_emails")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

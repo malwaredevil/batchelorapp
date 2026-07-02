@@ -29,21 +29,20 @@ async function runReminderAlerts(): Promise<void> {
         trip_title: string;
         trip_destination: string;
         due_date: string;
-        reminder_email: string;
+        recipient_emails: string[];
       }>(
-        `SELECT r.id             AS reminder_id,
+        `SELECT r.id                 AS reminder_id,
                 r.user_id,
-                r.title          AS reminder_title,
-                t.title          AS trip_title,
-                t.destination    AS trip_destination,
-                r.due_date::text AS due_date,
-                u.travels_reminder_email AS reminder_email
+                r.title              AS reminder_title,
+                t.title              AS trip_title,
+                t.destination        AS trip_destination,
+                r.due_date::text     AS due_date,
+                r.recipient_emails   AS recipient_emails
            FROM travels_reminders r
            JOIN travels_trips  t ON t.id  = r.trip_id
-           JOIN app_users      u ON u.id  = r.user_id
           WHERE r.done = false
             AND r.due_date = CURRENT_DATE + $1::integer
-            AND u.travels_reminder_email IS NOT NULL
+            AND array_length(r.recipient_emails, 1) > 0
             AND NOT EXISTS (
               SELECT 1 FROM travels_reminder_alert_log al
                WHERE al.reminder_id = r.id
@@ -54,14 +53,16 @@ async function runReminderAlerts(): Promise<void> {
 
       for (const row of rows) {
         try {
-          await sendReminderAlertEmail(
-            row.reminder_email,
-            row.reminder_title,
-            row.trip_title,
-            row.trip_destination,
-            type,
-            row.due_date,
-          );
+          for (const toEmail of row.recipient_emails) {
+            await sendReminderAlertEmail(
+              toEmail,
+              row.reminder_title,
+              row.trip_title,
+              row.trip_destination,
+              type,
+              row.due_date,
+            );
+          }
 
           await client.query(
             `INSERT INTO travels_reminder_alert_log (reminder_id, user_id, alert_type)
@@ -70,8 +71,8 @@ async function runReminderAlerts(): Promise<void> {
           );
 
           logger.info(
-            { reminderId: row.reminder_id, alertType: type },
-            "reminder-scheduler: alert email sent",
+            { reminderId: row.reminder_id, alertType: type, recipientCount: row.recipient_emails.length },
+            "reminder-scheduler: alert email(s) sent",
           );
         } catch (err) {
           logger.error(

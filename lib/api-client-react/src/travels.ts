@@ -869,18 +869,21 @@ export interface Reminder {
   title: string;
   dueDate?: string | null;
   done: boolean;
+  recipientEmails: string[];
   createdAt: string;
 }
 
 export interface CreateReminderBody {
   title: string;
   dueDate?: string;
+  recipientEmails?: string[];
 }
 
 export interface UpdateReminderBody {
   title?: string;
   dueDate?: string | null;
   done?: boolean;
+  recipientEmails?: string[];
 }
 
 const listReminders = (tripId: number, options?: RequestInit): Promise<Reminder[]> =>
@@ -1013,6 +1016,31 @@ export function useGetHighlights<
     TError,
     TData
   > & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+// ---------------------------------------------------------------------------
+// App users (for picking reminder recipients)
+// ---------------------------------------------------------------------------
+
+export interface TravelsAppUser {
+  id: number;
+  email: string;
+}
+
+const listTravelsAppUsers = (options?: RequestInit): Promise<TravelsAppUser[]> =>
+  customFetch<TravelsAppUser[]>("/api/travels/users", { ...options, method: "GET" });
+
+export const getListTravelsAppUsersQueryKey = () => [`/api/travels/users`] as const;
+
+export function useListTravelsAppUsers<TData = TravelsAppUser[], TError = unknown>(
+  options?: { query?: UseQueryOptions<TravelsAppUser[], TError, TData> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getListTravelsAppUsersQueryKey();
+  const queryFn: QueryFunction<TravelsAppUser[]> = ({ signal }) => listTravelsAppUsers({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<TravelsAppUser[], TError, TData> & { queryKey: QueryKey };
   const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
   return { ...query, queryKey: queryOpts.queryKey };
 }

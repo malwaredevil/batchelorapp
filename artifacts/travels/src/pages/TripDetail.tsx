@@ -19,6 +19,7 @@ import {
   useCreateReminder,
   useUpdateReminder,
   useDeleteReminder,
+  useListTravelsAppUsers,
   getTripDocumentDownloadUrl,
   getTripPhotoImageUrl,
   getListTripsQueryKey,
@@ -34,6 +35,7 @@ import {
   type TripPhoto,
   type PhotoType,
   type Reminder,
+  type TravelsAppUser,
 } from "@workspace/api-client-react";
 import { OneThingInput } from "@/components/OneThingInput";
 import { useQueryClient } from "@tanstack/react-query";
@@ -43,6 +45,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   ArrowLeft,
@@ -64,6 +68,7 @@ import {
   RefreshCw,
   CheckSquare,
   Square,
+  Mail,
   Plus,
   ExternalLink,
   MessageCircle,
@@ -471,9 +476,14 @@ function DayCard({
 
   return (
     <div className="border border-border/60 rounded-xl overflow-hidden">
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-card hover:bg-muted/50 transition-colors text-left"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen((v) => !v); }
+        }}
+        className="w-full flex items-center justify-between px-4 py-3 bg-card hover:bg-muted/50 transition-colors text-left cursor-pointer"
       >
         <div>
           <p className="font-medium text-foreground">
@@ -507,7 +517,7 @@ function DayCard({
             <ChevronDown className="w-4 h-4 text-muted-foreground" />
           )}
         </div>
-      </button>
+      </div>
 
       {open && (
         <div className="bg-card/50">
@@ -982,12 +992,15 @@ function PhotoGridSection({
 function RemindersSection({ tripId }: { tripId: number }) {
   const qc = useQueryClient();
   const { data: reminders = [], isLoading } = useListReminders(tripId);
+  const { data: appUsers = [] } = useListTravelsAppUsers();
   const createReminder = useCreateReminder({
     mutation: {
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: getListRemindersQueryKey(tripId) });
         setNewTitle("");
         setNewDue("");
+        setNewRecipients([]);
+        setCustomEmail("");
         setAdding(false);
         toast.success("Reminder added");
       },
@@ -1013,6 +1026,24 @@ function RemindersSection({ tripId }: { tripId: number }) {
   const [adding, setAdding] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newDue, setNewDue] = useState("");
+  const [newRecipients, setNewRecipients] = useState<string[]>([]);
+  const [customEmail, setCustomEmail] = useState("");
+
+  function toggleRecipient(email: string) {
+    setNewRecipients((prev) =>
+      prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email],
+    );
+  }
+
+  function addCustomEmail() {
+    const email = customEmail.trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error("Enter a valid email address");
+      return;
+    }
+    if (!newRecipients.includes(email)) setNewRecipients((prev) => [...prev, email]);
+    setCustomEmail("");
+  }
 
   const pending = reminders.filter((r) => !r.done);
   const done = reminders.filter((r) => r.done);
@@ -1044,21 +1075,73 @@ function RemindersSection({ tripId }: { tripId: number }) {
               onChange={(e) => setNewTitle(e.target.value)}
               autoFocus
             />
-            <div className="flex gap-2">
-              <Input
-                type="date"
-                value={newDue}
-                onChange={(e) => setNewDue(e.target.value)}
-                className="flex-1"
-                placeholder="Due date (optional)"
-              />
+            <Input
+              type="date"
+              value={newDue}
+              onChange={(e) => setNewDue(e.target.value)}
+              placeholder="Due date (optional)"
+            />
+
+            <div className="space-y-1.5 pt-1">
+              <Label className="text-xs text-muted-foreground">Send alerts to</Label>
+              {appUsers.length > 0 && (
+                <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                  {appUsers.map((u: TravelsAppUser) => (
+                    <label key={u.id} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                      <Checkbox
+                        checked={newRecipients.includes(u.email)}
+                        onCheckedChange={() => toggleRecipient(u.email)}
+                      />
+                      {u.email}
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <Input
+                  type="email"
+                  placeholder="Add another email address"
+                  value={customEmail}
+                  onChange={(e) => setCustomEmail(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") { e.preventDefault(); addCustomEmail(); }
+                  }}
+                  className="flex-1"
+                />
+                <Button size="sm" variant="outline" type="button" onClick={addCustomEmail}>
+                  Add
+                </Button>
+              </div>
+
+              {newRecipients.filter((e) => !appUsers.some((u: TravelsAppUser) => u.email === e)).length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {newRecipients
+                    .filter((e) => !appUsers.some((u: TravelsAppUser) => u.email === e))
+                    .map((email) => (
+                      <Badge key={email} variant="secondary" className="gap-1">
+                        {email}
+                        <button type="button" onClick={() => toggleRecipient(email)} aria-label={`Remove ${email}`}>
+                          <X className="w-3 h-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2 pt-1">
               <Button
                 size="sm"
                 onClick={() => {
                   if (!newTitle.trim()) return;
                   createReminder.mutate({
                     tripId,
-                    body: { title: newTitle.trim(), dueDate: newDue || undefined },
+                    body: {
+                      title: newTitle.trim(),
+                      dueDate: newDue || undefined,
+                      recipientEmails: newRecipients,
+                    },
                   });
                 }}
                 disabled={!newTitle.trim() || createReminder.isPending}
@@ -1139,6 +1222,15 @@ function ReminderRow({
       <p className={`flex-1 text-sm ${reminder.done ? "line-through text-muted-foreground" : overdue ? "text-red-700 font-medium" : "text-foreground"}`}>
         {reminder.title}
       </p>
+      {reminder.recipientEmails.length > 0 && (
+        <span
+          className="flex items-center gap-1 text-xs text-muted-foreground shrink-0"
+          title={`Alerts sent to: ${reminder.recipientEmails.join(", ")}`}
+        >
+          <Mail className="w-3 h-3" />
+          {reminder.recipientEmails.length}
+        </span>
+      )}
       {reminder.dueDate && (
         <span className={`text-xs shrink-0 ${overdue ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
           {overdue ? "Overdue · " : ""}

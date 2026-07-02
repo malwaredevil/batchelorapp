@@ -10,12 +10,14 @@ router.use(requireAuth);
 const CreateReminderBody = z.object({
   title: z.string().min(1),
   dueDate: z.string().optional(),
+  recipientEmails: z.array(z.email()).optional(),
 });
 
 const UpdateReminderBody = z.object({
   title: z.string().min(1).optional(),
   dueDate: z.string().nullable().optional(),
   done: z.boolean().optional(),
+  recipientEmails: z.array(z.email()).optional(),
 });
 
 async function tripExists(tripId: number): Promise<boolean> {
@@ -70,6 +72,7 @@ router.post("/trips/:id/reminders", async (req, res) => {
       title: body.title,
       dueDate: body.dueDate ?? null,
       done: false,
+      recipientEmails: body.recipientEmails ?? [],
     })
     .returning();
 
@@ -87,6 +90,7 @@ router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
   if (body.title !== undefined) updateData.title = body.title;
   if (body.dueDate !== undefined) updateData.dueDate = body.dueDate;
   if (body.done !== undefined) updateData.done = body.done;
+  if (body.recipientEmails !== undefined) updateData.recipientEmails = body.recipientEmails;
 
   const [updated] = await db
     .update(travelsReminders)

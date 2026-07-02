@@ -133,6 +133,29 @@ function formatDate(d: string | null | undefined) {
   });
 }
 
+// Formats a raw extracted date/date-time string (e.g. "2026-08-14T10:30:00")
+// into a readable form (e.g. "14 August 2026, 10:30 am") instead of the raw
+// ISO string with the date and time smashed together.
+function formatExtractedValue(raw: string): string {
+  const isoMatch = raw.match(/^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2})(?::\d{2})?)?/);
+  if (!isoMatch) return raw;
+  const [, datePart, timePart] = isoMatch;
+  const parsed = new Date(`${datePart}T${timePart ?? "12:00"}:00`);
+  if (isNaN(parsed.getTime())) return raw;
+  const dateStr = parsed.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+  if (!timePart) return dateStr;
+  const timeStr = parsed.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  return `${dateStr}, ${timeStr}`;
+}
+
 function buildCalendarUrl(
   title: string,
   destination: string,
@@ -261,21 +284,28 @@ function DocumentRow({
           <div className="mt-2 space-y-2">
             {keyFields.map(({ key, label }) => {
               const isLocked = lockedFields.includes(key);
+              const isDateField = key.toLowerCase().includes("date");
+              const preview = isDateField && fieldForm[key] ? formatExtractedValue(fieldForm[key]) : null;
               return (
                 <div key={key} className="flex items-center gap-2">
                   <Label className="text-xs text-muted-foreground w-24 shrink-0">{label}</Label>
-                  <Input
-                    value={fieldForm[key] ?? ""}
-                    onChange={(e) =>
-                      setFieldForm((f) => ({ ...f, [key]: e.target.value }))
-                    }
-                    className="h-7 text-xs"
-                    placeholder={
-                      key === "departureDateTime" || key.toLowerCase().includes("date")
-                        ? "e.g. 2026-08-14T10:30:00"
-                        : undefined
-                    }
-                  />
+                  <div className="flex-1 min-w-0">
+                    <Input
+                      value={fieldForm[key] ?? ""}
+                      onChange={(e) =>
+                        setFieldForm((f) => ({ ...f, [key]: e.target.value }))
+                      }
+                      className="h-7 text-xs"
+                      placeholder={
+                        key === "departureDateTime" || isDateField
+                          ? "e.g. 2026-08-14T10:30:00"
+                          : undefined
+                      }
+                    />
+                    {preview && preview !== fieldForm[key] && (
+                      <p className="text-[11px] text-muted-foreground mt-0.5 pl-0.5">{preview}</p>
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={() => toggleFieldLock(key)}
@@ -320,7 +350,7 @@ function DocumentRow({
               const isLocked = lockedFields.includes(key);
               return (
                 <p key={key} className="text-xs text-muted-foreground flex items-center gap-1">
-                  {label}: <span className="text-foreground">{String(ed[key])}</span>
+                  {label}: <span className="text-foreground">{formatExtractedValue(String(ed[key]))}</span>
                   <button
                     type="button"
                     onClick={() => toggleFieldLock(key)}

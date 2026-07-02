@@ -33,9 +33,12 @@ async function extractFromImage(buffer: Buffer, mimeType: string) {
               type: "text",
               text: `You are extracting structured information from a travel document (ticket, confirmation, rental agreement, boarding pass, hotel voucher, etc).
 
+Today's date is ${new Date().toISOString().slice(0, 10)}. Use this only to sanity-check plausibility (travel dates are usually in the near future) — always trust the exact year, month, and day printed on the document itself over any assumption.
+
 IMPORTANT date-extraction rules:
 - Many documents show several dates: the date the ticket/booking was ISSUED or PURCHASED, and the date(s) travel actually OCCURS. "departureDateTime" must be the actual travel departure date/time of the FIRST outbound leg — never the issue date, purchase date, or booking date. If the document has separate "Issued on"/"Booked on" and "Departure"/"Travel date" fields, always prefer the travel date.
 - If there are multiple flight legs/segments (e.g. a connection or a multi-city itinerary), use the departure date/time of the very first segment for "departureDateTime", and note any later legs in "notes".
+- Read every digit of the date and time carefully, character by character, before writing it out — transposed digits (e.g. reading "10:30" as "01:30", or "14" as "41") are a common and costly mistake. Double-check your extracted value against the source text before finalizing it.
 - Dates can be written ambiguously (e.g. "03/04/2026"). Use surrounding context (day-of-week labels, month names spelled out, airport/country of origin) to disambiguate DD/MM vs MM/DD. If genuinely ambiguous, state your best guess in "departureDateTime" and mention the ambiguity in "notes".
 - Always output "departureDateTime" (and any other date/time field) as a full ISO 8601 string including year, e.g. "2026-08-14T10:30:00". Never omit the year or leave it as the current year by assumption if a different year is printed on the document.
 
@@ -101,9 +104,12 @@ async function extractFromPdf(buffer: Buffer) {
 Document text:
 ${text}
 
+Today's date is ${new Date().toISOString().slice(0, 10)}. Use this only to sanity-check plausibility (travel dates are usually in the near future) — always trust the exact year, month, and day printed in the text over any assumption.
+
 IMPORTANT date-extraction rules:
 - Many documents show several dates: the date the ticket/booking was ISSUED or PURCHASED, and the date(s) travel actually OCCURS. "departureDateTime" must be the actual travel departure date/time of the FIRST outbound leg — never the issue date, purchase date, or booking date. If the text has separate "Issued on"/"Booked on" and "Departure"/"Travel date" fields, always prefer the travel date.
 - If there are multiple flight legs/segments (e.g. a connection or a multi-city itinerary), use the departure date/time of the very first segment for "departureDateTime", and note any later legs in "notes".
+- Read every digit of the date and time carefully, character by character, before writing it out — transposed digits (e.g. reading "10:30" as "01:30", or "14" as "41") are a common and costly mistake. Double-check your extracted value against the source text before finalizing it.
 - Dates can be written ambiguously (e.g. "03/04/2026"). Use surrounding context (day-of-week labels, month names spelled out, airport/country of origin) to disambiguate DD/MM vs MM/DD. If genuinely ambiguous, state your best guess in "departureDateTime" and mention the ambiguity in "notes".
 - Always output "departureDateTime" (and any other date/time field) as a full ISO 8601 string including year, e.g. "2026-08-14T10:30:00". Never omit the year or leave it as the current year by assumption if a different year is printed in the text.
 

@@ -23,6 +23,7 @@ router.use(requireAuth);
 
 const CreateReminderBody = z.object({
   title: z.string().min(1),
+  description: z.string().nullable().optional(),
   dueDate: z.string().optional(),
   recipientEmails: z.array(z.email()).optional(),
   syncToCalendar: z.boolean().optional(),
@@ -30,6 +31,7 @@ const CreateReminderBody = z.object({
 
 const UpdateReminderBody = z.object({
   title: z.string().min(1).optional(),
+  description: z.string().nullable().optional(),
   dueDate: z.string().nullable().optional(),
   done: z.boolean().optional(),
   recipientEmails: z.array(z.email()).optional(),
@@ -228,6 +230,7 @@ router.post("/trips/:id/reminders", async (req, res) => {
       tripId,
       userId,
       title: body.title,
+      description: body.description ?? null,
       dueDate: body.dueDate ?? null,
       done: false,
       recipientEmails: body.recipientEmails ?? [],
@@ -261,6 +264,7 @@ router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
   const body = UpdateReminderBody.parse(req.body);
   const updateData: Record<string, unknown> = {};
   if (body.title !== undefined) updateData.title = body.title;
+  if (body.description !== undefined) updateData.description = body.description;
   if (body.dueDate !== undefined) updateData.dueDate = body.dueDate;
   if (body.done !== undefined) updateData.done = body.done;
   if (body.recipientEmails !== undefined) updateData.recipientEmails = body.recipientEmails;

@@ -504,6 +504,9 @@ export const STATEMENTS: string[] = [
   // google_event_id: Google Calendar event id for update/delete; null if sync is
   // off, not yet attempted, or the last sync attempt failed.
   `ALTER TABLE travels_reminders ADD COLUMN IF NOT EXISTS google_event_id TEXT`,
+  // description: optional rich text (TipTap HTML) notes for the reminder,
+  // shown only in the detail dialog (not inline in reminder lists).
+  `ALTER TABLE travels_reminders ADD COLUMN IF NOT EXISTS description TEXT`,
   // travels_calendar_settings: singleton row (id = 1) holding the household's
   // chosen shared "Family" Google Calendar for auto-synced reminders.
   // Superseded by travels_google_calendar_connections (per-user OAuth) below;

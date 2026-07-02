@@ -215,3 +215,42 @@
 .wishlist-note-display u { text-decoration: underline; }
 .wishlist-note-display mark { background: #fef08a; border-radius: 2px; padding: 0 2px; }
 .wishlist-note-display p { font-size: 0.875rem; line-height: 1.5; margin: 0.15rem 0; }
+
+/* ── Shared TipTap rich text editor (reminders, etc.) ──────────────── */
+.tiptap-rich .tiptap {
+  outline: none;
+  min-height: 90px;
+  padding: 10px 12px;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: hsl(var(--foreground));
+}
+.tiptap-rich .tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: hsl(var(--muted-foreground));
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+.tiptap-rich .tiptap ul,
+.tiptap-rich .tiptap ol {
+  padding-left: 1.4rem;
+  margin: 0.25rem 0;
+}
+.tiptap-rich .tiptap ul { list-style-type: disc; }
+.tiptap-rich .tiptap ol { list-style-type: decimal; }
+.tiptap-rich .tiptap li { margin: 0.15rem 0; }
+.tiptap-rich .tiptap strong { font-weight: 700; }
+.tiptap-rich .tiptap em { font-style: italic; }
+.tiptap-rich .tiptap u { text-decoration: underline; }
+.tiptap-rich .tiptap mark { background: #fef08a; border-radius: 2px; padding: 0 2px; }
+
+/* Read-only rich text display (reminders, etc.) */
+.rich-text-display ul { list-style-type: disc; padding-left: 1.4rem; margin: 0; }
+.rich-text-display ol { list-style-type: decimal; padding-left: 1.4rem; margin: 0; }
+.rich-text-display li { margin: 0.15rem 0; font-size: 0.875rem; line-height: 1.5; }
+.rich-text-display strong { font-weight: 700; }
+.rich-text-display em { font-style: italic; }
+.rich-text-display u { text-decoration: underline; }
+.rich-text-display mark { background: #fef08a; border-radius: 2px; padding: 0 2px; }
+.rich-text-display p { font-size: 0.875rem; line-height: 1.5; margin: 0.15rem 0; }

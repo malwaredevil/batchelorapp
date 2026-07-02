@@ -155,7 +155,14 @@ export function ReminderEditDialog({ reminder, open, onOpenChange }: ReminderEdi
                       checked={recipients.includes(u.email)}
                       onCheckedChange={() => toggleRecipient(u.email)}
                     />
-                    {u.email}
+                    {u.displayName ? (
+                      <span>
+                        {u.displayName}{" "}
+                        <span className="text-muted-foreground">({u.email})</span>
+                      </span>
+                    ) : (
+                      u.email
+                    )}
                   </label>
                 ))}
               </div>

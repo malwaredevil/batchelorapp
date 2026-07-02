@@ -16,7 +16,11 @@ const UpdateSettingsBody = z.object({
 // GET /api/travels/users — app_users' emails, for picking reminder recipients
 router.get("/users", async (_req, res) => {
   const rows = await db
-    .select({ id: appUsers.id, email: appUsers.email })
+    .select({
+      id: appUsers.id,
+      email: appUsers.email,
+      displayName: appUsers.displayName,
+    })
     .from(appUsers)
     .orderBy(appUsers.email);
 

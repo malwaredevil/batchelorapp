@@ -1084,6 +1084,7 @@ export function useGetHighlights<
 export interface TravelsAppUser {
   id: number;
   email: string;
+  displayName: string | null;
 }
 
 const listTravelsAppUsers = (options?: RequestInit): Promise<TravelsAppUser[]> =>

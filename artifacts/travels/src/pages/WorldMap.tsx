@@ -18,19 +18,20 @@ const WISH_COLOR = "#eab308";
 const MAP_COLORS = {
   booked: "#f97316",
   completed: "#22c55e",
+  planning: "#eab308",
   wishlist: WISH_COLOR,
 } as const;
 
-type MapStatus = "booked" | "completed" | "wishlist";
+type MapStatus = "booked" | "completed" | "planning" | "wishlist";
 
 // Derive what status to DISPLAY on the map (independent of the stored trip.status).
 // - wishlist trips → star icon
 // - end date in the past → completed (green)
 // - end date in the future → booked (orange)
-// - no end date and not wishlist → omit from map
+// - no end date and not wishlist → planning (yellow pin)
 function getMapStatus(trip: Trip): MapStatus | null {
   if (trip.status === "wishlist") return "wishlist";
-  if (!trip.endDate) return null;
+  if (!trip.endDate) return "planning";
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const end = new Date(trip.endDate);
@@ -60,6 +61,7 @@ function makePinIcon(color: string) {
 const MAP_STATUS_LABELS: Record<MapStatus, string> = {
   booked: "Booked",
   completed: "Completed",
+  planning: "Planning",
   wishlist: "Wishlist trip",
 };
 
@@ -267,6 +269,10 @@ export default function WorldMap() {
           <div className="flex items-center gap-1.5">
             <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: MAP_COLORS.completed }} />
             <span className="text-xs text-muted-foreground">Completed</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: MAP_COLORS.planning }} />
+            <span className="text-xs text-muted-foreground">Planning</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="text-sm leading-none" style={{ color: WISH_COLOR }}>★</span>

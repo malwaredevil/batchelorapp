@@ -7,6 +7,7 @@ import {
   useGenerateItinerary,
   useDeleteTripDocument,
   useUpdateTripDocument,
+  useRescanTripDocument,
   useSendTripMessage,
   useClearTripChat,
   useGetHighlights,
@@ -69,6 +70,9 @@ import {
   Camera,
   Bell,
   Image as ImageIcon,
+  Lock,
+  LockOpen,
+  ScanSearch,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -165,11 +169,42 @@ function DocumentRow({
 }) {
   const qc = useQueryClient();
   const updateTripDocument = useUpdateTripDocument();
+  const rescanTripDocument = useRescanTripDocument();
   const [editingFields, setEditingFields] = useState(false);
   const [fieldForm, setFieldForm] = useState<Record<string, string>>({});
 
   const ext = doc.originalFilename?.split(".").pop()?.toLowerCase();
   const ed = doc.extractedData as Record<string, unknown> | null;
+  const lockedFields = doc.lockedFields ?? [];
+
+  const toggleFieldLock = (key: string) => {
+    const isLocked = lockedFields.includes(key);
+    const next = isLocked
+      ? lockedFields.filter((f) => f !== key)
+      : [...lockedFields, key];
+    updateTripDocument.mutate(
+      { tripId, docId: doc.id, body: { lockedFields: next } },
+      {
+        onSuccess: () => {
+          qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
+        },
+        onError: () => toast.error("Failed to update lock"),
+      },
+    );
+  };
+
+  const handleRescan = () => {
+    rescanTripDocument.mutate(
+      { tripId, docId: doc.id },
+      {
+        onSuccess: () => {
+          qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
+          toast.success("Document re-scanned");
+        },
+        onError: () => toast.error("Failed to re-scan document"),
+      },
+    );
+  };
 
   const keyFields: Array<{ key: string; label: string }> = [
     { key: "referenceNumber", label: "Ref" },
@@ -224,23 +259,38 @@ function DocumentRow({
         )}
         {editingFields ? (
           <div className="mt-2 space-y-2">
-            {keyFields.map(({ key, label }) => (
-              <div key={key} className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground w-24 shrink-0">{label}</Label>
-                <Input
-                  value={fieldForm[key] ?? ""}
-                  onChange={(e) =>
-                    setFieldForm((f) => ({ ...f, [key]: e.target.value }))
-                  }
-                  className="h-7 text-xs"
-                  placeholder={
-                    key === "departureDateTime" || key.toLowerCase().includes("date")
-                      ? "e.g. 2026-08-14T10:30:00"
-                      : undefined
-                  }
-                />
-              </div>
-            ))}
+            {keyFields.map(({ key, label }) => {
+              const isLocked = lockedFields.includes(key);
+              return (
+                <div key={key} className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground w-24 shrink-0">{label}</Label>
+                  <Input
+                    value={fieldForm[key] ?? ""}
+                    onChange={(e) =>
+                      setFieldForm((f) => ({ ...f, [key]: e.target.value }))
+                    }
+                    className="h-7 text-xs"
+                    placeholder={
+                      key === "departureDateTime" || key.toLowerCase().includes("date")
+                        ? "e.g. 2026-08-14T10:30:00"
+                        : undefined
+                    }
+                  />
+                  <button
+                    type="button"
+                    onClick={() => toggleFieldLock(key)}
+                    className={`p-1 shrink-0 transition-colors ${
+                      isLocked
+                        ? "text-amber-500 hover:text-amber-600"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                    title={isLocked ? "Locked — AI rescan won't overwrite" : "Unlocked — AI rescan may update"}
+                  >
+                    {isLocked ? <Lock className="w-3.5 h-3.5" /> : <LockOpen className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              );
+            })}
             <div className="flex items-center gap-2 pt-1">
               <Button
                 size="sm"
@@ -266,22 +316,47 @@ function DocumentRow({
           ed &&
           keyFields
             .filter(({ key }) => ed[key] != null)
-            .map(({ key, label }) => (
-              <p key={key} className="text-xs text-muted-foreground">
-                {label}: <span className="text-foreground">{String(ed[key])}</span>
-              </p>
-            ))
+            .map(({ key, label }) => {
+              const isLocked = lockedFields.includes(key);
+              return (
+                <p key={key} className="text-xs text-muted-foreground flex items-center gap-1">
+                  {label}: <span className="text-foreground">{String(ed[key])}</span>
+                  <button
+                    type="button"
+                    onClick={() => toggleFieldLock(key)}
+                    className={`p-0.5 shrink-0 transition-colors ${
+                      isLocked
+                        ? "text-amber-500 hover:text-amber-600"
+                        : "text-muted-foreground/50 hover:text-foreground"
+                    }`}
+                    title={isLocked ? "Locked — AI rescan won't overwrite" : "Unlocked — AI rescan may update"}
+                  >
+                    {isLocked ? <Lock className="w-3 h-3" /> : <LockOpen className="w-3 h-3" />}
+                  </button>
+                </p>
+              );
+            })
         )}
       </div>
       <div className="flex items-center gap-1 shrink-0">
         {!editingFields && (
-          <button
-            onClick={startEditFields}
-            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-            title="Correct extracted details"
-          >
-            <Edit2 className="w-4 h-4" />
-          </button>
+          <>
+            <button
+              onClick={handleRescan}
+              disabled={rescanTripDocument.isPending}
+              className="p-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+              title="Re-scan document with AI (locked fields are preserved)"
+            >
+              <ScanSearch className={`w-4 h-4 ${rescanTripDocument.isPending ? "animate-pulse" : ""}`} />
+            </button>
+            <button
+              onClick={startEditFields}
+              className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+              title="Correct extracted details"
+            >
+              <Edit2 className="w-4 h-4" />
+            </button>
+          </>
         )}
         <a
           href={getTripDocumentDownloadUrl(tripId, doc.id)}

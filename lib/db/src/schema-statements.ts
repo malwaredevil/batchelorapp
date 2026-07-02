@@ -392,6 +392,7 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE travels_trip_documents ENABLE ROW LEVEL SECURITY`,
   `CREATE INDEX IF NOT EXISTS travels_trip_documents_trip_id_idx ON travels_trip_documents (trip_id)`,
   `CREATE INDEX IF NOT EXISTS travels_trip_documents_user_id_idx ON travels_trip_documents (user_id)`,
+  `ALTER TABLE travels_trip_documents ADD COLUMN IF NOT EXISTS locked_fields TEXT[] NOT NULL DEFAULT '{}'`,
 
   // ── Travels enhancements ────────────────────────────────────────────────────
   // chat_history: per-trip AI conversation (array of {role, content} objects)

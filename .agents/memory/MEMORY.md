@@ -9,3 +9,4 @@
 - [Quilting fabric dominantColors are CSS names not hex](quilting-dominant-color-format.md) — fabric.dominantColors stores CSS color names ("light blue", "gold") not hex codes; never use HEX_RE to re-scan them — add directly to frequency map.
 - [Multer v2 req.params typing in Express](multer-params-typing.md) — multer v2's TypeScript types change req.params type to string|string[] inside upload-middleware route handlers; always use String(req.params["key"]) or req.params["key"] as string to parse params in those handlers.
 - [Travels itinerary auto-sync from documents](travels-itinerary-doc-sync.md) — doc-derived dates become tentative itinerary activities tagged sourceDocumentId; one idempotent sync fn handles create/correct/delete.
+- [Per-field locked_fields pattern](locked-fields-pattern.md) — recurring convention across pottery/quilting/travels: text[] column on the record, AI merge skips keys in the set, UI shows a lock/unlock icon per field.

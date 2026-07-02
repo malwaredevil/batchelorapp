@@ -442,9 +442,17 @@ router.patch("/trips/:id/documents/:docId", async (req, res) => {
     return;
   }
 
-  const { extractedData } = req.body as { extractedData?: Record<string, unknown> };
-  if (!extractedData || typeof extractedData !== "object") {
-    res.status(400).json({ error: "extractedData object is required" });
+  const { extractedData, lockedFields } = req.body as {
+    extractedData?: Record<string, unknown>;
+    lockedFields?: string[];
+  };
+  if (
+    (!extractedData || typeof extractedData !== "object") &&
+    !Array.isArray(lockedFields)
+  ) {
+    res
+      .status(400)
+      .json({ error: "extractedData object or lockedFields array is required" });
     return;
   }
 
@@ -463,14 +471,104 @@ router.patch("/trips/:id/documents/:docId", async (req, res) => {
     return;
   }
 
-  const merged = {
-    ...(existing.extractedData as Record<string, unknown> | null),
-    ...extractedData,
-  };
+  const merged = extractedData
+    ? {
+        ...(existing.extractedData as Record<string, unknown> | null),
+        ...extractedData,
+      }
+    : (existing.extractedData as Record<string, unknown> | null) ?? {};
+
+  const updateValues: {
+    extractedData?: Record<string, unknown>;
+    lockedFields?: string[];
+  } = {};
+  if (extractedData) updateValues.extractedData = merged;
+  if (Array.isArray(lockedFields)) updateValues.lockedFields = lockedFields;
 
   const [updated] = await db
     .update(travelsTripDocuments)
-    .set({ extractedData: merged })
+    .set(updateValues)
+    .where(
+      and(
+        eq(travelsTripDocuments.id, docId),
+        eq(travelsTripDocuments.tripId, tripId),
+      ),
+    )
+    .returning();
+
+  if (extractedData) {
+    try {
+      await syncItineraryFromDocument(tripId, docId, merged);
+    } catch (err) {
+      req.log.warn({ err }, "Failed to re-sync itinerary from corrected document");
+    }
+  }
+
+  res.json(updated);
+});
+
+router.post("/trips/:id/documents/:docId/rescan", async (req, res) => {
+  const tripId = parseInt(req.params.id, 10);
+  const docId = parseInt(req.params.docId, 10);
+  if (isNaN(tripId) || isNaN(docId)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(travelsTripDocuments)
+    .where(
+      and(
+        eq(travelsTripDocuments.id, docId),
+        eq(travelsTripDocuments.tripId, tripId),
+      ),
+    );
+
+  if (!existing) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  const { buffer, contentType } = await downloadDocument(existing.storagePath);
+  const isPdf = contentType === "application/pdf";
+  const isImage = contentType.startsWith("image/");
+
+  let freshData: Record<string, unknown> = {};
+  try {
+    if (isPdf) {
+      freshData = await extractFromPdf(buffer);
+    } else if (isImage) {
+      freshData = await extractFromImage(buffer, contentType);
+    } else {
+      res.status(400).json({ error: "Unsupported document type for rescan" });
+      return;
+    }
+  } catch (err) {
+    req.log.warn({ err }, "OCR re-extraction failed");
+    res.status(502).json({ error: "AI re-analysis failed, please try again" });
+    return;
+  }
+
+  const existingData =
+    (existing.extractedData as Record<string, unknown> | null) ?? {};
+  const locked = new Set(existing.lockedFields ?? []);
+
+  const merged: Record<string, unknown> = { ...existingData };
+  for (const [key, value] of Object.entries(freshData)) {
+    if (locked.has(key)) continue;
+    if (value === undefined || value === null || value === "") continue;
+    merged[key] = value;
+  }
+
+  const [updated] = await db
+    .update(travelsTripDocuments)
+    .set({
+      extractedData: merged,
+      documentType: locked.has("documentType")
+        ? existing.documentType
+        : ((merged.documentType as string | undefined) ?? existing.documentType),
+    })
     .where(
       and(
         eq(travelsTripDocuments.id, docId),
@@ -482,7 +580,7 @@ router.patch("/trips/:id/documents/:docId", async (req, res) => {
   try {
     await syncItineraryFromDocument(tripId, docId, merged);
   } catch (err) {
-    req.log.warn({ err }, "Failed to re-sync itinerary from corrected document");
+    req.log.warn({ err }, "Failed to re-sync itinerary after rescan");
   }
 
   res.json(updated);

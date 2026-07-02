@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   serial,
@@ -60,6 +61,10 @@ export const travelsTripDocuments = pgTable(
     documentType: text("document_type"),
     originalFilename: text("original_filename"),
     extractedData: jsonb("extracted_data"),
+    lockedFields: text("locked_fields")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

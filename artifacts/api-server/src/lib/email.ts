@@ -18,6 +18,13 @@ export function resendConfigured(): boolean {
   return !!process.env.RESEND_API_KEY && !!process.env.RESEND_FROM_EMAIL;
 }
 
+// Dedicated sender for Travels reminder alerts. Defaults to the verified
+// app.batchelor.app domain with a friendly display name; can be overridden
+// via RESEND_REMINDER_FROM_EMAIL.
+const REMINDER_FROM_EMAIL =
+  process.env.RESEND_REMINDER_FROM_EMAIL ||
+  "Batchelor Travels <travel.alert@app.batchelor.app>";
+
 export type ReminderAlertType = "14_day" | "7_day" | "3_day";
 
 const ALERT_LABEL: Record<ReminderAlertType, string> = {
@@ -34,8 +41,7 @@ export async function sendReminderAlertEmail(
   alertType: ReminderAlertType,
   dueDate: string,
 ): Promise<void> {
-  const from = process.env.RESEND_FROM_EMAIL;
-  if (!from) throw new Error("RESEND_FROM_EMAIL environment variable is not set.");
+  const from = REMINDER_FROM_EMAIL;
 
   const label = ALERT_LABEL[alertType];
   const formatted = new Date(dueDate + "T12:00:00Z").toLocaleDateString("en-GB", {

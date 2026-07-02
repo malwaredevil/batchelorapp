@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import UnderlineExt from "@tiptap/extension-underline";
@@ -348,6 +348,11 @@ export default function Wishlist() {
   const [newDest, setNewDest] = useState("");
   const [newDate, setNewDate] = useState("");
 
+  const sortedItems = useMemo(
+    () => [...items].sort((a, b) => a.destination.localeCompare(b.destination, undefined, { sensitivity: "base" })),
+    [items],
+  );
+
   const invalidate = () => qc.invalidateQueries({ queryKey: getListWishlistQueryKey() });
 
   function handleAdd() {
@@ -416,7 +421,7 @@ export default function Wishlist() {
         </div>
       ) : (
         <div className="space-y-2">
-          {items.map((item) => (
+          {sortedItems.map((item) => (
             <WishlistRow key={item.id} item={item} />
           ))}
         </div>

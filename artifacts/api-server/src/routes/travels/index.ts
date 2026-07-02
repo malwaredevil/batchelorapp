@@ -9,7 +9,7 @@ import remindersRouter from "./reminders";
 import destinationsRouter from "./destinations";
 import settingsRouter from "./settings";
 import magnetsRouter from "./magnets";
-import calendarRouter from "./calendar";
+import googleCalendarRouter from "./google-calendar";
 
 const router: IRouter = Router();
 
@@ -23,6 +23,6 @@ router.use(remindersRouter);
 router.use(destinationsRouter);
 router.use(settingsRouter);
 router.use(magnetsRouter);
-router.use(calendarRouter);
+router.use(googleCalendarRouter);
 
 export default router;

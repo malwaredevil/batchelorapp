@@ -198,3 +198,61 @@ export const travelsCalendarSettings = pgTable("travels_calendar_settings", {
 
 export type TravelsCalendarSettingsRow =
   typeof travelsCalendarSettings.$inferSelect;
+
+// Per-user connected Google Calendar account. Each family member connects
+// their own Google account (OAuth, offline access) and picks which of their
+// own calendars reminders should sync to. Replaces the old single shared
+// household connection (travels_calendar_settings, now unused).
+export const travelsGoogleCalendarConnections = pgTable(
+  "travels_google_calendar_connections",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull().unique(),
+    googleEmail: text("google_email").notNull(),
+    refreshToken: text("refresh_token").notNull(),
+    accessToken: text("access_token"),
+    accessTokenExpiresAt: timestamp("access_token_expires_at", {
+      withTimezone: true,
+    }),
+    calendarId: text("calendar_id"),
+    calendarSummary: text("calendar_summary"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+).enableRLS();
+
+export type TravelsGoogleCalendarConnectionRow =
+  typeof travelsGoogleCalendarConnections.$inferSelect;
+export type InsertTravelsGoogleCalendarConnection =
+  typeof travelsGoogleCalendarConnections.$inferInsert;
+
+// Tracks the Google Calendar event id created for a given reminder in a
+// given connected user's calendar — one reminder can fan out into multiple
+// users' calendars (each recipient who has connected their own account).
+export const travelsReminderCalendarEvents = pgTable(
+  "travels_reminder_calendar_events",
+  {
+    id: serial("id").primaryKey(),
+    reminderId: integer("reminder_id").notNull(),
+    userId: integer("user_id").notNull(),
+    googleEventId: text("google_event_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("travels_reminder_calendar_events_reminder_id_idx").on(
+      table.reminderId,
+    ),
+    index("travels_reminder_calendar_events_user_id_idx").on(table.userId),
+  ],
+).enableRLS();
+
+export type TravelsReminderCalendarEventRow =
+  typeof travelsReminderCalendarEvents.$inferSelect;
+export type InsertTravelsReminderCalendarEvent =
+  typeof travelsReminderCalendarEvents.$inferInsert;

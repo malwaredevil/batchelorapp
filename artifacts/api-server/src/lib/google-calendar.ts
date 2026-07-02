@@ -1,11 +1,10 @@
-// Google Calendar integration (Replit connector "google-calendar").
-// Provides one shared, connected Google account for the whole household.
-// Reminders are auto-synced to a single chosen "Family" calendar; see
-// travels_calendar_settings for the selected calendar id.
-import { ReplitConnectors } from "@replit/connectors-sdk";
+// Google Calendar API access on behalf of a connected user (per-user OAuth,
+// see google-calendar-oauth.ts / google-calendar-tokens.ts). Each function
+// takes that user's live access token and talks to the Calendar REST API
+// directly — no shared connector, no shared calendar.
 import { logger } from "./logger";
 
-const connectors = new ReplitConnectors();
+const CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3";
 
 export interface GoogleCalendarListItem {
   id: string;
@@ -18,14 +17,21 @@ export interface GoogleCalendarEvent {
   htmlLink?: string;
 }
 
-async function proxyJson<T>(
+async function calendarApiJson<T>(
+  accessToken: string,
   path: string,
   options?: { method?: string; body?: unknown },
 ): Promise<T> {
-  const res = await connectors.proxy("google-calendar", path, {
+  const res = await fetch(`${CALENDAR_API_BASE}${path}`, {
     method: options?.method ?? "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...(options?.body !== undefined
+        ? { "Content-Type": "application/json" }
+        : {}),
+    },
     ...(options?.body !== undefined
-      ? { body: JSON.stringify(options.body), headers: { "Content-Type": "application/json" } }
+      ? { body: JSON.stringify(options.body) }
       : {}),
   });
   if (!res.ok) {
@@ -40,23 +46,12 @@ async function proxyJson<T>(
   return (await res.json()) as T;
 }
 
-export async function isGoogleCalendarConnected(): Promise<boolean> {
-  try {
-    await connectors.listConnections({ connector_names: "google-calendar" });
-    // A successful proxy call is the real signal; listConnections can succeed
-    // even when the connection isn't authorized for this Repl. Do a cheap read.
-    await proxyJson("/users/me/calendarList?maxResults=1");
-    return true;
-  } catch (err) {
-    logger.warn({ err }, "google-calendar: connection check failed");
-    return false;
-  }
-}
-
-export async function listGoogleCalendars(): Promise<GoogleCalendarListItem[]> {
-  const data = await proxyJson<{
+export async function listGoogleCalendars(
+  accessToken: string,
+): Promise<GoogleCalendarListItem[]> {
+  const data = await calendarApiJson<{
     items?: Array<{ id: string; summary?: string; primary?: boolean }>;
-  }>("/users/me/calendarList");
+  }>(accessToken, "/users/me/calendarList");
   return (data.items ?? []).map((item) => ({
     id: item.id,
     summary: item.summary ?? item.id,
@@ -72,12 +67,14 @@ export interface CreateReminderEventInput {
 }
 
 // Reminders are all-day events on their due date, with a popup notification
-// the day before so it shows up as a native alert on everyone's phone.
+// the day before so it shows up as a native alert on the recipient's phone.
 export async function createReminderEvent(
+  accessToken: string,
   input: CreateReminderEventInput,
 ): Promise<GoogleCalendarEvent> {
   const nextDay = addDays(input.dueDate, 1);
-  return proxyJson<GoogleCalendarEvent>(
+  return calendarApiJson<GoogleCalendarEvent>(
+    accessToken,
     `/calendars/${encodeURIComponent(input.calendarId)}/events`,
     {
       method: "POST",
@@ -96,12 +93,14 @@ export async function createReminderEvent(
 }
 
 export async function updateReminderEvent(
+  accessToken: string,
   calendarId: string,
   eventId: string,
   input: Omit<CreateReminderEventInput, "calendarId">,
 ): Promise<GoogleCalendarEvent> {
   const nextDay = addDays(input.dueDate, 1);
-  return proxyJson<GoogleCalendarEvent>(
+  return calendarApiJson<GoogleCalendarEvent>(
+    accessToken,
     `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
     {
       method: "PATCH",
@@ -116,18 +115,23 @@ export async function updateReminderEvent(
 }
 
 export async function deleteReminderEvent(
+  accessToken: string,
   calendarId: string,
   eventId: string,
 ): Promise<void> {
   try {
-    await proxyJson<void>(
+    await calendarApiJson<void>(
+      accessToken,
       `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
       { method: "DELETE" },
     );
   } catch (err) {
     // Event may have already been deleted directly in Google Calendar — don't
     // fail the reminder deletion over a missing downstream event.
-    logger.warn({ err, calendarId, eventId }, "google-calendar: delete event failed");
+    logger.warn(
+      { err, calendarId, eventId },
+      "google-calendar: delete event failed",
+    );
   }
 }
 

@@ -64,6 +64,7 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
 - DATABASE_URL must point to the live Supabase (not the Replit built-in helium DB)
 - All three "optional" AI secrets (OPENROUTER_API_KEY, JINA_API_KEY, VOYAGE_API_KEY) are required
 - Single combined domain: app.batchelor.app (target), pottery.batchelor.app + quilting.batchelor.app (decommissioned after go-live)
+- When the user has queued multiple feature requests, don't silently barrel from one to the next. If a step needs something from the user (a manual action, a confirmation, a choice), stop and ask a simple yes/no or short question via user_query before proceeding — don't let the queue push past unanswered questions.
 
 ## Gotchas
 

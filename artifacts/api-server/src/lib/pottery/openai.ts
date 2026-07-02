@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { callModel, MODELS, getOpenAIClient } from "../ai-client";
+import { callModel, callModelWithAdvisor, MODELS, getOpenAIClient } from "../ai-client";
 import { classifyGlazeType } from "../visual-embed";
 import {
   asString,
@@ -401,25 +401,29 @@ export async function locateBackstampAndEnhanceMaker(
   }));
 
   try {
-    const completion = await callModel(MODELS.SMART_VISION, (c, model) =>
-      c.chat.completions.create({
-        model,
-        response_format: { type: "json_object" },
-        max_tokens: 512,
-        messages: [
-          { role: "system", content: BACKSTAMP_PROMPT },
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: "Focus on any maker's mark or backstamp visible on this piece. Respond with JSON only.",
-              },
-              ...imageContent,
-            ],
-          },
-        ],
-      }),
+    const completion = await callModelWithAdvisor(
+      MODELS.SMART_VISION,
+      "You are a ceramics/pottery maker's-mark expert. You will be asked to double-check an ambiguous or partially-legible backstamp/maker's mark from an image description or partial reading. Give your best identification of the maker and a one-line reason, or say clearly if it's genuinely unidentifiable.",
+      (c, model, tools) =>
+        c.chat.completions.create({
+          model,
+          ...(tools ? { tools: tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[] } : {}),
+          response_format: { type: "json_object" },
+          max_tokens: 512,
+          messages: [
+            { role: "system", content: BACKSTAMP_PROMPT },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Focus on any maker's mark or backstamp visible on this piece. If the mark is partially worn, unclear, or ambiguous, consult the advisor tool before finalizing your answer. Respond with JSON only.",
+                },
+                ...imageContent,
+              ],
+            },
+          ],
+        }),
     );
 
     const raw = parseJson(completion.choices[0]?.message?.content ?? null);

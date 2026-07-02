@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, eq, asc } from "drizzle-orm";
 import multer from "multer";
+import type OpenAI from "openai";
 import { db, travelsTrips, travelsTripDocuments } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import {
@@ -8,7 +9,15 @@ import {
   downloadDocument,
   deleteDocument,
 } from "../../lib/travels-storage";
-import { callModel, MODELS } from "../../lib/ai-client";
+import { callModelWithAdvisor, MODELS } from "../../lib/ai-client";
+
+// Escalation guidance for the openrouter:advisor server tool: extraction
+// mistakes here (wrong date, missed return leg) directly corrupt a trip's
+// itinerary, so it's worth a stronger model's opinion whenever the
+// FAST/SMART vision model is genuinely unsure — but not on every routine,
+// clearly-legible document.
+const DOCUMENT_ADVISOR_INSTRUCTIONS =
+  "You are a meticulous travel-document reviewer. You will be asked to double-check a specific extracted date, time, or field against source text/an image. Read character-by-character, flag any ambiguity (e.g. DD/MM vs MM/DD, transposed digits, issue date vs travel date), and give your best final answer plus a one-line reason.";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -22,16 +31,22 @@ async function extractFromImage(buffer: Buffer, mimeType: string) {
   const b64 = buffer.toString("base64");
   const dataUrl = `data:${mimeType};base64,${b64}`;
 
-  const result = await callModel(MODELS.SMART_VISION, async (client, model) => {
-    const resp = await client.chat.completions.create({
-      model,
-      messages: [
+  const result = await callModelWithAdvisor(
+    MODELS.SMART_VISION,
+    DOCUMENT_ADVISOR_INSTRUCTIONS,
+    async (client, model, tools) => {
+      const resp = await client.chat.completions.create({
+        model,
+        ...(tools ? { tools: tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[] } : {}),
+        messages: [
         {
           role: "user",
           content: [
             {
               type: "text",
               text: `You are extracting structured information from a travel document (ticket, confirmation, rental agreement, boarding pass, hotel voucher, etc).
+
+If any date, time, or field is genuinely ambiguous or hard to read, consult the advisor tool before finalizing your answer rather than guessing.
 
 Today's date is ${new Date().toISOString().slice(0, 10)}. Use this only to sanity-check plausibility (travel dates are usually in the near future) — always trust the exact year, month, and day printed on the document itself over any assumption.
 
@@ -75,11 +90,12 @@ Return ONLY valid JSON, no extra text.`,
             { type: "image_url", image_url: { url: dataUrl } },
           ],
         },
-      ],
-      max_tokens: 1000,
-    });
-    return resp.choices[0]?.message?.content ?? "{}";
-  });
+        ],
+        max_tokens: 1000,
+      });
+      return resp.choices[0]?.message?.content ?? "{}";
+    },
+  );
 
   try {
     const stripped = result.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
@@ -99,13 +115,19 @@ async function extractFromPdf(buffer: Buffer) {
     return { notes: "Could not parse PDF text" };
   }
 
-  const result = await callModel(MODELS.SMART_VISION, async (client, model) => {
-    const resp = await client.chat.completions.create({
-      model,
-      messages: [
+  const result = await callModelWithAdvisor(
+    MODELS.SMART_VISION,
+    DOCUMENT_ADVISOR_INSTRUCTIONS,
+    async (client, model, tools) => {
+      const resp = await client.chat.completions.create({
+        model,
+        ...(tools ? { tools: tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[] } : {}),
+        messages: [
         {
           role: "user",
           content: `You are extracting structured information from travel document text.
+
+If any date, time, or field is genuinely ambiguous or hard to read, consult the advisor tool before finalizing your answer rather than guessing.
 
 Document text:
 ${text}
@@ -149,11 +171,12 @@ Return a JSON object with these fields (include only the ones that are present):
 
 Return ONLY valid JSON, no extra text.`,
         },
-      ],
-      max_tokens: 1000,
-    });
-    return resp.choices[0]?.message?.content ?? "{}";
-  });
+        ],
+        max_tokens: 1000,
+      });
+      return resp.choices[0]?.message?.content ?? "{}";
+    },
+  );
 
   try {
     const stripped = result.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();

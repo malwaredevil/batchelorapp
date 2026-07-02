@@ -1,5 +1,11 @@
 import OpenAI from "openai";
-import { callModel, callWithFallback, getOpenAIClient, MODELS } from "./ai-client";
+import {
+  callModel,
+  callModelWithAdvisor,
+  callWithFallback,
+  getOpenAIClient,
+  MODELS,
+} from "./ai-client";
 import { classifyPrintType } from "./visual-embed";
 import {
   asString,
@@ -292,25 +298,29 @@ export async function analyzePatternImage(
       ? `Existing record — use as context:\n${contextLines.join("\n")}\n\n`
       : "";
 
-  const completion = await callModel(MODELS.FAST_VISION, (c, model) =>
-    c.chat.completions.create({
-      model,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: PATTERN_ANALYSIS_PROMPT },
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `${contextBlock}Analyse this quilt pattern image and respond with JSON only.`,
-            },
-            ...imageContent,
-          ],
-        },
-      ],
-      max_tokens: 512,
-    }),
+  const completion = await callModelWithAdvisor(
+    MODELS.FAST_VISION,
+    "You are a quilting-pattern expert. You will be asked to double-check an ambiguous or partially-legible pattern name, designer credit, or block size printed on a quilt pattern. Give your best identification and a one-line reason, or say clearly if it's genuinely unidentifiable.",
+    (c, model, tools) =>
+      c.chat.completions.create({
+        model,
+        ...(tools ? { tools: tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[] } : {}),
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: PATTERN_ANALYSIS_PROMPT },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `${contextBlock}Analyse this quilt pattern image and respond with JSON only. If the pattern name, designer, or block size is unclear or ambiguous, consult the advisor tool before finalizing.`,
+              },
+              ...imageContent,
+            ],
+          },
+        ],
+        max_tokens: 512,
+      }),
   );
 
   const raw = parseJson(completion.choices[0]?.message?.content ?? null);

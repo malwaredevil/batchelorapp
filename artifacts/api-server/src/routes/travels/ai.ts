@@ -3,7 +3,16 @@ import { eq } from "drizzle-orm";
 import { z } from "zod/v4";
 import { db, travelsTrips } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
-import { callModel, MODELS } from "../../lib/ai-client";
+import type OpenAI from "openai";
+import { callModel, callModelWithSubagent, MODELS } from "../../lib/ai-client";
+
+// Guidance for the openrouter:subagent server tool: the chat assistant can
+// delegate self-contained lookups (e.g. "list typical costs for X",
+// "summarize Y") to a cheap worker model instead of spending the
+// orchestrator's own tokens, while it stays focused on the conversational
+// reply.
+const CHAT_SUBAGENT_INSTRUCTIONS =
+  "You are a fast research helper for a travel assistant. You will be given a small, self-contained sub-task (e.g. list facts, summarize options, draft a short list). Answer concisely and factually in plain text so the orchestrating assistant can incorporate your answer into its reply.";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -405,14 +414,19 @@ Answer questions about ${trip.destination}: things to do, local food, customs, t
     { role: "user" as const, content: message },
   ];
 
-  const aiContent = await callModel(MODELS.FAST_VISION, async (client, model) => {
-    const response = await client.chat.completions.create({
-      model,
-      messages,
-      max_tokens: 600,
-    });
-    return response.choices[0]?.message?.content ?? "";
-  });
+  const aiContent = await callModelWithSubagent(
+    MODELS.FAST_VISION,
+    CHAT_SUBAGENT_INSTRUCTIONS,
+    async (client, model, tools) => {
+      const response = await client.chat.completions.create({
+        model,
+        ...(tools ? { tools: tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[] } : {}),
+        messages,
+        max_tokens: 600,
+      });
+      return response.choices[0]?.message?.content ?? "";
+    },
+  );
 
   const updatedHistory: ChatMessage[] = [
     ...history,

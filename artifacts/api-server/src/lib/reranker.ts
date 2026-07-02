@@ -8,7 +8,12 @@
 import { env } from "./env";
 
 const VOYAGE_RERANK_URL = "https://api.voyageai.com/v1/rerank";
-const RERANK_MODEL = "rerank-2";
+// rerank-2.5 is Voyage's current generalist model: better retrieval quality
+// than the legacy rerank-2 we used to call, plus a 32k-token context limit
+// (vs 16k) and instruction-following support. Our per-document text is short
+// (a few structured attribute lines), so we're nowhere near either limit —
+// the win here is purely ranking quality on the same requests we already make.
+const RERANK_MODEL = "rerank-2.5";
 
 interface VoyageRerankResponse {
   data: Array<{

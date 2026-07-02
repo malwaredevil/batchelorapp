@@ -60,6 +60,14 @@ const UpdateTripBody = CreateTripBody.partial().extend({
   itinerary: z.unknown().optional(),
   packingList: z.unknown().optional(),
   todoList: z.unknown().optional(),
+  // CreateTripBody.partial() does not strip .default() from these fields —
+  // Zod still applies the default when the key is omitted from a partial
+  // update, which would silently reset status/hasRentalCar/travellerCount
+  // on every single-field PATCH. Override with plain optionals (no default)
+  // so omitted keys are left untouched.
+  status: z.enum(["wishlist", "planning", "booked", "active", "completed"]).optional(),
+  hasRentalCar: z.boolean().optional(),
+  travellerCount: z.number().int().min(1).optional(),
 });
 
 // Must be before /:id routes to avoid Express routing conflict

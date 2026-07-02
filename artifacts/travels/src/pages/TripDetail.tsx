@@ -42,7 +42,7 @@ import { OneThingInput } from "@/components/OneThingInput";
 import { MagnetCheckDialog } from "@/components/MagnetCheckDialog";
 import { ReminderEditDialog } from "@/components/ReminderEditDialog";
 import { useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -89,6 +89,7 @@ import {
   CalendarPlus,
 } from "lucide-react";
 import { toast } from "sonner";
+import { InlineField, InlineTextField, InlineTextareaField, InlineDateField } from "@/components/InlineField";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -245,9 +246,6 @@ function DocumentRow({
   const qc = useQueryClient();
   const updateTripDocument = useUpdateTripDocument();
   const rescanTripDocument = useRescanTripDocument();
-  const [editingFields, setEditingFields] = useState(false);
-  const [fieldForm, setFieldForm] = useState<Record<string, string>>({});
-
   const ext = doc.originalFilename?.split(".").pop()?.toLowerCase();
   const ed = doc.extractedData as Record<string, unknown> | null;
   const lockedFields = doc.lockedFields ?? [];
@@ -294,27 +292,14 @@ function DocumentRow({
     { key: "returnFlightNumber", label: "Return flight" },
   ];
 
-  const startEditFields = () => {
-    const initial: Record<string, string> = {};
-    for (const { key } of keyFields) {
-      initial[key] = ed?.[key] != null ? String(ed[key]) : "";
-    }
-    setFieldForm(initial);
-    setEditingFields(true);
-  };
-
-  const saveFields = () => {
-    const extractedData: Record<string, unknown> = {};
-    for (const { key } of keyFields) {
-      const value = fieldForm[key]?.trim();
-      extractedData[key] = value ? value : null;
-    }
+  const saveExtractedField = (key: string, rawValue: string) => {
+    const value = rawValue.trim();
+    const extractedData: Record<string, unknown> = { ...(ed ?? {}), [key]: value ? value : null };
     updateTripDocument.mutate(
       { tripId, docId: doc.id, body: { extractedData } },
       {
         onSuccess: () => {
           qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
-          setEditingFields(false);
           toast.success("Document details updated");
         },
         onError: () => toast.error("Failed to update document details"),
@@ -334,114 +319,49 @@ function DocumentRow({
         {doc.documentType && (
           <p className="text-xs text-muted-foreground capitalize">{doc.documentType}</p>
         )}
-        {editingFields ? (
-          <div className="mt-2 space-y-2">
-            {keyFields.map(({ key, label }) => {
-              const isLocked = lockedFields.includes(key);
-              const isDateField = key.toLowerCase().includes("date");
-              const preview = isDateField && fieldForm[key] ? formatExtractedValue(fieldForm[key]) : null;
-              return (
-                <div key={key} className="flex items-center gap-2">
-                  <Label className="text-xs text-muted-foreground w-24 shrink-0">{label}</Label>
-                  <div className="flex-1 min-w-0">
-                    <Input
-                      value={fieldForm[key] ?? ""}
-                      onChange={(e) =>
-                        setFieldForm((f) => ({ ...f, [key]: e.target.value }))
-                      }
-                      className="h-7 text-xs"
-                      placeholder={
-                        key === "departureDateTime" || isDateField
-                          ? "e.g. 2026-08-14T10:30:00"
-                          : undefined
-                      }
-                    />
-                    {preview && preview !== fieldForm[key] && (
-                      <p className="text-[11px] text-muted-foreground mt-0.5 pl-0.5">{preview}</p>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => toggleFieldLock(key)}
-                    className={`p-1 shrink-0 transition-colors ${
-                      isLocked
-                        ? "text-amber-500 hover:text-amber-600"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                    title={isLocked ? "Locked — AI rescan won't overwrite" : "Unlocked — AI rescan may update"}
-                  >
-                    {isLocked ? <Lock className="w-3.5 h-3.5" /> : <LockOpen className="w-3.5 h-3.5" />}
-                  </button>
+        <div className="mt-1.5 space-y-1">
+          {keyFields.map(({ key, label }) => {
+            const isLocked = lockedFields.includes(key);
+            const isDateField = key.toLowerCase().includes("date");
+            const rawValue = ed?.[key] != null ? String(ed[key]) : "";
+            return (
+              <div key={key} className="flex items-start gap-1">
+                <div className="flex-1 min-w-0">
+                  <InlineTextField
+                    label={label}
+                    value={rawValue}
+                    onSave={(v) => saveExtractedField(key, v)}
+                    saving={updateTripDocument.isPending}
+                    placeholder={isDateField ? "e.g. 2026-08-14T10:30:00" : undefined}
+                    displayValue={(v) => formatExtractedValue(v)}
+                  />
                 </div>
-              );
-            })}
-            <div className="flex items-center gap-2 pt-1">
-              <Button
-                size="sm"
-                className="h-7 px-2"
-                onClick={saveFields}
-                disabled={updateTripDocument.isPending}
-              >
-                <Save className="w-3 h-3 mr-1" />
-                Save
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 px-2"
-                onClick={() => setEditingFields(false)}
-              >
-                <X className="w-3 h-3 mr-1" />
-                Cancel
-              </Button>
-            </div>
-          </div>
-        ) : (
-          ed &&
-          keyFields
-            .filter(({ key }) => ed[key] != null)
-            .map(({ key, label }) => {
-              const isLocked = lockedFields.includes(key);
-              return (
-                <p key={key} className="text-xs text-muted-foreground flex items-center gap-1">
-                  {label}: <span className="text-foreground">{formatExtractedValue(String(ed[key]))}</span>
-                  <button
-                    type="button"
-                    onClick={() => toggleFieldLock(key)}
-                    className={`p-0.5 shrink-0 transition-colors ${
-                      isLocked
-                        ? "text-amber-500 hover:text-amber-600"
-                        : "text-muted-foreground/50 hover:text-foreground"
-                    }`}
-                    title={isLocked ? "Locked — AI rescan won't overwrite" : "Unlocked — AI rescan may update"}
-                  >
-                    {isLocked ? <Lock className="w-3 h-3" /> : <LockOpen className="w-3 h-3" />}
-                  </button>
-                </p>
-              );
-            })
-        )}
+                <button
+                  type="button"
+                  onClick={() => toggleFieldLock(key)}
+                  className={`p-1 shrink-0 transition-colors mt-4 ${
+                    isLocked
+                      ? "text-amber-500 hover:text-amber-600"
+                      : "text-muted-foreground/50 hover:text-foreground"
+                  }`}
+                  title={isLocked ? "Locked — AI rescan won't overwrite" : "Unlocked — AI rescan may update"}
+                >
+                  {isLocked ? <Lock className="w-3.5 h-3.5" /> : <LockOpen className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            );
+          })}
+        </div>
       </div>
       <div className="flex items-center gap-1 shrink-0">
-        {!editingFields && (
-          <>
-            <button
-              onClick={handleRescan}
-              disabled={rescanTripDocument.isPending}
-              className="p-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-              title="Re-scan document with AI (locked fields are preserved)"
-            >
-              <ScanSearch className={`w-4 h-4 ${rescanTripDocument.isPending ? "animate-pulse" : ""}`} />
-            </button>
-            <button
-              onClick={startEditFields}
-              className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-              title="Correct extracted details"
-            >
-              <Edit2 className="w-4 h-4" />
-            </button>
-          </>
-        )}
+        <button
+          onClick={handleRescan}
+          disabled={rescanTripDocument.isPending}
+          className="p-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+          title="Re-scan document with AI (locked fields are preserved)"
+        >
+          <ScanSearch className={`w-4 h-4 ${rescanTripDocument.isPending ? "animate-pulse" : ""}`} />
+        </button>
         <a
           href={getTripDocumentDownloadUrl(tripId, doc.id)}
           target="_blank"
@@ -1374,8 +1294,6 @@ export default function TripDetail({ id }: { id: number }) {
   const clearChat = useClearTripChat();
   const { data: allHighlights = [] } = useGetHighlights();
 
-  const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState<Partial<UpdateTripBody>>({});
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [itinStyle, setItinStyle] = useState<"relaxed" | "balanced" | "packed">("balanced");
@@ -1412,36 +1330,13 @@ export default function TripDetail({ id }: { id: number }) {
     qc.invalidateQueries({ queryKey: getGetTravelsStatsQueryKey() });
   };
 
-  const startEdit = () => {
-    if (!trip) return;
-    setEditForm({
-      title: trip.title,
-      destination: trip.destination,
-      status: trip.status,
-      startDate: trip.startDate ?? undefined,
-      endDate: trip.endDate ?? undefined,
-      transportTo: trip.transportTo ?? undefined,
-      transportDetails: trip.transportDetails ?? undefined,
-      hasRentalCar: trip.hasRentalCar,
-      accommodationName: trip.accommodationName ?? undefined,
-      accommodationArea: trip.accommodationArea ?? undefined,
-      notes: trip.notes ?? undefined,
-      funFact: trip.funFact ?? undefined,
-      travellerCount: trip.travellerCount,
-      travelers: (trip.travelers as string[] | null) ?? [],
-      theOneThing: (trip.theOneThing as string[] | null) ?? [],
-    });
-    setEditing(true);
-  };
-
-  const saveEdit = () => {
+  const saveField = (body: Partial<UpdateTripBody>, successMsg = "Trip updated") => {
     updateTrip.mutate(
-      { id, body: editForm },
+      { id, body },
       {
         onSuccess: () => {
           invalidate();
-          setEditing(false);
-          toast.success("Trip updated");
+          toast.success(successMsg);
         },
         onError: () => toast.error("Failed to update trip"),
       },
@@ -1701,7 +1596,7 @@ export default function TripDetail({ id }: { id: number }) {
         >
           <ArrowLeft className="w-4 h-4" />
         </Button>
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 space-y-1.5">
           <div className="flex items-center gap-3 flex-wrap">
             {trip.iconPhotoId != null && (
               <img
@@ -1710,57 +1605,43 @@ export default function TripDetail({ id }: { id: number }) {
                 className="w-8 h-8 rounded-full object-cover border border-border shrink-0"
               />
             )}
-            <h1 className="font-serif text-2xl text-foreground">{trip.title}</h1>
-            <span
-              className={`text-xs px-2 py-0.5 rounded-full border font-medium shrink-0 ${STATUS_COLORS[trip.status]}`}
-            >
-              {STATUS_LABELS[trip.status]}
-            </span>
-          </div>
-          <p className="text-muted-foreground flex items-center gap-1 mt-1">
-            <MapPin className="w-4 h-4 shrink-0" />
-            {trip.destination}
-          </p>
-        </div>
-        <div className="flex gap-2 shrink-0">
-          {!editing && (
-            <Button variant="outline" size="sm" onClick={startEdit}>
-              <Edit2 className="w-4 h-4 mr-1.5" />
-              Edit
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Edit Form */}
-      {editing && (
-        <Card className="border-primary/20">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold">Edit Trip</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2 sm:col-span-2">
-                <Label>Trip name</Label>
+            <InlineField
+              label="Trip name"
+              value={trip.title}
+              iconType="text"
+              onSave={(v) => {
+                if (v.trim()) saveField({ title: v.trim() });
+              }}
+              className="min-w-[10rem]"
+              renderDisplay={(v) => <h1 className="font-serif text-2xl text-foreground">{v}</h1>}
+              renderEditor={(draft, setDraft, commit, cancel) => (
                 <Input
-                  value={editForm.title ?? ""}
-                  onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
+                  autoFocus
+                  className="font-serif text-xl h-10"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") commit();
+                    if (e.key === "Escape") cancel();
+                  }}
                 />
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label>Destination</Label>
-                <Input
-                  value={editForm.destination ?? ""}
-                  onChange={(e) => setEditForm((f) => ({ ...f, destination: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Status</Label>
-                <Select
-                  value={editForm.status ?? trip.status}
-                  onValueChange={(v) => setEditForm((f) => ({ ...f, status: v as TripStatus }))}
+              )}
+            />
+            <InlineField
+              label="Status"
+              value={trip.status}
+              iconType="custom"
+              onSave={(v) => saveField({ status: v })}
+              renderDisplay={(v) => (
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-full border font-medium shrink-0 ${STATUS_COLORS[v]}`}
                 >
-                  <SelectTrigger>
+                  {STATUS_LABELS[v]}
+                </span>
+              )}
+              renderEditor={(draft, setDraft) => (
+                <Select value={draft} onValueChange={(v) => setDraft(v as TripStatus)}>
+                  <SelectTrigger className="h-8 w-36">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1769,279 +1650,225 @@ export default function TripDetail({ id }: { id: number }) {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Travellers (count)</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  value={editForm.travellerCount ?? trip.travellerCount}
-                  onChange={(e) =>
-                    setEditForm((f) => ({ ...f, travellerCount: Number(e.target.value) }))
-                  }
-                />
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label>Who came along</Label>
-                <div className="flex flex-wrap gap-3">
-                  {(["John", "Ashley", "Karis", "Angela"] as const).map((name) => {
-                    const checked = ((editForm.travelers as string[] | undefined) ?? []).includes(name);
-                    return (
-                      <label key={name} className="flex items-center gap-2 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          className="w-4 h-4 rounded border-border accent-primary"
-                          onChange={(e) =>
-                            setEditForm((f) => {
-                              const cur = (f.travelers as string[] | undefined) ?? [];
-                              return {
-                                ...f,
-                                travelers: e.target.checked
-                                  ? [...cur, name]
-                                  : cur.filter((n) => n !== name),
-                              };
-                            })
-                          }
-                        />
-                        <span className="text-sm">{name}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Start date</Label>
-                <Input
-                  type="date"
-                  value={editForm.startDate ?? ""}
-                  onChange={(e) =>
-                    setEditForm((f) => ({ ...f, startDate: e.target.value || undefined }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>End date</Label>
-                <Input
-                  type="date"
-                  value={editForm.endDate ?? ""}
-                  onChange={(e) =>
-                    setEditForm((f) => ({ ...f, endDate: e.target.value || undefined }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Transport to destination</Label>
-                <Select
-                  value={editForm.transportTo ?? "none"}
-                  onValueChange={(v) =>
-                    setEditForm((f) => ({ ...f, transportTo: v === "none" ? undefined : (v as TransportTo) }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Not set" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Not set</SelectItem>
-                    <SelectItem value="flew">Flight</SelectItem>
-                    <SelectItem value="drove">Drove</SelectItem>
-                    <SelectItem value="train">Train</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {editForm.transportTo && editForm.transportTo !== "drove" && (
-                <div className="space-y-2">
-                  <Label>
-                    {editForm.transportTo === "flew" ? "Airline & flight number" : "Train line & train number"}
-                  </Label>
-                  <Input
-                    placeholder={editForm.transportTo === "flew" ? "e.g. Delta DL 405" : "e.g. Eurostar 9025"}
-                    value={editForm.transportDetails ?? ""}
-                    onChange={(e) =>
-                      setEditForm((f) => ({ ...f, transportDetails: e.target.value || undefined }))
-                    }
-                  />
-                </div>
               )}
-              <div className="space-y-2">
-                <Label>Rental car?</Label>
-                <Select
-                  value={editForm.hasRentalCar ? "yes" : "no"}
-                  onValueChange={(v) => setEditForm((f) => ({ ...f, hasRentalCar: v === "yes" }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="no">No</SelectItem>
-                    <SelectItem value="yes">Yes</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Accommodation name</Label>
-                <Input
-                  value={editForm.accommodationName ?? ""}
-                  onChange={(e) =>
-                    setEditForm((f) => ({ ...f, accommodationName: e.target.value || undefined }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Accommodation area</Label>
-                <Input
-                  value={editForm.accommodationArea ?? ""}
-                  onChange={(e) =>
-                    setEditForm((f) => ({ ...f, accommodationArea: e.target.value || undefined }))
-                  }
-                />
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label>Notes</Label>
-                <Textarea
-                  rows={3}
-                  value={editForm.notes ?? ""}
-                  onChange={(e) =>
-                    setEditForm((f) => ({ ...f, notes: e.target.value || undefined }))
-                  }
-                />
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label>The One Thing (highlights)</Label>
-                <OneThingInput
-                  value={(editForm.theOneThing as string[] | undefined) ?? []}
-                  onChange={(tags) => setEditForm((f) => ({ ...f, theOneThing: tags }))}
-                  existingValues={allHighlights}
-                  destination={editForm.destination ?? trip.destination}
-                />
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label>Fun fact / memory</Label>
-                <Textarea
-                  rows={2}
-                  placeholder="A memorable fact, story, or highlight about this trip..."
-                  value={editForm.funFact ?? ""}
-                  onChange={(e) =>
-                    setEditForm((f) => ({ ...f, funFact: e.target.value || undefined }))
-                  }
-                />
-              </div>
-            </div>
-            <div className="flex justify-between pt-2">
-              <Button
-                variant="ghost"
-                className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                onClick={() => setShowDeleteConfirm(true)}
-              >
-                <Trash2 className="w-4 h-4 mr-1.5" />
-                Delete trip
-              </Button>
-              <div className="flex gap-2">
-                <Button variant="ghost" onClick={() => setEditing(false)}>
-                  <X className="w-4 h-4 mr-1.5" />
-                  Cancel
-                </Button>
-                <Button onClick={saveEdit} disabled={updateTrip.isPending}>
-                  <Save className="w-4 h-4 mr-1.5" />
-                  {updateTrip.isPending ? "Saving..." : "Save"}
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+            />
+          </div>
+          <InlineField
+            label="Destination"
+            value={trip.destination}
+            iconType="text"
+            onSave={(v) => {
+              if (v.trim()) saveField({ destination: v.trim() });
+            }}
+            layout="row"
+            renderDisplay={(v) => (
+              <p className="text-muted-foreground flex items-center gap-1">
+                <MapPin className="w-4 h-4 shrink-0" />
+                {v}
+              </p>
+            )}
+            renderEditor={(draft, setDraft, commit, cancel) => (
+              <Input
+                autoFocus
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commit();
+                  if (e.key === "Escape") cancel();
+                }}
+              />
+            )}
+          />
+        </div>
+        <div className="flex gap-2 shrink-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-muted-foreground hover:text-destructive"
+            title="Delete trip"
+            onClick={() => setShowDeleteConfirm(true)}
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
 
-      {/* Trip info */}
-      {!editing && (
-        <Card className="border-border/50">
-          <CardContent className="py-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
-            {(trip.startDate || trip.endDate) && (
-              <div className="flex items-start gap-2">
-                <Calendar className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-xs text-muted-foreground">Dates</p>
-                  <p className="text-sm text-foreground">
-                    {formatDate(trip.startDate)}
-                    {trip.endDate && <><br />{formatDate(trip.endDate)}</>}
-                  </p>
-                </div>
+      {/* Trip info — every field is independently editable via its contextual icon */}
+      <Card className="border-border/50">
+        <CardContent className="py-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <InlineDateField
+            label="Start date"
+            value={trip.startDate ?? ""}
+            onSave={(v) => saveField({ startDate: v || undefined })}
+            displayValue={(v) => formatDate(v)}
+          />
+          <InlineDateField
+            label="End date"
+            value={trip.endDate ?? ""}
+            onSave={(v) => saveField({ endDate: v || undefined })}
+            displayValue={(v) => formatDate(v)}
+          />
+
+          <InlineField
+            label="Travellers"
+            value={(trip.travelers as string[] | null) ?? []}
+            iconType="custom"
+            onSave={(v) => saveField({ travelers: v })}
+            isEmpty={() => false}
+            renderDisplay={(v) => (
+              <p className="text-sm text-foreground">
+                {v.length ? v.join(", ") : trip.travellerCount}
+              </p>
+            )}
+            renderEditor={(draft, setDraft) => (
+              <div className="flex flex-wrap gap-3">
+                {(["John", "Ashley", "Karis", "Angela"] as const).map((name) => {
+                  const checked = draft.includes(name);
+                  return (
+                    <label key={name} className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        className="w-4 h-4 rounded border-border accent-primary"
+                        onChange={(e) =>
+                          setDraft(
+                            e.target.checked ? [...draft, name] : draft.filter((n) => n !== name),
+                          )
+                        }
+                      />
+                      <span className="text-sm">{name}</span>
+                    </label>
+                  );
+                })}
               </div>
             )}
-            <div className="flex items-start gap-2">
-              <Users className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
-              <div>
-                <p className="text-xs text-muted-foreground">Travellers</p>
-                {(trip.travelers as string[] | null)?.length ? (
-                  <p className="text-sm text-foreground">
-                    {(trip.travelers as string[]).join(", ")}
-                  </p>
-                ) : (
-                  <p className="text-sm text-foreground">{trip.travellerCount}</p>
-                )}
-              </div>
-            </div>
-            {trip.transportTo && (
-              <div className="flex items-start gap-2">
-                <span className="text-muted-foreground mt-0.5 shrink-0">
-                  <TransportIcon transport={trip.transportTo} />
+          />
+
+          <InlineField
+            label="Getting there"
+            value={trip.transportTo ?? "none"}
+            iconType="custom"
+            onSave={(v: TransportTo | "none") =>
+              saveField({ transportTo: v === "none" ? undefined : v })
+            }
+            isEmpty={(v: TransportTo | "none") => v === "none"}
+            renderDisplay={(v) => (
+              <div className="flex items-center gap-1.5">
+                <span className="text-muted-foreground shrink-0">
+                  <TransportIcon transport={v as TransportTo} />
                 </span>
-                <div>
-                  <p className="text-xs text-muted-foreground">Getting there</p>
-                  <p className="text-sm text-foreground capitalize">
-                    {trip.transportTo === "flew" ? "Flying" : trip.transportTo === "train" ? "Train" : "Driving"}
-                    {trip.hasRentalCar ? " + rental car" : ""}
-                  </p>
-                  {trip.transportDetails && (
-                    <p className="text-xs text-muted-foreground mt-0.5">{trip.transportDetails}</p>
-                  )}
-                </div>
+                <p className="text-sm text-foreground capitalize">
+                  {v === "flew" ? "Flying" : v === "train" ? "Train" : "Driving"}
+                  {trip.hasRentalCar ? " + rental car" : ""}
+                </p>
               </div>
             )}
-            {trip.accommodationName && (
-              <div className="flex items-start gap-2 col-span-2 sm:col-span-1">
-                <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-xs text-muted-foreground">Accommodation</p>
-                  <p className="text-sm text-foreground">
-                    {trip.accommodationName}
-                    {trip.accommodationArea ? `, ${trip.accommodationArea}` : ""}
-                  </p>
-                </div>
+            renderEditor={(draft, setDraft) => (
+              <Select value={draft} onValueChange={(v) => setDraft(v as TransportTo | "none")}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Not set" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Not set</SelectItem>
+                  <SelectItem value="flew">Flight</SelectItem>
+                  <SelectItem value="drove">Drove</SelectItem>
+                  <SelectItem value="train">Train</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+          />
+
+          {trip.transportTo && trip.transportTo !== "drove" && (
+            <InlineTextField
+              label={trip.transportTo === "flew" ? "Airline & flight number" : "Train line & train number"}
+              value={trip.transportDetails ?? ""}
+              placeholder={trip.transportTo === "flew" ? "e.g. Delta DL 405" : "e.g. Eurostar 9025"}
+              onSave={(v) => saveField({ transportDetails: v || undefined })}
+            />
+          )}
+
+          <InlineField
+            label="Rental car?"
+            value={trip.hasRentalCar}
+            iconType="custom"
+            onSave={(v) => saveField({ hasRentalCar: v })}
+            isEmpty={() => false}
+            renderDisplay={(v) => <p className="text-sm text-foreground">{v ? "Yes" : "No"}</p>}
+            renderEditor={(draft, setDraft) => (
+              <Select value={draft ? "yes" : "no"} onValueChange={(v) => setDraft(v === "yes")}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="no">No</SelectItem>
+                  <SelectItem value="yes">Yes</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+          />
+
+          <InlineTextField
+            label="Accommodation name"
+            value={trip.accommodationName ?? ""}
+            onSave={(v) => saveField({ accommodationName: v || undefined })}
+          />
+          <InlineTextField
+            label="Accommodation area"
+            value={trip.accommodationArea ?? ""}
+            onSave={(v) => saveField({ accommodationArea: v || undefined })}
+          />
+
+          <InlineTextareaField
+            label="Notes"
+            value={trip.notes ?? ""}
+            onSave={(v) => saveField({ notes: v || undefined })}
+            className="col-span-2 sm:col-span-3 pt-2 border-t border-border/50"
+          />
+
+          <InlineField
+            label="The One Thing (highlights)"
+            value={(trip.theOneThing as string[] | null) ?? []}
+            iconType="custom"
+            onSave={(v) => saveField({ theOneThing: v })}
+            isEmpty={(v) => v.length === 0}
+            emptyText="No highlights yet"
+            className="col-span-2 sm:col-span-3 pt-2 border-t border-border/50"
+            renderDisplay={(v) => (
+              <div className="flex flex-wrap gap-1.5">
+                {v.map((tag) => (
+                  <span
+                    key={tag}
+                    className="text-xs px-2.5 py-1 rounded-full border border-primary/30 bg-primary/5 text-primary font-medium"
+                  >
+                    {tag}
+                  </span>
+                ))}
               </div>
             )}
-            {trip.notes && (
-              <div className="col-span-2 sm:col-span-3 pt-2 border-t border-border/50">
-                <p className="text-xs text-muted-foreground mb-1">Notes</p>
-                <p className="text-sm text-foreground whitespace-pre-wrap">{trip.notes}</p>
-              </div>
+            renderEditor={(draft, setDraft) => (
+              <OneThingInput
+                value={draft}
+                onChange={setDraft}
+                existingValues={allHighlights}
+                destination={trip.destination}
+              />
             )}
-            {(trip.theOneThing as string[] | null)?.length ? (
-              <div className="col-span-2 sm:col-span-3 pt-2 border-t border-border/50">
-                <p className="text-xs text-muted-foreground mb-2">The One Thing</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {(trip.theOneThing as string[]).map((tag) => (
-                    <span
-                      key={tag}
-                      className="text-xs px-2.5 py-1 rounded-full border border-primary/30 bg-primary/5 text-primary font-medium"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-            {trip.funFact && (
-              <div className="col-span-2 sm:col-span-3 pt-2 border-t border-border/50">
-                <p className="text-xs text-muted-foreground mb-1">Fun fact / memory</p>
-                <p className="text-sm text-foreground italic whitespace-pre-wrap">"{trip.funFact}"</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+          />
+
+          <InlineTextareaField
+            label="Fun fact / memory"
+            value={trip.funFact ?? ""}
+            placeholder="A memorable fact, story, or highlight about this trip..."
+            onSave={(v) => saveField({ funFact: v || undefined })}
+            rows={2}
+            displayValue={(v) => `"${v}"`}
+            className="col-span-2 sm:col-span-3 pt-2 border-t border-border/50"
+          />
+        </CardContent>
+      </Card>
 
       {/* Photos */}
-      {!editing && trip && (
+      {trip && (
         <PhotoGridSection
           tripId={trip.id}
           photoType="photo"
@@ -2067,7 +1894,7 @@ export default function TripDetail({ id }: { id: number }) {
       )}
 
       {/* Magnets */}
-      {!editing && trip && (
+      {trip && (
         <PhotoGridSection
           tripId={trip.id}
           photoType="magnet"
@@ -2093,7 +1920,7 @@ export default function TripDetail({ id }: { id: number }) {
       )}
 
       {/* Reminders */}
-      {!editing && trip && <RemindersSection tripId={trip.id} />}
+      {trip && <RemindersSection tripId={trip.id} />}
 
       {/* Google Calendar link */}
       {canCalendar && (

@@ -10,6 +10,7 @@ import {
   timestamp,
   jsonb,
   index,
+  vector,
 } from "drizzle-orm/pg-core";
 
 export const travelsTrips = pgTable(
@@ -90,6 +91,9 @@ export const travelsTripPhotos = pgTable(
     caption: text("caption"),
     photoType: text("photo_type").notNull().default("photo"),
     sortOrder: integer("sort_order").notNull().default(0),
+    // Jina CLIP v2 visual embedding — only populated for photoType = 'magnet',
+    // used to check whether a magnet spotted in a store is already owned.
+    visualEmbedding: vector("visual_embedding", { dimensions: 1024 }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -97,6 +101,8 @@ export const travelsTripPhotos = pgTable(
   (table) => [
     index("travels_trip_photos_trip_id_idx").on(table.tripId),
     index("travels_trip_photos_user_id_idx").on(table.userId),
+    index("travels_trip_photos_visual_embedding_idx")
+      .using("hnsw", table.visualEmbedding.op("vector_cosine_ops")),
   ],
 ).enableRLS();
 

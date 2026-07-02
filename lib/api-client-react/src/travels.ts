@@ -855,6 +855,36 @@ export function useUploadTripPhoto<TError = unknown, TContext = unknown>(
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
+export interface MagnetCheckMatch {
+  photoId: number;
+  tripId: number;
+  tripTitle: string;
+  caption?: string | null;
+  similarity: number;
+}
+
+export interface MagnetCheckResult {
+  verdict: "likely_owned" | "possible_match" | "no_match";
+  matches: MagnetCheckMatch[];
+}
+
+export const checkMagnet = (formData: FormData): Promise<MagnetCheckResult> =>
+  fetch(`/api/travels/magnets/check`, { method: "POST", body: formData, credentials: "include" })
+    .then(async (res) => {
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error((body as { error?: string } | null)?.error ?? "Check failed");
+      }
+      return res.json() as Promise<MagnetCheckResult>;
+    });
+
+export function useCheckMagnet<TError = unknown, TContext = unknown>(
+  options?: { mutation?: UseMutationOptions<MagnetCheckResult, TError, FormData, TContext> },
+): UseMutationResult<MagnetCheckResult, TError, FormData, TContext> {
+  const mutationFn: MutationFunction<MagnetCheckResult, FormData> = (formData) => checkMagnet(formData);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
 const deleteTripPhotoFn = (tripId: number, photoId: number, options?: RequestInit): Promise<void> =>
   customFetch<void>(`/api/travels/trips/${tripId}/photos/${photoId}`, { ...options, method: "DELETE" });
 

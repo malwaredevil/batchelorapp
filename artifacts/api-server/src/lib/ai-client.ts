@@ -21,7 +21,45 @@ export const MODELS = {
     openrouter: "google/gemini-2.5-flash",
     openai: "gpt-4o",
   },
+  // Frontier model consulted by the `openrouter:advisor` server tool when a
+  // cheap/fast model hits an ambiguous case mid-generation. Only ever reached
+  // when the executing model actually decides it's stuck — most requests
+  // never invoke it, so normal-case cost stays at the FAST/SMART_VISION rate.
+  ADVISOR: "anthropic/claude-opus-4.8",
+  // Cheap worker model handed routine sub-tasks by the `openrouter:subagent`
+  // server tool (summarizing, extracting, reformatting) so a frontier
+  // orchestrator model doesn't burn its own (expensive) tokens on busywork.
+  SUBAGENT_WORKER: "z-ai/glm-5.2",
 } as const;
+
+/**
+ * OpenRouter "server tools" (beta, June 2026): tools executed by OpenRouter
+ * itself, not by our code, that the model can invoke mid-generation.
+ * - openrouter:advisor  — escalate UP to a stronger model when stuck.
+ * - openrouter:subagent — delegate DOWN routine work to a cheaper model.
+ * These tool types aren't part of the OpenAI SDK's ChatCompletionTool union
+ * (which only knows "function"), so callers pass this type and cast it at
+ * the request site. They are also OpenRouter-specific — the direct-OpenAI
+ * fallback path must never receive them, since the plain OpenAI API doesn't
+ * recognize these tool types and would error.
+ */
+export type OpenRouterServerTool =
+  | {
+      type: "openrouter:advisor";
+      parameters: {
+        model: string;
+        instructions?: string;
+        forward_transcript?: boolean;
+        max_completion_tokens?: number;
+      };
+    }
+  | {
+      type: "openrouter:subagent";
+      parameters: {
+        model: string;
+        instructions?: string;
+      };
+    };
 
 // Per-request timeout (ms). Gemini 2.5 Flash vision calls normally return in
 // 1-4s. This must stay well UNDER the reverse proxy's hard ~30s request budget:
@@ -126,6 +164,82 @@ export async function callModel<T>(
   } catch (err) {
     if (shouldFallbackToOpenAI(err)) {
       return fn(getOpenAIClient(), models.openai);
+    }
+    throw err;
+  }
+}
+
+/**
+ * Like callModel(), but also offers the executing model an
+ * `openrouter:advisor` server tool so it can self-escalate to
+ * MODELS.ADVISOR mid-generation on ambiguous/hard cases instead of us always
+ * paying premium rates, or always leaving hard cases under-served by a cheap
+ * model. The tool is a no-op (never invoked) on the easy majority of calls,
+ * so normal-case cost is unchanged.
+ *
+ * `tools` is undefined on the direct-OpenAI fallback path (no OPENROUTER_API_KEY,
+ * or OpenRouter unavailable) — the plain OpenAI API doesn't understand this
+ * tool type, so `fn` must only attach `tools` to the request when it's defined.
+ */
+export async function callModelWithAdvisor<T>(
+  models: { openrouter: string; openai: string },
+  advisorInstructions: string,
+  fn: (
+    client: OpenAI,
+    model: string,
+    tools: OpenRouterServerTool[] | undefined,
+  ) => Promise<T>,
+): Promise<T> {
+  const or = getOpenRouterClient();
+  if (!or) return fn(getOpenAIClient(), models.openai, undefined);
+  const tools: OpenRouterServerTool[] = [
+    {
+      type: "openrouter:advisor",
+      parameters: { model: MODELS.ADVISOR, instructions: advisorInstructions },
+    },
+  ];
+  try {
+    return await fn(or, models.openrouter, tools);
+  } catch (err) {
+    if (shouldFallbackToOpenAI(err)) {
+      return fn(getOpenAIClient(), models.openai, undefined);
+    }
+    throw err;
+  }
+}
+
+/**
+ * Like callModel(), but offers the executing (frontier) model an
+ * `openrouter:subagent` server tool so it can delegate self-contained,
+ * routine sub-tasks (summarizing, extracting, reformatting) to
+ * MODELS.SUBAGENT_WORKER mid-generation instead of spending its own,
+ * more expensive tokens on busywork. Same fallback rules as callModelWithAdvisor.
+ */
+export async function callModelWithSubagent<T>(
+  models: { openrouter: string; openai: string },
+  subagentInstructions: string,
+  fn: (
+    client: OpenAI,
+    model: string,
+    tools: OpenRouterServerTool[] | undefined,
+  ) => Promise<T>,
+): Promise<T> {
+  const or = getOpenRouterClient();
+  if (!or) return fn(getOpenAIClient(), models.openai, undefined);
+  const tools: OpenRouterServerTool[] = [
+    {
+      type: "openrouter:subagent",
+      parameters: {
+        model: MODELS.SUBAGENT_WORKER,
+        instructions: subagentInstructions,
+      },
+    },
+  ];
+  try {
+    return await fn(or, models.openrouter, tools);
+  } catch (err) {
+    if (shouldFallbackToOpenAI(err)) {
+      return fn(getOpenAIClient(), models.openai, undefined);
     }
     throw err;
   }

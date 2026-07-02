@@ -506,10 +506,45 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE travels_reminders ADD COLUMN IF NOT EXISTS google_event_id TEXT`,
   // travels_calendar_settings: singleton row (id = 1) holding the household's
   // chosen shared "Family" Google Calendar for auto-synced reminders.
+  // Superseded by travels_google_calendar_connections (per-user OAuth) below;
+  // left in place (unused) rather than dropped, per additive-only policy.
   `CREATE TABLE IF NOT EXISTS travels_calendar_settings (
     id               INTEGER PRIMARY KEY DEFAULT 1,
     calendar_id      TEXT,
     calendar_summary TEXT,
     updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
+
+  // ── Travels per-user Google Calendar connections ────────────────────────────
+  // Each family member connects their own Google account (OAuth, offline
+  // access) and picks which of their own calendars reminders sync to.
+  `CREATE TABLE IF NOT EXISTS travels_google_calendar_connections (
+    id                        SERIAL PRIMARY KEY,
+    user_id                   INTEGER NOT NULL UNIQUE,
+    google_email              TEXT NOT NULL,
+    refresh_token             TEXT NOT NULL,
+    access_token              TEXT,
+    access_token_expires_at   TIMESTAMPTZ,
+    calendar_id               TEXT,
+    calendar_summary          TEXT,
+    created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_google_calendar_connections ENABLE ROW LEVEL SECURITY`,
+
+  // travels_reminder_calendar_events: one reminder can fan out into multiple
+  // connected users' calendars, so this tracks the Google event id per
+  // (reminder, user) pair for update/delete.
+  `CREATE TABLE IF NOT EXISTS travels_reminder_calendar_events (
+    id               SERIAL PRIMARY KEY,
+    reminder_id      INTEGER NOT NULL,
+    user_id          INTEGER NOT NULL,
+    google_event_id  TEXT NOT NULL,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_reminder_calendar_events ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travels_reminder_calendar_events_reminder_id_idx
+     ON travels_reminder_calendar_events (reminder_id)`,
+  `CREATE INDEX IF NOT EXISTS travels_reminder_calendar_events_user_id_idx
+     ON travels_reminder_calendar_events (user_id)`,
 ];

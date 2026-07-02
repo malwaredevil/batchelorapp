@@ -1,11 +1,13 @@
 import { Router, type IRouter } from "express";
-import { and, eq, asc } from "drizzle-orm";
+import { and, eq, inArray, asc } from "drizzle-orm";
 import { z } from "zod/v4";
 import {
   db,
   travelsTrips,
   travelsReminders,
-  travelsCalendarSettings,
+  travelsReminderCalendarEvents,
+  travelsGoogleCalendarConnections,
+  appUsers,
 } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import {
@@ -13,6 +15,7 @@ import {
   updateReminderEvent,
   deleteReminderEvent,
 } from "../../lib/google-calendar";
+import { getValidAccessToken } from "../../lib/google-calendar-tokens";
 import { logger } from "../../lib/logger";
 
 const router: IRouter = Router();
@@ -41,69 +44,141 @@ async function tripExists(tripId: number): Promise<boolean> {
   return !!row;
 }
 
-async function getFamilyCalendarId(): Promise<string | null> {
-  const [row] = await db
-    .select({ calendarId: travelsCalendarSettings.calendarId })
-    .from(travelsCalendarSettings)
-    .limit(1);
-  return row?.calendarId ?? null;
-}
-
-// Best-effort sync — reminders remain the source of truth even if the Google
-// Calendar API call fails (missing connection, expired token, etc).
-async function syncCreateEvent(
-  reminderId: number,
-  tripTitle: string,
-  title: string,
-  dueDate: string | null,
-): Promise<void> {
-  if (!dueDate) return;
-  const calendarId = await getFamilyCalendarId();
-  if (!calendarId) return;
-
-  try {
-    const event = await createReminderEvent({
-      calendarId,
-      title,
-      dueDate,
-      description: `Trip reminder: ${tripTitle}`,
-    });
-    await db
-      .update(travelsReminders)
-      .set({ googleEventId: event.id })
-      .where(eq(travelsReminders.id, reminderId));
-  } catch (err) {
-    logger.warn({ err, reminderId }, "reminders: calendar sync (create) failed");
+// Every family member who has connected their own Google Calendar and
+// selected a target calendar gets their own copy of the event: the reminder's
+// creator, plus anyone listed in recipientEmails who has an app account.
+async function getConnectedTargetUserIds(
+  creatorUserId: number,
+  recipientEmails: string[],
+): Promise<number[]> {
+  const candidateUserIds = new Set<number>([creatorUserId]);
+  if (recipientEmails.length > 0) {
+    const recipients = await db
+      .select({ id: appUsers.id })
+      .from(appUsers)
+      .where(inArray(appUsers.email, recipientEmails));
+    for (const r of recipients) candidateUserIds.add(r.id);
   }
+
+  const connections = await db
+    .select({
+      userId: travelsGoogleCalendarConnections.userId,
+      calendarId: travelsGoogleCalendarConnections.calendarId,
+    })
+    .from(travelsGoogleCalendarConnections)
+    .where(inArray(travelsGoogleCalendarConnections.userId, [...candidateUserIds]));
+
+  return connections.filter((c) => c.calendarId).map((c) => c.userId);
 }
 
-async function syncUpdateEvent(
+// Best-effort sync — reminders remain the source of truth even if a
+// recipient's Google Calendar API call fails (revoked token, expired, etc).
+// Reconciles the desired target user set against travels_reminder_calendar_events:
+// creates events for newly-added targets, updates events for existing ones,
+// and removes events for targets that dropped off (recipient removed, sync
+// turned off, or the reminder was marked done-with-no-due-date... etc).
+async function syncReminderCalendarEvents(
   reminderId: number,
-  googleEventId: string,
   tripTitle: string,
   title: string,
   dueDate: string | null,
+  targetUserIds: number[],
 ): Promise<void> {
-  const calendarId = await getFamilyCalendarId();
-  if (!calendarId) return;
+  const existing = await db
+    .select()
+    .from(travelsReminderCalendarEvents)
+    .where(eq(travelsReminderCalendarEvents.reminderId, reminderId));
+  const existingByUser = new Map(existing.map((e) => [e.userId, e]));
+  const targetSet = new Set(dueDate ? targetUserIds : []);
 
-  try {
-    if (!dueDate) {
-      await deleteReminderEvent(calendarId, googleEventId);
+  for (const row of existing) {
+    if (!targetSet.has(row.userId)) {
+      const accessToken = await getValidAccessToken(row.userId);
+      const [connection] = await db
+        .select({ calendarId: travelsGoogleCalendarConnections.calendarId })
+        .from(travelsGoogleCalendarConnections)
+        .where(eq(travelsGoogleCalendarConnections.userId, row.userId));
+      if (accessToken && connection?.calendarId) {
+        await deleteReminderEvent(
+          accessToken,
+          connection.calendarId,
+          row.googleEventId,
+        );
+      }
       await db
-        .update(travelsReminders)
-        .set({ googleEventId: null })
-        .where(eq(travelsReminders.id, reminderId));
-      return;
+        .delete(travelsReminderCalendarEvents)
+        .where(eq(travelsReminderCalendarEvents.id, row.id));
     }
-    await updateReminderEvent(calendarId, googleEventId, {
-      title,
-      dueDate,
-      description: `Trip reminder: ${tripTitle}`,
-    });
-  } catch (err) {
-    logger.warn({ err, reminderId }, "reminders: calendar sync (update) failed");
   }
+
+  if (!dueDate) return;
+
+  for (const userId of targetUserIds) {
+    const accessToken = await getValidAccessToken(userId);
+    if (!accessToken) continue;
+    const [connection] = await db
+      .select({ calendarId: travelsGoogleCalendarConnections.calendarId })
+      .from(travelsGoogleCalendarConnections)
+      .where(eq(travelsGoogleCalendarConnections.userId, userId));
+    if (!connection?.calendarId) continue;
+
+    try {
+      const existingRow = existingByUser.get(userId);
+      if (existingRow) {
+        await updateReminderEvent(
+          accessToken,
+          connection.calendarId,
+          existingRow.googleEventId,
+          { title, dueDate, description: `Trip reminder: ${tripTitle}` },
+        );
+      } else {
+        const event = await createReminderEvent(accessToken, {
+          calendarId: connection.calendarId,
+          title,
+          dueDate,
+          description: `Trip reminder: ${tripTitle}`,
+        });
+        await db.insert(travelsReminderCalendarEvents).values({
+          reminderId,
+          userId,
+          googleEventId: event.id,
+        });
+      }
+    } catch (err) {
+      logger.warn(
+        { err, reminderId, userId },
+        "reminders: calendar sync failed for user",
+      );
+    }
+  }
+}
+
+async function deleteAllReminderCalendarEvents(
+  reminderId: number,
+): Promise<void> {
+  const existing = await db
+    .select()
+    .from(travelsReminderCalendarEvents)
+    .where(eq(travelsReminderCalendarEvents.reminderId, reminderId));
+
+  for (const row of existing) {
+    const accessToken = await getValidAccessToken(row.userId);
+    const [connection] = await db
+      .select({ calendarId: travelsGoogleCalendarConnections.calendarId })
+      .from(travelsGoogleCalendarConnections)
+      .where(eq(travelsGoogleCalendarConnections.userId, row.userId));
+    if (accessToken && connection?.calendarId) {
+      await deleteReminderEvent(
+        accessToken,
+        connection.calendarId,
+        row.googleEventId,
+      );
+    }
+  }
+
+  await db
+    .delete(travelsReminderCalendarEvents)
+    .where(eq(travelsReminderCalendarEvents.reminderId, reminderId));
 }
 
 // GET /reminders — all pending (or all) reminders across all trips (for Dashboard)
@@ -160,8 +235,18 @@ router.post("/trips/:id/reminders", async (req, res) => {
     })
     .returning();
 
-  if (syncToCalendar) {
-    await syncCreateEvent(row.id, trip.title, row.title, row.dueDate);
+  if (syncToCalendar && row.dueDate) {
+    const targetUserIds = await getConnectedTargetUserIds(
+      userId,
+      row.recipientEmails,
+    );
+    await syncReminderCalendarEvents(
+      row.id,
+      trip.title,
+      row.title,
+      row.dueDate,
+      targetUserIds,
+    );
   }
 
   res.status(201).json(row);
@@ -197,6 +282,8 @@ router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
   if (
     body.title !== undefined ||
     body.dueDate !== undefined ||
+    body.done !== undefined ||
+    body.recipientEmails !== undefined ||
     body.syncToCalendar !== undefined
   ) {
     const [trip] = await db
@@ -205,26 +292,16 @@ router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
       .where(eq(travelsTrips.id, tripId));
     const tripTitle = trip?.title ?? "Trip";
 
-    if (updated.syncToCalendar && updated.googleEventId) {
-      await syncUpdateEvent(
-        updated.id,
-        updated.googleEventId,
-        tripTitle,
-        updated.title,
-        updated.dueDate,
-      );
-    } else if (updated.syncToCalendar && !updated.googleEventId) {
-      await syncCreateEvent(updated.id, tripTitle, updated.title, updated.dueDate);
-    } else if (!updated.syncToCalendar && updated.googleEventId) {
-      const calendarId = await getFamilyCalendarId();
-      if (calendarId) {
-        await deleteReminderEvent(calendarId, updated.googleEventId);
-      }
-      await db
-        .update(travelsReminders)
-        .set({ googleEventId: null })
-        .where(eq(travelsReminders.id, updated.id));
-    }
+    const targetUserIds = updated.syncToCalendar
+      ? await getConnectedTargetUserIds(updated.userId, updated.recipientEmails)
+      : [];
+    await syncReminderCalendarEvents(
+      updated.id,
+      tripTitle,
+      updated.title,
+      updated.dueDate,
+      targetUserIds,
+    );
   }
 
   res.json(updated);
@@ -237,7 +314,7 @@ router.delete("/trips/:id/reminders/:reminderId", async (req, res) => {
   if (isNaN(tripId) || isNaN(reminderId)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const [existing] = await db
-    .select({ id: travelsReminders.id, googleEventId: travelsReminders.googleEventId })
+    .select({ id: travelsReminders.id })
     .from(travelsReminders)
     .where(
       and(
@@ -248,12 +325,7 @@ router.delete("/trips/:id/reminders/:reminderId", async (req, res) => {
 
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
 
-  if (existing.googleEventId) {
-    const calendarId = await getFamilyCalendarId();
-    if (calendarId) {
-      await deleteReminderEvent(calendarId, existing.googleEventId);
-    }
-  }
+  await deleteAllReminderCalendarEvents(existing.id);
 
   await db
     .delete(travelsReminders)

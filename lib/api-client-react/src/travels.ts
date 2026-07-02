@@ -594,6 +594,29 @@ export function useExploreDestination<TError = unknown, TContext = unknown>(
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
+export const sendTestReminderEmail = (
+  options?: RequestInit,
+): Promise<{ sent: boolean; to: string }> =>
+  customFetch<{ sent: boolean; to: string }>(`/api/travels/settings/test-email`, {
+    ...options,
+    method: "POST",
+  });
+
+export function useSendTestReminderEmail<TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      { sent: boolean; to: string },
+      TError,
+      void,
+      TContext
+    >;
+  },
+): UseMutationResult<{ sent: boolean; to: string }, TError, void, TContext> {
+  const mutationFn: MutationFunction<{ sent: boolean; to: string }, void> = () =>
+    sendTestReminderEmail();
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
 export const getGetTravelsStatsQueryOptions = <
   TData = Awaited<ReturnType<typeof getTravelsStats>>,
   TError = unknown,

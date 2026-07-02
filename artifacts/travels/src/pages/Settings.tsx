@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Mail, Bell, Save, X } from "lucide-react";
+import { Mail, Bell, Save, X, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import {
   useGetTravelsSettings,
   useUpdateTravelsSettings,
+  useSendTestReminderEmail,
   getGetTravelsSettingsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -15,6 +16,7 @@ export default function Settings() {
   const qc = useQueryClient();
   const { data, isLoading } = useGetTravelsSettings();
   const update = useUpdateTravelsSettings();
+  const sendTest = useSendTestReminderEmail();
 
   const [email, setEmail] = useState("");
   const [dirty, setDirty] = useState(false);
@@ -53,6 +55,18 @@ export default function Settings() {
         onError: () => toast.error("Could not save settings. Please try again."),
       },
     );
+  }
+
+  function handleSendTest() {
+    sendTest.mutate(undefined, {
+      onSuccess: (result) => toast.success(`Test email sent to ${result.to}`),
+      onError: (err) =>
+        toast.error(
+          err instanceof Error
+            ? err.message
+            : "Could not send test email. Please try again.",
+        ),
+    });
   }
 
   return (
@@ -114,6 +128,24 @@ export default function Settings() {
           <p className="text-xs text-muted-foreground">
             Leave blank to disable email alerts. Only reminders with a due date set will trigger emails.
           </p>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-card-border p-4">
+          <div>
+            <p className="text-sm font-medium text-foreground">Test email delivery</p>
+            <p className="text-xs text-muted-foreground">
+              Sends a sample reminder email to your own account address right now.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSendTest}
+            disabled={sendTest.isPending}
+          >
+            <Send className="h-3.5 w-3.5 mr-1.5" />
+            {sendTest.isPending ? "Sending…" : "Send test email"}
+          </Button>
         </div>
 
         <div className="rounded-lg bg-muted/50 p-4 space-y-1.5">

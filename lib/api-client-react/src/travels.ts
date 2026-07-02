@@ -210,7 +210,7 @@ export interface TravelsStats {
   completedTrips: number;
   upcomingTrips: number;
   uniqueDestinations: number;
-  nextTrip: { destination: string; startDate: string } | null;
+  nextTrip: { id: number; destination: string; startDate: string } | null;
 }
 
 // ---------------------------------------------------------------------------

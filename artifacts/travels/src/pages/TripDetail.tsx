@@ -159,6 +159,17 @@ function formatExtractedValue(raw: string): string {
   return `${dateStr}, ${timeStr}`;
 }
 
+// Itinerary activity tips can contain raw embedded ISO date/time strings
+// (e.g. "Arrives 2026-08-14T14:20:00 — some note") copied straight from
+// document extraction. Reformat any such substrings the same way Documents
+// displays them (e.g. "Arrives 14 August 2026, 2:20 pm — some note").
+function formatTipText(tip: string): string {
+  return tip.replace(
+    /\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?/g,
+    (match) => formatExtractedValue(match),
+  );
+}
+
 // Formats a bare "HH:MM" (24-hour) time string into the same 12-hour style
 // used for documents' extracted date/time values (e.g. "10:30" -> "10:30 AM").
 function formatTimeOfDay(time: string): string {
@@ -539,7 +550,7 @@ function DayCard({
                 </div>
                 {a.description && <p className="text-sm text-muted-foreground">{a.description}</p>}
                 {a.tip && (
-                  <p className="text-xs italic text-muted-foreground border-l-2 border-primary/30 pl-2">{a.tip}</p>
+                  <p className="text-xs italic text-muted-foreground border-l-2 border-primary/30 pl-2">{formatTipText(a.tip)}</p>
                 )}
               </div>
             ))}

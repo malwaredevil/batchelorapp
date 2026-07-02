@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Badge } from "@/components/ui/badge";
 import { MapPin, Plus, Plane, ArrowRight, Filter } from "lucide-react";
 import { toast } from "sonner";
+import { MagnetCheckDialog } from "@/components/MagnetCheckDialog";
 
 const ALL_STATUSES: TripStatus[] = ["wishlist", "planning", "booked", "active", "completed"];
 
@@ -231,10 +232,13 @@ export default function Trips() {
           <h1 className="font-serif text-3xl text-foreground">Trips</h1>
           <p className="text-muted-foreground mt-1">Your full travel pipeline.</p>
         </div>
-        <Button onClick={() => setCreating(true)} className="shrink-0">
-          <Plus className="w-4 h-4 mr-2" />
-          New trip
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <MagnetCheckDialog />
+          <Button onClick={() => setCreating(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            New trip
+          </Button>
+        </div>
       </div>
 
       {/* Filter bar */}

@@ -8,6 +8,7 @@ import {
   downloadTripPhoto,
   deleteTripPhoto,
 } from "../../lib/travels/storage";
+import { generateVisualEmbedding } from "../../lib/visual-embed";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -69,6 +70,13 @@ router.post("/trips/:id/photos", upload.single("photo"), async (req, res) => {
 
   const photoType = parsePhotoType(req.body["type"]);
 
+  // Only magnets get a visual embedding — used later to check whether a
+  // magnet spotted in a store is already owned. Never fails the upload.
+  const visualEmbedding =
+    photoType === "magnet"
+      ? await generateVisualEmbedding(req.file.buffer).catch(() => null)
+      : null;
+
   const maxOrderRow = await db
     .select({ sortOrder: travelsTripPhotos.sortOrder })
     .from(travelsTripPhotos)
@@ -86,7 +94,15 @@ router.post("/trips/:id/photos", upload.single("photo"), async (req, res) => {
 
   const [photo] = await db
     .insert(travelsTripPhotos)
-    .values({ tripId, userId, storagePath, caption, photoType, sortOrder: nextOrder })
+    .values({
+      tripId,
+      userId,
+      storagePath,
+      caption,
+      photoType,
+      sortOrder: nextOrder,
+      visualEmbedding,
+    })
     .returning();
 
   res.status(201).json(photo);

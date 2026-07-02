@@ -13,3 +13,5 @@
 - [Per-field locked_fields pattern](locked-fields-pattern.md) — recurring convention across pottery/quilting/travels: text[] column on the record, AI merge skips keys in the set, UI shows a lock/unlock icon per field.
 - [Travels reminder email delivery](travels-reminder-delivery.md) — Resend sandbox mode only delivers to the account owner's own address; autoscale sleep means in-process schedulers alone can't guarantee delivery, pair with a Scheduled Deployment.
 - [Backup/restore scripts drift from schema](backup-script-schema-drift.md) — backup/restore scripts hardcode table lists, silently skip new tables added later; verify new table names appear in the row-count summary, don't trust exit 0 alone.
+- [Travels app is household-shared](travels-shared-household-scoping.md) — trips have no per-user filter on GET; new search/query features must span all users, not just req.session.userId.
+- [Session cookies require HTTPS for curl tests](session-cookie-https-only.md) — cookie is secure+sameSite:none; curl against localhost:80 silently drops Set-Cookie, use https://$REPLIT_DEV_DOMAIN instead.

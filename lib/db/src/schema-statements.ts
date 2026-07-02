@@ -435,6 +435,11 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE travels_trip_photos ADD COLUMN IF NOT EXISTS photo_type TEXT NOT NULL DEFAULT 'photo'`,
   // icon_photo_id: id of a travels_trip_photos row (photo_type = 'magnet') shown beside the trip title
   `ALTER TABLE travels_trips ADD COLUMN IF NOT EXISTS icon_photo_id INTEGER`,
+  // visual_embedding: Jina CLIP v2 vector, only populated for photo_type = 'magnet',
+  // used to check whether a magnet is already owned before buying a duplicate.
+  `ALTER TABLE travels_trip_photos ADD COLUMN IF NOT EXISTS visual_embedding vector(1024)`,
+  `CREATE INDEX IF NOT EXISTS travels_trip_photos_visual_embedding_idx
+     ON travels_trip_photos USING hnsw (visual_embedding vector_cosine_ops)`,
   // travels_reminders: per-trip alerts/reminders with due dates
   `CREATE TABLE IF NOT EXISTS travels_reminders (
     id          SERIAL PRIMARY KEY,

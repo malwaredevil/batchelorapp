@@ -38,6 +38,7 @@ import {
   type TravelsAppUser,
 } from "@workspace/api-client-react";
 import { OneThingInput } from "@/components/OneThingInput";
+import { MagnetCheckDialog } from "@/components/MagnetCheckDialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -907,19 +908,22 @@ function PhotoGridSection({
             <span className="text-sm font-sans font-normal text-muted-foreground">({photos.length})</span>
           )}
         </h2>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => fileRef.current?.click()}
-          disabled={uploadPhoto.isPending || bulkUploading !== null}
-        >
-          <Plus className="w-3.5 h-3.5 mr-1.5" />
-          {bulkUploading
-            ? `Uploading ${bulkUploading.done}/${bulkUploading.total}...`
-            : uploadPhoto.isPending
-              ? "Uploading..."
-              : addLabel}
-        </Button>
+        <div className="flex items-center gap-2">
+          {photoType === "magnet" && <MagnetCheckDialog />}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => fileRef.current?.click()}
+            disabled={uploadPhoto.isPending || bulkUploading !== null}
+          >
+            <Plus className="w-3.5 h-3.5 mr-1.5" />
+            {bulkUploading
+              ? `Uploading ${bulkUploading.done}/${bulkUploading.total}...`
+              : uploadPhoto.isPending
+                ? "Uploading..."
+                : addLabel}
+          </Button>
+        </div>
         <input
           ref={fileRef}
           type="file"

@@ -8,6 +8,7 @@ import photosRouter from "./photos";
 import remindersRouter from "./reminders";
 import destinationsRouter from "./destinations";
 import settingsRouter from "./settings";
+import magnetsRouter from "./magnets";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(photosRouter);
 router.use(remindersRouter);
 router.use(destinationsRouter);
 router.use(settingsRouter);
+router.use(magnetsRouter);
 
 export default router;

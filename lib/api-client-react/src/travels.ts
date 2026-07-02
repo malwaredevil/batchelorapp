@@ -923,6 +923,8 @@ export interface Reminder {
   dueDate?: string | null;
   done: boolean;
   recipientEmails: string[];
+  syncToCalendar: boolean;
+  googleEventId?: string | null;
   createdAt: string;
 }
 
@@ -930,6 +932,7 @@ export interface CreateReminderBody {
   title: string;
   dueDate?: string;
   recipientEmails?: string[];
+  syncToCalendar?: boolean;
 }
 
 export interface UpdateReminderBody {
@@ -937,6 +940,7 @@ export interface UpdateReminderBody {
   dueDate?: string | null;
   done?: boolean;
   recipientEmails?: string[];
+  syncToCalendar?: boolean;
 }
 
 const listReminders = (tripId: number, options?: RequestInit): Promise<Reminder[]> =>
@@ -1133,5 +1137,72 @@ export function useUpdateTravelsSettings(
   options?: { mutation?: UseMutationOptions<TravelsSettings, unknown, { reminderEmail: string | null }> },
 ) {
   const mutationFn = (body: { reminderEmail: string | null }) => putTravelsSettingsFn(body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+// ---------------------------------------------------------------------------
+// Google Calendar sync (shared family calendar)
+// ---------------------------------------------------------------------------
+
+export interface CalendarStatus {
+  connected: boolean;
+  calendarId: string | null;
+  calendarSummary: string | null;
+}
+
+export interface CalendarListItem {
+  id: string;
+  summary: string;
+  primary?: boolean;
+}
+
+export interface SelectCalendarBody {
+  calendarId: string;
+  calendarSummary: string;
+}
+
+const getCalendarStatus = (options?: RequestInit): Promise<CalendarStatus> =>
+  customFetch<CalendarStatus>("/api/travels/calendar/status", { ...options, method: "GET" });
+
+export const getGetCalendarStatusQueryKey = () => [`/api/travels/calendar/status`] as const;
+
+export function useGetCalendarStatus<TData = CalendarStatus, TError = unknown>(
+  options?: { query?: UseQueryOptions<CalendarStatus, TError, TData> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetCalendarStatusQueryKey();
+  const queryFn: QueryFunction<CalendarStatus> = ({ signal }) => getCalendarStatus({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<CalendarStatus, TError, TData> & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const listCalendars = (options?: RequestInit): Promise<CalendarListItem[]> =>
+  customFetch<CalendarListItem[]>("/api/travels/calendar/list", { ...options, method: "GET" });
+
+export const getListCalendarsQueryKey = () => [`/api/travels/calendar/list`] as const;
+
+export function useListCalendars<TData = CalendarListItem[], TError = unknown>(
+  options?: { query?: UseQueryOptions<CalendarListItem[], TError, TData> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getListCalendarsQueryKey();
+  const queryFn: QueryFunction<CalendarListItem[]> = ({ signal }) => listCalendars({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<CalendarListItem[], TError, TData> & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const putCalendarSettingsFn = (body: SelectCalendarBody): Promise<SelectCalendarBody> =>
+  customFetch<SelectCalendarBody>("/api/travels/calendar/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export function useSelectCalendar(
+  options?: { mutation?: UseMutationOptions<SelectCalendarBody, unknown, SelectCalendarBody> },
+) {
+  const mutationFn = (body: SelectCalendarBody) => putCalendarSettingsFn(body);
   return useMutation({ mutationFn, ...options?.mutation });
 }

@@ -16,9 +16,9 @@ import { Globe, MapPin, LocateFixed } from "lucide-react";
 
 const WISH_COLOR = "#eab308";
 const MAP_COLORS = {
-  booked: "#f97316",
-  completed: "#22c55e",
-  planning: "#eab308",
+  booked: "#22c55e",
+  completed: "#ef4444",
+  planning: "#f97316",
   wishlist: WISH_COLOR,
 } as const;
 

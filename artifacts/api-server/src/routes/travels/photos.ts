@@ -135,7 +135,7 @@ router.delete("/trips/:id/photos/:photoId", async (req, res) => {
   res.status(204).send();
 });
 
-// PUT /trips/:id/icon  (set or clear the trip icon; must be a magnet photo on this trip)
+// PUT /trips/:id/icon  (set or clear the trip's default/cover picture; can be any photo — memory or magnet — on this trip)
 router.put("/trips/:id/icon", async (req, res) => {
   const tripId = parseInt(String(req.params["id"]), 10);
   if (isNaN(tripId)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -156,8 +156,8 @@ router.put("/trips/:id/icon", async (req, res) => {
     .from(travelsTripPhotos)
     .where(and(eq(travelsTripPhotos.id, photoId), eq(travelsTripPhotos.tripId, tripId)));
 
-  if (!photo || photo.photoType !== "magnet") {
-    res.status(400).json({ error: "Photo must be a magnet belonging to this trip" });
+  if (!photo) {
+    res.status(400).json({ error: "Photo must belong to this trip" });
     return;
   }
 

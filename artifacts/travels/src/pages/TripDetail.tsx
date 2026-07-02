@@ -81,6 +81,7 @@ import {
   LockOpen,
   ScanSearch,
   Magnet,
+  Star,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -938,10 +939,10 @@ function PhotoGridSection({
                         : "bg-black/60 text-white opacity-0 group-hover:opacity-100"
                     }`}
                     disabled={settingIcon}
-                    title={isIcon ? "Current trip icon" : "Use as trip icon"}
+                    title={isIcon ? "Current cover photo" : "Set as cover photo"}
                     onClick={(e) => { e.stopPropagation(); onSetIcon(photo.id); }}
                   >
-                    <Magnet className="w-3 h-3" />
+                    <Star className={`w-3 h-3 ${isIcon ? "fill-current" : ""}`} />
                   </button>
                 )}
                 {photo.caption && (
@@ -975,8 +976,8 @@ function PhotoGridSection({
                   disabled={settingIcon || iconPhotoId === lightbox.id}
                   onClick={() => onSetIcon(lightbox.id)}
                 >
-                  <Magnet className="w-3.5 h-3.5 mr-1.5" />
-                  {iconPhotoId === lightbox.id ? "Current trip icon" : "Use as trip icon"}
+                  <Star className={`w-3.5 h-3.5 mr-1.5 ${iconPhotoId === lightbox.id ? "fill-current" : ""}`} />
+                  {iconPhotoId === lightbox.id ? "Current cover photo" : "Set as cover photo"}
                 </Button>
               )}
             </>
@@ -1933,6 +1934,20 @@ export default function TripDetail({ id }: { id: number }) {
           icon={<Camera className="w-5 h-5" />}
           emptyText="No photos yet — add some memories"
           addLabel="Add photo"
+          iconPhotoId={trip.iconPhotoId}
+          settingIcon={setTripIcon.isPending}
+          onSetIcon={(photoId) =>
+            setTripIcon.mutate(
+              { tripId: trip.id, photoId },
+              {
+                onSuccess: () => {
+                  qc.invalidateQueries({ queryKey: getGetTripQueryKey(trip.id) });
+                  toast.success("Trip cover photo updated");
+                },
+                onError: () => toast.error("Failed to set trip cover photo"),
+              },
+            )
+          }
         />
       )}
 
@@ -1953,9 +1968,9 @@ export default function TripDetail({ id }: { id: number }) {
               {
                 onSuccess: () => {
                   qc.invalidateQueries({ queryKey: getGetTripQueryKey(trip.id) });
-                  toast.success("Trip icon updated");
+                  toast.success("Trip cover photo updated");
                 },
-                onError: () => toast.error("Failed to set trip icon"),
+                onError: () => toast.error("Failed to set trip cover photo"),
               },
             )
           }

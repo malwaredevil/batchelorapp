@@ -12,10 +12,10 @@ const PADDING_X = 16;      // left/right padding
 
 // ─── Colours ─────────────────────────────────────────────────────────────────
 const STATUS_COLORS: Record<TripStatus, { bg: string; border: string; text: string }> = {
-  completed: { bg: "#f0fdf4", border: "#22c55e", text: "#14532d" },
-  booked:    { bg: "#fff7ed", border: "#f97316", text: "#7c2d12" },
+  completed: { bg: "#fef2f2", border: "#ef4444", text: "#7f1d1d" },
+  booked:    { bg: "#f0fdf4", border: "#22c55e", text: "#14532d" },
   active:    { bg: "#fff7ed", border: "#f97316", text: "#7c2d12" },
-  planning:  { bg: "#fefce8", border: "#eab308", text: "#713f12" },
+  planning:  { bg: "#fff7ed", border: "#f97316", text: "#7c2d12" },
   wishlist:  { bg: "#fefce8", border: "#eab308", text: "#713f12" },
 };
 

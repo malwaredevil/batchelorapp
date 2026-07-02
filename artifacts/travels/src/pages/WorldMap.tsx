@@ -25,13 +25,13 @@ const MAP_COLORS = {
 type MapStatus = "booked" | "completed" | "planning" | "wishlist";
 
 // Derive what status to DISPLAY on the map (independent of the stored trip.status).
-// - wishlist trips → star icon
-// - end date in the past → completed (green)
-// - end date in the future → booked (orange)
-// - no end date and not wishlist → planning (yellow pin)
+// - wishlist trips → star icon (yellow)
+// - planning status OR no end date → planning (yellow pin)
+// - end date in the past → completed (green pin)
+// - end date in the future → booked (orange pin)
 function getMapStatus(trip: Trip): MapStatus | null {
   if (trip.status === "wishlist") return "wishlist";
-  if (!trip.endDate) return "planning";
+  if (trip.status === "planning" || !trip.endDate) return "planning";
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const end = new Date(trip.endDate);

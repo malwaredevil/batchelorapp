@@ -1307,7 +1307,7 @@ export default function TripDetail({ id }: { id: number }) {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInitialized, setChatInitialized] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const skipNextChatScroll = useRef(true);
+  const chatMessageCount = useRef(0);
 
   useEffect(() => {
     if (trip && !chatInitialized) {
@@ -1317,12 +1317,15 @@ export default function TripDetail({ id }: { id: number }) {
   }, [trip, chatInitialized]);
 
   useEffect(() => {
-    if (skipNextChatScroll.current) {
-      skipNextChatScroll.current = false;
+    if (!chatInitialized) {
+      chatMessageCount.current = chatMessages.length;
       return;
     }
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages]);
+    if (chatMessages.length > chatMessageCount.current) {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    chatMessageCount.current = chatMessages.length;
+  }, [chatMessages, chatInitialized]);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: getGetTripQueryKey(id) });

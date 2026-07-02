@@ -12,7 +12,7 @@ import {
   type WishlistItem,
   getListWishlistQueryKey,
 } from "@workspace/api-client-react";
-import { Globe, MapPin } from "lucide-react";
+import { Globe, MapPin, LocateFixed } from "lucide-react";
 
 const WISH_COLOR = "#eab308";
 const MAP_COLORS = {
@@ -123,9 +123,10 @@ interface MapPanelProps {
   wishlistItems: WishlistItem[];
   isLoading: boolean;
   onNavigate: (path: string) => void;
+  resetViewRef: React.MutableRefObject<(() => void) | null>;
 }
 
-function MapPanel({ trips, wishlistItems, isLoading, onNavigate }: MapPanelProps) {
+function MapPanel({ trips, wishlistItems, isLoading, onNavigate, resetViewRef }: MapPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
 
@@ -184,15 +185,20 @@ function MapPanel({ trips, wishlistItems, isLoading, onNavigate }: MapPanelProps
     const container = map.getContainer();
     container.addEventListener("click", handlePopupClick);
 
-    // Fit bounds to all plotted points once
+    // Fit bounds to all plotted points once, and store as the "home" view for recenter
     const allPoints: [number, number][] = [
       ...trips.filter((t) => t.lat != null).map((t) => [t.lat!, t.lng!] as [number, number]),
       ...wishlistItems.filter((w) => w.lat != null).map((w) => [w.lat!, w.lng!] as [number, number]),
     ];
     if (allPoints.length === 1) {
       map.setView(allPoints[0], 8);
+      resetViewRef.current = () => map.setView(allPoints[0], 8);
     } else if (allPoints.length > 1) {
       map.fitBounds(L.latLngBounds(allPoints), { padding: [40, 40], maxZoom: 10 });
+      const bounds = L.latLngBounds(allPoints);
+      resetViewRef.current = () => map.fitBounds(bounds, { padding: [40, 40], maxZoom: 10 });
+    } else {
+      resetViewRef.current = () => map.setView([30, 10], 2);
     }
 
     return () => {
@@ -210,6 +216,7 @@ export default function WorldMap() {
   const { data: trips = [], isLoading: tripsLoading } = useListTrips();
   const { data: wishlistItems = [], isLoading: wishlistLoading } = useListWishlist();
   const updateWishlistItem = useUpdateWishlistItem();
+  const resetViewRef = useRef<(() => void) | null>(null);
 
   const isLoading = tripsLoading || wishlistLoading;
 
@@ -291,9 +298,20 @@ export default function WorldMap() {
 
       {/* Map */}
       <div
-        className="rounded-xl overflow-hidden border border-border/50"
+        className="relative rounded-xl overflow-hidden border border-border/50"
         style={{ height: "calc(100vh - 220px)", minHeight: 420 }}
       >
+        {/* Recenter button — floats above the map */}
+        {!isLoading && (
+          <button
+            onClick={() => resetViewRef.current?.()}
+            title="Recenter map"
+            className="absolute top-3 right-3 z-[1000] flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/90 dark:bg-card/90 backdrop-blur-sm border border-border/60 shadow-sm hover:bg-white dark:hover:bg-card text-foreground transition-colors text-xs font-medium"
+          >
+            <LocateFixed className="w-3.5 h-3.5" />
+            Recenter
+          </button>
+        )}
         {isLoading ? (
           <div className="h-full flex items-center justify-center bg-muted/30">
             <span className="text-sm text-muted-foreground">Loading…</span>
@@ -304,6 +322,7 @@ export default function WorldMap() {
             wishlistItems={mappedWishlist}
             isLoading={isLoading}
             onNavigate={navigate}
+            resetViewRef={resetViewRef}
           />
         )}
       </div>

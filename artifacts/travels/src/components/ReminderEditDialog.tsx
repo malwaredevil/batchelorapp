@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Trash2, Save, X, Mail } from "lucide-react";
 import { toast } from "sonner";
+import { RichTextEditor } from "./RichTextEditor";
 
 interface ReminderEditDialogProps {
   reminder: Reminder | null;
@@ -31,6 +32,7 @@ export function ReminderEditDialog({ reminder, open, onOpenChange }: ReminderEdi
   const familyCalendarConnected = !!calendarStatus?.connected && !!calendarStatus?.calendarId;
 
   const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [recipients, setRecipients] = useState<string[]>([]);
   const [customEmail, setCustomEmail] = useState("");
@@ -40,6 +42,7 @@ export function ReminderEditDialog({ reminder, open, onOpenChange }: ReminderEdi
   useEffect(() => {
     if (reminder && open) {
       setTitle(reminder.title);
+      setDescription(reminder.description ?? "");
       setDueDate(reminder.dueDate ?? "");
       setRecipients(reminder.recipientEmails);
       setSync(reminder.syncToCalendar);
@@ -101,6 +104,7 @@ export function ReminderEditDialog({ reminder, open, onOpenChange }: ReminderEdi
       reminderId: reminder.id,
       body: {
         title: title.trim(),
+        description: description.trim() ? description : null,
         dueDate: dueDate || null,
         recipientEmails: recipients,
         syncToCalendar: sync,
@@ -119,12 +123,12 @@ export function ReminderEditDialog({ reminder, open, onOpenChange }: ReminderEdi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Edit reminder</DialogTitle>
+          <DialogTitle>Reminder details</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-3">
+        <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-0.5">
           <div className="space-y-1.5">
             <Label htmlFor="reminder-edit-title">Title</Label>
             <Input
@@ -142,6 +146,15 @@ export function ReminderEditDialog({ reminder, open, onOpenChange }: ReminderEdi
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Description</Label>
+            <RichTextEditor
+              value={description}
+              onChange={setDescription}
+              placeholder="Add details, notes, links…"
             />
           </div>
 

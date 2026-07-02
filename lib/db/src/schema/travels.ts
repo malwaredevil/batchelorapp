@@ -116,6 +116,9 @@ export const travelsReminders = pgTable(
     tripId: integer("trip_id").notNull(),
     userId: integer("user_id").notNull(),
     title: text("title").notNull(),
+    // Optional rich text (TipTap HTML) description/notes for the reminder.
+    // Not shown inline in reminder lists — only in the detail dialog.
+    description: text("description"),
     dueDate: date("due_date"),
     done: boolean("done").notNull().default(false),
     // Email addresses that receive alerts for this reminder — either picked from

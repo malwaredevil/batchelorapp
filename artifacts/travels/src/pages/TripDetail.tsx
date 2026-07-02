@@ -1299,9 +1299,13 @@ function ReminderRow({
           <Square className="w-4 h-4 text-muted-foreground hover:text-foreground" />
         )}
       </button>
-      <p className={`flex-1 text-sm ${reminder.done ? "line-through text-muted-foreground" : overdue ? "text-red-700 font-medium" : "text-foreground"}`}>
+      <button
+        type="button"
+        onClick={onEdit}
+        className={`flex-1 text-sm text-left hover:underline ${reminder.done ? "line-through text-muted-foreground" : overdue ? "text-red-700 font-medium" : "text-foreground"}`}
+      >
         {reminder.title}
-      </p>
+      </button>
       {reminder.syncToCalendar && reminder.googleEventId && (
         <span
           className="flex items-center gap-1 text-xs text-muted-foreground shrink-0"

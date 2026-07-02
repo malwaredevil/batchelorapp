@@ -191,9 +191,13 @@ export default function Dashboard() {
                     <Square className="w-4 h-4 text-yellow-700/70 hover:text-yellow-900 dark:text-yellow-400/70" />
                   </button>
                   <div className="flex-1 min-w-0">
-                    <span className={`text-sm ${overdue ? "text-red-700 font-medium" : "text-yellow-900 dark:text-yellow-200"}`}>
+                    <button
+                      type="button"
+                      onClick={() => setEditingReminder(r)}
+                      className={`text-sm text-left hover:underline ${overdue ? "text-red-700 font-medium" : "text-yellow-900 dark:text-yellow-200"}`}
+                    >
                       {r.title}
-                    </span>
+                    </button>
                     {trip && (
                       <Link href={`/trips/${trip.id}`}>
                         <span className="text-xs text-muted-foreground ml-2 hover:text-primary hover:underline">

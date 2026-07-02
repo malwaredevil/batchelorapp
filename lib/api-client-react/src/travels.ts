@@ -920,6 +920,7 @@ export interface Reminder {
   tripId: number;
   userId: number;
   title: string;
+  description?: string | null;
   dueDate?: string | null;
   done: boolean;
   recipientEmails: string[];
@@ -930,6 +931,7 @@ export interface Reminder {
 
 export interface CreateReminderBody {
   title: string;
+  description?: string | null;
   dueDate?: string;
   recipientEmails?: string[];
   syncToCalendar?: boolean;
@@ -937,6 +939,7 @@ export interface CreateReminderBody {
 
 export interface UpdateReminderBody {
   title?: string;
+  description?: string | null;
   dueDate?: string | null;
   done?: boolean;
   recipientEmails?: string[];

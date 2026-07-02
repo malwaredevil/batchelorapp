@@ -223,37 +223,38 @@ function AshleyCat() {
   );
 }
 
-/** Karis — Teen girl calico. White base, orange + dark patches, bow. */
+/** Karis — Teen girl orange & white tabby. Bold body stripes, white bib, blue eyes, bow. */
 function KarisCat() {
   return (
     <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" width="52" height="52">
-      {/* Ears — left calico orange, right dark */}
+      {/* Ears — orange with white tips */}
       <polygon points="7,17 12,4 17,17" fill="#f97316" />
-      <polygon points="23,17 28,4 33,17" fill="#292524" />
-      <polygon points="9,16 12,7 15,16" fill="#fecdd3" />
-      <polygon points="25,16 28,7 31,16" fill="#78716c" />
-      {/* Head base — white */}
-      <circle cx="20" cy="24" r="13" fill="#fafaf9" />
-      {/* Orange patch — right side */}
-      <path d="M20,11 Q33,14 33,24 Q33,31 26,35 Q20,37 20,37 L20,11 Z" fill="#f97316" opacity="0.85" />
-      {/* Dark patch — left eye area */}
-      <ellipse cx="12" cy="21" rx="5.5" ry="4.5" fill="#292524" opacity="0.75" />
-      {/* Head outline */}
-      <circle cx="20" cy="24" r="13" fill="none" stroke="#d4d4d0" strokeWidth="0.5" />
-      {/* Brows — arched */}
-      <path d="M11,19.5 Q13.5,17.5 16,19" stroke="#292524" strokeWidth="1" fill="none" strokeLinecap="round" />
-      <path d="M23,19 Q25.5,17.5 28,19.5" stroke="#c2410c" strokeWidth="1" fill="none" strokeLinecap="round" />
-      {/* Eyes — wide, bright */}
+      <polygon points="23,17 28,4 33,17" fill="#f97316" />
+      <polygon points="9.5,15.5 12,8 14.5,15.5" fill="#fafaf9" />
+      <polygon points="25.5,15.5 28,8 30.5,15.5" fill="#fafaf9" />
+      {/* Head base — orange */}
+      <circle cx="20" cy="24" r="13" fill="#f97316" />
+      {/* Bold classic-tabby "M" mark + swirl stripes on forehead */}
+      <path d="M14,14 L17,19 M26,14 L23,19 M17,19 L20,15 L23,19" stroke="#9a3412" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Bold cheek/side stripes */}
+      <path d="M6.5,20 Q9.5,19 12,21" stroke="#9a3412" strokeWidth="1.4" fill="none" strokeLinecap="round" />
+      <path d="M28,21 Q30.5,19 33.5,20" stroke="#9a3412" strokeWidth="1.4" fill="none" strokeLinecap="round" />
+      <path d="M7,25 Q10,24.3 12.5,25.5" stroke="#9a3412" strokeWidth="1.2" fill="none" strokeLinecap="round" />
+      <path d="M27.5,25.5 Q30,24.3 33,25" stroke="#9a3412" strokeWidth="1.2" fill="none" strokeLinecap="round" />
+      {/* White bib patch — rounder/smaller than Angela's */}
+      <ellipse cx="20" cy="31.5" rx="6.5" ry="5" fill="#fafaf9" />
+      {/* Brows — arched, playful */}
+      <path d="M11,19.5 Q13.5,17.5 16,19" stroke="#9a3412" strokeWidth="1" fill="none" strokeLinecap="round" />
+      <path d="M24,19 Q26.5,17.5 29,19.5" stroke="#9a3412" strokeWidth="1" fill="none" strokeLinecap="round" />
+      {/* Eyes — wide, bright blue */}
       <ellipse cx="14" cy="22.5" rx="3" ry="3.2" fill="#fafaf9" />
-      <ellipse cx="14" cy="22.5" rx="2.2" ry="2.5" fill="#0c4a6e" />
+      <ellipse cx="14" cy="22.5" rx="2.2" ry="2.5" fill="#0284c7" />
       <ellipse cx="14" cy="22.5" rx="1.2" ry="1.6" fill="#0a0a0a" />
       <circle cx="14.6" cy="21.6" r="0.8" fill="white" />
       <ellipse cx="26" cy="22.5" rx="3" ry="3.2" fill="#fafaf9" />
-      <ellipse cx="26" cy="22.5" rx="2.2" ry="2.5" fill="#b45309" />
+      <ellipse cx="26" cy="22.5" rx="2.2" ry="2.5" fill="#0284c7" />
       <ellipse cx="26" cy="22.5" rx="1.2" ry="1.6" fill="#0a0a0a" />
       <circle cx="26.6" cy="21.6" r="0.8" fill="white" />
-      {/* Muzzle — white */}
-      <ellipse cx="20" cy="28.5" rx="5" ry="3.5" fill="white" opacity="0.9" />
       {/* Nose */}
       <polygon points="20,26.5 18.8,28 21.2,28" fill="#e879a0" />
       {/* Mouth */}
@@ -263,10 +264,10 @@ function KarisCat() {
       <line x1="3" y1="28" x2="14.5" y2="28.5" stroke="#78716c" strokeWidth="0.55" opacity="0.6" />
       <line x1="25.5" y1="27.5" x2="37" y2="26" stroke="#78716c" strokeWidth="0.55" opacity="0.6" />
       <line x1="25.5" y1="28.5" x2="37" y2="28" stroke="#78716c" strokeWidth="0.55" opacity="0.6" />
-      {/* Bow — between ears, pink */}
-      <polygon points="14,5.5 17,8 14,10.5 11,8" fill="#f9a8d4" />
-      <circle cx="14" cy="8" r="1.3" fill="#ec4899" />
-      <polygon points="14,5.5 11,8 14,10.5 17,8" fill="#fbcfe8" opacity="0.6" />
+      {/* Bow — between ears, teal (distinct from Angela's plain look) */}
+      <polygon points="14,5.5 17,8 14,10.5 11,8" fill="#5eead4" />
+      <circle cx="14" cy="8" r="1.3" fill="#0d9488" />
+      <polygon points="14,5.5 11,8 14,10.5 17,8" fill="#99f6e4" opacity="0.6" />
     </svg>
   );
 }

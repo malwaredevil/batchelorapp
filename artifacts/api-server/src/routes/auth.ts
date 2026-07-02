@@ -23,6 +23,7 @@ import {
   GOOGLE_SCOPES,
 } from "../lib/google-oauth";
 import { sendPasswordResetEmail, resendConfigured } from "../lib/email";
+import { runReminderAlerts } from "../lib/reminder-scheduler";
 
 const LOGIN_PATH = "/login";
 const THIRTY_DAYS_MS = 1000 * 60 * 60 * 24 * 30;
@@ -101,6 +102,15 @@ router.post("/auth/login", loginLimiter, async (req, res) => {
       req.session.cookie.maxAge = undefined as unknown as number;
     }
     res.json(LoginResponse.parse({ id: user.id, email: user.email }));
+
+    // Fire-and-forget: use every successful login (any user) as an extra
+    // trigger point for the shared reminder-alert check, on top of the
+    // hourly in-process fallback and the scheduled cron job. This is a
+    // single shared function so any future notification channel (SMS, etc.)
+    // added to it automatically gets this same trigger for free.
+    runReminderAlerts().catch((err: unknown) =>
+      req.log.error({ err }, "reminder-scheduler: login-triggered run failed"),
+    );
   });
 });
 
@@ -536,6 +546,14 @@ router.get("/auth/google/callback", async (req, res) => {
           return;
         }
         res.redirect("/");
+
+        // Same shared trigger as password login — see comment there.
+        runReminderAlerts().catch((err: unknown) =>
+          req.log.error(
+            { err },
+            "reminder-scheduler: login-triggered run failed (google)",
+          ),
+        );
       });
     });
   } catch (err) {

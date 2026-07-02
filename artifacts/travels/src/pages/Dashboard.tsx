@@ -245,30 +245,33 @@ export default function Dashboard() {
 
       {/* Next trip countdown */}
       {stats?.nextTrip && nextTripCountdown !== null && (
-        <Card className="border-primary/20 bg-primary/5">
-          <CardContent className="flex items-center gap-4 py-5">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-              <Clock className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <p className="font-medium text-foreground">
-                {nextTripCountdown === 0
-                  ? "Today is the day!"
-                  : nextTripCountdown === 1
-                    ? "Tomorrow!"
-                    : `${nextTripCountdown} days until your next trip`}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {stats.nextTrip.destination} &middot;{" "}
-                {new Date(stats.nextTrip.startDate).toLocaleDateString("en-GB", {
-                  weekday: "long",
-                  day: "numeric",
-                  month: "long",
-                })}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <Link href={`/trips/${stats.nextTrip.id}`}>
+          <Card className="border-primary/20 bg-primary/5 cursor-pointer hover:bg-primary/10 transition-colors">
+            <CardContent className="flex items-center gap-4 py-5">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <Clock className="w-5 h-5 text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-foreground">
+                  {nextTripCountdown === 0
+                    ? "Today is the day!"
+                    : nextTripCountdown === 1
+                      ? "Tomorrow!"
+                      : `${nextTripCountdown} days until your next trip`}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {stats.nextTrip.destination} &middot;{" "}
+                  {new Date(stats.nextTrip.startDate).toLocaleDateString("en-GB", {
+                    weekday: "long",
+                    day: "numeric",
+                    month: "long",
+                  })}
+                </p>
+              </div>
+              <ArrowRight className="w-4 h-4 text-muted-foreground/50 shrink-0" />
+            </CardContent>
+          </Card>
+        </Link>
       )}
 
       {/* Pipeline */}

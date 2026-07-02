@@ -329,6 +329,7 @@ Example: ["Old Town Square", "Sunset Tram Ride", "Castle Tour", "Local Food Mark
 router.get("/stats", async (_req, res) => {
   const rows = await db
     .select({
+      id: travelsTrips.id,
       status: travelsTrips.status,
       destination: travelsTrips.destination,
       startDate: travelsTrips.startDate,

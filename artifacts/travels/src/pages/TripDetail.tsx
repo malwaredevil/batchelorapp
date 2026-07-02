@@ -1148,7 +1148,14 @@ function RemindersSection({ tripId }: { tripId: number }) {
                         checked={newRecipients.includes(u.email)}
                         onCheckedChange={() => toggleRecipient(u.email)}
                       />
-                      {u.email}
+                      {u.displayName ? (
+                        <span>
+                          {u.displayName}{" "}
+                          <span className="text-muted-foreground">({u.email})</span>
+                        </span>
+                      ) : (
+                        u.email
+                      )}
                     </label>
                   ))}
                 </div>
@@ -1378,6 +1385,7 @@ export default function TripDetail({ id }: { id: number }) {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInitialized, setChatInitialized] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const skipNextChatScroll = useRef(true);
 
   useEffect(() => {
     if (trip && !chatInitialized) {
@@ -1387,6 +1395,10 @@ export default function TripDetail({ id }: { id: number }) {
   }, [trip, chatInitialized]);
 
   useEffect(() => {
+    if (skipNextChatScroll.current) {
+      skipNextChatScroll.current = false;
+      return;
+    }
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 

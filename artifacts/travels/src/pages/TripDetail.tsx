@@ -238,6 +238,8 @@ function DocumentRow({
     { key: "flightNumber", label: "Flight" },
     { key: "airline", label: "Airline" },
     { key: "hotelName", label: "Hotel" },
+    { key: "returnDepartureDateTime", label: "Return" },
+    { key: "returnFlightNumber", label: "Return flight" },
   ];
 
   const startEditFields = () => {

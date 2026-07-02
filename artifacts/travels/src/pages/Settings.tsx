@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Mail, Bell, Save, X, Send, CalendarDays, CheckCircle2, XCircle } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Mail, Bell, Save, X, Send, CalendarDays, CheckCircle2, XCircle, LogIn, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,8 +12,10 @@ import {
   useGetCalendarStatus,
   useListCalendars,
   useSelectCalendar,
+  useDisconnectCalendar,
   getGetTravelsSettingsQueryKey,
   getGetCalendarStatusQueryKey,
+  getListCalendarsQueryKey,
   type CalendarListItem,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -26,6 +28,26 @@ export default function Settings() {
 
   const [email, setEmail] = useState("");
   const [dirty, setDirty] = useState(false);
+
+  const calendarToastShown = useRef(false);
+  useEffect(() => {
+    if (calendarToastShown.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const calendarResult = params.get("calendar");
+    if (!calendarResult) return;
+    calendarToastShown.current = true;
+
+    if (calendarResult === "connected") {
+      toast.success("Google Calendar connected");
+    } else if (calendarResult === "error") {
+      toast.error("Could not connect Google Calendar. Please try again.");
+    }
+
+    params.delete("calendar");
+    const newSearch = params.toString();
+    const newUrl = `${window.location.pathname}${newSearch ? `?${newSearch}` : ""}`;
+    window.history.replaceState({}, "", newUrl);
+  }, []);
 
   useEffect(() => {
     if (data !== undefined) {
@@ -183,11 +205,13 @@ function CalendarSyncCard() {
   const qc = useQueryClient();
   const { data: status, isLoading: statusLoading } = useGetCalendarStatus();
   const { data: calendars = [], isLoading: calendarsLoading } = useListCalendars<CalendarListItem[]>({
-    query: { enabled: !!status?.connected, queryKey: ["/api/travels/calendar/list"] },
+    query: { enabled: !!status?.connected, queryKey: getListCalendarsQueryKey() },
   });
   const selectCalendar = useSelectCalendar();
+  const disconnectCalendar = useDisconnectCalendar();
 
   const [selectedId, setSelectedId] = useState<string>("");
+  const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
 
   useEffect(() => {
     if (status?.calendarId) setSelectedId(status.calendarId);
@@ -209,6 +233,22 @@ function CalendarSyncCard() {
     );
   }
 
+  function handleConnect() {
+    window.location.href = "/api/travels/google-calendar/connect";
+  }
+
+  function handleDisconnect() {
+    disconnectCalendar.mutate(undefined, {
+      onSuccess: () => {
+        setConfirmingDisconnect(false);
+        setSelectedId("");
+        qc.invalidateQueries({ queryKey: getGetCalendarStatusQueryKey() });
+        toast.success("Google Calendar disconnected");
+      },
+      onError: () => toast.error("Could not disconnect. Please try again."),
+    });
+  }
+
   return (
     <div className="rounded-xl border border-card-border bg-card p-6 space-y-5">
       <div className="flex items-center gap-3">
@@ -227,10 +267,42 @@ function CalendarSyncCard() {
         <p className="text-sm text-muted-foreground">Checking connection…</p>
       ) : status?.connected ? (
         <div className="space-y-3">
-          <p className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            Google Calendar is connected
-          </p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Connected{status.googleEmail ? ` as ${status.googleEmail}` : ""}
+            </p>
+            {confirmingDisconnect ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Disconnect?</span>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleDisconnect}
+                  disabled={disconnectCalendar.isPending}
+                >
+                  Yes, disconnect
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setConfirmingDisconnect(false)}
+                  disabled={disconnectCalendar.isPending}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmingDisconnect(true)}
+              >
+                <LogOut className="h-3.5 w-3.5 mr-1.5" />
+                Disconnect
+              </Button>
+            )}
+          </div>
 
           <div className="space-y-2">
             <Label htmlFor="family-calendar">Calendar to sync reminders to</Label>
@@ -259,11 +331,16 @@ function CalendarSyncCard() {
           </div>
         </div>
       ) : (
-        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <XCircle className="h-3.5 w-3.5" />
-          Google Calendar isn't connected yet. Connect it from the Replit integrations panel, then
-          reload this page.
-        </p>
+        <div className="space-y-3">
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <XCircle className="h-3.5 w-3.5" />
+            Google Calendar isn't connected yet.
+          </p>
+          <Button size="sm" onClick={handleConnect}>
+            <LogIn className="h-3.5 w-3.5 mr-1.5" />
+            Connect my Google Calendar
+          </Button>
+        </div>
       )}
 
       <p className="text-xs text-muted-foreground pt-1">

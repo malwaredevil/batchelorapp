@@ -1150,6 +1150,7 @@ export function useUpdateTravelsSettings(
 
 export interface CalendarStatus {
   connected: boolean;
+  googleEmail: string | null;
   calendarId: string | null;
   calendarSummary: string | null;
 }
@@ -1166,9 +1167,9 @@ export interface SelectCalendarBody {
 }
 
 const getCalendarStatus = (options?: RequestInit): Promise<CalendarStatus> =>
-  customFetch<CalendarStatus>("/api/travels/calendar/status", { ...options, method: "GET" });
+  customFetch<CalendarStatus>("/api/travels/google-calendar/status", { ...options, method: "GET" });
 
-export const getGetCalendarStatusQueryKey = () => [`/api/travels/calendar/status`] as const;
+export const getGetCalendarStatusQueryKey = () => [`/api/travels/google-calendar/status`] as const;
 
 export function useGetCalendarStatus<TData = CalendarStatus, TError = unknown>(
   options?: { query?: UseQueryOptions<CalendarStatus, TError, TData> },
@@ -1182,9 +1183,9 @@ export function useGetCalendarStatus<TData = CalendarStatus, TError = unknown>(
 }
 
 const listCalendars = (options?: RequestInit): Promise<CalendarListItem[]> =>
-  customFetch<CalendarListItem[]>("/api/travels/calendar/list", { ...options, method: "GET" });
+  customFetch<CalendarListItem[]>("/api/travels/google-calendar/calendars", { ...options, method: "GET" });
 
-export const getListCalendarsQueryKey = () => [`/api/travels/calendar/list`] as const;
+export const getListCalendarsQueryKey = () => [`/api/travels/google-calendar/calendars`] as const;
 
 export function useListCalendars<TData = CalendarListItem[], TError = unknown>(
   options?: { query?: UseQueryOptions<CalendarListItem[], TError, TData> },
@@ -1198,7 +1199,7 @@ export function useListCalendars<TData = CalendarListItem[], TError = unknown>(
 }
 
 const putCalendarSettingsFn = (body: SelectCalendarBody): Promise<SelectCalendarBody> =>
-  customFetch<SelectCalendarBody>("/api/travels/calendar/settings", {
+  customFetch<SelectCalendarBody>("/api/travels/google-calendar/settings", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -1208,5 +1209,15 @@ export function useSelectCalendar(
   options?: { mutation?: UseMutationOptions<SelectCalendarBody, unknown, SelectCalendarBody> },
 ) {
   const mutationFn = (body: SelectCalendarBody) => putCalendarSettingsFn(body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const deleteCalendarConnectionFn = (): Promise<void> =>
+  customFetch<void>("/api/travels/google-calendar/disconnect", { method: "DELETE" });
+
+export function useDisconnectCalendar(
+  options?: { mutation?: UseMutationOptions<void, unknown, void> },
+) {
+  const mutationFn = () => deleteCalendarConnectionFn();
   return useMutation({ mutationFn, ...options?.mutation });
 }

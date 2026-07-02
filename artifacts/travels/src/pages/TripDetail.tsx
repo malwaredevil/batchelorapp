@@ -1752,7 +1752,7 @@ export default function TripDetail({ id }: { id: number }) {
             value={trip.transportTo ?? "none"}
             iconType="custom"
             onSave={(v: TransportTo | "none") =>
-              saveField({ transportTo: v === "none" ? undefined : v })
+              saveField({ transportTo: v === "none" ? undefined : (v as TransportTo) })
             }
             isEmpty={(v: TransportTo | "none") => v === "none"}
             renderDisplay={(v) => (

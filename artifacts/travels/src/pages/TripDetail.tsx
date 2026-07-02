@@ -40,6 +40,7 @@ import {
 } from "@workspace/api-client-react";
 import { OneThingInput } from "@/components/OneThingInput";
 import { MagnetCheckDialog } from "@/components/MagnetCheckDialog";
+import { ReminderEditDialog } from "@/components/ReminderEditDialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1080,6 +1081,7 @@ function RemindersSection({ tripId }: { tripId: number }) {
   const [newRecipients, setNewRecipients] = useState<string[]>([]);
   const [customEmail, setCustomEmail] = useState("");
   const [newSync, setNewSync] = useState(true);
+  const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
   const { data: calendarStatus } = useGetCalendarStatus();
   const familyCalendarConnected = !!calendarStatus?.connected && !!calendarStatus?.calendarId;
 
@@ -1233,6 +1235,7 @@ function RemindersSection({ tripId }: { tripId: number }) {
               reminder={r}
               tripId={tripId}
               onToggle={() => updateReminder.mutate({ tripId, reminderId: r.id, body: { done: true } })}
+              onEdit={() => setEditingReminder(r)}
               onDelete={() => deleteReminder.mutate({ tripId, reminderId: r.id })}
             />
           ))}
@@ -1248,6 +1251,7 @@ function RemindersSection({ tripId }: { tripId: number }) {
                     reminder={r}
                     tripId={tripId}
                     onToggle={() => updateReminder.mutate({ tripId, reminderId: r.id, body: { done: false } })}
+                    onEdit={() => setEditingReminder(r)}
                     onDelete={() => deleteReminder.mutate({ tripId, reminderId: r.id })}
                   />
                 ))}
@@ -1256,6 +1260,11 @@ function RemindersSection({ tripId }: { tripId: number }) {
           )}
         </div>
       )}
+      <ReminderEditDialog
+        reminder={editingReminder}
+        open={!!editingReminder}
+        onOpenChange={(open) => { if (!open) setEditingReminder(null); }}
+      />
     </div>
   );
 }
@@ -1264,17 +1273,19 @@ function ReminderRow({
   reminder,
   tripId,
   onToggle,
+  onEdit,
   onDelete,
 }: {
   reminder: Reminder;
   tripId: number;
   onToggle: () => void;
+  onEdit: () => void;
   onDelete: () => void;
 }) {
   const overdue = !reminder.done && reminder.dueDate && new Date(reminder.dueDate) < new Date();
   return (
-    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border group ${reminder.done ? "bg-muted/30 border-border/30" : "bg-card border-border/50"}`}>
-      <button onClick={onToggle} className="shrink-0">
+    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${reminder.done ? "bg-muted/30 border-border/30" : "bg-card border-border/50"}`}>
+      <button onClick={onToggle} className="shrink-0" title={reminder.done ? "Mark as not done" : "Mark as done"}>
         {reminder.done ? (
           <CheckSquare className="w-4 h-4 text-muted-foreground" />
         ) : (
@@ -1312,15 +1323,23 @@ function ReminderRow({
           href={buildReminderCalendarUrl(reminder.title, reminder.dueDate, "Trip reminder")}
           target="_blank"
           rel="noopener noreferrer"
-          className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 text-muted-foreground hover:text-foreground"
+          className="shrink-0 text-muted-foreground/70 hover:text-foreground"
           title="Add to my own Google Calendar"
         >
           <CalendarPlus className="w-3.5 h-3.5" />
         </a>
       )}
       <button
+        onClick={onEdit}
+        className="shrink-0 text-muted-foreground/70 hover:text-foreground"
+        title="Edit reminder"
+      >
+        <Edit2 className="w-3.5 h-3.5" />
+      </button>
+      <button
         onClick={onDelete}
-        className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 text-muted-foreground hover:text-destructive"
+        className="shrink-0 text-muted-foreground/70 hover:text-destructive"
+        title="Delete reminder"
       >
         <X className="w-3.5 h-3.5" />
       </button>

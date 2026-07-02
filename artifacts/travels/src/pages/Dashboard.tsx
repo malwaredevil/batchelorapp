@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { Link } from "wouter";
 import {
   useGetTravelsStats,
   useListTrips,
   useListAllReminders,
   useUpdateReminder,
+  useDeleteReminder,
   getListAllRemindersQueryKey,
   type Trip,
   type TripStatus,
@@ -13,8 +15,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Plane, MapPin, CheckCircle, Calendar, Clock, ArrowRight, Moon, Bell, Check } from "lucide-react";
+import { Plane, MapPin, CheckCircle, Calendar, Clock, ArrowRight, Moon, Bell, Square, Edit2, X } from "lucide-react";
 import TripTimeline from "@/components/TripTimeline";
+import { ReminderEditDialog } from "@/components/ReminderEditDialog";
 
 const STATUS_ORDER: TripStatus[] = ["active", "booked", "planning", "wishlist", "completed"];
 
@@ -95,6 +98,12 @@ export default function Dashboard() {
   const { data: trips = [], isLoading: tripsLoading } = useListTrips();
   const { data: pendingReminders = [] } = useListAllReminders(true);
   const updateReminder = useUpdateReminder();
+  const deleteReminder = useDeleteReminder({
+    mutation: {
+      onSuccess: () => qc.invalidateQueries({ queryKey: getListAllRemindersQueryKey(true) }),
+    },
+  });
+  const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
 
   const groupedTrips = STATUS_ORDER.reduce<Record<TripStatus, Trip[]>>(
     (acc, status) => {
@@ -168,16 +177,19 @@ export default function Dashboard() {
               const trip = trips.find((t) => t.id === r.tripId);
               const overdue = r.dueDate && new Date(r.dueDate) < new Date();
               return (
-                <div key={r.id} className="flex items-center gap-2 group">
+                <div key={r.id} className="flex items-center gap-2">
                   <button
-                    className="w-4 h-4 rounded border border-yellow-400 shrink-0 flex items-center justify-center hover:bg-yellow-200 transition-colors"
+                    className="shrink-0"
+                    title="Mark as done"
                     onClick={() => {
                       updateReminder.mutate(
                         { tripId: r.tripId, reminderId: r.id, body: { done: true } },
                         { onSuccess: () => qc.invalidateQueries({ queryKey: getListAllRemindersQueryKey(true) }) },
                       );
                     }}
-                  />
+                  >
+                    <Square className="w-4 h-4 text-yellow-700/70 hover:text-yellow-900 dark:text-yellow-400/70" />
+                  </button>
                   <div className="flex-1 min-w-0">
                     <span className={`text-sm ${overdue ? "text-red-700 font-medium" : "text-yellow-900 dark:text-yellow-200"}`}>
                       {r.title}
@@ -196,6 +208,20 @@ export default function Dashboard() {
                       {new Date(r.dueDate).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
                     </span>
                   )}
+                  <button
+                    className="shrink-0 text-yellow-700/60 hover:text-yellow-900 dark:text-yellow-400/60"
+                    title="Edit reminder"
+                    onClick={() => setEditingReminder(r)}
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    className="shrink-0 text-yellow-700/60 hover:text-destructive dark:text-yellow-400/60"
+                    title="Delete reminder"
+                    onClick={() => deleteReminder.mutate({ tripId: r.tripId, reminderId: r.id })}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               );
             })}
@@ -207,6 +233,11 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       )}
+      <ReminderEditDialog
+        reminder={editingReminder}
+        open={!!editingReminder}
+        onOpenChange={(open) => { if (!open) setEditingReminder(null); }}
+      />
 
       {/* Next trip countdown */}
       {stats?.nextTrip && nextTripCountdown !== null && (

@@ -496,4 +496,20 @@ export const STATEMENTS: string[] = [
   // alert (picked from app_users' login emails, or freeform custom addresses).
   // Replaces the old single per-user travels_reminder_email as the alert target.
   `ALTER TABLE travels_reminders ADD COLUMN IF NOT EXISTS recipient_emails TEXT[] NOT NULL DEFAULT '{}'`,
+
+  // ── Travels Google Calendar sync ────────────────────────────────────────────
+  // sync_to_calendar: whether this reminder should have a matching event on the
+  // shared family Google Calendar (created via the Google Calendar integration).
+  `ALTER TABLE travels_reminders ADD COLUMN IF NOT EXISTS sync_to_calendar BOOLEAN NOT NULL DEFAULT true`,
+  // google_event_id: Google Calendar event id for update/delete; null if sync is
+  // off, not yet attempted, or the last sync attempt failed.
+  `ALTER TABLE travels_reminders ADD COLUMN IF NOT EXISTS google_event_id TEXT`,
+  // travels_calendar_settings: singleton row (id = 1) holding the household's
+  // chosen shared "Family" Google Calendar for auto-synced reminders.
+  `CREATE TABLE IF NOT EXISTS travels_calendar_settings (
+    id               INTEGER PRIMARY KEY DEFAULT 1,
+    calendar_id      TEXT,
+    calendar_summary TEXT,
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
 ];

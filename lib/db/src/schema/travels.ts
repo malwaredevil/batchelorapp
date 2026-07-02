@@ -124,6 +124,12 @@ export const travelsReminders = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
+    // Whether this reminder should have a matching event on the shared family
+    // Google Calendar (created via the connected Google Calendar integration).
+    syncToCalendar: boolean("sync_to_calendar").notNull().default(true),
+    // Google Calendar event id, so we can update/delete the event later.
+    // Null if sync is off, not yet attempted, or the last sync attempt failed.
+    googleEventId: text("google_event_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -176,3 +182,19 @@ export const travelsReminderAlertLog = pgTable(
 
 export type TravelsReminderAlertLogRow =
   typeof travelsReminderAlertLog.$inferSelect;
+
+// Singleton row (id = 1) holding the shared household's chosen Google
+// Calendar for auto-synced reminders. There is exactly one connected Google
+// account for this app (via the Replit Google Calendar integration) and it
+// writes to a single shared "Family" calendar picked here.
+export const travelsCalendarSettings = pgTable("travels_calendar_settings", {
+  id: integer("id").primaryKey().default(1),
+  calendarId: text("calendar_id"),
+  calendarSummary: text("calendar_summary"),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export type TravelsCalendarSettingsRow =
+  typeof travelsCalendarSettings.$inferSelect;

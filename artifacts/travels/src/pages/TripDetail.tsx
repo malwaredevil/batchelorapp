@@ -20,6 +20,7 @@ import {
   useUpdateReminder,
   useDeleteReminder,
   useListTravelsAppUsers,
+  useGetCalendarStatus,
   getTripDocumentDownloadUrl,
   getTripPhotoImageUrl,
   getListTripsQueryKey,
@@ -83,6 +84,8 @@ import {
   ScanSearch,
   Magnet,
   Star,
+  CalendarCheck,
+  CalendarPlus,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -205,6 +208,19 @@ function buildCalendarUrl(
     `&dates=${fmt(startDate)}/${fmt(endDate || startDate)}` +
     `&location=${encodeURIComponent(destination)}` +
     (notes ? `&details=${encodeURIComponent(notes)}` : "")
+  );
+}
+
+function buildReminderCalendarUrl(title: string, dueDate: string, details?: string) {
+  const fmt = (d: string) => d.replace(/-/g, "");
+  const next = new Date(`${dueDate}T00:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  const end = next.toISOString().slice(0, 10);
+  return (
+    `https://calendar.google.com/calendar/render?action=TEMPLATE` +
+    `&text=${encodeURIComponent(title)}` +
+    `&dates=${fmt(dueDate)}/${fmt(end)}` +
+    (details ? `&details=${encodeURIComponent(details)}` : "")
   );
 }
 
@@ -1063,6 +1079,9 @@ function RemindersSection({ tripId }: { tripId: number }) {
   const [newDue, setNewDue] = useState("");
   const [newRecipients, setNewRecipients] = useState<string[]>([]);
   const [customEmail, setCustomEmail] = useState("");
+  const [newSync, setNewSync] = useState(true);
+  const { data: calendarStatus } = useGetCalendarStatus();
+  const familyCalendarConnected = !!calendarStatus?.connected && !!calendarStatus?.calendarId;
 
   function toggleRecipient(email: string) {
     setNewRecipients((prev) =>
@@ -1165,6 +1184,13 @@ function RemindersSection({ tripId }: { tripId: number }) {
               )}
             </div>
 
+            {familyCalendarConnected && (
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer pt-1">
+                <Checkbox checked={newSync} onCheckedChange={(v) => setNewSync(!!v)} />
+                Add to the family Google Calendar
+              </label>
+            )}
+
             <div className="flex gap-2 pt-1">
               <Button
                 size="sm"
@@ -1176,6 +1202,7 @@ function RemindersSection({ tripId }: { tripId: number }) {
                       title: newTitle.trim(),
                       dueDate: newDue || undefined,
                       recipientEmails: newRecipients,
+                      syncToCalendar: newSync,
                     },
                   });
                 }}
@@ -1257,6 +1284,14 @@ function ReminderRow({
       <p className={`flex-1 text-sm ${reminder.done ? "line-through text-muted-foreground" : overdue ? "text-red-700 font-medium" : "text-foreground"}`}>
         {reminder.title}
       </p>
+      {reminder.syncToCalendar && reminder.googleEventId && (
+        <span
+          className="flex items-center gap-1 text-xs text-muted-foreground shrink-0"
+          title="Synced to the family Google Calendar"
+        >
+          <CalendarCheck className="w-3 h-3" />
+        </span>
+      )}
       {reminder.recipientEmails.length > 0 && (
         <span
           className="flex items-center gap-1 text-xs text-muted-foreground shrink-0"
@@ -1271,6 +1306,17 @@ function ReminderRow({
           {overdue ? "Overdue · " : ""}
           {new Date(reminder.dueDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
         </span>
+      )}
+      {reminder.dueDate && (
+        <a
+          href={buildReminderCalendarUrl(reminder.title, reminder.dueDate, "Trip reminder")}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 text-muted-foreground hover:text-foreground"
+          title="Add to my own Google Calendar"
+        >
+          <CalendarPlus className="w-3.5 h-3.5" />
+        </a>
       )}
       <button
         onClick={onDelete}

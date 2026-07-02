@@ -28,10 +28,10 @@ const STATUS_LABELS: Record<TripStatus, string> = {
 
 const STATUS_COLORS: Record<TripStatus, string> = {
   wishlist:  "bg-yellow-50 text-yellow-700 border-yellow-200",
-  planning:  "bg-yellow-50 text-yellow-700 border-yellow-200",
-  booked:    "bg-orange-50 text-orange-700 border-orange-200",
+  planning:  "bg-orange-50 text-orange-700 border-orange-200",
+  booked:    "bg-green-50  text-green-700  border-green-200",
   active:    "bg-orange-50 text-orange-700 border-orange-200",
-  completed: "bg-green-50  text-green-700  border-green-200",
+  completed: "bg-red-50    text-red-700    border-red-200",
 };
 
 function StatCard({ icon, label, value, href }: { icon: React.ReactNode; label: string; value: string | number; href?: string }) {

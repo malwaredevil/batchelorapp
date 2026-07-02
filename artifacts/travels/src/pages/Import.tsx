@@ -335,8 +335,9 @@ export default function Import() {
                           </td>
                           <td className="px-4 py-2">
                             <span className={`text-xs px-1.5 py-0.5 rounded-full border ${
-                              t.status === "completed" ? "border-green-200 text-green-700 bg-green-50 dark:border-green-900 dark:text-green-400 dark:bg-green-950" :
-                              t.status === "booked" ? "border-blue-200 text-blue-700 bg-blue-50 dark:border-blue-900 dark:text-blue-400 dark:bg-blue-950" :
+                              t.status === "completed" ? "border-red-200 text-red-700 bg-red-50 dark:border-red-900 dark:text-red-400 dark:bg-red-950" :
+                              t.status === "booked" ? "border-green-200 text-green-700 bg-green-50 dark:border-green-900 dark:text-green-400 dark:bg-green-950" :
+                              t.status === "planning" ? "border-orange-200 text-orange-700 bg-orange-50 dark:border-orange-900 dark:text-orange-400 dark:bg-orange-950" :
                               "border-border text-muted-foreground"
                             }`}>
                               {t.status}

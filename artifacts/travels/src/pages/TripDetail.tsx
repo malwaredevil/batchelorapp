@@ -861,15 +861,40 @@ function PhotoGridSection({
   });
   const fileRef = useRef<HTMLInputElement>(null);
   const [lightbox, setLightbox] = useState<TripPhoto | null>(null);
+  const [bulkUploading, setBulkUploading] = useState<{ done: number; total: number } | null>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const formData = new FormData();
-    formData.append("photo", file);
-    formData.append("type", photoType);
-    uploadPhoto.mutate({ tripId, formData });
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
     e.target.value = "";
+    if (files.length === 0) return;
+
+    if (files.length === 1) {
+      const formData = new FormData();
+      formData.append("photo", files[0]);
+      formData.append("type", photoType);
+      uploadPhoto.mutate({ tripId, formData });
+      return;
+    }
+
+    setBulkUploading({ done: 0, total: files.length });
+    let failures = 0;
+    for (const file of files) {
+      const formData = new FormData();
+      formData.append("photo", file);
+      formData.append("type", photoType);
+      try {
+        await uploadPhoto.mutateAsync({ tripId, formData });
+      } catch {
+        failures++;
+      }
+      setBulkUploading((prev) => (prev ? { ...prev, done: prev.done + 1 } : prev));
+    }
+    setBulkUploading(null);
+    if (failures > 0) {
+      toast.error(`${failures} of ${files.length} uploads failed`);
+    } else {
+      toast.success(`${files.length} ${photoType === "magnet" ? "magnets" : "photos"} uploaded`);
+    }
   };
 
   return (
@@ -886,15 +911,20 @@ function PhotoGridSection({
           size="sm"
           variant="outline"
           onClick={() => fileRef.current?.click()}
-          disabled={uploadPhoto.isPending}
+          disabled={uploadPhoto.isPending || bulkUploading !== null}
         >
           <Plus className="w-3.5 h-3.5 mr-1.5" />
-          {uploadPhoto.isPending ? "Uploading..." : addLabel}
+          {bulkUploading
+            ? `Uploading ${bulkUploading.done}/${bulkUploading.total}...`
+            : uploadPhoto.isPending
+              ? "Uploading..."
+              : addLabel}
         </Button>
         <input
           ref={fileRef}
           type="file"
           accept="image/jpeg,image/png,image/webp"
+          multiple
           className="hidden"
           onChange={handleFileChange}
         />

@@ -58,3 +58,20 @@ next time instead of silently skipping the reminder. A per-recipient retry
 loop only marks an alert as sent once *every* recipient succeeds, so one
 failing address doesn't block delivery being retried for the rest, and
 vice versa doesn't get marked done if partially failed.
+
+## `runReminderAlerts()` is one shared function, invoked from three trigger points
+`runReminderAlerts()` always scans **all** users'/trips' reminders — it is
+never scoped to a specific caller. It is invoked from: (1) server boot +
+hourly in-process interval, (2) the standalone Scheduled Deployment script,
+and (3) every successful login (password or Google OAuth), fire-and-forget,
+regardless of which user logs in.
+
+**Why:** the user wants a single shared trigger point so a future
+notification channel (e.g. SMS) only needs to hook into this one function
+once, and using login as an additional trigger closes the gap between
+scheduled runs without needing a per-user code path.
+
+**How to apply:** when adding a new trigger point or notification channel,
+call/extend `runReminderAlerts()` rather than writing a parallel scan — the
+`travels_reminder_alert_log` table is the single dedupe mechanism shared by
+all trigger points.

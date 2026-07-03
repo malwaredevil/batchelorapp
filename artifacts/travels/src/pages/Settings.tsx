@@ -256,9 +256,11 @@ function CalendarSyncCard() {
           <CalendarDays className="h-4 w-4" />
         </span>
         <div>
-          <h2 className="font-semibold text-foreground">Family Google Calendar</h2>
+          <h2 className="font-semibold text-foreground">Your Google Calendar</h2>
           <p className="text-sm text-muted-foreground">
-            Reminders with a due date automatically sync as events on one shared household calendar.
+            Connect your own Google account and choose which of your calendars reminders should
+            sync to. Each family member connects independently — your connection and calendar
+            choice never affect anyone else's.
           </p>
         </div>
       </div>
@@ -344,8 +346,9 @@ function CalendarSyncCard() {
       )}
 
       <p className="text-xs text-muted-foreground pt-1">
-        Individuals can still add any single reminder to their own personal calendar from the trip
-        page — this setting only controls the shared family calendar.
+        Reminders with a due date sync automatically to your selected calendar. If you're listed
+        as a recipient on someone else's reminder, it will also appear on your own calendar, as
+        long as you're connected here.
       </p>
     </div>
   );

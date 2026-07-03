@@ -85,6 +85,6 @@
   "dependencies": {
     "dompurify": "^3.4.11",
     "leaflet": "^1.9.4",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   }
 }

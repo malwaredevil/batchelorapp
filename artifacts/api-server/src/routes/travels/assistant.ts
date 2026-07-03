@@ -18,6 +18,10 @@ import { requireAuth } from "../../middleware/auth";
 import { callModelWithSubagent, MODELS } from "../../lib/ai-client";
 import { deleteTripPhoto } from "../../lib/travels/storage";
 import { deleteDocument } from "../../lib/travels-storage";
+import {
+  getConnectedTargetUserIds,
+  syncReminderCalendarEvents,
+} from "./reminders";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -88,6 +92,16 @@ async function getWishlistLabelInfo(
     .select({ destination: travelsWishlist.destination })
     .from(travelsWishlist)
     .where(eq(travelsWishlist.id, wishlistId));
+  return item ?? null;
+}
+
+async function getReminderLabelInfo(
+  reminderId: number,
+): Promise<{ title: string } | null> {
+  const [item] = await db
+    .select({ title: travelsReminders.title })
+    .from(travelsReminders)
+    .where(eq(travelsReminders.id, reminderId));
   return item ?? null;
 }
 
@@ -165,6 +179,20 @@ const RemovePackingItemActionPayload = z.object({
   item: z.string().min(1).max(200),
 });
 
+const AddReminderActionPayload = z.object({
+  tripId: z.number().int().positive(),
+  title: z.string().min(1).max(200),
+  description: z.string().max(2000).optional(),
+  dueDate: z.string().max(20).optional(),
+  syncToCalendar: z.boolean().optional(),
+});
+
+const SyncReminderToCalendarActionPayload = z.object({
+  tripId: z.number().int().positive(),
+  reminderId: z.number().int().positive(),
+  syncToCalendar: z.boolean().optional(),
+});
+
 const ActionBody = z.discriminatedUnion("type", [
   z.object({ type: z.literal("create_trip"), payload: CreateTripActionPayload }),
   z.object({ type: z.literal("add_wishlist"), payload: AddWishlistActionPayload }),
@@ -192,6 +220,11 @@ const ActionBody = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("remove_packing_item"),
     payload: RemovePackingItemActionPayload,
+  }),
+  z.object({ type: z.literal("add_reminder"), payload: AddReminderActionPayload }),
+  z.object({
+    type: z.literal("sync_reminder_to_calendar"),
+    payload: SyncReminderToCalendarActionPayload,
   }),
 ]);
 
@@ -247,6 +280,21 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
     }
     case "remove_packing_item":
       return `Remove "${action.payload.item}" from the packing list`;
+    case "add_reminder": {
+      const trip = await getTripLabelInfo(action.payload.tripId);
+      const name = trip ? `"${trip.title || trip.destination}"` : "this trip";
+      const sync = action.payload.syncToCalendar ?? true;
+      return `Add a reminder "${action.payload.title}"${
+        action.payload.dueDate ? ` due ${action.payload.dueDate}` : ""
+      } for ${name}${sync ? " and sync it to the calendar" : ""}`;
+    }
+    case "sync_reminder_to_calendar": {
+      const reminder = await getReminderLabelInfo(action.payload.reminderId);
+      const name = reminder ? `"${reminder.title}"` : "this reminder";
+      return action.payload.syncToCalendar === false
+        ? `Stop syncing ${name} to the calendar`
+        : `Sync ${name} to the calendar`;
+    }
   }
 }
 
@@ -425,6 +473,72 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
       .returning();
     return { status: 200, body: { type: "remove_packing_item", result: row } };
   }) as ActionExecutor,
+
+  add_reminder: (async (payload: z.infer<typeof AddReminderActionPayload>, userId: number) => {
+    const [trip] = await db
+      .select({ id: travelsTrips.id, title: travelsTrips.title })
+      .from(travelsTrips)
+      .where(eq(travelsTrips.id, payload.tripId));
+    if (!trip) return { status: 404, body: { error: "Trip not found" } };
+
+    const syncToCalendar = payload.syncToCalendar ?? true;
+    const [row] = await db
+      .insert(travelsReminders)
+      .values({
+        tripId: payload.tripId,
+        userId,
+        title: payload.title,
+        description: payload.description ?? null,
+        dueDate: payload.dueDate ?? null,
+        done: false,
+        recipientEmails: [],
+        syncToCalendar,
+      })
+      .returning();
+
+    if (syncToCalendar && row.dueDate) {
+      const targetUserIds = await getConnectedTargetUserIds(userId, row.recipientEmails);
+      await syncReminderCalendarEvents(row.id, trip.title, row.title, row.dueDate, targetUserIds);
+    }
+
+    return { status: 201, body: { type: "add_reminder", result: row } };
+  }) as ActionExecutor,
+
+  sync_reminder_to_calendar: (async (
+    payload: z.infer<typeof SyncReminderToCalendarActionPayload>,
+  ) => {
+    const [existing] = await db
+      .select()
+      .from(travelsReminders)
+      .where(eq(travelsReminders.id, payload.reminderId));
+    if (!existing || existing.tripId !== payload.tripId) {
+      return { status: 404, body: { error: "Reminder not found" } };
+    }
+    const syncToCalendar = payload.syncToCalendar ?? true;
+
+    const [row] = await db
+      .update(travelsReminders)
+      .set({ syncToCalendar })
+      .where(eq(travelsReminders.id, payload.reminderId))
+      .returning();
+
+    const [trip] = await db
+      .select({ title: travelsTrips.title })
+      .from(travelsTrips)
+      .where(eq(travelsTrips.id, row.tripId));
+    const targetUserIds = syncToCalendar
+      ? await getConnectedTargetUserIds(row.userId, row.recipientEmails)
+      : [];
+    await syncReminderCalendarEvents(
+      row.id,
+      trip?.title ?? "Trip",
+      row.title,
+      row.dueDate,
+      targetUserIds,
+    );
+
+    return { status: 200, body: { type: "sync_reminder_to_calendar", result: row } };
+  }) as ActionExecutor,
 };
 
 // ---------------------------------------------------------------------------
@@ -577,6 +691,42 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           item: { type: "string" },
         },
         required: ["tripId", "item"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "add_reminder",
+      description:
+        'Propose creating a new reminder for a trip, e.g. "remind me to check in for our flight" or "remind me to book the hotel by Friday". Only call this if the trip\'s numeric id is visible on screen; never guess an id — offer to open the trip instead if you don\'t have one. If the user gives (or you can see on screen) a specific date the reminder is about, set dueDate to that exact date; never invent a date. syncToCalendar defaults to true (syncs to the family Google Calendar automatically if connected) — only set it to false if the user explicitly asks not to add it to the calendar.',
+      parameters: {
+        type: "object",
+        properties: {
+          tripId: { type: "integer" },
+          title: { type: "string", description: "Short reminder title" },
+          description: { type: "string" },
+          dueDate: { type: "string", description: "YYYY-MM-DD" },
+          syncToCalendar: { type: "boolean" },
+        },
+        required: ["tripId", "title"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "sync_reminder_to_calendar",
+      description:
+        'Propose turning calendar sync on (or off, if syncToCalendar is explicitly false) for an EXISTING reminder, e.g. "sync this to the calendar" or "stop syncing that reminder". Only call this if the reminder\'s numeric id is visible on screen (look for "reminderId: <number>" in the reminders listed for this trip); never guess an id — if you can\'t see the reminder\'s id, ask which reminder they mean or offer to open the trip. Do not use this for creating a brand-new reminder (use add_reminder for that, which already defaults to syncing).',
+      parameters: {
+        type: "object",
+        properties: {
+          tripId: { type: "integer" },
+          reminderId: { type: "integer" },
+          syncToCalendar: { type: "boolean" },
+        },
+        required: ["tripId", "reminderId"],
       },
     },
   },
@@ -748,7 +898,9 @@ ${pageContext ? pageContext : "(no page context was shared for this screen)"}
 SHARED FAMILY MEMORY (facts you've picked up from any family member — treat as true for the whole household, not just the person asking):
 ${memoryBlock}
 
-TOOLS: You have tools available for navigation suggestions, remembering household facts, and proposing changes to trips/wishlist/packing lists. Each tool's own description explains exactly when and how to use it — follow those rules precisely, especially around never fabricating numeric ids and asking permission in your visible reply text before calling any trip/wishlist/packing tool. Prefer calling at most one write-action tool per turn so the user isn't asked to confirm several things at once; navigation suggestions and remembering a fact can still accompany it.
+TOOLS: You have tools available for navigation suggestions, remembering household facts, and proposing changes to trips/wishlist/packing lists/reminders. Each tool's own description explains exactly when and how to use it — follow those rules precisely, especially around never fabricating numeric ids and asking permission in your visible reply text before calling any trip/wishlist/packing/reminder tool. Prefer calling at most one write-action tool per turn so the user isn't asked to confirm several things at once; navigation suggestions and remembering a fact can still accompany it.
+
+REMINDERS: Use add_reminder for requests like "remind me to check in for our flight" or "remind me to book the hotel by Friday" — it creates a new reminder and syncs it to the calendar by default. Use sync_reminder_to_calendar only to toggle calendar sync on or off for a reminder that already exists and whose numeric id you can see on screen (look for "reminderId: <number>" in the reminders listed for the current trip); never use it to create a reminder.
 
 Keep replies concise and easy to read in a chat bubble.`;
 

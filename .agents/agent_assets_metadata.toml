@@ -48,3 +48,9 @@ id = "J6Ut9OE-I4muQiF38VZ-3"
 uri = "file://artifacts/travels/src/assets/elaine-avatar.png"
 type = "image"
 title = "generated_image"
+
+[[generated]]
+id = "hxdJx2pLiWtj1jfnhEVaj"
+uri = "file://artifacts/travels/src/assets/elaine-avatar-new.png"
+type = "image"
+title = "generated_image"

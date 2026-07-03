@@ -1527,6 +1527,40 @@ export default function TripDetail({ id }: { id: number }) {
   const todoList = (trip.todoList ?? []) as TodoItem[];
   const documents = trip.documents ?? [];
 
+  const DOCUMENT_FIELD_LABELS: Array<[string, string]> = [
+    ["providerName", "provider"],
+    ["referenceNumber", "reference/confirmation number"],
+    ["passengerNames", "passengers"],
+    ["departureDateTime", "departure"],
+    ["arrivalDateTime", "arrival"],
+    ["flightNumber", "flight number"],
+    ["checkInDate", "check-in"],
+    ["checkOutDate", "check-out"],
+    ["hotelName", "hotel"],
+    ["pickupDateTime", "pickup"],
+    ["dropoffDateTime", "dropoff"],
+    ["returnFlightNumber", "return flight number"],
+    ["returnDepartureDateTime", "return departure"],
+    ["returnArrivalDateTime", "return arrival"],
+    ["notes", "notes"],
+  ];
+
+  const documentsSummary = documents
+    .slice(0, 30)
+    .map((doc) => {
+      const ed = (doc.extractedData ?? null) as Record<string, unknown> | null;
+      const fields = DOCUMENT_FIELD_LABELS.map(([key, label]) => {
+        const value = ed?.[key];
+        if (value === null || value === undefined || value === "") return null;
+        const rendered = Array.isArray(value) ? value.join(", ") : String(value);
+        return `${label}: ${rendered}`;
+      }).filter((entry): entry is string => entry !== null);
+      const type = doc.documentType ? doc.documentType.replace(/_/g, " ") : "document";
+      const name = doc.originalFilename ? ` ("${doc.originalFilename}")` : "";
+      return `- ${type}${name}${fields.length > 0 ? `: ${fields.join("; ")}` : " (no extracted data yet)"}`;
+    })
+    .join("\n");
+
   usePageAssistantContext(
     "trip-detail",
     `Viewing trip "${trip.title}" to ${trip.destination} (tripId: ${trip.id}, status: ${trip.status}${
@@ -1540,7 +1574,11 @@ export default function TripDetail({ id }: { id: number }) {
               .join(", ")}`
           : ""
       }. ` +
-      `To-do list has ${todoList.length} item(s). ${documents.length} document(s) attached. ` +
+      `To-do list has ${todoList.length} item(s). ` +
+      (documents.length > 0
+        ? `Documents attached to this trip (use these already-parsed fields to answer questions like confirmation numbers, hotel names, or flight/check-in times — never ask the user to re-upload or open the file):\n${documentsSummary}`
+        : "No documents attached to this trip yet.") +
+      "\n" +
       (reminders.length > 0
         ? `Reminders: ${reminders
             .slice(0, 20)

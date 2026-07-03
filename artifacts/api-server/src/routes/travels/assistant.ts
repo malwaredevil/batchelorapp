@@ -17,9 +17,11 @@ import {
   travelsGoogleCalendarConnections,
 } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
+import { logger } from "../../lib/logger";
 import { callModelWithSubagent, MODELS } from "../../lib/ai-client";
 import { deleteTripPhoto } from "../../lib/travels/storage";
 import { deleteDocument } from "../../lib/travels-storage";
+import { rescanTripDocument } from "./documents";
 import {
   getConnectedTargetUserIds,
   syncReminderCalendarEvents,
@@ -119,6 +121,19 @@ async function getReminderLabelInfo(
     .select({ title: travelsReminders.title })
     .from(travelsReminders)
     .where(eq(travelsReminders.id, reminderId));
+  return item ?? null;
+}
+
+async function getDocumentLabelInfo(
+  documentId: number,
+): Promise<{ documentType: string | null; originalFilename: string | null } | null> {
+  const [item] = await db
+    .select({
+      documentType: travelsTripDocuments.documentType,
+      originalFilename: travelsTripDocuments.originalFilename,
+    })
+    .from(travelsTripDocuments)
+    .where(eq(travelsTripDocuments.id, documentId));
   return item ?? null;
 }
 
@@ -248,6 +263,11 @@ const RegenerateItineraryDayActionPayload = z.object({
   dayNumber: z.number().int().positive(),
 });
 
+const RescanDocumentActionPayload = z.object({
+  tripId: z.number().int().positive(),
+  documentId: z.number().int().positive(),
+});
+
 const ActionBody = z.discriminatedUnion("type", [
   z.object({ type: z.literal("create_trip"), payload: CreateTripActionPayload }),
   z.object({ type: z.literal("add_wishlist"), payload: AddWishlistActionPayload }),
@@ -293,6 +313,7 @@ const ActionBody = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("select_calendar"), payload: SelectCalendarActionPayload }),
   z.object({ type: z.literal("disconnect_calendar"), payload: DisconnectCalendarActionPayload }),
+  z.object({ type: z.literal("rescan_document"), payload: RescanDocumentActionPayload }),
 ]);
 
 type PendingAction = z.infer<typeof ActionBody>;
@@ -398,6 +419,13 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
       return `Sync reminders to your "${action.payload.calendarSummary}" Google Calendar`;
     case "disconnect_calendar":
       return `Disconnect your Google Calendar`;
+    case "rescan_document": {
+      const doc = await getDocumentLabelInfo(action.payload.documentId);
+      const name = doc
+        ? `"${doc.originalFilename ?? (doc.documentType ? doc.documentType.replace(/_/g, " ") : "document")}"`
+        : "this document";
+      return `Re-scan ${name} to refresh its extracted details`;
+    }
   }
 }
 
@@ -827,6 +855,20 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
       .where(eq(travelsGoogleCalendarConnections.userId, userId));
     return { status: 200, body: { type: "disconnect_calendar", result: {} } };
   }) as ActionExecutor,
+  rescan_document: (async (
+    payload: z.infer<typeof RescanDocumentActionPayload>,
+    userId: number,
+  ) => {
+    const [trip] = await db
+      .select({ id: travelsTrips.id })
+      .from(travelsTrips)
+      .where(and(eq(travelsTrips.id, payload.tripId), eq(travelsTrips.userId, userId)));
+    if (!trip) return { status: 404, body: { error: "Trip not found" } };
+
+    const result = await rescanTripDocument(payload.tripId, payload.documentId, logger);
+    if (!result.ok) return { status: result.status, body: { error: result.error } };
+    return { status: 200, body: { type: "rescan_document", result: result.document } };
+  }) as ActionExecutor,
 };
 
 // ---------------------------------------------------------------------------
@@ -1129,6 +1171,22 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "rescan_document",
+      description:
+        'Propose re-scanning (re-running AI extraction on) an already-uploaded travel document, e.g. "re-scan my flight ticket" or "the hotel confirmation looks wrong, can you read it again?". This re-reads the original uploaded file and refreshes its extracted fields (dates, confirmation numbers, etc.), skipping any field the user has locked. It does not require a new upload. Only call this if the trip\'s numeric id AND the document\'s numeric id are visible on screen (look for "docId: <number>" next to the document you were given); never guess an id — if you can\'t see it, ask which document they mean or offer to open the trip.',
+      parameters: {
+        type: "object",
+        properties: {
+          tripId: { type: "integer" },
+          documentId: { type: "integer" },
+        },
+        required: ["tripId", "documentId"],
+      },
+    },
+  },
 ];
 
 const NAVIGATE_TOOL_NAME = "suggest_navigation";
@@ -1396,6 +1454,8 @@ ITINERARY: Use add_itinerary_day for requests like "add a day trip to Kyoto on t
 CALENDAR: Each family member connects their own Google Calendar independently from the Settings page; you can never trigger that OAuth connection yourself — it requires the user to click a real "Connect" button that redirects their browser to Google. If the user asks to connect and you can see from on-screen context that it's not connected yet, ask if they'd like you to take them to Settings and use suggest_navigation for "/settings" — never claim you connected it. Once connected, use select_calendar to change which of their calendars reminders sync to, but only if you're on the Settings page and can see the connection is active plus the exact calendarId in the on-screen calendar list — never guess a calendarId or pick one that isn't listed. Use disconnect_calendar to remove their Google Calendar connection entirely — only when it's shown as connected on screen, and make sure your visible reply asks permission first since this stops all future reminder syncing for them. Disconnecting or reconnecting only ever affects the current user, never anyone else in the household.
 
 MAGNET CHECK: If the user asks whether they already own a souvenir magnet, or wants to check a photo against their collection before buying a duplicate, you have no tool for this and can't see or analyze photos yourself in this text chat — tell them to tap the small camera icon next to the message box, which lets them snap or upload a photo and checks it against their whole collection right there in the chat (no need to navigate anywhere first). Never guess or fabricate a match result.
+
+DOCUMENTS: You can already see each uploaded document's parsed fields (confirmation numbers, dates, etc.) in the on-screen state above — answer questions about them directly instead of asking the user to open or re-read the file. If the user says a document's details look wrong, are missing, or asks you to "re-read"/"re-scan" a document, use rescan_document to re-run AI extraction on the original uploaded file; this only works for a document whose docId you can see on screen (look for "docId: <number>") and never touches fields the user has locked (shown with a lock icon in the app). This does not let you upload a new file — if there's no matching document on screen, tell the user to upload it from the trip's Documents section first.
 
 Keep replies concise and easy to read in a chat bubble.`;
 

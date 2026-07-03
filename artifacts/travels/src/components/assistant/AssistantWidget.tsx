@@ -262,7 +262,8 @@ export function AssistantWidget() {
       action.type === "cancel_trip" ||
       action.type === "remove_packing_item" ||
       action.type === "add_itinerary_day" ||
-      action.type === "regenerate_itinerary_day"
+      action.type === "regenerate_itinerary_day" ||
+      action.type === "rescan_document"
     ) {
       const tripId = action.payload.tripId;
       if (typeof tripId === "number") {

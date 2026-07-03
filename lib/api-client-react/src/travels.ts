@@ -1248,7 +1248,8 @@ export type AssistantActionType =
   | "add_itinerary_day"
   | "regenerate_itinerary_day"
   | "select_calendar"
-  | "disconnect_calendar";
+  | "disconnect_calendar"
+  | "rescan_document";
 
 export interface AssistantAction {
   type: AssistantActionType;

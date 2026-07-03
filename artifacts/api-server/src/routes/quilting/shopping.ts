@@ -50,7 +50,7 @@ router.get("/shopping", async (req, res) => {
   const rows = await db
     .select()
     .from(shoppingItems)
-    
+    .where(eq(shoppingItems.userId, userId))
     .orderBy(desc(shoppingItems.priority), desc(shoppingItems.createdAt));
   res.json(rows.map(serialize));
 });
@@ -60,7 +60,7 @@ router.get("/shopping/stats", async (req, res) => {
   const rows = await db
     .select()
     .from(shoppingItems)
-    ;
+    .where(eq(shoppingItems.userId, userId));
   const stats = {
     totalItems: rows.length,
     wantCount: rows.filter((r) => r.status === "want").length,
@@ -111,7 +111,7 @@ router.get("/shopping/:id", async (req, res) => {
   const [row] = await db
     .select()
     .from(shoppingItems)
-    .where(and(eq(shoppingItems.id, id)));
+    .where(and(eq(shoppingItems.id, id), eq(shoppingItems.userId, userId)));
   if (!row) {
     res.status(404).json({ error: "Item not found" });
     return;
@@ -143,7 +143,7 @@ router.patch("/shopping/:id", async (req, res) => {
   const [row] = await db
     .update(shoppingItems)
     .set(update)
-    .where(and(eq(shoppingItems.id, id)))
+    .where(and(eq(shoppingItems.id, id), eq(shoppingItems.userId, userId)))
     .returning();
   if (!row) {
     res.status(404).json({ error: "Item not found" });
@@ -161,7 +161,7 @@ router.delete("/shopping/:id", async (req, res) => {
   }
   const [row] = await db
     .delete(shoppingItems)
-    .where(and(eq(shoppingItems.id, id)))
+    .where(and(eq(shoppingItems.id, id), eq(shoppingItems.userId, userId)))
     .returning({ id: shoppingItems.id });
   if (!row) {
     res.status(404).json({ error: "Item not found" });

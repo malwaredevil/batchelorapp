@@ -1257,16 +1257,26 @@ export interface AssistantActionResult {
   result: unknown;
 }
 
+export type ActionConfirmationMode = "one_by_one" | "all_at_once" | "auto_run";
+
+export interface ExecutedAssistantAction extends AssistantAction {
+  status: number;
+  result: unknown;
+}
+
 export interface AssistantChatResponse {
   role: "assistant";
   content: string;
   navigate: { path: string; reason: string } | null;
-  action: AssistantAction | null;
+  actions: AssistantAction[];
+  executedActions: ExecutedAssistantAction[];
+  actionConfirmationMode: ActionConfirmationMode;
   messages: AssistantMessage[];
 }
 
 export interface AssistantSettings {
   enabled: boolean;
+  actionConfirmationMode: ActionConfirmationMode;
 }
 
 export interface HouseholdMemoryItem {
@@ -1463,7 +1473,11 @@ export function useGetAssistantSettings<
   return { ...query, queryKey: queryOpts.queryKey };
 }
 
-const putAssistantSettingsFn = (body: AssistantSettings): Promise<AssistantSettings> =>
+export type UpdateAssistantSettingsBody = Partial<AssistantSettings>;
+
+const putAssistantSettingsFn = (
+  body: UpdateAssistantSettingsBody,
+): Promise<AssistantSettings> =>
   customFetch<AssistantSettings>("/api/travels/assistant/settings", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -1471,9 +1485,11 @@ const putAssistantSettingsFn = (body: AssistantSettings): Promise<AssistantSetti
   });
 
 export function useUpdateAssistantSettings(
-  options?: { mutation?: UseMutationOptions<AssistantSettings, unknown, AssistantSettings> },
+  options?: {
+    mutation?: UseMutationOptions<AssistantSettings, unknown, UpdateAssistantSettingsBody>;
+  },
 ) {
-  const mutationFn = (body: AssistantSettings) => putAssistantSettingsFn(body);
+  const mutationFn = (body: UpdateAssistantSettingsBody) => putAssistantSettingsFn(body);
   return useMutation({ mutationFn, ...options?.mutation });
 }
 

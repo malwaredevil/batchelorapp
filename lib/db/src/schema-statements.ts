@@ -572,13 +572,16 @@ export const STATEMENTS: string[] = [
   )`,
   `ALTER TABLE travels_assistant_conversations ENABLE ROW LEVEL SECURITY`,
 
-  // Per-user on/off preference for elAIne (default on).
+  // Per-user on/off preference for elAIne (default on), plus how she should
+  // handle confirming multi-action turns (default: one at a time).
   `CREATE TABLE IF NOT EXISTS travels_assistant_settings (
     user_id     INTEGER PRIMARY KEY,
     enabled     BOOLEAN NOT NULL DEFAULT TRUE,
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
   `ALTER TABLE travels_assistant_settings ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE travels_assistant_settings
+     ADD COLUMN IF NOT EXISTS action_confirmation_mode TEXT NOT NULL DEFAULT 'one_by_one'`,
 
   // Shared household memory — facts elAIne learned from any family member,
   // visible to everyone (not siloed per-user).

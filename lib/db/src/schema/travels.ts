@@ -284,9 +284,15 @@ export type InsertTravelsAssistantConversation =
 
 // Per-user on/off preference for elAIne (default on). "Hide for this visit"
 // is session-only (client-side), so it does not need a row here.
+// `actionConfirmationMode` controls how she confirms multi-action turns:
+// "one_by_one" (default, safest), "all_at_once", or "auto_run" (no
+// confirmation — she just does them and reports back).
 export const travelsAssistantSettings = pgTable("travels_assistant_settings", {
   userId: integer("user_id").primaryKey(),
   enabled: boolean("enabled").notNull().default(true),
+  actionConfirmationMode: text("action_confirmation_mode")
+    .notNull()
+    .default("one_by_one"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

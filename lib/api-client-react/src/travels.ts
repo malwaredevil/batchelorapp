@@ -1252,7 +1252,8 @@ export type AssistantActionType =
   | "rescan_document"
   | "generate_itinerary"
   | "confirm_itinerary_activity"
-  | "remove_itinerary_activity";
+  | "remove_itinerary_activity"
+  | "send_email";
 
 export interface AssistantAction {
   type: AssistantActionType;

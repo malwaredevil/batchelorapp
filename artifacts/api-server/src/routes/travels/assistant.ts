@@ -28,6 +28,7 @@ import {
   deleteAllReminderCalendarEvents,
 } from "./reminders";
 import { generateItineraryForTrip, ItineraryActionError } from "./ai";
+import { sendAssistantEmail, resendConfigured } from "../../lib/email";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -285,6 +286,11 @@ const RemoveItineraryActivityActionPayload = z.object({
   activityNumber: z.number().int().positive(),
 });
 
+const SendEmailActionPayload = z.object({
+  subject: z.string().min(1).max(200),
+  body: z.string().min(1).max(10000),
+});
+
 const ActionBody = z.discriminatedUnion("type", [
   z.object({ type: z.literal("create_trip"), payload: CreateTripActionPayload }),
   z.object({ type: z.literal("add_wishlist"), payload: AddWishlistActionPayload }),
@@ -340,6 +346,7 @@ const ActionBody = z.discriminatedUnion("type", [
     type: z.literal("remove_itinerary_activity"),
     payload: RemoveItineraryActivityActionPayload,
   }),
+  z.object({ type: z.literal("send_email"), payload: SendEmailActionPayload }),
 ]);
 
 type PendingAction = z.infer<typeof ActionBody>;
@@ -469,6 +476,8 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
       const name = trip ? `"${trip.title || trip.destination}"` : "this trip";
       return `Remove activity ${action.payload.activityNumber} from day ${action.payload.dayNumber} of ${name}'s itinerary`;
     }
+    case "send_email":
+      return `Email you "${action.payload.subject}"`;
   }
 }
 
@@ -1007,6 +1016,22 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
       .returning();
     return { status: 200, body: { type: "remove_itinerary_activity", result: row } };
   }) as ActionExecutor,
+  send_email: (async (payload: z.infer<typeof SendEmailActionPayload>, userId: number) => {
+    if (!resendConfigured()) {
+      return { status: 503, body: { error: "Email sending isn't configured yet." } };
+    }
+    const [user] = await db
+      .select({ email: appUsers.email })
+      .from(appUsers)
+      .where(eq(appUsers.id, userId));
+    if (!user?.email) return { status: 404, body: { error: "No email address on file" } };
+
+    await sendAssistantEmail(user.email, payload.subject, payload.body);
+    return {
+      status: 200,
+      body: { type: "send_email", result: { sentTo: user.email, subject: payload.subject } },
+    };
+  }) as ActionExecutor,
 };
 
 // ---------------------------------------------------------------------------
@@ -1384,6 +1409,22 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "send_email",
+      description:
+        'Propose emailing the user a copy of something you just told them, e.g. after listing recommendations, an itinerary summary, or packing tips: "want me to email you that list?" This always sends to the user\'s own registered account email — never ask for or accept a different address, and never use this to email anyone else. Write `subject` as a short descriptive title and `body` as plain text (no markdown/HTML) using blank lines between paragraphs; it will be nicely formatted automatically. Offer this proactively when you\'ve just produced a substantial list or summary the user might want to keep, but don\'t call it until the user agrees.',
+      parameters: {
+        type: "object",
+        properties: {
+          subject: { type: "string", description: "Short email subject line" },
+          body: { type: "string", description: "Plain text email body, blank line between paragraphs" },
+        },
+        required: ["subject", "body"],
+      },
+    },
+  },
 ];
 
 const NAVIGATE_TOOL_NAME = "suggest_navigation";
@@ -1653,6 +1694,8 @@ CALENDAR: Each family member connects their own Google Calendar independently fr
 MAGNET CHECK: If the user asks whether they already own a souvenir magnet, or wants to check a photo against their collection before buying a duplicate, you have no tool for this and can't see or analyze photos yourself in this text chat — tell them to tap the small camera icon next to the message box, which lets them snap or upload a photo and checks it against their whole collection right there in the chat (no need to navigate anywhere first). Never guess or fabricate a match result.
 
 DOCUMENTS: You can already see each uploaded document's parsed fields (confirmation numbers, dates, etc.) in the on-screen state above — answer questions about them directly instead of asking the user to open or re-read the file. If the user says a document's details look wrong, are missing, or asks you to "re-read"/"re-scan" a document, use rescan_document to re-run AI extraction on the original uploaded file; this only works for a document whose docId you can see on screen (look for "docId: <number>") and never touches fields the user has locked (shown with a lock icon in the app). This does not let you upload a new file — if there's no matching document on screen, tell the user to upload it from the trip's Documents section first.
+
+EMAIL: Whenever you've just given the user something substantial worth keeping — a list of recommendations, an itinerary summary, packing tips, etc. — offer to email it to them, e.g. "Want me to email you this list?" Only call send_email once they say yes; never call it unprompted or assume they want it. It always goes to their own registered account email, so never ask for an address and never offer to send it to anyone else. Write a short subject and a plain-text body (no markdown/HTML, blank line between paragraphs) — it gets formatted into a nice email automatically. You have no way to export a PDF or Word document, so don't offer that; email is the only export option available.
 
 Keep replies concise and easy to read in a chat bubble.`;
 

@@ -29,3 +29,4 @@
 - [elAIne proactive nudges architecture](travels-proactive-nudges.md) — background job only inserts dedup'd nudge rows; the conversation-read endpoint folds unseen ones into chat + marks seen atomically; separate unseen-count endpoint backs the badge.
 - [Travels Google Calendar OAuth cannot be assistant-triggered](travels-calendar-oauth-constraint.md) — connect flow is a full browser redirect; automation may only report status/select-calendar/disconnect, never connect.
 - [elAIne magnet duplicate-photo check lives in the chat widget](travels-magnet-assistant-widget.md) — image-upload features bypass the text-only chat/tool loop entirely; wire the UI straight to the existing vision endpoint/hook instead.
+- [elAIne send_email action](travels-itinerary-assistant-actions.md) — no user-supplied recipient, always resolves the caller's own account email server-side; watch for backticks breaking the systemPrompt template literal.

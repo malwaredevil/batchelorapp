@@ -75,6 +75,17 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS IDX_quilting_session_expire ON quilting_sessions (expire)`,
   `ALTER TABLE quilting_sessions ENABLE ROW LEVEL SECURITY`,
 
+  // Shared, cross-instance rate limiting counters. Backs express-rate-limit's
+  // Store interface so limits are enforced across the whole autoscaled
+  // deployment instead of per-process. `key` is `${limiterName}:${clientKey}`.
+  `CREATE TABLE IF NOT EXISTS rate_limits (
+    key text PRIMARY KEY,
+    points integer NOT NULL DEFAULT 0,
+    reset_at timestamptz NOT NULL
+  )`,
+  `ALTER TABLE rate_limits ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS rate_limits_reset_at_idx ON rate_limits (reset_at)`,
+
   // ═══════════════════════════════════════════════════════════════════════════
   // POTTERY TABLES
   // ═══════════════════════════════════════════════════════════════════════════

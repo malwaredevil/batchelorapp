@@ -18,11 +18,13 @@ import {
   useUpdateAssistantSettings,
   useExecuteAssistantAction,
   getGetAssistantConversationQueryKey,
+  getGetAssistantSettingsQueryKey,
   getListTripsQueryKey,
   getListWishlistQueryKey,
   getGetTripQueryKey,
   type AssistantMessage,
   type AssistantAction,
+  type ExecutedAssistantAction,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -52,7 +54,15 @@ export function AssistantWidget() {
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [initialized, setInitialized] = useState(false);
   const [pendingNavigate, setPendingNavigate] = useState<{ path: string; reason: string } | null>(null);
-  const [pendingAction, setPendingAction] = useState<AssistantAction | null>(null);
+  // Actions elAIne proposed this turn, still awaiting confirmation. In
+  // one_by_one mode only the first entry is shown at a time; in
+  // all_at_once mode they're all shown together with a single confirm/cancel.
+  const [pendingActions, setPendingActions] = useState<AssistantAction[]>([]);
+  const [confirmingAll, setConfirmingAll] = useState(false);
+  // Actions elAIne already ran on her own this turn (auto_run mode) — shown
+  // as a summary instead of a confirmation card, since there's nothing left
+  // to confirm.
+  const [executedActions, setExecutedActions] = useState<ExecutedAssistantAction[]>([]);
   const [actionDone, setActionDone] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
@@ -114,7 +124,8 @@ export function AssistantWidget() {
     if (!trimmed || isStreaming) return;
     setInput("");
     setPendingNavigate(null);
-    setPendingAction(null);
+    setPendingActions([]);
+    setExecutedActions([]);
     setActionDone(false);
     setStreamingContent("");
     setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
@@ -125,18 +136,26 @@ export function AssistantWidget() {
         { message: trimmed, pageContext: getPageContext() },
         {
           onDelta: (text) => setStreamingContent((prev) => prev + text),
-          onAction: (action) => setPendingAction(action),
+          onAction: (action) => setPendingActions((prev) => [...prev, action]),
           onDone: (result) => {
             setMessages(result.messages);
             if (result.navigate) setPendingNavigate(result.navigate);
-            if (result.action) setPendingAction(result.action);
+            if (result.actions.length > 0) setPendingActions(result.actions);
+            if (result.executedActions.length > 0) {
+              setExecutedActions(result.executedActions);
+              qc.invalidateQueries({ queryKey: getListTripsQueryKey() });
+              qc.invalidateQueries({ queryKey: getListWishlistQueryKey() });
+            }
+            if (result.actionConfirmationMode !== settings?.actionConfirmationMode) {
+              qc.invalidateQueries({ queryKey: getGetAssistantSettingsQueryKey() });
+            }
           },
         },
       );
     } catch {
       toast.error("elAIne couldn't respond just now. Please try again.");
       setMessages((prev) => prev.slice(0, -1));
-      setPendingAction(null);
+      setPendingActions([]);
     } finally {
       setStreamingContent("");
       setIsStreaming(false);
@@ -150,30 +169,37 @@ export function AssistantWidget() {
     setOpen(false);
   }
 
+  function invalidateActionQueries(action: AssistantAction) {
+    qc.invalidateQueries({ queryKey: getListTripsQueryKey() });
+    qc.invalidateQueries({ queryKey: getListWishlistQueryKey() });
+    if (
+      action.type === "add_packing_item" ||
+      action.type === "update_trip_status" ||
+      action.type === "update_trip_details" ||
+      action.type === "cancel_trip" ||
+      action.type === "remove_packing_item" ||
+      action.type === "add_itinerary_day" ||
+      action.type === "regenerate_itinerary_day"
+    ) {
+      const tripId = action.payload.tripId;
+      if (typeof tripId === "number") {
+        qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
+      }
+    }
+  }
+
+  // one_by_one mode: confirm or skip just the first queued action, then
+  // move on to the next one (if any).
   function handleConfirmAction() {
-    if (!pendingAction || executeAction.isPending) return;
+    const action = pendingActions[0];
+    if (!action || executeAction.isPending) return;
     executeAction.mutate(
-      { type: pendingAction.type, payload: pendingAction.payload },
+      { type: action.type, payload: action.payload },
       {
         onSuccess: () => {
           setActionDone(true);
-          setPendingAction(null);
-          qc.invalidateQueries({ queryKey: getListTripsQueryKey() });
-          qc.invalidateQueries({ queryKey: getListWishlistQueryKey() });
-          if (
-            pendingAction.type === "add_packing_item" ||
-            pendingAction.type === "update_trip_status" ||
-            pendingAction.type === "update_trip_details" ||
-            pendingAction.type === "cancel_trip" ||
-            pendingAction.type === "remove_packing_item" ||
-            pendingAction.type === "add_itinerary_day" ||
-            pendingAction.type === "regenerate_itinerary_day"
-          ) {
-            const tripId = pendingAction.payload.tripId;
-            if (typeof tripId === "number") {
-              qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
-            }
-          }
+          setPendingActions((prev) => prev.slice(1));
+          invalidateActionQueries(action);
           toast.success("Done!");
         },
         onError: () => {
@@ -181,6 +207,38 @@ export function AssistantWidget() {
         },
       },
     );
+  }
+
+  function handleSkipAction() {
+    setPendingActions((prev) => prev.slice(1));
+  }
+
+  // all_at_once mode: confirm every queued action in order, one request
+  // at a time, then clear the queue once they've all run.
+  async function handleConfirmAll() {
+    if (pendingActions.length === 0 || confirmingAll) return;
+    setConfirmingAll(true);
+    let failed = 0;
+    for (const action of pendingActions) {
+      try {
+        await executeAction.mutateAsync({ type: action.type, payload: action.payload });
+        invalidateActionQueries(action);
+      } catch {
+        failed += 1;
+      }
+    }
+    setConfirmingAll(false);
+    setPendingActions([]);
+    if (failed > 0) {
+      toast.error(`${failed} of ${pendingActions.length} action(s) couldn't be done.`);
+    } else {
+      setActionDone(true);
+      toast.success("Done!");
+    }
+  }
+
+  function handleCancelAll() {
+    setPendingActions([]);
   }
 
   return (
@@ -285,9 +343,51 @@ export function AssistantWidget() {
               </div>
             )}
 
-            {pendingAction && (
+            {pendingActions.length > 0 && settings?.actionConfirmationMode === "all_at_once" && (
               <div className="ml-8 flex flex-col gap-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
-                <p className="text-xs text-muted-foreground">{pendingAction.label}?</p>
+                <p className="text-xs text-muted-foreground">
+                  {pendingActions.length === 1 ? "1 thing" : `${pendingActions.length} things`} to
+                  confirm:
+                </p>
+                <ul className="space-y-1">
+                  {pendingActions.map((action, i) => (
+                    <li key={i} className="flex items-start gap-1.5 text-xs text-foreground">
+                      <Check className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
+                      {action.label}
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={handleConfirmAll}
+                    disabled={confirmingAll}
+                  >
+                    <Check className="h-3 w-3 mr-1" />
+                    {confirmingAll ? "Doing it…" : "Yes, do all of it"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs"
+                    onClick={handleCancelAll}
+                    disabled={confirmingAll}
+                  >
+                    Cancel all
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {pendingActions.length > 0 && settings?.actionConfirmationMode !== "all_at_once" && (
+              <div className="ml-8 flex flex-col gap-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
+                <p className="text-xs text-muted-foreground">
+                  {pendingActions[0]!.label}?
+                  {pendingActions.length > 1 && (
+                    <span className="text-muted-foreground/70"> ({pendingActions.length} more after this)</span>
+                  )}
+                </p>
                 <div className="flex gap-2">
                   <Button
                     size="sm"
@@ -302,12 +402,30 @@ export function AssistantWidget() {
                     size="sm"
                     variant="ghost"
                     className="h-7 text-xs"
-                    onClick={() => setPendingAction(null)}
+                    onClick={handleSkipAction}
                     disabled={executeAction.isPending}
                   >
                     No thanks
                   </Button>
                 </div>
+              </div>
+            )}
+
+            {executedActions.length > 0 && (
+              <div className="ml-8 flex flex-col gap-1 rounded-xl border border-primary/30 bg-primary/5 p-3">
+                <p className="text-xs text-muted-foreground">Already done automatically:</p>
+                <ul className="space-y-1">
+                  {executedActions.map((action, i) => (
+                    <li key={i} className="flex items-start gap-1.5 text-xs text-foreground">
+                      {action.status < 400 ? (
+                        <Check className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
+                      ) : (
+                        <X className="mt-0.5 h-3 w-3 shrink-0 text-destructive" />
+                      )}
+                      {action.label}
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
 

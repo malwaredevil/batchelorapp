@@ -72,6 +72,10 @@ const dbMock = {
     onConflictDoNothing() {
       return this;
     },
+    onConflictDoUpdate(config: unknown) {
+      updateCalls.push({ table: "upsert", set: (config as { set: unknown }).set });
+      return this;
+    },
     returning() {
       return Promise.resolve(lastReturning);
     },
@@ -712,6 +716,110 @@ describe("POST /api/travels/assistant/action", () => {
     const res = await request(app)
       .post("/api/travels/assistant/action")
       .send({ type: "remove_wishlist_item", payload: { wishlistId: 3 } });
+
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("GET /api/travels/assistant/settings", () => {
+  it("defaults to enabled + one_by_one when no row exists", async () => {
+    selectQueue.push([]);
+    const app = await buildApp();
+
+    const res = await request(app).get("/api/travels/assistant/settings");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ enabled: true, actionConfirmationMode: "one_by_one" });
+  });
+
+  it("returns the stored mode when a row exists", async () => {
+    selectQueue.push([{ enabled: false, actionConfirmationMode: "auto_run" }]);
+    const app = await buildApp();
+
+    const res = await request(app).get("/api/travels/assistant/settings");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ enabled: false, actionConfirmationMode: "auto_run" });
+  });
+});
+
+describe("PUT /api/travels/assistant/settings", () => {
+  it("creates settings with the requested mode when none exist yet", async () => {
+    selectQueue.push([]); // select-before-upsert finds nothing
+    const app = await buildApp();
+
+    const res = await request(app)
+      .put("/api/travels/assistant/settings")
+      .send({ actionConfirmationMode: "all_at_once" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ enabled: true, actionConfirmationMode: "all_at_once" });
+    expect(updateCalls[0]?.set).toEqual({
+      enabled: true,
+      actionConfirmationMode: "all_at_once",
+      updatedAt: expect.any(Date),
+    });
+  });
+
+  it("merges a mode-only patch on top of an existing enabled value", async () => {
+    selectQueue.push([{ enabled: false, actionConfirmationMode: "one_by_one" }]);
+    const app = await buildApp();
+
+    const res = await request(app)
+      .put("/api/travels/assistant/settings")
+      .send({ actionConfirmationMode: "auto_run" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ enabled: false, actionConfirmationMode: "auto_run" });
+    expect(updateCalls[0]?.set).toMatchObject({
+      enabled: false,
+      actionConfirmationMode: "auto_run",
+    });
+  });
+
+  it("preserves the existing mode when only enabled is patched", async () => {
+    selectQueue.push([{ enabled: true, actionConfirmationMode: "all_at_once" }]);
+    const app = await buildApp();
+
+    const res = await request(app)
+      .put("/api/travels/assistant/settings")
+      .send({ enabled: false });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ enabled: false, actionConfirmationMode: "all_at_once" });
+  });
+
+  it("rejects an invalid actionConfirmationMode value", async () => {
+    const app = await buildApp();
+
+    const res = await request(app)
+      .put("/api/travels/assistant/settings")
+      .send({ actionConfirmationMode: "not_a_mode" });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects an empty body", async () => {
+    const app = await buildApp();
+
+    const res = await request(app).put("/api/travels/assistant/settings").send({});
+
+    expect(res.status).toBe(400);
+  });
+
+  it("requires authentication", async () => {
+    const { default: router } = await import("./assistant");
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => {
+      (req as unknown as { session: Record<string, unknown> }).session = {};
+      next();
+    });
+    app.use("/api/travels", router);
+
+    const res = await request(app)
+      .put("/api/travels/assistant/settings")
+      .send({ actionConfirmationMode: "auto_run" });
 
     expect(res.status).toBe(401);
   });

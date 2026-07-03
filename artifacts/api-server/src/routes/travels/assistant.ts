@@ -52,9 +52,22 @@ const ChatBody = z.object({
   pageContext: z.string().max(6000).optional(),
 });
 
-const SettingsBody = z.object({
-  enabled: z.boolean(),
-});
+// How elAIne confirms a turn that proposes more than one write-action:
+// "one_by_one" (default, safest) shows each proposed action individually,
+// confirm/skip before the next appears; "all_at_once" shows every proposed
+// action together with one Confirm all / Cancel all; "auto_run" executes
+// them immediately with no confirmation step and reports back afterward.
+const ACTION_CONFIRMATION_MODES = ["one_by_one", "all_at_once", "auto_run"] as const;
+type ActionConfirmationMode = (typeof ACTION_CONFIRMATION_MODES)[number];
+
+const SettingsBody = z
+  .object({
+    enabled: z.boolean().optional(),
+    actionConfirmationMode: z.enum(ACTION_CONFIRMATION_MODES).optional(),
+  })
+  .refine((v) => v.enabled !== undefined || v.actionConfirmationMode !== undefined, {
+    message: "At least one setting must be provided",
+  });
 
 // Copied intentionally from routes/travels/trips.ts and wishlist.ts, which
 // each keep their own small copy of this helper rather than sharing one.
@@ -918,6 +931,12 @@ const RememberToolPayload = z.object({
   content: z.string().min(1).max(2000),
 });
 
+const SET_MODE_TOOL_NAME = "set_action_confirmation_mode";
+
+const SetModeToolPayload = z.object({
+  mode: z.enum(ACTION_CONFIRMATION_MODES),
+});
+
 const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: "function",
@@ -952,6 +971,26 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           content: { type: "string", description: "The fact, written plainly" },
         },
         required: ["content"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: SET_MODE_TOOL_NAME,
+      description:
+        'Change how this user wants you to confirm multi-action turns going forward. Applied immediately, without a separate confirmation card — only call this when the user explicitly asks you to change it (e.g. "just do things automatically from now on", "ask me one at a time", "show me everything together before you do it"). Never call this to explain the modes — just tell them in your visible reply and only call the tool once they\'ve actually decided.',
+      parameters: {
+        type: "object",
+        properties: {
+          mode: {
+            type: "string",
+            enum: [...ACTION_CONFIRMATION_MODES],
+            description:
+              'one_by_one = confirm each proposed action individually before the next is shown (default, safest). all_at_once = show every proposed action together with one Confirm all / Cancel all. auto_run = execute proposed actions immediately with no confirmation and report back afterward.',
+          },
+        },
+        required: ["mode"],
       },
     },
   },
@@ -1049,6 +1088,22 @@ router.post("/assistant/chat", async (req, res) => {
       ? memoryRows.map((m) => `- ${m.content}`).join("\n")
       : "(nothing remembered yet)";
 
+  const [settingsRow] = await db
+    .select({ actionConfirmationMode: travelsAssistantSettings.actionConfirmationMode })
+    .from(travelsAssistantSettings)
+    .where(eq(travelsAssistantSettings.userId, userId));
+  const actionConfirmationMode: ActionConfirmationMode =
+    (settingsRow?.actionConfirmationMode as ActionConfirmationMode | undefined) ?? "one_by_one";
+
+  const CONFIRMATION_MODE_EXPLANATION: Record<ActionConfirmationMode, string> = {
+    one_by_one:
+      'one_by_one — the user reviews and confirms/skips each proposed action individually, one at a time.',
+    all_at_once:
+      'all_at_once — the user sees every proposed action from this turn together and confirms or cancels them as a group.',
+    auto_run:
+      'auto_run — proposed actions run immediately with no confirmation step; you should report what you did (or if something failed) after the fact.',
+  };
+
   const systemPrompt = `You are elAIne, a warm, personable AI assistant built into a family travel-planning app. You are talking with ${userName}.
 
 PERSONALITY: You're conversational, upbeat, and genuinely helpful — like a well-traveled friend, not a generic corporate assistant. You can be a little playful. You still give concrete, accurate, step-by-step help when asked.
@@ -1059,7 +1114,9 @@ ${pageContext ? pageContext : "(no page context was shared for this screen)"}
 SHARED FAMILY MEMORY (facts you've picked up from any family member — treat as true for the whole household, not just the person asking):
 ${memoryBlock}
 
-TOOLS: You have tools available for navigation suggestions, remembering household facts, and proposing changes to trips/wishlist/packing lists/reminders. Each tool's own description explains exactly when and how to use it — follow those rules precisely, especially around never fabricating numeric ids and asking permission in your visible reply text before calling any trip/wishlist/packing/reminder tool. Prefer calling at most one write-action tool per turn so the user isn't asked to confirm several things at once; navigation suggestions and remembering a fact can still accompany it.
+TOOLS: You have tools available for navigation suggestions, remembering household facts, and proposing changes to trips/wishlist/packing lists/reminders. Each tool's own description explains exactly when and how to use it — follow those rules precisely, especially around never fabricating numeric ids and asking permission in your visible reply text before calling any trip/wishlist/packing/reminder tool. If a single request naturally involves more than one write-action (e.g. "add a reminder to book the hotel and add wine tasting to the wishlist"), call all of the relevant action tools in that same turn — don't limit yourself to one. Just make sure your visible reply names everything you're about to do before you call the tools, so nothing is a surprise. Navigation suggestions and remembering a fact can always accompany action tools.
+
+CONFIRMATION MODE: This user's current mode for confirming proposed actions is "${actionConfirmationMode}" — ${CONFIRMATION_MODE_EXPLANATION[actionConfirmationMode]} The three modes are: ${Object.values(CONFIRMATION_MODE_EXPLANATION).join(" | ")} If the user asks how you confirm actions, or asks to change it (e.g. "just do it automatically", "ask me one at a time", "show me everything together"), explain the modes in your visible reply and call ${SET_MODE_TOOL_NAME} once they've decided — never call it just to describe the options. Mention that they can also change this anytime from Settings.
 
 REMINDERS: Use add_reminder for requests like "remind me to check in for our flight" or "remind me to book the hotel by Friday" — it creates a new reminder and syncs it to the calendar by default. Use sync_reminder_to_calendar only to toggle calendar sync on or off for a reminder that already exists and whose numeric id you can see on screen (look for "reminderId: <number>" in the reminders listed for the current trip); never use it to create a reminder.
 
@@ -1087,8 +1144,13 @@ Keep replies concise and easy to read in a chat bubble.`;
   }
 
   let rawContent = "";
-  let actionSent = false;
-  let resolvedAction: ProposedAction | null = null;
+  // Proposed (not-yet-executed) actions for one_by_one / all_at_once modes,
+  // in the order the model produced them.
+  const resolvedActions: ProposedAction[] = [];
+  // Indices already turned into a proposed action, so the post-stream pass
+  // doesn't double-send one already caught mid-stream. Only used outside
+  // auto_run, since auto_run never sends a proposal — it executes instead.
+  const sentActionIndices = new Set<number>();
   // Accumulates streamed tool-call fragments by their index. `arguments`
   // arrives as growing string fragments across multiple chunks — this is
   // the standard OpenAI/OpenRouter streaming tool-call shape.
@@ -1126,12 +1188,19 @@ Keep replies concise and easy to read in a chat bubble.`;
             if (tc.function?.arguments) acc.args += tc.function.arguments;
             toolCallAcc.set(tc.index, acc);
 
-            if (!actionSent && ACTION_TOOL_NAMES.has(acc.name)) {
+            // auto_run never proposes mid-stream — every action is executed
+            // together in one pass once the full turn (and its arguments)
+            // have finished streaming, see below.
+            if (
+              actionConfirmationMode !== "auto_run" &&
+              !sentActionIndices.has(tc.index) &&
+              ACTION_TOOL_NAMES.has(acc.name)
+            ) {
               const early = await tryBuildAction(acc.name, acc.args);
               if (early) {
                 sendEvent("action", early);
-                actionSent = true;
-                resolvedAction = early;
+                sentActionIndices.add(tc.index);
+                resolvedActions.push(early);
               }
             }
           }
@@ -1150,8 +1219,10 @@ Keep replies concise and easy to read in a chat bubble.`;
   // calls arrive as a structured field separate from the reply text.
   const content = rawContent.trim();
   let navigate: { path: string; reason: string } | null = null;
+  let updatedActionConfirmationMode: ActionConfirmationMode | null = null;
+  const executedActions: Array<ProposedAction & { status: number; result: unknown }> = [];
 
-  for (const { name, args } of toolCallAcc.values()) {
+  for (const [index, { name, args }] of toolCallAcc.entries()) {
     if (name === REMEMBER_TOOL_NAME) {
       try {
         const parsed = RememberToolPayload.safeParse(JSON.parse(args));
@@ -1162,6 +1233,25 @@ Keep replies concise and easy to read in a chat bubble.`;
         }
       } catch {
         // Malformed JSON from the model — drop it, keep the reply text.
+      }
+      continue;
+    }
+
+    if (name === SET_MODE_TOOL_NAME) {
+      try {
+        const parsed = SetModeToolPayload.safeParse(JSON.parse(args));
+        if (parsed.success) {
+          updatedActionConfirmationMode = parsed.data.mode;
+          await db
+            .insert(travelsAssistantSettings)
+            .values({ userId, actionConfirmationMode: parsed.data.mode })
+            .onConflictDoUpdate({
+              target: travelsAssistantSettings.userId,
+              set: { actionConfirmationMode: parsed.data.mode, updatedAt: new Date() },
+            });
+        }
+      } catch {
+        // Malformed JSON from the model — drop it.
       }
       continue;
     }
@@ -1177,13 +1267,26 @@ Keep replies concise and easy to read in a chat bubble.`;
       continue;
     }
 
-    if (!actionSent && ACTION_TOOL_NAMES.has(name)) {
+    if (!ACTION_TOOL_NAMES.has(name)) continue;
+
+    // auto_run: execute every proposed action from this turn right away —
+    // there is no confirmation step, so the reply's "done" event carries
+    // what actually happened instead of a pending proposal.
+    if (actionConfirmationMode === "auto_run") {
       const finalAction = await tryBuildAction(name, args);
-      if (finalAction) {
-        sendEvent("action", finalAction);
-        actionSent = true;
-        resolvedAction = finalAction;
-      }
+      if (!finalAction) continue;
+      const executor = ACTION_EXECUTORS[finalAction.type as ActionType];
+      const { status, body } = await executor(finalAction.payload as never, userId);
+      executedActions.push({ ...finalAction, status, result: body });
+      continue;
+    }
+
+    if (sentActionIndices.has(index)) continue;
+    const finalAction = await tryBuildAction(name, args);
+    if (finalAction) {
+      sendEvent("action", finalAction);
+      sentActionIndices.add(index);
+      resolvedActions.push(finalAction);
     }
   }
 
@@ -1202,7 +1305,9 @@ Keep replies concise and easy to read in a chat bubble.`;
     role: "assistant",
     content,
     navigate,
-    action: resolvedAction,
+    actions: resolvedActions,
+    executedActions,
+    actionConfirmationMode: updatedActionConfirmationMode ?? actionConfirmationMode,
     messages: updatedHistory,
   });
   res.end();
@@ -1225,20 +1330,33 @@ router.get("/assistant/settings", async (req, res) => {
     .select()
     .from(travelsAssistantSettings)
     .where(eq(travelsAssistantSettings.userId, userId));
-  res.json({ enabled: row?.enabled ?? true });
+  res.json({
+    enabled: row?.enabled ?? true,
+    actionConfirmationMode:
+      (row?.actionConfirmationMode as ActionConfirmationMode | undefined) ?? "one_by_one",
+  });
 });
 
 router.put("/assistant/settings", async (req, res) => {
   const userId = req.session.userId!;
-  const { enabled } = SettingsBody.parse(req.body);
+  const patch = SettingsBody.parse(req.body);
+  const [existing] = await db
+    .select()
+    .from(travelsAssistantSettings)
+    .where(eq(travelsAssistantSettings.userId, userId));
+  const enabled = patch.enabled ?? existing?.enabled ?? true;
+  const actionConfirmationMode =
+    patch.actionConfirmationMode ??
+    (existing?.actionConfirmationMode as ActionConfirmationMode | undefined) ??
+    "one_by_one";
   await db
     .insert(travelsAssistantSettings)
-    .values({ userId, enabled })
+    .values({ userId, enabled, actionConfirmationMode })
     .onConflictDoUpdate({
       target: travelsAssistantSettings.userId,
-      set: { enabled, updatedAt: new Date() },
+      set: { enabled, actionConfirmationMode, updatedAt: new Date() },
     });
-  res.json({ enabled });
+  res.json({ enabled, actionConfirmationMode });
 });
 
 router.get("/assistant/memory", async (_req, res) => {

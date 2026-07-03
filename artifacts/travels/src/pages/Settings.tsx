@@ -24,6 +24,7 @@ import {
   getGetAssistantSettingsQueryKey,
   getListHouseholdMemoryQueryKey,
   type CalendarListItem,
+  type ActionConfirmationMode,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ElaineAvatar, ElaineWordmark } from "@/components/assistant/ElaineAvatar";
@@ -230,6 +231,19 @@ function ElaineSettingsCard() {
     );
   }
 
+  function handleModeChange(actionConfirmationMode: ActionConfirmationMode) {
+    updateAssistantSettings.mutate(
+      { actionConfirmationMode },
+      {
+        onSuccess: (result) => {
+          qc.setQueryData(getGetAssistantSettingsQueryKey(), result);
+          toast.success("Updated how elAIne confirms actions");
+        },
+        onError: () => toast.error("Failed to update elAIne settings"),
+      },
+    );
+  }
+
   function handleDeleteMemory(id: number) {
     deleteMemory.mutate(id, {
       onSuccess: () => qc.invalidateQueries({ queryKey: getListHouseholdMemoryQueryKey() }),
@@ -261,6 +275,28 @@ function ElaineSettingsCard() {
           onCheckedChange={handleToggle}
           disabled={settingsLoading || updateAssistantSettings.isPending}
         />
+      </div>
+
+      <div className="space-y-2 rounded-lg border border-card-border p-4">
+        <p className="text-sm font-medium text-foreground">How elAIne confirms actions</p>
+        <p className="text-xs text-muted-foreground pb-1">
+          When elAIne proposes a change (like adding a reminder or trip), choose how you want to
+          approve it. You can also just tell her in chat to switch modes.
+        </p>
+        <Select
+          value={assistantSettings?.actionConfirmationMode ?? "one_by_one"}
+          onValueChange={(value) => handleModeChange(value as ActionConfirmationMode)}
+          disabled={settingsLoading || updateAssistantSettings.isPending}
+        >
+          <SelectTrigger className="w-full sm:w-72">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="one_by_one">One at a time (safest, default)</SelectItem>
+            <SelectItem value="all_at_once">All together</SelectItem>
+            <SelectItem value="auto_run">Run automatically, no confirmation</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="space-y-2">

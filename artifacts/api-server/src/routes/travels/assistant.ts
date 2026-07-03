@@ -29,6 +29,7 @@ import {
 } from "./reminders";
 import { generateItineraryForTrip, ItineraryActionError } from "./ai";
 import { sendAssistantEmail, resendConfigured } from "../../lib/email";
+import { webSearch } from "../../lib/web-search";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -1458,6 +1459,12 @@ const SetModeToolPayload = z.object({
   mode: z.enum(ACTION_CONFIRMATION_MODES),
 });
 
+const WEB_SEARCH_TOOL_NAME = "web_search";
+
+const WebSearchToolPayload = z.object({
+  query: z.string().min(1).max(500),
+});
+
 const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: "function",
@@ -1512,6 +1519,21 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           },
         },
         required: ["mode"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: WEB_SEARCH_TOOL_NAME,
+      description:
+        'Search the live web for current, up-to-date information you would not reliably know otherwise — opening hours, current prices, weather forecasts, visa/entry requirements, local events, news, "is X open right now", or anything time-sensitive. Call this BEFORE answering whenever the question needs current/real-world facts rather than general travel knowledge; don\'t guess or rely on stale training knowledge for anything that changes over time. You can call it more than once in the same turn for different sub-questions. After you get results back, answer normally in your visible reply (mention where the info came from if relevant) — do not paste raw search output verbatim.',
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "A focused, specific search query" },
+        },
+        required: ["query"],
       },
     },
   },
@@ -1697,12 +1719,14 @@ DOCUMENTS: You can already see each uploaded document's parsed fields (confirmat
 
 EMAIL: Whenever you've just given the user something substantial worth keeping — a list of recommendations, an itinerary summary, packing tips, etc. — offer to email it to them, e.g. "Want me to email you this list?" Only call send_email once they say yes; never call it unprompted or assume they want it. It always goes to their own registered account email, so never ask for an address and never offer to send it to anyone else. Write a short subject and a plain-text body (no markdown/HTML, blank line between paragraphs) — it gets formatted into a nice email automatically. You have no way to export a PDF or Word document, so don't offer that; email is the only export option available.
 
+WEB SEARCH: You have a real-time web_search tool, unlike a plain language model — use it proactively (no need to ask permission first) whenever a question depends on current information you can't be confident about from memory alone: opening hours, current prices, weather, visa/entry rules, local events, news, or anything else that changes over time. Don't use it for stable general knowledge or for things already visible in the on-screen state above. Call it as many times as needed for different sub-questions, then write your visible reply based on what it returns — never paste raw search output, and never fabricate a current fact instead of searching for it.
+
 Keep replies concise and easy to read in a chat bubble.`;
 
-  const messages = [
-    { role: "system" as const, content: systemPrompt },
+  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    { role: "system", content: systemPrompt },
     ...history.map((m) => ({ role: m.role, content: m.content })),
-    { role: "user" as const, content: message },
+    { role: "user", content: message },
   ];
 
   // Streamed as Server-Sent Events so the client can show elAIne's reply (and
@@ -1722,148 +1746,212 @@ Keep replies concise and easy to read in a chat bubble.`;
   // Proposed (not-yet-executed) actions for one_by_one / all_at_once modes,
   // in the order the model produced them.
   const resolvedActions: ProposedAction[] = [];
-  // Indices already turned into a proposed action, so the post-stream pass
-  // doesn't double-send one already caught mid-stream. Only used outside
-  // auto_run, since auto_run never sends a proposal — it executes instead.
-  const sentActionIndices = new Set<number>();
-  // Accumulates streamed tool-call fragments by their index. `arguments`
-  // arrives as growing string fragments across multiple chunks — this is
-  // the standard OpenAI/OpenRouter streaming tool-call shape.
-  const toolCallAcc = new Map<number, { name: string; args: string }>();
-
-  try {
-    await callModelWithSubagent(
-      MODELS.FAST_VISION,
-      ASSISTANT_SUBAGENT_INSTRUCTIONS,
-      async (client, model, serverTools) => {
-        const stream = await client.chat.completions.create({
-          model,
-          tools: [
-            ...(serverTools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[]),
-            ...ACTION_TOOLS,
-            ...SOFT_TOOLS,
-          ],
-          messages,
-          max_tokens: 700,
-          stream: true,
-        });
-
-        for await (const chunk of stream) {
-          const delta = chunk.choices[0]?.delta;
-          if (!delta) continue;
-
-          if (delta.content) {
-            rawContent += delta.content;
-            sendEvent("delta", { text: delta.content });
-          }
-
-          for (const tc of delta.tool_calls ?? []) {
-            const acc = toolCallAcc.get(tc.index) ?? { name: "", args: "" };
-            if (tc.function?.name) acc.name = tc.function.name;
-            if (tc.function?.arguments) acc.args += tc.function.arguments;
-            toolCallAcc.set(tc.index, acc);
-
-            // auto_run never proposes mid-stream — every action is executed
-            // together in one pass once the full turn (and its arguments)
-            // have finished streaming, see below.
-            if (
-              actionConfirmationMode !== "auto_run" &&
-              !sentActionIndices.has(tc.index) &&
-              ACTION_TOOL_NAMES.has(acc.name)
-            ) {
-              const early = await tryBuildAction(acc.name, acc.args);
-              if (early) {
-                sendEvent("action", early);
-                sentActionIndices.add(tc.index);
-                resolvedActions.push(early);
-              }
-            }
-          }
-        }
-      },
-    );
-  } catch (err) {
-    req.log.error({ err }, "elAIne assistant stream failed");
-    sendEvent("error", { message: "elAIne couldn't respond just now." });
-    res.end();
-    return;
-  }
-
-  // Resolve any tool calls not already handled mid-stream. Content no
-  // longer needs cleanup here — unlike the old regex-directive scheme, tool
-  // calls arrive as a structured field separate from the reply text.
-  const content = rawContent.trim();
   let navigate: { path: string; reason: string } | null = null;
   let updatedActionConfirmationMode: ActionConfirmationMode | null = null;
   const executedActions: Array<ProposedAction & { status: number; result: unknown }> = [];
 
-  for (const [index, { name, args }] of toolCallAcc.entries()) {
-    if (name === REMEMBER_TOOL_NAME) {
-      try {
-        const parsed = RememberToolPayload.safeParse(JSON.parse(args));
-        if (parsed.success) {
-          await db
-            .insert(travelsHouseholdMemory)
-            .values({ content: parsed.data.content, createdByUserId: userId });
+  // web_search is the one tool whose result the model needs back before it
+  // can write its final reply — unlike the other "soft" tools (navigate,
+  // remember, set mode) which apply immediately with no further model input.
+  // That means a turn using it takes two model calls: one that emits the
+  // search tool_call(s), then a second with the results appended as `tool`
+  // messages so the model can answer using them. Capped at MAX_ROUNDS so a
+  // confused model can't loop indefinitely on our AI spend — one search
+  // round plus one mandatory final-answer round covers "look this up, then
+  // tell me" without unbounded cost.
+  const MAX_ROUNDS = 2;
+
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    // Indices already turned into a proposed action, so the post-stream pass
+    // doesn't double-send one already caught mid-stream. Scoped per round —
+    // OpenAI/OpenRouter restart tool-call indices at 0 on every response, so
+    // reusing this across rounds could wrongly skip a same-indexed action
+    // from a later round. Only used outside auto_run, since auto_run never
+    // sends a proposal — it executes instead.
+    const sentActionIndices = new Set<number>();
+    // Accumulates streamed tool-call fragments by their index. `arguments`
+    // arrives as growing string fragments across multiple chunks — this is
+    // the standard OpenAI/OpenRouter streaming tool-call shape. `id` only
+    // arrives on a tool call's first chunk, alongside its name.
+    const toolCallAcc = new Map<number, { id: string; name: string; args: string }>();
+
+    try {
+      await callModelWithSubagent(
+        MODELS.FAST_VISION,
+        ASSISTANT_SUBAGENT_INSTRUCTIONS,
+        async (client, model, serverTools) => {
+          const stream = await client.chat.completions.create({
+            model,
+            tools: [
+              ...(serverTools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[]),
+              ...ACTION_TOOLS,
+              ...SOFT_TOOLS,
+            ],
+            messages,
+            max_tokens: 700,
+            stream: true,
+          });
+
+          for await (const chunk of stream) {
+            const delta = chunk.choices[0]?.delta;
+            if (!delta) continue;
+
+            if (delta.content) {
+              rawContent += delta.content;
+              sendEvent("delta", { text: delta.content });
+            }
+
+            for (const tc of delta.tool_calls ?? []) {
+              const acc = toolCallAcc.get(tc.index) ?? { id: "", name: "", args: "" };
+              if (tc.id) acc.id = tc.id;
+              if (tc.function?.name) acc.name = tc.function.name;
+              if (tc.function?.arguments) acc.args += tc.function.arguments;
+              toolCallAcc.set(tc.index, acc);
+
+              // auto_run never proposes mid-stream — every action is executed
+              // together in one pass once the full turn (and its arguments)
+              // have finished streaming, see below.
+              if (
+                actionConfirmationMode !== "auto_run" &&
+                !sentActionIndices.has(tc.index) &&
+                ACTION_TOOL_NAMES.has(acc.name)
+              ) {
+                const early = await tryBuildAction(acc.name, acc.args);
+                if (early) {
+                  sendEvent("action", early);
+                  sentActionIndices.add(tc.index);
+                  resolvedActions.push(early);
+                }
+              }
+            }
+          }
+        },
+      );
+    } catch (err) {
+      req.log.error({ err }, "elAIne assistant stream failed");
+      sendEvent("error", { message: "elAIne couldn't respond just now." });
+      res.end();
+      return;
+    }
+
+    // Resolve any tool calls not already handled mid-stream. Content no
+    // longer needs cleanup here — unlike the old regex-directive scheme, tool
+    // calls arrive as a structured field separate from the reply text.
+    const webSearchCalls: Array<{ id: string; args: string }> = [];
+
+    for (const [index, { id, name, args }] of toolCallAcc.entries()) {
+      if (name === WEB_SEARCH_TOOL_NAME) {
+        if (id) webSearchCalls.push({ id, args });
+        continue;
+      }
+
+      if (name === REMEMBER_TOOL_NAME) {
+        try {
+          const parsed = RememberToolPayload.safeParse(JSON.parse(args));
+          if (parsed.success) {
+            await db
+              .insert(travelsHouseholdMemory)
+              .values({ content: parsed.data.content, createdByUserId: userId });
+          }
+        } catch {
+          // Malformed JSON from the model — drop it, keep the reply text.
         }
-      } catch {
-        // Malformed JSON from the model — drop it, keep the reply text.
+        continue;
       }
-      continue;
-    }
 
-    if (name === SET_MODE_TOOL_NAME) {
-      try {
-        const parsed = SetModeToolPayload.safeParse(JSON.parse(args));
-        if (parsed.success) {
-          updatedActionConfirmationMode = parsed.data.mode;
-          await db
-            .insert(travelsAssistantSettings)
-            .values({ userId, actionConfirmationMode: parsed.data.mode })
-            .onConflictDoUpdate({
-              target: travelsAssistantSettings.userId,
-              set: { actionConfirmationMode: parsed.data.mode, updatedAt: new Date() },
-            });
+      if (name === SET_MODE_TOOL_NAME) {
+        try {
+          const parsed = SetModeToolPayload.safeParse(JSON.parse(args));
+          if (parsed.success) {
+            updatedActionConfirmationMode = parsed.data.mode;
+            await db
+              .insert(travelsAssistantSettings)
+              .values({ userId, actionConfirmationMode: parsed.data.mode })
+              .onConflictDoUpdate({
+                target: travelsAssistantSettings.userId,
+                set: { actionConfirmationMode: parsed.data.mode, updatedAt: new Date() },
+              });
+          }
+        } catch {
+          // Malformed JSON from the model — drop it.
         }
-      } catch {
-        // Malformed JSON from the model — drop it.
+        continue;
       }
-      continue;
-    }
 
-    if (name === NAVIGATE_TOOL_NAME) {
-      if (navigate) continue; // only surface the first navigate suggestion
-      try {
-        const parsed = NavigateToolPayload.safeParse(JSON.parse(args));
-        if (parsed.success) navigate = parsed.data;
-      } catch {
-        // Malformed JSON from the model — drop it.
+      if (name === NAVIGATE_TOOL_NAME) {
+        if (navigate) continue; // only surface the first navigate suggestion
+        try {
+          const parsed = NavigateToolPayload.safeParse(JSON.parse(args));
+          if (parsed.success) navigate = parsed.data;
+        } catch {
+          // Malformed JSON from the model — drop it.
+        }
+        continue;
       }
-      continue;
-    }
 
-    if (!ACTION_TOOL_NAMES.has(name)) continue;
+      if (!ACTION_TOOL_NAMES.has(name)) continue;
 
-    // auto_run: execute every proposed action from this turn right away —
-    // there is no confirmation step, so the reply's "done" event carries
-    // what actually happened instead of a pending proposal.
-    if (actionConfirmationMode === "auto_run") {
+      // auto_run: execute every proposed action from this turn right away —
+      // there is no confirmation step, so the reply's "done" event carries
+      // what actually happened instead of a pending proposal.
+      if (actionConfirmationMode === "auto_run") {
+        const finalAction = await tryBuildAction(name, args);
+        if (!finalAction) continue;
+        const executor = ACTION_EXECUTORS[finalAction.type as ActionType];
+        const { status, body } = await executor(finalAction.payload as never, userId);
+        executedActions.push({ ...finalAction, status, result: body });
+        continue;
+      }
+
+      if (sentActionIndices.has(index)) continue;
       const finalAction = await tryBuildAction(name, args);
-      if (!finalAction) continue;
-      const executor = ACTION_EXECUTORS[finalAction.type as ActionType];
-      const { status, body } = await executor(finalAction.payload as never, userId);
-      executedActions.push({ ...finalAction, status, result: body });
-      continue;
+      if (finalAction) {
+        sendEvent("action", finalAction);
+        sentActionIndices.add(index);
+        resolvedActions.push(finalAction);
+      }
     }
 
-    if (sentActionIndices.has(index)) continue;
-    const finalAction = await tryBuildAction(name, args);
-    if (finalAction) {
-      sendEvent("action", finalAction);
-      sentActionIndices.add(index);
-      resolvedActions.push(finalAction);
+    if (webSearchCalls.length === 0 || round === MAX_ROUNDS - 1) break;
+
+    // Feed search results back so the model can write its real answer next
+    // round. Reset rawContent first — models essentially never emit text
+    // alongside a tool call, but if one did, it'd otherwise be duplicated
+    // ahead of the actual answer in the final saved/sent content.
+    messages.push({
+      role: "assistant",
+      content: rawContent || null,
+      tool_calls: webSearchCalls.map((c) => ({
+        id: c.id,
+        type: "function",
+        function: { name: WEB_SEARCH_TOOL_NAME, arguments: c.args },
+      })),
+    });
+    rawContent = "";
+
+    for (const call of webSearchCalls) {
+      let resultText: string;
+      try {
+        const parsed = WebSearchToolPayload.safeParse(JSON.parse(call.args));
+        if (!parsed.success) {
+          resultText = "Invalid search query — ask the user to rephrase.";
+        } else {
+          const { answer, citations } = await webSearch(parsed.data.query);
+          resultText = answer
+            ? citations.length > 0
+              ? `${answer}\n\nSources: ${citations.join(", ")}`
+              : answer
+            : "No results found for this search.";
+        }
+      } catch (err) {
+        req.log.error({ err }, "elAIne web_search tool failed");
+        resultText = "Search failed — tell the user you couldn't look this up right now.";
+      }
+      messages.push({ role: "tool", tool_call_id: call.id, content: resultText });
     }
   }
+
+  const content = rawContent.trim();
 
   const updatedHistory: ChatMessage[] = [
     ...history,

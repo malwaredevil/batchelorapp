@@ -20,3 +20,4 @@
 - [Cartographer breaks generic-typed JSX in dev](vite-cartographer-generic-jsx-parse-bug.md) — `<Component<T> ...>` JSX call sites can 500 an entire Vite artifact under cartographer instrumentation; drop the explicit type arg at call sites.
 - [Quilting IDOR fix pattern](quilting-idor-fix-pattern.md) — trust docstrings claiming ownership filtering as evidence of intent, not proof; verify the actual `.where()` clause before assuming a helper is safe.
 - [runTest sandbox DNS failure fallback](runtest-dns-failure-fallback.md) — if runTest fails with ENOTFOUND on a DB host before any browser step, it's test-sandbox infra, not the app; fall back to curl+cookies for API-level e2e verification.
+- [SSE streaming with mid-stream directive detection](sse-streaming-with-directive-parsing.md) — stream the completion, re-run the same finalization regex/parser on the growing buffer per chunk; a closing-delimiter regex naturally waits for completeness.

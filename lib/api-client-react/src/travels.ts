@@ -1303,27 +1303,91 @@ export function useGetAssistantConversation<
   return { ...query, queryKey: queryOpts.queryKey };
 }
 
-const sendAssistantMessageFn = (
+// The chat endpoint is streamed as Server-Sent Events (so elAIne's reply, and
+// any proposed [[ACTION: ...]] directive, can build up incrementally in the
+// UI) rather than returning a single JSON body, so it isn't a plain
+// react-query mutation like the other endpoints in this file. Callers get
+// incremental updates via `callbacks` and the final result via the resolved
+// promise (which also resolves `onDone`).
+export interface AssistantChatStreamCallbacks {
+  onDelta?: (text: string) => void;
+  onAction?: (action: AssistantAction) => void;
+  onDone?: (result: AssistantChatResponse) => void;
+}
+
+function parseSseDataLines(rawEvent: string): string | null {
+  const dataLines = rawEvent
+    .split("\n")
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trimStart());
+  return dataLines.length > 0 ? dataLines.join("\n") : null;
+}
+
+export async function streamAssistantMessage(
   body: { message: string; pageContext?: string },
-): Promise<AssistantChatResponse> =>
-  customFetch<AssistantChatResponse>("/api/travels/assistant/chat", {
+  callbacks: AssistantChatStreamCallbacks = {},
+  signal?: AbortSignal,
+): Promise<AssistantChatResponse> {
+  const response = await fetch("/api/travels/assistant/chat", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
     body: JSON.stringify(body),
+    signal,
   });
 
-export function useSendAssistantMessage(
-  options?: {
-    mutation?: UseMutationOptions<
-      AssistantChatResponse,
-      unknown,
-      { message: string; pageContext?: string }
-    >;
-  },
-) {
-  const mutationFn = (body: { message: string; pageContext?: string }) =>
-    sendAssistantMessageFn(body);
-  return useMutation({ mutationFn, ...options?.mutation });
+  if (!response.ok || !response.body) {
+    const text = await response.text().catch(() => "");
+    throw new Error(text || `Request failed with status ${response.status}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let done: AssistantChatResponse | null = null;
+
+  while (true) {
+    const { value, done: streamDone } = await reader.read();
+    if (streamDone) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let separatorIndex: number;
+    while ((separatorIndex = buffer.indexOf("\n\n")) !== -1) {
+      const rawEvent = buffer.slice(0, separatorIndex);
+      buffer = buffer.slice(separatorIndex + 2);
+      if (!rawEvent.trim()) continue;
+
+      const eventType = rawEvent.match(/^event:\s*(.+)$/m)?.[1]?.trim() ?? "message";
+      const dataText = parseSseDataLines(rawEvent);
+      if (dataText === null) continue;
+
+      let data: unknown;
+      try {
+        data = JSON.parse(dataText);
+      } catch {
+        continue;
+      }
+
+      switch (eventType) {
+        case "delta":
+          callbacks.onDelta?.((data as { text: string }).text);
+          break;
+        case "action":
+          callbacks.onAction?.(data as AssistantAction);
+          break;
+        case "done":
+          done = data as AssistantChatResponse;
+          callbacks.onDone?.(done);
+          break;
+        case "error":
+          throw new Error((data as { message?: string }).message ?? "elAIne couldn't respond just now.");
+      }
+    }
+  }
+
+  if (!done) {
+    throw new Error("elAIne's response ended unexpectedly.");
+  }
+  return done;
 }
 
 const newAssistantConversationFn = (): Promise<{ messages: AssistantMessage[] }> =>

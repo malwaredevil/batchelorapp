@@ -12,7 +12,7 @@ import {
 import { toast } from "sonner";
 import {
   useGetAssistantConversation,
-  useSendAssistantMessage,
+  streamAssistantMessage,
   useNewAssistantConversation,
   useGetAssistantSettings,
   useUpdateAssistantSettings,
@@ -54,6 +54,8 @@ export function AssistantWidget() {
   const [pendingNavigate, setPendingNavigate] = useState<{ path: string; reason: string } | null>(null);
   const [pendingAction, setPendingAction] = useState<AssistantAction | null>(null);
   const [actionDone, setActionDone] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingContent, setStreamingContent] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
 
   const { data: settings } = useGetAssistantSettings();
@@ -61,7 +63,6 @@ export function AssistantWidget() {
   const { data: conversation } = useGetAssistantConversation({
     query: { enabled: open && !initialized, queryKey: getGetAssistantConversationQueryKey() },
   });
-  const sendMessage = useSendAssistantMessage();
   const newConversation = useNewAssistantConversation();
   const executeAction = useExecuteAssistantAction();
 
@@ -74,7 +75,7 @@ export function AssistantWidget() {
 
   useEffect(() => {
     if (open) endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, open, sendMessage.isPending]);
+  }, [messages, open, isStreaming, streamingContent]);
 
   if (!settings?.enabled || hiddenForVisit) {
     return null;
@@ -108,29 +109,38 @@ export function AssistantWidget() {
     });
   }
 
-  function handleSend() {
+  async function handleSend() {
     const trimmed = input.trim();
-    if (!trimmed || sendMessage.isPending) return;
+    if (!trimmed || isStreaming) return;
     setInput("");
     setPendingNavigate(null);
     setPendingAction(null);
     setActionDone(false);
+    setStreamingContent("");
     setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
+    setIsStreaming(true);
 
-    sendMessage.mutate(
-      { message: trimmed, pageContext: getPageContext() },
-      {
-        onSuccess: (result) => {
-          setMessages(result.messages);
-          if (result.navigate) setPendingNavigate(result.navigate);
-          if (result.action) setPendingAction(result.action);
+    try {
+      await streamAssistantMessage(
+        { message: trimmed, pageContext: getPageContext() },
+        {
+          onDelta: (text) => setStreamingContent((prev) => prev + text),
+          onAction: (action) => setPendingAction(action),
+          onDone: (result) => {
+            setMessages(result.messages);
+            if (result.navigate) setPendingNavigate(result.navigate);
+            if (result.action) setPendingAction(result.action);
+          },
         },
-        onError: () => {
-          toast.error("elAIne couldn't respond just now. Please try again.");
-          setMessages((prev) => prev.slice(0, -1));
-        },
-      },
-    );
+      );
+    } catch {
+      toast.error("elAIne couldn't respond just now. Please try again.");
+      setMessages((prev) => prev.slice(0, -1));
+      setPendingAction(null);
+    } finally {
+      setStreamingContent("");
+      setIsStreaming(false);
+    }
   }
 
   function handleConfirmNavigate() {
@@ -207,7 +217,7 @@ export function AssistantWidget() {
           </div>
 
           <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
-            {messages.length === 0 && !sendMessage.isPending && (
+            {messages.length === 0 && !isStreaming && (
               <div className="flex flex-col items-center gap-2 py-8 text-center">
                 <ElaineAvatar size={48} />
                 <p className="text-sm text-muted-foreground">
@@ -231,16 +241,22 @@ export function AssistantWidget() {
               </div>
             ))}
 
-            {sendMessage.isPending && (
+            {isStreaming && (
               <div className="flex gap-2.5 justify-start">
                 <ElaineAvatar size={26} className="mt-0.5" />
-                <div className="rounded-2xl rounded-tl-sm bg-muted px-3.5 py-3 text-muted-foreground">
-                  <span className="inline-flex gap-1 text-lg leading-none">
-                    <span className="animate-bounce" style={{ animationDelay: "0ms" }}>·</span>
-                    <span className="animate-bounce" style={{ animationDelay: "150ms" }}>·</span>
-                    <span className="animate-bounce" style={{ animationDelay: "300ms" }}>·</span>
-                  </span>
-                </div>
+                {streamingContent ? (
+                  <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-tl-sm bg-muted px-3.5 py-2.5 text-sm leading-relaxed text-foreground">
+                    {streamingContent}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl rounded-tl-sm bg-muted px-3.5 py-3 text-muted-foreground">
+                    <span className="inline-flex gap-1 text-lg leading-none">
+                      <span className="animate-bounce" style={{ animationDelay: "0ms" }}>·</span>
+                      <span className="animate-bounce" style={{ animationDelay: "150ms" }}>·</span>
+                      <span className="animate-bounce" style={{ animationDelay: "300ms" }}>·</span>
+                    </span>
+                  </div>
+                )}
               </div>
             )}
 
@@ -315,9 +331,9 @@ export function AssistantWidget() {
                   handleSend();
                 }
               }}
-              disabled={sendMessage.isPending}
+              disabled={isStreaming}
             />
-            <Button size="icon" onClick={handleSend} disabled={!input.trim() || sendMessage.isPending}>
+            <Button size="icon" onClick={handleSend} disabled={!input.trim() || isStreaming}>
               <Send className="h-4 w-4" />
             </Button>
           </div>

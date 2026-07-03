@@ -226,28 +226,42 @@ function extractDirectives(raw: string): {
 
   const actionMatch = content.match(ACTION_RE);
   if (actionMatch) {
+    action = tryExtractAction(content);
     content = content.replace(ACTION_RE, "").trim();
-    try {
-      const parsedPayload: unknown = JSON.parse(actionMatch[2]);
-      const parsedAction = ActionBody.safeParse({
-        type: actionMatch[1],
-        payload: parsedPayload,
-      });
-      if (parsedAction.success) {
-        action = {
-          type: parsedAction.data.type,
-          label: buildActionLabel(parsedAction.data),
-          payload: parsedAction.data.payload,
-        };
-      }
-      // If validation fails, we silently drop the action rather than
-      // surfacing a malformed/unsafe write-action to the confirmation UI.
-    } catch {
-      // Malformed JSON from the model — drop the action, keep the reply text.
-    }
   }
 
   return { content, navigate, remember, action };
+}
+
+// Attempts to pull a fully-formed [[ACTION: ...]] directive out of a (possibly
+// still-growing, mid-stream) content buffer. Returns null until the closing
+// `]]` has actually arrived — ACTION_RE requires it — so this is also what
+// lets the streaming chat route detect the directive "as soon as it's fully
+// received" rather than guessing from a partial JSON payload.
+function tryExtractAction(
+  content: string,
+): { type: string; label: string; payload: unknown } | null {
+  const actionMatch = content.match(ACTION_RE);
+  if (!actionMatch) return null;
+  try {
+    const parsedPayload: unknown = JSON.parse(actionMatch[2]);
+    const parsedAction = ActionBody.safeParse({
+      type: actionMatch[1],
+      payload: parsedPayload,
+    });
+    if (parsedAction.success) {
+      return {
+        type: parsedAction.data.type,
+        label: buildActionLabel(parsedAction.data),
+        payload: parsedAction.data.payload,
+      };
+    }
+    // If validation fails, we silently drop the action rather than
+    // surfacing a malformed/unsafe write-action to the confirmation UI.
+  } catch {
+    // Malformed JSON from the model — drop the action, keep the reply text.
+  }
+  return null;
 }
 
 router.get("/assistant/conversation", async (req, res) => {
@@ -330,19 +344,59 @@ Keep replies concise and easy to read in a chat bubble.`;
     { role: "user" as const, content: message },
   ];
 
-  const rawContent = await callModelWithSubagent(
-    MODELS.FAST_VISION,
-    ASSISTANT_SUBAGENT_INSTRUCTIONS,
-    async (client, model, tools) => {
-      const response = await client.chat.completions.create({
-        model,
-        ...(tools ? { tools: tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[] } : {}),
-        messages,
-        max_tokens: 700,
-      });
-      return response.choices[0]?.message?.content ?? "";
-    },
-  );
+  // Streamed as Server-Sent Events so the client can show elAIne's reply (and
+  // a proposed [[ACTION: ...]] directive) building up incrementally instead
+  // of waiting for the entire completion to land at once.
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  function sendEvent(event: string, data: unknown) {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  }
+
+  let rawContent = "";
+  let actionSent = false;
+
+  try {
+    await callModelWithSubagent(
+      MODELS.FAST_VISION,
+      ASSISTANT_SUBAGENT_INSTRUCTIONS,
+      async (client, model, tools) => {
+        const stream = await client.chat.completions.create({
+          model,
+          ...(tools
+            ? { tools: tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[] }
+            : {}),
+          messages,
+          max_tokens: 700,
+          stream: true,
+        });
+
+        for await (const chunk of stream) {
+          const delta = chunk.choices[0]?.delta?.content;
+          if (!delta) continue;
+          rawContent += delta;
+          sendEvent("delta", { text: delta });
+
+          if (!actionSent) {
+            const action = tryExtractAction(rawContent);
+            if (action) {
+              sendEvent("action", action);
+              actionSent = true;
+            }
+          }
+        }
+      },
+    );
+  } catch (err) {
+    req.log.error({ err }, "elAIne assistant stream failed");
+    sendEvent("error", { message: "elAIne couldn't respond just now." });
+    res.end();
+    return;
+  }
 
   const { content, navigate, remember, action } = extractDirectives(rawContent);
 
@@ -363,7 +417,8 @@ Keep replies concise and easy to read in a chat bubble.`;
     .set({ messages: updatedHistory, updatedAt: new Date() })
     .where(eq(travelsAssistantConversations.userId, userId));
 
-  res.json({ role: "assistant", content, navigate, action, messages: updatedHistory });
+  sendEvent("done", { role: "assistant", content, navigate, action, messages: updatedHistory });
+  res.end();
 });
 
 // Executes a write-action elAIne proposed in chat, only once the user has

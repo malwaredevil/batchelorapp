@@ -3,6 +3,9 @@ import { eq } from "drizzle-orm";
 import { db, appUsers } from "@workspace/db";
 import { z } from "zod/v4";
 import { requireAuth } from "../middleware/auth";
+import dns from "node:dns";
+import { isIP } from "node:net";
+import { Agent, fetch as undiciFetch } from "undici";
 
 const router: IRouter = Router();
 
@@ -93,14 +96,153 @@ router.put("/hub/preferences", requireAuth, async (req, res) => {
 });
 
 // ── RSS proxy ─────────────────────────────────────────────────────────────────
-function isPrivateHost(hostname: string): boolean {
-  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1")
-    return true;
-  if (/^10\./.test(hostname)) return true;
-  if (/^192\.168\./.test(hostname)) return true;
-  if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return true;
-  if (/^169\.254\./.test(hostname)) return true;
-  return false;
+// SSRF hardening: validate the *resolved* IP address (not just the hostname
+// string), cover both IPv4 and IPv6 private/loopback/link-local ranges, and
+// pin the outbound connection to the addresses we validated so a subsequent
+// DNS lookup performed during the actual request (DNS rebinding) can't be
+// used to smuggle in a different, unvalidated destination. Redirects are
+// handled manually and re-validated at every hop.
+function isPrivateIp(ip: string): boolean {
+  const version = isIP(ip);
+  if (version === 4) {
+    const parts = ip.split(".").map((n) => Number(n));
+    if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) return true;
+    const [a, b] = parts as [number, number, number, number];
+    if (a === 0) return true; // "this" network
+    if (a === 10) return true; // RFC1918
+    if (a === 127) return true; // loopback
+    if (a === 169 && b === 254) return true; // link-local
+    if (a === 172 && b >= 16 && b <= 31) return true; // RFC1918
+    if (a === 192 && b === 168) return true; // RFC1918
+    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT (RFC6598)
+    if (a === 192 && b === 0) return true; // IETF protocol assignments / benchmarking
+    if (a >= 224) return true; // multicast + reserved
+    return false;
+  }
+  if (version === 6) {
+    const normalized = ip.toLowerCase();
+    if (normalized === "::1" || normalized === "::") return true; // loopback / unspecified
+    if (normalized.startsWith("fe8") || normalized.startsWith("fe9")) return true; // link-local
+    if (normalized.startsWith("fea") || normalized.startsWith("feb")) return true; // link-local
+    if (normalized.startsWith("fc") || normalized.startsWith("fd")) return true; // unique local (fc00::/7)
+    // IPv4-mapped / IPv4-compatible IPv6 addresses (e.g. ::ffff:127.0.0.1)
+    const mapped = normalized.match(/(\d+\.\d+\.\d+\.\d+)$/);
+    if (mapped && (normalized.includes("::ffff:") || normalized.includes("::"))) {
+      if (isPrivateIp(mapped[1])) return true;
+    }
+    return false;
+  }
+  // Not a parseable IP literal at all — treat as unsafe.
+  return true;
+}
+
+async function resolveSafeAddresses(hostname: string): Promise<string[]> {
+  let records: dns.LookupAddress[];
+  try {
+    records = await dns.promises.lookup(hostname, { all: true, verbatim: true });
+  } catch {
+    throw new Error("DNS resolution failed");
+  }
+  if (records.length === 0) throw new Error("DNS resolution returned no addresses");
+  for (const record of records) {
+    if (isPrivateIp(record.address)) {
+      throw new Error("Destination resolves to an internal address");
+    }
+  }
+  return records.map((r) => r.address);
+}
+
+type LookupCallback = (
+  err: NodeJS.ErrnoException | null,
+  address: string | dns.LookupAddress[],
+  family?: number,
+) => void;
+
+function pinnedLookup(addresses: string[]) {
+  return (
+    _hostname: string,
+    options: dns.LookupAllOptions | dns.LookupOptions,
+    callback: LookupCallback,
+  ): void => {
+    const family = isIP(addresses[0] ?? "");
+    if (typeof options === "object" && options !== null && "all" in options && options.all) {
+      callback(
+        null,
+        addresses.map((address) => ({ address, family: isIP(address) })),
+      );
+    } else {
+      callback(null, addresses[0] as string, family);
+    }
+  };
+}
+
+const MAX_REDIRECTS = 5;
+const FETCH_TIMEOUT_MS = 10_000;
+
+async function safeFetchFollowingRedirects(
+  initialUrl: URL,
+): Promise<{ response: Response; finalUrl: URL }> {
+  let currentUrl = initialUrl;
+
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    if (!["http:", "https:"].includes(currentUrl.protocol)) {
+      throw new Error("Only http/https URLs are allowed");
+    }
+
+    let addresses: string[];
+    try {
+      addresses = await resolveSafeAddresses(currentUrl.hostname);
+    } catch {
+      throw new Error("Internal addresses are not allowed");
+    }
+
+    const dispatcher = new Agent({
+      connect: { lookup: pinnedLookup(addresses) },
+    });
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+    let response: Response;
+    try {
+      response = (await undiciFetch(currentUrl, {
+        redirect: "manual",
+        dispatcher,
+        signal: controller.signal,
+        headers: {
+          "User-Agent": "Batchelor/1.0 RSS Reader",
+          Accept:
+            "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
+        },
+      })) as unknown as Response;
+    } finally {
+      clearTimeout(timer);
+      void dispatcher.close();
+    }
+
+    const isRedirect = [301, 302, 303, 307, 308].includes(response.status);
+    if (!isRedirect) {
+      return { response, finalUrl: currentUrl };
+    }
+
+    const location = response.headers.get("location");
+    if (!location) {
+      return { response, finalUrl: currentUrl };
+    }
+    if (hop === MAX_REDIRECTS) {
+      throw new Error("Too many redirects");
+    }
+
+    let nextUrl: URL;
+    try {
+      nextUrl = new URL(location, currentUrl);
+    } catch {
+      throw new Error("Invalid redirect target");
+    }
+    currentUrl = nextUrl;
+  }
+
+  throw new Error("Too many redirects");
 }
 
 function unescapeHtml(s: string): string {
@@ -199,28 +341,8 @@ router.get("/hub/rss", requireAuth, async (req, res) => {
     return;
   }
 
-  if (isPrivateHost(parsedUrl.hostname)) {
-    res.status(400).json({ error: "Internal addresses are not allowed" });
-    return;
-  }
-
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10_000);
-
-    let response: Response;
-    try {
-      response = await fetch(rawUrl, {
-        signal: controller.signal,
-        headers: {
-          "User-Agent": "Batchelor/1.0 RSS Reader",
-          Accept:
-            "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
-        },
-      });
-    } finally {
-      clearTimeout(timer);
-    }
+    const { response } = await safeFetchFollowingRedirects(parsedUrl);
 
     if (!response.ok) {
       res.status(502).json({ error: `Feed returned HTTP ${response.status}` });
@@ -260,6 +382,16 @@ router.get("/hub/rss", requireAuth, async (req, res) => {
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "AbortError") {
       res.status(504).json({ error: "Feed timed out after 10 seconds" });
+      return;
+    }
+    if (
+      err instanceof Error &&
+      (err.message === "Internal addresses are not allowed" ||
+        err.message === "Only http/https URLs are allowed" ||
+        err.message === "Invalid redirect target" ||
+        err.message === "Too many redirects")
+    ) {
+      res.status(400).json({ error: err.message });
       return;
     }
     req.log.error({ err }, "RSS proxy error");

@@ -19,6 +19,7 @@ import Wishlist from "@/pages/Wishlist";
 import Import from "@/pages/Import";
 import Destinations from "@/pages/Destinations";
 import Settings from "@/pages/Settings";
+import FamilyCalendar from "@/pages/FamilyCalendar";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -96,6 +97,14 @@ function Router() {
         <ProtectedRoute>
           <Layout>
             <Settings />
+          </Layout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/family-calendar">
+        <ProtectedRoute>
+          <Layout>
+            <FamilyCalendar />
           </Layout>
         </ProtectedRoute>
       </Route>

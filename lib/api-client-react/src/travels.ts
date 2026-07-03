@@ -1153,6 +1153,7 @@ export interface CalendarStatus {
   googleEmail: string | null;
   calendarId: string | null;
   calendarSummary: string | null;
+  isHouseholdShared: boolean;
 }
 
 export interface CalendarListItem {
@@ -1219,6 +1220,152 @@ export function useDisconnectCalendar(
   options?: { mutation?: UseMutationOptions<void, unknown, void> },
 ) {
   const mutationFn = () => deleteCalendarConnectionFn();
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const putShareCalendarFn = (body: { shared: boolean }): Promise<{ shared: boolean }> =>
+  customFetch<{ shared: boolean }>("/api/travels/google-calendar/share", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export function useShareCalendar(
+  options?: { mutation?: UseMutationOptions<{ shared: boolean }, unknown, { shared: boolean }> },
+) {
+  const mutationFn = (body: { shared: boolean }) => putShareCalendarFn(body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+// ---------------------------------------------------------------------------
+// Family Calendar (shared household calendar — view/add/edit/delete events)
+// ---------------------------------------------------------------------------
+
+export interface FamilyCalendarStatus {
+  configured: boolean;
+  calendarSummary: string | null;
+  ownerGoogleEmail: string | null;
+  isOwner: boolean;
+}
+
+export interface FamilyCalendarEvent {
+  id: string;
+  title: string;
+  description: string | null;
+  location: string | null;
+  allDay: boolean;
+  start: string;
+  end: string;
+  htmlLink?: string;
+}
+
+export interface FamilyCalendarEventInput {
+  title: string;
+  description?: string | null;
+  location?: string | null;
+  allDay: boolean;
+  start: string;
+  end: string;
+}
+
+const getFamilyCalendarStatus = (options?: RequestInit): Promise<FamilyCalendarStatus> =>
+  customFetch<FamilyCalendarStatus>("/api/travels/family-calendar/status", { ...options, method: "GET" });
+
+export const getGetFamilyCalendarStatusQueryKey = () => [`/api/travels/family-calendar/status`] as const;
+
+export function useGetFamilyCalendarStatus<TData = FamilyCalendarStatus, TError = unknown>(
+  options?: { query?: UseQueryOptions<FamilyCalendarStatus, TError, TData> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetFamilyCalendarStatusQueryKey();
+  const queryFn: QueryFunction<FamilyCalendarStatus> = ({ signal }) => getFamilyCalendarStatus({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<FamilyCalendarStatus, TError, TData> & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const listFamilyCalendarEvents = (
+  start: string,
+  end: string,
+  options?: RequestInit,
+): Promise<FamilyCalendarEvent[]> =>
+  customFetch<FamilyCalendarEvent[]>(
+    `/api/travels/family-calendar/events?${new URLSearchParams({ start, end }).toString()}`,
+    { ...options, method: "GET" },
+  );
+
+export const getListFamilyCalendarEventsQueryKey = (start: string, end: string) =>
+  [`/api/travels/family-calendar/events`, start, end] as const;
+
+export function useListFamilyCalendarEvents<TData = FamilyCalendarEvent[], TError = unknown>(
+  start: string,
+  end: string,
+  options?: { query?: UseQueryOptions<FamilyCalendarEvent[], TError, TData> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getListFamilyCalendarEventsQueryKey(start, end);
+  const queryFn: QueryFunction<FamilyCalendarEvent[]> = ({ signal }) =>
+    listFamilyCalendarEvents(start, end, { signal });
+  const queryOpts = {
+    queryKey,
+    queryFn,
+    enabled: Boolean(start && end),
+    ...queryOptions,
+  } as UseQueryOptions<FamilyCalendarEvent[], TError, TData> & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const postFamilyCalendarEventFn = (body: FamilyCalendarEventInput): Promise<FamilyCalendarEvent> =>
+  customFetch<FamilyCalendarEvent>("/api/travels/family-calendar/events", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export function useCreateFamilyCalendarEvent(
+  options?: { mutation?: UseMutationOptions<FamilyCalendarEvent, unknown, FamilyCalendarEventInput> },
+) {
+  const mutationFn = (body: FamilyCalendarEventInput) => postFamilyCalendarEventFn(body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const patchFamilyCalendarEventFn = (
+  eventId: string,
+  body: FamilyCalendarEventInput,
+): Promise<FamilyCalendarEvent> =>
+  customFetch<FamilyCalendarEvent>(
+    `/api/travels/family-calendar/events/${encodeURIComponent(eventId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+
+export function useUpdateFamilyCalendarEvent(
+  options?: {
+    mutation?: UseMutationOptions<
+      FamilyCalendarEvent,
+      unknown,
+      { eventId: string; body: FamilyCalendarEventInput }
+    >;
+  },
+) {
+  const mutationFn = ({ eventId, body }: { eventId: string; body: FamilyCalendarEventInput }) =>
+    patchFamilyCalendarEventFn(eventId, body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const deleteFamilyCalendarEventFn = (eventId: string): Promise<void> =>
+  customFetch<void>(`/api/travels/family-calendar/events/${encodeURIComponent(eventId)}`, {
+    method: "DELETE",
+  });
+
+export function useDeleteFamilyCalendarEvent(
+  options?: { mutation?: UseMutationOptions<void, unknown, string> },
+) {
+  const mutationFn = (eventId: string) => deleteFamilyCalendarEventFn(eventId);
   return useMutation({ mutationFn, ...options?.mutation });
 }
 

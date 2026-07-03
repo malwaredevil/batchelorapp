@@ -1280,6 +1280,7 @@ export default function TripDetail({ id }: { id: number }) {
   const qc = useQueryClient();
 
   const { data: trip, isLoading } = useGetTrip(id);
+  const { data: reminders = [] } = useListReminders(id);
   const updateTrip = useUpdateTrip();
   const setTripIcon = useSetTripIcon();
   const deleteTrip = useDeleteTrip();
@@ -1539,7 +1540,18 @@ export default function TripDetail({ id }: { id: number }) {
               .join(", ")}`
           : ""
       }. ` +
-      `To-do list has ${todoList.length} item(s). ${documents.length} document(s) attached.` +
+      `To-do list has ${todoList.length} item(s). ${documents.length} document(s) attached. ` +
+      (reminders.length > 0
+        ? `Reminders: ${reminders
+            .slice(0, 20)
+            .map(
+              (r) =>
+                `"${r.title}" (reminderId: ${r.id}${r.dueDate ? `, due ${r.dueDate}` : ", no due date"}, ${
+                  r.done ? "done" : "not done"
+                }, ${r.syncToCalendar ? "synced to calendar" : "NOT synced to calendar"})`,
+            )
+            .join("; ")}.`
+        : "No reminders yet for this trip.") +
       (addingDay ? ` User is currently adding a new itinerary day with title "${dayForm.title}" on ${dayForm.date}.` : ""),
   );
   const canCalendar =

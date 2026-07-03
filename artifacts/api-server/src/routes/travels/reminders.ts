@@ -49,7 +49,7 @@ async function tripExists(tripId: number): Promise<boolean> {
 // Every family member who has connected their own Google Calendar and
 // selected a target calendar gets their own copy of the event: the reminder's
 // creator, plus anyone listed in recipientEmails who has an app account.
-async function getConnectedTargetUserIds(
+export async function getConnectedTargetUserIds(
   creatorUserId: number,
   recipientEmails: string[],
 ): Promise<number[]> {
@@ -79,7 +79,7 @@ async function getConnectedTargetUserIds(
 // creates events for newly-added targets, updates events for existing ones,
 // and removes events for targets that dropped off (recipient removed, sync
 // turned off, or the reminder was marked done-with-no-due-date... etc).
-async function syncReminderCalendarEvents(
+export async function syncReminderCalendarEvents(
   reminderId: number,
   tripTitle: string,
   title: string,

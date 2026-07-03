@@ -1596,10 +1596,23 @@ export default function TripDetail({ id }: { id: number }) {
         : "No reminders yet for this trip.") +
       "\n" +
       (localItinerary?.days && localItinerary.days.length > 0
-        ? `Itinerary has ${localItinerary.days.length} day(s): ${localItinerary.days
+        ? `Itinerary has ${localItinerary.days.length} day(s) (use these 1-based day/activity numbers exactly for confirm_itinerary_activity / remove_itinerary_activity — never guess them):\n${localItinerary.days
             .slice(0, 20)
-            .map((d, i) => `Day ${i + 1}${d.date ? ` (${d.date})` : ""}: "${d.title}"`)
-            .join("; ")}.`
+            .map((d, i) => {
+              const activitiesSummary =
+                d.activities.length > 0
+                  ? d.activities
+                      .slice(0, 20)
+                      .map((a, ai) => {
+                        const status = a.status === "confirmed" ? "confirmed" : "tentative";
+                        const sourced = a.sourceDocumentId ? ", from document" : "";
+                        return `activity ${ai + 1}: "${a.name}"${a.time ? ` at ${a.time}` : ""} (${status}${sourced})`;
+                      })
+                      .join("; ")
+                  : "no activities yet";
+              return `Day ${i + 1}${d.date ? ` (${d.date})` : ""}: "${d.title}" — ${activitiesSummary}`;
+            })
+            .join("\n")}`
         : "No itinerary generated yet for this trip.") +
       (addingDay ? ` User is currently adding a new itinerary day with title "${dayForm.title}" on ${dayForm.date}.` : ""),
   );

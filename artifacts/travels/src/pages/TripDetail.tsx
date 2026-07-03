@@ -1590,6 +1590,13 @@ export default function TripDetail({ id }: { id: number }) {
             )
             .join("; ")}.`
         : "No reminders yet for this trip.") +
+      "\n" +
+      (localItinerary?.days && localItinerary.days.length > 0
+        ? `Itinerary has ${localItinerary.days.length} day(s): ${localItinerary.days
+            .slice(0, 20)
+            .map((d, i) => `Day ${i + 1}${d.date ? ` (${d.date})` : ""}: "${d.title}"`)
+            .join("; ")}.`
+        : "No itinerary generated yet for this trip.") +
       (addingDay ? ` User is currently adding a new itinerary day with title "${dayForm.title}" on ${dayForm.date}.` : ""),
   );
   const canCalendar =

@@ -79,25 +79,28 @@ function proximityGuide(trip: {
 🚫 Avoid: suggestions that require a car or driving`;
 }
 
-router.post("/trips/:id/itinerary", async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (isNaN(id)) {
-    res.status(400).json({ error: "Invalid id" });
-    return;
+export class ItineraryActionError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
   }
+}
 
+export async function generateItineraryForTrip(
+  tripId: number,
+  style: "relaxed" | "balanced" | "packed",
+  interests: string[],
+  regenerateDay?: number,
+): Promise<unknown> {
   const [trip] = await db
     .select()
     .from(travelsTrips)
-    .where(eq(travelsTrips.id, id));
+    .where(eq(travelsTrips.id, tripId));
 
   if (!trip) {
-    res.status(404).json({ error: "Not found" });
-    return;
+    throw new ItineraryActionError(404, "Trip not found");
   }
-
-  const body = GenerateItineraryBody.parse(req.body);
-  const { style, interests, regenerateDay } = body;
 
   const dateRange =
     trip.startDate && trip.endDate
@@ -126,8 +129,7 @@ router.post("/trips/:id/itinerary", async (req, res) => {
   if (regenerateDay !== undefined && existingItinerary?.days) {
     const day = existingItinerary.days[regenerateDay];
     if (!day) {
-      res.status(400).json({ error: "Day index out of range" });
-      return;
+      throw new ItineraryActionError(400, "Day index out of range");
     }
     prompt = `Regenerate ONLY day ${regenerateDay + 1} (${day.date}) of a trip itinerary for ${trip.destination}.
 
@@ -202,8 +204,7 @@ If dates are unspecified, create 5 days labelled Day 1, Day 2, etc. Return ONLY 
   try {
     parsed = parseAiJson(raw);
   } catch {
-    res.status(500).json({ error: "AI returned invalid JSON" });
-    return;
+    throw new ItineraryActionError(500, "AI returned invalid JSON");
   }
 
   let newItinerary: unknown;
@@ -218,9 +219,31 @@ If dates are unspecified, create 5 days labelled Day 1, Day 2, etc. Return ONLY 
   await db
     .update(travelsTrips)
     .set({ itinerary: newItinerary as Record<string, unknown> })
-    .where(eq(travelsTrips.id, id));
+    .where(eq(travelsTrips.id, tripId));
 
-  res.json({ itinerary: newItinerary });
+  return newItinerary;
+}
+
+router.post("/trips/:id/itinerary", async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  const body = GenerateItineraryBody.parse(req.body);
+  const { style, interests, regenerateDay } = body;
+
+  try {
+    const itinerary = await generateItineraryForTrip(id, style, interests, regenerateDay);
+    res.json({ itinerary });
+  } catch (err) {
+    if (err instanceof ItineraryActionError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
 });
 
 router.post("/explore", async (req, res) => {

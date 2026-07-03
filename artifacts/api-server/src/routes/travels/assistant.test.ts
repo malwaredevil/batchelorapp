@@ -93,6 +93,19 @@ vi.mock("../../lib/travels-storage", () => ({
   deleteDocument: (...args: unknown[]) => deleteDocument(...args),
 }));
 
+class FakeItineraryActionError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+const generateItineraryForTrip = vi.fn();
+vi.mock("./ai", () => ({
+  generateItineraryForTrip: (...args: unknown[]) => generateItineraryForTrip(...args),
+  ItineraryActionError: FakeItineraryActionError,
+}));
+
 vi.mock("../../middleware/auth", () => ({
   requireAuth: (
     req: { session: { userId?: number } },
@@ -355,6 +368,144 @@ describe("POST /api/travels/assistant/action", () => {
 
       expect(res.status).toBe(404);
       expect(res.body).toEqual({ error: "Trip not found" });
+    });
+  });
+
+  describe("add_itinerary_day", () => {
+    it("appends a new day (with an optional activity) to the itinerary", async () => {
+      selectQueue.push([
+        { id: 7, itinerary: { days: [{ date: "2026-07-13", title: "Arrival", activities: [] }] } },
+      ]);
+      lastReturning = [
+        {
+          id: 7,
+          itinerary: {
+            days: [
+              { date: "2026-07-13", title: "Arrival", activities: [] },
+              {
+                date: "2026-07-14",
+                title: "Kyoto day trip",
+                activities: [
+                  {
+                    time: "09:00",
+                    name: "Fushimi Inari",
+                    description: "",
+                    proximity: "",
+                    tip: "",
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      ];
+      const app = await buildApp();
+
+      const res = await request(app)
+        .post("/api/travels/assistant/action")
+        .send({
+          type: "add_itinerary_day",
+          payload: {
+            tripId: 7,
+            date: "2026-07-14",
+            title: "Kyoto day trip",
+            activityName: "Fushimi Inari",
+          },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ type: "add_itinerary_day", result: lastReturning[0] });
+      expect(updateCalls[0]?.set).toEqual({
+        itinerary: {
+          days: [
+            { date: "2026-07-13", title: "Arrival", activities: [] },
+            {
+              date: "2026-07-14",
+              title: "Kyoto day trip",
+              activities: [
+                { time: "09:00", name: "Fushimi Inari", description: "", proximity: "", tip: "" },
+              ],
+            },
+          ],
+        },
+      });
+    });
+
+    it("works when the trip has no itinerary yet", async () => {
+      selectQueue.push([{ id: 7, itinerary: null }]);
+      lastReturning = [{ id: 7, itinerary: { days: [{ date: "", title: "Day 1", activities: [] }] } }];
+      const app = await buildApp();
+
+      const res = await request(app)
+        .post("/api/travels/assistant/action")
+        .send({ type: "add_itinerary_day", payload: { tripId: 7, title: "Day 1" } });
+
+      expect(res.status).toBe(200);
+      expect(updateCalls[0]?.set).toEqual({
+        itinerary: { days: [{ date: "", title: "Day 1", activities: [] }] },
+      });
+    });
+
+    it("404s when the trip does not exist", async () => {
+      selectQueue.push([]);
+      const app = await buildApp();
+
+      const res = await request(app)
+        .post("/api/travels/assistant/action")
+        .send({ type: "add_itinerary_day", payload: { tripId: 999, title: "Day 1" } });
+
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: "Trip not found" });
+    });
+  });
+
+  describe("regenerate_itinerary_day", () => {
+    it("regenerates the given 1-based day and passes a 0-based index with balanced defaults", async () => {
+      generateItineraryForTrip.mockResolvedValueOnce({
+        days: [{ date: "2026-07-14", title: "Refreshed", activities: [] }],
+      });
+      const app = await buildApp();
+
+      const res = await request(app)
+        .post("/api/travels/assistant/action")
+        .send({ type: "regenerate_itinerary_day", payload: { tripId: 7, dayNumber: 2 } });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        type: "regenerate_itinerary_day",
+        result: { itinerary: { days: [{ date: "2026-07-14", title: "Refreshed", activities: [] }] } },
+      });
+      expect(generateItineraryForTrip).toHaveBeenCalledWith(
+        7,
+        "balanced",
+        ["food", "history", "culture"],
+        1,
+      );
+    });
+
+    it("surfaces an ItineraryActionError's status and message", async () => {
+      generateItineraryForTrip.mockRejectedValueOnce(
+        new FakeItineraryActionError(400, "Day index out of range"),
+      );
+      const app = await buildApp();
+
+      const res = await request(app)
+        .post("/api/travels/assistant/action")
+        .send({ type: "regenerate_itinerary_day", payload: { tripId: 7, dayNumber: 99 } });
+
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual({ error: "Day index out of range" });
+    });
+
+    it("rejects a non-positive dayNumber", async () => {
+      const app = await buildApp();
+
+      const res = await request(app)
+        .post("/api/travels/assistant/action")
+        .send({ type: "regenerate_itinerary_day", payload: { tripId: 7, dayNumber: 0 } });
+
+      expect(res.status).toBe(400);
+      expect(generateItineraryForTrip).not.toHaveBeenCalled();
     });
   });
 

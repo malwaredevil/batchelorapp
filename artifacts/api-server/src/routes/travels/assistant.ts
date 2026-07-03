@@ -22,6 +22,7 @@ import {
   getConnectedTargetUserIds,
   syncReminderCalendarEvents,
 } from "./reminders";
+import { generateItineraryForTrip, ItineraryActionError } from "./ai";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -193,6 +194,20 @@ const SyncReminderToCalendarActionPayload = z.object({
   syncToCalendar: z.boolean().optional(),
 });
 
+const AddItineraryDayActionPayload = z.object({
+  tripId: z.number().int().positive(),
+  date: z.string().max(20).optional(),
+  title: z.string().min(1).max(200),
+  activityName: z.string().max(200).optional(),
+  activityTime: z.string().max(20).optional(),
+  activityDescription: z.string().max(1000).optional(),
+});
+
+const RegenerateItineraryDayActionPayload = z.object({
+  tripId: z.number().int().positive(),
+  dayNumber: z.number().int().positive(),
+});
+
 const ActionBody = z.discriminatedUnion("type", [
   z.object({ type: z.literal("create_trip"), payload: CreateTripActionPayload }),
   z.object({ type: z.literal("add_wishlist"), payload: AddWishlistActionPayload }),
@@ -225,6 +240,14 @@ const ActionBody = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("sync_reminder_to_calendar"),
     payload: SyncReminderToCalendarActionPayload,
+  }),
+  z.object({
+    type: z.literal("add_itinerary_day"),
+    payload: AddItineraryDayActionPayload,
+  }),
+  z.object({
+    type: z.literal("regenerate_itinerary_day"),
+    payload: RegenerateItineraryDayActionPayload,
   }),
 ]);
 
@@ -294,6 +317,18 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
       return action.payload.syncToCalendar === false
         ? `Stop syncing ${name} to the calendar`
         : `Sync ${name} to the calendar`;
+    }
+    case "add_itinerary_day": {
+      const trip = await getTripLabelInfo(action.payload.tripId);
+      const name = trip ? `"${trip.title || trip.destination}"` : "this trip";
+      return `Add a day "${action.payload.title}"${
+        action.payload.date ? ` on ${action.payload.date}` : ""
+      } to ${name}'s itinerary`;
+    }
+    case "regenerate_itinerary_day": {
+      const trip = await getTripLabelInfo(action.payload.tripId);
+      const name = trip ? `"${trip.title || trip.destination}"` : "this trip";
+      return `Regenerate day ${action.payload.dayNumber} of ${name}'s itinerary`;
     }
   }
 }
@@ -539,6 +574,59 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
 
     return { status: 200, body: { type: "sync_reminder_to_calendar", result: row } };
   }) as ActionExecutor,
+
+  add_itinerary_day: (async (payload: z.infer<typeof AddItineraryDayActionPayload>) => {
+    const [trip] = await db
+      .select({ id: travelsTrips.id, itinerary: travelsTrips.itinerary })
+      .from(travelsTrips)
+      .where(eq(travelsTrips.id, payload.tripId));
+    if (!trip) return { status: 404, body: { error: "Trip not found" } };
+
+    const existing =
+      (trip.itinerary as { days: Array<Record<string, unknown>> } | null)?.days ?? [];
+    const newDay = {
+      date: payload.date ?? "",
+      title: payload.title,
+      activities: payload.activityName
+        ? [
+            {
+              time: payload.activityTime ?? "09:00",
+              name: payload.activityName,
+              description: payload.activityDescription ?? "",
+              proximity: "",
+              tip: "",
+            },
+          ]
+        : [],
+    };
+    const newItinerary = { days: [...existing, newDay] };
+    const [row] = await db
+      .update(travelsTrips)
+      .set({ itinerary: newItinerary })
+      .where(eq(travelsTrips.id, payload.tripId))
+      .returning();
+    return { status: 200, body: { type: "add_itinerary_day", result: row } };
+  }) as ActionExecutor,
+
+  regenerate_itinerary_day: (async (
+    payload: z.infer<typeof RegenerateItineraryDayActionPayload>,
+  ) => {
+    const dayIndex = payload.dayNumber - 1;
+    try {
+      const itinerary = await generateItineraryForTrip(
+        payload.tripId,
+        "balanced",
+        ["food", "history", "culture"],
+        dayIndex,
+      );
+      return { status: 200, body: { type: "regenerate_itinerary_day", result: { itinerary } } };
+    } catch (err) {
+      if (err instanceof ItineraryActionError) {
+        return { status: err.status, body: { error: err.message } };
+      }
+      throw err;
+    }
+  }) as ActionExecutor,
 };
 
 // ---------------------------------------------------------------------------
@@ -730,6 +818,42 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "add_itinerary_day",
+      description:
+        'Propose adding a new day to a trip\'s itinerary, e.g. "add a day trip to Kyoto on the 14th". Only call this if the trip\'s numeric id is visible on screen; never guess an id — offer to open the trip instead if you don\'t have one. Use the exact date the user gave (YYYY-MM-DD) if known; never invent a date. Optionally include a single starting activity if the user described one.',
+      parameters: {
+        type: "object",
+        properties: {
+          tripId: { type: "integer" },
+          date: { type: "string", description: "YYYY-MM-DD, if known" },
+          title: { type: "string", description: "Short theme/title for the day" },
+          activityName: { type: "string" },
+          activityTime: { type: "string", description: "HH:MM, e.g. 09:00" },
+          activityDescription: { type: "string" },
+        },
+        required: ["tripId", "title"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "regenerate_itinerary_day",
+      description:
+        'Propose regenerating (re-running AI planning for) ONE existing day of a trip\'s itinerary, e.g. "regenerate day 3" or "come up with a new plan for day 2". This replaces that day\'s activities with a freshly AI-generated plan using balanced-pace, general-interest defaults. Only call this if the trip\'s numeric id AND the day\'s number (1-based, as shown on screen, e.g. "Day 3") are visible on screen; never guess either.',
+      parameters: {
+        type: "object",
+        properties: {
+          tripId: { type: "integer" },
+          dayNumber: { type: "integer", description: "1-based day number as shown on screen" },
+        },
+        required: ["tripId", "dayNumber"],
+      },
+    },
+  },
 ];
 
 const NAVIGATE_TOOL_NAME = "suggest_navigation";
@@ -901,6 +1025,8 @@ ${memoryBlock}
 TOOLS: You have tools available for navigation suggestions, remembering household facts, and proposing changes to trips/wishlist/packing lists/reminders. Each tool's own description explains exactly when and how to use it — follow those rules precisely, especially around never fabricating numeric ids and asking permission in your visible reply text before calling any trip/wishlist/packing/reminder tool. Prefer calling at most one write-action tool per turn so the user isn't asked to confirm several things at once; navigation suggestions and remembering a fact can still accompany it.
 
 REMINDERS: Use add_reminder for requests like "remind me to check in for our flight" or "remind me to book the hotel by Friday" — it creates a new reminder and syncs it to the calendar by default. Use sync_reminder_to_calendar only to toggle calendar sync on or off for a reminder that already exists and whose numeric id you can see on screen (look for "reminderId: <number>" in the reminders listed for the current trip); never use it to create a reminder.
+
+ITINERARY: Use add_itinerary_day for requests like "add a day trip to Kyoto on the 14th" — it appends a brand-new day to the trip's itinerary. Use regenerate_itinerary_day for requests like "regenerate day 3" or "come up with a new plan for that day" — it re-runs AI planning for ONE existing day and replaces its activities, using balanced-pace, general-interest defaults since it can't see any per-session style/interest picks the user made in the UI. Only use regenerate_itinerary_day on a day number you can see listed on screen (e.g. "Day 3"); never guess a day number, and never use it to create a new day (use add_itinerary_day for that).
 
 Keep replies concise and easy to read in a chat bubble.`;
 

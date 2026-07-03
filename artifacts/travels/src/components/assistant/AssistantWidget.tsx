@@ -165,7 +165,9 @@ export function AssistantWidget() {
             pendingAction.type === "update_trip_status" ||
             pendingAction.type === "update_trip_details" ||
             pendingAction.type === "cancel_trip" ||
-            pendingAction.type === "remove_packing_item"
+            pendingAction.type === "remove_packing_item" ||
+            pendingAction.type === "add_itinerary_day" ||
+            pendingAction.type === "regenerate_itinerary_day"
           ) {
             const tripId = pendingAction.payload.tripId;
             if (typeof tripId === "number") {

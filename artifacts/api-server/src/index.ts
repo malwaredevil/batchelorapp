@@ -3,6 +3,7 @@ import { logger } from "./lib/logger";
 import { runStartupMigration } from "./lib/startup-migrate";
 import { startReminderScheduler } from "./lib/reminder-scheduler";
 import { startNudgeScheduler } from "./lib/travels-nudges";
+import { startCalendarTripScanScheduler } from "./lib/travels-calendar-scan";
 
 const rawPort = process.env["PORT"];
 
@@ -29,6 +30,7 @@ runStartupMigration()
       logger.info({ port }, "Server listening");
       startReminderScheduler();
       startNudgeScheduler();
+      startCalendarTripScanScheduler();
     });
   })
   .catch((err) => {
@@ -44,5 +46,6 @@ runStartupMigration()
       logger.info({ port }, "Server listening");
       startReminderScheduler();
       startNudgeScheduler();
+      startCalendarTripScanScheduler();
     });
   });

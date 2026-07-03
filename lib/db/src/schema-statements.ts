@@ -568,6 +568,55 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS travels_reminder_calendar_events_user_id_idx
      ON travels_reminder_calendar_events (user_id)`,
 
+  // travel_color_id: which Google Calendar event colorId (Google's fixed
+  // "1".."11" palette) the household has chosen to mean "Travel". Only
+  // meaningful on the connection row currently marked is_household_shared.
+  `ALTER TABLE travels_google_calendar_connections ADD COLUMN IF NOT EXISTS travel_color_id TEXT`,
+
+  // travels_trip_calendar_events: maps a trip's itinerary content to the
+  // Google Calendar event(s) synced for it — one row for the trip-level
+  // event plus one per itinerary activity. Keyed by a content-derived
+  // item_key (not array index) so reordering/editing itinerary days or
+  // activities doesn't desync the mapping; content_hash lets the
+  // reconciler skip no-op updates.
+  `CREATE TABLE IF NOT EXISTS travels_trip_calendar_events (
+    id                SERIAL PRIMARY KEY,
+    trip_id           INTEGER NOT NULL,
+    item_key          TEXT NOT NULL,
+    kind              TEXT NOT NULL,
+    content_hash      TEXT NOT NULL,
+    google_event_id   TEXT NOT NULL,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_trip_calendar_events ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travels_trip_calendar_events_trip_id_idx
+     ON travels_trip_calendar_events (trip_id)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS travels_trip_calendar_events_trip_id_item_key_idx
+     ON travels_trip_calendar_events (trip_id, item_key)`,
+
+  // travels_calendar_trip_suggestions: AI-detected candidate trips found by
+  // scanning the Family Calendar for travel-looking events (flights,
+  // hotels, etc) that aren't already linked to a trip. dedupe_key makes
+  // repeated scans (daily scheduler + manual button) idempotent.
+  `CREATE TABLE IF NOT EXISTS travels_calendar_trip_suggestions (
+    id                 SERIAL PRIMARY KEY,
+    suggested_title    TEXT NOT NULL,
+    destination        TEXT,
+    start_date         DATE,
+    end_date           DATE,
+    related_event_ids  JSONB NOT NULL DEFAULT '[]'::jsonb,
+    dedupe_key         TEXT NOT NULL,
+    status             TEXT NOT NULL DEFAULT 'pending',
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_calendar_trip_suggestions ENABLE ROW LEVEL SECURITY`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS travels_calendar_trip_suggestions_dedupe_key_idx
+     ON travels_calendar_trip_suggestions (dedupe_key)`,
+  `CREATE INDEX IF NOT EXISTS travels_calendar_trip_suggestions_status_idx
+     ON travels_calendar_trip_suggestions (status)`,
+
   // ── elAIne assistant ───────────────────────────────────────────────────────
   // One ongoing conversation per user that follows them across every page.
   `CREATE TABLE IF NOT EXISTS travels_assistant_conversations (

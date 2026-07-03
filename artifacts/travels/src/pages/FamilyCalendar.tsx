@@ -18,7 +18,9 @@ import {
   Clock,
   MapPin,
   Pencil,
+  Plane,
   Plus,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -42,9 +44,15 @@ import {
   useCreateFamilyCalendarEvent,
   useUpdateFamilyCalendarEvent,
   useDeleteFamilyCalendarEvent,
+  useListCalendarTripSuggestions,
+  useScanCalendarTripSuggestions,
+  useDismissCalendarTripSuggestion,
+  useAcceptCalendarTripSuggestion,
   getListFamilyCalendarEventsQueryKey,
+  getListCalendarTripSuggestionsQueryKey,
   type FamilyCalendarEvent,
   type FamilyCalendarEventInput,
+  type CalendarTripSuggestion,
 } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 
@@ -106,6 +114,7 @@ interface EventFormState {
   startTime: string;
   endDate: string;
   endTime: string;
+  isTravel: boolean;
 }
 
 function emptyForm(defaultDate?: string): EventFormState {
@@ -119,10 +128,12 @@ function emptyForm(defaultDate?: string): EventFormState {
     startTime: "09:00",
     endDate: today,
     endTime: "10:00",
+    isTravel: false,
   };
 }
 
-function eventToForm(event: FamilyCalendarEvent): EventFormState {
+function eventToForm(event: FamilyCalendarEvent, travelColorId: string | null): EventFormState {
+  const isTravel = Boolean(travelColorId) && event.colorId === travelColorId;
   if (event.allDay) {
     return {
       title: event.title,
@@ -133,6 +144,7 @@ function eventToForm(event: FamilyCalendarEvent): EventFormState {
       startTime: "09:00",
       endDate: event.end,
       endTime: "10:00",
+      isTravel,
     };
   }
   const start = isoToLocalParts(event.start);
@@ -146,10 +158,12 @@ function eventToForm(event: FamilyCalendarEvent): EventFormState {
     startTime: start.time,
     endDate: end.date,
     endTime: end.time,
+    isTravel,
   };
 }
 
-function formToInput(form: EventFormState): FamilyCalendarEventInput {
+function formToInput(form: EventFormState, travelColorId: string | null): FamilyCalendarEventInput {
+  const colorId = form.isTravel && travelColorId ? travelColorId : null;
   if (form.allDay) {
     return {
       title: form.title,
@@ -158,6 +172,7 @@ function formToInput(form: EventFormState): FamilyCalendarEventInput {
       allDay: true,
       start: form.startDate,
       end: form.endDate || form.startDate,
+      colorId,
     };
   }
   const start = new Date(`${form.startDate}T${form.startTime || "09:00"}:00`).toISOString();
@@ -171,6 +186,7 @@ function formToInput(form: EventFormState): FamilyCalendarEventInput {
     allDay: false,
     start,
     end,
+    colorId,
   };
 }
 
@@ -202,6 +218,66 @@ export default function FamilyCalendar() {
   const [editingEvent, setEditingEvent] = useState<FamilyCalendarEvent | null>(null);
   const [form, setForm] = useState<EventFormState>(emptyForm());
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [travelOnly, setTravelOnly] = useState(false);
+
+  const travelColorId = status?.travelColorId ?? null;
+
+  const { data: suggestions = [] } = useListCalendarTripSuggestions({
+    query: {
+      enabled: Boolean(status?.configured),
+      queryKey: getListCalendarTripSuggestionsQueryKey(),
+    },
+  });
+  const pendingSuggestions = useMemo(
+    () => suggestions.filter((s) => s.status === "pending"),
+    [suggestions],
+  );
+  const scanSuggestions = useScanCalendarTripSuggestions();
+  const dismissSuggestion = useDismissCalendarTripSuggestion();
+  const acceptSuggestion = useAcceptCalendarTripSuggestion();
+
+  function isTravelEvent(event: FamilyCalendarEvent): boolean {
+    return Boolean(travelColorId) && event.colorId === travelColorId;
+  }
+
+  const visibleEvents = useMemo(
+    () => (travelOnly ? events.filter(isTravelEvent) : events),
+    [events, travelOnly, travelColorId],
+  );
+
+  function handleScan() {
+    scanSuggestions.mutate(undefined, {
+      onSuccess: (result) => {
+        qc.invalidateQueries({ queryKey: getListCalendarTripSuggestionsQueryKey() });
+        toast.success(
+          result.created > 0
+            ? `Found ${result.created} new trip suggestion${result.created === 1 ? "" : "s"}`
+            : "No new trips found in your calendar",
+        );
+      },
+      onError: () => toast.error("Could not scan the calendar. Please try again."),
+    });
+  }
+
+  function handleDismissSuggestion(id: number) {
+    dismissSuggestion.mutate(id, {
+      onSuccess: () => qc.invalidateQueries({ queryKey: getListCalendarTripSuggestionsQueryKey() }),
+      onError: () => toast.error("Could not dismiss suggestion. Please try again."),
+    });
+  }
+
+  function handleAcceptSuggestion(suggestion: CalendarTripSuggestion) {
+    acceptSuggestion.mutate(
+      { id: suggestion.id },
+      {
+        onSuccess: () => {
+          qc.invalidateQueries({ queryKey: getListCalendarTripSuggestionsQueryKey() });
+          toast.success(`"${suggestion.suggestedTitle}" added as a trip`);
+        },
+        onError: () => toast.error("Could not create the trip. Please try again."),
+      },
+    );
+  }
 
   const eventsQueryKey = getListFamilyCalendarEventsQueryKey(startISO, endISO);
 
@@ -211,38 +287,45 @@ export default function FamilyCalendar() {
       return "Family Calendar page: no shared household calendar is configured yet. The owner needs to connect Google Calendar in Settings and turn on 'Share as household Family Calendar'.";
     }
     const monthLabel = cursor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-    const summary = events
+    const summary = visibleEvents
       .slice(0, 15)
       .map((e) => `"${e.title}" (${e.allDay ? e.start : e.start})`)
       .join("; ");
+    const suggestionSummary = pendingSuggestions
+      .slice(0, 5)
+      .map((s) => `"${s.suggestedTitle}"${s.destination ? ` to ${s.destination}` : ""}`)
+      .join("; ");
     return (
-      `Family Calendar page: viewing ${monthLabel} in ${view} view on the shared calendar "${status.calendarSummary}". ` +
-      (summary ? `Events in range: ${summary}.` : "No events found in this range.")
+      `Family Calendar page: viewing ${monthLabel} in ${view} view on the shared calendar "${status.calendarSummary}"${travelOnly ? " (filtered to travel events only)" : ""}. ` +
+      (summary ? `Events in range: ${summary}.` : "No events found in this range.") +
+      (pendingSuggestions.length > 0
+        ? ` There are ${pendingSuggestions.length} AI-detected trip suggestion(s) awaiting review: ${suggestionSummary}.`
+        : "")
     );
-  }, [statusLoading, status, cursor, events, view]);
+  }, [statusLoading, status, cursor, visibleEvents, view, travelOnly, pendingSuggestions]);
   usePageAssistantContext("family-calendar", context);
 
   const groups = useMemo(() => {
     const map = new Map<string, FamilyCalendarEvent[]>();
-    for (const event of events) {
+    for (const event of visibleEvents) {
       const key = eventDayKey(event);
       const list = map.get(key) ?? [];
       list.push(event);
       map.set(key, list);
     }
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [events]);
+  }, [visibleEvents]);
 
   const eventsByDay = useMemo(() => {
     const map = new Map<string, FamilyCalendarEvent[]>();
-    for (const event of events) {
+    for (const event of visibleEvents) {
       const key = eventDayKey(event);
       const list = map.get(key) ?? [];
       list.push(event);
       map.set(key, list);
     }
     return map;
-  }, [events]);
+  }, [visibleEvents]);
 
   const gridDays = useMemo(() => {
     if (view === "list") return [];
@@ -264,14 +347,14 @@ export default function FamilyCalendar() {
 
   function openEdit(event: FamilyCalendarEvent) {
     setEditingEvent(event);
-    setForm(eventToForm(event));
+    setForm(eventToForm(event, travelColorId));
     setDialogOpen(true);
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.title.trim()) return;
-    const input = formToInput(form);
+    const input = formToInput(form, travelColorId);
 
     if (editingEvent) {
       updateEvent.mutate(
@@ -387,6 +470,80 @@ export default function FamilyCalendar() {
         </ToggleGroup>
       </div>
 
+      {Boolean(travelColorId) && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-card-border bg-card px-4 py-3">
+          <div className="flex items-center gap-2">
+            <Plane className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <Label htmlFor="travel-only" className="text-sm font-medium">
+              Travel only
+            </Label>
+          </div>
+          <Switch id="travel-only" checked={travelOnly} onCheckedChange={setTravelOnly} />
+        </div>
+      )}
+
+      {status?.configured && (pendingSuggestions.length > 0 || scanSuggestions.isPending) && (
+        <div className="space-y-3 rounded-xl border border-card-border bg-card p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <h2 className="text-sm font-semibold text-foreground">Trip suggestions</h2>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleScan}
+              disabled={scanSuggestions.isPending}
+            >
+              {scanSuggestions.isPending ? "Scanning…" : "Scan calendar"}
+            </Button>
+          </div>
+          {pendingSuggestions.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Scanning your calendar for possible trips…</p>
+          ) : (
+            <ul className="space-y-2">
+              {pendingSuggestions.map((suggestion) => (
+                <li
+                  key={suggestion.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-card-border/60 p-3"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-foreground">{suggestion.suggestedTitle}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {[
+                        suggestion.destination,
+                        suggestion.startDate && suggestion.endDate
+                          ? `${suggestion.startDate} – ${suggestion.endDate}`
+                          : suggestion.startDate,
+                      ]
+                        .filter(Boolean)
+                        .join(" • ")}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDismissSuggestion(suggestion.id)}
+                      disabled={dismissSuggestion.isPending}
+                    >
+                      Dismiss
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => handleAcceptSuggestion(suggestion)}
+                      disabled={acceptSuggestion.isPending}
+                    >
+                      Add as trip
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {eventsLoading ? (
         <p className="text-sm text-muted-foreground">Loading events…</p>
       ) : view === "month" ? (
@@ -438,10 +595,15 @@ export default function FamilyCalendar() {
                           e.stopPropagation();
                           openEdit(event);
                         }}
-                        className="truncate rounded bg-primary/10 px-1 py-0.5 text-[11px] text-primary hover:bg-primary/20"
+                        className={`flex items-center gap-1 truncate rounded px-1 py-0.5 text-[11px] ${
+                          isTravelEvent(event)
+                            ? "bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:hover:bg-amber-900/60"
+                            : "bg-primary/10 text-primary hover:bg-primary/20"
+                        }`}
                         title={event.title}
                       >
-                        {event.title}
+                        {isTravelEvent(event) && <Plane className="h-2.5 w-2.5 shrink-0" />}
+                        <span className="truncate">{event.title}</span>
                       </div>
                     ))}
                     {dayEvents.length > 3 && (
@@ -489,9 +651,14 @@ export default function FamilyCalendar() {
                           key={event.id}
                           type="button"
                           onClick={() => openEdit(event)}
-                          className="block w-full truncate rounded bg-primary/10 px-1.5 py-1 text-left text-[11px] text-primary hover:bg-primary/20"
+                          className={`flex w-full items-center gap-1 truncate rounded px-1.5 py-1 text-left text-[11px] ${
+                            isTravelEvent(event)
+                              ? "bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:hover:bg-amber-900/60"
+                              : "bg-primary/10 text-primary hover:bg-primary/20"
+                          }`}
                           title={event.title}
                         >
+                          {isTravelEvent(event) && <Plane className="h-2.5 w-2.5 shrink-0" />}
                           {!event.allDay && (
                             <span className="mr-1 text-muted-foreground">
                               {new Date(event.start).toLocaleTimeString(undefined, {
@@ -500,7 +667,7 @@ export default function FamilyCalendar() {
                               })}
                             </span>
                           )}
-                          {event.title}
+                          <span className="truncate">{event.title}</span>
                         </button>
                       ))
                     )}
@@ -529,10 +696,19 @@ export default function FamilyCalendar() {
                 {dayEvents.map((event) => (
                   <li
                     key={event.id}
-                    className="flex items-start justify-between gap-3 rounded-lg border border-card-border/60 p-3"
+                    className={`flex items-start justify-between gap-3 rounded-lg border p-3 ${
+                      isTravelEvent(event)
+                        ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20"
+                        : "border-card-border/60"
+                    }`}
                   >
                     <div className="min-w-0 space-y-1">
-                      <p className="font-medium text-foreground">{event.title}</p>
+                      <p className="flex items-center gap-1.5 font-medium text-foreground">
+                        {isTravelEvent(event) && (
+                          <Plane className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                        )}
+                        {event.title}
+                      </p>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                         {!event.allDay && (
                           <span className="flex items-center gap-1">
@@ -630,6 +806,20 @@ export default function FamilyCalendar() {
                 onCheckedChange={(v) => setForm((f) => ({ ...f, allDay: v }))}
               />
             </div>
+
+            {Boolean(travelColorId) && (
+              <div className="flex items-center justify-between rounded-lg border border-card-border p-3">
+                <Label htmlFor="event-is-travel" className="flex items-center gap-1.5">
+                  <Plane className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                  Mark as travel
+                </Label>
+                <Switch
+                  id="event-is-travel"
+                  checked={form.isTravel}
+                  onCheckedChange={(v) => setForm((f) => ({ ...f, isTravel: v }))}
+                />
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">

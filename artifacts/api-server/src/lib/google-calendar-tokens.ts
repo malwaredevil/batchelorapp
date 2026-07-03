@@ -13,6 +13,7 @@ export interface CalendarConnection {
   googleEmail: string;
   calendarId: string | null;
   calendarSummary: string | null;
+  travelColorId: string | null;
 }
 
 export interface HouseholdCalendarConnection extends CalendarConnection {
@@ -36,6 +37,7 @@ export async function getHouseholdCalendarConnection(): Promise<HouseholdCalenda
     googleEmail: row.googleEmail,
     calendarId: row.calendarId,
     calendarSummary: row.calendarSummary,
+    travelColorId: row.travelColorId,
     isHouseholdShared: true,
   };
 }
@@ -54,6 +56,7 @@ export async function getCalendarConnection(
     googleEmail: row.googleEmail,
     calendarId: row.calendarId,
     calendarSummary: row.calendarSummary,
+    travelColorId: row.travelColorId,
   };
 }
 

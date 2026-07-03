@@ -5,6 +5,7 @@ import { db, travelsTrips, travelsTripDocuments, travelsTripPhotos, travelsRemin
 import { requireAuth } from "../../middleware/auth";
 import { deleteTripPhoto } from "../../lib/travels/storage";
 import { deleteDocument } from "../../lib/travels-storage";
+import { syncTripCalendarEvents, deleteTripCalendarEvents } from "../../lib/trip-calendar-sync";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -111,6 +112,14 @@ router.post("/trips", async (req, res) => {
     })
     .returning();
   res.status(201).json(row);
+  void syncTripCalendarEvents({
+    id: row.id,
+    title: row.title,
+    destination: row.destination,
+    startDate: row.startDate,
+    endDate: row.endDate,
+    itinerary: row.itinerary,
+  });
 });
 
 router.get("/trips/:id", async (req, res) => {
@@ -187,6 +196,16 @@ router.patch("/trips/:id", async (req, res) => {
     .returning();
 
   res.json(updated);
+  if (updated) {
+    void syncTripCalendarEvents({
+      id: updated.id,
+      title: updated.title,
+      destination: updated.destination,
+      startDate: updated.startDate,
+      endDate: updated.endDate,
+      itinerary: updated.itinerary,
+    });
+  }
 });
 
 router.delete("/trips/:id", async (req, res) => {
@@ -229,6 +248,7 @@ router.delete("/trips/:id", async (req, res) => {
   await db.delete(travelsTrips).where(eq(travelsTrips.id, id));
 
   res.status(204).send();
+  void deleteTripCalendarEvents(id);
 });
 
 export default router;

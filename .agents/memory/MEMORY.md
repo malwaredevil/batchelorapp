@@ -25,3 +25,4 @@
 - [elAIne assistant page-context is winner-take-all](assistant-pagecontext-single-source.md) — usePageAssistantContext picks the highest-`order` call per page, it doesn't merge; append extra data into the existing string instead of registering a second context id.
 - [elAIne document Q&A via pageContext](elaine-document-qa.md) — parsed doc fields (extractedData) are surfaced to the assistant via plain-text pageContext, no new tool; test by PATCHing extractedData on an uploaded doc, not by relying on real OCR.
 - [elAIne itinerary actions](travels-itinerary-assistant-actions.md) — extracted route AI logic into a shared throwing function for reuse by assistant actions; AssistantActionType in api-client-react is hand-maintained, not codegen'd.
+- [elAIne assistant action executor ownership](travels-assistant-action-ownership.md) — a shared `userId` param in an executor's type signature doesn't mean every executor uses it; audit each WHERE clause individually.

@@ -461,6 +461,7 @@ describe("POST /api/travels/assistant/action", () => {
 
   describe("regenerate_itinerary_day", () => {
     it("regenerates the given 1-based day and passes a 0-based index with balanced defaults", async () => {
+      selectQueue.push([{ id: 7 }]); // ownership check
       generateItineraryForTrip.mockResolvedValueOnce({
         days: [{ date: "2026-07-14", title: "Refreshed", activities: [] }],
       });
@@ -484,6 +485,7 @@ describe("POST /api/travels/assistant/action", () => {
     });
 
     it("surfaces an ItineraryActionError's status and message", async () => {
+      selectQueue.push([{ id: 7 }]); // ownership check
       generateItineraryForTrip.mockRejectedValueOnce(
         new FakeItineraryActionError(400, "Day index out of range"),
       );
@@ -505,6 +507,184 @@ describe("POST /api/travels/assistant/action", () => {
         .send({ type: "regenerate_itinerary_day", payload: { tripId: 7, dayNumber: 0 } });
 
       expect(res.status).toBe(400);
+      expect(generateItineraryForTrip).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("add_packing_item", () => {
+    it("adds the item when the trip belongs to the caller", async () => {
+      selectQueue.push([{ id: 7, packingList: [] }]);
+      lastReturning = [{ id: 7, packingList: [{ item: "Sunscreen", packed: false }] }];
+      const app = await buildApp();
+
+      const res = await request(app)
+        .post("/api/travels/assistant/action")
+        .send({ type: "add_packing_item", payload: { tripId: 7, item: "Sunscreen" } });
+
+      expect(res.status).toBe(200);
+      expect(updateCalls[0]?.set).toEqual({
+        packingList: [{ item: "Sunscreen", packed: false }],
+      });
+    });
+
+    it("404s when the trip belongs to a different user", async () => {
+      selectQueue.push([]); // ownership-scoped lookup finds nothing for this user
+      const app = await buildApp();
+
+      const res = await request(app)
+        .post("/api/travels/assistant/action")
+        .send({ type: "add_packing_item", payload: { tripId: 7, item: "Sunscreen" } });
+
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: "Trip not found" });
+      expect(updateCalls).toHaveLength(0);
+    });
+  });
+
+  describe("add_reminder", () => {
+    it("creates a reminder when the trip belongs to the caller", async () => {
+      selectQueue.push([{ id: 7, title: "Rome" }]);
+      lastReturning = [
+        { id: 1, tripId: 7, title: "Check in", dueDate: null, recipientEmails: [] },
+      ];
+      const app = await buildApp();
+
+      const res = await request(app)
+        .post("/api/travels/assistant/action")
+        .send({ type: "add_reminder", payload: { tripId: 7, title: "Check in" } });
+
+      expect(res.status).toBe(201);
+      expect(insertCalls).toHaveLength(1);
+    });
+
+    it("404s when the trip belongs to a different user, without inserting a reminder", async () => {
+      selectQueue.push([]); // ownership-scoped lookup finds nothing for this user
+      const app = await buildApp();
+
+      const res = await request(app)
+        .post("/api/travels/assistant/action")
+        .send({ type: "add_reminder", payload: { tripId: 7, title: "Check in" } });
+
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: "Trip not found" });
+      expect(insertCalls).toHaveLength(0);
+    });
+  });
+
+  describe("sync_reminder_to_calendar", () => {
+    it("404s when the reminder belongs to a different user, without updating it", async () => {
+      selectQueue.push([{ id: 1, tripId: 7, userId: 999, recipientEmails: [] }]);
+      const app = await buildApp();
+
+      const res = await request(app)
+        .post("/api/travels/assistant/action")
+        .send({
+          type: "sync_reminder_to_calendar",
+          payload: { tripId: 7, reminderId: 1 },
+        });
+
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: "Reminder not found" });
+      expect(updateCalls).toHaveLength(0);
+    });
+  });
+
+  describe("cross-user ownership on other trip/wishlist actions", () => {
+    it("update_trip_status 404s when the trip belongs to a different user", async () => {
+      selectQueue.push([]); // ownership-scoped lookup finds nothing for this user
+      const app = await buildApp();
+
+      const res = await request(app)
+        .post("/api/travels/assistant/action")
+        .send({ type: "update_trip_status", payload: { tripId: 7, status: "booked" } });
+
+      expect(res.status).toBe(404);
+      expect(updateCalls).toHaveLength(0);
+    });
+
+    it("update_trip_details 404s when the trip belongs to a different user", async () => {
+      selectQueue.push([]);
+      const app = await buildApp();
+
+      const res = await request(app)
+        .post("/api/travels/assistant/action")
+        .send({ type: "update_trip_details", payload: { tripId: 7, notes: "hi" } });
+
+      expect(res.status).toBe(404);
+      expect(updateCalls).toHaveLength(0);
+    });
+
+    it("cancel_trip 404s and performs no cleanup when the trip belongs to a different user", async () => {
+      selectQueue.push([]);
+      const app = await buildApp();
+
+      const res = await request(app)
+        .post("/api/travels/assistant/action")
+        .send({ type: "cancel_trip", payload: { tripId: 7 } });
+
+      expect(res.status).toBe(404);
+      expect(deleteCalls).toHaveLength(0);
+      expect(deleteTripPhoto).not.toHaveBeenCalled();
+      expect(deleteDocument).not.toHaveBeenCalled();
+    });
+
+    it("mark_wishlist_done 404s when the wishlist item belongs to a different user", async () => {
+      selectQueue.push([]);
+      const app = await buildApp();
+
+      const res = await request(app)
+        .post("/api/travels/assistant/action")
+        .send({ type: "mark_wishlist_done", payload: { wishlistId: 3 } });
+
+      expect(res.status).toBe(404);
+      expect(updateCalls).toHaveLength(0);
+    });
+
+    it("remove_wishlist_item 404s when the wishlist item belongs to a different user", async () => {
+      selectQueue.push([]);
+      const app = await buildApp();
+
+      const res = await request(app)
+        .post("/api/travels/assistant/action")
+        .send({ type: "remove_wishlist_item", payload: { wishlistId: 3 } });
+
+      expect(res.status).toBe(404);
+      expect(deleteCalls).toHaveLength(0);
+    });
+
+    it("remove_packing_item 404s when the trip belongs to a different user", async () => {
+      selectQueue.push([]);
+      const app = await buildApp();
+
+      const res = await request(app)
+        .post("/api/travels/assistant/action")
+        .send({ type: "remove_packing_item", payload: { tripId: 7, item: "Sunscreen" } });
+
+      expect(res.status).toBe(404);
+      expect(updateCalls).toHaveLength(0);
+    });
+
+    it("add_itinerary_day 404s when the trip belongs to a different user", async () => {
+      selectQueue.push([]);
+      const app = await buildApp();
+
+      const res = await request(app)
+        .post("/api/travels/assistant/action")
+        .send({ type: "add_itinerary_day", payload: { tripId: 7, title: "Day 1" } });
+
+      expect(res.status).toBe(404);
+      expect(updateCalls).toHaveLength(0);
+    });
+
+    it("regenerate_itinerary_day 404s when the trip belongs to a different user, without calling the AI", async () => {
+      selectQueue.push([]); // ownership check
+      const app = await buildApp();
+
+      const res = await request(app)
+        .post("/api/travels/assistant/action")
+        .send({ type: "regenerate_itinerary_day", payload: { tripId: 7, dayNumber: 1 } });
+
+      expect(res.status).toBe(404);
       expect(generateItineraryForTrip).not.toHaveBeenCalled();
     });
   });

@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { runStartupMigration } from "./lib/startup-migrate";
 import { startReminderScheduler } from "./lib/reminder-scheduler";
+import { startNudgeScheduler } from "./lib/travels-nudges";
 
 const rawPort = process.env["PORT"];
 
@@ -27,6 +28,7 @@ runStartupMigration()
 
       logger.info({ port }, "Server listening");
       startReminderScheduler();
+      startNudgeScheduler();
     });
   })
   .catch((err) => {
@@ -41,5 +43,6 @@ runStartupMigration()
       }
       logger.info({ port }, "Server listening");
       startReminderScheduler();
+      startNudgeScheduler();
     });
   });

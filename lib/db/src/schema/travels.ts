@@ -10,6 +10,7 @@ import {
   timestamp,
   jsonb,
   index,
+  uniqueIndex,
   vector,
 } from "drizzle-orm/pg-core";
 
@@ -322,3 +323,44 @@ export type TravelsHouseholdMemoryRow =
   typeof travelsHouseholdMemory.$inferSelect;
 export type InsertTravelsHouseholdMemory =
   typeof travelsHouseholdMemory.$inferInsert;
+
+// Proactive nudges — messages elAIne generates unprompted (e.g. "your trip
+// starts in 2 days and the packing list is empty"), produced by a scheduled
+// job (lib/travels-nudges.ts) rather than in response to a chat turn.
+// `nudgeKey` is a stable dedup key per condition instance (e.g.
+// "packing_empty:<tripId>") so the job never nags about the same thing
+// twice; the unique constraint on (user_id, nudge_key) makes inserts
+// idempotent via ON CONFLICT DO NOTHING. Once picked up by
+// GET /assistant/conversation, a nudge's message is appended to the user's
+// conversation history as a normal assistant chat bubble and `seenAt` is
+// stamped so it never appears twice and drops off the unseen-count badge.
+export const travelsAssistantNudges = pgTable(
+  "travels_assistant_nudges",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull(),
+    tripId: integer("trip_id"),
+    nudgeKey: text("nudge_key").notNull(),
+    message: text("message").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    seenAt: timestamp("seen_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("travels_assistant_nudges_user_id_idx").on(table.userId),
+    index("travels_assistant_nudges_user_id_seen_at_idx").on(
+      table.userId,
+      table.seenAt,
+    ),
+    uniqueIndex("travels_assistant_nudges_user_id_nudge_key_idx").on(
+      table.userId,
+      table.nudgeKey,
+    ),
+  ],
+).enableRLS();
+
+export type TravelsAssistantNudgeRow =
+  typeof travelsAssistantNudges.$inferSelect;
+export type InsertTravelsAssistantNudge =
+  typeof travelsAssistantNudges.$inferInsert;

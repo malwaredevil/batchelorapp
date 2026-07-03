@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/lib/auth";
+import { AssistantWidget } from "@/components/assistant/AssistantWidget";
 
 const NAV_ITEMS = [
   { href: "/", label: "Home", icon: Home },
@@ -134,6 +135,8 @@ export function Layout({ children }: { children: ReactNode }) {
       <main className="mx-auto w-full max-w-5xl px-4 pb-24 pt-6 md:pb-8">
         {children}
       </main>
+
+      <AssistantWidget />
     </div>
   );
 }

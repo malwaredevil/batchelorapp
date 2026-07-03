@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from "react";
-import { Mail, Bell, Save, X, Send, CalendarDays, CheckCircle2, XCircle, LogIn, LogOut } from "lucide-react";
+import { Mail, Bell, Save, X, Send, CalendarDays, CheckCircle2, XCircle, LogIn, LogOut, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   useGetTravelsSettings,
@@ -13,12 +14,19 @@ import {
   useListCalendars,
   useSelectCalendar,
   useDisconnectCalendar,
+  useGetAssistantSettings,
+  useUpdateAssistantSettings,
+  useListHouseholdMemory,
+  useDeleteHouseholdMemory,
   getGetTravelsSettingsQueryKey,
   getGetCalendarStatusQueryKey,
   getListCalendarsQueryKey,
+  getGetAssistantSettingsQueryKey,
+  getListHouseholdMemoryQueryKey,
   type CalendarListItem,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { ElaineAvatar, ElaineWordmark } from "@/components/assistant/ElaineAvatar";
 
 export default function Settings() {
   const qc = useQueryClient();
@@ -197,6 +205,95 @@ export default function Settings() {
       </div>
 
       <CalendarSyncCard />
+      <ElaineSettingsCard />
+    </div>
+  );
+}
+
+function ElaineSettingsCard() {
+  const qc = useQueryClient();
+  const { data: assistantSettings, isLoading: settingsLoading } = useGetAssistantSettings();
+  const updateAssistantSettings = useUpdateAssistantSettings();
+  const { data: memory = [], isLoading: memoryLoading } = useListHouseholdMemory();
+  const deleteMemory = useDeleteHouseholdMemory();
+
+  function handleToggle(enabled: boolean) {
+    updateAssistantSettings.mutate(
+      { enabled },
+      {
+        onSuccess: (result) => {
+          qc.setQueryData(getGetAssistantSettingsQueryKey(), result);
+          toast.success(enabled ? "elAIne is back!" : "elAIne is turned off");
+        },
+        onError: () => toast.error("Failed to update elAIne settings"),
+      },
+    );
+  }
+
+  function handleDeleteMemory(id: number) {
+    deleteMemory.mutate(id, {
+      onSuccess: () => qc.invalidateQueries({ queryKey: getListHouseholdMemoryQueryKey() }),
+      onError: () => toast.error("Failed to remove memory"),
+    });
+  }
+
+  return (
+    <div className="rounded-2xl border border-card-border bg-card p-6 space-y-5">
+      <div className="flex items-center gap-3">
+        <ElaineAvatar size={40} />
+        <div>
+          <h2 className="font-serif text-lg text-foreground flex items-center gap-1.5">
+            <ElaineWordmark />
+          </h2>
+          <p className="text-xs text-muted-foreground">Your household's travel assistant</p>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-card-border p-4">
+        <div>
+          <p className="text-sm font-medium text-foreground">Enable elAIne</p>
+          <p className="text-xs text-muted-foreground">
+            Shows the floating assistant bubble across every page.
+          </p>
+        </div>
+        <Switch
+          checked={assistantSettings?.enabled ?? true}
+          onCheckedChange={handleToggle}
+          disabled={settingsLoading || updateAssistantSettings.isPending}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-sm font-medium text-foreground">What elAIne remembers</p>
+        <p className="text-xs text-muted-foreground pb-1">
+          Shared facts elAIne has picked up about your household's travel preferences.
+        </p>
+        {memoryLoading && <p className="text-xs text-muted-foreground">Loading…</p>}
+        {!memoryLoading && memory.length === 0 && (
+          <p className="text-xs text-muted-foreground italic">Nothing remembered yet.</p>
+        )}
+        {memory.length > 0 && (
+          <ul className="space-y-1.5">
+            {memory.map((m) => (
+              <li
+                key={m.id}
+                className="flex items-center justify-between gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm"
+              >
+                <span className="text-foreground">{m.content}</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                  onClick={() => handleDeleteMemory(m.id)}
+                  disabled={deleteMemory.isPending}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

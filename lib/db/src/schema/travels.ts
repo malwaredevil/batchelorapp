@@ -259,3 +259,60 @@ export type TravelsReminderCalendarEventRow =
   typeof travelsReminderCalendarEvents.$inferSelect;
 export type InsertTravelsReminderCalendarEvent =
   typeof travelsReminderCalendarEvents.$inferInsert;
+
+// ── elAIne assistant ─────────────────────────────────────────────────────────
+
+// One ongoing conversation per user that follows them across every page.
+// "New conversation" just clears messages back to []. Not to be confused with
+// the (now-retired) per-trip chatHistory column on travelsTrips.
+export const travelsAssistantConversations = pgTable(
+  "travels_assistant_conversations",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull().unique(),
+    messages: jsonb("messages").notNull().default(sql`'[]'::jsonb`),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+).enableRLS();
+
+export type TravelsAssistantConversationRow =
+  typeof travelsAssistantConversations.$inferSelect;
+export type InsertTravelsAssistantConversation =
+  typeof travelsAssistantConversations.$inferInsert;
+
+// Per-user on/off preference for elAIne (default on). "Hide for this visit"
+// is session-only (client-side), so it does not need a row here.
+export const travelsAssistantSettings = pgTable("travels_assistant_settings", {
+  userId: integer("user_id").primaryKey(),
+  enabled: boolean("enabled").notNull().default(true),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+}).enableRLS();
+
+export type TravelsAssistantSettingsRow =
+  typeof travelsAssistantSettings.$inferSelect;
+export type InsertTravelsAssistantSettings =
+  typeof travelsAssistantSettings.$inferInsert;
+
+// Shared household memory — facts elAIne has learned from any family member
+// that are relevant to everyone, not siloed per-user. Populated by the
+// assistant itself via a save_household_memory tool call, not hand-authored.
+export const travelsHouseholdMemory = pgTable(
+  "travels_household_memory",
+  {
+    id: serial("id").primaryKey(),
+    content: text("content").notNull(),
+    createdByUserId: integer("created_by_user_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+).enableRLS();
+
+export type TravelsHouseholdMemoryRow =
+  typeof travelsHouseholdMemory.$inferSelect;
+export type InsertTravelsHouseholdMemory =
+  typeof travelsHouseholdMemory.$inferInsert;

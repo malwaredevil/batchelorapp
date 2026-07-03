@@ -561,4 +561,32 @@ export const STATEMENTS: string[] = [
      ON travels_reminder_calendar_events (reminder_id)`,
   `CREATE INDEX IF NOT EXISTS travels_reminder_calendar_events_user_id_idx
      ON travels_reminder_calendar_events (user_id)`,
+
+  // ── elAIne assistant ───────────────────────────────────────────────────────
+  // One ongoing conversation per user that follows them across every page.
+  `CREATE TABLE IF NOT EXISTS travels_assistant_conversations (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER NOT NULL UNIQUE,
+    messages    JSONB NOT NULL DEFAULT '[]'::jsonb,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_assistant_conversations ENABLE ROW LEVEL SECURITY`,
+
+  // Per-user on/off preference for elAIne (default on).
+  `CREATE TABLE IF NOT EXISTS travels_assistant_settings (
+    user_id     INTEGER PRIMARY KEY,
+    enabled     BOOLEAN NOT NULL DEFAULT TRUE,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_assistant_settings ENABLE ROW LEVEL SECURITY`,
+
+  // Shared household memory — facts elAIne learned from any family member,
+  // visible to everyone (not siloed per-user).
+  `CREATE TABLE IF NOT EXISTS travels_household_memory (
+    id                  SERIAL PRIMARY KEY,
+    content             TEXT NOT NULL,
+    created_by_user_id  INTEGER NOT NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_household_memory ENABLE ROW LEVEL SECURITY`,
 ];

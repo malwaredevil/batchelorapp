@@ -10,6 +10,7 @@ import destinationsRouter from "./destinations";
 import settingsRouter from "./settings";
 import magnetsRouter from "./magnets";
 import googleCalendarRouter from "./google-calendar";
+import assistantRouter from "./assistant";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(destinationsRouter);
 router.use(settingsRouter);
 router.use(magnetsRouter);
 router.use(googleCalendarRouter);
+router.use(assistantRouter);
 
 export default router;

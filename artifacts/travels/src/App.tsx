@@ -19,7 +19,7 @@ import Wishlist from "@/pages/Wishlist";
 import Import from "@/pages/Import";
 import Destinations from "@/pages/Destinations";
 import Settings from "@/pages/Settings";
-import FamilyCalendar from "@/pages/FamilyCalendar";
+import TravelCalendar from "@/pages/TravelCalendar";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -101,10 +101,10 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
-      <Route path="/family-calendar">
+      <Route path="/travel-calendar">
         <ProtectedRoute>
           <Layout>
-            <FamilyCalendar />
+            <TravelCalendar />
           </Layout>
         </ProtectedRoute>
       </Route>

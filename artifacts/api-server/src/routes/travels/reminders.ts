@@ -6,7 +6,7 @@ import {
   travelsTrips,
   travelsReminders,
   travelsReminderCalendarEvents,
-  travelsGoogleCalendarConnections,
+  travelsConnectedCalendars,
   appUsers,
 } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
@@ -14,6 +14,7 @@ import {
   createReminderEvent,
   updateReminderEvent,
   deleteReminderEvent,
+  getReminderEventAlertDays,
 } from "../../lib/google-calendar";
 import { getValidAccessToken } from "../../lib/google-calendar-tokens";
 import { logger } from "../../lib/logger";
@@ -27,6 +28,7 @@ const CreateReminderBody = z.object({
   dueDate: z.string().optional(),
   recipientEmails: z.array(z.email()).optional(),
   syncToCalendar: z.boolean().optional(),
+  alertDaysBefore: z.array(z.number().int().min(0)).min(1).optional(),
 });
 
 const UpdateReminderBody = z.object({
@@ -36,6 +38,7 @@ const UpdateReminderBody = z.object({
   done: z.boolean().optional(),
   recipientEmails: z.array(z.email()).optional(),
   syncToCalendar: z.boolean().optional(),
+  alertDaysBefore: z.array(z.number().int().min(0)).min(1).optional(),
 });
 
 async function tripExists(tripId: number): Promise<boolean> {
@@ -46,13 +49,14 @@ async function tripExists(tripId: number): Promise<boolean> {
   return !!row;
 }
 
-// Every family member who has connected their own Google Calendar and
-// selected a target calendar gets their own copy of the event: the reminder's
-// creator, plus anyone listed in recipientEmails who has an app account.
+// Every family member who has connected at least one Google calendar, and
+// selected recipients who have an app account, gets their own copy of the
+// event on their oldest (first-added) connected calendar — their reminder's
+// creator, plus anyone listed in recipientEmails.
 export async function getConnectedTargetUserIds(
   creatorUserId: number,
   recipientEmails: string[],
-): Promise<number[]> {
+): Promise<{ userId: number; calendarId: string }[]> {
   const candidateUserIds = new Set<number>([creatorUserId]);
   if (recipientEmails.length > 0) {
     const recipients = await db
@@ -62,15 +66,21 @@ export async function getConnectedTargetUserIds(
     for (const r of recipients) candidateUserIds.add(r.id);
   }
 
-  const connections = await db
+  const rows = await db
     .select({
-      userId: travelsGoogleCalendarConnections.userId,
-      calendarId: travelsGoogleCalendarConnections.calendarId,
+      userId: travelsConnectedCalendars.userId,
+      calendarId: travelsConnectedCalendars.googleCalendarId,
+      id: travelsConnectedCalendars.id,
     })
-    .from(travelsGoogleCalendarConnections)
-    .where(inArray(travelsGoogleCalendarConnections.userId, [...candidateUserIds]));
+    .from(travelsConnectedCalendars)
+    .where(inArray(travelsConnectedCalendars.userId, [...candidateUserIds]))
+    .orderBy(travelsConnectedCalendars.id);
 
-  return connections.filter((c) => c.calendarId).map((c) => c.userId);
+  const firstByUser = new Map<number, string>();
+  for (const row of rows) {
+    if (!firstByUser.has(row.userId)) firstByUser.set(row.userId, row.calendarId);
+  }
+  return [...firstByUser.entries()].map(([userId, calendarId]) => ({ userId, calendarId }));
 }
 
 // Best-effort sync — reminders remain the source of truth even if a
@@ -84,28 +94,22 @@ export async function syncReminderCalendarEvents(
   tripTitle: string,
   title: string,
   dueDate: string | null,
-  targetUserIds: number[],
+  targets: { userId: number; calendarId: string }[],
+  alertDaysBefore: number[],
 ): Promise<void> {
   const existing = await db
     .select()
     .from(travelsReminderCalendarEvents)
     .where(eq(travelsReminderCalendarEvents.reminderId, reminderId));
   const existingByUser = new Map(existing.map((e) => [e.userId, e]));
-  const targetSet = new Set(dueDate ? targetUserIds : []);
+  const targetByUser = new Map(targets.map((t) => [t.userId, t.calendarId]));
+  const targetSet = new Set(dueDate ? [...targetByUser.keys()] : []);
 
   for (const row of existing) {
     if (!targetSet.has(row.userId)) {
       const accessToken = await getValidAccessToken(row.userId);
-      const [connection] = await db
-        .select({ calendarId: travelsGoogleCalendarConnections.calendarId })
-        .from(travelsGoogleCalendarConnections)
-        .where(eq(travelsGoogleCalendarConnections.userId, row.userId));
-      if (accessToken && connection?.calendarId) {
-        await deleteReminderEvent(
-          accessToken,
-          connection.calendarId,
-          row.googleEventId,
-        );
+      if (accessToken) {
+        await deleteReminderEvent(accessToken, row.calendarId, row.googleEventId);
       }
       await db
         .delete(travelsReminderCalendarEvents)
@@ -115,34 +119,31 @@ export async function syncReminderCalendarEvents(
 
   if (!dueDate) return;
 
-  for (const userId of targetUserIds) {
+  for (const [userId, calendarId] of targetByUser) {
     const accessToken = await getValidAccessToken(userId);
     if (!accessToken) continue;
-    const [connection] = await db
-      .select({ calendarId: travelsGoogleCalendarConnections.calendarId })
-      .from(travelsGoogleCalendarConnections)
-      .where(eq(travelsGoogleCalendarConnections.userId, userId));
-    if (!connection?.calendarId) continue;
 
     try {
       const existingRow = existingByUser.get(userId);
       if (existingRow) {
-        await updateReminderEvent(
-          accessToken,
-          connection.calendarId,
-          existingRow.googleEventId,
-          { title, dueDate, description: `Trip reminder: ${tripTitle}` },
-        );
-      } else {
-        const event = await createReminderEvent(accessToken, {
-          calendarId: connection.calendarId,
+        await updateReminderEvent(accessToken, existingRow.calendarId, existingRow.googleEventId, {
           title,
           dueDate,
           description: `Trip reminder: ${tripTitle}`,
+          alertDaysBefore,
+        });
+      } else {
+        const event = await createReminderEvent(accessToken, {
+          calendarId,
+          title,
+          dueDate,
+          description: `Trip reminder: ${tripTitle}`,
+          alertDaysBefore,
         });
         await db.insert(travelsReminderCalendarEvents).values({
           reminderId,
           userId,
+          calendarId,
           googleEventId: event.id,
         });
       }
@@ -165,22 +166,65 @@ export async function deleteAllReminderCalendarEvents(
 
   for (const row of existing) {
     const accessToken = await getValidAccessToken(row.userId);
-    const [connection] = await db
-      .select({ calendarId: travelsGoogleCalendarConnections.calendarId })
-      .from(travelsGoogleCalendarConnections)
-      .where(eq(travelsGoogleCalendarConnections.userId, row.userId));
-    if (accessToken && connection?.calendarId) {
-      await deleteReminderEvent(
-        accessToken,
-        connection.calendarId,
-        row.googleEventId,
-      );
+    if (accessToken) {
+      await deleteReminderEvent(accessToken, row.calendarId, row.googleEventId);
     }
   }
 
   await db
     .delete(travelsReminderCalendarEvents)
     .where(eq(travelsReminderCalendarEvents.reminderId, reminderId));
+}
+
+/**
+ * Pull-side of the bidirectional reminder-interval sync: reads the
+ * creator's own copy of the reminder's calendar event and, if its popup
+ * overrides imply a different set of day-offsets than what's stored, treats
+ * Google as the source of truth and updates travels_reminders. Called
+ * lazily whenever a reminder's events are read/listed, and periodically
+ * from the reminder scheduler. Best-effort — never throws.
+ */
+export async function pullReminderAlertDaysFromCalendar(
+  reminderId: number,
+  creatorUserId: number,
+  currentAlertDaysBefore: number[],
+): Promise<number[]> {
+  try {
+    const [row] = await db
+      .select()
+      .from(travelsReminderCalendarEvents)
+      .where(
+        and(
+          eq(travelsReminderCalendarEvents.reminderId, reminderId),
+          eq(travelsReminderCalendarEvents.userId, creatorUserId),
+        ),
+      );
+    if (!row) return currentAlertDaysBefore;
+
+    const accessToken = await getValidAccessToken(creatorUserId);
+    if (!accessToken) return currentAlertDaysBefore;
+
+    const googleDays = await getReminderEventAlertDays(accessToken, row.calendarId, row.googleEventId);
+    if (!googleDays || googleDays.length === 0) return currentAlertDaysBefore;
+
+    const sameSet =
+      googleDays.length === currentAlertDaysBefore.length &&
+      [...googleDays].sort().every((d, i) => d === [...currentAlertDaysBefore].sort()[i]);
+    if (sameSet) return currentAlertDaysBefore;
+
+    await db
+      .update(travelsReminders)
+      .set({ alertDaysBefore: googleDays })
+      .where(eq(travelsReminders.id, reminderId));
+    logger.info(
+      { reminderId, googleDays },
+      "reminders: pulled alert-day overrides from Google Calendar edit",
+    );
+    return googleDays;
+  } catch (err) {
+    logger.warn({ err, reminderId }, "reminders: pull-alert-days failed");
+    return currentAlertDaysBefore;
+  }
 }
 
 // GET /reminders — all pending (or all) reminders across all trips (for Dashboard)
@@ -235,20 +279,19 @@ router.post("/trips/:id/reminders", async (req, res) => {
       done: false,
       recipientEmails: body.recipientEmails ?? [],
       syncToCalendar,
+      ...(body.alertDaysBefore !== undefined ? { alertDaysBefore: body.alertDaysBefore } : {}),
     })
     .returning();
 
   if (syncToCalendar && row.dueDate) {
-    const targetUserIds = await getConnectedTargetUserIds(
-      userId,
-      row.recipientEmails,
-    );
+    const targets = await getConnectedTargetUserIds(userId, row.recipientEmails);
     await syncReminderCalendarEvents(
       row.id,
       trip.title,
       row.title,
       row.dueDate,
-      targetUserIds,
+      targets,
+      row.alertDaysBefore,
     );
   }
 
@@ -269,6 +312,7 @@ router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
   if (body.done !== undefined) updateData.done = body.done;
   if (body.recipientEmails !== undefined) updateData.recipientEmails = body.recipientEmails;
   if (body.syncToCalendar !== undefined) updateData.syncToCalendar = body.syncToCalendar;
+  if (body.alertDaysBefore !== undefined) updateData.alertDaysBefore = body.alertDaysBefore;
 
   const [updated] = await db
     .update(travelsReminders)
@@ -288,7 +332,8 @@ router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
     body.dueDate !== undefined ||
     body.done !== undefined ||
     body.recipientEmails !== undefined ||
-    body.syncToCalendar !== undefined
+    body.syncToCalendar !== undefined ||
+    body.alertDaysBefore !== undefined
   ) {
     const [trip] = await db
       .select({ title: travelsTrips.title })
@@ -296,7 +341,7 @@ router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
       .where(eq(travelsTrips.id, tripId));
     const tripTitle = trip?.title ?? "Trip";
 
-    const targetUserIds = updated.syncToCalendar
+    const targets = updated.syncToCalendar
       ? await getConnectedTargetUserIds(updated.userId, updated.recipientEmails)
       : [];
     await syncReminderCalendarEvents(
@@ -304,7 +349,8 @@ router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
       tripTitle,
       updated.title,
       updated.dueDate,
-      targetUserIds,
+      targets,
+      updated.alertDaysBefore,
     );
   }
 

@@ -15,12 +15,14 @@ import {
   travelsReminders,
   travelsWishlist,
   travelsGoogleCalendarConnections,
+  travelsConnectedCalendars,
 } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { logger } from "../../lib/logger";
 import { callModelWithSubagent, MODELS } from "../../lib/ai-client";
 import { deleteTripPhoto } from "../../lib/travels/storage";
 import { deleteDocument } from "../../lib/travels-storage";
+import { getValidAccessToken } from "../../lib/google-calendar-tokens";
 import { rescanTripDocument } from "./documents";
 import {
   getConnectedTargetUserIds,
@@ -245,9 +247,10 @@ const DeleteReminderActionPayload = z.object({
   reminderId: z.number().int().positive(),
 });
 
-const SelectCalendarActionPayload = z.object({
-  calendarId: z.string().min(1).max(500),
+const AddConnectedCalendarActionPayload = z.object({
+  googleCalendarId: z.string().min(1).max(500),
   calendarSummary: z.string().min(1).max(200),
+  primaryColor: z.string().min(1).max(20).optional(),
 });
 
 const DisconnectCalendarActionPayload = z.object({});
@@ -336,7 +339,7 @@ const ActionBody = z.discriminatedUnion("type", [
     type: z.literal("regenerate_itinerary_day"),
     payload: RegenerateItineraryDayActionPayload,
   }),
-  z.object({ type: z.literal("select_calendar"), payload: SelectCalendarActionPayload }),
+  z.object({ type: z.literal("add_connected_calendar"), payload: AddConnectedCalendarActionPayload }),
   z.object({ type: z.literal("disconnect_calendar"), payload: DisconnectCalendarActionPayload }),
   z.object({ type: z.literal("rescan_document"), payload: RescanDocumentActionPayload }),
   z.object({ type: z.literal("generate_itinerary"), payload: GenerateItineraryActionPayload }),
@@ -450,8 +453,8 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
       const name = trip ? `"${trip.title || trip.destination}"` : "this trip";
       return `Regenerate day ${action.payload.dayNumber} of ${name}'s itinerary`;
     }
-    case "select_calendar":
-      return `Sync reminders to your "${action.payload.calendarSummary}" Google Calendar`;
+    case "add_connected_calendar":
+      return `Connect your "${action.payload.calendarSummary}" Google Calendar`;
     case "disconnect_calendar":
       return `Disconnect your Google Calendar`;
     case "rescan_document": {
@@ -705,7 +708,14 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
 
     if (syncToCalendar && row.dueDate) {
       const targetUserIds = await getConnectedTargetUserIds(userId, row.recipientEmails);
-      await syncReminderCalendarEvents(row.id, trip.title, row.title, row.dueDate, targetUserIds);
+      await syncReminderCalendarEvents(
+        row.id,
+        trip.title,
+        row.title,
+        row.dueDate,
+        targetUserIds,
+        row.alertDaysBefore,
+      );
     }
 
     return { status: 201, body: { type: "add_reminder", result: row } };
@@ -747,6 +757,7 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
       row.title,
       row.dueDate,
       targetUserIds,
+      row.alertDaysBefore,
     );
 
     return { status: 200, body: { type: "sync_reminder_to_calendar", result: row } };
@@ -792,6 +803,7 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
         row.title,
         row.dueDate,
         targetUserIds,
+        row.alertDaysBefore,
       );
     } else {
       await deleteAllReminderCalendarEvents(row.id);
@@ -881,25 +893,31 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
       throw err;
     }
   }) as ActionExecutor,
-  select_calendar: (async (
-    payload: z.infer<typeof SelectCalendarActionPayload>,
+  add_connected_calendar: (async (
+    payload: z.infer<typeof AddConnectedCalendarActionPayload>,
     userId: number,
   ) => {
-    const [updated] = await db
-      .update(travelsGoogleCalendarConnections)
-      .set({
-        calendarId: payload.calendarId,
-        calendarSummary: payload.calendarSummary,
-        updatedAt: new Date(),
+    const accessToken = await getValidAccessToken(userId);
+    if (!accessToken) return { status: 409, body: { error: "Google Calendar is not connected." } };
+    const [row] = await db
+      .insert(travelsConnectedCalendars)
+      .values({
+        userId,
+        googleCalendarId: payload.googleCalendarId,
+        summary: payload.calendarSummary,
+        source: "picked",
+        primaryColor: payload.primaryColor ?? "#4285f4",
       })
-      .where(eq(travelsGoogleCalendarConnections.userId, userId))
+      .onConflictDoUpdate({
+        target: [travelsConnectedCalendars.userId, travelsConnectedCalendars.googleCalendarId],
+        set: { summary: payload.calendarSummary, updatedAt: new Date() },
+      })
       .returning();
-    if (!updated) return { status: 409, body: { error: "Google Calendar is not connected." } };
     return {
       status: 200,
       body: {
-        type: "select_calendar",
-        result: { calendarId: payload.calendarId, calendarSummary: payload.calendarSummary },
+        type: "add_connected_calendar",
+        result: { googleCalendarId: row.googleCalendarId, calendarSummary: row.summary },
       },
     };
   }) as ActionExecutor,
@@ -1311,16 +1329,17 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
-      name: "select_calendar",
+      name: "add_connected_calendar",
       description:
-        'Propose which of the user\'s own Google calendars reminders should sync to, e.g. "sync my reminders to my Family calendar". Only call this if the user is on the Settings page and Google Calendar is already connected, and only pick a calendarId that is actually listed in the on-screen calendar list — never guess or invent one. If the calendar isn\'t connected yet, do NOT call this; instead tell the user to click Connect (suggest navigating to Settings if needed).',
+        'Propose connecting one of the user\'s own Google calendars to the Travel Calendar overlay, e.g. "add my Work calendar" or "show my Family calendar too". Only call this if the user is on the Settings page and Google Calendar is already connected, and only pick a googleCalendarId that is actually listed in the on-screen calendar list — never guess or invent one. If the calendar isn\'t connected yet, do NOT call this; instead tell the user to click Connect (suggest navigating to Settings if needed).',
       parameters: {
         type: "object",
         properties: {
-          calendarId: { type: "string", description: "Exact calendarId as shown on screen" },
+          googleCalendarId: { type: "string", description: "Exact calendarId as shown on screen" },
           calendarSummary: { type: "string", description: "The calendar's display name, as shown on screen" },
+          primaryColor: { type: "string", description: "Optional hex color for the overlay, if the user specified one" },
         },
-        required: ["calendarId", "calendarSummary"],
+        required: ["googleCalendarId", "calendarSummary"],
       },
     },
   },
@@ -1741,7 +1760,7 @@ REMINDERS: Use add_reminder for requests like "remind me to check in for our fli
 
 ITINERARY: Use add_itinerary_day for requests like "add a day trip to Kyoto on the 14th" — it appends a brand-new day to the trip's itinerary. Use regenerate_itinerary_day for requests like "regenerate day 3" or "come up with a new plan for that day" — it re-runs AI planning for ONE existing day and replaces its activities, using balanced-pace, general-interest defaults since it can't see any per-session style/interest picks the user made in the UI. Only use regenerate_itinerary_day on a day number you can see listed on screen (e.g. "Day 3"); never guess a day number, and never use it to create a new day (use add_itinerary_day for that). Use generate_itinerary for requests like "plan my whole trip" or "generate an itinerary" — it replaces ALL days with a fresh AI-generated plan; if the trip already has itinerary days shown on screen, say so and confirm the user wants to overwrite them before calling it. Each activity you can see on screen has a 1-based day/activity number and a status (tentative or confirmed); tentative activities synced from a document are flagged as such. Use confirm_itinerary_activity to mark a tentative activity firm (or back to tentative) once the user has verified it, and remove_itinerary_activity to delete an activity outright (e.g. a wrong or duplicate document-derived entry) — both require the exact day and activity numbers shown on screen, never guessed.
 
-CALENDAR: Each family member connects their own Google Calendar independently from the Settings page; you can never trigger that OAuth connection yourself — it requires the user to click a real "Connect" button that redirects their browser to Google. If the user asks to connect and you can see from on-screen context that it's not connected yet, ask if they'd like you to take them to Settings and use suggest_navigation for "/settings" — never claim you connected it. Once connected, use select_calendar to change which of their calendars reminders sync to, but only if you're on the Settings page and can see the connection is active plus the exact calendarId in the on-screen calendar list — never guess a calendarId or pick one that isn't listed. Use disconnect_calendar to remove their Google Calendar connection entirely — only when it's shown as connected on screen, and make sure your visible reply asks permission first since this stops all future reminder syncing for them. Disconnecting or reconnecting only ever affects the current user, never anyone else in the household.
+CALENDAR: Each family member connects their own Google Calendar independently from the Settings page; you can never trigger that OAuth connection yourself — it requires the user to click a real "Connect" button that redirects their browser to Google. If the user asks to connect and you can see from on-screen context that it's not connected yet, ask if they'd like you to take them to Settings and use suggest_navigation for "/settings" — never claim you connected it. Once connected, use add_connected_calendar to add one of their own calendars to their Travel Calendar overlay, but only if you're on the Settings page and can see the connection is active plus the exact googleCalendarId in the on-screen calendar list — never guess one or pick one that isn't listed. Use disconnect_calendar to remove their Google Calendar connection entirely — only when it's shown as connected on screen, and make sure your visible reply asks permission first since this stops all future reminder syncing and removes every calendar they'd connected. Disconnecting or reconnecting only ever affects the current user, never anyone else in the household. Only the app owner can assign which calendar is the shared "Travel" calendar, and you can never do that on their behalf — direct them to the Settings page for that.
 
 MAGNET CHECK: If the user asks whether they already own a souvenir magnet, or wants to check a photo against their collection before buying a duplicate, you have no tool for this and can't see or analyze photos yourself in this text chat — tell them to tap the small camera icon next to the message box, which lets them snap or upload a photo and checks it against their whole collection right there in the chat (no need to navigate anywhere first). Never guess or fabricate a match result.
 

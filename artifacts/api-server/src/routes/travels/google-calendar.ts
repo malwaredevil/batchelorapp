@@ -1,7 +1,6 @@
 import crypto from "node:crypto";
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { z } from "zod/v4";
 import { db, travelsGoogleCalendarConnections } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import {
@@ -24,7 +23,7 @@ function callbackUrl(req: { protocol: string; get: (h: string) => string | undef
   return `${req.protocol}://${host}/api/travels/google-calendar/callback`;
 }
 
-// GET /google-calendar/status — is the current user connected, and to which calendar
+// GET /google-calendar/status — is the current user's Google account connected
 router.get("/google-calendar/status", requireAuth, async (req, res) => {
   const userId = req.session.userId!;
   const [connection] = await db
@@ -35,10 +34,6 @@ router.get("/google-calendar/status", requireAuth, async (req, res) => {
   res.json({
     connected: Boolean(connection),
     googleEmail: connection?.googleEmail ?? null,
-    calendarId: connection?.calendarId ?? null,
-    calendarSummary: connection?.calendarSummary ?? null,
-    isHouseholdShared: connection?.isHouseholdShared ?? false,
-    travelColorId: connection?.travelColorId ?? null,
   });
 });
 
@@ -171,38 +166,11 @@ router.get("/google-calendar/calendars", requireAuth, async (req, res) => {
   }
 });
 
-const SelectCalendarBody = z.object({
-  calendarId: z.string().min(1),
-  calendarSummary: z.string().min(1),
-});
-
-// PUT /google-calendar/settings — choose which calendar reminders sync to
-router.put("/google-calendar/settings", requireAuth, async (req, res) => {
-  const userId = req.session.userId!;
-  const body = SelectCalendarBody.parse(req.body);
-
-  const [updated] = await db
-    .update(travelsGoogleCalendarConnections)
-    .set({
-      calendarId: body.calendarId,
-      calendarSummary: body.calendarSummary,
-      updatedAt: new Date(),
-    })
-    .where(eq(travelsGoogleCalendarConnections.userId, userId))
-    .returning();
-
-  if (!updated) {
-    res.status(409).json({ error: "Google Calendar is not connected." });
-    return;
-  }
-
-  res.json({
-    calendarId: body.calendarId,
-    calendarSummary: body.calendarSummary,
-  });
-});
-
-// DELETE /google-calendar/disconnect — remove the stored connection
+// DELETE /google-calendar/disconnect — remove the stored connection (and,
+// by extension, every connected calendar row that depended on this token —
+// handled by the connected-calendars route via ON DELETE semantics is not
+// enforced at the DB level, so callers should remove connected calendars
+// first if they want a clean teardown; this just revokes the token).
 router.delete("/google-calendar/disconnect", requireAuth, async (req, res) => {
   const userId = req.session.userId!;
   await db
@@ -228,76 +196,10 @@ const GOOGLE_EVENT_COLORS = [
   { id: "11", name: "Tomato", hex: "#d60000" },
 ] as const;
 
-// GET /google-calendar/colors — Google's fixed event color palette, for the
-// travel-color picker in Settings.
+// GET /google-calendar/colors — Google's fixed event color palette, used for
+// the per-event colorId in the Travel Calendar overlay UI.
 router.get("/google-calendar/colors", requireAuth, (_req, res) => {
   res.json(GOOGLE_EVENT_COLORS);
-});
-
-const TravelColorBody = z.object({ travelColorId: z.string().min(1).nullable() });
-
-// PUT /google-calendar/travel-color — choose which event colorId means
-// "Travel" for the household's shared Family Calendar. Stored on the
-// current user's own connection row; only takes effect once that row is
-// also the household-shared one.
-router.put("/google-calendar/travel-color", requireAuth, async (req, res) => {
-  const userId = req.session.userId!;
-  const body = TravelColorBody.parse(req.body);
-
-  const [updated] = await db
-    .update(travelsGoogleCalendarConnections)
-    .set({ travelColorId: body.travelColorId, updatedAt: new Date() })
-    .where(eq(travelsGoogleCalendarConnections.userId, userId))
-    .returning();
-
-  if (!updated) {
-    res.status(409).json({ error: "Google Calendar is not connected." });
-    return;
-  }
-
-  res.json({ travelColorId: updated.travelColorId });
-});
-
-const ShareCalendarBody = z.object({ shared: z.boolean() });
-
-// PUT /google-calendar/share — mark/unmark this user's connection as the
-// household's shared "Family Calendar". All other app_users' family-calendar
-// requests are proxied through whichever connection has this flag set, so at
-// most one connection may be shared at a time (enforced here, not in the DB).
-router.put("/google-calendar/share", requireAuth, async (req, res) => {
-  const userId = req.session.userId!;
-  const body = ShareCalendarBody.parse(req.body);
-
-  if (body.shared) {
-    const [connection] = await db
-      .select()
-      .from(travelsGoogleCalendarConnections)
-      .where(eq(travelsGoogleCalendarConnections.userId, userId))
-      .limit(1);
-    if (!connection?.calendarId) {
-      res
-        .status(409)
-        .json({ error: "Connect Google Calendar and pick a calendar first." });
-      return;
-    }
-    await db.transaction(async (tx) => {
-      await tx
-        .update(travelsGoogleCalendarConnections)
-        .set({ isHouseholdShared: false, updatedAt: new Date() })
-        .where(eq(travelsGoogleCalendarConnections.isHouseholdShared, true));
-      await tx
-        .update(travelsGoogleCalendarConnections)
-        .set({ isHouseholdShared: true, updatedAt: new Date() })
-        .where(eq(travelsGoogleCalendarConnections.userId, userId));
-    });
-  } else {
-    await db
-      .update(travelsGoogleCalendarConnections)
-      .set({ isHouseholdShared: false, updatedAt: new Date() })
-      .where(eq(travelsGoogleCalendarConnections.userId, userId));
-  }
-
-  res.json({ shared: body.shared });
 });
 
 export default router;

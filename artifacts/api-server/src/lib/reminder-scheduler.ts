@@ -1,12 +1,15 @@
 import { pool } from "@workspace/db";
 import { sendReminderAlertEmail, resendConfigured, type ReminderAlertType } from "./email";
+import { pullReminderAlertDaysFromCalendar } from "../routes/travels/reminders";
 import { logger } from "./logger";
 
-const ALERT_THRESHOLDS: { type: ReminderAlertType; days: number }[] = [
-  { type: "14_day", days: 14 },
-  { type: "7_day",  days: 7 },
-  { type: "3_day",  days: 3 },
-];
+// Gating is driven entirely by each reminder's own alert_days_before array
+// (which may itself have been edited directly in the recipient's Google
+// Calendar and pulled back here before we decide what to send) — any
+// non-negative day count is valid, not just a fixed 14/7/3-day set.
+function alertTypeForDays(days: number): ReminderAlertType {
+  return `${days}_day` as ReminderAlertType;
+}
 
 export async function runReminderAlerts(): Promise<void> {
   if (!resendConfigured()) {
@@ -21,38 +24,57 @@ export async function runReminderAlerts(): Promise<void> {
   if (!client) return;
 
   try {
-    for (const { type, days } of ALERT_THRESHOLDS) {
-      const { rows } = await client.query<{
-        reminder_id: number;
-        user_id: number;
-        reminder_title: string;
-        trip_title: string;
-        trip_destination: string;
-        due_date: string;
-        recipient_emails: string[];
-      }>(
-        `SELECT r.id                 AS reminder_id,
-                r.user_id,
-                r.title              AS reminder_title,
-                t.title              AS trip_title,
-                t.destination        AS trip_destination,
-                r.due_date::text     AS due_date,
-                r.recipient_emails   AS recipient_emails
-           FROM travels_reminders r
-           JOIN travels_trips  t ON t.id  = r.trip_id
-          WHERE r.done = false
-            AND r.due_date >= CURRENT_DATE
-            AND r.due_date <= CURRENT_DATE + $1::integer
-            AND array_length(r.recipient_emails, 1) > 0
-            AND NOT EXISTS (
-              SELECT 1 FROM travels_reminder_alert_log al
-               WHERE al.reminder_id = r.id
-                 AND al.alert_type  = $2
-            )`,
-        [days, type],
+    const { rows: candidates } = await client.query<{
+      reminder_id: number;
+      user_id: number;
+      reminder_title: string;
+      trip_title: string;
+      trip_destination: string;
+      due_date: string;
+      recipient_emails: string[];
+      alert_days_before: number[];
+    }>(
+      `SELECT r.id                 AS reminder_id,
+              r.user_id,
+              r.title              AS reminder_title,
+              t.title              AS trip_title,
+              t.destination        AS trip_destination,
+              r.due_date::text     AS due_date,
+              r.recipient_emails   AS recipient_emails,
+              r.alert_days_before  AS alert_days_before
+         FROM travels_reminders r
+         JOIN travels_trips  t ON t.id  = r.trip_id
+        WHERE r.done = false
+          AND r.due_date >= CURRENT_DATE
+          AND r.due_date <= CURRENT_DATE + 30
+          AND array_length(r.recipient_emails, 1) > 0`,
+    );
+
+    for (const candidate of candidates) {
+      // Pull-back: Google Calendar edits to the reminder's own notification
+      // overrides win, so a user who nudges the popup time in their Google
+      // Calendar app sees that reflected in future alert-day gating here.
+      const alertDaysBefore = await pullReminderAlertDaysFromCalendar(
+        candidate.reminder_id,
+        candidate.user_id,
+        candidate.alert_days_before,
       );
 
-      for (const row of rows) {
+      const daysUntilDue = Math.round(
+        (new Date(`${candidate.due_date}T00:00:00Z`).getTime() - Date.now()) / 86_400_000,
+      );
+
+      for (const days of alertDaysBefore) {
+        if (daysUntilDue !== days) continue;
+        const type = alertTypeForDays(days) ?? (`${days}_day` as ReminderAlertType);
+
+        const { rows: alreadySent } = await client.query<{ id: number }>(
+          `SELECT id FROM travels_reminder_alert_log WHERE reminder_id = $1 AND alert_type = $2`,
+          [candidate.reminder_id, type],
+        );
+        if (alreadySent.length > 0) continue;
+
+        const row = candidate;
         const failures: { toEmail: string; err: unknown }[] = [];
         let successCount = 0;
 

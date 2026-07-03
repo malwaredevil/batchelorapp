@@ -1145,16 +1145,12 @@ export function useUpdateTravelsSettings(
 }
 
 // ---------------------------------------------------------------------------
-// Google Calendar sync (shared family calendar)
+// Google Calendar OAuth (per-user account connection)
 // ---------------------------------------------------------------------------
 
 export interface CalendarStatus {
   connected: boolean;
   googleEmail: string | null;
-  calendarId: string | null;
-  calendarSummary: string | null;
-  isHouseholdShared: boolean;
-  travelColorId: string | null;
 }
 
 export interface CalendarListItem {
@@ -1167,11 +1163,6 @@ export interface GoogleEventColor {
   id: string;
   name: string;
   hex: string;
-}
-
-export interface SelectCalendarBody {
-  calendarId: string;
-  calendarSummary: string;
 }
 
 const getCalendarStatus = (options?: RequestInit): Promise<CalendarStatus> =>
@@ -1206,20 +1197,6 @@ export function useListCalendars<TData = CalendarListItem[], TError = unknown>(
   return { ...query, queryKey: queryOpts.queryKey };
 }
 
-const putCalendarSettingsFn = (body: SelectCalendarBody): Promise<SelectCalendarBody> =>
-  customFetch<SelectCalendarBody>("/api/travels/google-calendar/settings", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-export function useSelectCalendar(
-  options?: { mutation?: UseMutationOptions<SelectCalendarBody, unknown, SelectCalendarBody> },
-) {
-  const mutationFn = (body: SelectCalendarBody) => putCalendarSettingsFn(body);
-  return useMutation({ mutationFn, ...options?.mutation });
-}
-
 const deleteCalendarConnectionFn = (): Promise<void> =>
   customFetch<void>("/api/travels/google-calendar/disconnect", { method: "DELETE" });
 
@@ -1227,20 +1204,6 @@ export function useDisconnectCalendar(
   options?: { mutation?: UseMutationOptions<void, unknown, void> },
 ) {
   const mutationFn = () => deleteCalendarConnectionFn();
-  return useMutation({ mutationFn, ...options?.mutation });
-}
-
-const putShareCalendarFn = (body: { shared: boolean }): Promise<{ shared: boolean }> =>
-  customFetch<{ shared: boolean }>("/api/travels/google-calendar/share", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-export function useShareCalendar(
-  options?: { mutation?: UseMutationOptions<{ shared: boolean }, unknown, { shared: boolean }> },
-) {
-  const mutationFn = (body: { shared: boolean }) => putShareCalendarFn(body);
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
@@ -1263,28 +1226,143 @@ export function useListGoogleEventColors<TData = GoogleEventColor[], TError = un
   return { ...query, queryKey: queryOpts.queryKey };
 }
 
-const putTravelColorFn = (body: { travelColorId: string | null }): Promise<{ travelColorId: string | null }> =>
-  customFetch<{ travelColorId: string | null }>("/api/travels/google-calendar/travel-color", {
-    method: "PUT",
+// ---------------------------------------------------------------------------
+// Connected calendars (unlimited per-user Google calendars, each with a
+// user-chosen overlay color; exactly one may be the shared "Travel" calendar)
+// ---------------------------------------------------------------------------
+
+export interface ConnectedCalendar {
+  id: number;
+  userId: number;
+  googleCalendarId: string;
+  summary: string;
+  source: "picked" | "manual";
+  primaryColor: string;
+  isTravelCalendar: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConnectedCalendarInput {
+  googleCalendarId: string;
+  summary: string;
+  source?: "picked" | "manual";
+  primaryColor?: string;
+}
+
+const listConnectedCalendars = (options?: RequestInit): Promise<ConnectedCalendar[]> =>
+  customFetch<ConnectedCalendar[]>("/api/travels/connected-calendars", { ...options, method: "GET" });
+
+export const getListConnectedCalendarsQueryKey = () => [`/api/travels/connected-calendars`] as const;
+
+export function useListConnectedCalendars<TData = ConnectedCalendar[], TError = unknown>(
+  options?: { query?: UseQueryOptions<ConnectedCalendar[], TError, TData> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getListConnectedCalendarsQueryKey();
+  const queryFn: QueryFunction<ConnectedCalendar[]> = ({ signal }) => listConnectedCalendars({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<ConnectedCalendar[], TError, TData> & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const postConnectedCalendarFn = (body: ConnectedCalendarInput): Promise<ConnectedCalendar> =>
+  customFetch<ConnectedCalendar>("/api/travels/connected-calendars", {
+    method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
 
-export function useSetTravelColor(
-  options?: {
-    mutation?: UseMutationOptions<
-      { travelColorId: string | null },
-      unknown,
-      { travelColorId: string | null }
-    >;
-  },
+export function useAddConnectedCalendar(
+  options?: { mutation?: UseMutationOptions<ConnectedCalendar, unknown, ConnectedCalendarInput> },
 ) {
-  const mutationFn = (body: { travelColorId: string | null }) => putTravelColorFn(body);
+  const mutationFn = (body: ConnectedCalendarInput) => postConnectedCalendarFn(body);
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
+const patchConnectedCalendarFn = (
+  id: number,
+  body: { primaryColor?: string; summary?: string },
+): Promise<ConnectedCalendar> =>
+  customFetch<ConnectedCalendar>(`/api/travels/connected-calendars/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export function useUpdateConnectedCalendar(
+  options?: {
+    mutation?: UseMutationOptions<
+      ConnectedCalendar,
+      unknown,
+      { id: number; body: { primaryColor?: string; summary?: string } }
+    >;
+  },
+) {
+  const mutationFn = ({ id, body }: { id: number; body: { primaryColor?: string; summary?: string } }) =>
+    patchConnectedCalendarFn(id, body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const deleteConnectedCalendarFn = (id: number): Promise<void> =>
+  customFetch<void>(`/api/travels/connected-calendars/${id}`, { method: "DELETE" });
+
+export function useDeleteConnectedCalendar(
+  options?: { mutation?: UseMutationOptions<void, unknown, number> },
+) {
+  const mutationFn = (id: number) => deleteConnectedCalendarFn(id);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const putConnectedCalendarAsTravelFn = (id: number): Promise<{ id: number; isTravelCalendar: boolean }> =>
+  customFetch<{ id: number; isTravelCalendar: boolean }>(`/api/travels/connected-calendars/${id}/travel`, {
+    method: "PUT",
+  });
+
+export function useSetTravelCalendar(
+  options?: { mutation?: UseMutationOptions<{ id: number; isTravelCalendar: boolean }, unknown, number> },
+) {
+  const mutationFn = (id: number) => putConnectedCalendarAsTravelFn(id);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const listConnectedCalendarEvents = (
+  id: number,
+  start: string,
+  end: string,
+  options?: RequestInit,
+): Promise<FamilyCalendarEvent[]> =>
+  customFetch<FamilyCalendarEvent[]>(
+    `/api/travels/connected-calendars/${id}/events?${new URLSearchParams({ start, end }).toString()}`,
+    { ...options, method: "GET" },
+  );
+
+export const getListConnectedCalendarEventsQueryKey = (id: number, start: string, end: string) =>
+  [`/api/travels/connected-calendars`, id, `events`, start, end] as const;
+
+export function useListConnectedCalendarEvents<TData = FamilyCalendarEvent[], TError = unknown>(
+  id: number,
+  start: string,
+  end: string,
+  options?: { query?: UseQueryOptions<FamilyCalendarEvent[], TError, TData> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getListConnectedCalendarEventsQueryKey(id, start, end);
+  const queryFn: QueryFunction<FamilyCalendarEvent[]> = ({ signal }) =>
+    listConnectedCalendarEvents(id, start, end, { signal });
+  const queryOpts = {
+    queryKey,
+    queryFn,
+    enabled: Boolean(id && start && end),
+    ...queryOptions,
+  } as UseQueryOptions<FamilyCalendarEvent[], TError, TData> & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
 // ---------------------------------------------------------------------------
-// Family Calendar (shared household calendar — view/add/edit/delete events)
+// Travel Calendar (shared, owner-assignable calendar — view/add/edit/delete
+// events; every app_user may act on it, not just the owner)
 // ---------------------------------------------------------------------------
 
 export interface FamilyCalendarStatus {
@@ -1292,7 +1370,7 @@ export interface FamilyCalendarStatus {
   calendarSummary: string | null;
   ownerGoogleEmail: string | null;
   isOwner: boolean;
-  travelColorId: string | null;
+  primaryColor: string | null;
 }
 
 export interface FamilyCalendarEvent {
@@ -1318,9 +1396,9 @@ export interface FamilyCalendarEventInput {
 }
 
 const getFamilyCalendarStatus = (options?: RequestInit): Promise<FamilyCalendarStatus> =>
-  customFetch<FamilyCalendarStatus>("/api/travels/family-calendar/status", { ...options, method: "GET" });
+  customFetch<FamilyCalendarStatus>("/api/travels/travel-calendar/status", { ...options, method: "GET" });
 
-export const getGetFamilyCalendarStatusQueryKey = () => [`/api/travels/family-calendar/status`] as const;
+export const getGetFamilyCalendarStatusQueryKey = () => [`/api/travels/travel-calendar/status`] as const;
 
 export function useGetFamilyCalendarStatus<TData = FamilyCalendarStatus, TError = unknown>(
   options?: { query?: UseQueryOptions<FamilyCalendarStatus, TError, TData> },
@@ -1339,12 +1417,12 @@ const listFamilyCalendarEvents = (
   options?: RequestInit,
 ): Promise<FamilyCalendarEvent[]> =>
   customFetch<FamilyCalendarEvent[]>(
-    `/api/travels/family-calendar/events?${new URLSearchParams({ start, end }).toString()}`,
+    `/api/travels/travel-calendar/events?${new URLSearchParams({ start, end }).toString()}`,
     { ...options, method: "GET" },
   );
 
 export const getListFamilyCalendarEventsQueryKey = (start: string, end: string) =>
-  [`/api/travels/family-calendar/events`, start, end] as const;
+  [`/api/travels/travel-calendar/events`, start, end] as const;
 
 export function useListFamilyCalendarEvents<TData = FamilyCalendarEvent[], TError = unknown>(
   start: string,
@@ -1366,7 +1444,7 @@ export function useListFamilyCalendarEvents<TData = FamilyCalendarEvent[], TErro
 }
 
 const postFamilyCalendarEventFn = (body: FamilyCalendarEventInput): Promise<FamilyCalendarEvent> =>
-  customFetch<FamilyCalendarEvent>("/api/travels/family-calendar/events", {
+  customFetch<FamilyCalendarEvent>("/api/travels/travel-calendar/events", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -1384,7 +1462,7 @@ const patchFamilyCalendarEventFn = (
   body: FamilyCalendarEventInput,
 ): Promise<FamilyCalendarEvent> =>
   customFetch<FamilyCalendarEvent>(
-    `/api/travels/family-calendar/events/${encodeURIComponent(eventId)}`,
+    `/api/travels/travel-calendar/events/${encodeURIComponent(eventId)}`,
     {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -1407,7 +1485,7 @@ export function useUpdateFamilyCalendarEvent(
 }
 
 const deleteFamilyCalendarEventFn = (eventId: string): Promise<void> =>
-  customFetch<void>(`/api/travels/family-calendar/events/${encodeURIComponent(eventId)}`, {
+  customFetch<void>(`/api/travels/travel-calendar/events/${encodeURIComponent(eventId)}`, {
     method: "DELETE",
   });
 
@@ -1419,7 +1497,7 @@ export function useDeleteFamilyCalendarEvent(
 }
 
 // ---------------------------------------------------------------------------
-// AI-detected trip suggestions from the Family Calendar
+// AI-detected trip suggestions from every connected calendar
 // ---------------------------------------------------------------------------
 
 export interface CalendarTripSuggestion {
@@ -1545,7 +1623,7 @@ export type AssistantActionType =
   | "delete_reminder"
   | "add_itinerary_day"
   | "regenerate_itinerary_day"
-  | "select_calendar"
+  | "add_connected_calendar"
   | "disconnect_calendar"
   | "rescan_document"
   | "generate_itinerary"

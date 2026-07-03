@@ -21,6 +21,10 @@ export const appUsers = pgTable("app_users", {
   hubWeatherConfig: text("hub_weather_config"),
   // Email address for travels trip-reminder alerts (14-day, 7-day, 3-day).
   travelsReminderEmail: text("travels_reminder_email"),
+  // True for the single app owner (batchelorjc@gmail.com) — the only account
+  // allowed to assign/reassign which connected calendar is the shared
+  // "Travel" calendar in the Travels app.
+  isOwner: boolean("is_owner").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

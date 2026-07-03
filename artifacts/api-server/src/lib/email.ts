@@ -25,13 +25,20 @@ const REMINDER_FROM_EMAIL =
   process.env.RESEND_REMINDER_FROM_EMAIL ||
   "Batchelor Travels <travel.alert@app.batchelor.app>";
 
-export type ReminderAlertType = "14_day" | "7_day" | "3_day";
+// Alert type is now derived from the reminder's own configurable
+// alert_days_before array rather than a fixed 14/7/3-day set — any
+// non-negative day count is a valid alert type, e.g. "10_day".
+export type ReminderAlertType = `${number}_day`;
 
-const ALERT_LABEL: Record<ReminderAlertType, string> = {
-  "14_day": "2 weeks",
-  "7_day":  "1 week",
-  "3_day":  "3 days",
-};
+function alertLabel(days: number): string {
+  if (days === 0) return "today";
+  if (days === 1) return "1 day";
+  if (days % 7 === 0) {
+    const weeks = days / 7;
+    return weeks === 1 ? "1 week" : `${weeks} weeks`;
+  }
+  return `${days} days`;
+}
 
 export async function sendReminderAlertEmail(
   toEmail: string,
@@ -43,7 +50,8 @@ export async function sendReminderAlertEmail(
 ): Promise<void> {
   const from = REMINDER_FROM_EMAIL;
 
-  const label = ALERT_LABEL[alertType];
+  const days = parseInt(alertType, 10);
+  const label = alertLabel(isNaN(days) ? 0 : days);
   const formatted = new Date(dueDate + "T12:00:00Z").toLocaleDateString("en-GB", {
     day: "numeric", month: "long", year: "numeric",
   });

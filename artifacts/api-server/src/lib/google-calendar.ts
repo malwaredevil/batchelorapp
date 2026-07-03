@@ -64,10 +64,21 @@ export interface CreateReminderEventInput {
   title: string;
   dueDate: string; // YYYY-MM-DD
   description?: string;
+  // Day-offsets before dueDate that should each fire a popup reminder.
+  // Defaults to a single day-before popup if omitted.
+  alertDaysBefore?: number[];
 }
 
-// Reminders are all-day events on their due date, with a popup notification
-// the day before so it shows up as a native alert on the recipient's phone.
+function reminderOverrides(alertDaysBefore: number[] | undefined) {
+  const days = alertDaysBefore && alertDaysBefore.length > 0 ? alertDaysBefore : [1];
+  return [...new Set(days)]
+    .filter((d) => d >= 0)
+    .sort((a, b) => b - a)
+    .map((d) => ({ method: "popup", minutes: d * 24 * 60 }));
+}
+
+// Reminders are all-day events on their due date, with popup notifications
+// at each configured day-offset before the due date.
 export async function createReminderEvent(
   accessToken: string,
   input: CreateReminderEventInput,
@@ -85,7 +96,7 @@ export async function createReminderEvent(
         end: { date: nextDay },
         reminders: {
           useDefault: false,
-          overrides: [{ method: "popup", minutes: 24 * 60 }],
+          overrides: reminderOverrides(input.alertDaysBefore),
         },
       },
     },
@@ -109,9 +120,45 @@ export async function updateReminderEvent(
         description: input.description,
         start: { date: input.dueDate },
         end: { date: nextDay },
+        reminders: {
+          useDefault: false,
+          overrides: reminderOverrides(input.alertDaysBefore),
+        },
       },
     },
   );
+}
+
+/**
+ * Reads back the popup reminder overrides on a reminder's Google event and
+ * converts them to whole-day offsets, so edits made directly in Google
+ * Calendar (adding/removing/changing a reminder time) can be pulled back
+ * into travels_reminders.alert_days_before. Returns null if the event can't
+ * be read (deleted, revoked token, etc) — callers should leave the stored
+ * value untouched in that case.
+ */
+export async function getReminderEventAlertDays(
+  accessToken: string,
+  calendarId: string,
+  eventId: string,
+): Promise<number[] | null> {
+  try {
+    const raw = await calendarApiJson<{
+      reminders?: { useDefault?: boolean; overrides?: { method?: string; minutes?: number }[] };
+    }>(
+      accessToken,
+      `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+    );
+    const overrides = raw.reminders?.overrides ?? [];
+    const days = overrides
+      .filter((o) => o.method === "popup" && typeof o.minutes === "number")
+      .map((o) => Math.round((o.minutes as number) / (24 * 60)))
+      .filter((d) => d >= 0);
+    return [...new Set(days)].sort((a, b) => b - a);
+  } catch (err) {
+    logger.warn({ err, calendarId, eventId }, "google-calendar: failed to read reminder overrides");
+    return null;
+  }
 }
 
 export async function deleteReminderEvent(
@@ -142,7 +189,7 @@ function addDays(dateStr: string, days: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// Generic calendar events (Family Calendar — arbitrary events, not just
+// Generic calendar events (Travel Calendar — arbitrary events, not just
 // reminders). Supports both all-day events (date-only) and timed events
 // (dateTime with offset), unlike the reminder-shaped functions above.
 // ---------------------------------------------------------------------------

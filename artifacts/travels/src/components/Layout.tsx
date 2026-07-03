@@ -23,7 +23,7 @@ const NAV_ITEMS = [
   { href: "/map", label: "Map", icon: Globe },
   { href: "/explore", label: "Explore", icon: Compass },
   { href: "/wishlist", label: "Wishlist", icon: Star },
-  { href: "/family-calendar", label: "Family Calendar", icon: CalendarDays },
+  { href: "/travel-calendar", label: "Travel Calendar", icon: CalendarDays },
   { href: "/import", label: "Import", icon: Upload },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

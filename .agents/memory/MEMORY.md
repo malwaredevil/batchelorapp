@@ -27,3 +27,4 @@
 - [elAIne itinerary actions](travels-itinerary-assistant-actions.md) — extracted route AI logic into a shared throwing function for reuse by assistant actions; AssistantActionType in api-client-react is hand-maintained, not codegen'd.
 - [elAIne assistant action executor ownership](travels-assistant-action-ownership.md) — a shared `userId` param in an executor's type signature doesn't mean every executor uses it; audit each WHERE clause individually.
 - [elAIne proactive nudges architecture](travels-proactive-nudges.md) — background job only inserts dedup'd nudge rows; the conversation-read endpoint folds unseen ones into chat + marks seen atomically; separate unseen-count endpoint backs the badge.
+- [Travels Google Calendar OAuth cannot be assistant-triggered](travels-calendar-oauth-constraint.md) — connect flow is a full browser redirect; automation may only report status/select-calendar/disconnect, never connect.

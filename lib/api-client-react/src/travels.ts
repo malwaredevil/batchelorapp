@@ -1246,7 +1246,9 @@ export type AssistantActionType =
   | "edit_reminder"
   | "delete_reminder"
   | "add_itinerary_day"
-  | "regenerate_itinerary_day";
+  | "regenerate_itinerary_day"
+  | "select_calendar"
+  | "disconnect_calendar";
 
 export interface AssistantAction {
   type: AssistantActionType;

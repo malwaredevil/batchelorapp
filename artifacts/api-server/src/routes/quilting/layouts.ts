@@ -99,7 +99,7 @@ async function resolveOrCreateCategories(
     const [existing] = await db
       .select({ id: categories.id })
       .from(categories)
-      .where(and(eq(categories.name, name)))
+      .where(and(eq(categories.name, name), eq(categories.userId, userId)))
       .limit(1);
     if (existing) {
       ids.push(existing.id);
@@ -178,12 +178,13 @@ const HEX_RE = /#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?/g;
 
 async function fetchBlockCellsMap(
   blockIds: number[],
+  userId: number,
 ): Promise<Map<number, string[]>> {
   if (blockIds.length === 0) return new Map();
   const rows = await db
     .select({ id: blocks.id, cells: blocks.cells })
     .from(blocks)
-    .where(inArray(blocks.id, blockIds));
+    .where(and(inArray(blocks.id, blockIds), eq(blocks.userId, userId)));
 
   const FAB_RE = /\bfab:(\d+)/g;
   const allFabricIds = new Set<number>();
@@ -198,7 +199,7 @@ async function fetchBlockCellsMap(
     const fabRows = await db
       .select({ id: fabrics.id, dominantColors: fabrics.dominantColors })
       .from(fabrics)
-      .where(inArray(fabrics.id, [...allFabricIds]));
+      .where(and(inArray(fabrics.id, [...allFabricIds]), eq(fabrics.userId, userId)));
     for (const fr of fabRows) fabricColorMap.set(fr.id, fr.dominantColors ?? []);
   }
 
@@ -285,6 +286,7 @@ router.get("/layouts", async (req, res) => {
   const rows = await db
     .select()
     .from(layouts)
+    .where(eq(layouts.userId, userId))
     .orderBy(desc(layouts.createdAt));
   const catMap = await fetchLayoutCategories(rows.map((r) => r.id));
 
@@ -294,7 +296,7 @@ router.get("/layouts", async (req, res) => {
       if (cell.blockId !== null) allBlockIds.add(cell.blockId);
     }
   }
-  const blockCellsMap = await fetchBlockCellsMap([...allBlockIds]);
+  const blockCellsMap = await fetchBlockCellsMap([...allBlockIds], userId);
 
   res.json(
     rows.map((r) =>
@@ -352,7 +354,7 @@ router.get("/layouts/:id", async (req, res) => {
   const [row] = await db
     .select()
     .from(layouts)
-    .where(and(eq(layouts.id, id)));
+    .where(and(eq(layouts.id, id), eq(layouts.userId, userId)));
   if (!row) {
     res.status(404).json({ error: "Layout not found" });
     return;
@@ -365,7 +367,7 @@ router.get("/layouts/:id", async (req, res) => {
         .filter((bid): bid is number => bid !== null),
     ),
   ];
-  const blockCellsMap = await fetchBlockCellsMap(blockIds);
+  const blockCellsMap = await fetchBlockCellsMap(blockIds, userId);
   res.json(serialize(row, catMap.get(id) ?? [], extractLayoutColors(row, blockCellsMap)));
 });
 
@@ -385,7 +387,7 @@ router.patch("/layouts/:id", async (req, res) => {
     const [existing] = await db
       .select({ rows: layouts.rows, cols: layouts.cols })
       .from(layouts)
-      .where(and(eq(layouts.id, id)));
+      .where(and(eq(layouts.id, id), eq(layouts.userId, userId)));
     const rows = data.rows ?? existing?.rows ?? 5;
     const cols = data.cols ?? existing?.cols ?? 5;
     update.cells = normalizeCells(data.cells, rows, cols);
@@ -403,14 +405,14 @@ router.patch("/layouts/:id", async (req, res) => {
     const [updated] = await db
       .update(layouts)
       .set(update)
-      .where(and(eq(layouts.id, id)))
+      .where(and(eq(layouts.id, id), eq(layouts.userId, userId)))
       .returning();
     row = updated;
   } else {
     const [existing] = await db
       .select()
       .from(layouts)
-      .where(and(eq(layouts.id, id)));
+      .where(and(eq(layouts.id, id), eq(layouts.userId, userId)));
     row = existing;
   }
   if (!row) {
@@ -460,7 +462,7 @@ router.delete("/layouts/:id", async (req, res) => {
   const [existing] = await db
     .select({ id: layouts.id })
     .from(layouts)
-    .where(and(eq(layouts.id, id)));
+    .where(and(eq(layouts.id, id), eq(layouts.userId, userId)));
   if (!existing) {
     res.status(404).json({ error: "Layout not found" });
     return;
@@ -476,7 +478,7 @@ router.delete("/layouts/:id", async (req, res) => {
     );
   await db
     .delete(layouts)
-    .where(and(eq(layouts.id, id)));
+    .where(and(eq(layouts.id, id), eq(layouts.userId, userId)));
   res.status(204).send();
 });
 

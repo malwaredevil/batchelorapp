@@ -110,7 +110,7 @@ async function resolveOrCreateCategories(
     const [existing] = await db
       .select({ id: categories.id })
       .from(categories)
-      .where(and(eq(categories.name, name)))
+      .where(and(eq(categories.name, name), eq(categories.userId, userId)))
       .limit(1);
     if (existing) {
       ids.push(existing.id);
@@ -170,6 +170,7 @@ const HEX_RE = /#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?/g;
 
 async function buildFabricColorMap(
   allCells: string[][],
+  userId: number,
 ): Promise<Map<number, string[]>> {
   const ids = new Set<number>();
   for (const cells of allCells) {
@@ -182,7 +183,7 @@ async function buildFabricColorMap(
   const rows = await db
     .select({ id: fabrics.id, dominantColors: fabrics.dominantColors })
     .from(fabrics)
-    .where(inArray(fabrics.id, [...ids]));
+    .where(and(inArray(fabrics.id, [...ids]), eq(fabrics.userId, userId)));
   for (const r of rows) map.set(r.id, r.dominantColors ?? []);
   return map;
 }
@@ -269,13 +270,15 @@ router.post("/blocks/detect-seams", aiLimiter, async (req, res) => {
 // ---------------------------------------------------------------------------
 
 router.get("/blocks", async (req, res) => {
+  const userId = req.session.userId!;
   const rows = await db
     .select()
     .from(blocks)
+    .where(eq(blocks.userId, userId))
     .orderBy(desc(blocks.createdAt));
   const [catMap, fabricColorMap] = await Promise.all([
     fetchBlockCategories(rows.map((r) => r.id)),
-    buildFabricColorMap(rows.map((r) => r.cells)),
+    buildFabricColorMap(rows.map((r) => r.cells), userId),
   ]);
   res.json(rows.map((r) => serialize(r, catMap.get(r.id) ?? [], fabricColorMap)));
 });
@@ -326,14 +329,14 @@ router.get("/blocks/:id", async (req, res) => {
   const [row] = await db
     .select()
     .from(blocks)
-    .where(and(eq(blocks.id, id)));
+    .where(and(eq(blocks.id, id), eq(blocks.userId, userId)));
   if (!row) {
     res.status(404).json({ error: "Block not found" });
     return;
   }
   const [catMap, fabricColorMap] = await Promise.all([
     fetchBlockCategories([id]),
-    buildFabricColorMap([row.cells]),
+    buildFabricColorMap([row.cells], userId),
   ]);
   res.json(serialize(row, catMap.get(id) ?? [], fabricColorMap));
 });
@@ -355,7 +358,7 @@ router.patch("/blocks/:id", async (req, res) => {
       const [existing] = await db
         .select({ gridSize: blocks.gridSize })
         .from(blocks)
-        .where(and(eq(blocks.id, id)));
+        .where(and(eq(blocks.id, id), eq(blocks.userId, userId)));
       gridSize = existing?.gridSize ?? 8;
     }
     update.cells = normalizeCells(data.cells, gridSize);
@@ -371,14 +374,14 @@ router.patch("/blocks/:id", async (req, res) => {
     const [updated] = await db
       .update(blocks)
       .set(update)
-      .where(and(eq(blocks.id, id)))
+      .where(and(eq(blocks.id, id), eq(blocks.userId, userId)))
       .returning();
     row = updated;
   } else {
     const [existing] = await db
       .select()
       .from(blocks)
-      .where(and(eq(blocks.id, id)));
+      .where(and(eq(blocks.id, id), eq(blocks.userId, userId)));
     row = existing;
   }
   if (!row) {
@@ -428,7 +431,7 @@ router.delete("/blocks/:id", async (req, res) => {
   const [existing] = await db
     .select({ id: blocks.id })
     .from(blocks)
-    .where(and(eq(blocks.id, id)));
+    .where(and(eq(blocks.id, id), eq(blocks.userId, userId)));
   if (!existing) {
     res.status(404).json({ error: "Block not found" });
     return;
@@ -444,7 +447,7 @@ router.delete("/blocks/:id", async (req, res) => {
     );
   await db
     .delete(blocks)
-    .where(and(eq(blocks.id, id)));
+    .where(and(eq(blocks.id, id), eq(blocks.userId, userId)));
   res.status(204).send();
 });
 

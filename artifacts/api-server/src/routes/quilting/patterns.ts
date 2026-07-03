@@ -115,7 +115,7 @@ async function resolveOrCreateCategories(
     .select({ name: categories.name, id: categories.id })
     .from(categories)
     .where(
-      and(inArray(categories.name, unique)),
+      and(inArray(categories.name, unique), eq(categories.userId, userId)),
     );
   const existingNames = new Set(existing.map((c) => c.name));
   const existingIds = existing.map((c) => c.id);
@@ -140,7 +140,7 @@ async function resolveOrCreateCategories(
     .select({ id: categories.id })
     .from(categories)
     .where(
-      and(inArray(categories.name, unique)),
+      and(inArray(categories.name, unique), eq(categories.userId, userId)),
     );
   // Merge with any existing ids we already found (in case insert+lookup missed some)
   const allIds = [...new Set([...existingIds, ...all.map((c) => c.id)])];
@@ -159,7 +159,7 @@ router.get("/patterns", async (req, res) => {
   const rows = await db
     .select()
     .from(quiltPatterns)
-    
+    .where(eq(quiltPatterns.userId, userId))
     .orderBy(desc(quiltPatterns.createdAt));
   const items = await serializePatterns(rows);
   res.json(ListPatternsResponse.parse(items));
@@ -175,7 +175,7 @@ router.get("/patterns/:id", async (req, res) => {
   const [row] = await db
     .select()
     .from(quiltPatterns)
-    .where(and(eq(quiltPatterns.id, id)))
+    .where(and(eq(quiltPatterns.id, id), eq(quiltPatterns.userId, userId)))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Pattern not found." });
@@ -255,7 +255,7 @@ router.patch("/patterns/:id", async (req, res) => {
   const [existing] = await db
     .select({ id: quiltPatterns.id })
     .from(quiltPatterns)
-    .where(and(eq(quiltPatterns.id, id)))
+    .where(and(eq(quiltPatterns.id, id), eq(quiltPatterns.userId, userId)))
     .limit(1);
   if (!existing) {
     res.status(404).json({ error: "Pattern not found." });
@@ -279,7 +279,7 @@ router.patch("/patterns/:id", async (req, res) => {
     await db
       .update(quiltPatterns)
       .set(updates)
-      .where(and(eq(quiltPatterns.id, id)));
+      .where(and(eq(quiltPatterns.id, id), eq(quiltPatterns.userId, userId)));
   }
 
   if (body.categories !== undefined) {
@@ -304,7 +304,7 @@ router.patch("/patterns/:id", async (req, res) => {
   const [updated] = await db
     .select()
     .from(quiltPatterns)
-    .where(and(eq(quiltPatterns.id, id)))
+    .where(and(eq(quiltPatterns.id, id), eq(quiltPatterns.userId, userId)))
     .limit(1);
   res.json(UpdatePatternResponse.parse(await serializePattern(updated)));
 });
@@ -319,7 +319,7 @@ router.delete("/patterns/:id", async (req, res) => {
   const [row] = await db
     .select({ imagePath: quiltPatterns.imagePath })
     .from(quiltPatterns)
-    .where(and(eq(quiltPatterns.id, id)))
+    .where(and(eq(quiltPatterns.id, id), eq(quiltPatterns.userId, userId)))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Pattern not found." });
@@ -333,7 +333,7 @@ router.delete("/patterns/:id", async (req, res) => {
 
   await db
     .delete(quiltPatterns)
-    .where(and(eq(quiltPatterns.id, id)));
+    .where(and(eq(quiltPatterns.id, id), eq(quiltPatterns.userId, userId)));
   await Promise.allSettled([
     ...(row.imagePath ? [deleteImage(row.imagePath)] : []),
     ...supplementalImages.map((img) => deleteImage(img.storagePath)),
@@ -354,7 +354,7 @@ router.post("/patterns/:id/reanalyze", aiLimiter, async (req, res) => {
   const [row] = await db
     .select()
     .from(quiltPatterns)
-    .where(and(eq(quiltPatterns.id, id)))
+    .where(and(eq(quiltPatterns.id, id), eq(quiltPatterns.userId, userId)))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Pattern not found." });
@@ -416,12 +416,12 @@ router.post("/patterns/:id/reanalyze", aiLimiter, async (req, res) => {
         : { difficulty: analysis.difficulty }),
       ...(lockedFields.includes("notes") ? {} : { notes: analysis.notes }),
     })
-    .where(and(eq(quiltPatterns.id, id)));
+    .where(and(eq(quiltPatterns.id, id), eq(quiltPatterns.userId, userId)));
 
   const [updated] = await db
     .select()
     .from(quiltPatterns)
-    .where(and(eq(quiltPatterns.id, id)))
+    .where(and(eq(quiltPatterns.id, id), eq(quiltPatterns.userId, userId)))
     .limit(1);
   res.json(
     ReanalyzePatternResponse.parse(
@@ -442,7 +442,7 @@ router.post("/patterns/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
       const [row] = await db
         .select()
         .from(quiltPatterns)
-        .where(and(eq(quiltPatterns.id, id)))
+        .where(and(eq(quiltPatterns.id, id), eq(quiltPatterns.userId, userId)))
         .limit(1);
       if (!row || !row.imagePath) {
         failed.push(id);
@@ -494,7 +494,7 @@ router.post("/patterns/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
             : { difficulty: analysis.difficulty }),
           ...(lockedFields.includes("notes") ? {} : { notes: analysis.notes }),
         })
-        .where(and(eq(quiltPatterns.id, id)));
+        .where(and(eq(quiltPatterns.id, id), eq(quiltPatterns.userId, userId)));
       succeeded.push(id);
     } catch {
       failed.push(id);
@@ -517,7 +517,7 @@ router.get("/patterns/:id/image", async (req, res) => {
   const [row] = await db
     .select({ imagePath: quiltPatterns.imagePath })
     .from(quiltPatterns)
-    .where(and(eq(quiltPatterns.id, id)))
+    .where(and(eq(quiltPatterns.id, id), eq(quiltPatterns.userId, userId)))
     .limit(1);
   if (!row || !row.imagePath) {
     res.status(404).json({ error: "Image not found." });
@@ -545,7 +545,7 @@ router.post(
     const [pattern] = await db
       .select({ id: quiltPatterns.id })
       .from(quiltPatterns)
-      .where(and(eq(quiltPatterns.id, id)))
+      .where(and(eq(quiltPatterns.id, id), eq(quiltPatterns.userId, userId)))
       .limit(1);
     if (!pattern) {
       res.status(404).json({ error: "Pattern not found." });
@@ -601,7 +601,7 @@ router.get("/patterns/:id/images/:imageId", async (req, res) => {
   const [pattern] = await db
     .select({ id: quiltPatterns.id })
     .from(quiltPatterns)
-    .where(and(eq(quiltPatterns.id, id)))
+    .where(and(eq(quiltPatterns.id, id), eq(quiltPatterns.userId, userId)))
     .limit(1);
   if (!pattern) {
     res.status(404).json({ error: "Pattern not found." });
@@ -635,7 +635,7 @@ router.patch("/patterns/:id/images/:imageId", async (req, res) => {
   const [pattern] = await db
     .select({ id: quiltPatterns.id })
     .from(quiltPatterns)
-    .where(and(eq(quiltPatterns.id, id)))
+    .where(and(eq(quiltPatterns.id, id), eq(quiltPatterns.userId, userId)))
     .limit(1);
   if (!pattern) {
     res.status(404).json({ error: "Pattern not found." });
@@ -675,7 +675,7 @@ router.delete("/patterns/:id/images/:imageId", async (req, res) => {
   const [pattern] = await db
     .select({ id: quiltPatterns.id })
     .from(quiltPatterns)
-    .where(and(eq(quiltPatterns.id, id)))
+    .where(and(eq(quiltPatterns.id, id), eq(quiltPatterns.userId, userId)))
     .limit(1);
   if (!pattern) {
     res.status(404).json({ error: "Pattern not found." });
@@ -706,7 +706,7 @@ router.post("/patterns/:id/enrich", aiLimiter, async (req, res) => {
   const [row] = await db
     .select()
     .from(quiltPatterns)
-    .where(and(eq(quiltPatterns.id, id)))
+    .where(and(eq(quiltPatterns.id, id), eq(quiltPatterns.userId, userId)))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Pattern not found." });
@@ -723,12 +723,12 @@ router.post("/patterns/:id/enrich", aiLimiter, async (req, res) => {
       publicationName: enrichment.publicationName,
       publicationYear: enrichment.publicationYear,
     })
-    .where(and(eq(quiltPatterns.id, id)));
+    .where(and(eq(quiltPatterns.id, id), eq(quiltPatterns.userId, userId)));
 
   const [updated] = await db
     .select()
     .from(quiltPatterns)
-    .where(and(eq(quiltPatterns.id, id)))
+    .where(and(eq(quiltPatterns.id, id), eq(quiltPatterns.userId, userId)))
     .limit(1);
   res.json(GetPatternResponse.parse(await serializePattern(updated)));
 });
@@ -743,7 +743,7 @@ router.post("/patterns/:id/extract-blocks", aiLimiter, async (req, res) => {
   const [row] = await db
     .select({ imagePath: quiltPatterns.imagePath, name: quiltPatterns.name })
     .from(quiltPatterns)
-    .where(and(eq(quiltPatterns.id, id)))
+    .where(and(eq(quiltPatterns.id, id), eq(quiltPatterns.userId, userId)))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Pattern not found." });

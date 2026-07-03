@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
-import { getTableColumns, inArray, sql } from "drizzle-orm";
+import { and, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import { db, fabrics, quiltingImages } from "@workspace/db";
 import { CompareFabricResponse } from "@workspace/api-zod";
 import { requireAuth } from "../../middleware/auth";
@@ -119,7 +119,7 @@ router.post(
           sql`
           select id, 1 - (embedding <=> ${vectorLiteral}::vector) as similarity
           from ${fabrics}
-          where embedding is not null
+          where embedding is not null and user_id = ${userId}
           order by embedding <=> ${vectorLiteral}::vector
           limit ${TEXT_SEARCH_POOL}
         `,
@@ -136,7 +136,7 @@ router.post(
               sql`
               select id, 1 - (visual_embedding <=> ${`[${visualEmb.join(",")}]`}::vector) as similarity
               from ${fabrics}
-              where visual_embedding is not null
+              where visual_embedding is not null and user_id = ${userId}
               order by visual_embedding <=> ${`[${visualEmb.join(",")}]`}::vector
               limit ${VISUAL_SEARCH_POOL}
             `,
@@ -171,9 +171,12 @@ router.post(
       .select(fabricColumns)
       .from(fabrics)
       .where(
-        inArray(
-          fabrics.id,
-          mergedRanking.map((r) => r.id),
+        and(
+          inArray(
+            fabrics.id,
+            mergedRanking.map((r) => r.id),
+          ),
+          eq(fabrics.userId, userId),
         ),
       );
 

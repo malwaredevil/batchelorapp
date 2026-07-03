@@ -1217,4 +1217,22 @@ router.get("/assistant/memory", async (_req, res) => {
   res.json(rows);
 });
 
+router.delete("/assistant/memory/:id", async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const [existing] = await db
+    .select({ id: travelsHouseholdMemory.id })
+    .from(travelsHouseholdMemory)
+    .where(eq(travelsHouseholdMemory.id, id));
+  if (!existing) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  await db.delete(travelsHouseholdMemory).where(eq(travelsHouseholdMemory.id, id));
+  res.status(204).end();
+});
+
 export default router;

@@ -263,7 +263,10 @@ export function AssistantWidget() {
       action.type === "remove_packing_item" ||
       action.type === "add_itinerary_day" ||
       action.type === "regenerate_itinerary_day" ||
-      action.type === "rescan_document"
+      action.type === "rescan_document" ||
+      action.type === "generate_itinerary" ||
+      action.type === "confirm_itinerary_activity" ||
+      action.type === "remove_itinerary_activity"
     ) {
       const tripId = action.payload.tripId;
       if (typeof tripId === "number") {

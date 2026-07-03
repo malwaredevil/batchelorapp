@@ -268,6 +268,23 @@ const RescanDocumentActionPayload = z.object({
   documentId: z.number().int().positive(),
 });
 
+const GenerateItineraryActionPayload = z.object({
+  tripId: z.number().int().positive(),
+});
+
+const ConfirmItineraryActivityActionPayload = z.object({
+  tripId: z.number().int().positive(),
+  dayNumber: z.number().int().positive(),
+  activityNumber: z.number().int().positive(),
+  confirmed: z.boolean().optional(),
+});
+
+const RemoveItineraryActivityActionPayload = z.object({
+  tripId: z.number().int().positive(),
+  dayNumber: z.number().int().positive(),
+  activityNumber: z.number().int().positive(),
+});
+
 const ActionBody = z.discriminatedUnion("type", [
   z.object({ type: z.literal("create_trip"), payload: CreateTripActionPayload }),
   z.object({ type: z.literal("add_wishlist"), payload: AddWishlistActionPayload }),
@@ -314,6 +331,15 @@ const ActionBody = z.discriminatedUnion("type", [
   z.object({ type: z.literal("select_calendar"), payload: SelectCalendarActionPayload }),
   z.object({ type: z.literal("disconnect_calendar"), payload: DisconnectCalendarActionPayload }),
   z.object({ type: z.literal("rescan_document"), payload: RescanDocumentActionPayload }),
+  z.object({ type: z.literal("generate_itinerary"), payload: GenerateItineraryActionPayload }),
+  z.object({
+    type: z.literal("confirm_itinerary_activity"),
+    payload: ConfirmItineraryActivityActionPayload,
+  }),
+  z.object({
+    type: z.literal("remove_itinerary_activity"),
+    payload: RemoveItineraryActivityActionPayload,
+  }),
 ]);
 
 type PendingAction = z.infer<typeof ActionBody>;
@@ -425,6 +451,23 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
         ? `"${doc.originalFilename ?? (doc.documentType ? doc.documentType.replace(/_/g, " ") : "document")}"`
         : "this document";
       return `Re-scan ${name} to refresh its extracted details`;
+    }
+    case "generate_itinerary": {
+      const trip = await getTripLabelInfo(action.payload.tripId);
+      const name = trip ? `"${trip.title || trip.destination}"` : "this trip";
+      return `Generate a full AI itinerary for ${name}`;
+    }
+    case "confirm_itinerary_activity": {
+      const trip = await getTripLabelInfo(action.payload.tripId);
+      const name = trip ? `"${trip.title || trip.destination}"` : "this trip";
+      return action.payload.confirmed === false
+        ? `Mark activity ${action.payload.activityNumber} on day ${action.payload.dayNumber} of ${name}'s itinerary as tentative again`
+        : `Mark activity ${action.payload.activityNumber} on day ${action.payload.dayNumber} of ${name}'s itinerary as firm`;
+    }
+    case "remove_itinerary_activity": {
+      const trip = await getTripLabelInfo(action.payload.tripId);
+      const name = trip ? `"${trip.title || trip.destination}"` : "this trip";
+      return `Remove activity ${action.payload.activityNumber} from day ${action.payload.dayNumber} of ${name}'s itinerary`;
     }
   }
 }
@@ -869,6 +912,101 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     if (!result.ok) return { status: result.status, body: { error: result.error } };
     return { status: 200, body: { type: "rescan_document", result: result.document } };
   }) as ActionExecutor,
+  generate_itinerary: (async (
+    payload: z.infer<typeof GenerateItineraryActionPayload>,
+    userId: number,
+  ) => {
+    const [trip] = await db
+      .select({ id: travelsTrips.id })
+      .from(travelsTrips)
+      .where(and(eq(travelsTrips.id, payload.tripId), eq(travelsTrips.userId, userId)));
+    if (!trip) return { status: 404, body: { error: "Trip not found" } };
+
+    try {
+      const itinerary = await generateItineraryForTrip(payload.tripId, "balanced", [
+        "food",
+        "history",
+        "culture",
+      ]);
+      return { status: 200, body: { type: "generate_itinerary", result: { itinerary } } };
+    } catch (err) {
+      if (err instanceof ItineraryActionError) {
+        return { status: err.status, body: { error: err.message } };
+      }
+      throw err;
+    }
+  }) as ActionExecutor,
+  confirm_itinerary_activity: (async (
+    payload: z.infer<typeof ConfirmItineraryActivityActionPayload>,
+    userId: number,
+  ) => {
+    const [trip] = await db
+      .select({ id: travelsTrips.id, itinerary: travelsTrips.itinerary })
+      .from(travelsTrips)
+      .where(and(eq(travelsTrips.id, payload.tripId), eq(travelsTrips.userId, userId)));
+    if (!trip) return { status: 404, body: { error: "Trip not found" } };
+
+    const itinerary = trip.itinerary as { days?: Array<{ activities?: Array<Record<string, unknown>> }> } | null;
+    const dayIndex = payload.dayNumber - 1;
+    const activityIndex = payload.activityNumber - 1;
+    const day = itinerary?.days?.[dayIndex];
+    const activity = day?.activities?.[activityIndex];
+    if (!itinerary?.days || !day || !activity) {
+      return { status: 400, body: { error: "Day or activity number out of range" } };
+    }
+
+    const days = itinerary.days.map((d, i) =>
+      i === dayIndex
+        ? {
+            ...d,
+            activities: (d.activities ?? []).map((a, ai) =>
+              ai === activityIndex
+                ? { ...a, status: payload.confirmed === false ? "tentative" : "confirmed" }
+                : a,
+            ),
+          }
+        : d,
+    );
+    const newItinerary = { days };
+    const [row] = await db
+      .update(travelsTrips)
+      .set({ itinerary: newItinerary })
+      .where(eq(travelsTrips.id, payload.tripId))
+      .returning();
+    return { status: 200, body: { type: "confirm_itinerary_activity", result: row } };
+  }) as ActionExecutor,
+  remove_itinerary_activity: (async (
+    payload: z.infer<typeof RemoveItineraryActivityActionPayload>,
+    userId: number,
+  ) => {
+    const [trip] = await db
+      .select({ id: travelsTrips.id, itinerary: travelsTrips.itinerary })
+      .from(travelsTrips)
+      .where(and(eq(travelsTrips.id, payload.tripId), eq(travelsTrips.userId, userId)));
+    if (!trip) return { status: 404, body: { error: "Trip not found" } };
+
+    const itinerary = trip.itinerary as { days?: Array<{ activities?: Array<Record<string, unknown>> }> } | null;
+    const dayIndex = payload.dayNumber - 1;
+    const activityIndex = payload.activityNumber - 1;
+    const day = itinerary?.days?.[dayIndex];
+    const activity = day?.activities?.[activityIndex];
+    if (!itinerary?.days || !day || !activity) {
+      return { status: 400, body: { error: "Day or activity number out of range" } };
+    }
+
+    const days = itinerary.days.map((d, i) =>
+      i === dayIndex
+        ? { ...d, activities: (d.activities ?? []).filter((_, ai) => ai !== activityIndex) }
+        : d,
+    );
+    const newItinerary = { days };
+    const [row] = await db
+      .update(travelsTrips)
+      .set({ itinerary: newItinerary })
+      .where(eq(travelsTrips.id, payload.tripId))
+      .returning();
+    return { status: 200, body: { type: "remove_itinerary_activity", result: row } };
+  }) as ActionExecutor,
 };
 
 // ---------------------------------------------------------------------------
@@ -1187,6 +1325,65 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "generate_itinerary",
+      description:
+        'Propose generating a brand-new, full day-by-day AI itinerary for a trip, e.g. "plan my whole trip" or "generate an itinerary for this trip". This replaces ALL existing days with a freshly AI-generated plan (using balanced-pace, general-interest defaults, since it can\'t see any per-session style/interest picks made in the UI) — if the trip already has an itinerary, warn the user in your visible reply that this overwrites it before calling this tool. Only call this if the trip\'s numeric id is visible on screen; never guess an id. Use regenerate_itinerary_day instead if the user only wants to redo one existing day.',
+      parameters: {
+        type: "object",
+        properties: {
+          tripId: { type: "integer" },
+        },
+        required: ["tripId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "confirm_itinerary_activity",
+      description:
+        'Propose marking one itinerary activity as firm/confirmed (or back to tentative), e.g. "mark the hotel check-in as firm" or "that flight time is right, confirm it". This is mainly used to accept a tentative, document-derived activity (flagged "tentative, from document" on screen) once the user has verified it\'s correct. Only call this if the trip\'s numeric id, the day\'s number, and the activity\'s number (both 1-based, as shown on screen) are visible on screen; never guess any of them.',
+      parameters: {
+        type: "object",
+        properties: {
+          tripId: { type: "integer" },
+          dayNumber: { type: "integer", description: "1-based day number as shown on screen" },
+          activityNumber: {
+            type: "integer",
+            description: "1-based activity number within that day, as shown on screen",
+          },
+          confirmed: {
+            type: "boolean",
+            description: "true (default) to mark firm/confirmed, false to revert to tentative",
+          },
+        },
+        required: ["tripId", "dayNumber", "activityNumber"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "remove_itinerary_activity",
+      description:
+        'Propose removing one activity from a trip\'s itinerary, e.g. "delete that duplicate hotel check-in" or "remove the wrong flight entry from day 2". Especially useful for cleaning up an incorrect activity that document auto-sync added (flagged "tentative, from document" on screen) — e.g. after a document was mis-read. Only call this if the trip\'s numeric id, the day\'s number, and the activity\'s number (both 1-based, as shown on screen) are visible on screen; never guess any of them. If the underlying document itself is wrong, prefer rescan_document to fix the source instead of just deleting the symptom, unless the user specifically asks to remove the entry.',
+      parameters: {
+        type: "object",
+        properties: {
+          tripId: { type: "integer" },
+          dayNumber: { type: "integer", description: "1-based day number as shown on screen" },
+          activityNumber: {
+            type: "integer",
+            description: "1-based activity number within that day, as shown on screen",
+          },
+        },
+        required: ["tripId", "dayNumber", "activityNumber"],
+      },
+    },
+  },
 ];
 
 const NAVIGATE_TOOL_NAME = "suggest_navigation";
@@ -1449,7 +1646,7 @@ CONFIRMATION MODE: This user's current mode for confirming proposed actions is "
 
 REMINDERS: Use add_reminder for requests like "remind me to check in for our flight" or "remind me to book the hotel by Friday" — it creates a new reminder and syncs it to the calendar by default; include recipientEmails only if the user asked to also notify someone. Use sync_reminder_to_calendar only to toggle calendar sync on or off for a reminder that already exists and whose numeric id you can see on screen (look for "reminderId: <number>" in the reminders listed for the current trip); never use it to create a reminder. Use edit_reminder for changes to an existing reminder (title, description, due date, done state, recipients, or calendar sync) — only include the fields the user asked to change, and never guess a reminder id. Use delete_reminder to permanently remove an existing reminder (also removes its calendar events); never guess a reminder id for either.
 
-ITINERARY: Use add_itinerary_day for requests like "add a day trip to Kyoto on the 14th" — it appends a brand-new day to the trip's itinerary. Use regenerate_itinerary_day for requests like "regenerate day 3" or "come up with a new plan for that day" — it re-runs AI planning for ONE existing day and replaces its activities, using balanced-pace, general-interest defaults since it can't see any per-session style/interest picks the user made in the UI. Only use regenerate_itinerary_day on a day number you can see listed on screen (e.g. "Day 3"); never guess a day number, and never use it to create a new day (use add_itinerary_day for that).
+ITINERARY: Use add_itinerary_day for requests like "add a day trip to Kyoto on the 14th" — it appends a brand-new day to the trip's itinerary. Use regenerate_itinerary_day for requests like "regenerate day 3" or "come up with a new plan for that day" — it re-runs AI planning for ONE existing day and replaces its activities, using balanced-pace, general-interest defaults since it can't see any per-session style/interest picks the user made in the UI. Only use regenerate_itinerary_day on a day number you can see listed on screen (e.g. "Day 3"); never guess a day number, and never use it to create a new day (use add_itinerary_day for that). Use generate_itinerary for requests like "plan my whole trip" or "generate an itinerary" — it replaces ALL days with a fresh AI-generated plan; if the trip already has itinerary days shown on screen, say so and confirm the user wants to overwrite them before calling it. Each activity you can see on screen has a 1-based day/activity number and a status (tentative or confirmed); tentative activities synced from a document are flagged as such. Use confirm_itinerary_activity to mark a tentative activity firm (or back to tentative) once the user has verified it, and remove_itinerary_activity to delete an activity outright (e.g. a wrong or duplicate document-derived entry) — both require the exact day and activity numbers shown on screen, never guessed.
 
 CALENDAR: Each family member connects their own Google Calendar independently from the Settings page; you can never trigger that OAuth connection yourself — it requires the user to click a real "Connect" button that redirects their browser to Google. If the user asks to connect and you can see from on-screen context that it's not connected yet, ask if they'd like you to take them to Settings and use suggest_navigation for "/settings" — never claim you connected it. Once connected, use select_calendar to change which of their calendars reminders sync to, but only if you're on the Settings page and can see the connection is active plus the exact calendarId in the on-screen calendar list — never guess a calendarId or pick one that isn't listed. Use disconnect_calendar to remove their Google Calendar connection entirely — only when it's shown as connected on screen, and make sure your visible reply asks permission first since this stops all future reminder syncing for them. Disconnecting or reconnecting only ever affects the current user, never anyone else in the household.
 

@@ -1249,7 +1249,10 @@ export type AssistantActionType =
   | "regenerate_itinerary_day"
   | "select_calendar"
   | "disconnect_calendar"
-  | "rescan_document";
+  | "rescan_document"
+  | "generate_itinerary"
+  | "confirm_itinerary_activity"
+  | "remove_itinerary_activity";
 
 export interface AssistantAction {
   type: AssistantActionType;

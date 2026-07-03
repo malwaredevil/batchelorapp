@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Compass, Search, MapPin, Clock, Globe, Sparkles, ChevronDown, ChevronUp, Navigation, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 function HighlightCard({ h }: { h: { name: string; description: string; category: string } }) {
   return (
@@ -193,6 +194,13 @@ export default function Explore() {
       onError: () => toast.error("Failed to explore destination. Try again."),
     });
   };
+
+  usePageAssistantContext(
+    "explore",
+    `On the Explore page.` +
+      (destination.trim() ? ` User has typed "${destination.trim()}" in the destination search box.` : "") +
+      (explore.data ? ` Currently showing AI overview results for "${destination.trim()}".` : ""),
+  );
 
   return (
     <div className="space-y-8">

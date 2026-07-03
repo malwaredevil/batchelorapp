@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { MapPin, Plus, Plane, ArrowRight, Filter, X } from "lucide-react";
 import { toast } from "sonner";
 import { MagnetCheckDialog } from "@/components/MagnetCheckDialog";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 const ALL_STATUSES: TripStatus[] = ["wishlist", "planning", "booked", "active", "completed"];
 
@@ -56,6 +57,13 @@ function CreateTripDialog({
 
   const set = (k: keyof CreateTripBody, v: unknown) =>
     setForm((f) => ({ ...f, [k]: v }));
+
+  usePageAssistantContext(
+    "trip-create-dialog",
+    open
+      ? `User has the "New Trip" dialog open, currently filling in: title="${form.title ?? ""}", destination="${form.destination ?? ""}", status=${form.status ?? "wishlist"}, travellers=${form.travellerCount ?? ""}.`
+      : undefined,
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

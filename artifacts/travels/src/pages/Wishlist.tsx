@@ -34,6 +34,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getListWishlistQueryKey } from "@workspace/api-client-react";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 // ─── Notes JSON format ────────────────────────────────────────────────────────
 //
@@ -357,6 +358,15 @@ export default function Wishlist() {
   const sortedItems = useMemo(
     () => [...items].sort((a, b) => a.destination.localeCompare(b.destination, undefined, { sensitivity: "base" })),
     [items],
+  );
+
+  usePageAssistantContext(
+    "wishlist",
+    `Viewing wishlist with ${items.length} destination(s): ${sortedItems
+      .slice(0, 15)
+      .map((i) => i.destination)
+      .join(", ")}.` +
+      (newDest.trim() ? ` User is currently typing a new wishlist entry: "${newDest.trim()}"${newDate ? ` targeting ${newDate}` : ""}.` : ""),
   );
 
   const invalidate = () => qc.invalidateQueries({ queryKey: getListWishlistQueryKey() });

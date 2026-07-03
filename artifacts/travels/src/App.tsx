@@ -7,6 +7,7 @@ import { Layout } from "@/components/Layout";
 import { queryClient } from "@/lib/query-client";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/hooks/use-theme";
+import { AssistantContextProvider } from "@/lib/assistant-context";
 
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
@@ -111,10 +112,12 @@ export default function App() {
         <AuthProvider>
           <TooltipProvider>
             <ErrorBoundary>
-              <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-                <Router />
-              </WouterRouter>
-              <Toaster richColors position="top-right" />
+              <AssistantContextProvider>
+                <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+                  <Router />
+                </WouterRouter>
+                <Toaster richColors position="top-right" />
+              </AssistantContextProvider>
             </ErrorBoundary>
           </TooltipProvider>
         </AuthProvider>

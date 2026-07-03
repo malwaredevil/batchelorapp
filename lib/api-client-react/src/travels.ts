@@ -1221,3 +1221,184 @@ export function useDisconnectCalendar(
   const mutationFn = () => deleteCalendarConnectionFn();
   return useMutation({ mutationFn, ...options?.mutation });
 }
+
+// ---------------------------------------------------------------------------
+// elAIne assistant
+// ---------------------------------------------------------------------------
+
+export interface AssistantMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface AssistantChatResponse {
+  role: "assistant";
+  content: string;
+  navigate: { path: string; reason: string } | null;
+  messages: AssistantMessage[];
+}
+
+export interface AssistantSettings {
+  enabled: boolean;
+}
+
+export interface HouseholdMemoryItem {
+  id: number;
+  content: string;
+  createdAt: string;
+  createdByUserId: number;
+}
+
+export const getGetAssistantConversationQueryKey = () =>
+  [`/api/travels/assistant/conversation`] as const;
+
+const getAssistantConversationFn = (
+  options?: RequestInit,
+): Promise<{ messages: AssistantMessage[] }> =>
+  customFetch<{ messages: AssistantMessage[] }>(
+    "/api/travels/assistant/conversation",
+    { ...options, method: "GET" },
+  );
+
+export function useGetAssistantConversation<
+  TData = { messages: AssistantMessage[] },
+  TError = unknown,
+>(options?: {
+  query?: UseQueryOptions<{ messages: AssistantMessage[] }, TError, TData>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetAssistantConversationQueryKey();
+  const queryFn: QueryFunction<{ messages: AssistantMessage[] }> = ({ signal }) =>
+    getAssistantConversationFn({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    { messages: AssistantMessage[] },
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const sendAssistantMessageFn = (
+  body: { message: string; pageContext?: string },
+): Promise<AssistantChatResponse> =>
+  customFetch<AssistantChatResponse>("/api/travels/assistant/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export function useSendAssistantMessage(
+  options?: {
+    mutation?: UseMutationOptions<
+      AssistantChatResponse,
+      unknown,
+      { message: string; pageContext?: string }
+    >;
+  },
+) {
+  const mutationFn = (body: { message: string; pageContext?: string }) =>
+    sendAssistantMessageFn(body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const newAssistantConversationFn = (): Promise<{ messages: AssistantMessage[] }> =>
+  customFetch<{ messages: AssistantMessage[] }>(
+    "/api/travels/assistant/conversation",
+    { method: "DELETE" },
+  );
+
+export function useNewAssistantConversation(
+  options?: {
+    mutation?: UseMutationOptions<{ messages: AssistantMessage[] }, unknown, void>;
+  },
+) {
+  const mutationFn = () => newAssistantConversationFn();
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+export const getGetAssistantSettingsQueryKey = () =>
+  [`/api/travels/assistant/settings`] as const;
+
+const getAssistantSettingsFn = (options?: RequestInit): Promise<AssistantSettings> =>
+  customFetch<AssistantSettings>("/api/travels/assistant/settings", {
+    ...options,
+    method: "GET",
+  });
+
+export function useGetAssistantSettings<
+  TData = AssistantSettings,
+  TError = unknown,
+>(options?: {
+  query?: UseQueryOptions<AssistantSettings, TError, TData>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetAssistantSettingsQueryKey();
+  const queryFn: QueryFunction<AssistantSettings> = ({ signal }) =>
+    getAssistantSettingsFn({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    AssistantSettings,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const putAssistantSettingsFn = (body: AssistantSettings): Promise<AssistantSettings> =>
+  customFetch<AssistantSettings>("/api/travels/assistant/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export function useUpdateAssistantSettings(
+  options?: { mutation?: UseMutationOptions<AssistantSettings, unknown, AssistantSettings> },
+) {
+  const mutationFn = (body: AssistantSettings) => putAssistantSettingsFn(body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+export const getListHouseholdMemoryQueryKey = () =>
+  [`/api/travels/assistant/memory`] as const;
+
+const listHouseholdMemoryFn = (options?: RequestInit): Promise<HouseholdMemoryItem[]> =>
+  customFetch<HouseholdMemoryItem[]>("/api/travels/assistant/memory", {
+    ...options,
+    method: "GET",
+  });
+
+export function useListHouseholdMemory<
+  TData = HouseholdMemoryItem[],
+  TError = unknown,
+>(options?: {
+  query?: UseQueryOptions<HouseholdMemoryItem[], TError, TData>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getListHouseholdMemoryQueryKey();
+  const queryFn: QueryFunction<HouseholdMemoryItem[]> = ({ signal }) =>
+    listHouseholdMemoryFn({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    HouseholdMemoryItem[],
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const deleteHouseholdMemoryFn = (id: number): Promise<void> =>
+  customFetch<void>(`/api/travels/assistant/memory/${id}`, { method: "DELETE" });
+
+export function useDeleteHouseholdMemory(
+  options?: { mutation?: UseMutationOptions<void, unknown, number> },
+) {
+  const mutationFn = (id: number) => deleteHouseholdMemoryFn(id);
+  return useMutation({ mutationFn, ...options?.mutation });
+}

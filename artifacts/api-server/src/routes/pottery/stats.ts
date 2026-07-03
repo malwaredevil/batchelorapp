@@ -25,7 +25,7 @@ router.get("/stats", async (req, res) => {
       quantity: potteryItems.quantity,
     })
     .from(potteryItems)
-    ;
+    .where(eq(potteryItems.userId, userId));
 
   const motifCounts = new Map<string, number>();
   const colorCounts = new Map<string, number>();

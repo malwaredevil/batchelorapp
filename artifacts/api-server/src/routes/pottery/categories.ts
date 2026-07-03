@@ -58,7 +58,7 @@ async function fetchWithCount(id: number, userId: number) {
     })
     .from(categories)
     .leftJoin(itemCategories, eq(itemCategories.categoryId, categories.id))
-    .where(and(eq(categories.id, id)))
+    .where(and(eq(categories.id, id), eq(categories.userId, userId)))
     .groupBy(
       categories.id,
       categories.name,
@@ -80,7 +80,7 @@ router.get("/categories", async (req, res) => {
     })
     .from(categories)
     .leftJoin(itemCategories, eq(itemCategories.categoryId, categories.id))
-    
+    .where(eq(categories.userId, userId))
     .groupBy(
       categories.id,
       categories.name,
@@ -127,7 +127,7 @@ router.patch("/categories/:id", async (req, res) => {
     const [updated] = await db
       .update(categories)
       .set({ name })
-      .where(and(eq(categories.id, id)))
+      .where(and(eq(categories.id, id), eq(categories.userId, userId)))
       .returning({ id: categories.id });
     if (!updated) {
       res.status(404).json({ error: "Category not found." });
@@ -153,7 +153,7 @@ router.put("/categories/:id/colors", async (req, res) => {
   const [updated] = await db
     .update(categories)
     .set({ bgColor: body.bgColor ?? null, textColor: body.textColor ?? null })
-    .where(and(eq(categories.id, id)))
+    .where(and(eq(categories.id, id), eq(categories.userId, userId)))
     .returning({ id: categories.id });
   if (!updated) {
     res.status(404).json({ error: "Category not found." });
@@ -168,7 +168,8 @@ router.put("/categories/:id/colors", async (req, res) => {
 router.delete("/categories/unused", async (req, res) => {
   const userId = req.session.userId!;
 
-  // Find category IDs used by any item (shared household — no user filter)
+  // Find category IDs used by any item (used-by-anyone still counts as "in
+  // use" for cascade-delete safety), scoped to this user's own categories.
   const usedRows = await db
     .select({ categoryId: itemCategories.categoryId })
     .from(itemCategories);
@@ -176,8 +177,8 @@ router.delete("/categories/unused", async (req, res) => {
 
   const whereClause =
     usedIds.length > 0
-      ? notInArray(categories.id, usedIds)
-      : undefined;
+      ? and(eq(categories.userId, userId), notInArray(categories.id, usedIds))
+      : eq(categories.userId, userId);
 
   const deletedRows = await db
     .delete(categories)
@@ -191,7 +192,7 @@ router.delete("/categories/:id", async (req, res) => {
   const { id } = DeleteCategoryParams.parse(req.params);
   const [row] = await db
     .delete(categories)
-    .where(and(eq(categories.id, id)))
+    .where(and(eq(categories.id, id), eq(categories.userId, userId)))
     .returning({ id: categories.id });
   if (!row) {
     res.status(404).json({ error: "Category not found." });
@@ -214,12 +215,12 @@ router.post("/categories/:id/merge", async (req, res) => {
     db
       .select({ id: categories.id })
       .from(categories)
-      .where(and(eq(categories.id, id)))
+      .where(and(eq(categories.id, id), eq(categories.userId, userId)))
       .then((r) => r[0]),
     db
       .select({ id: categories.id })
       .from(categories)
-      .where(and(eq(categories.id, intoId)))
+      .where(and(eq(categories.id, intoId), eq(categories.userId, userId)))
       .then((r) => r[0]),
   ]);
 
@@ -244,7 +245,7 @@ router.post("/categories/:id/merge", async (req, res) => {
 
   await db
     .delete(categories)
-    .where(and(eq(categories.id, id)));
+    .where(and(eq(categories.id, id), eq(categories.userId, userId)));
 
   res.status(204).end();
 });

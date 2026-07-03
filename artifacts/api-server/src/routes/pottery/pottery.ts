@@ -118,7 +118,7 @@ router.get("/items", async (req, res) => {
   const rows = await db
     .select(itemColumns)
     .from(potteryItems)
-    
+    .where(eq(potteryItems.userId, userId))
     .orderBy(desc(potteryItems.createdAt));
   const items = await serializeItems(rows);
   res.json(ListPotteryResponse.parse(items));
@@ -139,6 +139,7 @@ router.get("/items/stragglers", async (req, res) => {
     .from(potteryItems)
     .where(
       and(
+        eq(potteryItems.userId, userId),
         or(
           isNull(potteryItems.embedding),
           and(
@@ -167,7 +168,7 @@ router.get("/items/:id", async (req, res) => {
   const [row] = await db
     .select(itemColumns)
     .from(potteryItems)
-    .where(and(eq(potteryItems.id, id)))
+    .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Pottery piece not found." });
@@ -284,7 +285,7 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
     const allCats = await db
       .select({ id: categories.id, name: categories.name })
       .from(categories)
-      ;
+      .where(eq(categories.userId, userId));
 
     // Normalise inch-mark variants so AI output (which may use ″ double-prime)
     // and user-typed category names (which use plain ") match each other.
@@ -320,7 +321,8 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
       .filter((cat) => categoryMatchesText(cat.name))
       .map((cat) => cat.id);
 
-    // Restrict manual category picks to this user's own categories
+    // Restrict manual category picks to this user's own categories.
+    // allCats is already scoped to userId above.
     const userCatIds = new Set(allCats.map((c) => c.id));
     const safeManualCategoryIds = manualCategoryIds.filter((id) =>
       userCatIds.has(id),
@@ -339,7 +341,7 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
     }
 
     // Auto-assign (or remove) the "Duplicate" category based on quantity.
-    await syncDuplicateCategory(row.id, row.quantity);
+    await syncDuplicateCategory(row.id, row.quantity, userId);
 
     res.status(201).json(GetPotteryResponse.parse(await serializeItem(row)));
   } catch (err) {
@@ -378,7 +380,7 @@ router.patch("/items/:id", async (req, res) => {
     const [updated] = await db
       .update(potteryItems)
       .set(fieldUpdates)
-      .where(and(eq(potteryItems.id, id)))
+      .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)))
       .returning(itemColumns);
     if (!updated) {
       res.status(404).json({ error: "Pottery piece not found." });
@@ -389,7 +391,7 @@ router.patch("/items/:id", async (req, res) => {
     const [existing] = await db
       .select(itemColumns)
       .from(potteryItems)
-      .where(and(eq(potteryItems.id, id)))
+      .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)))
       .limit(1);
     if (!existing) {
       res.status(404).json({ error: "Pottery piece not found." });
@@ -404,7 +406,7 @@ router.patch("/items/:id", async (req, res) => {
     const userCats = await db
       .select({ id: categories.id })
       .from(categories)
-      ;
+      .where(eq(categories.userId, userId));
     const userCatIds = new Set(userCats.map((c) => c.id));
     const safeCategoryIds = body.categoryIds.filter((catId) =>
       userCatIds.has(catId),
@@ -426,7 +428,7 @@ router.patch("/items/:id", async (req, res) => {
   // Re-sync the "Duplicate" category based on the item's current quantity.
   // Runs after any category replacement so it always wins, even if the user
   // didn't include "Duplicate" in their categoryIds list.
-  await syncDuplicateCategory(id, row.quantity);
+  await syncDuplicateCategory(id, row.quantity, userId);
 
   res.json(UpdatePotteryResponse.parse(await serializeItem(row)));
 });
@@ -445,7 +447,7 @@ router.delete("/items/:id", async (req, res) => {
       patternCropPath: potteryItems.patternCropPath,
     })
     .from(potteryItems)
-    .where(and(eq(potteryItems.id, id)))
+    .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)))
     .limit(1);
   if (!item) {
     res.status(404).json({ error: "Pottery piece not found." });
@@ -458,7 +460,7 @@ router.delete("/items/:id", async (req, res) => {
 
   await db
     .delete(potteryItems)
-    .where(and(eq(potteryItems.id, id)));
+    .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)));
 
   await Promise.all([
     deleteImage(item.imagePath),
@@ -480,7 +482,7 @@ router.get("/items/:id/image", async (req, res) => {
   const [row] = await db
     .select({ imagePath: potteryItems.imagePath })
     .from(potteryItems)
-    .where(and(eq(potteryItems.id, id)))
+    .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Pottery piece not found." });
@@ -505,7 +507,7 @@ router.get("/items/:id/images/:imageId", async (req, res) => {
   const [item] = await db
     .select({ id: potteryItems.id })
     .from(potteryItems)
-    .where(and(eq(potteryItems.id, id)))
+    .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)))
     .limit(1);
   if (!item) {
     res.status(404).json({ error: "Pottery piece not found." });
@@ -545,7 +547,7 @@ router.post(
     const [item] = await db
       .select({ id: potteryItems.id })
       .from(potteryItems)
-      .where(and(eq(potteryItems.id, id)))
+      .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)))
       .limit(1);
     if (!item) {
       res.status(404).json({ error: "Pottery piece not found." });
@@ -615,7 +617,7 @@ router.patch("/items/:id/images/:imageId", async (req, res) => {
   const [item] = await db
     .select({ id: potteryItems.id })
     .from(potteryItems)
-    .where(and(eq(potteryItems.id, id)))
+    .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)))
     .limit(1);
   if (!item) {
     res.status(404).json({ error: "Pottery piece not found." });
@@ -669,7 +671,7 @@ router.delete("/items/:id/images/:imageId", async (req, res) => {
   const [item] = await db
     .select({ id: potteryItems.id })
     .from(potteryItems)
-    .where(and(eq(potteryItems.id, id)))
+    .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)))
     .limit(1);
   if (!item) {
     res.status(404).json({ error: "Pottery piece not found." });
@@ -707,11 +709,20 @@ router.delete("/items/:id/images/:imageId", async (req, res) => {
  *
  * If no category named "Duplicate" exists, this is a no-op.
  */
-async function syncDuplicateCategory(itemId: number, quantity: number): Promise<void> {
+async function syncDuplicateCategory(
+  itemId: number,
+  quantity: number,
+  userId: number,
+): Promise<void> {
   const [dupCat] = await db
     .select({ id: categories.id })
     .from(categories)
-    .where(sql`lower(${categories.name}) = 'duplicate'`)
+    .where(
+      and(
+        sql`lower(${categories.name}) = 'duplicate'`,
+        eq(categories.userId, userId),
+      ),
+    )
     .limit(1);
   if (!dupCat) return;
 
@@ -740,7 +751,7 @@ async function runItemAnalysis(id: number, userId: number): Promise<unknown> {
   const [item] = await db
     .select(itemColumns)
     .from(potteryItems)
-    .where(and(eq(potteryItems.id, id)))
+    .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)))
     .limit(1);
   if (!item)
     throw Object.assign(new Error("Pottery piece not found."), { status: 404 });
@@ -850,7 +861,7 @@ async function runItemAnalysis(id: number, userId: number): Promise<unknown> {
   const [updated] = await db
     .update(potteryItems)
     .set(merged)
-    .where(and(eq(potteryItems.id, id)))
+    .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)))
     .returning(itemColumns);
 
   // Re-run category auto-matching (union-only — never removes existing assignments).
@@ -872,7 +883,7 @@ async function runItemAnalysis(id: number, userId: number): Promise<unknown> {
   const allCats = await db
     .select({ id: categories.id, name: categories.name })
     .from(categories)
-    ;
+    .where(eq(categories.userId, userId));
   const existingCatRows = await db
     .select({ categoryId: itemCategories.categoryId })
     .from(itemCategories)
@@ -898,7 +909,7 @@ async function runItemAnalysis(id: number, userId: number): Promise<unknown> {
 
   // Sync the "Duplicate" category based on quantity (unchanged by reanalysis,
   // but the category may have been manually removed — re-assert it here).
-  await syncDuplicateCategory(id, item.quantity);
+  await syncDuplicateCategory(id, item.quantity, userId);
 
   return GetPotteryResponse.parse(await serializeItem(updated));
 }
@@ -969,7 +980,7 @@ router.post("/items/:id/set-primary-image", aiLimiter, async (req, res) => {
   const [item] = await db
     .select(itemColumns)
     .from(potteryItems)
-    .where(and(eq(potteryItems.id, id)))
+    .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)))
     .limit(1);
   if (!item) {
     res.status(404).json({ error: "Pottery piece not found." });
@@ -999,7 +1010,7 @@ router.post("/items/:id/set-primary-image", aiLimiter, async (req, res) => {
   await db
     .update(potteryItems)
     .set({ imagePath: newPrimaryPath })
-    .where(and(eq(potteryItems.id, id)));
+    .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)));
 
   // Re-analyse with the new primary image in place
   try {

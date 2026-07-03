@@ -16,7 +16,9 @@
  *             quilting_entity_categories, quilting_images, quilting_blocks,
  *             quilting_layouts, quilting_shopping_items
  *   Travels:  travels_trips, travels_trip_documents, travels_trip_photos,
- *             travels_wishlist, travels_reminders, travels_reminder_alert_log
+ *             travels_wishlist, travels_reminders, travels_reminder_alert_log,
+ *             travels_calendar_settings, travels_google_calendar_connections,
+ *             travels_reminder_calendar_events
  *
  * What is intentionally skipped:
  *   - embedding / visual_embedding columns (require pgvector, unavailable on Replit DB)
@@ -318,6 +320,34 @@ CREATE TABLE IF NOT EXISTS travels_reminder_alert_log (
   user_id     INTEGER NOT NULL,
   alert_type  TEXT NOT NULL,
   sent_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS travels_calendar_settings (
+  id               INTEGER PRIMARY KEY DEFAULT 1,
+  calendar_id      TEXT,
+  calendar_summary TEXT,
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS travels_google_calendar_connections (
+  id                        SERIAL PRIMARY KEY,
+  user_id                   INTEGER NOT NULL UNIQUE,
+  google_email              TEXT NOT NULL,
+  refresh_token             TEXT NOT NULL,
+  access_token              TEXT,
+  access_token_expires_at   TIMESTAMPTZ,
+  calendar_id               TEXT,
+  calendar_summary          TEXT,
+  created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS travels_reminder_calendar_events (
+  id               SERIAL PRIMARY KEY,
+  reminder_id      INTEGER NOT NULL,
+  user_id          INTEGER NOT NULL,
+  google_event_id  TEXT NOT NULL,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 `;
 
@@ -750,6 +780,45 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "travels_reminder_alert_log", "id");
+
+  summary["travels_calendar_settings"] = await copyTable(source, dest, {
+    table: "travels_calendar_settings",
+    columns: ["id", "calendar_id", "calendar_summary", "updated_at"],
+    orderBy: "id",
+  });
+
+  summary["travels_google_calendar_connections"] = await copyTable(
+    source,
+    dest,
+    {
+      table: "travels_google_calendar_connections",
+      columns: [
+        "id",
+        "user_id",
+        "google_email",
+        "refresh_token",
+        "access_token",
+        "access_token_expires_at",
+        "calendar_id",
+        "calendar_summary",
+        "created_at",
+        "updated_at",
+      ],
+      orderBy: "id",
+    },
+  );
+  await resetSequence(dest, "travels_google_calendar_connections", "id");
+
+  summary["travels_reminder_calendar_events"] = await copyTable(
+    source,
+    dest,
+    {
+      table: "travels_reminder_calendar_events",
+      columns: ["id", "reminder_id", "user_id", "google_event_id", "created_at"],
+      orderBy: "id",
+    },
+  );
+  await resetSequence(dest, "travels_reminder_calendar_events", "id");
 
   // ── Record backup history ─────────────────────────────────────────────────
   const note = Object.entries(summary)

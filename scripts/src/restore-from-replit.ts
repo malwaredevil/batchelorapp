@@ -352,7 +352,7 @@ async function main() {
 
   // ── Travels ───────────────────────────────────────────────────────────────
   await dest.query(
-    "TRUNCATE travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_trip_photos, travels_trip_documents CASCADE",
+    "TRUNCATE travels_reminder_calendar_events, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_trip_photos, travels_trip_documents CASCADE",
   );
   await dest.query("TRUNCATE travels_trips CASCADE");
 
@@ -462,6 +462,37 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "travels_reminder_alert_log", "id");
+
+  await copyTable(source, dest, {
+    table: "travels_calendar_settings",
+    columns: ["id", "calendar_id", "calendar_summary", "updated_at"],
+    orderBy: "id",
+  });
+
+  await copyTable(source, dest, {
+    table: "travels_google_calendar_connections",
+    columns: [
+      "id",
+      "user_id",
+      "google_email",
+      "refresh_token",
+      "access_token",
+      "access_token_expires_at",
+      "calendar_id",
+      "calendar_summary",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_google_calendar_connections", "id");
+
+  await copyTable(source, dest, {
+    table: "travels_reminder_calendar_events",
+    columns: ["id", "reminder_id", "user_id", "google_event_id", "created_at"],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_reminder_calendar_events", "id");
 
   await dest.query("SET session_replication_role = DEFAULT");
 

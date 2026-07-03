@@ -73,7 +73,7 @@ export async function getValidAccessToken(
     return credentials.access_token;
   } catch (err) {
     logger.warn(
-      { err, userId },
+      { errMessage: err instanceof Error ? err.message : String(err), userId },
       "google-calendar: refresh token failed (revoked or expired)",
     );
     return null;

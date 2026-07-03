@@ -9,7 +9,8 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "send-reminder-alerts": "node --enable-source-maps ./dist/scripts/send-reminder-alerts.mjs",
     "pretypecheck": "pnpm -w run typecheck:libs",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@replit/connectors-sdk": "latest",
@@ -45,9 +46,12 @@
     "@types/multer": "^2.1.0",
     "@types/node": "catalog:",
     "@types/pdf-parse": "^1.1.4",
+    "@types/supertest": "^7.2.0",
     "esbuild": "0.28.1",
     "esbuild-plugin-pino": "^2.3.3",
     "pino-pretty": "^13.1.3",
-    "thread-stream": "3.1.0"
+    "supertest": "^7.2.2",
+    "thread-stream": "3.1.0",
+    "vitest": "^3.2.6"
   }
 }

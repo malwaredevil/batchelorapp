@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import {
   MessageCircle,
   X,
@@ -8,6 +8,10 @@ import {
   ArrowRight,
   RotateCcw,
   Check,
+  Camera,
+  CheckCircle2,
+  HelpCircle,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -18,6 +22,8 @@ import {
   useUpdateAssistantSettings,
   useExecuteAssistantAction,
   useGetAssistantNudgesUnseenCount,
+  useCheckMagnet,
+  getTripPhotoImageUrl,
   getGetAssistantConversationQueryKey,
   getGetAssistantSettingsQueryKey,
   getGetAssistantNudgesUnseenCountQueryKey,
@@ -29,6 +35,7 @@ import {
   type AssistantMessage,
   type AssistantAction,
   type ExecutedAssistantAction,
+  type MagnetCheckResult,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -44,6 +51,27 @@ import { ElaineAvatar, ElaineWordmark } from "./ElaineAvatar";
 import { useAssistantPageContextReader } from "@/lib/assistant-context";
 
 const HIDE_FOR_VISIT_KEY = "elaine_hidden_for_visit";
+
+const MAGNET_VERDICT_COPY: Record<
+  MagnetCheckResult["verdict"],
+  { label: string; icon: React.ReactNode; className: string }
+> = {
+  likely_owned: {
+    label: "You already have this magnet",
+    icon: <CheckCircle2 className="h-4 w-4 text-green-600" />,
+    className: "bg-green-50 border-green-200 text-green-800",
+  },
+  possible_match: {
+    label: "Possible match — take a closer look",
+    icon: <HelpCircle className="h-4 w-4 text-amber-600" />,
+    className: "bg-amber-50 border-amber-200 text-amber-800",
+  },
+  no_match: {
+    label: "No match found — looks new!",
+    icon: <XCircle className="h-4 w-4 text-muted-foreground" />,
+    className: "bg-muted border-border text-muted-foreground",
+  },
+};
 
 export function AssistantWidget() {
   const [, navigate] = useLocation();
@@ -70,6 +98,16 @@ export function AssistantWidget() {
   const [actionDone, setActionDone] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
+  // Magnet duplicate-photo check: bypasses the normal chat/tool-call loop
+  // entirely and hits the same /magnets/check endpoint the standalone
+  // MagnetCheckDialog uses, since it needs an actual image upload rather
+  // than a text tool call. Shown as its own ephemeral card below the chat
+  // log rather than woven into `messages` (which is server-persisted text
+  // only), so it resets on new conversation / next message and doesn't
+  // survive a reload.
+  const [magnetPreview, setMagnetPreview] = useState<string | null>(null);
+  const [magnetResult, setMagnetResult] = useState<MagnetCheckResult | null>(null);
+  const magnetFileRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   const { data: settings } = useGetAssistantSettings();
@@ -79,6 +117,11 @@ export function AssistantWidget() {
   });
   const newConversation = useNewAssistantConversation();
   const executeAction = useExecuteAssistantAction();
+  const checkMagnet = useCheckMagnet({
+    mutation: {
+      onError: (err) => toast.error(err instanceof Error ? err.message : "Check failed"),
+    },
+  });
   // Proactive nudges (e.g. "your trip starts in 2 days...") are computed by
   // a background job and surfaced as a badge on the closed floating button.
   // Polled while the widget is closed; opening it fetches the conversation,
@@ -131,9 +174,29 @@ export function AssistantWidget() {
       onSuccess: (result) => {
         setMessages(result.messages);
         setPendingNavigate(null);
+        setMagnetPreview(null);
+        setMagnetResult(null);
+        checkMagnet.reset();
         qc.setQueryData(getGetAssistantConversationQueryKey(), result);
       },
     });
+  }
+
+  function handleMagnetFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setMagnetPreview(URL.createObjectURL(file));
+    setMagnetResult(null);
+    const formData = new FormData();
+    formData.append("photo", file);
+    checkMagnet.mutate(formData, { onSuccess: setMagnetResult });
+  }
+
+  function dismissMagnetCheck() {
+    setMagnetPreview(null);
+    setMagnetResult(null);
+    checkMagnet.reset();
   }
 
   async function handleSend() {
@@ -144,6 +207,9 @@ export function AssistantWidget() {
     setPendingActions([]);
     setExecutedActions([]);
     setActionDone(false);
+    setMagnetPreview(null);
+    setMagnetResult(null);
+    checkMagnet.reset();
     setStreamingContent("");
     setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
     setIsStreaming(true);
@@ -457,10 +523,90 @@ export function AssistantWidget() {
               </div>
             )}
 
+            {(magnetPreview || checkMagnet.isPending || magnetResult) && (
+              <div className="ml-8 flex flex-col gap-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
+                <div className="flex items-start gap-3">
+                  {magnetPreview && (
+                    <img
+                      src={magnetPreview}
+                      alt="Magnet to check"
+                      className="h-14 w-14 shrink-0 rounded-lg object-cover"
+                    />
+                  )}
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    {checkMagnet.isPending && (
+                      <p className="text-xs text-muted-foreground">Checking your collection…</p>
+                    )}
+                    {magnetResult && (
+                      <div
+                        className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium ${MAGNET_VERDICT_COPY[magnetResult.verdict].className}`}
+                      >
+                        {MAGNET_VERDICT_COPY[magnetResult.verdict].icon}
+                        {MAGNET_VERDICT_COPY[magnetResult.verdict].label}
+                      </div>
+                    )}
+                  </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 shrink-0"
+                    onClick={dismissMagnetCheck}
+                    disabled={checkMagnet.isPending}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+
+                {magnetResult && magnetResult.matches.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Closest matches</p>
+                    {magnetResult.matches.map((match) => (
+                      <Link
+                        key={match.photoId}
+                        href={`/trips/${match.tripId}`}
+                        onClick={() => setOpen(false)}
+                      >
+                        <div className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-border/50 p-1.5 transition-colors hover:border-primary/30">
+                          <img
+                            src={getTripPhotoImageUrl(match.tripId, match.photoId)}
+                            alt=""
+                            className="h-10 w-10 shrink-0 rounded-md object-cover"
+                          />
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-medium">{match.tripTitle}</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {Math.round(match.similarity * 100)}% similar
+                            </p>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div ref={endRef} />
           </div>
 
           <div className="flex gap-2 border-t border-border/50 p-3">
+            <input
+              ref={magnetFileRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              capture="environment"
+              className="hidden"
+              onChange={handleMagnetFileChange}
+            />
+            <Button
+              size="icon"
+              variant="outline"
+              onClick={() => magnetFileRef.current?.click()}
+              disabled={isStreaming || checkMagnet.isPending}
+              title="Check if you already have this magnet"
+            >
+              <Camera className="h-4 w-4" />
+            </Button>
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}

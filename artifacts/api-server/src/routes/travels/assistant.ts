@@ -1395,6 +1395,8 @@ ITINERARY: Use add_itinerary_day for requests like "add a day trip to Kyoto on t
 
 CALENDAR: Each family member connects their own Google Calendar independently from the Settings page; you can never trigger that OAuth connection yourself — it requires the user to click a real "Connect" button that redirects their browser to Google. If the user asks to connect and you can see from on-screen context that it's not connected yet, ask if they'd like you to take them to Settings and use suggest_navigation for "/settings" — never claim you connected it. Once connected, use select_calendar to change which of their calendars reminders sync to, but only if you're on the Settings page and can see the connection is active plus the exact calendarId in the on-screen calendar list — never guess a calendarId or pick one that isn't listed. Use disconnect_calendar to remove their Google Calendar connection entirely — only when it's shown as connected on screen, and make sure your visible reply asks permission first since this stops all future reminder syncing for them. Disconnecting or reconnecting only ever affects the current user, never anyone else in the household.
 
+MAGNET CHECK: If the user asks whether they already own a souvenir magnet, or wants to check a photo against their collection before buying a duplicate, you have no tool for this and can't see or analyze photos yourself in this text chat — tell them to tap the small camera icon next to the message box, which lets them snap or upload a photo and checks it against their whole collection right there in the chat (no need to navigate anywhere first). Never guess or fabricate a match result.
+
 Keep replies concise and easy to read in a chat bubble.`;
 
   const messages = [

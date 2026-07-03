@@ -4,7 +4,7 @@ import { and, asc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import { db, potteryItems, potteryImages } from "@workspace/db";
 import { ComparePotteryResponse } from "@workspace/api-zod";
 import { requireAuth } from "../../middleware/auth";
-import { aiLimiter } from "../../middleware/rateLimit";
+import { compareLimiter } from "../../middleware/rateLimit";
 import {
   sniffImageType,
   stripImageMetadata,
@@ -129,7 +129,7 @@ function buildPotteryDocument(attrs: {
 const router: IRouter = Router();
 router.use(requireAuth);
 
-router.post("/compare", aiLimiter, upload.single("image"), async (req, res) => {
+router.post("/compare", compareLimiter, upload.single("image"), async (req, res) => {
   const userId = req.session.userId!;
   const file = req.file;
   if (!file) {

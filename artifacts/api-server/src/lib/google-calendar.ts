@@ -140,3 +140,144 @@ function addDays(dateStr: string, days: number): string {
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
+
+// ---------------------------------------------------------------------------
+// Generic calendar events (Family Calendar — arbitrary events, not just
+// reminders). Supports both all-day events (date-only) and timed events
+// (dateTime with offset), unlike the reminder-shaped functions above.
+// ---------------------------------------------------------------------------
+
+export interface CalendarEventInput {
+  title: string;
+  description?: string | null;
+  location?: string | null;
+  allDay: boolean;
+  // All-day: "YYYY-MM-DD" (inclusive start, exclusive end per Google's model
+  // — callers pass the last inclusive day; we add one day for `end` here).
+  // Timed: RFC3339 datetime string with offset, e.g. "2026-07-10T14:00:00-04:00".
+  start: string;
+  end: string;
+}
+
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  description: string | null;
+  location: string | null;
+  allDay: boolean;
+  start: string;
+  end: string;
+  htmlLink?: string;
+}
+
+interface RawGoogleEvent {
+  id: string;
+  summary?: string;
+  description?: string;
+  location?: string;
+  htmlLink?: string;
+  status?: string;
+  start?: { date?: string; dateTime?: string };
+  end?: { date?: string; dateTime?: string };
+}
+
+function toGoogleEventBody(input: CalendarEventInput) {
+  return {
+    summary: input.title,
+    description: input.description ?? undefined,
+    location: input.location ?? undefined,
+    start: input.allDay
+      ? { date: input.start }
+      : { dateTime: input.start },
+    end: input.allDay
+      ? { date: addDays(input.end, 1) }
+      : { dateTime: input.end },
+  };
+}
+
+function fromGoogleEvent(raw: RawGoogleEvent): CalendarEvent {
+  const allDay = Boolean(raw.start?.date);
+  return {
+    id: raw.id,
+    title: raw.summary ?? "(untitled event)",
+    description: raw.description ?? null,
+    location: raw.location ?? null,
+    allDay,
+    start: raw.start?.date ?? raw.start?.dateTime ?? "",
+    // All-day events store an exclusive end date from Google; convert back to
+    // the last inclusive day for display/editing.
+    end: allDay
+      ? subtractDays(raw.end?.date ?? raw.start?.date ?? "", 1)
+      : (raw.end?.dateTime ?? raw.start?.dateTime ?? ""),
+    htmlLink: raw.htmlLink,
+  };
+}
+
+function subtractDays(dateStr: string, days: number): string {
+  if (!dateStr) return dateStr;
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
+// List events in [timeMinISO, timeMaxISO). Both bounds are RFC3339 datetimes.
+export async function listCalendarEvents(
+  accessToken: string,
+  calendarId: string,
+  timeMinISO: string,
+  timeMaxISO: string,
+): Promise<CalendarEvent[]> {
+  const params = new URLSearchParams({
+    timeMin: timeMinISO,
+    timeMax: timeMaxISO,
+    singleEvents: "true",
+    orderBy: "startTime",
+    maxResults: "250",
+  });
+  const data = await calendarApiJson<{ items?: RawGoogleEvent[] }>(
+    accessToken,
+    `/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`,
+  );
+  return (data.items ?? [])
+    .filter((item) => item.status !== "cancelled")
+    .map(fromGoogleEvent);
+}
+
+export async function createCalendarEvent(
+  accessToken: string,
+  calendarId: string,
+  input: CalendarEventInput,
+): Promise<CalendarEvent> {
+  const raw = await calendarApiJson<RawGoogleEvent>(
+    accessToken,
+    `/calendars/${encodeURIComponent(calendarId)}/events`,
+    { method: "POST", body: toGoogleEventBody(input) },
+  );
+  return fromGoogleEvent(raw);
+}
+
+export async function updateCalendarEvent(
+  accessToken: string,
+  calendarId: string,
+  eventId: string,
+  input: CalendarEventInput,
+): Promise<CalendarEvent> {
+  const raw = await calendarApiJson<RawGoogleEvent>(
+    accessToken,
+    `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+    { method: "PATCH", body: toGoogleEventBody(input) },
+  );
+  return fromGoogleEvent(raw);
+}
+
+export async function deleteCalendarEvent(
+  accessToken: string,
+  calendarId: string,
+  eventId: string,
+): Promise<void> {
+  await calendarApiJson<void>(
+    accessToken,
+    `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+    { method: "DELETE" },
+  );
+}

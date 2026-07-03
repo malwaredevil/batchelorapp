@@ -27,6 +27,20 @@ the local Replit history doesn't have (and vice-versa for local auto-commits).
 Content is usually identical so a later Replit-side sync merges cleanly, but expect
 a merge commit; never force-push to "fix" it.
 
+## Multi-file commits: use the Git Data API, not one Contents-API call per file
+
+- For a feature touching many files, build one atomic commit with the **Git Data
+  API**: `GET /git/ref/heads/main` → `GET /git/commits/{sha}` for the base tree →
+  `POST /git/blobs` per changed file (base64 content) → `POST /git/trees` with
+  `base_tree` + the blob entries → `POST /git/commits` with the new tree +
+  parent → `PATCH /git/refs/heads/main`. One commit, one message, no per-file
+  commit spam.
+- Get the changed-file list from `git --no-optional-locks status --porcelain`
+  and slice `line[3:]` for the path — slicing `line[2:]` truncates the first
+  path's leading character when the status column has no space padding.
+- Drive this from `bash` with a `python3 -` heredoc (urllib + subprocess), not
+  the `code_execution` notebook — it doesn't see `$GITHUB_PAT`.
+
 ## Branch protection must not break the Replit→main flow
 
 - The user pushes **directly to `main`** from the Replit Git pane (Replit = source

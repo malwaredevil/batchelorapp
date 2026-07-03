@@ -1,6 +1,6 @@
 import { type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { Home, Globe, Plane, Compass, Star, Upload, LogOut, ChevronDown, MapPin, Settings } from "lucide-react";
+import { Home, Globe, Plane, Compass, Star, Upload, LogOut, ChevronDown, MapPin, Settings, CalendarDays } from "lucide-react";
 import { AppSwitcher } from "@/components/AppSwitcher";
 import { useLogout, getGetCurrentUserQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -23,6 +23,7 @@ const NAV_ITEMS = [
   { href: "/map", label: "Map", icon: Globe },
   { href: "/explore", label: "Explore", icon: Compass },
   { href: "/wishlist", label: "Wishlist", icon: Star },
+  { href: "/family-calendar", label: "Family Calendar", icon: CalendarDays },
   { href: "/import", label: "Import", icon: Upload },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

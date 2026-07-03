@@ -14,6 +14,7 @@ import {
   useListCalendars,
   useSelectCalendar,
   useDisconnectCalendar,
+  useShareCalendar,
   useGetAssistantSettings,
   useUpdateAssistantSettings,
   useListHouseholdMemory,
@@ -343,6 +344,7 @@ function CalendarSyncCard() {
   });
   const selectCalendar = useSelectCalendar();
   const disconnectCalendar = useDisconnectCalendar();
+  const shareCalendar = useShareCalendar();
 
   const [selectedId, setSelectedId] = useState<string>("");
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
@@ -399,6 +401,30 @@ function CalendarSyncCard() {
       },
       onError: () => toast.error("Could not disconnect. Please try again."),
     });
+  }
+
+  function handleToggleShare(shared: boolean) {
+    shareCalendar.mutate(
+      { shared },
+      {
+        onSuccess: () => {
+          qc.invalidateQueries({ queryKey: getGetCalendarStatusQueryKey() });
+          toast.success(
+            shared
+              ? `"${status?.calendarSummary}" is now the shared Family Calendar for everyone`
+              : "This calendar is no longer shared with the household",
+          );
+        },
+        onError: (err) => {
+          const message = err instanceof Error ? err.message : "";
+          toast.error(
+            message.includes("409") || !status?.calendarId
+              ? "Pick a calendar above first."
+              : "Could not update sharing. Please try again.",
+          );
+        },
+      },
+    );
   }
 
   return (
@@ -482,6 +508,24 @@ function CalendarSyncCard() {
                 Currently syncing to <span className="text-foreground">{status.calendarSummary}</span>.
               </p>
             )}
+          </div>
+
+          <div className="flex items-start justify-between gap-4 rounded-lg border border-card-border bg-muted/30 p-4">
+            <div className="space-y-1">
+              <Label htmlFor="household-share">Share as household Family Calendar</Label>
+              <p className="text-xs text-muted-foreground">
+                When on, everyone in the household — even without their own Google account — can
+                view, add, edit, and delete events on{" "}
+                {status.calendarSummary ? `"${status.calendarSummary}"` : "this calendar"} from the
+                Family Calendar page. The app acts on your behalf using your connection.
+              </p>
+            </div>
+            <Switch
+              id="household-share"
+              checked={status.isHouseholdShared}
+              onCheckedChange={handleToggleShare}
+              disabled={shareCalendar.isPending || !status.calendarId}
+            />
           </div>
         </div>
       ) : (

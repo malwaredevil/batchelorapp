@@ -546,6 +546,12 @@ export const STATEMENTS: string[] = [
   )`,
   `ALTER TABLE travels_google_calendar_connections ENABLE ROW LEVEL SECURITY`,
 
+  // is_household_shared: marks this connection's calendar as the household's
+  // shared "Family Calendar" — every app_user can view/add/edit/delete events
+  // on it via the app, proxied through this connection owner's Google token.
+  // Application logic (not a DB constraint) enforces at most one shared row.
+  `ALTER TABLE travels_google_calendar_connections ADD COLUMN IF NOT EXISTS is_household_shared BOOLEAN NOT NULL DEFAULT false`,
+
   // travels_reminder_calendar_events: one reminder can fan out into multiple
   // connected users' calendars, so this tracks the Google event id per
   // (reminder, user) pair for update/delete.

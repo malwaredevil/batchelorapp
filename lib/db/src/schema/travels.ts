@@ -220,6 +220,12 @@ export const travelsGoogleCalendarConnections = pgTable(
     }),
     calendarId: text("calendar_id"),
     calendarSummary: text("calendar_summary"),
+    // When true, this connection's calendar is the household's shared
+    // "Family Calendar" — every app_user (whether or not they've connected
+    // their own Google account) can view/add/edit/delete events on it, with
+    // requests proxied through this connection's owner's Google token.
+    // Application logic enforces at most one shared connection at a time.
+    isHouseholdShared: boolean("is_household_shared").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

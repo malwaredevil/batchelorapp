@@ -15,6 +15,31 @@ export interface CalendarConnection {
   calendarSummary: string | null;
 }
 
+export interface HouseholdCalendarConnection extends CalendarConnection {
+  isHouseholdShared: true;
+}
+
+/**
+ * Returns the single connection (if any) marked as the household's shared
+ * "Family Calendar" — every app_user's family-calendar requests are proxied
+ * through this connection owner's Google token, regardless of who is asking.
+ */
+export async function getHouseholdCalendarConnection(): Promise<HouseholdCalendarConnection | null> {
+  const [row] = await db
+    .select()
+    .from(travelsGoogleCalendarConnections)
+    .where(eq(travelsGoogleCalendarConnections.isHouseholdShared, true))
+    .limit(1);
+  if (!row) return null;
+  return {
+    userId: row.userId,
+    googleEmail: row.googleEmail,
+    calendarId: row.calendarId,
+    calendarSummary: row.calendarSummary,
+    isHouseholdShared: true,
+  };
+}
+
 export async function getCalendarConnection(
   userId: number,
 ): Promise<CalendarConnection | null> {

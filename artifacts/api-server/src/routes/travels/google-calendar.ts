@@ -9,10 +9,7 @@ import {
   googleCalendarOAuthEnabled,
   GOOGLE_CALENDAR_SCOPES,
 } from "../../lib/google-calendar-oauth";
-import {
-  getCalendarConnection,
-  getValidAccessToken,
-} from "../../lib/google-calendar-tokens";
+import { getValidAccessToken } from "../../lib/google-calendar-tokens";
 import { listGoogleCalendars } from "../../lib/google-calendar";
 import { logger } from "../../lib/logger";
 
@@ -30,12 +27,17 @@ function callbackUrl(req: { protocol: string; get: (h: string) => string | undef
 // GET /google-calendar/status — is the current user connected, and to which calendar
 router.get("/google-calendar/status", requireAuth, async (req, res) => {
   const userId = req.session.userId!;
-  const connection = await getCalendarConnection(userId);
+  const [connection] = await db
+    .select()
+    .from(travelsGoogleCalendarConnections)
+    .where(eq(travelsGoogleCalendarConnections.userId, userId))
+    .limit(1);
   res.json({
     connected: Boolean(connection),
     googleEmail: connection?.googleEmail ?? null,
     calendarId: connection?.calendarId ?? null,
     calendarSummary: connection?.calendarSummary ?? null,
+    isHouseholdShared: connection?.isHouseholdShared ?? false,
   });
 });
 
@@ -206,6 +208,48 @@ router.delete("/google-calendar/disconnect", requireAuth, async (req, res) => {
     .delete(travelsGoogleCalendarConnections)
     .where(eq(travelsGoogleCalendarConnections.userId, userId));
   res.status(204).send();
+});
+
+const ShareCalendarBody = z.object({ shared: z.boolean() });
+
+// PUT /google-calendar/share — mark/unmark this user's connection as the
+// household's shared "Family Calendar". All other app_users' family-calendar
+// requests are proxied through whichever connection has this flag set, so at
+// most one connection may be shared at a time (enforced here, not in the DB).
+router.put("/google-calendar/share", requireAuth, async (req, res) => {
+  const userId = req.session.userId!;
+  const body = ShareCalendarBody.parse(req.body);
+
+  if (body.shared) {
+    const [connection] = await db
+      .select()
+      .from(travelsGoogleCalendarConnections)
+      .where(eq(travelsGoogleCalendarConnections.userId, userId))
+      .limit(1);
+    if (!connection?.calendarId) {
+      res
+        .status(409)
+        .json({ error: "Connect Google Calendar and pick a calendar first." });
+      return;
+    }
+    await db.transaction(async (tx) => {
+      await tx
+        .update(travelsGoogleCalendarConnections)
+        .set({ isHouseholdShared: false, updatedAt: new Date() })
+        .where(eq(travelsGoogleCalendarConnections.isHouseholdShared, true));
+      await tx
+        .update(travelsGoogleCalendarConnections)
+        .set({ isHouseholdShared: true, updatedAt: new Date() })
+        .where(eq(travelsGoogleCalendarConnections.userId, userId));
+    });
+  } else {
+    await db
+      .update(travelsGoogleCalendarConnections)
+      .set({ isHouseholdShared: false, updatedAt: new Date() })
+      .where(eq(travelsGoogleCalendarConnections.userId, userId));
+  }
+
+  res.json({ shared: body.shared });
 });
 
 export default router;

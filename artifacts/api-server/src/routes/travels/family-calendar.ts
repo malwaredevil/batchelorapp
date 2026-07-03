@@ -15,6 +15,7 @@ import {
   updateCalendarEvent,
   deleteCalendarEvent,
 } from "../../lib/google-calendar";
+import { applyCalendarEventEditToTrip } from "../../lib/trip-calendar-sync";
 import { logger } from "../../lib/logger";
 
 const router: IRouter = Router();
@@ -121,6 +122,7 @@ router.patch("/family-calendar/events/:eventId", requireAuth, async (req, res) =
       body,
     );
     res.json(event);
+    void applyCalendarEventEditToTrip(eventId, body);
   } catch (err) {
     logger.error({ err }, "family-calendar: failed to update event");
     res.status(502).json({ error: "Could not reach Google Calendar." });

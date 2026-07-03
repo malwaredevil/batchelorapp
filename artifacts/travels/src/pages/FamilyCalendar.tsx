@@ -48,11 +48,14 @@ import {
   useScanCalendarTripSuggestions,
   useDismissCalendarTripSuggestion,
   useAcceptCalendarTripSuggestion,
+  useListGoogleEventColors,
   getListFamilyCalendarEventsQueryKey,
   getListCalendarTripSuggestionsQueryKey,
+  getListGoogleEventColorsQueryKey,
   type FamilyCalendarEvent,
   type FamilyCalendarEventInput,
   type CalendarTripSuggestion,
+  type GoogleEventColor,
 } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 
@@ -114,7 +117,7 @@ interface EventFormState {
   startTime: string;
   endDate: string;
   endTime: string;
-  isTravel: boolean;
+  colorId: string | null;
 }
 
 function emptyForm(defaultDate?: string): EventFormState {
@@ -128,12 +131,11 @@ function emptyForm(defaultDate?: string): EventFormState {
     startTime: "09:00",
     endDate: today,
     endTime: "10:00",
-    isTravel: false,
+    colorId: null,
   };
 }
 
-function eventToForm(event: FamilyCalendarEvent, travelColorId: string | null): EventFormState {
-  const isTravel = Boolean(travelColorId) && event.colorId === travelColorId;
+function eventToForm(event: FamilyCalendarEvent): EventFormState {
   if (event.allDay) {
     return {
       title: event.title,
@@ -144,7 +146,7 @@ function eventToForm(event: FamilyCalendarEvent, travelColorId: string | null): 
       startTime: "09:00",
       endDate: event.end,
       endTime: "10:00",
-      isTravel,
+      colorId: event.colorId ?? null,
     };
   }
   const start = isoToLocalParts(event.start);
@@ -158,12 +160,11 @@ function eventToForm(event: FamilyCalendarEvent, travelColorId: string | null): 
     startTime: start.time,
     endDate: end.date,
     endTime: end.time,
-    isTravel,
+    colorId: event.colorId ?? null,
   };
 }
 
-function formToInput(form: EventFormState, travelColorId: string | null): FamilyCalendarEventInput {
-  const colorId = form.isTravel && travelColorId ? travelColorId : null;
+function formToInput(form: EventFormState): FamilyCalendarEventInput {
   if (form.allDay) {
     return {
       title: form.title,
@@ -172,7 +173,7 @@ function formToInput(form: EventFormState, travelColorId: string | null): Family
       allDay: true,
       start: form.startDate,
       end: form.endDate || form.startDate,
-      colorId,
+      colorId: form.colorId,
     };
   }
   const start = new Date(`${form.startDate}T${form.startTime || "09:00"}:00`).toISOString();
@@ -186,7 +187,7 @@ function formToInput(form: EventFormState, travelColorId: string | null): Family
     allDay: false,
     start,
     end,
-    colorId,
+    colorId: form.colorId,
   };
 }
 
@@ -221,6 +222,32 @@ export default function FamilyCalendar() {
   const [travelOnly, setTravelOnly] = useState(false);
 
   const travelColorId = status?.travelColorId ?? null;
+
+  const { data: googleColors = [] } = useListGoogleEventColors({
+    query: { enabled: Boolean(status?.configured), queryKey: getListGoogleEventColorsQueryKey() },
+  });
+  const colorHexById = useMemo(() => {
+    const map = new Map<string, GoogleEventColor>();
+    for (const c of googleColors) map.set(c.id, c);
+    return map;
+  }, [googleColors]);
+
+  function eventStyle(event: FamilyCalendarEvent): { className: string; style?: React.CSSProperties } {
+    if (isTravelEvent(event)) {
+      return {
+        className:
+          "bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:hover:bg-amber-900/60",
+      };
+    }
+    const color = event.colorId ? colorHexById.get(event.colorId) : undefined;
+    if (color) {
+      return {
+        className: "text-white hover:brightness-110",
+        style: { backgroundColor: color.hex },
+      };
+    }
+    return { className: "bg-primary/10 text-primary hover:bg-primary/20" };
+  }
 
   const { data: suggestions = [] } = useListCalendarTripSuggestions({
     query: {
@@ -347,14 +374,14 @@ export default function FamilyCalendar() {
 
   function openEdit(event: FamilyCalendarEvent) {
     setEditingEvent(event);
-    setForm(eventToForm(event, travelColorId));
+    setForm(eventToForm(event));
     setDialogOpen(true);
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.title.trim()) return;
-    const input = formToInput(form, travelColorId);
+    const input = formToInput(form);
 
     if (editingEvent) {
       updateEvent.mutate(
@@ -595,11 +622,8 @@ export default function FamilyCalendar() {
                           e.stopPropagation();
                           openEdit(event);
                         }}
-                        className={`flex items-center gap-1 truncate rounded px-1 py-0.5 text-[11px] ${
-                          isTravelEvent(event)
-                            ? "bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:hover:bg-amber-900/60"
-                            : "bg-primary/10 text-primary hover:bg-primary/20"
-                        }`}
+                        className={`flex items-center gap-1 truncate rounded px-1 py-0.5 text-[11px] ${eventStyle(event).className}`}
+                        style={eventStyle(event).style}
                         title={event.title}
                       >
                         {isTravelEvent(event) && <Plane className="h-2.5 w-2.5 shrink-0" />}
@@ -651,11 +675,8 @@ export default function FamilyCalendar() {
                           key={event.id}
                           type="button"
                           onClick={() => openEdit(event)}
-                          className={`flex w-full items-center gap-1 truncate rounded px-1.5 py-1 text-left text-[11px] ${
-                            isTravelEvent(event)
-                              ? "bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:hover:bg-amber-900/60"
-                              : "bg-primary/10 text-primary hover:bg-primary/20"
-                          }`}
+                          className={`flex w-full items-center gap-1 truncate rounded px-1.5 py-1 text-left text-[11px] ${eventStyle(event).className}`}
+                          style={eventStyle(event).style}
                           title={event.title}
                         >
                           {isTravelEvent(event) && <Plane className="h-2.5 w-2.5 shrink-0" />}
@@ -693,7 +714,11 @@ export default function FamilyCalendar() {
                 })}
               </h2>
               <ul className="space-y-2">
-                {dayEvents.map((event) => (
+                {dayEvents.map((event) => {
+                  const color = !isTravelEvent(event) && event.colorId
+                    ? colorHexById.get(event.colorId)
+                    : undefined;
+                  return (
                   <li
                     key={event.id}
                     className={`flex items-start justify-between gap-3 rounded-lg border p-3 ${
@@ -701,11 +726,18 @@ export default function FamilyCalendar() {
                         ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20"
                         : "border-card-border/60"
                     }`}
+                    style={color ? { borderLeft: `4px solid ${color.hex}` } : undefined}
                   >
                     <div className="min-w-0 space-y-1">
                       <p className="flex items-center gap-1.5 font-medium text-foreground">
                         {isTravelEvent(event) && (
                           <Plane className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                        )}
+                        {!isTravelEvent(event) && color && (
+                          <span
+                            className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: color.hex }}
+                          />
                         )}
                         {event.title}
                       </p>
@@ -773,7 +805,8 @@ export default function FamilyCalendar() {
                       )}
                     </div>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             </div>
           ))}
@@ -807,17 +840,43 @@ export default function FamilyCalendar() {
               />
             </div>
 
-            {Boolean(travelColorId) && (
-              <div className="flex items-center justify-between rounded-lg border border-card-border p-3">
-                <Label htmlFor="event-is-travel" className="flex items-center gap-1.5">
-                  <Plane className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                  Mark as travel
-                </Label>
-                <Switch
-                  id="event-is-travel"
-                  checked={form.isTravel}
-                  onCheckedChange={(v) => setForm((f) => ({ ...f, isTravel: v }))}
-                />
+            {googleColors.length > 0 && (
+              <div className="space-y-2 rounded-lg border border-card-border p-3">
+                <Label>Event label</Label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, colorId: null }))}
+                    title="Default"
+                    className={`flex h-8 w-8 items-center justify-center rounded-full border-2 bg-muted text-[10px] text-muted-foreground ${
+                      form.colorId === null ? "border-foreground" : "border-transparent"
+                    }`}
+                  >
+                    —
+                  </button>
+                  {googleColors.map((color) => {
+                    const isTravel = Boolean(travelColorId) && color.id === travelColorId;
+                    return (
+                      <button
+                        key={color.id}
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, colorId: color.id }))}
+                        title={isTravel ? `${color.name} (Travel)` : color.name}
+                        className={`flex h-8 w-8 items-center justify-center rounded-full border-2 ${
+                          form.colorId === color.id ? "border-foreground" : "border-transparent"
+                        }`}
+                        style={{ backgroundColor: color.hex }}
+                      >
+                        {isTravel && <Plane className="h-3.5 w-3.5 text-white" />}
+                      </button>
+                    );
+                  })}
+                </div>
+                {form.colorId && Boolean(travelColorId) && form.colorId === travelColorId && (
+                  <p className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+                    <Plane className="h-3 w-3" /> Marked as travel
+                  </p>
+                )}
               </div>
             )}
 

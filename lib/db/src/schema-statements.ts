@@ -510,7 +510,7 @@ export const STATEMENTS: string[] = [
 
   // ── Travels Google Calendar sync ────────────────────────────────────────────
   // sync_to_calendar: whether this reminder should have a matching event on the
-  // shared family Google Calendar (created via the Google Calendar integration).
+  // shared Travel Calendar (created via the Google Calendar integration).
   `ALTER TABLE travels_reminders ADD COLUMN IF NOT EXISTS sync_to_calendar BOOLEAN NOT NULL DEFAULT true`,
   // google_event_id: Google Calendar event id for update/delete; null if sync is
   // off, not yet attempted, or the last sync attempt failed.
@@ -519,7 +519,7 @@ export const STATEMENTS: string[] = [
   // shown only in the detail dialog (not inline in reminder lists).
   `ALTER TABLE travels_reminders ADD COLUMN IF NOT EXISTS description TEXT`,
   // travels_calendar_settings: singleton row (id = 1) holding the household's
-  // chosen shared "Family" Google Calendar for auto-synced reminders.
+  // chosen shared Travel Calendar for auto-synced reminders.
   // Superseded by travels_google_calendar_connections (per-user OAuth) below;
   // left in place (unused) rather than dropped, per additive-only policy.
   `CREATE TABLE IF NOT EXISTS travels_calendar_settings (
@@ -530,7 +530,7 @@ export const STATEMENTS: string[] = [
   )`,
 
   // ── Travels per-user Google Calendar connections ────────────────────────────
-  // Each family member connects their own Google account (OAuth, offline
+  // Each household member connects their own Google account (OAuth, offline
   // access) and picks which of their own calendars reminders sync to.
   `CREATE TABLE IF NOT EXISTS travels_google_calendar_connections (
     id                        SERIAL PRIMARY KEY,
@@ -547,7 +547,7 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE travels_google_calendar_connections ENABLE ROW LEVEL SECURITY`,
 
   // is_household_shared: marks this connection's calendar as the household's
-  // shared "Family Calendar" — every app_user can view/add/edit/delete events
+  // shared Travel Calendar — every app_user can view/add/edit/delete events
   // on it via the app, proxied through this connection owner's Google token.
   // Application logic (not a DB constraint) enforces at most one shared row.
   `ALTER TABLE travels_google_calendar_connections ADD COLUMN IF NOT EXISTS is_household_shared BOOLEAN NOT NULL DEFAULT false`,
@@ -596,7 +596,7 @@ export const STATEMENTS: string[] = [
      ON travels_trip_calendar_events (trip_id, item_key)`,
 
   // travels_calendar_trip_suggestions: AI-detected candidate trips found by
-  // scanning the Family Calendar for travel-looking events (flights,
+  // scanning connected calendars for travel-looking events (flights,
   // hotels, etc) that aren't already linked to a trip. dedupe_key makes
   // repeated scans (daily scheduler + manual button) idempotent.
   `CREATE TABLE IF NOT EXISTS travels_calendar_trip_suggestions (
@@ -616,6 +616,17 @@ export const STATEMENTS: string[] = [
      ON travels_calendar_trip_suggestions (dedupe_key)`,
   `CREATE INDEX IF NOT EXISTS travels_calendar_trip_suggestions_status_idx
      ON travels_calendar_trip_suggestions (status)`,
+
+  // travels_calendar_trip_suggestions.user_id / is_from_shared_calendar:
+  // scope suggestions so a personal (non-Travel) calendar's suggestions are
+  // only visible to that calendar's owner — the shared Travel calendar's
+  // suggestions remain visible to everyone. Prevents leaking one user's
+  // personal-calendar events to the rest of the household via suggestion
+  // cards.
+  `ALTER TABLE travels_calendar_trip_suggestions ADD COLUMN IF NOT EXISTS user_id INTEGER`,
+  `ALTER TABLE travels_calendar_trip_suggestions ADD COLUMN IF NOT EXISTS is_from_shared_calendar BOOLEAN NOT NULL DEFAULT false`,
+  `CREATE INDEX IF NOT EXISTS travels_calendar_trip_suggestions_user_id_idx
+     ON travels_calendar_trip_suggestions (user_id)`,
 
   // ── elAIne assistant ───────────────────────────────────────────────────────
   // One ongoing conversation per user that follows them across every page.

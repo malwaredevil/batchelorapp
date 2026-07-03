@@ -29,7 +29,7 @@ export function ReminderEditDialog({ reminder, open, onOpenChange }: ReminderEdi
   const qc = useQueryClient();
   const { data: appUsers = [] } = useListTravelsAppUsers();
   const { data: calendarStatus } = useGetCalendarStatus();
-  const familyCalendarConnected = !!calendarStatus?.connected;
+  const travelCalendarConnected = !!calendarStatus?.connected;
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -37,6 +37,7 @@ export function ReminderEditDialog({ reminder, open, onOpenChange }: ReminderEdi
   const [recipients, setRecipients] = useState<string[]>([]);
   const [customEmail, setCustomEmail] = useState("");
   const [sync, setSync] = useState(true);
+  const [alertDays, setAlertDays] = useState<number[]>([0]);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   useEffect(() => {
@@ -46,10 +47,20 @@ export function ReminderEditDialog({ reminder, open, onOpenChange }: ReminderEdi
       setDueDate(reminder.dueDate ?? "");
       setRecipients(reminder.recipientEmails);
       setSync(reminder.syncToCalendar);
+      setAlertDays(reminder.alertDaysBefore && reminder.alertDaysBefore.length > 0 ? reminder.alertDaysBefore : [0]);
       setCustomEmail("");
       setConfirmingDelete(false);
     }
   }, [reminder, open]);
+
+  const ALERT_DAY_OPTIONS = [0, 1, 3, 7];
+
+  function toggleAlertDay(day: number) {
+    setAlertDays((prev) => {
+      const next = prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day];
+      return next.length > 0 ? next : [0];
+    });
+  }
 
   function invalidateAll(tripId: number) {
     qc.invalidateQueries({ queryKey: getListRemindersQueryKey(tripId) });
@@ -108,6 +119,7 @@ export function ReminderEditDialog({ reminder, open, onOpenChange }: ReminderEdi
         dueDate: dueDate || null,
         recipientEmails: recipients,
         syncToCalendar: sync,
+        alertDaysBefore: alertDays,
       },
     });
   }
@@ -209,11 +221,34 @@ export function ReminderEditDialog({ reminder, open, onOpenChange }: ReminderEdi
             )}
           </div>
 
-          {familyCalendarConnected && (
-            <label className="flex items-center gap-2 text-sm cursor-pointer pt-1">
-              <Checkbox checked={sync} onCheckedChange={(v) => setSync(!!v)} />
-              Sync to family Google Calendar
-            </label>
+          {travelCalendarConnected && (
+            <div className="space-y-1.5 pt-1">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <Checkbox checked={sync} onCheckedChange={(v) => setSync(!!v)} />
+                Sync to Travel Calendar
+              </label>
+              {sync && (
+                <div className="pl-6 space-y-1">
+                  <Label className="text-xs text-muted-foreground">Remind me</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ALERT_DAY_OPTIONS.map((day) => (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => toggleAlertDay(day)}
+                        className={`text-xs rounded-full px-2.5 py-1 border transition-colors ${
+                          alertDays.includes(day)
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-background text-muted-foreground border-card-border hover:border-primary/50"
+                        }`}
+                      >
+                        {day === 0 ? "On the day" : `${day} day${day > 1 ? "s" : ""} before`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </div>
 

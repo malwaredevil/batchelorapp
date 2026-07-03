@@ -1236,6 +1236,7 @@ export type AssistantActionType =
   | "add_wishlist"
   | "add_packing_item"
   | "update_trip_status"
+  | "update_trip_details"
   | "cancel_trip"
   | "mark_wishlist_done"
   | "remove_wishlist_item"

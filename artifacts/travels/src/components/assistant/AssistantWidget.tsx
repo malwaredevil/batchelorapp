@@ -163,6 +163,7 @@ export function AssistantWidget() {
           if (
             pendingAction.type === "add_packing_item" ||
             pendingAction.type === "update_trip_status" ||
+            pendingAction.type === "update_trip_details" ||
             pendingAction.type === "cancel_trip" ||
             pendingAction.type === "remove_packing_item"
           ) {

@@ -14,8 +14,8 @@
 // throws past this module, so a Google Calendar hiccup never blocks a trip
 // save.
 import crypto from "node:crypto";
-import { eq } from "drizzle-orm";
-import { db, travelsTripCalendarEvents } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
+import { db, travelsTripCalendarEvents, travelsTrips } from "@workspace/db";
 import {
   getHouseholdCalendarConnection,
   getValidAccessToken,
@@ -196,6 +196,124 @@ export async function syncTripCalendarEvents(trip: TripForCalendarSync): Promise
     }
   } catch (err) {
     logger.warn({ err, tripId: trip.id }, "trip-calendar-sync: reconciliation failed");
+  }
+}
+
+function dateOnly(iso: string): string {
+  return iso.length >= 10 ? iso.slice(0, 10) : iso;
+}
+
+function localTimeOfIso(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+/**
+ * Reverse-sync: when a user edits a Family Calendar event that was
+ * originally generated from a trip/itinerary (has a row in
+ * travelsTripCalendarEvents), push the edited title/dates/description back
+ * into the owning trip's Supabase record so the two stay consistent.
+ *
+ * - kind 'trip': updates the trip's title (stripping the "Trip: " prefix)
+ *   and start/end dates.
+ * - kind 'itinerary_activity': updates the matching activity's name, time,
+ *   and description within the trip's itinerary JSON. Note: activities also
+ *   have separate `proximity`/`tip` fields that get folded into
+ *   `description` on save from here (there's no way to tell them apart from
+ *   the calendar's single description field) — an accepted simplification.
+ * - kind 'suggested_event': no owned trip content to update; skipped.
+ *
+ * Best effort — never throws, and never blocks the calendar response.
+ */
+export async function applyCalendarEventEditToTrip(
+  googleEventId: string,
+  input: CalendarEventInput,
+): Promise<void> {
+  try {
+    const [row] = await db
+      .select()
+      .from(travelsTripCalendarEvents)
+      .where(eq(travelsTripCalendarEvents.googleEventId, googleEventId));
+    if (!row || row.kind === "suggested_event") return;
+
+    const [trip] = await db.select().from(travelsTrips).where(eq(travelsTrips.id, row.tripId));
+    if (!trip) return;
+
+    if (row.kind === "trip") {
+      const title = input.title.startsWith("Trip: ") ? input.title.slice("Trip: ".length) : input.title;
+      const startDate = dateOnly(input.start);
+      const endDate = dateOnly(input.end);
+      await db
+        .update(travelsTrips)
+        .set({ title, startDate, endDate })
+        .where(eq(travelsTrips.id, trip.id));
+
+      const newHash = contentHash({ ...input, title: `Trip: ${title}` });
+      await db
+        .update(travelsTripCalendarEvents)
+        .set({ contentHash: newHash, updatedAt: new Date() })
+        .where(eq(travelsTripCalendarEvents.id, row.id));
+      logger.info({ tripId: trip.id }, "trip-calendar-sync: reverse-synced trip fields from calendar edit");
+      return;
+    }
+
+    // kind === "itinerary_activity"
+    const match = /^activity:([^:]+):(.+)$/.exec(row.itemKey);
+    if (!match) return;
+    const [, oldDate, oldHash] = match;
+    const itinerary = trip.itinerary as Itinerary | null;
+    const day = itinerary?.days?.find((d) => d?.date === oldDate);
+    const activity = day?.activities?.find(
+      (a) => a?.name && shortHash(`${a.name}|${a.time ?? ""}`) === oldHash,
+    );
+    if (!itinerary || !day || !activity) return;
+
+    const newDate = dateOnly(input.start);
+    activity.name = input.title;
+    activity.time = input.allDay ? undefined : localTimeOfIso(input.start);
+    activity.description = input.description ?? undefined;
+    if (day.date !== newDate) day.date = newDate;
+
+    await db
+      .update(travelsTrips)
+      .set({ itinerary })
+      .where(eq(travelsTrips.id, trip.id));
+
+    const newItemKey = `activity:${newDate}:${shortHash(`${activity.name}|${activity.time ?? ""}`)}`;
+    const newHash = contentHash(input);
+    if (newItemKey !== row.itemKey) {
+      const clash = await db
+        .select({ id: travelsTripCalendarEvents.id })
+        .from(travelsTripCalendarEvents)
+        .where(
+          and(
+            eq(travelsTripCalendarEvents.tripId, trip.id),
+            eq(travelsTripCalendarEvents.itemKey, newItemKey),
+          ),
+        );
+      if (clash.length === 0) {
+        await db
+          .update(travelsTripCalendarEvents)
+          .set({ itemKey: newItemKey, contentHash: newHash, updatedAt: new Date() })
+          .where(eq(travelsTripCalendarEvents.id, row.id));
+      } else {
+        await db
+          .update(travelsTripCalendarEvents)
+          .set({ contentHash: newHash, updatedAt: new Date() })
+          .where(eq(travelsTripCalendarEvents.id, row.id));
+      }
+    } else {
+      await db
+        .update(travelsTripCalendarEvents)
+        .set({ contentHash: newHash, updatedAt: new Date() })
+        .where(eq(travelsTripCalendarEvents.id, row.id));
+    }
+    logger.info(
+      { tripId: trip.id, itemKey: newItemKey },
+      "trip-calendar-sync: reverse-synced itinerary activity from calendar edit",
+    );
+  } catch (err) {
+    logger.warn({ err, googleEventId }, "trip-calendar-sync: reverse-sync failed");
   }
 }
 

@@ -1,11 +1,12 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod/v4";
-import { and, eq, desc } from "drizzle-orm";
+import { and, eq, desc, isNull } from "drizzle-orm";
 import type OpenAI from "openai";
 import {
   db,
   appUsers,
   travelsAssistantConversations,
+  travelsAssistantNudges,
   travelsAssistantSettings,
   travelsHouseholdMemory,
   travelsTrips,
@@ -1047,12 +1048,58 @@ async function tryBuildAction(name: string, argsBuffer: string): Promise<Propose
   }
 }
 
+// Folds any unseen proactive nudges (see lib/travels-nudges.ts) into the
+// user's persisted conversation history as ordinary assistant messages, and
+// marks them seen so they're never surfaced twice. Returns the (possibly
+// updated) message history. Called from GET /assistant/conversation, which
+// is what the widget fetches the moment it's opened — this is how an
+// unprompted nudge actually becomes a chat bubble the user sees.
+async function applyUnseenNudges(userId: number): Promise<ChatMessage[]> {
+  const conversation = await getOrCreateConversation(userId);
+  const history = (conversation?.messages as ChatMessage[] | null) ?? [];
+
+  const unseen = await db
+    .select({ id: travelsAssistantNudges.id, message: travelsAssistantNudges.message })
+    .from(travelsAssistantNudges)
+    .where(and(eq(travelsAssistantNudges.userId, userId), isNull(travelsAssistantNudges.seenAt)))
+    .orderBy(travelsAssistantNudges.createdAt);
+
+  if (unseen.length === 0) return history;
+
+  const updatedHistory: ChatMessage[] = [
+    ...history,
+    ...unseen.map((n) => ({ role: "assistant" as const, content: n.message })),
+  ];
+
+  await db
+    .update(travelsAssistantConversations)
+    .set({ messages: updatedHistory, updatedAt: new Date() })
+    .where(eq(travelsAssistantConversations.userId, userId));
+
+  await db
+    .update(travelsAssistantNudges)
+    .set({ seenAt: new Date() })
+    .where(and(eq(travelsAssistantNudges.userId, userId), isNull(travelsAssistantNudges.seenAt)));
+
+  return updatedHistory;
+}
+
 router.get("/assistant/conversation", async (req, res) => {
   const userId = req.session.userId!;
-  const conversation = await getOrCreateConversation(userId);
-  res.json({
-    messages: (conversation?.messages as ChatMessage[] | null) ?? [],
-  });
+  const messages = await applyUnseenNudges(userId);
+  res.json({ messages });
+});
+
+// Lightweight polling endpoint for the floating-button badge — deliberately
+// separate from GET /assistant/conversation (which also marks nudges seen)
+// so simply showing a badge never consumes the nudge.
+router.get("/assistant/nudges/unseen-count", async (req, res) => {
+  const userId = req.session.userId!;
+  const rows = await db
+    .select({ id: travelsAssistantNudges.id })
+    .from(travelsAssistantNudges)
+    .where(and(eq(travelsAssistantNudges.userId, userId), isNull(travelsAssistantNudges.seenAt)));
+  res.json({ count: rows.length });
 });
 
 router.delete("/assistant/conversation", async (req, res) => {

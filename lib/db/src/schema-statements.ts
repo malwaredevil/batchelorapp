@@ -592,4 +592,25 @@ export const STATEMENTS: string[] = [
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
   `ALTER TABLE travels_household_memory ENABLE ROW LEVEL SECURITY`,
+
+  // Proactive nudges — messages elAIne generates unprompted (e.g. "your
+  // trip starts in 2 days and packing is empty"), produced by a scheduled
+  // job rather than a chat turn. Unique on (user_id, nudge_key) so the job
+  // can safely re-run without ever duplicating the same nudge.
+  `CREATE TABLE IF NOT EXISTS travels_assistant_nudges (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER NOT NULL,
+    trip_id     INTEGER,
+    nudge_key   TEXT NOT NULL,
+    message     TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    seen_at     TIMESTAMPTZ
+  )`,
+  `ALTER TABLE travels_assistant_nudges ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travels_assistant_nudges_user_id_idx
+     ON travels_assistant_nudges (user_id)`,
+  `CREATE INDEX IF NOT EXISTS travels_assistant_nudges_user_id_seen_at_idx
+     ON travels_assistant_nudges (user_id, seen_at)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS travels_assistant_nudges_user_id_nudge_key_idx
+     ON travels_assistant_nudges (user_id, nudge_key)`,
 ];

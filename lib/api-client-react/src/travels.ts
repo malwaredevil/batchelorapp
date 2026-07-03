@@ -1493,6 +1493,42 @@ export function useUpdateAssistantSettings(
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
+export interface AssistantNudgesUnseenCount {
+  count: number;
+}
+
+export const getGetAssistantNudgesUnseenCountQueryKey = () =>
+  [`/api/travels/assistant/nudges/unseen-count`] as const;
+
+const getAssistantNudgesUnseenCountFn = (
+  options?: RequestInit,
+): Promise<AssistantNudgesUnseenCount> =>
+  customFetch<AssistantNudgesUnseenCount>("/api/travels/assistant/nudges/unseen-count", {
+    ...options,
+    method: "GET",
+  });
+
+export function useGetAssistantNudgesUnseenCount<
+  TData = AssistantNudgesUnseenCount,
+  TError = unknown,
+>(options?: {
+  query?: UseQueryOptions<AssistantNudgesUnseenCount, TError, TData>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetAssistantNudgesUnseenCountQueryKey();
+  const queryFn: QueryFunction<AssistantNudgesUnseenCount> = ({ signal }) =>
+    getAssistantNudgesUnseenCountFn({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    AssistantNudgesUnseenCount,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
 export const getListHouseholdMemoryQueryKey = () =>
   [`/api/travels/assistant/memory`] as const;
 

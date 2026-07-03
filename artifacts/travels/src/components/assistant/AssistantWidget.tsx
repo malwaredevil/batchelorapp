@@ -17,8 +17,10 @@ import {
   useGetAssistantSettings,
   useUpdateAssistantSettings,
   useExecuteAssistantAction,
+  useGetAssistantNudgesUnseenCount,
   getGetAssistantConversationQueryKey,
   getGetAssistantSettingsQueryKey,
+  getGetAssistantNudgesUnseenCountQueryKey,
   getListTripsQueryKey,
   getListWishlistQueryKey,
   getGetTripQueryKey,
@@ -75,13 +77,26 @@ export function AssistantWidget() {
   });
   const newConversation = useNewAssistantConversation();
   const executeAction = useExecuteAssistantAction();
+  // Proactive nudges (e.g. "your trip starts in 2 days...") are computed by
+  // a background job and surfaced as a badge on the closed floating button.
+  // Polled while the widget is closed; opening it fetches the conversation,
+  // which folds any unseen nudges into chat history server-side and marks
+  // them seen, so we just need to drop the badge once that happens.
+  const { data: unseenNudges } = useGetAssistantNudgesUnseenCount({
+    query: {
+      enabled: !open,
+      refetchInterval: 2 * 60 * 1000,
+      queryKey: getGetAssistantNudgesUnseenCountQueryKey(),
+    },
+  });
 
   useEffect(() => {
     if (conversation && !initialized) {
       setMessages(conversation.messages);
       setInitialized(true);
+      qc.invalidateQueries({ queryKey: getGetAssistantNudgesUnseenCountQueryKey() });
     }
-  }, [conversation, initialized]);
+  }, [conversation, initialized, qc]);
 
   useEffect(() => {
     if (open) endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -464,9 +479,18 @@ export function AssistantWidget() {
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="flex items-center gap-2 rounded-full border border-card-border bg-card py-2 pl-2 pr-4 shadow-lg transition-transform hover:scale-105"
-          aria-label="Open elAIne assistant"
+          className="relative flex items-center gap-2 rounded-full border border-card-border bg-card py-2 pl-2 pr-4 shadow-lg transition-transform hover:scale-105"
+          aria-label={
+            unseenNudges && unseenNudges.count > 0
+              ? `Open elAIne assistant (${unseenNudges.count} new)`
+              : "Open elAIne assistant"
+          }
         >
+          {unseenNudges && unseenNudges.count > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[11px] font-semibold leading-none text-destructive-foreground">
+              {unseenNudges.count > 9 ? "9+" : unseenNudges.count}
+            </span>
+          )}
           <ElaineAvatar size={36} />
           <span className="flex items-center gap-1 text-sm font-medium">
             <ElaineWordmark />

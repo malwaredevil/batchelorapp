@@ -26,10 +26,13 @@ router.use(requireAuth);
 // across every page of the Travels app (replaces the old per-trip chat).
 // She is given: (1) whatever is live on the user's current screen, including
 // unsaved input, (2) shared household memory from every family member, and
-// (3) two tool-like affordances handled as structured JSON directives rather
-// than real function-calling, since the executing model here is a fast/cheap
-// chat model: suggesting navigation (never auto-followed) and remembering a
-// new household fact.
+// (3) real OpenAI-style function/tool calling for everything she can do:
+// proposing a write-action (confirmed by the user before it executes),
+// suggesting navigation (never auto-followed), and remembering a new
+// household fact (applied immediately, like today's chat text). Tool defs
+// live in one registry below (ACTION_DEFS) so adding a new confirmable
+// action later is a single addition, not edits scattered across a prompt,
+// a regex, and a switch statement.
 
 const ASSISTANT_SUBAGENT_INSTRUCTIONS =
   "You are a fast research helper for a friendly travel assistant named elAIne. You will be given a small, self-contained sub-task (e.g. list facts, summarize options, draft a short list). Answer concisely and factually in plain text so elAIne can incorporate your answer into her reply.";
@@ -68,15 +71,41 @@ async function geocodeDestination(
   }
 }
 
-// Payload schemas for the write-actions elAIne can propose. Kept intentionally
-// small (a subset of the full create schemas) since elAIne proposes these
-// from a short chat exchange, not a full form.
+async function getTripLabelInfo(
+  tripId: number,
+): Promise<{ title: string; destination: string } | null> {
+  const [trip] = await db
+    .select({ title: travelsTrips.title, destination: travelsTrips.destination })
+    .from(travelsTrips)
+    .where(eq(travelsTrips.id, tripId));
+  return trip ?? null;
+}
+
+async function getWishlistLabelInfo(
+  wishlistId: number,
+): Promise<{ destination: string } | null> {
+  const [item] = await db
+    .select({ destination: travelsWishlist.destination })
+    .from(travelsWishlist)
+    .where(eq(travelsWishlist.id, wishlistId));
+  return item ?? null;
+}
+
+const TRIP_STATUS_ENUM = ["wishlist", "planning", "booked", "active", "completed"] as const;
+
+// ---------------------------------------------------------------------------
+// Action registry. Each entry is the single source of truth for one
+// confirmable write-action: its Zod payload schema (server-side validation,
+// unchanged trust boundary), the JSON Schema exposed to the model as a
+// function tool, how to phrase the user-facing confirmation label, and how
+// to execute it once the user confirms. To add a new action in future: add
+// one entry here, and add its variant to the ActionBody union below.
+// ---------------------------------------------------------------------------
+
 const CreateTripActionPayload = z.object({
   title: z.string().min(1).max(200),
   destination: z.string().min(1).max(200),
-  status: z
-    .enum(["wishlist", "planning", "booked", "active", "completed"])
-    .optional(),
+  status: z.enum(TRIP_STATUS_ENUM).optional(),
   startDate: z.string().max(20).optional(),
   endDate: z.string().max(20).optional(),
   notes: z.string().max(2000).optional(),
@@ -95,7 +124,7 @@ const AddPackingItemActionPayload = z.object({
 
 const UpdateTripStatusActionPayload = z.object({
   tripId: z.number().int().positive(),
-  status: z.enum(["wishlist", "planning", "booked", "active", "completed"]),
+  status: z.enum(TRIP_STATUS_ENUM),
 });
 
 // At least one editable field must be present — this action is for editing
@@ -167,29 +196,7 @@ const ActionBody = z.discriminatedUnion("type", [
 ]);
 
 type PendingAction = z.infer<typeof ActionBody>;
-
-// Looks up a trip's title/destination so confirmation labels can name the
-// record instead of saying "this trip". Returns null if the trip can't be
-// found (e.g. already deleted) so callers can fall back to a generic label.
-async function getTripLabelInfo(
-  tripId: number,
-): Promise<{ title: string; destination: string } | null> {
-  const [trip] = await db
-    .select({ title: travelsTrips.title, destination: travelsTrips.destination })
-    .from(travelsTrips)
-    .where(eq(travelsTrips.id, tripId));
-  return trip ?? null;
-}
-
-async function getWishlistLabelInfo(
-  wishlistId: number,
-): Promise<{ destination: string } | null> {
-  const [item] = await db
-    .select({ destination: travelsWishlist.destination })
-    .from(travelsWishlist)
-    .where(eq(travelsWishlist.id, wishlistId));
-  return item ?? null;
-}
+type ActionType = PendingAction["type"];
 
 async function buildActionLabel(action: PendingAction): Promise<string> {
   switch (action.type) {
@@ -243,6 +250,406 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
   }
 }
 
+// One executor per action type, keyed by type, so the confirm-and-execute
+// route below is a single lookup instead of a growing if/else chain. Every
+// write here is scoped to the calling user the same way the equivalent
+// hand-written routes (trips.ts, wishlist.ts) are.
+type ActionExecutor = (
+  payload: never,
+  userId: number,
+) => Promise<{ status: number; body: unknown }>;
+
+const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
+  create_trip: (async (payload: z.infer<typeof CreateTripActionPayload>, userId: number) => {
+    const coords = await geocodeDestination(payload.destination);
+    const [row] = await db
+      .insert(travelsTrips)
+      .values({
+        title: payload.title,
+        destination: payload.destination,
+        status: payload.status ?? "wishlist",
+        startDate: payload.startDate,
+        endDate: payload.endDate,
+        notes: payload.notes,
+        userId,
+        ...(coords ?? {}),
+      })
+      .returning();
+    return { status: 201, body: { type: "create_trip", result: row } };
+  }) as ActionExecutor,
+
+  add_wishlist: (async (payload: z.infer<typeof AddWishlistActionPayload>, userId: number) => {
+    const coords = await geocodeDestination(payload.destination);
+    const [row] = await db
+      .insert(travelsWishlist)
+      .values({
+        destination: payload.destination,
+        targetDate: payload.targetDate,
+        notes: payload.notes,
+        userId,
+        ...(coords ?? {}),
+      })
+      .returning();
+    return { status: 201, body: { type: "add_wishlist", result: row } };
+  }) as ActionExecutor,
+
+  add_packing_item: (async (payload: z.infer<typeof AddPackingItemActionPayload>) => {
+    const [trip] = await db
+      .select({ id: travelsTrips.id, packingList: travelsTrips.packingList })
+      .from(travelsTrips)
+      .where(eq(travelsTrips.id, payload.tripId));
+    if (!trip) return { status: 404, body: { error: "Trip not found" } };
+    const existing =
+      (trip.packingList as Array<{ item: string; packed: boolean }> | null) ?? [];
+    const updatedList = [...existing, { item: payload.item, packed: false }];
+    const [row] = await db
+      .update(travelsTrips)
+      .set({ packingList: updatedList })
+      .where(eq(travelsTrips.id, payload.tripId))
+      .returning();
+    return { status: 200, body: { type: "add_packing_item", result: row } };
+  }) as ActionExecutor,
+
+  update_trip_status: (async (payload: z.infer<typeof UpdateTripStatusActionPayload>) => {
+    const [existing] = await db
+      .select({ id: travelsTrips.id })
+      .from(travelsTrips)
+      .where(eq(travelsTrips.id, payload.tripId));
+    if (!existing) return { status: 404, body: { error: "Trip not found" } };
+    const [row] = await db
+      .update(travelsTrips)
+      .set({ status: payload.status })
+      .where(eq(travelsTrips.id, payload.tripId))
+      .returning();
+    return { status: 200, body: { type: "update_trip_status", result: row } };
+  }) as ActionExecutor,
+
+  update_trip_details: (async (payload: z.infer<typeof UpdateTripDetailsActionPayload>) => {
+    const [existing] = await db
+      .select({ id: travelsTrips.id })
+      .from(travelsTrips)
+      .where(eq(travelsTrips.id, payload.tripId));
+    if (!existing) return { status: 404, body: { error: "Trip not found" } };
+    const updates: Partial<typeof travelsTrips.$inferInsert> = {};
+    if (payload.destination !== undefined) updates.destination = payload.destination;
+    if (payload.startDate !== undefined) updates.startDate = payload.startDate;
+    if (payload.endDate !== undefined) updates.endDate = payload.endDate;
+    if (payload.notes !== undefined) updates.notes = payload.notes;
+    if (payload.destination !== undefined) {
+      const coords = await geocodeDestination(payload.destination);
+      if (coords) Object.assign(updates, coords);
+    }
+    const [row] = await db
+      .update(travelsTrips)
+      .set(updates)
+      .where(eq(travelsTrips.id, payload.tripId))
+      .returning();
+    return { status: 200, body: { type: "update_trip_details", result: row } };
+  }) as ActionExecutor,
+
+  cancel_trip: (async (payload: z.infer<typeof CancelTripActionPayload>) => {
+    const [existing] = await db
+      .select({ id: travelsTrips.id })
+      .from(travelsTrips)
+      .where(eq(travelsTrips.id, payload.tripId));
+    if (!existing) return { status: 404, body: { error: "Trip not found" } };
+
+    // Same cleanup order as DELETE /trips/:id — remove storage objects
+    // before deleting DB rows so nothing orphans in Supabase Storage.
+    const photos = await db
+      .select({ storagePath: travelsTripPhotos.storagePath })
+      .from(travelsTripPhotos)
+      .where(eq(travelsTripPhotos.tripId, payload.tripId));
+    const docs = await db
+      .select({ storagePath: travelsTripDocuments.storagePath })
+      .from(travelsTripDocuments)
+      .where(eq(travelsTripDocuments.tripId, payload.tripId));
+
+    await Promise.allSettled([
+      ...photos.map((p) => deleteTripPhoto(p.storagePath)),
+      ...docs.map((d) => deleteDocument(d.storagePath)),
+    ]);
+
+    await db.delete(travelsTripPhotos).where(eq(travelsTripPhotos.tripId, payload.tripId));
+    await db
+      .delete(travelsTripDocuments)
+      .where(eq(travelsTripDocuments.tripId, payload.tripId));
+    await db.delete(travelsReminders).where(eq(travelsReminders.tripId, payload.tripId));
+    await db.delete(travelsTrips).where(eq(travelsTrips.id, payload.tripId));
+
+    return { status: 200, body: { type: "cancel_trip", result: { id: payload.tripId } } };
+  }) as ActionExecutor,
+
+  mark_wishlist_done: (async (payload: z.infer<typeof MarkWishlistDoneActionPayload>) => {
+    const [existing] = await db
+      .select({ id: travelsWishlist.id })
+      .from(travelsWishlist)
+      .where(eq(travelsWishlist.id, payload.wishlistId));
+    if (!existing) return { status: 404, body: { error: "Wishlist item not found" } };
+    const [row] = await db
+      .update(travelsWishlist)
+      .set({ done: payload.done ?? true })
+      .where(eq(travelsWishlist.id, payload.wishlistId))
+      .returning();
+    return { status: 200, body: { type: "mark_wishlist_done", result: row } };
+  }) as ActionExecutor,
+
+  remove_wishlist_item: (async (payload: z.infer<typeof RemoveWishlistItemActionPayload>) => {
+    const [existing] = await db
+      .select({ id: travelsWishlist.id })
+      .from(travelsWishlist)
+      .where(eq(travelsWishlist.id, payload.wishlistId));
+    if (!existing) return { status: 404, body: { error: "Wishlist item not found" } };
+    await db.delete(travelsWishlist).where(eq(travelsWishlist.id, payload.wishlistId));
+    return {
+      status: 200,
+      body: { type: "remove_wishlist_item", result: { id: payload.wishlistId } },
+    };
+  }) as ActionExecutor,
+
+  remove_packing_item: (async (payload: z.infer<typeof RemovePackingItemActionPayload>) => {
+    const [trip] = await db
+      .select({ id: travelsTrips.id, packingList: travelsTrips.packingList })
+      .from(travelsTrips)
+      .where(eq(travelsTrips.id, payload.tripId));
+    if (!trip) return { status: 404, body: { error: "Trip not found" } };
+    const existingList =
+      (trip.packingList as Array<{ item: string; packed: boolean }> | null) ?? [];
+    const filteredList = existingList.filter(
+      (entry) => entry.item.toLowerCase() !== payload.item.toLowerCase(),
+    );
+    const [row] = await db
+      .update(travelsTrips)
+      .set({ packingList: filteredList })
+      .where(eq(travelsTrips.id, payload.tripId))
+      .returning();
+    return { status: 200, body: { type: "remove_packing_item", result: row } };
+  }) as ActionExecutor,
+};
+
+// ---------------------------------------------------------------------------
+// Function-tool definitions handed to the model via real tool-calling
+// (`tools` on the chat completion request). One per confirmable write-action,
+// plus two standalone tools for navigation suggestions and household memory
+// that aren't part of the confirm-then-execute flow.
+// ---------------------------------------------------------------------------
+
+const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  {
+    type: "function",
+    function: {
+      name: "create_trip",
+      description:
+        "Propose creating a new trip. Ask permission in your reply's visible text first (e.g. \"Want me to create a trip to Rome for August?\"), then call this.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Short trip title" },
+          destination: { type: "string" },
+          status: { type: "string", enum: [...TRIP_STATUS_ENUM] },
+          startDate: { type: "string", description: "YYYY-MM-DD" },
+          endDate: { type: "string", description: "YYYY-MM-DD" },
+          notes: { type: "string" },
+        },
+        required: ["title", "destination"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "add_wishlist",
+      description: "Propose adding a destination to the household wishlist.",
+      parameters: {
+        type: "object",
+        properties: {
+          destination: { type: "string" },
+          targetDate: { type: "string", description: "YYYY-MM-DD" },
+          notes: { type: "string" },
+        },
+        required: ["destination"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "add_packing_item",
+      description:
+        "Propose adding an item to a specific trip's packing list. Only call this if you can see a specific trip's numeric id in the on-screen state you were given (look for \"tripId: <number>\"); never guess an id — offer to open the trip instead if you don't have one.",
+      parameters: {
+        type: "object",
+        properties: {
+          tripId: { type: "integer" },
+          item: { type: "string" },
+        },
+        required: ["tripId", "item"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_trip_status",
+      description:
+        'Propose moving a trip to a different stage, e.g. "mark my Tokyo trip as booked". Only call this if the trip\'s numeric id is visible in the on-screen state you were given; never guess an id.',
+      parameters: {
+        type: "object",
+        properties: {
+          tripId: { type: "integer" },
+          status: { type: "string", enum: [...TRIP_STATUS_ENUM] },
+        },
+        required: ["tripId", "status"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_trip_details",
+      description:
+        'Propose editing a trip\'s destination, dates, and/or notes, e.g. "push my Rome trip back a week" or "add a note that we\'re flying instead of driving". Not for status changes (use update_trip_status). Include only the field(s) that actually change; you must include at least one. Only call this if the trip\'s numeric id is visible on screen; never guess an id, and never guess new dates the user didn\'t specify — compute exact dates from what you can see on screen, or ask instead of guessing.',
+      parameters: {
+        type: "object",
+        properties: {
+          tripId: { type: "integer" },
+          destination: { type: "string" },
+          startDate: { type: "string", description: "YYYY-MM-DD" },
+          endDate: { type: "string", description: "YYYY-MM-DD" },
+          notes: { type: "string" },
+        },
+        required: ["tripId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "cancel_trip",
+      description:
+        "Propose permanently deleting a trip and everything attached to it (photos, documents, reminders). Only call this if the trip's numeric id is visible on screen; never guess an id. Since this is destructive, your visible reply text must clearly say it will DELETE the trip, not just \"cancel\" it ambiguously.",
+      parameters: {
+        type: "object",
+        properties: { tripId: { type: "integer" } },
+        required: ["tripId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "mark_wishlist_done",
+      description:
+        "Propose marking a wishlist item done (or not done, if done is explicitly false). Only call this if the wishlist item's numeric id is visible on screen; never guess an id.",
+      parameters: {
+        type: "object",
+        properties: {
+          wishlistId: { type: "integer" },
+          done: { type: "boolean" },
+        },
+        required: ["wishlistId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "remove_wishlist_item",
+      description:
+        "Propose permanently deleting a wishlist item. Only call this if the wishlist item's numeric id is visible on screen; never guess an id.",
+      parameters: {
+        type: "object",
+        properties: { wishlistId: { type: "integer" } },
+        required: ["wishlistId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "remove_packing_item",
+      description:
+        "Propose removing an existing item from a trip's packing list, matched by name. Only call this if the trip's numeric id is visible on screen; never guess an id, and use the exact item text as it appears on screen.",
+      parameters: {
+        type: "object",
+        properties: {
+          tripId: { type: "integer" },
+          item: { type: "string" },
+        },
+        required: ["tripId", "item"],
+      },
+    },
+  },
+];
+
+const NAVIGATE_TOOL_NAME = "suggest_navigation";
+const REMEMBER_TOOL_NAME = "remember_household_fact";
+
+const NAVIGATE_ALLOWED_PATHS = [
+  "/",
+  "/trips",
+  "/map",
+  "/explore",
+  "/wishlist",
+  "/import",
+  "/destinations",
+  "/settings",
+] as const;
+// "/trips/:id" is also allowed with a concrete numeric id, e.g. "/trips/42".
+const NAVIGATE_PATH_RE = /^\/(trips\/\d+|trips|map|explore|wishlist|import|destinations|settings)?$/;
+
+const NavigateToolPayload = z.object({
+  path: z.string().max(50).regex(NAVIGATE_PATH_RE, "not an allowed in-app path"),
+  reason: z.string().min(1).max(300),
+});
+
+const RememberToolPayload = z.object({
+  content: z.string().min(1).max(2000),
+});
+
+const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  {
+    type: "function",
+    function: {
+      name: NAVIGATE_TOOL_NAME,
+      description:
+        'Suggest moving the user to another screen. You are never allowed to navigate them yourself — the UI only offers a button, the user must click it. First ASK in plain language in your visible reply (e.g. "Want me to open your Wishlist so you can add that?"). Only call this if you actually just asked permission in your visible text, and never for the page the user is already on.',
+      parameters: {
+        type: "object",
+        properties: {
+          path: {
+            type: "string",
+            enum: [...NAVIGATE_ALLOWED_PATHS, "/trips/{id}"],
+            description:
+              'One of the listed static paths, or "/trips/{id}" with a real numeric id substituted in, e.g. "/trips/42".',
+          },
+          reason: { type: "string", description: "Short reason shown to the user" },
+        },
+        required: ["path", "reason"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: REMEMBER_TOOL_NAME,
+      description:
+        "Save a durable, household-relevant fact for later (a preference, a recurring detail, something another family member would want to know). Applied immediately, without a user confirmation step — only use this for genuinely durable facts, never small talk or one-off questions.",
+      parameters: {
+        type: "object",
+        properties: {
+          content: { type: "string", description: "The fact, written plainly" },
+        },
+        required: ["content"],
+      },
+    },
+  },
+];
+
+const ACTION_TOOL_NAMES = new Set<string>(
+  ACTION_TOOLS.map((t) => (t as OpenAI.Chat.Completions.ChatCompletionFunctionTool).function.name),
+);
+
 async function getOrCreateConversation(userId: number) {
   const [existing] = await db
     .select()
@@ -265,75 +672,29 @@ async function getOrCreateConversation(userId: number) {
   return row;
 }
 
-// Very lightweight structured directives the model can emit at the END of
-// its reply, on their own line, which we strip out before showing the
-// message to the user. Kept intentionally simple (no real tool-calling loop)
-// since elAIne runs on a fast chat model tuned for low latency.
-const NAVIGATE_RE = /\[\[NAVIGATE:\s*(\/[a-zA-Z0-9/_-]*)\s*\|\s*([^\]]+)\]\]/;
-const REMEMBER_RE = /\[\[REMEMBER:\s*([^\]]+)\]\]/;
-const ACTION_RE = /\[\[ACTION:\s*(\w+)\s*\|\s*(\{[^{}]*\})\s*\]\]/;
+type ProposedAction = { type: string; label: string; payload: unknown };
 
-async function extractDirectives(raw: string): Promise<{
-  content: string;
-  navigate: { path: string; reason: string } | null;
-  remember: string | null;
-  action: { type: string; label: string; payload: unknown } | null;
-}> {
-  let content = raw;
-  let navigate: { path: string; reason: string } | null = null;
-  let remember: string | null = null;
-  let action: { type: string; label: string; payload: unknown } | null = null;
-
-  const navMatch = content.match(NAVIGATE_RE);
-  if (navMatch) {
-    navigate = { path: navMatch[1], reason: navMatch[2].trim() };
-    content = content.replace(NAVIGATE_RE, "").trim();
-  }
-
-  const rememberMatch = content.match(REMEMBER_RE);
-  if (rememberMatch) {
-    remember = rememberMatch[1].trim();
-    content = content.replace(REMEMBER_RE, "").trim();
-  }
-
-  const actionMatch = content.match(ACTION_RE);
-  if (actionMatch) {
-    action = await tryExtractAction(content);
-    content = content.replace(ACTION_RE, "").trim();
-  }
-
-  return { content, navigate, remember, action };
-}
-
-// Attempts to pull a fully-formed [[ACTION: ...]] directive out of a (possibly
-// still-growing, mid-stream) content buffer. Returns null until the closing
-// `]]` has actually arrived — ACTION_RE requires it — so this is also what
-// lets the streaming chat route detect the directive "as soon as it's fully
-// received" rather than guessing from a partial JSON payload.
-async function tryExtractAction(
-  content: string,
-): Promise<{ type: string; label: string; payload: unknown } | null> {
-  const actionMatch = content.match(ACTION_RE);
-  if (!actionMatch) return null;
+// Attempts to turn an accumulated tool-call argument buffer into a fully
+// validated, ready-to-confirm action. Returns null while the JSON is still
+// incomplete (JSON.parse throws) or if the model produced an invalid
+// payload — in both cases we simply drop it rather than surfacing a
+// malformed/unsafe write-action to the confirmation UI. Called repeatedly
+// as the argument buffer grows during streaming, so the `action` SSE event
+// can fire the instant a fully-formed call arrives, not just at stream end.
+async function tryBuildAction(name: string, argsBuffer: string): Promise<ProposedAction | null> {
+  if (!ACTION_TOOL_NAMES.has(name)) return null;
   try {
-    const parsedPayload: unknown = JSON.parse(actionMatch[2]);
-    const parsedAction = ActionBody.safeParse({
-      type: actionMatch[1],
-      payload: parsedPayload,
-    });
-    if (parsedAction.success) {
-      return {
-        type: parsedAction.data.type,
-        label: await buildActionLabel(parsedAction.data),
-        payload: parsedAction.data.payload,
-      };
-    }
-    // If validation fails, we silently drop the action rather than
-    // surfacing a malformed/unsafe write-action to the confirmation UI.
+    const parsedPayload: unknown = JSON.parse(argsBuffer);
+    const parsedAction = ActionBody.safeParse({ type: name, payload: parsedPayload });
+    if (!parsedAction.success) return null;
+    return {
+      type: parsedAction.data.type,
+      label: await buildActionLabel(parsedAction.data),
+      payload: parsedAction.data.payload,
+    };
   } catch {
-    // Malformed JSON from the model — drop the action, keep the reply text.
+    return null;
   }
-  return null;
 }
 
 router.get("/assistant/conversation", async (req, res) => {
@@ -387,27 +748,7 @@ ${pageContext ? pageContext : "(no page context was shared for this screen)"}
 SHARED FAMILY MEMORY (facts you've picked up from any family member — treat as true for the whole household, not just the person asking):
 ${memoryBlock}
 
-NAVIGATION: You are never allowed to move the user to another screen yourself. If going somewhere else in the app would genuinely help (e.g. opening the Wishlist to add something, or a specific trip's page), first ASK in plain language ("Want me to open your Wishlist so you can add that?"). Only if it clearly helps, append this exact machine-readable line as the LAST line of your reply, on its own line, with a real in-app path from this list: /, /trips, /trips/:id, /map, /explore, /wishlist, /import, /destinations, /settings:
-[[NAVIGATE: /path | short reason]]
-Never include this line unless you actually just asked permission in your reply's visible text. Never include it for the page the user is already on.
-
-REMEMBERING: If the user shares a fact worth remembering for the whole household later (a preference, a recurring detail, something another family member would want to know), append this exact line as the LAST line of your reply (after any NAVIGATE line):
-[[REMEMBER: the fact, written plainly]]
-Only do this for genuinely durable, household-relevant facts — not small talk, not one-off questions.
-
-TAKING ACTION: You can propose making an actual change for the user — you never make the change yourself, the user always has to press a confirm button first. When the user clearly asks you to do one of the following, first briefly confirm in plain language what you're about to do (e.g. "Want me to create a trip to Rome for August?"), then append this exact machine-readable line as the LAST line of your reply (after any NAVIGATE/REMEMBER lines), with compact single-line JSON and no comments:
-[[ACTION: <type> | {"...":"..."}]]
-Only ever emit ONE action line per reply. Valid types and their JSON payload shape:
-- create_trip: {"title": string, "destination": string, "status"?: "wishlist"|"planning"|"booked"|"active"|"completed", "startDate"?: "YYYY-MM-DD", "endDate"?: "YYYY-MM-DD", "notes"?: string}
-- add_wishlist: {"destination": string, "targetDate"?: "YYYY-MM-DD", "notes"?: string}
-- add_packing_item: {"tripId": number, "item": string} — only use this if you can see a specific trip's numeric id in the on-screen state above (look for "tripId: <number>"); never guess an id, and never use this type if no trip id is visible — offer to open the trip instead.
-- update_trip_status: {"tripId": number, "status": "wishlist"|"planning"|"booked"|"active"|"completed"} — move a trip to a different stage, e.g. "mark my Tokyo trip as booked". Only use this if the trip's numeric id is visible in the on-screen state above; never guess an id.
-- update_trip_details: {"tripId": number, "destination"?: string, "startDate"?: "YYYY-MM-DD", "endDate"?: "YYYY-MM-DD", "notes"?: string} — edit a trip's dates, destination, and/or notes, e.g. "push my Rome trip back a week" or "add a note that we're flying instead of driving". Only use this for these specific fields, not status (use update_trip_status for that). Include only the field(s) that actually change; you must include at least one. Only use this if the trip's numeric id is visible in the on-screen state above; never guess an id, and never guess new dates the user didn't specify (ask them for the exact new date if it's ambiguous, e.g. "a week later" — compute it from the date you can see on screen instead of guessing).
-- cancel_trip: {"tripId": number} — permanently deletes a trip and everything attached to it (photos, documents, reminders). Only use this if the trip's numeric id is visible in the on-screen state above; never guess an id. Since this is destructive, make sure your confirmation text in the reply clearly says it will delete the trip, not just "cancel" it ambiguously.
-- mark_wishlist_done: {"wishlistId": number, "done"?: boolean} — marks a wishlist item done (or not done if done is explicitly false). Only use this if the wishlist item's numeric id is visible in the on-screen state above; never guess an id.
-- remove_wishlist_item: {"wishlistId": number} — permanently deletes a wishlist item. Only use this if the wishlist item's numeric id is visible in the on-screen state above; never guess an id.
-- remove_packing_item: {"tripId": number, "item": string} — removes an existing item from a trip's packing list by name. Only use this if the trip's numeric id is visible in the on-screen state above; never guess an id, and use the exact item text as it appears on screen.
-Never include an ACTION line unless you just asked permission in your reply's visible text, and never fabricate ids or facts not given to you.
+TOOLS: You have tools available for navigation suggestions, remembering household facts, and proposing changes to trips/wishlist/packing lists. Each tool's own description explains exactly when and how to use it — follow those rules precisely, especially around never fabricating numeric ids and asking permission in your visible reply text before calling any trip/wishlist/packing tool. Prefer calling at most one write-action tool per turn so the user isn't asked to confirm several things at once; navigation suggestions and remembering a fact can still accompany it.
 
 Keep replies concise and easy to read in a chat bubble.`;
 
@@ -418,7 +759,7 @@ Keep replies concise and easy to read in a chat bubble.`;
   ];
 
   // Streamed as Server-Sent Events so the client can show elAIne's reply (and
-  // a proposed [[ACTION: ...]] directive) building up incrementally instead
+  // a proposed action's confirmation card) building up incrementally instead
   // of waiting for the entire completion to land at once.
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache, no-transform");
@@ -432,33 +773,51 @@ Keep replies concise and easy to read in a chat bubble.`;
 
   let rawContent = "";
   let actionSent = false;
+  let resolvedAction: ProposedAction | null = null;
+  // Accumulates streamed tool-call fragments by their index. `arguments`
+  // arrives as growing string fragments across multiple chunks — this is
+  // the standard OpenAI/OpenRouter streaming tool-call shape.
+  const toolCallAcc = new Map<number, { name: string; args: string }>();
 
   try {
     await callModelWithSubagent(
       MODELS.FAST_VISION,
       ASSISTANT_SUBAGENT_INSTRUCTIONS,
-      async (client, model, tools) => {
+      async (client, model, serverTools) => {
         const stream = await client.chat.completions.create({
           model,
-          ...(tools
-            ? { tools: tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[] }
-            : {}),
+          tools: [
+            ...(serverTools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[]),
+            ...ACTION_TOOLS,
+            ...SOFT_TOOLS,
+          ],
           messages,
           max_tokens: 700,
           stream: true,
         });
 
         for await (const chunk of stream) {
-          const delta = chunk.choices[0]?.delta?.content;
+          const delta = chunk.choices[0]?.delta;
           if (!delta) continue;
-          rawContent += delta;
-          sendEvent("delta", { text: delta });
 
-          if (!actionSent) {
-            const action = await tryExtractAction(rawContent);
-            if (action) {
-              sendEvent("action", action);
-              actionSent = true;
+          if (delta.content) {
+            rawContent += delta.content;
+            sendEvent("delta", { text: delta.content });
+          }
+
+          for (const tc of delta.tool_calls ?? []) {
+            const acc = toolCallAcc.get(tc.index) ?? { name: "", args: "" };
+            if (tc.function?.name) acc.name = tc.function.name;
+            if (tc.function?.arguments) acc.args += tc.function.arguments;
+            toolCallAcc.set(tc.index, acc);
+
+            if (!actionSent && ACTION_TOOL_NAMES.has(acc.name)) {
+              const early = await tryBuildAction(acc.name, acc.args);
+              if (early) {
+                sendEvent("action", early);
+                actionSent = true;
+                resolvedAction = early;
+              }
             }
           }
         }
@@ -471,12 +830,46 @@ Keep replies concise and easy to read in a chat bubble.`;
     return;
   }
 
-  const { content, navigate, remember, action } = await extractDirectives(rawContent);
+  // Resolve any tool calls not already handled mid-stream. Content no
+  // longer needs cleanup here — unlike the old regex-directive scheme, tool
+  // calls arrive as a structured field separate from the reply text.
+  const content = rawContent.trim();
+  let navigate: { path: string; reason: string } | null = null;
 
-  if (remember) {
-    await db
-      .insert(travelsHouseholdMemory)
-      .values({ content: remember, createdByUserId: userId });
+  for (const { name, args } of toolCallAcc.values()) {
+    if (name === REMEMBER_TOOL_NAME) {
+      try {
+        const parsed = RememberToolPayload.safeParse(JSON.parse(args));
+        if (parsed.success) {
+          await db
+            .insert(travelsHouseholdMemory)
+            .values({ content: parsed.data.content, createdByUserId: userId });
+        }
+      } catch {
+        // Malformed JSON from the model — drop it, keep the reply text.
+      }
+      continue;
+    }
+
+    if (name === NAVIGATE_TOOL_NAME) {
+      if (navigate) continue; // only surface the first navigate suggestion
+      try {
+        const parsed = NavigateToolPayload.safeParse(JSON.parse(args));
+        if (parsed.success) navigate = parsed.data;
+      } catch {
+        // Malformed JSON from the model — drop it.
+      }
+      continue;
+    }
+
+    if (!actionSent && ACTION_TOOL_NAMES.has(name)) {
+      const finalAction = await tryBuildAction(name, args);
+      if (finalAction) {
+        sendEvent("action", finalAction);
+        actionSent = true;
+        resolvedAction = finalAction;
+      }
+    }
   }
 
   const updatedHistory: ChatMessage[] = [
@@ -490,7 +883,13 @@ Keep replies concise and easy to read in a chat bubble.`;
     .set({ messages: updatedHistory, updatedAt: new Date() })
     .where(eq(travelsAssistantConversations.userId, userId));
 
-  sendEvent("done", { role: "assistant", content, navigate, action, messages: updatedHistory });
+  sendEvent("done", {
+    role: "assistant",
+    content,
+    navigate,
+    action: resolvedAction,
+    messages: updatedHistory,
+  });
   res.end();
 });
 
@@ -500,206 +899,9 @@ Keep replies concise and easy to read in a chat bubble.`;
 router.post("/assistant/action", async (req, res) => {
   const userId = req.session.userId!;
   const action = ActionBody.parse(req.body);
-
-  if (action.type === "create_trip") {
-    const { payload } = action;
-    const coords = await geocodeDestination(payload.destination);
-    const [row] = await db
-      .insert(travelsTrips)
-      .values({
-        title: payload.title,
-        destination: payload.destination,
-        status: payload.status ?? "wishlist",
-        startDate: payload.startDate,
-        endDate: payload.endDate,
-        notes: payload.notes,
-        userId,
-        ...(coords ?? {}),
-      })
-      .returning();
-    res.status(201).json({ type: action.type, result: row });
-    return;
-  }
-
-  if (action.type === "add_wishlist") {
-    const { payload } = action;
-    const coords = await geocodeDestination(payload.destination);
-    const [row] = await db
-      .insert(travelsWishlist)
-      .values({
-        destination: payload.destination,
-        targetDate: payload.targetDate,
-        notes: payload.notes,
-        userId,
-        ...(coords ?? {}),
-      })
-      .returning();
-    res.status(201).json({ type: action.type, result: row });
-    return;
-  }
-
-  if (action.type === "add_packing_item") {
-    const { payload } = action;
-    const [trip] = await db
-      .select({ id: travelsTrips.id, packingList: travelsTrips.packingList })
-      .from(travelsTrips)
-      .where(eq(travelsTrips.id, payload.tripId));
-    if (!trip) {
-      res.status(404).json({ error: "Trip not found" });
-      return;
-    }
-    const existing =
-      (trip.packingList as Array<{ item: string; packed: boolean }> | null) ?? [];
-    const updatedList = [...existing, { item: payload.item, packed: false }];
-    const [row] = await db
-      .update(travelsTrips)
-      .set({ packingList: updatedList })
-      .where(eq(travelsTrips.id, payload.tripId))
-      .returning();
-    res.status(200).json({ type: action.type, result: row });
-    return;
-  }
-
-  if (action.type === "update_trip_status") {
-    const { payload } = action;
-    const [existing] = await db
-      .select({ id: travelsTrips.id })
-      .from(travelsTrips)
-      .where(eq(travelsTrips.id, payload.tripId));
-    if (!existing) {
-      res.status(404).json({ error: "Trip not found" });
-      return;
-    }
-    const [row] = await db
-      .update(travelsTrips)
-      .set({ status: payload.status })
-      .where(eq(travelsTrips.id, payload.tripId))
-      .returning();
-    res.status(200).json({ type: action.type, result: row });
-    return;
-  }
-
-  if (action.type === "update_trip_details") {
-    const { payload } = action;
-    const [existing] = await db
-      .select({ id: travelsTrips.id })
-      .from(travelsTrips)
-      .where(eq(travelsTrips.id, payload.tripId));
-    if (!existing) {
-      res.status(404).json({ error: "Trip not found" });
-      return;
-    }
-    const updates: Partial<typeof travelsTrips.$inferInsert> = {};
-    if (payload.destination !== undefined) updates.destination = payload.destination;
-    if (payload.startDate !== undefined) updates.startDate = payload.startDate;
-    if (payload.endDate !== undefined) updates.endDate = payload.endDate;
-    if (payload.notes !== undefined) updates.notes = payload.notes;
-    if (payload.destination !== undefined) {
-      const coords = await geocodeDestination(payload.destination);
-      if (coords) Object.assign(updates, coords);
-    }
-    const [row] = await db
-      .update(travelsTrips)
-      .set(updates)
-      .where(eq(travelsTrips.id, payload.tripId))
-      .returning();
-    res.status(200).json({ type: action.type, result: row });
-    return;
-  }
-
-  if (action.type === "cancel_trip") {
-    const { payload } = action;
-    const [existing] = await db
-      .select({ id: travelsTrips.id })
-      .from(travelsTrips)
-      .where(eq(travelsTrips.id, payload.tripId));
-    if (!existing) {
-      res.status(404).json({ error: "Trip not found" });
-      return;
-    }
-
-    // Same cleanup order as DELETE /trips/:id — remove storage objects
-    // before deleting DB rows so nothing orphans in Supabase Storage.
-    const photos = await db
-      .select({ storagePath: travelsTripPhotos.storagePath })
-      .from(travelsTripPhotos)
-      .where(eq(travelsTripPhotos.tripId, payload.tripId));
-    const docs = await db
-      .select({ storagePath: travelsTripDocuments.storagePath })
-      .from(travelsTripDocuments)
-      .where(eq(travelsTripDocuments.tripId, payload.tripId));
-
-    await Promise.allSettled([
-      ...photos.map((p) => deleteTripPhoto(p.storagePath)),
-      ...docs.map((d) => deleteDocument(d.storagePath)),
-    ]);
-
-    await db.delete(travelsTripPhotos).where(eq(travelsTripPhotos.tripId, payload.tripId));
-    await db
-      .delete(travelsTripDocuments)
-      .where(eq(travelsTripDocuments.tripId, payload.tripId));
-    await db.delete(travelsReminders).where(eq(travelsReminders.tripId, payload.tripId));
-    await db.delete(travelsTrips).where(eq(travelsTrips.id, payload.tripId));
-
-    res.status(200).json({ type: action.type, result: { id: payload.tripId } });
-    return;
-  }
-
-  if (action.type === "mark_wishlist_done") {
-    const { payload } = action;
-    const [existing] = await db
-      .select({ id: travelsWishlist.id })
-      .from(travelsWishlist)
-      .where(eq(travelsWishlist.id, payload.wishlistId));
-    if (!existing) {
-      res.status(404).json({ error: "Wishlist item not found" });
-      return;
-    }
-    const [row] = await db
-      .update(travelsWishlist)
-      .set({ done: payload.done ?? true })
-      .where(eq(travelsWishlist.id, payload.wishlistId))
-      .returning();
-    res.status(200).json({ type: action.type, result: row });
-    return;
-  }
-
-  if (action.type === "remove_wishlist_item") {
-    const { payload } = action;
-    const [existing] = await db
-      .select({ id: travelsWishlist.id })
-      .from(travelsWishlist)
-      .where(eq(travelsWishlist.id, payload.wishlistId));
-    if (!existing) {
-      res.status(404).json({ error: "Wishlist item not found" });
-      return;
-    }
-    await db.delete(travelsWishlist).where(eq(travelsWishlist.id, payload.wishlistId));
-    res.status(200).json({ type: action.type, result: { id: payload.wishlistId } });
-    return;
-  }
-
-  // remove_packing_item
-  const { payload } = action;
-  const [trip] = await db
-    .select({ id: travelsTrips.id, packingList: travelsTrips.packingList })
-    .from(travelsTrips)
-    .where(eq(travelsTrips.id, payload.tripId));
-  if (!trip) {
-    res.status(404).json({ error: "Trip not found" });
-    return;
-  }
-  const existingList =
-    (trip.packingList as Array<{ item: string; packed: boolean }> | null) ?? [];
-  const filteredList = existingList.filter(
-    (entry) => entry.item.toLowerCase() !== payload.item.toLowerCase(),
-  );
-  const [row] = await db
-    .update(travelsTrips)
-    .set({ packingList: filteredList })
-    .where(eq(travelsTrips.id, payload.tripId))
-    .returning();
-  res.status(200).json({ type: action.type, result: row });
+  const executor = ACTION_EXECUTORS[action.type];
+  const { status, body } = await executor(action.payload as never, userId);
+  res.status(status).json(body);
 });
 
 router.get("/assistant/settings", async (req, res) => {
@@ -735,16 +937,6 @@ router.get("/assistant/memory", async (_req, res) => {
     .from(travelsHouseholdMemory)
     .orderBy(desc(travelsHouseholdMemory.createdAt));
   res.json(rows);
-});
-
-router.delete("/assistant/memory/:id", async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (isNaN(id)) {
-    res.status(400).json({ error: "Invalid id" });
-    return;
-  }
-  await db.delete(travelsHouseholdMemory).where(eq(travelsHouseholdMemory.id, id));
-  res.status(204).end();
 });
 
 export default router;

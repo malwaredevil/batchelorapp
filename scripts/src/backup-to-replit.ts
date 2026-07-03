@@ -18,7 +18,8 @@
  *   Travels:  travels_trips, travels_trip_documents, travels_trip_photos,
  *             travels_wishlist, travels_reminders, travels_reminder_alert_log,
  *             travels_calendar_settings, travels_google_calendar_connections,
- *             travels_reminder_calendar_events
+ *             travels_reminder_calendar_events, travels_assistant_conversations,
+ *             travels_assistant_settings, travels_household_memory
  *
  * What is intentionally skipped:
  *   - embedding / visual_embedding columns (require pgvector, unavailable on Replit DB)
@@ -348,6 +349,27 @@ CREATE TABLE IF NOT EXISTS travels_reminder_calendar_events (
   user_id          INTEGER NOT NULL,
   google_event_id  TEXT NOT NULL,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- elAIne assistant
+CREATE TABLE IF NOT EXISTS travels_assistant_conversations (
+  id          SERIAL PRIMARY KEY,
+  user_id     INTEGER NOT NULL UNIQUE,
+  messages    JSONB NOT NULL DEFAULT '[]'::jsonb,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS travels_assistant_settings (
+  user_id     INTEGER PRIMARY KEY,
+  enabled     BOOLEAN NOT NULL DEFAULT TRUE,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS travels_household_memory (
+  id                  SERIAL PRIMARY KEY,
+  content             TEXT NOT NULL,
+  created_by_user_id  INTEGER NOT NULL,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 `;
 
@@ -819,6 +841,28 @@ async function main() {
     },
   );
   await resetSequence(dest, "travels_reminder_calendar_events", "id");
+
+  // ── elAIne assistant ──────────────────────────────────────────────────────
+  summary["travels_assistant_conversations"] = await copyTable(source, dest, {
+    table: "travels_assistant_conversations",
+    columns: ["id", "user_id", "messages", "updated_at"],
+    orderBy: "id",
+    jsonbColumns: ["messages"],
+  });
+  await resetSequence(dest, "travels_assistant_conversations", "id");
+
+  summary["travels_assistant_settings"] = await copyTable(source, dest, {
+    table: "travels_assistant_settings",
+    columns: ["user_id", "enabled", "updated_at"],
+    orderBy: "user_id",
+  });
+
+  summary["travels_household_memory"] = await copyTable(source, dest, {
+    table: "travels_household_memory",
+    columns: ["id", "content", "created_by_user_id", "created_at"],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_household_memory", "id");
 
   // ── Record backup history ─────────────────────────────────────────────────
   const note = Object.entries(summary)

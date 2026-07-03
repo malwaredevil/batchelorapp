@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod/v4";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import type OpenAI from "openai";
 import {
   db,
@@ -376,11 +376,14 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     return { status: 201, body: { type: "add_wishlist", result: row } };
   }) as ActionExecutor,
 
-  add_packing_item: (async (payload: z.infer<typeof AddPackingItemActionPayload>) => {
+  add_packing_item: (async (
+    payload: z.infer<typeof AddPackingItemActionPayload>,
+    userId: number,
+  ) => {
     const [trip] = await db
       .select({ id: travelsTrips.id, packingList: travelsTrips.packingList })
       .from(travelsTrips)
-      .where(eq(travelsTrips.id, payload.tripId));
+      .where(and(eq(travelsTrips.id, payload.tripId), eq(travelsTrips.userId, userId)));
     if (!trip) return { status: 404, body: { error: "Trip not found" } };
     const existing =
       (trip.packingList as Array<{ item: string; packed: boolean }> | null) ?? [];
@@ -393,11 +396,14 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     return { status: 200, body: { type: "add_packing_item", result: row } };
   }) as ActionExecutor,
 
-  update_trip_status: (async (payload: z.infer<typeof UpdateTripStatusActionPayload>) => {
+  update_trip_status: (async (
+    payload: z.infer<typeof UpdateTripStatusActionPayload>,
+    userId: number,
+  ) => {
     const [existing] = await db
       .select({ id: travelsTrips.id })
       .from(travelsTrips)
-      .where(eq(travelsTrips.id, payload.tripId));
+      .where(and(eq(travelsTrips.id, payload.tripId), eq(travelsTrips.userId, userId)));
     if (!existing) return { status: 404, body: { error: "Trip not found" } };
     const [row] = await db
       .update(travelsTrips)
@@ -407,11 +413,14 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     return { status: 200, body: { type: "update_trip_status", result: row } };
   }) as ActionExecutor,
 
-  update_trip_details: (async (payload: z.infer<typeof UpdateTripDetailsActionPayload>) => {
+  update_trip_details: (async (
+    payload: z.infer<typeof UpdateTripDetailsActionPayload>,
+    userId: number,
+  ) => {
     const [existing] = await db
       .select({ id: travelsTrips.id })
       .from(travelsTrips)
-      .where(eq(travelsTrips.id, payload.tripId));
+      .where(and(eq(travelsTrips.id, payload.tripId), eq(travelsTrips.userId, userId)));
     if (!existing) return { status: 404, body: { error: "Trip not found" } };
     const updates: Partial<typeof travelsTrips.$inferInsert> = {};
     if (payload.destination !== undefined) updates.destination = payload.destination;
@@ -430,11 +439,11 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     return { status: 200, body: { type: "update_trip_details", result: row } };
   }) as ActionExecutor,
 
-  cancel_trip: (async (payload: z.infer<typeof CancelTripActionPayload>) => {
+  cancel_trip: (async (payload: z.infer<typeof CancelTripActionPayload>, userId: number) => {
     const [existing] = await db
       .select({ id: travelsTrips.id })
       .from(travelsTrips)
-      .where(eq(travelsTrips.id, payload.tripId));
+      .where(and(eq(travelsTrips.id, payload.tripId), eq(travelsTrips.userId, userId)));
     if (!existing) return { status: 404, body: { error: "Trip not found" } };
 
     // Same cleanup order as DELETE /trips/:id — remove storage objects
@@ -463,11 +472,16 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     return { status: 200, body: { type: "cancel_trip", result: { id: payload.tripId } } };
   }) as ActionExecutor,
 
-  mark_wishlist_done: (async (payload: z.infer<typeof MarkWishlistDoneActionPayload>) => {
+  mark_wishlist_done: (async (
+    payload: z.infer<typeof MarkWishlistDoneActionPayload>,
+    userId: number,
+  ) => {
     const [existing] = await db
       .select({ id: travelsWishlist.id })
       .from(travelsWishlist)
-      .where(eq(travelsWishlist.id, payload.wishlistId));
+      .where(
+        and(eq(travelsWishlist.id, payload.wishlistId), eq(travelsWishlist.userId, userId)),
+      );
     if (!existing) return { status: 404, body: { error: "Wishlist item not found" } };
     const [row] = await db
       .update(travelsWishlist)
@@ -477,11 +491,16 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     return { status: 200, body: { type: "mark_wishlist_done", result: row } };
   }) as ActionExecutor,
 
-  remove_wishlist_item: (async (payload: z.infer<typeof RemoveWishlistItemActionPayload>) => {
+  remove_wishlist_item: (async (
+    payload: z.infer<typeof RemoveWishlistItemActionPayload>,
+    userId: number,
+  ) => {
     const [existing] = await db
       .select({ id: travelsWishlist.id })
       .from(travelsWishlist)
-      .where(eq(travelsWishlist.id, payload.wishlistId));
+      .where(
+        and(eq(travelsWishlist.id, payload.wishlistId), eq(travelsWishlist.userId, userId)),
+      );
     if (!existing) return { status: 404, body: { error: "Wishlist item not found" } };
     await db.delete(travelsWishlist).where(eq(travelsWishlist.id, payload.wishlistId));
     return {
@@ -490,11 +509,14 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     };
   }) as ActionExecutor,
 
-  remove_packing_item: (async (payload: z.infer<typeof RemovePackingItemActionPayload>) => {
+  remove_packing_item: (async (
+    payload: z.infer<typeof RemovePackingItemActionPayload>,
+    userId: number,
+  ) => {
     const [trip] = await db
       .select({ id: travelsTrips.id, packingList: travelsTrips.packingList })
       .from(travelsTrips)
-      .where(eq(travelsTrips.id, payload.tripId));
+      .where(and(eq(travelsTrips.id, payload.tripId), eq(travelsTrips.userId, userId)));
     if (!trip) return { status: 404, body: { error: "Trip not found" } };
     const existingList =
       (trip.packingList as Array<{ item: string; packed: boolean }> | null) ?? [];
@@ -513,7 +535,7 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     const [trip] = await db
       .select({ id: travelsTrips.id, title: travelsTrips.title })
       .from(travelsTrips)
-      .where(eq(travelsTrips.id, payload.tripId));
+      .where(and(eq(travelsTrips.id, payload.tripId), eq(travelsTrips.userId, userId)));
     if (!trip) return { status: 404, body: { error: "Trip not found" } };
 
     const syncToCalendar = payload.syncToCalendar ?? true;
@@ -541,12 +563,17 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
 
   sync_reminder_to_calendar: (async (
     payload: z.infer<typeof SyncReminderToCalendarActionPayload>,
+    userId: number,
   ) => {
     const [existing] = await db
       .select()
       .from(travelsReminders)
       .where(eq(travelsReminders.id, payload.reminderId));
-    if (!existing || existing.tripId !== payload.tripId) {
+    if (
+      !existing ||
+      existing.tripId !== payload.tripId ||
+      existing.userId !== userId
+    ) {
       return { status: 404, body: { error: "Reminder not found" } };
     }
     const syncToCalendar = payload.syncToCalendar ?? true;
@@ -575,11 +602,14 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     return { status: 200, body: { type: "sync_reminder_to_calendar", result: row } };
   }) as ActionExecutor,
 
-  add_itinerary_day: (async (payload: z.infer<typeof AddItineraryDayActionPayload>) => {
+  add_itinerary_day: (async (
+    payload: z.infer<typeof AddItineraryDayActionPayload>,
+    userId: number,
+  ) => {
     const [trip] = await db
       .select({ id: travelsTrips.id, itinerary: travelsTrips.itinerary })
       .from(travelsTrips)
-      .where(eq(travelsTrips.id, payload.tripId));
+      .where(and(eq(travelsTrips.id, payload.tripId), eq(travelsTrips.userId, userId)));
     if (!trip) return { status: 404, body: { error: "Trip not found" } };
 
     const existing =
@@ -610,7 +640,14 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
 
   regenerate_itinerary_day: (async (
     payload: z.infer<typeof RegenerateItineraryDayActionPayload>,
+    userId: number,
   ) => {
+    const [trip] = await db
+      .select({ id: travelsTrips.id })
+      .from(travelsTrips)
+      .where(and(eq(travelsTrips.id, payload.tripId), eq(travelsTrips.userId, userId)));
+    if (!trip) return { status: 404, body: { error: "Trip not found" } };
+
     const dayIndex = payload.dayNumber - 1;
     try {
       const itinerary = await generateItineraryForTrip(

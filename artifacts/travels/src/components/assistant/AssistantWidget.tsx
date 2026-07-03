@@ -24,6 +24,8 @@ import {
   getListTripsQueryKey,
   getListWishlistQueryKey,
   getGetTripQueryKey,
+  getGetCalendarStatusQueryKey,
+  getListCalendarsQueryKey,
   type AssistantMessage,
   type AssistantAction,
   type ExecutedAssistantAction,
@@ -200,6 +202,10 @@ export function AssistantWidget() {
       if (typeof tripId === "number") {
         qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
       }
+    }
+    if (action.type === "select_calendar" || action.type === "disconnect_calendar") {
+      qc.invalidateQueries({ queryKey: getGetCalendarStatusQueryKey() });
+      qc.invalidateQueries({ queryKey: getListCalendarsQueryKey() });
     }
   }
 

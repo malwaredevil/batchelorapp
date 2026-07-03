@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Mail, Bell, Save, X, Send, CalendarDays, CheckCircle2, XCircle, LogIn, LogOut, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ElaineAvatar, ElaineWordmark } from "@/components/assistant/ElaineAvatar";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 export default function Settings() {
   const qc = useQueryClient();
@@ -349,6 +350,24 @@ function CalendarSyncCard() {
   useEffect(() => {
     if (status?.calendarId) setSelectedId(status.calendarId);
   }, [status?.calendarId]);
+
+  const calendarContext = useMemo(() => {
+    if (statusLoading) return undefined;
+    if (!status?.connected) {
+      return "Settings page: Google Calendar is NOT connected for this user. Connecting requires clicking the Connect button (an OAuth redirect elAIne cannot trigger herself) — offer to take them to Settings if they're elsewhere.";
+    }
+    const calendarList = calendars
+      .map((c: CalendarListItem) => `"${c.summary}" (calendarId: ${c.id}${c.primary ? ", primary" : ""})`)
+      .join("; ");
+    return (
+      `Settings page: Google Calendar is connected${status.googleEmail ? ` as ${status.googleEmail}` : ""}. ` +
+      `Currently syncing reminders to ${status.calendarSummary ? `"${status.calendarSummary}"` : "no calendar selected yet"}. ` +
+      (calendarList
+        ? `Calendars available to choose from: ${calendarList}.`
+        : "No calendars loaded yet.")
+    );
+  }, [statusLoading, status, calendars]);
+  usePageAssistantContext("settings-calendar", calendarContext);
 
   function handleSelect(calendarId: string) {
     const cal = calendars.find((c: CalendarListItem) => c.id === calendarId);

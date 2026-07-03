@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
+import DOMPurify from "dompurify";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import UnderlineExt from "@tiptap/extension-underline";
@@ -101,11 +102,16 @@ function mergeDates(newHtml: string, oldDates: (string | null)[]): (string | nul
   }
 }
 
-/** Inject date spans into HTML at display time (never modifies stored HTML). */
+/**
+ * Inject date spans into HTML at display time (never modifies stored HTML),
+ * then sanitize the result. This is the only place notes HTML is rendered
+ * via dangerouslySetInnerHTML, so sanitizing here covers both the
+ * date-annotated and plain-passthrough paths.
+ */
 function buildDisplayHtml(notes: WishlistNotes): string {
   const { html, dates } = notes;
   if (!html?.trim()) return "";
-  if (!dates.some(Boolean)) return html;
+  if (!dates.some(Boolean)) return DOMPurify.sanitize(html);
   try {
     const doc = new DOMParser().parseFromString(html, "text/html");
     const blocks = getContentBlocks(doc);
@@ -121,9 +127,9 @@ function buildDisplayHtml(notes: WishlistNotes): string {
       span.textContent = ` (${d})`;
       target.appendChild(span);
     });
-    return doc.body.innerHTML;
+    return DOMPurify.sanitize(doc.body.innerHTML);
   } catch {
-    return html;
+    return DOMPurify.sanitize(html);
   }
 }
 

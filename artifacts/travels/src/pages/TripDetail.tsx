@@ -1531,7 +1531,14 @@ export default function TripDetail({ id }: { id: number }) {
     `Viewing trip "${trip.title}" to ${trip.destination} (tripId: ${trip.id}, status: ${trip.status}${
       trip.startDate ? `, starts ${trip.startDate}` : ""
     }${trip.endDate ? `, ends ${trip.endDate}` : ""}). ` +
-      `Packing list has ${packingList.length} item(s), ${packingList.filter((p) => p.packed).length} packed. ` +
+      `Packing list has ${packingList.length} item(s), ${packingList.filter((p) => p.packed).length} packed${
+        packingList.length > 0
+          ? `: ${packingList
+              .slice(0, 20)
+              .map((p) => `"${p.item}"${p.packed ? " (packed)" : ""}`)
+              .join(", ")}`
+          : ""
+      }. ` +
       `To-do list has ${todoList.length} item(s). ${documents.length} document(s) attached.` +
       (addingDay ? ` User is currently adding a new itinerary day with title "${dayForm.title}" on ${dayForm.date}.` : ""),
   );

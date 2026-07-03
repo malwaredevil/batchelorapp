@@ -9,10 +9,15 @@ import {
   travelsAssistantSettings,
   travelsHouseholdMemory,
   travelsTrips,
+  travelsTripDocuments,
+  travelsTripPhotos,
+  travelsReminders,
   travelsWishlist,
 } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { callModelWithSubagent, MODELS } from "../../lib/ai-client";
+import { deleteTripPhoto } from "../../lib/travels/storage";
+import { deleteDocument } from "../../lib/travels-storage";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -88,12 +93,52 @@ const AddPackingItemActionPayload = z.object({
   item: z.string().min(1).max(200),
 });
 
+const UpdateTripStatusActionPayload = z.object({
+  tripId: z.number().int().positive(),
+  status: z.enum(["wishlist", "planning", "booked", "active", "completed"]),
+});
+
+const CancelTripActionPayload = z.object({
+  tripId: z.number().int().positive(),
+});
+
+const MarkWishlistDoneActionPayload = z.object({
+  wishlistId: z.number().int().positive(),
+  done: z.boolean().optional(),
+});
+
+const RemoveWishlistItemActionPayload = z.object({
+  wishlistId: z.number().int().positive(),
+});
+
+const RemovePackingItemActionPayload = z.object({
+  tripId: z.number().int().positive(),
+  item: z.string().min(1).max(200),
+});
+
 const ActionBody = z.discriminatedUnion("type", [
   z.object({ type: z.literal("create_trip"), payload: CreateTripActionPayload }),
   z.object({ type: z.literal("add_wishlist"), payload: AddWishlistActionPayload }),
   z.object({
     type: z.literal("add_packing_item"),
     payload: AddPackingItemActionPayload,
+  }),
+  z.object({
+    type: z.literal("update_trip_status"),
+    payload: UpdateTripStatusActionPayload,
+  }),
+  z.object({ type: z.literal("cancel_trip"), payload: CancelTripActionPayload }),
+  z.object({
+    type: z.literal("mark_wishlist_done"),
+    payload: MarkWishlistDoneActionPayload,
+  }),
+  z.object({
+    type: z.literal("remove_wishlist_item"),
+    payload: RemoveWishlistItemActionPayload,
+  }),
+  z.object({
+    type: z.literal("remove_packing_item"),
+    payload: RemovePackingItemActionPayload,
   }),
 ]);
 
@@ -111,6 +156,18 @@ function buildActionLabel(action: PendingAction): string {
       return `Add "${action.payload.destination}" to the wishlist`;
     case "add_packing_item":
       return `Add "${action.payload.item}" to the packing list`;
+    case "update_trip_status":
+      return `Move this trip to "${action.payload.status}"`;
+    case "cancel_trip":
+      return `Cancel this trip`;
+    case "mark_wishlist_done":
+      return action.payload.done === false
+        ? `Mark this wishlist item as not done`
+        : `Mark this wishlist item as done`;
+    case "remove_wishlist_item":
+      return `Remove this item from the wishlist`;
+    case "remove_packing_item":
+      return `Remove "${action.payload.item}" from the packing list`;
   }
 }
 
@@ -258,6 +315,11 @@ Only ever emit ONE action line per reply. Valid types and their JSON payload sha
 - create_trip: {"title": string, "destination": string, "status"?: "wishlist"|"planning"|"booked"|"active"|"completed", "startDate"?: "YYYY-MM-DD", "endDate"?: "YYYY-MM-DD", "notes"?: string}
 - add_wishlist: {"destination": string, "targetDate"?: "YYYY-MM-DD", "notes"?: string}
 - add_packing_item: {"tripId": number, "item": string} — only use this if you can see a specific trip's numeric id in the on-screen state above (look for "tripId: <number>"); never guess an id, and never use this type if no trip id is visible — offer to open the trip instead.
+- update_trip_status: {"tripId": number, "status": "wishlist"|"planning"|"booked"|"active"|"completed"} — move a trip to a different stage, e.g. "mark my Tokyo trip as booked". Only use this if the trip's numeric id is visible in the on-screen state above; never guess an id.
+- cancel_trip: {"tripId": number} — permanently deletes a trip and everything attached to it (photos, documents, reminders). Only use this if the trip's numeric id is visible in the on-screen state above; never guess an id. Since this is destructive, make sure your confirmation text in the reply clearly says it will delete the trip, not just "cancel" it ambiguously.
+- mark_wishlist_done: {"wishlistId": number, "done"?: boolean} — marks a wishlist item done (or not done if done is explicitly false). Only use this if the wishlist item's numeric id is visible in the on-screen state above; never guess an id.
+- remove_wishlist_item: {"wishlistId": number} — permanently deletes a wishlist item. Only use this if the wishlist item's numeric id is visible in the on-screen state above; never guess an id.
+- remove_packing_item: {"tripId": number, "item": string} — removes an existing item from a trip's packing list by name. Only use this if the trip's numeric id is visible in the on-screen state above; never guess an id, and use the exact item text as it appears on screen.
 Never include an ACTION line unless you just asked permission in your reply's visible text, and never fabricate ids or facts not given to you.
 
 Keep replies concise and easy to read in a chat bubble.`;
@@ -348,7 +410,120 @@ router.post("/assistant/action", async (req, res) => {
     return;
   }
 
-  // add_packing_item
+  if (action.type === "add_packing_item") {
+    const { payload } = action;
+    const [trip] = await db
+      .select({ id: travelsTrips.id, packingList: travelsTrips.packingList })
+      .from(travelsTrips)
+      .where(eq(travelsTrips.id, payload.tripId));
+    if (!trip) {
+      res.status(404).json({ error: "Trip not found" });
+      return;
+    }
+    const existing =
+      (trip.packingList as Array<{ item: string; packed: boolean }> | null) ?? [];
+    const updatedList = [...existing, { item: payload.item, packed: false }];
+    const [row] = await db
+      .update(travelsTrips)
+      .set({ packingList: updatedList })
+      .where(eq(travelsTrips.id, payload.tripId))
+      .returning();
+    res.status(200).json({ type: action.type, result: row });
+    return;
+  }
+
+  if (action.type === "update_trip_status") {
+    const { payload } = action;
+    const [existing] = await db
+      .select({ id: travelsTrips.id })
+      .from(travelsTrips)
+      .where(eq(travelsTrips.id, payload.tripId));
+    if (!existing) {
+      res.status(404).json({ error: "Trip not found" });
+      return;
+    }
+    const [row] = await db
+      .update(travelsTrips)
+      .set({ status: payload.status })
+      .where(eq(travelsTrips.id, payload.tripId))
+      .returning();
+    res.status(200).json({ type: action.type, result: row });
+    return;
+  }
+
+  if (action.type === "cancel_trip") {
+    const { payload } = action;
+    const [existing] = await db
+      .select({ id: travelsTrips.id })
+      .from(travelsTrips)
+      .where(eq(travelsTrips.id, payload.tripId));
+    if (!existing) {
+      res.status(404).json({ error: "Trip not found" });
+      return;
+    }
+
+    // Same cleanup order as DELETE /trips/:id — remove storage objects
+    // before deleting DB rows so nothing orphans in Supabase Storage.
+    const photos = await db
+      .select({ storagePath: travelsTripPhotos.storagePath })
+      .from(travelsTripPhotos)
+      .where(eq(travelsTripPhotos.tripId, payload.tripId));
+    const docs = await db
+      .select({ storagePath: travelsTripDocuments.storagePath })
+      .from(travelsTripDocuments)
+      .where(eq(travelsTripDocuments.tripId, payload.tripId));
+
+    await Promise.allSettled([
+      ...photos.map((p) => deleteTripPhoto(p.storagePath)),
+      ...docs.map((d) => deleteDocument(d.storagePath)),
+    ]);
+
+    await db.delete(travelsTripPhotos).where(eq(travelsTripPhotos.tripId, payload.tripId));
+    await db
+      .delete(travelsTripDocuments)
+      .where(eq(travelsTripDocuments.tripId, payload.tripId));
+    await db.delete(travelsReminders).where(eq(travelsReminders.tripId, payload.tripId));
+    await db.delete(travelsTrips).where(eq(travelsTrips.id, payload.tripId));
+
+    res.status(200).json({ type: action.type, result: { id: payload.tripId } });
+    return;
+  }
+
+  if (action.type === "mark_wishlist_done") {
+    const { payload } = action;
+    const [existing] = await db
+      .select({ id: travelsWishlist.id })
+      .from(travelsWishlist)
+      .where(eq(travelsWishlist.id, payload.wishlistId));
+    if (!existing) {
+      res.status(404).json({ error: "Wishlist item not found" });
+      return;
+    }
+    const [row] = await db
+      .update(travelsWishlist)
+      .set({ done: payload.done ?? true })
+      .where(eq(travelsWishlist.id, payload.wishlistId))
+      .returning();
+    res.status(200).json({ type: action.type, result: row });
+    return;
+  }
+
+  if (action.type === "remove_wishlist_item") {
+    const { payload } = action;
+    const [existing] = await db
+      .select({ id: travelsWishlist.id })
+      .from(travelsWishlist)
+      .where(eq(travelsWishlist.id, payload.wishlistId));
+    if (!existing) {
+      res.status(404).json({ error: "Wishlist item not found" });
+      return;
+    }
+    await db.delete(travelsWishlist).where(eq(travelsWishlist.id, payload.wishlistId));
+    res.status(200).json({ type: action.type, result: { id: payload.wishlistId } });
+    return;
+  }
+
+  // remove_packing_item
   const { payload } = action;
   const [trip] = await db
     .select({ id: travelsTrips.id, packingList: travelsTrips.packingList })
@@ -358,12 +533,14 @@ router.post("/assistant/action", async (req, res) => {
     res.status(404).json({ error: "Trip not found" });
     return;
   }
-  const existing =
+  const existingList =
     (trip.packingList as Array<{ item: string; packed: boolean }> | null) ?? [];
-  const updatedList = [...existing, { item: payload.item, packed: false }];
+  const filteredList = existingList.filter(
+    (entry) => entry.item.toLowerCase() !== payload.item.toLowerCase(),
+  );
   const [row] = await db
     .update(travelsTrips)
-    .set({ packingList: updatedList })
+    .set({ packingList: filteredList })
     .where(eq(travelsTrips.id, payload.tripId))
     .returning();
   res.status(200).json({ type: action.type, result: row });

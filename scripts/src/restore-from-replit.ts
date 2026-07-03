@@ -352,7 +352,7 @@ async function main() {
 
   // ── Travels ───────────────────────────────────────────────────────────────
   await dest.query(
-    "TRUNCATE travels_reminder_calendar_events, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_trip_photos, travels_trip_documents CASCADE",
+    "TRUNCATE travels_household_memory, travels_assistant_settings, travels_assistant_conversations, travels_reminder_calendar_events, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_trip_photos, travels_trip_documents CASCADE",
   );
   await dest.query("TRUNCATE travels_trips CASCADE");
 
@@ -493,6 +493,26 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "travels_reminder_calendar_events", "id");
+
+  await copyTable(source, dest, {
+    table: "travels_assistant_conversations",
+    columns: ["id", "user_id", "messages", "updated_at"],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_assistant_conversations", "id");
+
+  await copyTable(source, dest, {
+    table: "travels_assistant_settings",
+    columns: ["user_id", "enabled", "updated_at"],
+    orderBy: "user_id",
+  });
+
+  await copyTable(source, dest, {
+    table: "travels_household_memory",
+    columns: ["id", "content", "created_by_user_id", "created_at"],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_household_memory", "id");
 
   await dest.query("SET session_replication_role = DEFAULT");
 

@@ -1528,7 +1528,7 @@ export default function TripDetail({ id }: { id: number }) {
 
   usePageAssistantContext(
     "trip-detail",
-    `Viewing trip "${trip.title}" to ${trip.destination} (status: ${trip.status}${
+    `Viewing trip "${trip.title}" to ${trip.destination} (tripId: ${trip.id}, status: ${trip.status}${
       trip.startDate ? `, starts ${trip.startDate}` : ""
     }${trip.endDate ? `, ends ${trip.endDate}` : ""}). ` +
       `Packing list has ${packingList.length} item(s), ${packingList.filter((p) => p.packed).length} packed. ` +

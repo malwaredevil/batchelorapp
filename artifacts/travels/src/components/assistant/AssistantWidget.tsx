@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { MessageCircle, X, MoreVertical, Send, ArrowRight, RotateCcw } from "lucide-react";
+import {
+  MessageCircle,
+  X,
+  MoreVertical,
+  Send,
+  ArrowRight,
+  RotateCcw,
+  Check,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   useGetAssistantConversation,
@@ -8,8 +16,13 @@ import {
   useNewAssistantConversation,
   useGetAssistantSettings,
   useUpdateAssistantSettings,
+  useExecuteAssistantAction,
   getGetAssistantConversationQueryKey,
+  getListTripsQueryKey,
+  getListWishlistQueryKey,
+  getGetTripQueryKey,
   type AssistantMessage,
+  type AssistantAction,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -39,6 +52,8 @@ export function AssistantWidget() {
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [initialized, setInitialized] = useState(false);
   const [pendingNavigate, setPendingNavigate] = useState<{ path: string; reason: string } | null>(null);
+  const [pendingAction, setPendingAction] = useState<AssistantAction | null>(null);
+  const [actionDone, setActionDone] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   const { data: settings } = useGetAssistantSettings();
@@ -48,6 +63,7 @@ export function AssistantWidget() {
   });
   const sendMessage = useSendAssistantMessage();
   const newConversation = useNewAssistantConversation();
+  const executeAction = useExecuteAssistantAction();
 
   useEffect(() => {
     if (conversation && !initialized) {
@@ -97,6 +113,8 @@ export function AssistantWidget() {
     if (!trimmed || sendMessage.isPending) return;
     setInput("");
     setPendingNavigate(null);
+    setPendingAction(null);
+    setActionDone(false);
     setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
 
     sendMessage.mutate(
@@ -105,6 +123,7 @@ export function AssistantWidget() {
         onSuccess: (result) => {
           setMessages(result.messages);
           if (result.navigate) setPendingNavigate(result.navigate);
+          if (result.action) setPendingAction(result.action);
         },
         onError: () => {
           toast.error("elAIne couldn't respond just now. Please try again.");
@@ -119,6 +138,31 @@ export function AssistantWidget() {
     navigate(pendingNavigate.path);
     setPendingNavigate(null);
     setOpen(false);
+  }
+
+  function handleConfirmAction() {
+    if (!pendingAction || executeAction.isPending) return;
+    executeAction.mutate(
+      { type: pendingAction.type, payload: pendingAction.payload },
+      {
+        onSuccess: () => {
+          setActionDone(true);
+          setPendingAction(null);
+          qc.invalidateQueries({ queryKey: getListTripsQueryKey() });
+          qc.invalidateQueries({ queryKey: getListWishlistQueryKey() });
+          if (pendingAction.type === "add_packing_item") {
+            const tripId = pendingAction.payload.tripId;
+            if (typeof tripId === "number") {
+              qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
+            }
+          }
+          toast.success("Done!");
+        },
+        onError: () => {
+          toast.error("elAIne couldn't do that just now. Please try again.");
+        },
+      },
+    );
   }
 
   return (
@@ -214,6 +258,39 @@ export function AssistantWidget() {
                     No thanks
                   </Button>
                 </div>
+              </div>
+            )}
+
+            {pendingAction && (
+              <div className="ml-8 flex flex-col gap-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
+                <p className="text-xs text-muted-foreground">{pendingAction.label}?</p>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={handleConfirmAction}
+                    disabled={executeAction.isPending}
+                  >
+                    <Check className="h-3 w-3 mr-1" />
+                    {executeAction.isPending ? "Doing it…" : "Yes, do it"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs"
+                    onClick={() => setPendingAction(null)}
+                    disabled={executeAction.isPending}
+                  >
+                    No thanks
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {actionDone && (
+              <div className="ml-8 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Check className="h-3 w-3 text-primary" />
+                Done!
               </div>
             )}
 

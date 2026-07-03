@@ -1,6 +1,17 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import {
+  addDays,
+  eachDayOfInterval,
+  endOfMonth,
+  endOfWeek,
+  isSameDay,
+  isSameMonth,
+  isToday,
+  startOfMonth,
+  startOfWeek,
+} from "date-fns";
+import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
@@ -17,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Dialog,
   DialogContent,
@@ -44,10 +56,34 @@ function dateKey(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+type ViewMode = "month" | "week" | "list";
+
 function monthRange(cursor: Date): { start: Date; end: Date } {
   const start = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
   const end = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
   return { start, end };
+}
+
+function weekRange(cursor: Date): { start: Date; end: Date } {
+  const start = startOfWeek(cursor);
+  return { start, end: addDays(start, 7) };
+}
+
+function monthGridRange(cursor: Date): { start: Date; end: Date } {
+  const gridStart = startOfWeek(startOfMonth(cursor));
+  const lastRowStart = startOfWeek(endOfWeek(endOfMonth(cursor)));
+  return { start: gridStart, end: addDays(lastRowStart, 7) };
+}
+
+function rangeForView(view: ViewMode, cursor: Date): { start: Date; end: Date } {
+  if (view === "week") return weekRange(cursor);
+  if (view === "month") return monthGridRange(cursor);
+  return monthRange(cursor);
+}
+
+function shiftCursor(view: ViewMode, cursor: Date, direction: 1 | -1): Date {
+  if (view === "week") return addDays(cursor, 7 * direction);
+  return new Date(cursor.getFullYear(), cursor.getMonth() + direction, 1);
 }
 
 function eventDayKey(event: FamilyCalendarEvent): string {
@@ -142,7 +178,8 @@ export default function FamilyCalendar() {
   const qc = useQueryClient();
   const { data: status, isLoading: statusLoading } = useGetFamilyCalendarStatus();
   const [cursor, setCursor] = useState(() => new Date());
-  const { start, end } = useMemo(() => monthRange(cursor), [cursor]);
+  const [view, setView] = useState<ViewMode>("month");
+  const { start, end } = useMemo(() => rangeForView(view, cursor), [view, cursor]);
   const startISO = start.toISOString();
   const endISO = end.toISOString();
 
@@ -179,10 +216,10 @@ export default function FamilyCalendar() {
       .map((e) => `"${e.title}" (${e.allDay ? e.start : e.start})`)
       .join("; ");
     return (
-      `Family Calendar page: viewing ${monthLabel} on the shared calendar "${status.calendarSummary}". ` +
-      (summary ? `Events this month: ${summary}.` : "No events found this month.")
+      `Family Calendar page: viewing ${monthLabel} in ${view} view on the shared calendar "${status.calendarSummary}". ` +
+      (summary ? `Events in range: ${summary}.` : "No events found in this range.")
     );
-  }, [statusLoading, status, cursor, events]);
+  }, [statusLoading, status, cursor, events, view]);
   usePageAssistantContext("family-calendar", context);
 
   const groups = useMemo(() => {
@@ -196,9 +233,32 @@ export default function FamilyCalendar() {
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [events]);
 
+  const eventsByDay = useMemo(() => {
+    const map = new Map<string, FamilyCalendarEvent[]>();
+    for (const event of events) {
+      const key = eventDayKey(event);
+      const list = map.get(key) ?? [];
+      list.push(event);
+      map.set(key, list);
+    }
+    return map;
+  }, [events]);
+
+  const gridDays = useMemo(() => {
+    if (view === "list") return [];
+    const lastDayInclusive = addDays(end, -1);
+    return eachDayOfInterval({ start, end: lastDayInclusive });
+  }, [view, start, end]);
+
   function openCreate() {
     setEditingEvent(null);
     setForm(emptyForm());
+    setDialogOpen(true);
+  }
+
+  function openCreateForDay(day: string) {
+    setEditingEvent(null);
+    setForm(emptyForm(day));
     setDialogOpen(true);
   }
 
@@ -281,25 +341,175 @@ export default function FamilyCalendar() {
         </Button>
       </div>
 
-      <div className="flex items-center justify-between rounded-xl border border-card-border bg-card px-4 py-3">
-        <Button variant="ghost" size="icon" onClick={() => setCursor((c) => new Date(c.getFullYear(), c.getMonth() - 1, 1))}>
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-card-border bg-card px-4 py-3">
         <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => setCursor((c) => shiftCursor(view, c, -1))}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
           <span className="font-medium text-foreground">
-            {cursor.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
+            {view === "week"
+              ? (() => {
+                  const weekEnd = addDays(start, 6);
+                  const sameMonth = start.getMonth() === weekEnd.getMonth();
+                  const startLabel = start.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+                  const endLabel = weekEnd.toLocaleDateString(
+                    undefined,
+                    sameMonth
+                      ? { day: "numeric", year: "numeric" }
+                      : { month: "short", day: "numeric", year: "numeric" },
+                  );
+                  return `${startLabel} – ${endLabel}`;
+                })()
+              : cursor.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
           </span>
           <Button variant="outline" size="sm" onClick={() => setCursor(new Date())}>
             Today
           </Button>
+          <Button variant="ghost" size="icon" onClick={() => setCursor((c) => shiftCursor(view, c, 1))}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
-        <Button variant="ghost" size="icon" onClick={() => setCursor((c) => new Date(c.getFullYear(), c.getMonth() + 1, 1))}>
-          <ChevronRight className="h-4 w-4" />
-        </Button>
+        <ToggleGroup
+          type="single"
+          value={view}
+          onValueChange={(v) => v && setView(v as ViewMode)}
+          className="justify-start"
+        >
+          <ToggleGroupItem value="month" size="sm" aria-label="Month view">
+            Month
+          </ToggleGroupItem>
+          <ToggleGroupItem value="week" size="sm" aria-label="Week view">
+            Week
+          </ToggleGroupItem>
+          <ToggleGroupItem value="list" size="sm" aria-label="List view">
+            List
+          </ToggleGroupItem>
+        </ToggleGroup>
       </div>
 
       {eventsLoading ? (
         <p className="text-sm text-muted-foreground">Loading events…</p>
+      ) : view === "month" ? (
+        <div className="overflow-hidden rounded-xl border border-card-border bg-card">
+          <div className="grid grid-cols-7 border-b border-card-border bg-muted/40 text-center text-xs font-medium text-muted-foreground">
+            {gridDays.slice(0, 7).map((d) => (
+              <div key={d.toISOString()} className="py-2">
+                {d.toLocaleDateString(undefined, { weekday: "short" })}
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7">
+            {gridDays.map((day) => {
+              const key = dateKey(day);
+              const dayEvents = eventsByDay.get(key) ?? [];
+              const inMonth = isSameMonth(day, cursor);
+              const today = isToday(day);
+              return (
+                <div
+                  key={key}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openCreateForDay(key)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") openCreateForDay(key);
+                  }}
+                  className={`min-h-[92px] cursor-pointer border-b border-r border-card-border/60 p-1.5 text-left align-top last:border-r-0 hover:bg-muted/40 ${
+                    inMonth ? "bg-card" : "bg-muted/20"
+                  }`}
+                >
+                  <span
+                    className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${
+                      today
+                        ? "bg-primary text-primary-foreground font-semibold"
+                        : inMonth
+                          ? "text-foreground"
+                          : "text-muted-foreground"
+                    }`}
+                  >
+                    {day.getDate()}
+                  </span>
+                  <div className="mt-1 space-y-0.5">
+                    {dayEvents.slice(0, 3).map((event) => (
+                      <div
+                        key={event.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEdit(event);
+                        }}
+                        className="truncate rounded bg-primary/10 px-1 py-0.5 text-[11px] text-primary hover:bg-primary/20"
+                        title={event.title}
+                      >
+                        {event.title}
+                      </div>
+                    ))}
+                    {dayEvents.length > 3 && (
+                      <div className="px-1 text-[10px] text-muted-foreground">
+                        +{dayEvents.length - 3} more
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : view === "week" ? (
+        <div className="overflow-hidden rounded-xl border border-card-border bg-card">
+          <div className="grid grid-cols-7 divide-x divide-card-border/60">
+            {gridDays.map((day) => {
+              const key = dateKey(day);
+              const dayEvents = eventsByDay.get(key) ?? [];
+              const today = isToday(day);
+              return (
+                <div key={key} className="min-h-[220px]">
+                  <div
+                    className={`flex flex-col items-center border-b border-card-border/60 py-2 ${
+                      today ? "bg-primary/10" : "bg-muted/30"
+                    }`}
+                  >
+                    <span className="text-[11px] text-muted-foreground">
+                      {day.toLocaleDateString(undefined, { weekday: "short" })}
+                    </span>
+                    <span
+                      className={`mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${
+                        today ? "bg-primary text-primary-foreground font-semibold" : "text-foreground"
+                      }`}
+                    >
+                      {day.getDate()}
+                    </span>
+                  </div>
+                  <div className="space-y-1 p-1.5">
+                    {dayEvents.length === 0 ? (
+                      <p className="px-1 text-center text-[11px] text-muted-foreground">—</p>
+                    ) : (
+                      dayEvents.map((event) => (
+                        <button
+                          key={event.id}
+                          type="button"
+                          onClick={() => openEdit(event)}
+                          className="block w-full truncate rounded bg-primary/10 px-1.5 py-1 text-left text-[11px] text-primary hover:bg-primary/20"
+                          title={event.title}
+                        >
+                          {!event.allDay && (
+                            <span className="mr-1 text-muted-foreground">
+                              {new Date(event.start).toLocaleTimeString(undefined, {
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                          )}
+                          {event.title}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       ) : groups.length === 0 ? (
         <p className="rounded-xl border border-dashed border-card-border p-8 text-center text-sm text-muted-foreground">
           No events this month yet.

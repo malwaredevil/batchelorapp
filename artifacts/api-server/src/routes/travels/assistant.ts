@@ -98,6 +98,26 @@ const UpdateTripStatusActionPayload = z.object({
   status: z.enum(["wishlist", "planning", "booked", "active", "completed"]),
 });
 
+// At least one editable field must be present — this action is for editing
+// existing trip details (dates/notes/destination), not for status changes
+// (that stays on update_trip_status) or full trip replacement.
+const UpdateTripDetailsActionPayload = z
+  .object({
+    tripId: z.number().int().positive(),
+    destination: z.string().min(1).max(200).optional(),
+    startDate: z.string().max(20).optional(),
+    endDate: z.string().max(20).optional(),
+    notes: z.string().max(2000).optional(),
+  })
+  .refine(
+    (payload) =>
+      payload.destination !== undefined ||
+      payload.startDate !== undefined ||
+      payload.endDate !== undefined ||
+      payload.notes !== undefined,
+    { message: "At least one field to update must be provided" },
+  );
+
 const CancelTripActionPayload = z.object({
   tripId: z.number().int().positive(),
 });
@@ -126,6 +146,10 @@ const ActionBody = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("update_trip_status"),
     payload: UpdateTripStatusActionPayload,
+  }),
+  z.object({
+    type: z.literal("update_trip_details"),
+    payload: UpdateTripDetailsActionPayload,
   }),
   z.object({ type: z.literal("cancel_trip"), payload: CancelTripActionPayload }),
   z.object({
@@ -158,6 +182,17 @@ function buildActionLabel(action: PendingAction): string {
       return `Add "${action.payload.item}" to the packing list`;
     case "update_trip_status":
       return `Move this trip to "${action.payload.status}"`;
+    case "update_trip_details": {
+      const changes: string[] = [];
+      if (action.payload.destination !== undefined)
+        changes.push(`destination to "${action.payload.destination}"`);
+      if (action.payload.startDate !== undefined)
+        changes.push(`start date to ${action.payload.startDate}`);
+      if (action.payload.endDate !== undefined)
+        changes.push(`end date to ${action.payload.endDate}`);
+      if (action.payload.notes !== undefined) changes.push(`notes`);
+      return `Update this trip's ${changes.join(", ")}`;
+    }
     case "cancel_trip":
       return `Cancel this trip`;
     case "mark_wishlist_done":
@@ -330,6 +365,7 @@ Only ever emit ONE action line per reply. Valid types and their JSON payload sha
 - add_wishlist: {"destination": string, "targetDate"?: "YYYY-MM-DD", "notes"?: string}
 - add_packing_item: {"tripId": number, "item": string} — only use this if you can see a specific trip's numeric id in the on-screen state above (look for "tripId: <number>"); never guess an id, and never use this type if no trip id is visible — offer to open the trip instead.
 - update_trip_status: {"tripId": number, "status": "wishlist"|"planning"|"booked"|"active"|"completed"} — move a trip to a different stage, e.g. "mark my Tokyo trip as booked". Only use this if the trip's numeric id is visible in the on-screen state above; never guess an id.
+- update_trip_details: {"tripId": number, "destination"?: string, "startDate"?: "YYYY-MM-DD", "endDate"?: "YYYY-MM-DD", "notes"?: string} — edit a trip's dates, destination, and/or notes, e.g. "push my Rome trip back a week" or "add a note that we're flying instead of driving". Only use this for these specific fields, not status (use update_trip_status for that). Include only the field(s) that actually change; you must include at least one. Only use this if the trip's numeric id is visible in the on-screen state above; never guess an id, and never guess new dates the user didn't specify (ask them for the exact new date if it's ambiguous, e.g. "a week later" — compute it from the date you can see on screen instead of guessing).
 - cancel_trip: {"tripId": number} — permanently deletes a trip and everything attached to it (photos, documents, reminders). Only use this if the trip's numeric id is visible in the on-screen state above; never guess an id. Since this is destructive, make sure your confirmation text in the reply clearly says it will delete the trip, not just "cancel" it ambiguously.
 - mark_wishlist_done: {"wishlistId": number, "done"?: boolean} — marks a wishlist item done (or not done if done is explicitly false). Only use this if the wishlist item's numeric id is visible in the on-screen state above; never guess an id.
 - remove_wishlist_item: {"wishlistId": number} — permanently deletes a wishlist item. Only use this if the wishlist item's numeric id is visible in the on-screen state above; never guess an id.
@@ -500,6 +536,34 @@ router.post("/assistant/action", async (req, res) => {
     const [row] = await db
       .update(travelsTrips)
       .set({ status: payload.status })
+      .where(eq(travelsTrips.id, payload.tripId))
+      .returning();
+    res.status(200).json({ type: action.type, result: row });
+    return;
+  }
+
+  if (action.type === "update_trip_details") {
+    const { payload } = action;
+    const [existing] = await db
+      .select({ id: travelsTrips.id })
+      .from(travelsTrips)
+      .where(eq(travelsTrips.id, payload.tripId));
+    if (!existing) {
+      res.status(404).json({ error: "Trip not found" });
+      return;
+    }
+    const updates: Partial<typeof travelsTrips.$inferInsert> = {};
+    if (payload.destination !== undefined) updates.destination = payload.destination;
+    if (payload.startDate !== undefined) updates.startDate = payload.startDate;
+    if (payload.endDate !== undefined) updates.endDate = payload.endDate;
+    if (payload.notes !== undefined) updates.notes = payload.notes;
+    if (payload.destination !== undefined) {
+      const coords = await geocodeDestination(payload.destination);
+      if (coords) Object.assign(updates, coords);
+    }
+    const [row] = await db
+      .update(travelsTrips)
+      .set(updates)
       .where(eq(travelsTrips.id, payload.tripId))
       .returning();
     res.status(200).json({ type: action.type, result: row });

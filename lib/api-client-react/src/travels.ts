@@ -1154,12 +1154,19 @@ export interface CalendarStatus {
   calendarId: string | null;
   calendarSummary: string | null;
   isHouseholdShared: boolean;
+  travelColorId: string | null;
 }
 
 export interface CalendarListItem {
   id: string;
   summary: string;
   primary?: boolean;
+}
+
+export interface GoogleEventColor {
+  id: string;
+  name: string;
+  hex: string;
 }
 
 export interface SelectCalendarBody {
@@ -1237,6 +1244,45 @@ export function useShareCalendar(
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
+const listGoogleEventColors = (options?: RequestInit): Promise<GoogleEventColor[]> =>
+  customFetch<GoogleEventColor[]>("/api/travels/google-calendar/colors", {
+    ...options,
+    method: "GET",
+  });
+
+export const getListGoogleEventColorsQueryKey = () => [`/api/travels/google-calendar/colors`] as const;
+
+export function useListGoogleEventColors<TData = GoogleEventColor[], TError = unknown>(
+  options?: { query?: UseQueryOptions<GoogleEventColor[], TError, TData> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getListGoogleEventColorsQueryKey();
+  const queryFn: QueryFunction<GoogleEventColor[]> = ({ signal }) => listGoogleEventColors({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<GoogleEventColor[], TError, TData> & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const putTravelColorFn = (body: { travelColorId: string | null }): Promise<{ travelColorId: string | null }> =>
+  customFetch<{ travelColorId: string | null }>("/api/travels/google-calendar/travel-color", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export function useSetTravelColor(
+  options?: {
+    mutation?: UseMutationOptions<
+      { travelColorId: string | null },
+      unknown,
+      { travelColorId: string | null }
+    >;
+  },
+) {
+  const mutationFn = (body: { travelColorId: string | null }) => putTravelColorFn(body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
 // ---------------------------------------------------------------------------
 // Family Calendar (shared household calendar — view/add/edit/delete events)
 // ---------------------------------------------------------------------------
@@ -1246,6 +1292,7 @@ export interface FamilyCalendarStatus {
   calendarSummary: string | null;
   ownerGoogleEmail: string | null;
   isOwner: boolean;
+  travelColorId: string | null;
 }
 
 export interface FamilyCalendarEvent {
@@ -1257,6 +1304,7 @@ export interface FamilyCalendarEvent {
   start: string;
   end: string;
   htmlLink?: string;
+  colorId?: string | null;
 }
 
 export interface FamilyCalendarEventInput {
@@ -1266,6 +1314,7 @@ export interface FamilyCalendarEventInput {
   allDay: boolean;
   start: string;
   end: string;
+  colorId?: string | null;
 }
 
 const getFamilyCalendarStatus = (options?: RequestInit): Promise<FamilyCalendarStatus> =>
@@ -1366,6 +1415,108 @@ export function useDeleteFamilyCalendarEvent(
   options?: { mutation?: UseMutationOptions<void, unknown, string> },
 ) {
   const mutationFn = (eventId: string) => deleteFamilyCalendarEventFn(eventId);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+// ---------------------------------------------------------------------------
+// AI-detected trip suggestions from the Family Calendar
+// ---------------------------------------------------------------------------
+
+export interface CalendarTripSuggestion {
+  id: number;
+  suggestedTitle: string;
+  destination: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  relatedEventIds: string[];
+  dedupeKey: string;
+  status: "pending" | "accepted" | "dismissed";
+  createdAt: string;
+  updatedAt: string;
+}
+
+const listCalendarTripSuggestions = (
+  options?: RequestInit,
+): Promise<CalendarTripSuggestion[]> =>
+  customFetch<CalendarTripSuggestion[]>("/api/travels/calendar-trip-suggestions", {
+    ...options,
+    method: "GET",
+  });
+
+export const getListCalendarTripSuggestionsQueryKey = () =>
+  [`/api/travels/calendar-trip-suggestions`] as const;
+
+export function useListCalendarTripSuggestions<
+  TData = CalendarTripSuggestion[],
+  TError = unknown,
+>(
+  options?: { query?: UseQueryOptions<CalendarTripSuggestion[], TError, TData> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getListCalendarTripSuggestionsQueryKey();
+  const queryFn: QueryFunction<CalendarTripSuggestion[]> = ({ signal }) =>
+    listCalendarTripSuggestions({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    CalendarTripSuggestion[],
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const postScanCalendarTripSuggestionsFn = (): Promise<{ scanned: number; created: number }> =>
+  customFetch<{ scanned: number; created: number }>(
+    "/api/travels/calendar-trip-suggestions/scan",
+    { method: "POST" },
+  );
+
+export function useScanCalendarTripSuggestions(
+  options?: { mutation?: UseMutationOptions<{ scanned: number; created: number }, unknown, void> },
+) {
+  const mutationFn = () => postScanCalendarTripSuggestionsFn();
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const postDismissCalendarTripSuggestionFn = (id: number): Promise<CalendarTripSuggestion> =>
+  customFetch<CalendarTripSuggestion>(
+    `/api/travels/calendar-trip-suggestions/${id}/dismiss`,
+    { method: "POST" },
+  );
+
+export function useDismissCalendarTripSuggestion(
+  options?: { mutation?: UseMutationOptions<CalendarTripSuggestion, unknown, number> },
+) {
+  const mutationFn = (id: number) => postDismissCalendarTripSuggestionFn(id);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const postAcceptCalendarTripSuggestionFn = (
+  id: number,
+  body?: { title?: string; destination?: string },
+): Promise<Trip> =>
+  customFetch<Trip>(`/api/travels/calendar-trip-suggestions/${id}/accept`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body ?? {}),
+  });
+
+export function useAcceptCalendarTripSuggestion(
+  options?: {
+    mutation?: UseMutationOptions<
+      Trip,
+      unknown,
+      { id: number; body?: { title?: string; destination?: string } }
+    >;
+  },
+) {
+  const mutationFn = ({
+    id,
+    body,
+  }: {
+    id: number;
+    body?: { title?: string; destination?: string };
+  }) => postAcceptCalendarTripSuggestionFn(id, body);
   return useMutation({ mutationFn, ...options?.mutation });
 }
 

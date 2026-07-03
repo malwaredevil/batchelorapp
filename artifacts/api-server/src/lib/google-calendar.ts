@@ -157,6 +157,9 @@ export interface CalendarEventInput {
   // Timed: RFC3339 datetime string with offset, e.g. "2026-07-10T14:00:00-04:00".
   start: string;
   end: string;
+  // Google's fixed per-event colorId ("1".."11"), or null/undefined to leave
+  // the event using the calendar's default color.
+  colorId?: string | null;
 }
 
 export interface CalendarEvent {
@@ -167,6 +170,7 @@ export interface CalendarEvent {
   allDay: boolean;
   start: string;
   end: string;
+  colorId: string | null;
   htmlLink?: string;
 }
 
@@ -177,6 +181,7 @@ interface RawGoogleEvent {
   location?: string;
   htmlLink?: string;
   status?: string;
+  colorId?: string;
   start?: { date?: string; dateTime?: string };
   end?: { date?: string; dateTime?: string };
 }
@@ -186,6 +191,7 @@ function toGoogleEventBody(input: CalendarEventInput) {
     summary: input.title,
     description: input.description ?? undefined,
     location: input.location ?? undefined,
+    colorId: input.colorId ?? undefined,
     start: input.allDay
       ? { date: input.start }
       : { dateTime: input.start },
@@ -209,6 +215,7 @@ function fromGoogleEvent(raw: RawGoogleEvent): CalendarEvent {
     end: allDay
       ? subtractDays(raw.end?.date ?? raw.start?.date ?? "", 1)
       : (raw.end?.dateTime ?? raw.start?.dateTime ?? ""),
+    colorId: raw.colorId ?? null,
     htmlLink: raw.htmlLink,
   };
 }

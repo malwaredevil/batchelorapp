@@ -27,6 +27,7 @@ router.get("/family-calendar/status", requireAuth, async (req, res) => {
     calendarSummary: connection?.calendarSummary ?? null,
     ownerGoogleEmail: connection?.googleEmail ?? null,
     isOwner: connection?.userId === req.session.userId,
+    travelColorId: connection?.travelColorId ?? null,
   });
 });
 
@@ -73,6 +74,7 @@ const EventBody = z.object({
   allDay: z.boolean(),
   start: z.string().min(1),
   end: z.string().min(1),
+  colorId: z.string().nullish(),
 });
 
 // POST /family-calendar/events

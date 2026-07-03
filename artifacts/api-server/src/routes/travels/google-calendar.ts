@@ -38,6 +38,7 @@ router.get("/google-calendar/status", requireAuth, async (req, res) => {
     calendarId: connection?.calendarId ?? null,
     calendarSummary: connection?.calendarSummary ?? null,
     isHouseholdShared: connection?.isHouseholdShared ?? false,
+    travelColorId: connection?.travelColorId ?? null,
   });
 });
 
@@ -208,6 +209,53 @@ router.delete("/google-calendar/disconnect", requireAuth, async (req, res) => {
     .delete(travelsGoogleCalendarConnections)
     .where(eq(travelsGoogleCalendarConnections.userId, userId));
   res.status(204).send();
+});
+
+// Google's fixed per-event color palette (colorId "1".."11"). Hardcoded
+// since it never changes and calling Google's /colors endpoint would just
+// be an extra round trip for a static list.
+const GOOGLE_EVENT_COLORS = [
+  { id: "1", name: "Lavender", hex: "#7986cb" },
+  { id: "2", name: "Sage", hex: "#33b679" },
+  { id: "3", name: "Grape", hex: "#8e24aa" },
+  { id: "4", name: "Flamingo", hex: "#e67c73" },
+  { id: "5", name: "Banana", hex: "#f6c026" },
+  { id: "6", name: "Tangerine", hex: "#f5511d" },
+  { id: "7", name: "Peacock", hex: "#039be5" },
+  { id: "8", name: "Graphite", hex: "#616161" },
+  { id: "9", name: "Blueberry", hex: "#3f51b5" },
+  { id: "10", name: "Basil", hex: "#0b8043" },
+  { id: "11", name: "Tomato", hex: "#d60000" },
+] as const;
+
+// GET /google-calendar/colors — Google's fixed event color palette, for the
+// travel-color picker in Settings.
+router.get("/google-calendar/colors", requireAuth, (_req, res) => {
+  res.json(GOOGLE_EVENT_COLORS);
+});
+
+const TravelColorBody = z.object({ travelColorId: z.string().min(1).nullable() });
+
+// PUT /google-calendar/travel-color — choose which event colorId means
+// "Travel" for the household's shared Family Calendar. Stored on the
+// current user's own connection row; only takes effect once that row is
+// also the household-shared one.
+router.put("/google-calendar/travel-color", requireAuth, async (req, res) => {
+  const userId = req.session.userId!;
+  const body = TravelColorBody.parse(req.body);
+
+  const [updated] = await db
+    .update(travelsGoogleCalendarConnections)
+    .set({ travelColorId: body.travelColorId, updatedAt: new Date() })
+    .where(eq(travelsGoogleCalendarConnections.userId, userId))
+    .returning();
+
+  if (!updated) {
+    res.status(409).json({ error: "Google Calendar is not connected." });
+    return;
+  }
+
+  res.json({ travelColorId: updated.travelColorId });
 });
 
 const ShareCalendarBody = z.object({ shared: z.boolean() });

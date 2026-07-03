@@ -226,6 +226,10 @@ export const travelsGoogleCalendarConnections = pgTable(
     // requests proxied through this connection's owner's Google token.
     // Application logic enforces at most one shared connection at a time.
     isHouseholdShared: boolean("is_household_shared").notNull().default(false),
+    // Which of Google's fixed event colorIds ("1".."11") the household has
+    // chosen to mean "Travel". Only meaningful on the row currently marked
+    // isHouseholdShared.
+    travelColorId: text("travel_color_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -239,6 +243,76 @@ export type TravelsGoogleCalendarConnectionRow =
   typeof travelsGoogleCalendarConnections.$inferSelect;
 export type InsertTravelsGoogleCalendarConnection =
   typeof travelsGoogleCalendarConnections.$inferInsert;
+
+// Maps a trip's itinerary content to the Google Calendar event(s) synced for
+// it — one row for the trip-level event, plus one per itinerary activity.
+// itemKey is content-derived (not array index), so reordering/editing
+// itinerary days/activities doesn't desync the mapping; contentHash lets the
+// reconciler skip no-op updates against the Google API.
+export const travelsTripCalendarEvents = pgTable(
+  "travels_trip_calendar_events",
+  {
+    id: serial("id").primaryKey(),
+    tripId: integer("trip_id").notNull(),
+    itemKey: text("item_key").notNull(),
+    kind: text("kind").notNull(), // 'trip' | 'itinerary_activity' | 'suggested_event'
+    contentHash: text("content_hash").notNull(),
+    googleEventId: text("google_event_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("travels_trip_calendar_events_trip_id_idx").on(table.tripId),
+    uniqueIndex("travels_trip_calendar_events_trip_id_item_key_idx").on(
+      table.tripId,
+      table.itemKey,
+    ),
+  ],
+).enableRLS();
+
+export type TravelsTripCalendarEventRow =
+  typeof travelsTripCalendarEvents.$inferSelect;
+export type InsertTravelsTripCalendarEvent =
+  typeof travelsTripCalendarEvents.$inferInsert;
+
+// AI-detected candidate trips found by scanning the Family Calendar for
+// travel-looking events (flights, hotels, etc) not already linked to a
+// trip. dedupeKey makes repeated scans (daily scheduler + manual button)
+// idempotent via ON CONFLICT DO NOTHING.
+export const travelsCalendarTripSuggestions = pgTable(
+  "travels_calendar_trip_suggestions",
+  {
+    id: serial("id").primaryKey(),
+    suggestedTitle: text("suggested_title").notNull(),
+    destination: text("destination"),
+    startDate: date("start_date"),
+    endDate: date("end_date"),
+    relatedEventIds: jsonb("related_event_ids").notNull().default(sql`'[]'::jsonb`),
+    dedupeKey: text("dedupe_key").notNull(),
+    status: text("status").notNull().default("pending"), // 'pending' | 'accepted' | 'dismissed'
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("travels_calendar_trip_suggestions_dedupe_key_idx").on(
+      table.dedupeKey,
+    ),
+    index("travels_calendar_trip_suggestions_status_idx").on(table.status),
+  ],
+).enableRLS();
+
+export type TravelsCalendarTripSuggestionRow =
+  typeof travelsCalendarTripSuggestions.$inferSelect;
+export type InsertTravelsCalendarTripSuggestion =
+  typeof travelsCalendarTripSuggestions.$inferInsert;
 
 // Tracks the Google Calendar event id created for a given reminder in a
 // given connected user's calendar — one reminder can fan out into multiple

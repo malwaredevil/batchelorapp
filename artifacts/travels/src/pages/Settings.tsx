@@ -15,6 +15,8 @@ import {
   useSelectCalendar,
   useDisconnectCalendar,
   useShareCalendar,
+  useListGoogleEventColors,
+  useSetTravelColor,
   useGetAssistantSettings,
   useUpdateAssistantSettings,
   useListHouseholdMemory,
@@ -22,9 +24,11 @@ import {
   getGetTravelsSettingsQueryKey,
   getGetCalendarStatusQueryKey,
   getListCalendarsQueryKey,
+  getListGoogleEventColorsQueryKey,
   getGetAssistantSettingsQueryKey,
   getListHouseholdMemoryQueryKey,
   type CalendarListItem,
+  type GoogleEventColor,
   type ActionConfirmationMode,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -345,6 +349,10 @@ function CalendarSyncCard() {
   const selectCalendar = useSelectCalendar();
   const disconnectCalendar = useDisconnectCalendar();
   const shareCalendar = useShareCalendar();
+  const { data: eventColors = [] } = useListGoogleEventColors<GoogleEventColor[]>({
+    query: { enabled: !!status?.isHouseholdShared, queryKey: getListGoogleEventColorsQueryKey() },
+  });
+  const setTravelColor = useSetTravelColor();
 
   const [selectedId, setSelectedId] = useState<string>("");
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
@@ -401,6 +409,22 @@ function CalendarSyncCard() {
       },
       onError: () => toast.error("Could not disconnect. Please try again."),
     });
+  }
+
+  function handleSetTravelColor(colorId: string) {
+    const nextId = colorId === "none" ? null : colorId;
+    setTravelColor.mutate(
+      { travelColorId: nextId },
+      {
+        onSuccess: () => {
+          qc.invalidateQueries({ queryKey: getGetCalendarStatusQueryKey() });
+          toast.success(
+            nextId ? "Travel color saved" : "Travel color cleared",
+          );
+        },
+        onError: () => toast.error("Could not save travel color. Please try again."),
+      },
+    );
   }
 
   function handleToggleShare(shared: boolean) {
@@ -527,6 +551,40 @@ function CalendarSyncCard() {
               disabled={shareCalendar.isPending || !status.calendarId}
             />
           </div>
+
+          {status.isHouseholdShared && (
+            <div className="space-y-2 rounded-lg border border-card-border bg-muted/30 p-4">
+              <Label htmlFor="travel-color">Travel event color</Label>
+              <p className="text-xs text-muted-foreground">
+                Pick a Google Calendar event color to mean "Travel". Trips and itinerary items
+                synced to the Family Calendar will use this color, and the Family Calendar page
+                can highlight or filter to travel-colored events.
+              </p>
+              <Select
+                value={status.travelColorId ?? "none"}
+                onValueChange={handleSetTravelColor}
+                disabled={setTravelColor.isPending}
+              >
+                <SelectTrigger id="travel-color">
+                  <SelectValue placeholder="Choose a color" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {eventColors.map((color: GoogleEventColor) => (
+                    <SelectItem key={color.id} value={color.id}>
+                      <span className="flex items-center gap-2">
+                        <span
+                          className="inline-block h-3 w-3 rounded-full border border-black/10"
+                          style={{ backgroundColor: color.hex }}
+                        />
+                        {color.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
       ) : (
         <div className="space-y-3">

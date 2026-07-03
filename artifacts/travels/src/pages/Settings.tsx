@@ -403,6 +403,9 @@ function CalendarSyncCard() {
   const [editingColorId, setEditingColorId] = useState<number | null>(null);
   const [addingCalendarId, setAddingCalendarId] = useState<string>("");
   const [newCalendarColor, setNewCalendarColor] = useState(CALENDAR_COLOR_PRESETS[0]);
+  const [manualEntryOpen, setManualEntryOpen] = useState(false);
+  const [manualCalendarId, setManualCalendarId] = useState("");
+  const [manualCalendarSummary, setManualCalendarSummary] = useState("");
 
   const connectedGoogleIds = useMemo(
     () => new Set(connectedCalendars.map((c) => c.googleCalendarId)),
@@ -454,7 +457,7 @@ function CalendarSyncCard() {
     const cal = addableCalendars.find((c) => c.id === addingCalendarId);
     if (!cal) return;
     addCalendar.mutate(
-      { googleCalendarId: cal.id, summary: cal.summary, primaryColor: newCalendarColor },
+      { googleCalendarId: cal.id, summary: cal.summary, primaryColor: newCalendarColor, source: "picked" },
       {
         onSuccess: () => {
           qc.invalidateQueries({ queryKey: getListConnectedCalendarsQueryKey() });
@@ -463,6 +466,26 @@ function CalendarSyncCard() {
           setNewCalendarColor(CALENDAR_COLOR_PRESETS[0]);
         },
         onError: () => toast.error("Could not add calendar. Please try again."),
+      },
+    );
+  }
+
+  function handleAddManualCalendar() {
+    const id = manualCalendarId.trim();
+    const summary = manualCalendarSummary.trim() || id;
+    if (!id) return;
+    addCalendar.mutate(
+      { googleCalendarId: id, summary, primaryColor: newCalendarColor, source: "manual" },
+      {
+        onSuccess: () => {
+          qc.invalidateQueries({ queryKey: getListConnectedCalendarsQueryKey() });
+          toast.success(`Added "${summary}"`);
+          setManualCalendarId("");
+          setManualCalendarSummary("");
+          setNewCalendarColor(CALENDAR_COLOR_PRESETS[0]);
+          setManualEntryOpen(false);
+        },
+        onError: () => toast.error("Could not add calendar. Check the calendar ID and try again."),
       },
     );
   }
@@ -681,6 +704,56 @@ function CalendarSyncCard() {
                   </div>
                 )}
               </>
+            )}
+
+            {manualEntryOpen ? (
+              <div className="space-y-2 pt-2 border-t border-card-border/60 mt-1">
+                <Label htmlFor="manual-calendar-id" className="text-xs">
+                  Calendar ID (from Google Calendar settings)
+                </Label>
+                <Input
+                  id="manual-calendar-id"
+                  placeholder="e.g. abcd1234@group.calendar.google.com"
+                  value={manualCalendarId}
+                  onChange={(e) => setManualCalendarId(e.target.value)}
+                />
+                <Input
+                  placeholder="Display name (optional)"
+                  value={manualCalendarSummary}
+                  onChange={(e) => setManualCalendarSummary(e.target.value)}
+                />
+                <Label className="text-xs">Overlay color</Label>
+                <ColorSwatchPicker value={newCalendarColor} onChange={setNewCalendarColor} />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={handleAddManualCalendar}
+                    disabled={!manualCalendarId.trim() || addCalendar.isPending}
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1.5" />
+                    Add calendar
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setManualEntryOpen(false);
+                      setManualCalendarId("");
+                      setManualCalendarSummary("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground pt-1"
+                onClick={() => setManualEntryOpen(true)}
+              >
+                Or add a calendar by ID instead
+              </button>
             )}
           </div>
         </div>

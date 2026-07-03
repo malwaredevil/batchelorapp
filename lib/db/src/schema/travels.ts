@@ -230,7 +230,7 @@ export const travelsGoogleCalendarConnections = pgTable(
     calendarId: text("calendar_id"),
     calendarSummary: text("calendar_summary"),
     // When true, this connection's calendar is the household's shared
-    // "Family Calendar" — every app_user (whether or not they've connected
+    // Travel Calendar — every app_user (whether or not they've connected
     // their own Google account) can view/add/edit/delete events on it, with
     // requests proxied through this connection's owner's Google token.
     // Application logic enforces at most one shared connection at a time.
@@ -329,10 +329,17 @@ export type TravelsTripCalendarEventRow =
 export type InsertTravelsTripCalendarEvent =
   typeof travelsTripCalendarEvents.$inferInsert;
 
-// AI-detected candidate trips found by scanning the Family Calendar for
+// AI-detected candidate trips found by scanning connected calendars for
 // travel-looking events (flights, hotels, etc) not already linked to a
 // trip. dedupeKey makes repeated scans (daily scheduler + manual button)
 // idempotent via ON CONFLICT DO NOTHING.
+//
+// userId is the owner of the personal connected calendar that produced the
+// suggestion (nullable — legacy rows predating this column have no owner on
+// record). isFromSharedCalendar is true when the suggestion came from the
+// household-wide Travel calendar. Visibility rule enforced at the route
+// layer: a user sees their own personal-calendar suggestions plus every
+// shared-calendar suggestion, never another user's personal-calendar ones.
 export const travelsCalendarTripSuggestions = pgTable(
   "travels_calendar_trip_suggestions",
   {
@@ -344,6 +351,8 @@ export const travelsCalendarTripSuggestions = pgTable(
     relatedEventIds: jsonb("related_event_ids").notNull().default(sql`'[]'::jsonb`),
     dedupeKey: text("dedupe_key").notNull(),
     status: text("status").notNull().default("pending"), // 'pending' | 'accepted' | 'dismissed'
+    userId: integer("user_id"),
+    isFromSharedCalendar: boolean("is_from_shared_calendar").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -356,6 +365,7 @@ export const travelsCalendarTripSuggestions = pgTable(
       table.dedupeKey,
     ),
     index("travels_calendar_trip_suggestions_status_idx").on(table.status),
+    index("travels_calendar_trip_suggestions_user_id_idx").on(table.userId),
   ],
 ).enableRLS();
 

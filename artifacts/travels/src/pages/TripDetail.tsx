@@ -996,9 +996,18 @@ function RemindersSection({ tripId }: { tripId: number }) {
   const [newRecipients, setNewRecipients] = useState<string[]>([]);
   const [customEmail, setCustomEmail] = useState("");
   const [newSync, setNewSync] = useState(true);
+  const [newAlertDays, setNewAlertDays] = useState<number[]>([0]);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
   const { data: calendarStatus } = useGetCalendarStatus();
-  const familyCalendarConnected = !!calendarStatus?.connected;
+  const travelCalendarConnected = !!calendarStatus?.connected;
+  const ALERT_DAY_OPTIONS = [0, 1, 3, 7];
+
+  function toggleNewAlertDay(day: number) {
+    setNewAlertDays((prev) => {
+      const next = prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day];
+      return next.length > 0 ? next : [0];
+    });
+  }
 
   function toggleRecipient(email: string) {
     setNewRecipients((prev) =>
@@ -1108,11 +1117,31 @@ function RemindersSection({ tripId }: { tripId: number }) {
               )}
             </div>
 
-            {familyCalendarConnected && (
-              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer pt-1">
-                <Checkbox checked={newSync} onCheckedChange={(v) => setNewSync(!!v)} />
-                Add to the family Google Calendar
-              </label>
+            {travelCalendarConnected && (
+              <div className="space-y-1.5 pt-1">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <Checkbox checked={newSync} onCheckedChange={(v) => setNewSync(!!v)} />
+                  Add to the Travel Calendar
+                </label>
+                {newSync && (
+                  <div className="pl-6 flex flex-wrap gap-1.5">
+                    {ALERT_DAY_OPTIONS.map((day) => (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => toggleNewAlertDay(day)}
+                        className={`text-xs rounded-full px-2.5 py-1 border transition-colors ${
+                          newAlertDays.includes(day)
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-background text-muted-foreground border-card-border hover:border-primary/50"
+                        }`}
+                      >
+                        {day === 0 ? "On the day" : `${day} day${day > 1 ? "s" : ""} before`}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
 
             <div className="flex gap-2 pt-1">
@@ -1127,6 +1156,7 @@ function RemindersSection({ tripId }: { tripId: number }) {
                       dueDate: newDue || undefined,
                       recipientEmails: newRecipients,
                       syncToCalendar: newSync,
+                      alertDaysBefore: newAlertDays,
                     },
                   });
                 }}
@@ -1224,7 +1254,7 @@ function ReminderRow({
       {reminder.syncToCalendar && reminder.googleEventId && (
         <span
           className="flex items-center gap-1 text-xs text-muted-foreground shrink-0"
-          title="Synced to the family Google Calendar"
+          title="Synced to the Travel Calendar"
         >
           <CalendarCheck className="w-3 h-3" />
         </span>

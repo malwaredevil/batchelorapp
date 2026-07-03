@@ -926,6 +926,7 @@ export interface Reminder {
   recipientEmails: string[];
   syncToCalendar: boolean;
   googleEventId?: string | null;
+  alertDaysBefore?: number[];
   createdAt: string;
 }
 
@@ -935,6 +936,7 @@ export interface CreateReminderBody {
   dueDate?: string;
   recipientEmails?: string[];
   syncToCalendar?: boolean;
+  alertDaysBefore?: number[];
 }
 
 export interface UpdateReminderBody {
@@ -944,6 +946,7 @@ export interface UpdateReminderBody {
   done?: boolean;
   recipientEmails?: string[];
   syncToCalendar?: boolean;
+  alertDaysBefore?: number[];
 }
 
 const listReminders = (tripId: number, options?: RequestInit): Promise<Reminder[]> =>

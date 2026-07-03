@@ -577,14 +577,19 @@ router.patch("/trips/:id/documents/:docId", async (req, res) => {
   res.json(updated);
 });
 
-router.post("/trips/:id/documents/:docId/rescan", async (req, res) => {
-  const tripId = parseInt(req.params.id, 10);
-  const docId = parseInt(req.params.docId, 10);
-  if (isNaN(tripId) || isNaN(docId)) {
-    res.status(400).json({ error: "Invalid id" });
-    return;
-  }
+export type RescanResult =
+  | { ok: true; document: typeof travelsTripDocuments.$inferSelect }
+  | { ok: false; status: number; error: string };
 
+// Shared by the hand-written route below and the elAIne "rescan_document"
+// assistant action so both re-analysis paths stay in lockstep. Never let a
+// caller mutate a document outside its own tripId — this only looks up the
+// document scoped to the tripId that was passed in.
+export async function rescanTripDocument(
+  tripId: number,
+  docId: number,
+  log: { warn: (obj: unknown, msg: string) => void },
+): Promise<RescanResult> {
   const [existing] = await db
     .select()
     .from(travelsTripDocuments)
@@ -596,8 +601,7 @@ router.post("/trips/:id/documents/:docId/rescan", async (req, res) => {
     );
 
   if (!existing) {
-    res.status(404).json({ error: "Not found" });
-    return;
+    return { ok: false, status: 404, error: "Not found" };
   }
 
   const { buffer, contentType } = await downloadDocument(existing.storagePath);
@@ -611,13 +615,11 @@ router.post("/trips/:id/documents/:docId/rescan", async (req, res) => {
     } else if (isImage) {
       freshData = await extractFromImage(buffer, contentType);
     } else {
-      res.status(400).json({ error: "Unsupported document type for rescan" });
-      return;
+      return { ok: false, status: 400, error: "Unsupported document type for rescan" };
     }
   } catch (err) {
-    req.log.warn({ err }, "OCR re-extraction failed");
-    res.status(502).json({ error: "AI re-analysis failed, please try again" });
-    return;
+    log.warn({ err }, "OCR re-extraction failed");
+    return { ok: false, status: 502, error: "AI re-analysis failed, please try again" };
   }
 
   const existingData =
@@ -650,10 +652,27 @@ router.post("/trips/:id/documents/:docId/rescan", async (req, res) => {
   try {
     await syncItineraryFromDocument(tripId, docId, merged);
   } catch (err) {
-    req.log.warn({ err }, "Failed to re-sync itinerary after rescan");
+    log.warn({ err }, "Failed to re-sync itinerary after rescan");
   }
 
-  res.json(updated);
+  return { ok: true, document: updated! };
+}
+
+router.post("/trips/:id/documents/:docId/rescan", async (req, res) => {
+  const tripId = parseInt(req.params.id, 10);
+  const docId = parseInt(req.params.docId, 10);
+  if (isNaN(tripId) || isNaN(docId)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  const result = await rescanTripDocument(tripId, docId, req.log);
+  if (!result.ok) {
+    res.status(result.status).json({ error: result.error });
+    return;
+  }
+
+  res.json(result.document);
 });
 
 router.delete("/trips/:id/documents/:docId", async (req, res) => {

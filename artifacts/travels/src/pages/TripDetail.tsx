@@ -1557,7 +1557,7 @@ export default function TripDetail({ id }: { id: number }) {
       }).filter((entry): entry is string => entry !== null);
       const type = doc.documentType ? doc.documentType.replace(/_/g, " ") : "document";
       const name = doc.originalFilename ? ` ("${doc.originalFilename}")` : "";
-      return `- ${type}${name}${fields.length > 0 ? `: ${fields.join("; ")}` : " (no extracted data yet)"}`;
+      return `- ${type}${name} [docId: ${doc.id}]${fields.length > 0 ? `: ${fields.join("; ")}` : " (no extracted data yet)"}`;
     })
     .join("\n");
 

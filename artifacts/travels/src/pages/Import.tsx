@@ -3,7 +3,7 @@ import { Upload, FileSpreadsheet, Check, AlertCircle, ArrowRight, Loader2 } from
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
+import * as XLSX from "@e965/xlsx";
 import { useQueryClient } from "@tanstack/react-query";
 import { getListTripsQueryKey, getGetTravelsStatsQueryKey, getListWishlistQueryKey } from "@workspace/api-client-react";
 

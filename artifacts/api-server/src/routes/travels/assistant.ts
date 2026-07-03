@@ -22,6 +22,7 @@ import { deleteDocument } from "../../lib/travels-storage";
 import {
   getConnectedTargetUserIds,
   syncReminderCalendarEvents,
+  deleteAllReminderCalendarEvents,
 } from "./reminders";
 import { generateItineraryForTrip, ItineraryActionError } from "./ai";
 
@@ -199,6 +200,7 @@ const AddReminderActionPayload = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
   dueDate: z.string().max(20).optional(),
+  recipientEmails: z.array(z.email()).max(20).optional(),
   syncToCalendar: z.boolean().optional(),
 });
 
@@ -206,6 +208,22 @@ const SyncReminderToCalendarActionPayload = z.object({
   tripId: z.number().int().positive(),
   reminderId: z.number().int().positive(),
   syncToCalendar: z.boolean().optional(),
+});
+
+const EditReminderActionPayload = z.object({
+  tripId: z.number().int().positive(),
+  reminderId: z.number().int().positive(),
+  title: z.string().min(1).max(200).optional(),
+  description: z.string().max(2000).optional(),
+  dueDate: z.string().max(20).nullable().optional(),
+  done: z.boolean().optional(),
+  recipientEmails: z.array(z.email()).max(20).optional(),
+  syncToCalendar: z.boolean().optional(),
+});
+
+const DeleteReminderActionPayload = z.object({
+  tripId: z.number().int().positive(),
+  reminderId: z.number().int().positive(),
 });
 
 const AddItineraryDayActionPayload = z.object({
@@ -255,6 +273,8 @@ const ActionBody = z.discriminatedUnion("type", [
     type: z.literal("sync_reminder_to_calendar"),
     payload: SyncReminderToCalendarActionPayload,
   }),
+  z.object({ type: z.literal("edit_reminder"), payload: EditReminderActionPayload }),
+  z.object({ type: z.literal("delete_reminder"), payload: DeleteReminderActionPayload }),
   z.object({
     type: z.literal("add_itinerary_day"),
     payload: AddItineraryDayActionPayload,
@@ -331,6 +351,26 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
       return action.payload.syncToCalendar === false
         ? `Stop syncing ${name} to the calendar`
         : `Sync ${name} to the calendar`;
+    }
+    case "edit_reminder": {
+      const reminder = await getReminderLabelInfo(action.payload.reminderId);
+      const name = reminder ? `"${reminder.title}"` : "this reminder";
+      const changes: string[] = [];
+      if (action.payload.title !== undefined) changes.push(`title to "${action.payload.title}"`);
+      if (action.payload.description !== undefined) changes.push(`description`);
+      if (action.payload.dueDate !== undefined)
+        changes.push(action.payload.dueDate ? `due date to ${action.payload.dueDate}` : "clear the due date");
+      if (action.payload.done !== undefined)
+        changes.push(action.payload.done ? "mark as done" : "mark as not done");
+      if (action.payload.recipientEmails !== undefined) changes.push(`recipients`);
+      if (action.payload.syncToCalendar !== undefined)
+        changes.push(action.payload.syncToCalendar ? "sync to the calendar" : "stop syncing to the calendar");
+      return `Update ${name}${changes.length ? `: ${changes.join(", ")}` : ""}`;
+    }
+    case "delete_reminder": {
+      const reminder = await getReminderLabelInfo(action.payload.reminderId);
+      const name = reminder ? `"${reminder.title}"` : "this reminder";
+      return `Delete ${name}`;
     }
     case "add_itinerary_day": {
       const trip = await getTripLabelInfo(action.payload.tripId);
@@ -562,7 +602,7 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
         description: payload.description ?? null,
         dueDate: payload.dueDate ?? null,
         done: false,
-        recipientEmails: [],
+        recipientEmails: payload.recipientEmails ?? [],
         syncToCalendar,
       })
       .returning();
@@ -614,6 +654,73 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     );
 
     return { status: 200, body: { type: "sync_reminder_to_calendar", result: row } };
+  }) as ActionExecutor,
+
+  edit_reminder: (async (payload: z.infer<typeof EditReminderActionPayload>, userId: number) => {
+    const [existing] = await db
+      .select()
+      .from(travelsReminders)
+      .where(eq(travelsReminders.id, payload.reminderId));
+    if (
+      !existing ||
+      existing.tripId !== payload.tripId ||
+      existing.userId !== userId
+    ) {
+      return { status: 404, body: { error: "Reminder not found" } };
+    }
+
+    const updates: Partial<typeof travelsReminders.$inferInsert> = {};
+    if (payload.title !== undefined) updates.title = payload.title;
+    if (payload.description !== undefined) updates.description = payload.description;
+    if (payload.dueDate !== undefined) updates.dueDate = payload.dueDate;
+    if (payload.done !== undefined) updates.done = payload.done;
+    if (payload.recipientEmails !== undefined) updates.recipientEmails = payload.recipientEmails;
+    if (payload.syncToCalendar !== undefined) updates.syncToCalendar = payload.syncToCalendar;
+
+    const [row] = await db
+      .update(travelsReminders)
+      .set(updates)
+      .where(eq(travelsReminders.id, payload.reminderId))
+      .returning();
+
+    const [trip] = await db
+      .select({ title: travelsTrips.title })
+      .from(travelsTrips)
+      .where(eq(travelsTrips.id, row.tripId));
+
+    if (row.syncToCalendar && row.dueDate) {
+      const targetUserIds = await getConnectedTargetUserIds(row.userId, row.recipientEmails);
+      await syncReminderCalendarEvents(
+        row.id,
+        trip?.title ?? "Trip",
+        row.title,
+        row.dueDate,
+        targetUserIds,
+      );
+    } else {
+      await deleteAllReminderCalendarEvents(row.id);
+    }
+
+    return { status: 200, body: { type: "edit_reminder", result: row } };
+  }) as ActionExecutor,
+
+  delete_reminder: (async (payload: z.infer<typeof DeleteReminderActionPayload>, userId: number) => {
+    const [existing] = await db
+      .select()
+      .from(travelsReminders)
+      .where(eq(travelsReminders.id, payload.reminderId));
+    if (
+      !existing ||
+      existing.tripId !== payload.tripId ||
+      existing.userId !== userId
+    ) {
+      return { status: 404, body: { error: "Reminder not found" } };
+    }
+
+    await deleteAllReminderCalendarEvents(payload.reminderId);
+    await db.delete(travelsReminders).where(eq(travelsReminders.id, payload.reminderId));
+
+    return { status: 200, body: { type: "delete_reminder", result: { id: payload.reminderId } } };
   }) as ActionExecutor,
 
   add_itinerary_day: (async (
@@ -838,7 +945,7 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "add_reminder",
       description:
-        'Propose creating a new reminder for a trip, e.g. "remind me to check in for our flight" or "remind me to book the hotel by Friday". Only call this if the trip\'s numeric id is visible on screen; never guess an id — offer to open the trip instead if you don\'t have one. If the user gives (or you can see on screen) a specific date the reminder is about, set dueDate to that exact date; never invent a date. syncToCalendar defaults to true (syncs to the family Google Calendar automatically if connected) — only set it to false if the user explicitly asks not to add it to the calendar.',
+        'Propose creating a new reminder for a trip, e.g. "remind me to check in for our flight" or "remind me to book the hotel by Friday". Only call this if the trip\'s numeric id is visible on screen; never guess an id — offer to open the trip instead if you don\'t have one. If the user gives (or you can see on screen) a specific date the reminder is about, set dueDate to that exact date; never invent a date. If the user asks to also notify/email someone (a connected household member), include their email(s) in recipientEmails; never invent an email address you can\'t see on screen or that the user didn\'t give you. syncToCalendar defaults to true (syncs to the family Google Calendar automatically if connected) — only set it to false if the user explicitly asks not to add it to the calendar.',
       parameters: {
         type: "object",
         properties: {
@@ -846,6 +953,11 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           title: { type: "string", description: "Short reminder title" },
           description: { type: "string" },
           dueDate: { type: "string", description: "YYYY-MM-DD" },
+          recipientEmails: {
+            type: "array",
+            items: { type: "string" },
+            description: "Email addresses to also notify, if the user asked for that",
+          },
           syncToCalendar: { type: "boolean" },
         },
         required: ["tripId", "title"],
@@ -864,6 +976,48 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           tripId: { type: "integer" },
           reminderId: { type: "integer" },
           syncToCalendar: { type: "boolean" },
+        },
+        required: ["tripId", "reminderId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "edit_reminder",
+      description:
+        'Propose editing an EXISTING reminder, e.g. "change that reminder\'s due date to next Friday", "rename it to...", "mark it as done", or "also email that reminder to mom". Only call this if the reminder\'s numeric id is visible on screen (look for "reminderId: <number>" in the reminders listed for this trip); never guess an id — if you can\'t see it, ask which reminder they mean. Only include the fields the user actually asked to change; leave everything else out. Never invent a due date or email address you can\'t see on screen or that the user didn\'t give you. Setting recipientEmails replaces the full list of recipients, so if the user asks to add one person, include the existing recipients too if you can see them on screen.',
+      parameters: {
+        type: "object",
+        properties: {
+          tripId: { type: "integer" },
+          reminderId: { type: "integer" },
+          title: { type: "string" },
+          description: { type: "string" },
+          dueDate: { type: "string", description: "YYYY-MM-DD" },
+          done: { type: "boolean" },
+          recipientEmails: {
+            type: "array",
+            items: { type: "string" },
+            description: "Full replacement list of emails to notify",
+          },
+          syncToCalendar: { type: "boolean" },
+        },
+        required: ["tripId", "reminderId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_reminder",
+      description:
+        'Propose permanently deleting an EXISTING reminder, e.g. "delete that reminder" or "remove the flight check-in reminder". This also removes it from the calendar if it was synced. Only call this if the reminder\'s numeric id is visible on screen (look for "reminderId: <number>" in the reminders listed for this trip); never guess an id — if you can\'t see it, ask which reminder they mean.',
+      parameters: {
+        type: "object",
+        properties: {
+          tripId: { type: "integer" },
+          reminderId: { type: "integer" },
         },
         required: ["tripId", "reminderId"],
       },
@@ -1165,7 +1319,7 @@ TOOLS: You have tools available for navigation suggestions, remembering househol
 
 CONFIRMATION MODE: This user's current mode for confirming proposed actions is "${actionConfirmationMode}" — ${CONFIRMATION_MODE_EXPLANATION[actionConfirmationMode]} The three modes are: ${Object.values(CONFIRMATION_MODE_EXPLANATION).join(" | ")} If the user asks how you confirm actions, or asks to change it (e.g. "just do it automatically", "ask me one at a time", "show me everything together"), explain the modes in your visible reply and call ${SET_MODE_TOOL_NAME} once they've decided — never call it just to describe the options. Mention that they can also change this anytime from Settings.
 
-REMINDERS: Use add_reminder for requests like "remind me to check in for our flight" or "remind me to book the hotel by Friday" — it creates a new reminder and syncs it to the calendar by default. Use sync_reminder_to_calendar only to toggle calendar sync on or off for a reminder that already exists and whose numeric id you can see on screen (look for "reminderId: <number>" in the reminders listed for the current trip); never use it to create a reminder.
+REMINDERS: Use add_reminder for requests like "remind me to check in for our flight" or "remind me to book the hotel by Friday" — it creates a new reminder and syncs it to the calendar by default; include recipientEmails only if the user asked to also notify someone. Use sync_reminder_to_calendar only to toggle calendar sync on or off for a reminder that already exists and whose numeric id you can see on screen (look for "reminderId: <number>" in the reminders listed for the current trip); never use it to create a reminder. Use edit_reminder for changes to an existing reminder (title, description, due date, done state, recipients, or calendar sync) — only include the fields the user asked to change, and never guess a reminder id. Use delete_reminder to permanently remove an existing reminder (also removes its calendar events); never guess a reminder id for either.
 
 ITINERARY: Use add_itinerary_day for requests like "add a day trip to Kyoto on the 14th" — it appends a brand-new day to the trip's itinerary. Use regenerate_itinerary_day for requests like "regenerate day 3" or "come up with a new plan for that day" — it re-runs AI planning for ONE existing day and replaces its activities, using balanced-pace, general-interest defaults since it can't see any per-session style/interest picks the user made in the UI. Only use regenerate_itinerary_day on a day number you can see listed on screen (e.g. "Day 3"); never guess a day number, and never use it to create a new day (use add_itinerary_day for that).
 

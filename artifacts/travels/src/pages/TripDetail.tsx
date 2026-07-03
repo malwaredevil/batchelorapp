@@ -1586,7 +1586,11 @@ export default function TripDetail({ id }: { id: number }) {
               (r) =>
                 `"${r.title}" (reminderId: ${r.id}${r.dueDate ? `, due ${r.dueDate}` : ", no due date"}, ${
                   r.done ? "done" : "not done"
-                }, ${r.syncToCalendar ? "synced to calendar" : "NOT synced to calendar"})`,
+                }, ${r.syncToCalendar ? "synced to calendar" : "NOT synced to calendar"}, recipients: ${
+                  r.recipientEmails && r.recipientEmails.length > 0
+                    ? r.recipientEmails.join(", ")
+                    : "none"
+                })`,
             )
             .join("; ")}.`
         : "No reminders yet for this trip.") +

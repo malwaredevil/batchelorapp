@@ -27,7 +27,7 @@ router.post("/calendar-trip-suggestions/scan", async (req, res) => {
     res.json(result);
   } catch (err) {
     logger.error({ err, userId: req.session.userId }, "calendar-trip-suggestions: manual scan failed");
-    res.status(502).json({ error: "Could not scan the Family Calendar right now." });
+    res.status(502).json({ error: "Could not scan your connected calendars right now." });
   }
 });
 

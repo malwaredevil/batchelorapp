@@ -1,7 +1,8 @@
-// Reconciles a trip's itinerary content against the household's shared
-// Family Calendar: one Google event for the trip overall, plus one per
-// itinerary activity (flights, hotel check-in/out, activities), all tagged
-// with the household's chosen "Travel" colorId.
+// Reconciles a trip's itinerary content against the shared Travel Calendar
+// (the one connected calendar with isTravelCalendar = true): one Google
+// event for the trip overall, plus one per itinerary activity (flights,
+// hotel check-in/out, activities). Being on the dedicated Travel calendar
+// is itself the "this is a trip" signal — no colorId tagging needed.
 //
 // Itinerary days/activities have no stable ids (they're a plain JSON array
 // edited in place), so this maps each item to a content-derived `itemKey`
@@ -17,7 +18,7 @@ import crypto from "node:crypto";
 import { eq, and } from "drizzle-orm";
 import { db, travelsTripCalendarEvents, travelsTrips } from "@workspace/db";
 import {
-  getHouseholdCalendarConnection,
+  getTravelCalendarConnection,
   getValidAccessToken,
 } from "./google-calendar-tokens";
 import {
@@ -85,10 +86,7 @@ function addHourIso(iso: string): string {
   return d.toISOString();
 }
 
-function buildDesiredItems(
-  trip: TripForCalendarSync,
-  travelColorId: string | null,
-): DesiredItem[] {
+function buildDesiredItems(trip: TripForCalendarSync): DesiredItem[] {
   const items: DesiredItem[] = [];
 
   if (trip.startDate && trip.endDate) {
@@ -100,7 +98,7 @@ function buildDesiredItems(
         allDay: true,
         start: trip.startDate,
         end: trip.endDate,
-        colorId: travelColorId,
+        colorId: null,
       },
     });
   }
@@ -126,7 +124,7 @@ function buildDesiredItems(
           allDay,
           start,
           end,
-          colorId: travelColorId,
+          colorId: null,
         },
       });
     }
@@ -143,12 +141,12 @@ function buildDesiredItems(
  */
 export async function syncTripCalendarEvents(trip: TripForCalendarSync): Promise<void> {
   try {
-    const connection = await getHouseholdCalendarConnection();
-    if (!connection?.calendarId) return;
+    const connection = await getTravelCalendarConnection();
+    if (!connection) return;
     const accessToken = await getValidAccessToken(connection.userId);
     if (!accessToken) return;
 
-    const desired = buildDesiredItems(trip, connection.travelColorId);
+    const desired = buildDesiredItems(trip);
     const desiredByKey = new Map(desired.map((d) => [d.itemKey, d]));
 
     const existing = await db
@@ -160,7 +158,7 @@ export async function syncTripCalendarEvents(trip: TripForCalendarSync): Promise
     // Delete mapping rows (and their Google events) for items no longer present.
     for (const row of existing) {
       if (!desiredByKey.has(row.itemKey)) {
-        await deleteCalendarEvent(accessToken, connection.calendarId, row.googleEventId).catch(
+        await deleteCalendarEvent(accessToken, connection.googleCalendarId, row.googleEventId).catch(
           (err: unknown) =>
             logger.warn({ err, tripId: trip.id, itemKey: row.itemKey }, "trip-calendar-sync: delete failed"),
         );
@@ -173,7 +171,7 @@ export async function syncTripCalendarEvents(trip: TripForCalendarSync): Promise
       const hash = contentHash(item.input);
       const existingRow = existingByKey.get(item.itemKey);
       if (!existingRow) {
-        const event = await createCalendarEvent(accessToken, connection.calendarId, item.input);
+        const event = await createCalendarEvent(accessToken, connection.googleCalendarId, item.input);
         await db.insert(travelsTripCalendarEvents).values({
           tripId: trip.id,
           itemKey: item.itemKey,
@@ -184,7 +182,7 @@ export async function syncTripCalendarEvents(trip: TripForCalendarSync): Promise
       } else if (existingRow.contentHash !== hash) {
         await updateCalendarEvent(
           accessToken,
-          connection.calendarId,
+          connection.googleCalendarId,
           existingRow.googleEventId,
           item.input,
         );
@@ -209,7 +207,7 @@ function localTimeOfIso(iso: string): string {
 }
 
 /**
- * Reverse-sync: when a user edits a Family Calendar event that was
+ * Reverse-sync: when a user edits a Travel Calendar event that was
  * originally generated from a trip/itinerary (has a row in
  * travelsTripCalendarEvents), push the edited title/dates/description back
  * into the owning trip's Supabase record so the two stay consistent.
@@ -323,20 +321,18 @@ export async function applyCalendarEventEditToTrip(
  */
 export async function deleteTripCalendarEvents(tripId: number): Promise<void> {
   try {
-    const connection = await getHouseholdCalendarConnection();
+    const connection = await getTravelCalendarConnection();
     const rows = await db
       .select()
       .from(travelsTripCalendarEvents)
       .where(eq(travelsTripCalendarEvents.tripId, tripId));
     if (rows.length === 0) return;
 
-    const accessToken = connection?.calendarId
-      ? await getValidAccessToken(connection.userId)
-      : null;
+    const accessToken = connection ? await getValidAccessToken(connection.userId) : null;
 
-    if (accessToken && connection?.calendarId) {
+    if (accessToken && connection) {
       for (const row of rows) {
-        await deleteCalendarEvent(accessToken, connection.calendarId, row.googleEventId).catch(
+        await deleteCalendarEvent(accessToken, connection.googleCalendarId, row.googleEventId).catch(
           (err: unknown) =>
             logger.warn({ err, tripId, itemKey: row.itemKey }, "trip-calendar-sync: delete-on-cleanup failed"),
         );

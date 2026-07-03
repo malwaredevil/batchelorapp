@@ -1,7 +1,8 @@
 /**
- * AI scan of the household Family Calendar for travel-looking events
- * (flights, hotels, "Trip to ...", etc) that aren't already linked to a
- * trip, surfaced to the user as accept/dismiss suggestion cards instead of
+ * AI scan across every connected calendar (every user's personal calendars
+ * plus the shared Travel calendar) for travel-looking events (flights,
+ * hotels, "Trip to ...", etc) that aren't already linked to a trip,
+ * surfaced to the user as accept/dismiss suggestion cards instead of
  * silently creating trips. Runs daily in-process plus on-demand via a
  * manual "Scan now" button (POST /travels-calendar-scan).
  *
@@ -16,10 +17,7 @@ import {
   travelsCalendarTripSuggestions,
   travelsTripCalendarEvents,
 } from "@workspace/db";
-import {
-  getHouseholdCalendarConnection,
-  getValidAccessToken,
-} from "./google-calendar-tokens";
+import { getAllConnectedCalendars, getValidAccessToken } from "./google-calendar-tokens";
 import { listCalendarEvents, type CalendarEvent } from "./google-calendar";
 import { callModel, MODELS } from "./ai-client";
 import { logger } from "./logger";
@@ -102,46 +100,51 @@ Only include a trip if at least one relatedEventIds entry is present. If no even
 }
 
 /**
- * Scan the household Family Calendar for travel-looking events not already
- * linked to a trip, ask the AI to cluster them into candidate trips, and
- * store any new candidates as pending suggestions. Best-effort — logs and
- * returns rather than throwing, so it's always safe to call from a
- * scheduler or a manual "Scan now" endpoint.
+ * Scan every connected calendar (every user's personal calendars plus the
+ * shared Travel calendar) for travel-looking events not already linked to a
+ * trip, ask the AI to cluster them into candidate trips, and store any new
+ * candidates as pending suggestions. Best-effort — logs and returns rather
+ * than throwing, so it's always safe to call from a scheduler or a manual
+ * "Scan now" endpoint.
  */
 export async function scanCalendarForTripSuggestions(): Promise<{
   scanned: number;
   created: number;
 }> {
-  const connection = await getHouseholdCalendarConnection();
-  if (!connection?.calendarId) return { scanned: 0, created: 0 };
-
-  const accessToken = await getValidAccessToken(connection.userId);
-  if (!accessToken) return { scanned: 0, created: 0 };
+  const calendars = await getAllConnectedCalendars();
+  if (calendars.length === 0) return { scanned: 0, created: 0 };
 
   const now = new Date();
   const timeMin = new Date(now.getTime() - SCAN_WINDOW_DAYS_PAST * 86_400_000).toISOString();
   const timeMax = new Date(now.getTime() + SCAN_WINDOW_DAYS_FUTURE * 86_400_000).toISOString();
 
-  let events: CalendarEvent[];
-  try {
-    events = await listCalendarEvents(accessToken, connection.calendarId, timeMin, timeMax);
-  } catch (err) {
-    logger.warn({ err }, "travels-calendar-scan: could not list events");
-    return { scanned: 0, created: 0 };
+  const accessTokenByUser = new Map<number, string | null>();
+  const events: CalendarEvent[] = [];
+  for (const cal of calendars) {
+    let accessToken = accessTokenByUser.get(cal.userId);
+    if (accessToken === undefined) {
+      accessToken = await getValidAccessToken(cal.userId);
+      accessTokenByUser.set(cal.userId, accessToken);
+    }
+    if (!accessToken) continue;
+    try {
+      const calEvents = await listCalendarEvents(accessToken, cal.googleCalendarId, timeMin, timeMax);
+      events.push(...calEvents);
+    } catch (err) {
+      logger.warn({ err, calendarId: cal.googleCalendarId }, "travels-calendar-scan: could not list events");
+    }
   }
 
-  // Skip events already tagged as Travel or already linked to a trip.
+  // Skip events already linked to a trip. Being on the dedicated Travel
+  // calendar no longer needs a colorId check — a trip-sync-created event on
+  // that calendar is already linked via travels_trip_calendar_events.
   const linkedEventIds = new Set(
     (await db.select({ googleEventId: travelsTripCalendarEvents.googleEventId }).from(
       travelsTripCalendarEvents,
     )).map((r) => r.googleEventId),
   );
 
-  const candidates = events.filter(
-    (e) =>
-      !linkedEventIds.has(e.id) &&
-      (!connection.travelColorId || e.colorId !== connection.travelColorId),
-  );
+  const candidates = events.filter((e) => !linkedEventIds.has(e.id));
 
   if (candidates.length === 0) return { scanned: events.length, created: 0 };
 

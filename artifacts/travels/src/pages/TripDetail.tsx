@@ -998,7 +998,7 @@ function RemindersSection({ tripId }: { tripId: number }) {
   const [newSync, setNewSync] = useState(true);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
   const { data: calendarStatus } = useGetCalendarStatus();
-  const familyCalendarConnected = !!calendarStatus?.connected && !!calendarStatus?.calendarId;
+  const familyCalendarConnected = !!calendarStatus?.connected;
 
   function toggleRecipient(email: string) {
     setNewRecipients((prev) =>

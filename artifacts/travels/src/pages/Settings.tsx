@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Mail, Bell, Save, X, Send, CalendarDays, CheckCircle2, XCircle, LogIn, LogOut, Trash2 } from "lucide-react";
+import { Mail, Bell, Save, X, Send, CalendarDays, CheckCircle2, XCircle, LogIn, LogOut, Trash2, Plane, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,11 +12,13 @@ import {
   useSendTestReminderEmail,
   useGetCalendarStatus,
   useListCalendars,
-  useSelectCalendar,
   useDisconnectCalendar,
-  useShareCalendar,
-  useListGoogleEventColors,
-  useSetTravelColor,
+  useListConnectedCalendars,
+  useAddConnectedCalendar,
+  useUpdateConnectedCalendar,
+  useDeleteConnectedCalendar,
+  useSetTravelCalendar,
+  useGetFamilyCalendarStatus,
   useGetAssistantSettings,
   useUpdateAssistantSettings,
   useListHouseholdMemory,
@@ -24,11 +26,12 @@ import {
   getGetTravelsSettingsQueryKey,
   getGetCalendarStatusQueryKey,
   getListCalendarsQueryKey,
-  getListGoogleEventColorsQueryKey,
+  getListConnectedCalendarsQueryKey,
+  getGetFamilyCalendarStatusQueryKey,
   getGetAssistantSettingsQueryKey,
   getListHouseholdMemoryQueryKey,
   type CalendarListItem,
-  type GoogleEventColor,
+  type ConnectedCalendar,
   type ActionConfirmationMode,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -340,60 +343,95 @@ function ElaineSettingsCard() {
   );
 }
 
+const CALENDAR_COLOR_PRESETS = [
+  "#2563eb", // blue
+  "#16a34a", // green
+  "#db2777", // pink
+  "#9333ea", // purple
+  "#0891b2", // cyan
+  "#ea580c", // orange
+  "#4f46e5", // indigo
+  "#65a30d", // lime
+  "#dc2626", // red
+  "#0d9488", // teal
+];
+
+function ColorSwatchPicker({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (hex: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {CALENDAR_COLOR_PRESETS.map((hex) => (
+        <button
+          key={hex}
+          type="button"
+          disabled={disabled}
+          onClick={() => onChange(hex)}
+          className={`h-6 w-6 rounded-full border-2 ${value === hex ? "border-foreground" : "border-transparent"}`}
+          style={{ backgroundColor: hex }}
+          aria-label={hex}
+        />
+      ))}
+    </div>
+  );
+}
+
 function CalendarSyncCard() {
   const qc = useQueryClient();
   const { data: status, isLoading: statusLoading } = useGetCalendarStatus();
   const { data: calendars = [], isLoading: calendarsLoading } = useListCalendars<CalendarListItem[]>({
     query: { enabled: !!status?.connected, queryKey: getListCalendarsQueryKey() },
   });
-  const selectCalendar = useSelectCalendar();
-  const disconnectCalendar = useDisconnectCalendar();
-  const shareCalendar = useShareCalendar();
-  const { data: eventColors = [] } = useListGoogleEventColors<GoogleEventColor[]>({
-    query: { enabled: !!status?.isHouseholdShared, queryKey: getListGoogleEventColorsQueryKey() },
+  const { data: connectedCalendars = [] } = useListConnectedCalendars({
+    query: { enabled: !!status?.connected, queryKey: getListConnectedCalendarsQueryKey() },
   });
-  const setTravelColor = useSetTravelColor();
+  const { data: travelStatus } = useGetFamilyCalendarStatus();
+  const disconnectCalendar = useDisconnectCalendar();
+  const addCalendar = useAddConnectedCalendar();
+  const updateCalendar = useUpdateConnectedCalendar();
+  const deleteCalendar = useDeleteConnectedCalendar();
+  const setTravelCalendar = useSetTravelCalendar();
 
-  const [selectedId, setSelectedId] = useState<string>("");
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<number | null>(null);
+  const [editingColorId, setEditingColorId] = useState<number | null>(null);
+  const [addingCalendarId, setAddingCalendarId] = useState<string>("");
+  const [newCalendarColor, setNewCalendarColor] = useState(CALENDAR_COLOR_PRESETS[0]);
 
-  useEffect(() => {
-    if (status?.calendarId) setSelectedId(status.calendarId);
-  }, [status?.calendarId]);
+  const connectedGoogleIds = useMemo(
+    () => new Set(connectedCalendars.map((c) => c.googleCalendarId)),
+    [connectedCalendars],
+  );
+  const addableCalendars = useMemo(
+    () => calendars.filter((c) => !connectedGoogleIds.has(c.id)),
+    [calendars, connectedGoogleIds],
+  );
 
   const calendarContext = useMemo(() => {
     if (statusLoading) return undefined;
     if (!status?.connected) {
       return "Settings page: Google Calendar is NOT connected for this user. Connecting requires clicking the Connect button (an OAuth redirect elAIne cannot trigger herself) — offer to take them to Settings if they're elsewhere.";
     }
-    const calendarList = calendars
-      .map((c: CalendarListItem) => `"${c.summary}" (calendarId: ${c.id}${c.primary ? ", primary" : ""})`)
+    const connectedList = connectedCalendars
+      .map((c) => `"${c.summary}"${c.isTravelCalendar ? " (Travel calendar)" : ""}`)
       .join("; ");
     return (
       `Settings page: Google Calendar is connected${status.googleEmail ? ` as ${status.googleEmail}` : ""}. ` +
-      `Currently syncing reminders to ${status.calendarSummary ? `"${status.calendarSummary}"` : "no calendar selected yet"}. ` +
-      (calendarList
-        ? `Calendars available to choose from: ${calendarList}.`
-        : "No calendars loaded yet.")
+      (connectedList
+        ? `Connected calendars: ${connectedList}.`
+        : "No calendars connected yet — add one from the list of Google calendars.") +
+      (travelStatus?.isOwner
+        ? " This user is the app owner and can assign any of their connected calendars as the shared Travel calendar."
+        : " This user is not the app owner and cannot change which calendar is the shared Travel calendar.")
     );
-  }, [statusLoading, status, calendars]);
+  }, [statusLoading, status, connectedCalendars, travelStatus]);
   usePageAssistantContext("settings-calendar", calendarContext);
-
-  function handleSelect(calendarId: string) {
-    const cal = calendars.find((c: CalendarListItem) => c.id === calendarId);
-    if (!cal) return;
-    setSelectedId(calendarId);
-    selectCalendar.mutate(
-      { calendarId: cal.id, calendarSummary: cal.summary },
-      {
-        onSuccess: () => {
-          qc.invalidateQueries({ queryKey: getGetCalendarStatusQueryKey() });
-          toast.success(`Reminders will sync to "${cal.summary}"`);
-        },
-        onError: () => toast.error("Could not save calendar. Please try again."),
-      },
-    );
-  }
 
   function handleConnect() {
     window.location.href = "/api/travels/google-calendar/connect";
@@ -403,52 +441,66 @@ function CalendarSyncCard() {
     disconnectCalendar.mutate(undefined, {
       onSuccess: () => {
         setConfirmingDisconnect(false);
-        setSelectedId("");
         qc.invalidateQueries({ queryKey: getGetCalendarStatusQueryKey() });
+        qc.invalidateQueries({ queryKey: getListConnectedCalendarsQueryKey() });
+        qc.invalidateQueries({ queryKey: getGetFamilyCalendarStatusQueryKey() });
         toast.success("Google Calendar disconnected");
       },
       onError: () => toast.error("Could not disconnect. Please try again."),
     });
   }
 
-  function handleSetTravelColor(colorId: string) {
-    const nextId = colorId === "none" ? null : colorId;
-    setTravelColor.mutate(
-      { travelColorId: nextId },
+  function handleAddCalendar() {
+    const cal = addableCalendars.find((c) => c.id === addingCalendarId);
+    if (!cal) return;
+    addCalendar.mutate(
+      { googleCalendarId: cal.id, summary: cal.summary, primaryColor: newCalendarColor },
       {
         onSuccess: () => {
-          qc.invalidateQueries({ queryKey: getGetCalendarStatusQueryKey() });
-          toast.success(
-            nextId ? "Travel color saved" : "Travel color cleared",
-          );
+          qc.invalidateQueries({ queryKey: getListConnectedCalendarsQueryKey() });
+          toast.success(`Added "${cal.summary}"`);
+          setAddingCalendarId("");
+          setNewCalendarColor(CALENDAR_COLOR_PRESETS[0]);
         },
-        onError: () => toast.error("Could not save travel color. Please try again."),
+        onError: () => toast.error("Could not add calendar. Please try again."),
       },
     );
   }
 
-  function handleToggleShare(shared: boolean) {
-    shareCalendar.mutate(
-      { shared },
+  function handleUpdateColor(cal: ConnectedCalendar, hex: string) {
+    updateCalendar.mutate(
+      { id: cal.id, body: { primaryColor: hex } },
       {
         onSuccess: () => {
-          qc.invalidateQueries({ queryKey: getGetCalendarStatusQueryKey() });
-          toast.success(
-            shared
-              ? `"${status?.calendarSummary}" is now the shared Family Calendar for everyone`
-              : "This calendar is no longer shared with the household",
-          );
+          qc.invalidateQueries({ queryKey: getListConnectedCalendarsQueryKey() });
+          setEditingColorId(null);
         },
-        onError: (err) => {
-          const message = err instanceof Error ? err.message : "";
-          toast.error(
-            message.includes("409") || !status?.calendarId
-              ? "Pick a calendar above first."
-              : "Could not update sharing. Please try again.",
-          );
-        },
+        onError: () => toast.error("Could not update color. Please try again."),
       },
     );
+  }
+
+  function handleDeleteCalendar(id: number) {
+    deleteCalendar.mutate(id, {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListConnectedCalendarsQueryKey() });
+        qc.invalidateQueries({ queryKey: getGetFamilyCalendarStatusQueryKey() });
+        setConfirmingDeleteId(null);
+        toast.success("Calendar removed");
+      },
+      onError: () => toast.error("Could not remove calendar. Please try again."),
+    });
+  }
+
+  function handleSetTravel(cal: ConnectedCalendar) {
+    setTravelCalendar.mutate(cal.id, {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListConnectedCalendarsQueryKey() });
+        qc.invalidateQueries({ queryKey: getGetFamilyCalendarStatusQueryKey() });
+        toast.success(`"${cal.summary}" is now the shared Travel calendar for everyone`);
+      },
+      onError: () => toast.error("Could not set the Travel calendar. Please try again."),
+    });
   }
 
   return (
@@ -458,11 +510,13 @@ function CalendarSyncCard() {
           <CalendarDays className="h-4 w-4" />
         </span>
         <div>
-          <h2 className="font-semibold text-foreground">Your Google Calendar</h2>
+          <h2 className="font-semibold text-foreground">Your Google Calendars</h2>
           <p className="text-sm text-muted-foreground">
-            Connect your own Google account and choose which of your calendars reminders should
-            sync to. Each family member connects independently — your connection and calendar
-            choice never affect anyone else's.
+            Connect your Google account, then add as many of your calendars as you like. Each gets
+            its own overlay color on the Travel Calendar page.{" "}
+            {travelStatus?.isOwner
+              ? "As the app owner, you can also assign one connected calendar as the shared Travel calendar."
+              : "Only the app owner can assign the shared Travel calendar."}
           </p>
         </div>
       </div>
@@ -470,7 +524,7 @@ function CalendarSyncCard() {
       {statusLoading ? (
         <p className="text-sm text-muted-foreground">Checking connection…</p>
       ) : status?.connected ? (
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div className="flex items-center justify-between gap-3">
             <p className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
               <CheckCircle2 className="h-3.5 w-3.5" />
@@ -508,83 +562,127 @@ function CalendarSyncCard() {
             )}
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="family-calendar">Calendar to sync reminders to</Label>
-            <Select
-              value={selectedId}
-              onValueChange={handleSelect}
-              disabled={calendarsLoading || selectCalendar.isPending}
-            >
-              <SelectTrigger id="family-calendar">
-                <SelectValue placeholder="Choose a calendar" />
-              </SelectTrigger>
-              <SelectContent>
-                {calendars.map((cal: CalendarListItem) => (
-                  <SelectItem key={cal.id} value={cal.id}>
-                    {cal.summary}
-                    {cal.primary ? " (primary)" : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {status.calendarSummary && (
-              <p className="text-xs text-muted-foreground">
-                Currently syncing to <span className="text-foreground">{status.calendarSummary}</span>.
-              </p>
+          {connectedCalendars.length > 0 && (
+            <ul className="space-y-2">
+              {connectedCalendars.map((cal) => (
+                <li key={cal.id} className="rounded-lg border border-card-border p-3 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className="inline-block h-3 w-3 shrink-0 rounded-full"
+                        style={{ backgroundColor: cal.primaryColor }}
+                      />
+                      <span className="truncate text-sm font-medium text-foreground">{cal.summary}</span>
+                      {cal.isTravelCalendar && (
+                        <span className="flex shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
+                          <Plane className="h-2.5 w-2.5" /> Travel
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => setEditingColorId(editingColorId === cal.id ? null : cal.id)}
+                        aria-label="Edit color"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      {travelStatus?.isOwner && !cal.isTravelCalendar && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => handleSetTravel(cal)}
+                          disabled={setTravelCalendar.isPending}
+                        >
+                          Set as Travel
+                        </Button>
+                      )}
+                      {confirmingDeleteId === cal.id ? (
+                        <>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => handleDeleteCalendar(cal.id)}
+                            disabled={deleteCalendar.isPending}
+                          >
+                            Remove
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => setConfirmingDeleteId(null)}
+                          >
+                            Cancel
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                          onClick={() => setConfirmingDeleteId(cal.id)}
+                          aria-label="Remove calendar"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  {editingColorId === cal.id && (
+                    <ColorSwatchPicker
+                      value={cal.primaryColor}
+                      onChange={(hex) => handleUpdateColor(cal, hex)}
+                      disabled={updateCalendar.isPending}
+                    />
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="space-y-2 rounded-lg border border-dashed border-card-border p-3">
+            <Label htmlFor="add-calendar">Add a calendar</Label>
+            {calendarsLoading ? (
+              <p className="text-xs text-muted-foreground">Loading your Google calendars…</p>
+            ) : addableCalendars.length === 0 ? (
+              <p className="text-xs text-muted-foreground">All of your Google calendars are already connected.</p>
+            ) : (
+              <>
+                <Select value={addingCalendarId} onValueChange={setAddingCalendarId}>
+                  <SelectTrigger id="add-calendar">
+                    <SelectValue placeholder="Choose a calendar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {addableCalendars.map((cal) => (
+                      <SelectItem key={cal.id} value={cal.id}>
+                        {cal.summary}
+                        {cal.primary ? " (primary)" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {addingCalendarId && (
+                  <div className="space-y-2 pt-1">
+                    <Label className="text-xs">Overlay color</Label>
+                    <ColorSwatchPicker value={newCalendarColor} onChange={setNewCalendarColor} />
+                    <Button
+                      size="sm"
+                      onClick={handleAddCalendar}
+                      disabled={addCalendar.isPending}
+                    >
+                      <Plus className="h-3.5 w-3.5 mr-1.5" />
+                      Add calendar
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </div>
-
-          <div className="flex items-start justify-between gap-4 rounded-lg border border-card-border bg-muted/30 p-4">
-            <div className="space-y-1">
-              <Label htmlFor="household-share">Share as household Family Calendar</Label>
-              <p className="text-xs text-muted-foreground">
-                When on, everyone in the household — even without their own Google account — can
-                view, add, edit, and delete events on{" "}
-                {status.calendarSummary ? `"${status.calendarSummary}"` : "this calendar"} from the
-                Family Calendar page. The app acts on your behalf using your connection.
-              </p>
-            </div>
-            <Switch
-              id="household-share"
-              checked={status.isHouseholdShared}
-              onCheckedChange={handleToggleShare}
-              disabled={shareCalendar.isPending || !status.calendarId}
-            />
-          </div>
-
-          {status.isHouseholdShared && (
-            <div className="space-y-2 rounded-lg border border-card-border bg-muted/30 p-4">
-              <Label htmlFor="travel-color">Travel event color</Label>
-              <p className="text-xs text-muted-foreground">
-                Pick a Google Calendar event color to mean "Travel". Trips and itinerary items
-                synced to the Family Calendar will use this color, and the Family Calendar page
-                can highlight or filter to travel-colored events.
-              </p>
-              <Select
-                value={status.travelColorId ?? "none"}
-                onValueChange={handleSetTravelColor}
-                disabled={setTravelColor.isPending}
-              >
-                <SelectTrigger id="travel-color">
-                  <SelectValue placeholder="Choose a color" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {eventColors.map((color: GoogleEventColor) => (
-                    <SelectItem key={color.id} value={color.id}>
-                      <span className="flex items-center gap-2">
-                        <span
-                          className="inline-block h-3 w-3 rounded-full border border-black/10"
-                          style={{ backgroundColor: color.hex }}
-                        />
-                        {color.name}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
         </div>
       ) : (
         <div className="space-y-3">
@@ -600,9 +698,9 @@ function CalendarSyncCard() {
       )}
 
       <p className="text-xs text-muted-foreground pt-1">
-        Reminders with a due date sync automatically to your selected calendar. If you're listed
-        as a recipient on someone else's reminder, it will also appear on your own calendar, as
-        long as you're connected here.
+        Reminders with a due date sync automatically to your primary Google calendar. Events on
+        the shared Travel calendar are visible and editable by everyone; events on your other
+        connected calendars appear as read-only overlays on the Travel Calendar page.
       </p>
     </div>
   );

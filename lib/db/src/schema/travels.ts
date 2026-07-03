@@ -134,6 +134,15 @@ export const travelsReminders = pgTable(
     // Google Calendar event id, so we can update/delete the event later.
     // Null if sync is off, not yet attempted, or the last sync attempt failed.
     googleEventId: text("google_event_id"),
+    // Which day-offsets before dueDate should trigger an alert (email + a
+    // matching popup override on the synced Travel-calendar Google event).
+    // Bidirectionally synced: editing this array pushes new reminder
+    // overrides to Google; editing the event's reminders directly in Google
+    // pulls the offsets back into this array on next read.
+    alertDaysBefore: integer("alert_days_before")
+      .array()
+      .notNull()
+      .default(sql`'{14,7,3}'::integer[]`),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -244,6 +253,47 @@ export type TravelsGoogleCalendarConnectionRow =
 export type InsertTravelsGoogleCalendarConnection =
   typeof travelsGoogleCalendarConnections.$inferInsert;
 
+// Per-user, per-calendar rows: each user can connect an unlimited number of
+// their own Google calendars (picked from their calendar list, or entered
+// manually by id), each with its own chosen primary color. Exactly one row
+// across the WHOLE table may have isTravelCalendar = true (enforced in
+// application code, not the DB) — that row is the shared "Travel" calendar:
+// every app_user can view/create/edit/delete events on it, proxied through
+// its owning user's Google token. All other rows are private to their owner
+// and only toggle visibility in that owner's own Travel Calendar page.
+export const travelsConnectedCalendars = pgTable(
+  "travels_connected_calendars",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull(),
+    googleCalendarId: text("google_calendar_id").notNull(),
+    summary: text("summary").notNull(),
+    // 'picked' — chosen from the user's Google calendar list via the API.
+    // 'manual' — calendar id typed/pasted in directly.
+    source: text("source").notNull().default("picked"),
+    primaryColor: text("primary_color").notNull().default("#4285f4"),
+    isTravelCalendar: boolean("is_travel_calendar").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("travels_connected_calendars_user_id_idx").on(table.userId),
+    uniqueIndex("travels_connected_calendars_user_id_google_calendar_id_idx").on(
+      table.userId,
+      table.googleCalendarId,
+    ),
+  ],
+).enableRLS();
+
+export type TravelsConnectedCalendarRow =
+  typeof travelsConnectedCalendars.$inferSelect;
+export type InsertTravelsConnectedCalendar =
+  typeof travelsConnectedCalendars.$inferInsert;
+
 // Maps a trip's itinerary content to the Google Calendar event(s) synced for
 // it — one row for the trip-level event, plus one per itinerary activity.
 // itemKey is content-derived (not array index), so reordering/editing
@@ -323,6 +373,9 @@ export const travelsReminderCalendarEvents = pgTable(
     id: serial("id").primaryKey(),
     reminderId: integer("reminder_id").notNull(),
     userId: integer("user_id").notNull(),
+    // Which of the user's connected calendars this event lives in — needed
+    // now that a user may have more than one connected Google calendar.
+    calendarId: text("calendar_id").notNull().default(""),
     googleEventId: text("google_event_id").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()

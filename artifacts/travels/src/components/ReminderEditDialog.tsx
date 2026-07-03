@@ -29,7 +29,7 @@ export function ReminderEditDialog({ reminder, open, onOpenChange }: ReminderEdi
   const qc = useQueryClient();
   const { data: appUsers = [] } = useListTravelsAppUsers();
   const { data: calendarStatus } = useGetCalendarStatus();
-  const familyCalendarConnected = !!calendarStatus?.connected && !!calendarStatus?.calendarId;
+  const familyCalendarConnected = !!calendarStatus?.connected;
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");

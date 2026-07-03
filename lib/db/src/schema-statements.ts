@@ -668,4 +668,69 @@ export const STATEMENTS: string[] = [
      ON travels_assistant_nudges (user_id, seen_at)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS travels_assistant_nudges_user_id_nudge_key_idx
      ON travels_assistant_nudges (user_id, nudge_key)`,
+
+  // --- Multi-Calendar Travel Rework ---------------------------------------
+  // is_owner: the single app owner (batchelorjc@gmail.com) is the only
+  // account allowed to assign/reassign the shared "Travel" calendar.
+  `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS is_owner BOOLEAN NOT NULL DEFAULT false`,
+  `UPDATE app_users SET is_owner = true WHERE email = 'batchelorjc@gmail.com' AND is_owner = false`,
+
+  // travels_connected_calendars: unlimited per-user connected Google
+  // calendars, each with its own chosen primary color. Exactly one row
+  // system-wide may have is_travel_calendar = true (enforced in app code) —
+  // that is the shared "Travel" calendar every app_user can see/edit.
+  `CREATE TABLE IF NOT EXISTS travels_connected_calendars (
+    id                   SERIAL PRIMARY KEY,
+    user_id              INTEGER NOT NULL,
+    google_calendar_id   TEXT NOT NULL,
+    summary              TEXT NOT NULL,
+    source               TEXT NOT NULL DEFAULT 'picked',
+    primary_color        TEXT NOT NULL DEFAULT '#4285f4',
+    is_travel_calendar   BOOLEAN NOT NULL DEFAULT false,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_connected_calendars ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travels_connected_calendars_user_id_idx
+     ON travels_connected_calendars (user_id)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS travels_connected_calendars_user_id_google_calendar_id_idx
+     ON travels_connected_calendars (user_id, google_calendar_id)`,
+
+  // One-time (idempotent) backfill: migrate each existing single-calendar
+  // connection (old travels_google_calendar_connections.calendar_id /
+  // is_household_shared / travel_color_id model) into the new per-calendar
+  // table, preserving the previous household/Travel assignment. Safe to
+  // re-run every boot — the NOT EXISTS guard means it only inserts once per
+  // (user_id, google_calendar_id).
+  `INSERT INTO travels_connected_calendars
+     (user_id, google_calendar_id, summary, source, primary_color, is_travel_calendar)
+   SELECT c.user_id,
+          c.calendar_id,
+          COALESCE(c.calendar_summary, c.calendar_id),
+          'picked',
+          CASE WHEN c.is_household_shared THEN '#f59e0b' ELSE '#4285f4' END,
+          c.is_household_shared
+     FROM travels_google_calendar_connections c
+    WHERE c.calendar_id IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM travels_connected_calendars cc
+         WHERE cc.user_id = c.user_id AND cc.google_calendar_id = c.calendar_id
+      )`,
+
+  // travels_reminders.alert_days_before: configurable per-reminder alert
+  // day-offsets (replaces the previously hardcoded 14/7/3-day thresholds),
+  // bidirectionally synced with the reminder's Google Calendar event
+  // notification overrides.
+  `ALTER TABLE travels_reminders ADD COLUMN IF NOT EXISTS alert_days_before INTEGER[] NOT NULL DEFAULT '{14,7,3}'`,
+
+  // travels_reminder_calendar_events.calendar_id: a user may now have more
+  // than one connected calendar, so each synced reminder copy must record
+  // which calendar it was written to (backfilled best-effort from whichever
+  // calendar that user had connected at migration time).
+  `ALTER TABLE travels_reminder_calendar_events ADD COLUMN IF NOT EXISTS calendar_id TEXT NOT NULL DEFAULT ''`,
+  `UPDATE travels_reminder_calendar_events rce
+     SET calendar_id = cc.google_calendar_id
+     FROM travels_connected_calendars cc
+    WHERE rce.calendar_id = ''
+      AND cc.user_id = rce.user_id`,
 ];

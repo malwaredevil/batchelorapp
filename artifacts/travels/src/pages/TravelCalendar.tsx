@@ -1,11 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import {
   addDays,
   eachDayOfInterval,
   endOfMonth,
   endOfWeek,
-  isSameDay,
   isSameMonth,
   isToday,
   startOfMonth,
@@ -16,6 +15,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Eye,
+  EyeOff,
   MapPin,
   Pencil,
   Plane,
@@ -49,6 +50,9 @@ import {
   useDismissCalendarTripSuggestion,
   useAcceptCalendarTripSuggestion,
   useListGoogleEventColors,
+  useListConnectedCalendars,
+  useListConnectedCalendarEvents,
+  getListConnectedCalendarEventsQueryKey,
   getListFamilyCalendarEventsQueryKey,
   getListCalendarTripSuggestionsQueryKey,
   getListGoogleEventColorsQueryKey,
@@ -56,6 +60,7 @@ import {
   type FamilyCalendarEventInput,
   type CalendarTripSuggestion,
   type GoogleEventColor,
+  type ConnectedCalendar,
 } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 
@@ -95,6 +100,14 @@ function rangeForView(view: ViewMode, cursor: Date): { start: Date; end: Date } 
 function shiftCursor(view: ViewMode, cursor: Date, direction: 1 | -1): Date {
   if (view === "week") return addDays(cursor, 7 * direction);
   return new Date(cursor.getFullYear(), cursor.getMonth() + direction, 1);
+}
+
+// A displayed event tagged with which calendar it came from — either the
+// shared, editable Travel calendar, or a read-only overlay calendar.
+interface DisplayEvent {
+  event: FamilyCalendarEvent;
+  kind: "travel" | "overlay";
+  calendar?: ConnectedCalendar;
 }
 
 function eventDayKey(event: FamilyCalendarEvent): string {
@@ -191,7 +204,43 @@ function formToInput(form: EventFormState): FamilyCalendarEventInput {
   };
 }
 
-export default function FamilyCalendar() {
+// Loads one overlay calendar's events for the visible range and reports them
+// up to the parent. Kept as its own component so each connected calendar can
+// independently call the events hook (hooks can't be called in a loop).
+function OverlayCalendarEvents({
+  calendar,
+  start,
+  end,
+  onEvents,
+}: {
+  calendar: ConnectedCalendar;
+  start: string;
+  end: string;
+  onEvents: (calendarId: number, events: FamilyCalendarEvent[]) => void;
+}) {
+  const { data = [] } = useListConnectedCalendarEvents(calendar.id, start, end, {
+    query: {
+      enabled: Boolean(start && end),
+      queryKey: getListConnectedCalendarEventsQueryKey(calendar.id, start, end),
+    },
+  });
+  useEffect(() => {
+    onEvents(calendar.id, data);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendar.id, JSON.stringify(data)]);
+  return null;
+}
+
+function tintColor(hex: string, alpha: number): string {
+  const clean = hex.replace("#", "");
+  if (clean.length !== 6) return hex;
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+export default function TravelCalendar() {
   const qc = useQueryClient();
   const { data: status, isLoading: statusLoading } = useGetFamilyCalendarStatus();
   const [cursor, setCursor] = useState(() => new Date());
@@ -219,9 +268,6 @@ export default function FamilyCalendar() {
   const [editingEvent, setEditingEvent] = useState<FamilyCalendarEvent | null>(null);
   const [form, setForm] = useState<EventFormState>(emptyForm());
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
-  const [travelOnly, setTravelOnly] = useState(false);
-
-  const travelColorId = status?.travelColorId ?? null;
 
   const { data: googleColors = [] } = useListGoogleEventColors({
     query: { enabled: Boolean(status?.configured), queryKey: getListGoogleEventColorsQueryKey() },
@@ -232,21 +278,63 @@ export default function FamilyCalendar() {
     return map;
   }, [googleColors]);
 
-  function eventStyle(event: FamilyCalendarEvent): { className: string; style?: React.CSSProperties } {
-    if (isTravelEvent(event)) {
+  // Outlook-style calendar overlay: every connected calendar (Travel calendar
+  // is always shown; other calendars can be toggled on/off with the eye icon).
+  const { data: connectedCalendars = [] } = useListConnectedCalendars();
+  const overlayCalendars = useMemo(
+    () => connectedCalendars.filter((c) => !c.isTravelCalendar),
+    [connectedCalendars],
+  );
+  const [hiddenCalendarIds, setHiddenCalendarIds] = useState<Set<number>>(new Set());
+  const [overlayEventsByCalendar, setOverlayEventsByCalendar] = useState<
+    Record<number, FamilyCalendarEvent[]>
+  >({});
+
+  function toggleCalendarVisibility(id: number) {
+    setHiddenCalendarIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function handleOverlayEvents(calendarId: number, calEvents: FamilyCalendarEvent[]) {
+    setOverlayEventsByCalendar((prev) => ({ ...prev, [calendarId]: calEvents }));
+  }
+
+  const displayEvents = useMemo<DisplayEvent[]>(() => {
+    const travel: DisplayEvent[] = events.map((event) => ({ event, kind: "travel" }));
+    const overlay: DisplayEvent[] = overlayCalendars
+      .filter((cal) => !hiddenCalendarIds.has(cal.id))
+      .flatMap((cal) =>
+        (overlayEventsByCalendar[cal.id] ?? []).map((event) => ({
+          event,
+          kind: "overlay" as const,
+          calendar: cal,
+        })),
+      );
+    return [...travel, ...overlay];
+  }, [events, overlayCalendars, hiddenCalendarIds, overlayEventsByCalendar]);
+
+  function eventStyle(item: DisplayEvent): { className: string; style?: React.CSSProperties } {
+    if (item.kind === "travel") {
       return {
         className:
           "bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:hover:bg-amber-900/60",
       };
     }
-    const color = event.colorId ? colorHexById.get(event.colorId) : undefined;
-    if (color) {
-      return {
-        className: "text-white hover:brightness-110",
-        style: { backgroundColor: color.hex },
-      };
-    }
-    return { className: "bg-primary/10 text-primary hover:bg-primary/20" };
+    const cal = item.calendar!;
+    const labelColor = item.event.colorId ? colorHexById.get(item.event.colorId) : undefined;
+    const fill = labelColor ? labelColor.hex : tintColor(cal.primaryColor, 0.18);
+    return {
+      className: labelColor ? "text-white hover:brightness-110" : "hover:brightness-95",
+      style: {
+        backgroundColor: fill,
+        border: `1.5px solid ${cal.primaryColor}`,
+        color: labelColor ? undefined : undefined,
+      },
+    };
   }
 
   const { data: suggestions = [] } = useListCalendarTripSuggestions({
@@ -263,15 +351,6 @@ export default function FamilyCalendar() {
   const dismissSuggestion = useDismissCalendarTripSuggestion();
   const acceptSuggestion = useAcceptCalendarTripSuggestion();
 
-  function isTravelEvent(event: FamilyCalendarEvent): boolean {
-    return Boolean(travelColorId) && event.colorId === travelColorId;
-  }
-
-  const visibleEvents = useMemo(
-    () => (travelOnly ? events.filter(isTravelEvent) : events),
-    [events, travelOnly, travelColorId],
-  );
-
   function handleScan() {
     scanSuggestions.mutate(undefined, {
       onSuccess: (result) => {
@@ -279,10 +358,10 @@ export default function FamilyCalendar() {
         toast.success(
           result.created > 0
             ? `Found ${result.created} new trip suggestion${result.created === 1 ? "" : "s"}`
-            : "No new trips found in your calendar",
+            : "No new trips found across your connected calendars",
         );
       },
-      onError: () => toast.error("Could not scan the calendar. Please try again."),
+      onError: () => toast.error("Could not scan your calendars. Please try again."),
     });
   }
 
@@ -311,48 +390,49 @@ export default function FamilyCalendar() {
   const context = useMemo(() => {
     if (statusLoading) return undefined;
     if (!status?.configured) {
-      return "Family Calendar page: no shared household calendar is configured yet. The owner needs to connect Google Calendar in Settings and turn on 'Share as household Family Calendar'.";
+      return "Travel Calendar page: no shared Travel calendar is configured yet. The app owner needs to connect Google Calendar in Settings and assign a calendar as the shared Travel calendar.";
     }
     const monthLabel = cursor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-    const summary = visibleEvents
+    const summary = displayEvents
       .slice(0, 15)
-      .map((e) => `"${e.title}" (${e.allDay ? e.start : e.start})`)
+      .map((d) => `"${d.event.title}"${d.kind === "overlay" ? ` (${d.calendar?.summary})` : ""}`)
       .join("; ");
     const suggestionSummary = pendingSuggestions
       .slice(0, 5)
       .map((s) => `"${s.suggestedTitle}"${s.destination ? ` to ${s.destination}` : ""}`)
       .join("; ");
     return (
-      `Family Calendar page: viewing ${monthLabel} in ${view} view on the shared calendar "${status.calendarSummary}"${travelOnly ? " (filtered to travel events only)" : ""}. ` +
+      `Travel Calendar page: viewing ${monthLabel} in ${view} view. Shared Travel calendar is "${status.calendarSummary}". ` +
+      `${overlayCalendars.length} other connected calendar(s) available as overlays. ` +
       (summary ? `Events in range: ${summary}.` : "No events found in this range.") +
       (pendingSuggestions.length > 0
         ? ` There are ${pendingSuggestions.length} AI-detected trip suggestion(s) awaiting review: ${suggestionSummary}.`
         : "")
     );
-  }, [statusLoading, status, cursor, visibleEvents, view, travelOnly, pendingSuggestions]);
-  usePageAssistantContext("family-calendar", context);
+  }, [statusLoading, status, cursor, displayEvents, view, overlayCalendars, pendingSuggestions]);
+  usePageAssistantContext("travel-calendar", context);
 
   const groups = useMemo(() => {
-    const map = new Map<string, FamilyCalendarEvent[]>();
-    for (const event of visibleEvents) {
-      const key = eventDayKey(event);
+    const map = new Map<string, DisplayEvent[]>();
+    for (const item of displayEvents) {
+      const key = eventDayKey(item.event);
       const list = map.get(key) ?? [];
-      list.push(event);
+      list.push(item);
       map.set(key, list);
     }
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [visibleEvents]);
+  }, [displayEvents]);
 
   const eventsByDay = useMemo(() => {
-    const map = new Map<string, FamilyCalendarEvent[]>();
-    for (const event of visibleEvents) {
-      const key = eventDayKey(event);
+    const map = new Map<string, DisplayEvent[]>();
+    for (const item of displayEvents) {
+      const key = eventDayKey(item.event);
       const list = map.get(key) ?? [];
-      list.push(event);
+      list.push(item);
       map.set(key, list);
     }
     return map;
-  }, [visibleEvents]);
+  }, [displayEvents]);
 
   const gridDays = useMemo(() => {
     if (view === "list") return [];
@@ -372,9 +452,13 @@ export default function FamilyCalendar() {
     setDialogOpen(true);
   }
 
-  function openEdit(event: FamilyCalendarEvent) {
-    setEditingEvent(event);
-    setForm(eventToForm(event));
+  function openEdit(item: DisplayEvent) {
+    if (item.kind === "overlay") {
+      toast.info(`"${item.event.title}" is on ${item.calendar?.summary} — connect it as the shared Travel calendar to edit it here.`);
+      return;
+    }
+    setEditingEvent(item.event);
+    setForm(eventToForm(item.event));
     setDialogOpen(true);
   }
 
@@ -399,7 +483,7 @@ export default function FamilyCalendar() {
       createEvent.mutate(input, {
         onSuccess: () => {
           qc.invalidateQueries({ queryKey: eventsQueryKey });
-          toast.success("Event added to the Family Calendar");
+          toast.success("Event added to the Travel Calendar");
           setDialogOpen(false);
         },
         onError: () => toast.error("Could not add event. Please try again."),
@@ -424,10 +508,10 @@ export default function FamilyCalendar() {
         <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400">
           <CalendarDays className="h-6 w-6" />
         </span>
-        <h1 className="font-serif text-2xl text-foreground">No shared Family Calendar yet</h1>
+        <h1 className="font-serif text-2xl text-foreground">No shared Travel Calendar yet</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Connect a Google account in Settings and turn on "Share as household Family Calendar" so
-          everyone can view, add, edit, and delete events here.
+          Connect a Google account in Settings and assign one of your calendars as the shared
+          "Travel" calendar so everyone can view, add, edit, and delete events here.
         </p>
         <Link href="/settings">
           <Button className="mt-5">Go to Settings</Button>
@@ -438,11 +522,21 @@ export default function FamilyCalendar() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 space-y-6">
+      {overlayCalendars.map((cal) => (
+        <OverlayCalendarEvents
+          key={cal.id}
+          calendar={cal}
+          start={startISO}
+          end={endISO}
+          onEvents={handleOverlayEvents}
+        />
+      ))}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-serif text-2xl text-foreground">Family Calendar</h1>
+          <h1 className="font-serif text-2xl text-foreground">Travel Calendar</h1>
           <p className="text-sm text-muted-foreground">
-            {status?.calendarSummary ? `Shared calendar: "${status.calendarSummary}"` : "Shared household calendar"}
+            {status?.calendarSummary ? `Shared calendar: "${status.calendarSummary}"` : "Shared Travel calendar"}
           </p>
         </div>
         <Button onClick={openCreate}>
@@ -497,15 +591,33 @@ export default function FamilyCalendar() {
         </ToggleGroup>
       </div>
 
-      {Boolean(travelColorId) && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-card-border bg-card px-4 py-3">
-          <div className="flex items-center gap-2">
-            <Plane className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-            <Label htmlFor="travel-only" className="text-sm font-medium">
-              Travel only
-            </Label>
-          </div>
-          <Switch id="travel-only" checked={travelOnly} onCheckedChange={setTravelOnly} />
+      {overlayCalendars.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-card-border bg-card px-4 py-3">
+          <span className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+            <Plane className="h-3.5 w-3.5" />
+            {status?.calendarSummary ?? "Travel"}
+          </span>
+          {overlayCalendars.map((cal) => {
+            const hidden = hiddenCalendarIds.has(cal.id);
+            return (
+              <button
+                key={cal.id}
+                type="button"
+                onClick={() => toggleCalendarVisibility(cal.id)}
+                className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                  hidden ? "text-muted-foreground border-card-border" : "text-foreground"
+                }`}
+                style={!hidden ? { borderColor: cal.primaryColor, backgroundColor: tintColor(cal.primaryColor, 0.12) } : undefined}
+              >
+                {hidden ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                <span
+                  className="inline-block h-2 w-2 rounded-full"
+                  style={{ backgroundColor: cal.primaryColor }}
+                />
+                {cal.summary}
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -522,11 +634,11 @@ export default function FamilyCalendar() {
               onClick={handleScan}
               disabled={scanSuggestions.isPending}
             >
-              {scanSuggestions.isPending ? "Scanning…" : "Scan calendar"}
+              {scanSuggestions.isPending ? "Scanning…" : "Scan calendars"}
             </Button>
           </div>
           {pendingSuggestions.length === 0 ? (
-            <p className="text-xs text-muted-foreground">Scanning your calendar for possible trips…</p>
+            <p className="text-xs text-muted-foreground">Scanning your connected calendars for possible trips…</p>
           ) : (
             <ul className="space-y-2">
               {pendingSuggestions.map((suggestion) => (
@@ -613,21 +725,21 @@ export default function FamilyCalendar() {
                     {day.getDate()}
                   </span>
                   <div className="mt-1 space-y-0.5">
-                    {dayEvents.slice(0, 3).map((event) => (
+                    {dayEvents.slice(0, 3).map((item) => (
                       <div
-                        key={event.id}
+                        key={`${item.kind}-${item.event.id}`}
                         role="button"
                         tabIndex={0}
                         onClick={(e) => {
                           e.stopPropagation();
-                          openEdit(event);
+                          openEdit(item);
                         }}
-                        className={`flex items-center gap-1 truncate rounded px-1 py-0.5 text-[11px] ${eventStyle(event).className}`}
-                        style={eventStyle(event).style}
-                        title={event.title}
+                        className={`flex items-center gap-1 truncate rounded px-1 py-0.5 text-[11px] ${eventStyle(item).className}`}
+                        style={eventStyle(item).style}
+                        title={item.event.title}
                       >
-                        {isTravelEvent(event) && <Plane className="h-2.5 w-2.5 shrink-0" />}
-                        <span className="truncate">{event.title}</span>
+                        {item.kind === "travel" && <Plane className="h-2.5 w-2.5 shrink-0" />}
+                        <span className="truncate">{item.event.title}</span>
                       </div>
                     ))}
                     {dayEvents.length > 3 && (
@@ -670,25 +782,25 @@ export default function FamilyCalendar() {
                     {dayEvents.length === 0 ? (
                       <p className="px-1 text-center text-[11px] text-muted-foreground">—</p>
                     ) : (
-                      dayEvents.map((event) => (
+                      dayEvents.map((item) => (
                         <button
-                          key={event.id}
+                          key={`${item.kind}-${item.event.id}`}
                           type="button"
-                          onClick={() => openEdit(event)}
-                          className={`flex w-full items-center gap-1 truncate rounded px-1.5 py-1 text-left text-[11px] ${eventStyle(event).className}`}
-                          style={eventStyle(event).style}
-                          title={event.title}
+                          onClick={() => openEdit(item)}
+                          className={`flex w-full items-center gap-1 truncate rounded px-1.5 py-1 text-left text-[11px] ${eventStyle(item).className}`}
+                          style={eventStyle(item).style}
+                          title={item.event.title}
                         >
-                          {isTravelEvent(event) && <Plane className="h-2.5 w-2.5 shrink-0" />}
-                          {!event.allDay && (
+                          {item.kind === "travel" && <Plane className="h-2.5 w-2.5 shrink-0" />}
+                          {!item.event.allDay && (
                             <span className="mr-1 text-muted-foreground">
-                              {new Date(event.start).toLocaleTimeString(undefined, {
+                              {new Date(item.event.start).toLocaleTimeString(undefined, {
                                 hour: "numeric",
                                 minute: "2-digit",
                               })}
                             </span>
                           )}
-                          <span className="truncate">{event.title}</span>
+                          <span className="truncate">{item.event.title}</span>
                         </button>
                       ))
                     )}
@@ -714,96 +826,100 @@ export default function FamilyCalendar() {
                 })}
               </h2>
               <ul className="space-y-2">
-                {dayEvents.map((event) => {
-                  const color = !isTravelEvent(event) && event.colorId
-                    ? colorHexById.get(event.colorId)
-                    : undefined;
+                {dayEvents.map((item) => {
+                  const style = eventStyle(item);
                   return (
                   <li
-                    key={event.id}
+                    key={`${item.kind}-${item.event.id}`}
                     className={`flex items-start justify-between gap-3 rounded-lg border p-3 ${
-                      isTravelEvent(event)
+                      item.kind === "travel"
                         ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20"
                         : "border-card-border/60"
                     }`}
-                    style={color ? { borderLeft: `4px solid ${color.hex}` } : undefined}
+                    style={item.kind === "overlay" ? { borderLeft: `4px solid ${item.calendar?.primaryColor}` } : undefined}
                   >
                     <div className="min-w-0 space-y-1">
                       <p className="flex items-center gap-1.5 font-medium text-foreground">
-                        {isTravelEvent(event) && (
+                        {item.kind === "travel" ? (
                           <Plane className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-                        )}
-                        {!isTravelEvent(event) && color && (
+                        ) : (
                           <span
                             className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
-                            style={{ backgroundColor: color.hex }}
+                            style={{ backgroundColor: style.style?.backgroundColor as string | undefined }}
                           />
                         )}
-                        {event.title}
+                        {item.event.title}
+                        {item.kind === "overlay" && (
+                          <span className="text-xs font-normal text-muted-foreground">
+                            · {item.calendar?.summary}
+                          </span>
+                        )}
                       </p>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                        {!event.allDay && (
+                        {!item.event.allDay && (
                           <span className="flex items-center gap-1">
                             <Clock className="h-3 w-3" />
-                            {new Date(event.start).toLocaleTimeString(undefined, {
+                            {new Date(item.event.start).toLocaleTimeString(undefined, {
                               hour: "numeric",
                               minute: "2-digit",
                             })}
                             {" – "}
-                            {new Date(event.end).toLocaleTimeString(undefined, {
+                            {new Date(item.event.end).toLocaleTimeString(undefined, {
                               hour: "numeric",
                               minute: "2-digit",
                             })}
                           </span>
                         )}
-                        {event.allDay && <span>All day</span>}
-                        {event.location && (
+                        {item.event.allDay && <span>All day</span>}
+                        {item.event.location && (
                           <span className="flex items-center gap-1">
                             <MapPin className="h-3 w-3" />
-                            {event.location}
+                            {item.event.location}
                           </span>
                         )}
                       </div>
-                      {event.description && (
-                        <p className="text-xs text-muted-foreground">{event.description}</p>
+                      {item.event.description && (
+                        <p className="text-xs text-muted-foreground">{item.event.description}</p>
                       )}
                     </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      {confirmingDeleteId === event.id ? (
-                        <>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => handleDelete(event.id)}
-                            disabled={deleteEvent.isPending}
-                          >
-                            Delete
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setConfirmingDeleteId(null)}
-                            disabled={deleteEvent.isPending}
-                          >
-                            Cancel
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(event)}>
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                            onClick={() => setConfirmingDeleteId(event.id)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </>
-                      )}
-                    </div>
+                    {item.kind === "travel" && (
+                      <div className="flex shrink-0 items-center gap-1">
+                        {confirmingDeleteId === item.event.id ? (
+                          <>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => handleDelete(item.event.id)}
+                              disabled={deleteEvent.isPending}
+                            >
+                              Delete
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setConfirmingDeleteId(null)}
+                              disabled={deleteEvent.isPending}
+                            >
+                              Cancel
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(item)}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              onClick={() => setConfirmingDeleteId(item.event.id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </li>
                   );
                 })}
@@ -854,29 +970,19 @@ export default function FamilyCalendar() {
                   >
                     —
                   </button>
-                  {googleColors.map((color) => {
-                    const isTravel = Boolean(travelColorId) && color.id === travelColorId;
-                    return (
-                      <button
-                        key={color.id}
-                        type="button"
-                        onClick={() => setForm((f) => ({ ...f, colorId: color.id }))}
-                        title={isTravel ? `${color.name} (Travel)` : color.name}
-                        className={`flex h-8 w-8 items-center justify-center rounded-full border-2 ${
-                          form.colorId === color.id ? "border-foreground" : "border-transparent"
-                        }`}
-                        style={{ backgroundColor: color.hex }}
-                      >
-                        {isTravel && <Plane className="h-3.5 w-3.5 text-white" />}
-                      </button>
-                    );
-                  })}
+                  {googleColors.map((color) => (
+                    <button
+                      key={color.id}
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, colorId: color.id }))}
+                      title={color.name}
+                      className={`flex h-8 w-8 items-center justify-center rounded-full border-2 ${
+                        form.colorId === color.id ? "border-foreground" : "border-transparent"
+                      }`}
+                      style={{ backgroundColor: color.hex }}
+                    />
+                  ))}
                 </div>
-                {form.colorId && Boolean(travelColorId) && form.colorId === travelColorId && (
-                  <p className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
-                    <Plane className="h-3 w-3" /> Marked as travel
-                  </p>
-                )}
               </div>
             )}
 

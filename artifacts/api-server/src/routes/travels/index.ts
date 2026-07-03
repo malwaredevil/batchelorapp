@@ -10,7 +10,8 @@ import destinationsRouter from "./destinations";
 import settingsRouter from "./settings";
 import magnetsRouter from "./magnets";
 import googleCalendarRouter from "./google-calendar";
-import familyCalendarRouter from "./family-calendar";
+import travelCalendarRouter from "./travel-calendar";
+import connectedCalendarsRouter from "./connected-calendars";
 import calendarTripSuggestionsRouter from "./calendar-trip-suggestions";
 import assistantRouter from "./assistant";
 
@@ -27,7 +28,8 @@ router.use(destinationsRouter);
 router.use(settingsRouter);
 router.use(magnetsRouter);
 router.use(googleCalendarRouter);
-router.use(familyCalendarRouter);
+router.use(travelCalendarRouter);
+router.use(connectedCalendarsRouter);
 router.use(calendarTripSuggestionsRouter);
 router.use(assistantRouter);
 

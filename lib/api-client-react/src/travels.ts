@@ -1243,6 +1243,8 @@ export type AssistantActionType =
   | "remove_packing_item"
   | "add_reminder"
   | "sync_reminder_to_calendar"
+  | "edit_reminder"
+  | "delete_reminder"
   | "add_itinerary_day"
   | "regenerate_itinerary_day";
 

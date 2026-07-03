@@ -155,7 +155,7 @@ export async function syncReminderCalendarEvents(
   }
 }
 
-async function deleteAllReminderCalendarEvents(
+export async function deleteAllReminderCalendarEvents(
   reminderId: number,
 ): Promise<void> {
   const existing = await db

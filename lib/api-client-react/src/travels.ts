@@ -1336,6 +1336,7 @@ export function useGetAssistantConversation<
 export interface AssistantChatStreamCallbacks {
   onDelta?: (text: string) => void;
   onAction?: (action: AssistantAction) => void;
+  onStatus?: (message: string) => void;
   onDone?: (result: AssistantChatResponse) => void;
 }
 
@@ -1397,6 +1398,9 @@ export async function streamAssistantMessage(
           break;
         case "action":
           callbacks.onAction?.(data as AssistantAction);
+          break;
+        case "status":
+          callbacks.onStatus?.((data as { message: string }).message);
           break;
         case "done":
           done = data as AssistantChatResponse;

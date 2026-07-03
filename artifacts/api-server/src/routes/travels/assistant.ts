@@ -30,6 +30,7 @@ import {
 import { generateItineraryForTrip, ItineraryActionError } from "./ai";
 import { sendAssistantEmail, resendConfigured } from "../../lib/email";
 import { webSearch } from "../../lib/web-search";
+import { consultExperts } from "../../lib/expert-consult";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -1465,6 +1466,13 @@ const WebSearchToolPayload = z.object({
   query: z.string().min(1).max(500),
 });
 
+const CONSULT_EXPERTS_TOOL_NAME = "consult_experts";
+
+const ConsultExpertsToolPayload = z.object({
+  question: z.string().min(1).max(500),
+  context: z.string().max(1000).optional(),
+});
+
 const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: "function",
@@ -1534,6 +1542,28 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           query: { type: "string", description: "A focused, specific search query" },
         },
         required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: CONSULT_EXPERTS_TOOL_NAME,
+      description:
+        "Get a cross-checked panel opinion instead of answering purely from your own single perspective. Use this when the user is asking for expertise, advice, a recommendation, or a judgment call where being wrong or one-sided actually matters — e.g. \"which of these two flights should I book\", \"is this itinerary too packed\", \"what should I pack for hiking with a bad knee\", \"how should I negotiate this hotel rate\", \"is it worth paying for travel insurance here\". Do NOT use it for simple facts (answer directly), anything needing current/live data (use web_search instead), or casual chit-chat. Pass a standalone `question` (it won't see this conversation) plus optional `context` with only the specific relevant details (e.g. dates, constraints, preferences) — not the whole conversation. Takes a bit longer than a normal reply since it consults more than one source; that's expected.",
+      parameters: {
+        type: "object",
+        properties: {
+          question: {
+            type: "string",
+            description: "A standalone, specific question to get advice on",
+          },
+          context: {
+            type: "string",
+            description: "Optional short background details relevant to the question",
+          },
+        },
+        required: ["question"],
       },
     },
   },
@@ -1719,7 +1749,9 @@ DOCUMENTS: You can already see each uploaded document's parsed fields (confirmat
 
 EMAIL: Whenever you've just given the user something substantial worth keeping — a list of recommendations, an itinerary summary, packing tips, etc. — offer to email it to them, e.g. "Want me to email you this list?" Only call send_email once they say yes; never call it unprompted or assume they want it. It always goes to their own registered account email, so never ask for an address and never offer to send it to anyone else. Write a short subject and a plain-text body (no markdown/HTML, blank line between paragraphs) — it gets formatted into a nice email automatically. You have no way to export a PDF or Word document, so don't offer that; email is the only export option available.
 
-WEB SEARCH: You have a real-time web_search tool, unlike a plain language model — use it proactively (no need to ask permission first) whenever a question depends on current information you can't be confident about from memory alone: opening hours, current prices, weather, visa/entry rules, local events, news, or anything else that changes over time. Don't use it for stable general knowledge or for things already visible in the on-screen state above. Call it as many times as needed for different sub-questions, then write your visible reply based on what it returns — never paste raw search output, and never fabricate a current fact instead of searching for it.
+WEB SEARCH: You have a real-time web_search tool, unlike a plain language model — use it proactively (no need to ask permission first) whenever a question depends on current information you can't be confident about from memory alone: opening hours, current prices, weather, visa/entry rules, local events, news, or anything else that changes over time. Don't use it for stable general knowledge or for things already visible in the on-screen state above. Call it as many times as needed for different sub-questions (e.g. rephrase or split into multiple focused searches for a broad question, so you get a fuller picture rather than one narrow result), then write your visible reply based on what it returns — never paste raw search output, and never fabricate a current fact instead of searching for it.
+
+EXPERT ADVICE: For genuine expertise/advice/recommendation questions — a judgment call where being one-sided could actually steer the user wrong (packing/gear advice for specific constraints, which option to book, negotiating tactics, whether something is a good idea, etc.) — use consult_experts rather than just answering solo; it cross-checks more than one independent source and gives you back a single synthesized answer to relay. Don't use it for simple facts, small talk, or anything that needs web_search instead (current/live data). It takes a bit longer than a normal reply — that's expected, not a malfunction.
 
 Keep replies concise and easy to read in a chat bubble.`;
 
@@ -1838,10 +1870,16 @@ Keep replies concise and easy to read in a chat bubble.`;
     // longer needs cleanup here — unlike the old regex-directive scheme, tool
     // calls arrive as a structured field separate from the reply text.
     const webSearchCalls: Array<{ id: string; args: string }> = [];
+    const consultExpertsCalls: Array<{ id: string; args: string }> = [];
 
     for (const [index, { id, name, args }] of toolCallAcc.entries()) {
       if (name === WEB_SEARCH_TOOL_NAME) {
         if (id) webSearchCalls.push({ id, args });
+        continue;
+      }
+
+      if (name === CONSULT_EXPERTS_TOOL_NAME) {
+        if (id) consultExpertsCalls.push({ id, args });
         continue;
       }
 
@@ -1912,43 +1950,78 @@ Keep replies concise and easy to read in a chat bubble.`;
       }
     }
 
-    if (webSearchCalls.length === 0 || round === MAX_ROUNDS - 1) break;
+    const hardToolCalls = [...webSearchCalls, ...consultExpertsCalls];
+    if (hardToolCalls.length === 0 || round === MAX_ROUNDS - 1) break;
 
-    // Feed search results back so the model can write its real answer next
+    // Let the user know why the reply is taking longer than usual instead of
+    // leaving them wondering if elAIne is hung — this round can involve
+    // several sequential/parallel model calls before she writes anything.
+    if (webSearchCalls.length > 0 && consultExpertsCalls.length > 0) {
+      sendEvent("status", { message: "Searching the web and checking in with a couple of experts…" });
+    } else if (webSearchCalls.length > 0) {
+      sendEvent("status", {
+        message: webSearchCalls.length > 1 ? "Searching the web for a few things…" : "Searching the web…",
+      });
+    } else {
+      sendEvent("status", { message: "Checking in with a couple of experts…" });
+    }
+
+    // Feed tool results back so the model can write its real answer next
     // round. Reset rawContent first — models essentially never emit text
     // alongside a tool call, but if one did, it'd otherwise be duplicated
     // ahead of the actual answer in the final saved/sent content.
     messages.push({
       role: "assistant",
       content: rawContent || null,
-      tool_calls: webSearchCalls.map((c) => ({
+      tool_calls: hardToolCalls.map((c, i) => ({
         id: c.id,
         type: "function",
-        function: { name: WEB_SEARCH_TOOL_NAME, arguments: c.args },
+        function: {
+          name: i < webSearchCalls.length ? WEB_SEARCH_TOOL_NAME : CONSULT_EXPERTS_TOOL_NAME,
+          arguments: c.args,
+        },
       })),
     });
     rawContent = "";
 
-    for (const call of webSearchCalls) {
-      let resultText: string;
-      try {
-        const parsed = WebSearchToolPayload.safeParse(JSON.parse(call.args));
-        if (!parsed.success) {
-          resultText = "Invalid search query — ask the user to rephrase.";
-        } else {
-          const { answer, citations } = await webSearch(parsed.data.query);
-          resultText = answer
-            ? citations.length > 0
-              ? `${answer}\n\nSources: ${citations.join(", ")}`
-              : answer
-            : "No results found for this search.";
+    await Promise.all([
+      ...webSearchCalls.map(async (call) => {
+        let resultText: string;
+        try {
+          const parsed = WebSearchToolPayload.safeParse(JSON.parse(call.args));
+          if (!parsed.success) {
+            resultText = "Invalid search query — ask the user to rephrase.";
+          } else {
+            const { answer, citations } = await webSearch(parsed.data.query);
+            resultText = answer
+              ? citations.length > 0
+                ? `${answer}\n\nSources: ${citations.join(", ")}`
+                : answer
+              : "No results found for this search.";
+          }
+        } catch (err) {
+          req.log.error({ err }, "elAIne web_search tool failed");
+          resultText = "Search failed — tell the user you couldn't look this up right now.";
         }
-      } catch (err) {
-        req.log.error({ err }, "elAIne web_search tool failed");
-        resultText = "Search failed — tell the user you couldn't look this up right now.";
-      }
-      messages.push({ role: "tool", tool_call_id: call.id, content: resultText });
-    }
+        messages.push({ role: "tool", tool_call_id: call.id, content: resultText });
+      }),
+      ...consultExpertsCalls.map(async (call) => {
+        let resultText: string;
+        try {
+          const parsed = ConsultExpertsToolPayload.safeParse(JSON.parse(call.args));
+          if (!parsed.success) {
+            resultText = "Invalid question — ask the user to rephrase.";
+          } else {
+            const { answer } = await consultExperts(parsed.data.question, parsed.data.context);
+            resultText = answer || "No panel opinion could be gathered — answer from your own best judgment instead.";
+          }
+        } catch (err) {
+          req.log.error({ err }, "elAIne consult_experts tool failed");
+          resultText = "Expert consultation failed — answer from your own best judgment instead.";
+        }
+        messages.push({ role: "tool", tool_call_id: call.id, content: resultText });
+      }),
+    ]);
   }
 
   const content = rawContent.trim();

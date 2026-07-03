@@ -33,6 +33,12 @@ export const MODELS = {
   SUBAGENT_WORKER: "z-ai/glm-5.2",
   // Web-search-grounded model used for factual lookups (designer bios, etc).
   RESEARCH: "perplexity/sonar",
+  // Second, independent voice for the `consultExperts()` multi-model advice
+  // panel (see lib/expert-consult.ts). Deliberately a different vendor from
+  // ADVISOR (Anthropic) and FAST/SMART_VISION (Google) so the two opinions
+  // reflect genuinely different model families, not just two calls to the
+  // same underlying model.
+  EXPERT_PANEL_ALT: "openai/gpt-5.1",
   // OpenAI's embedding model, accessed through OpenRouter's unified
   // embeddings endpoint (https://openrouter.ai/docs/api-reference/embeddings)
   // rather than a direct OpenAI API key.

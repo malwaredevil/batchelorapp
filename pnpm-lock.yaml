@@ -862,15 +862,15 @@ importers:
 
   artifacts/travels:
     dependencies:
+      '@e965/xlsx':
+        specifier: ^0.20.3
+        version: 0.20.3
       dompurify:
         specifier: ^3.4.11
         version: 3.4.11
       leaflet:
         specifier: ^1.9.4
         version: 1.9.4
-      xlsx:
-        specifier: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
-        version: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
     devDependencies:
       '@hookform/resolvers':
         specifier: ^3.10.0
@@ -1470,6 +1470,11 @@ packages:
 
   '@drizzle-team/brocli@0.10.2':
     resolution: {integrity: sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w==}
+
+  '@e965/xlsx@0.20.3':
+    resolution: {integrity: sha512-703RN/3OdsRD5mtse2HBX7Um7xwaP9tlswEG6svOtjqokXoX7rJdQj7DyabD2I+xk22RgaIIU+R6BHgkpZGB/w==}
+    engines: {node: '>=0.8'}
+    hasBin: true
 
   '@emnapi/runtime@1.11.1':
     resolution: {integrity: sha512-vgj7R3y3Wgx24IQaGPA/R6YFXLHVMOZ0uVEyIQPaWs+rd1AzfEMXlAC22FYwO1XkKR6NPsq7mUandH8oIRdZFw==}
@@ -4815,12 +4820,6 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
-  xlsx@https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz:
-    resolution: {integrity: sha512-oLDq3jw7AcLqKWH2AhCpVTZl8mf6X2YReP+Neh0SJUzV/BdZYjth94tG5toiMB1PPrYtxOCfaoUCkvtuH+3AJA==, tarball: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz}
-    version: 0.20.3
-    engines: {node: '>=0.8'}
-    hasBin: true
-
   xtend@4.0.2:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
     engines: {node: '>=0.4'}
@@ -4972,6 +4971,8 @@ snapshots:
   '@date-fns/tz@1.4.1': {}
 
   '@drizzle-team/brocli@0.10.2': {}
+
+  '@e965/xlsx@0.20.3': {}
 
   '@emnapi/runtime@1.11.1':
     dependencies:
@@ -8362,8 +8363,6 @@ snapshots:
       strip-ansi: 7.2.0
 
   wrappy@1.0.2: {}
-
-  xlsx@https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz: {}
 
   xtend@4.0.2: {}
 

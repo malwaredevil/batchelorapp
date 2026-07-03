@@ -1231,10 +1231,24 @@ export interface AssistantMessage {
   content: string;
 }
 
+export type AssistantActionType = "create_trip" | "add_wishlist" | "add_packing_item";
+
+export interface AssistantAction {
+  type: AssistantActionType;
+  label: string;
+  payload: Record<string, unknown>;
+}
+
+export interface AssistantActionResult {
+  type: AssistantActionType;
+  result: unknown;
+}
+
 export interface AssistantChatResponse {
   role: "assistant";
   content: string;
   navigate: { path: string; reason: string } | null;
+  action: AssistantAction | null;
   messages: AssistantMessage[];
 }
 
@@ -1316,6 +1330,29 @@ export function useNewAssistantConversation(
   },
 ) {
   const mutationFn = () => newAssistantConversationFn();
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const executeAssistantActionFn = (
+  body: Pick<AssistantAction, "type" | "payload">,
+): Promise<AssistantActionResult> =>
+  customFetch<AssistantActionResult>("/api/travels/assistant/action", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export function useExecuteAssistantAction(
+  options?: {
+    mutation?: UseMutationOptions<
+      AssistantActionResult,
+      unknown,
+      Pick<AssistantAction, "type" | "payload">
+    >;
+  },
+) {
+  const mutationFn = (body: Pick<AssistantAction, "type" | "payload">) =>
+    executeAssistantActionFn(body);
   return useMutation({ mutationFn, ...options?.mutation });
 }
 

@@ -8,6 +8,8 @@ import {
   travelsAssistantConversations,
   travelsAssistantSettings,
   travelsHouseholdMemory,
+  travelsTrips,
+  travelsWishlist,
 } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { callModelWithSubagent, MODELS } from "../../lib/ai-client";
@@ -41,6 +43,77 @@ const SettingsBody = z.object({
   enabled: z.boolean(),
 });
 
+// Copied intentionally from routes/travels/trips.ts and wishlist.ts, which
+// each keep their own small copy of this helper rather than sharing one.
+async function geocodeDestination(
+  destination: string,
+): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(destination)}&format=json&limit=1`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Batchelor-App/1.0" },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as Array<{ lat: string; lon: string }>;
+    if (data[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Payload schemas for the write-actions elAIne can propose. Kept intentionally
+// small (a subset of the full create schemas) since elAIne proposes these
+// from a short chat exchange, not a full form.
+const CreateTripActionPayload = z.object({
+  title: z.string().min(1).max(200),
+  destination: z.string().min(1).max(200),
+  status: z
+    .enum(["wishlist", "planning", "booked", "active", "completed"])
+    .optional(),
+  startDate: z.string().max(20).optional(),
+  endDate: z.string().max(20).optional(),
+  notes: z.string().max(2000).optional(),
+});
+
+const AddWishlistActionPayload = z.object({
+  destination: z.string().min(1).max(200),
+  targetDate: z.string().max(20).optional(),
+  notes: z.string().max(2000).optional(),
+});
+
+const AddPackingItemActionPayload = z.object({
+  tripId: z.number().int().positive(),
+  item: z.string().min(1).max(200),
+});
+
+const ActionBody = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("create_trip"), payload: CreateTripActionPayload }),
+  z.object({ type: z.literal("add_wishlist"), payload: AddWishlistActionPayload }),
+  z.object({
+    type: z.literal("add_packing_item"),
+    payload: AddPackingItemActionPayload,
+  }),
+]);
+
+type PendingAction = z.infer<typeof ActionBody>;
+
+function buildActionLabel(action: PendingAction): string {
+  switch (action.type) {
+    case "create_trip":
+      return `Create a trip to ${action.payload.destination}${
+        action.payload.title && action.payload.title !== action.payload.destination
+          ? ` ("${action.payload.title}")`
+          : ""
+      }`;
+    case "add_wishlist":
+      return `Add "${action.payload.destination}" to the wishlist`;
+    case "add_packing_item":
+      return `Add "${action.payload.item}" to the packing list`;
+  }
+}
+
 async function getOrCreateConversation(userId: number) {
   const [existing] = await db
     .select()
@@ -69,15 +142,18 @@ async function getOrCreateConversation(userId: number) {
 // since elAIne runs on a fast chat model tuned for low latency.
 const NAVIGATE_RE = /\[\[NAVIGATE:\s*(\/[a-zA-Z0-9/_-]*)\s*\|\s*([^\]]+)\]\]/;
 const REMEMBER_RE = /\[\[REMEMBER:\s*([^\]]+)\]\]/;
+const ACTION_RE = /\[\[ACTION:\s*(\w+)\s*\|\s*(\{[^{}]*\})\s*\]\]/;
 
 function extractDirectives(raw: string): {
   content: string;
   navigate: { path: string; reason: string } | null;
   remember: string | null;
+  action: { type: string; label: string; payload: unknown } | null;
 } {
   let content = raw;
   let navigate: { path: string; reason: string } | null = null;
   let remember: string | null = null;
+  let action: { type: string; label: string; payload: unknown } | null = null;
 
   const navMatch = content.match(NAVIGATE_RE);
   if (navMatch) {
@@ -91,7 +167,30 @@ function extractDirectives(raw: string): {
     content = content.replace(REMEMBER_RE, "").trim();
   }
 
-  return { content, navigate, remember };
+  const actionMatch = content.match(ACTION_RE);
+  if (actionMatch) {
+    content = content.replace(ACTION_RE, "").trim();
+    try {
+      const parsedPayload: unknown = JSON.parse(actionMatch[2]);
+      const parsedAction = ActionBody.safeParse({
+        type: actionMatch[1],
+        payload: parsedPayload,
+      });
+      if (parsedAction.success) {
+        action = {
+          type: parsedAction.data.type,
+          label: buildActionLabel(parsedAction.data),
+          payload: parsedAction.data.payload,
+        };
+      }
+      // If validation fails, we silently drop the action rather than
+      // surfacing a malformed/unsafe write-action to the confirmation UI.
+    } catch {
+      // Malformed JSON from the model — drop the action, keep the reply text.
+    }
+  }
+
+  return { content, navigate, remember, action };
 }
 
 router.get("/assistant/conversation", async (req, res) => {
@@ -153,6 +252,14 @@ REMEMBERING: If the user shares a fact worth remembering for the whole household
 [[REMEMBER: the fact, written plainly]]
 Only do this for genuinely durable, household-relevant facts — not small talk, not one-off questions.
 
+TAKING ACTION: You can propose making an actual change for the user — you never make the change yourself, the user always has to press a confirm button first. When the user clearly asks you to do one of the following, first briefly confirm in plain language what you're about to do (e.g. "Want me to create a trip to Rome for August?"), then append this exact machine-readable line as the LAST line of your reply (after any NAVIGATE/REMEMBER lines), with compact single-line JSON and no comments:
+[[ACTION: <type> | {"...":"..."}]]
+Only ever emit ONE action line per reply. Valid types and their JSON payload shape:
+- create_trip: {"title": string, "destination": string, "status"?: "wishlist"|"planning"|"booked"|"active"|"completed", "startDate"?: "YYYY-MM-DD", "endDate"?: "YYYY-MM-DD", "notes"?: string}
+- add_wishlist: {"destination": string, "targetDate"?: "YYYY-MM-DD", "notes"?: string}
+- add_packing_item: {"tripId": number, "item": string} — only use this if you can see a specific trip's numeric id in the on-screen state above (look for "tripId: <number>"); never guess an id, and never use this type if no trip id is visible — offer to open the trip instead.
+Never include an ACTION line unless you just asked permission in your reply's visible text, and never fabricate ids or facts not given to you.
+
 Keep replies concise and easy to read in a chat bubble.`;
 
   const messages = [
@@ -175,7 +282,7 @@ Keep replies concise and easy to read in a chat bubble.`;
     },
   );
 
-  const { content, navigate, remember } = extractDirectives(rawContent);
+  const { content, navigate, remember, action } = extractDirectives(rawContent);
 
   if (remember) {
     await db
@@ -194,7 +301,72 @@ Keep replies concise and easy to read in a chat bubble.`;
     .set({ messages: updatedHistory, updatedAt: new Date() })
     .where(eq(travelsAssistantConversations.userId, userId));
 
-  res.json({ role: "assistant", content, navigate, messages: updatedHistory });
+  res.json({ role: "assistant", content, navigate, action, messages: updatedHistory });
+});
+
+// Executes a write-action elAIne proposed in chat, only once the user has
+// explicitly confirmed it in the UI. Every write here is scoped to the
+// calling user the same way the equivalent hand-written routes are.
+router.post("/assistant/action", async (req, res) => {
+  const userId = req.session.userId!;
+  const action = ActionBody.parse(req.body);
+
+  if (action.type === "create_trip") {
+    const { payload } = action;
+    const coords = await geocodeDestination(payload.destination);
+    const [row] = await db
+      .insert(travelsTrips)
+      .values({
+        title: payload.title,
+        destination: payload.destination,
+        status: payload.status ?? "wishlist",
+        startDate: payload.startDate,
+        endDate: payload.endDate,
+        notes: payload.notes,
+        userId,
+        ...(coords ?? {}),
+      })
+      .returning();
+    res.status(201).json({ type: action.type, result: row });
+    return;
+  }
+
+  if (action.type === "add_wishlist") {
+    const { payload } = action;
+    const coords = await geocodeDestination(payload.destination);
+    const [row] = await db
+      .insert(travelsWishlist)
+      .values({
+        destination: payload.destination,
+        targetDate: payload.targetDate,
+        notes: payload.notes,
+        userId,
+        ...(coords ?? {}),
+      })
+      .returning();
+    res.status(201).json({ type: action.type, result: row });
+    return;
+  }
+
+  // add_packing_item
+  const { payload } = action;
+  const [trip] = await db
+    .select({ id: travelsTrips.id, packingList: travelsTrips.packingList })
+    .from(travelsTrips)
+    .where(eq(travelsTrips.id, payload.tripId));
+  if (!trip) {
+    res.status(404).json({ error: "Trip not found" });
+    return;
+  }
+  const existing =
+    (trip.packingList as Array<{ item: string; packed: boolean }> | null) ?? [];
+  const updatedList = [...existing, { item: payload.item, packed: false }];
+  const [row] = await db
+    .update(travelsTrips)
+    .set({ packingList: updatedList })
+    .where(eq(travelsTrips.id, payload.tripId))
+    .returning();
+  res.status(200).json({ type: action.type, result: row });
 });
 
 router.get("/assistant/settings", async (req, res) => {

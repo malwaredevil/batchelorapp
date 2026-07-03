@@ -168,7 +168,30 @@ const ActionBody = z.discriminatedUnion("type", [
 
 type PendingAction = z.infer<typeof ActionBody>;
 
-function buildActionLabel(action: PendingAction): string {
+// Looks up a trip's title/destination so confirmation labels can name the
+// record instead of saying "this trip". Returns null if the trip can't be
+// found (e.g. already deleted) so callers can fall back to a generic label.
+async function getTripLabelInfo(
+  tripId: number,
+): Promise<{ title: string; destination: string } | null> {
+  const [trip] = await db
+    .select({ title: travelsTrips.title, destination: travelsTrips.destination })
+    .from(travelsTrips)
+    .where(eq(travelsTrips.id, tripId));
+  return trip ?? null;
+}
+
+async function getWishlistLabelInfo(
+  wishlistId: number,
+): Promise<{ destination: string } | null> {
+  const [item] = await db
+    .select({ destination: travelsWishlist.destination })
+    .from(travelsWishlist)
+    .where(eq(travelsWishlist.id, wishlistId));
+  return item ?? null;
+}
+
+async function buildActionLabel(action: PendingAction): Promise<string> {
   switch (action.type) {
     case "create_trip":
       return `Create a trip to ${action.payload.destination}${
@@ -180,9 +203,14 @@ function buildActionLabel(action: PendingAction): string {
       return `Add "${action.payload.destination}" to the wishlist`;
     case "add_packing_item":
       return `Add "${action.payload.item}" to the packing list`;
-    case "update_trip_status":
-      return `Move this trip to "${action.payload.status}"`;
+    case "update_trip_status": {
+      const trip = await getTripLabelInfo(action.payload.tripId);
+      const name = trip ? `"${trip.title || trip.destination}"` : "this trip";
+      return `Move ${name} to "${action.payload.status}"`;
+    }
     case "update_trip_details": {
+      const trip = await getTripLabelInfo(action.payload.tripId);
+      const name = trip ? `"${trip.title || trip.destination}"` : "this trip";
       const changes: string[] = [];
       if (action.payload.destination !== undefined)
         changes.push(`destination to "${action.payload.destination}"`);
@@ -191,16 +219,25 @@ function buildActionLabel(action: PendingAction): string {
       if (action.payload.endDate !== undefined)
         changes.push(`end date to ${action.payload.endDate}`);
       if (action.payload.notes !== undefined) changes.push(`notes`);
-      return `Update this trip's ${changes.join(", ")}`;
+      return `Update ${name}'s ${changes.join(", ")}`;
     }
-    case "cancel_trip":
-      return `Cancel this trip`;
-    case "mark_wishlist_done":
+    case "cancel_trip": {
+      const trip = await getTripLabelInfo(action.payload.tripId);
+      return trip ? `Cancel your trip to ${trip.destination}` : `Cancel this trip`;
+    }
+    case "mark_wishlist_done": {
+      const item = await getWishlistLabelInfo(action.payload.wishlistId);
+      const name = item ? `"${item.destination}"` : "this wishlist item";
       return action.payload.done === false
-        ? `Mark this wishlist item as not done`
-        : `Mark this wishlist item as done`;
-    case "remove_wishlist_item":
-      return `Remove this item from the wishlist`;
+        ? `Mark ${name} as not done`
+        : `Mark ${name} as done on the wishlist`;
+    }
+    case "remove_wishlist_item": {
+      const item = await getWishlistLabelInfo(action.payload.wishlistId);
+      return item
+        ? `Remove "${item.destination}" from the wishlist`
+        : `Remove this item from the wishlist`;
+    }
     case "remove_packing_item":
       return `Remove "${action.payload.item}" from the packing list`;
   }
@@ -236,12 +273,12 @@ const NAVIGATE_RE = /\[\[NAVIGATE:\s*(\/[a-zA-Z0-9/_-]*)\s*\|\s*([^\]]+)\]\]/;
 const REMEMBER_RE = /\[\[REMEMBER:\s*([^\]]+)\]\]/;
 const ACTION_RE = /\[\[ACTION:\s*(\w+)\s*\|\s*(\{[^{}]*\})\s*\]\]/;
 
-function extractDirectives(raw: string): {
+async function extractDirectives(raw: string): Promise<{
   content: string;
   navigate: { path: string; reason: string } | null;
   remember: string | null;
   action: { type: string; label: string; payload: unknown } | null;
-} {
+}> {
   let content = raw;
   let navigate: { path: string; reason: string } | null = null;
   let remember: string | null = null;
@@ -261,7 +298,7 @@ function extractDirectives(raw: string): {
 
   const actionMatch = content.match(ACTION_RE);
   if (actionMatch) {
-    action = tryExtractAction(content);
+    action = await tryExtractAction(content);
     content = content.replace(ACTION_RE, "").trim();
   }
 
@@ -273,9 +310,9 @@ function extractDirectives(raw: string): {
 // `]]` has actually arrived — ACTION_RE requires it — so this is also what
 // lets the streaming chat route detect the directive "as soon as it's fully
 // received" rather than guessing from a partial JSON payload.
-function tryExtractAction(
+async function tryExtractAction(
   content: string,
-): { type: string; label: string; payload: unknown } | null {
+): Promise<{ type: string; label: string; payload: unknown } | null> {
   const actionMatch = content.match(ACTION_RE);
   if (!actionMatch) return null;
   try {
@@ -287,7 +324,7 @@ function tryExtractAction(
     if (parsedAction.success) {
       return {
         type: parsedAction.data.type,
-        label: buildActionLabel(parsedAction.data),
+        label: await buildActionLabel(parsedAction.data),
         payload: parsedAction.data.payload,
       };
     }
@@ -418,7 +455,7 @@ Keep replies concise and easy to read in a chat bubble.`;
           sendEvent("delta", { text: delta });
 
           if (!actionSent) {
-            const action = tryExtractAction(rawContent);
+            const action = await tryExtractAction(rawContent);
             if (action) {
               sendEvent("action", action);
               actionSent = true;
@@ -434,7 +471,7 @@ Keep replies concise and easy to read in a chat bubble.`;
     return;
   }
 
-  const { content, navigate, remember, action } = extractDirectives(rawContent);
+  const { content, navigate, remember, action } = await extractDirectives(rawContent);
 
   if (remember) {
     await db

@@ -364,7 +364,7 @@ export default function Wishlist() {
     "wishlist",
     `Viewing wishlist with ${items.length} destination(s): ${sortedItems
       .slice(0, 15)
-      .map((i) => i.destination)
+      .map((i) => `${i.destination} (wishlistId: ${i.id}${i.done ? ", done" : ""})`)
       .join(", ")}.` +
       (newDest.trim() ? ` User is currently typing a new wishlist entry: "${newDest.trim()}"${newDate ? ` targeting ${newDate}` : ""}.` : ""),
   );

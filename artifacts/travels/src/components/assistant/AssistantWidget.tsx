@@ -150,7 +150,12 @@ export function AssistantWidget() {
           setPendingAction(null);
           qc.invalidateQueries({ queryKey: getListTripsQueryKey() });
           qc.invalidateQueries({ queryKey: getListWishlistQueryKey() });
-          if (pendingAction.type === "add_packing_item") {
+          if (
+            pendingAction.type === "add_packing_item" ||
+            pendingAction.type === "update_trip_status" ||
+            pendingAction.type === "cancel_trip" ||
+            pendingAction.type === "remove_packing_item"
+          ) {
             const tripId = pendingAction.payload.tripId;
             if (typeof tripId === "number") {
               qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });

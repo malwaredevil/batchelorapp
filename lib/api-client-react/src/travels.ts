@@ -1231,7 +1231,15 @@ export interface AssistantMessage {
   content: string;
 }
 
-export type AssistantActionType = "create_trip" | "add_wishlist" | "add_packing_item";
+export type AssistantActionType =
+  | "create_trip"
+  | "add_wishlist"
+  | "add_packing_item"
+  | "update_trip_status"
+  | "cancel_trip"
+  | "mark_wishlist_done"
+  | "remove_wishlist_item"
+  | "remove_packing_item";
 
 export interface AssistantAction {
   type: AssistantActionType;

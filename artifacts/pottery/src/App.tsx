@@ -1,13 +1,13 @@
+import { useEffect } from "react";
 import { Switch, Route, Redirect, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider, useAuth } from "@/lib/auth";
+import { AuthProvider, useAuth, redirectToMainLogin } from "@/lib/auth";
 import { ThemeProvider } from "@/hooks/use-theme";
 import { AppShell } from "@/components/app-shell";
 import "@/features";
-import Login from "@/pages/login";
 import ForgotPassword from "@/pages/forgot-password";
 import ResetPassword from "@/pages/reset-password";
 import Collection from "@/pages/collection";
@@ -39,16 +39,19 @@ function Splash() {
 function Routes() {
   const { user, isLoading } = useAuth();
 
+  useEffect(() => {
+    if (!isLoading && !user) redirectToMainLogin();
+  }, [isLoading, user]);
+
   if (isLoading) return <Splash />;
 
   if (!user) {
     return (
       <Switch>
-        <Route path="/login" component={Login} />
         <Route path="/forgot-password" component={ForgotPassword} />
         <Route path="/reset-password" component={ResetPassword} />
         <Route>
-          <Redirect to="/login" />
+          <Splash />
         </Route>
       </Switch>
     );

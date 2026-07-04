@@ -58,7 +58,9 @@ export default function ForgotPassword() {
             <Button
               variant="outline"
               className="w-full"
-              onClick={() => navigate("/login")}
+              onClick={() => {
+                window.location.href = "/login";
+              }}
             >
               Back to sign in
             </Button>
@@ -110,7 +112,9 @@ export default function ForgotPassword() {
               type="button"
               variant="ghost"
               className="w-full gap-1 text-sm text-muted-foreground"
-              onClick={() => navigate("/login")}
+              onClick={() => {
+                window.location.href = "/login";
+              }}
             >
               <ArrowLeft className="h-3.5 w-3.5" />
               Back to sign in

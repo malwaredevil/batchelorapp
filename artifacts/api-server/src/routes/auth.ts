@@ -55,6 +55,18 @@ function googleCallbackUrl(req: Request): string | null {
   return `${req.protocol}://${host}/api/auth/google/callback`;
 }
 
+// All apps (pottery, quilting, travels) share one login page hosted at the
+// domain root by the main Batchelor app. Sub-apps hard-redirect unauthenticated
+// visitors to "/login?returnTo=<original path>" so this must only ever accept
+// a same-origin relative path — never an absolute URL or protocol-relative
+// "//host" path — to prevent it being used as an open redirect.
+function sanitizeReturnTo(value: unknown): string | null {
+  if (typeof value !== "string" || !value) return null;
+  if (!value.startsWith("/") || value.startsWith("//")) return null;
+  if (value.includes("\\")) return null;
+  return value;
+}
+
 const router: IRouter = Router();
 
 router.post("/auth/login", loginLimiter, async (req, res) => {
@@ -429,6 +441,7 @@ router.post("/auth/reset-password", async (req, res) => {
 
 const TEN_MINUTES_MS = 1000 * 60 * 10;
 const OAUTH_STATE_COOKIE = "pottery.oauth_state";
+const OAUTH_RETURN_TO_COOKIE = "pottery.oauth_returnto";
 // Restrict the state cookie to the auth routes that use it.
 const OAUTH_COOKIE_PATH = "/api/auth";
 
@@ -457,6 +470,26 @@ router.get("/auth/google", loginLimiter, (req, res) => {
     maxAge: TEN_MINUTES_MS,
     path: OAUTH_COOKIE_PATH,
   });
+
+  // Sub-apps (pottery/quilting/travels) send visitors here with a
+  // returnTo=<their original path> so they land back where they started after
+  // Google sign-in. Stash it in the same short-lived signed cookie pattern as
+  // the CSRF state rather than trusting a query param on the callback, since
+  // Google echoes back its own `state` param, not arbitrary app state.
+  const returnTo = sanitizeReturnTo(req.query.returnTo);
+  if (returnTo) {
+    res.cookie(OAUTH_RETURN_TO_COOKIE, returnTo, {
+      signed: true,
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      maxAge: TEN_MINUTES_MS,
+      path: OAUTH_COOKIE_PATH,
+    });
+  } else {
+    res.clearCookie(OAUTH_RETURN_TO_COOKIE, { path: OAUTH_COOKIE_PATH });
+  }
+
   const url = createGoogleClient(callbackUrl).generateAuthUrl({
     access_type: "online",
     scope: GOOGLE_SCOPES,
@@ -475,9 +508,17 @@ router.get("/auth/google/callback", async (req, res) => {
 
   const { code, state } = req.query;
   const expectedState = req.signedCookies?.[OAUTH_STATE_COOKIE];
-  // One-time use: clear the state cookie regardless of outcome. The attributes
-  // must match those it was set with so every browser reliably deletes it.
+  const returnTo = sanitizeReturnTo(req.signedCookies?.[OAUTH_RETURN_TO_COOKIE]);
+  // One-time use: clear the state cookies regardless of outcome. The
+  // attributes must match those they were set with so every browser reliably
+  // deletes them.
   res.clearCookie(OAUTH_STATE_COOKIE, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "none",
+    path: OAUTH_COOKIE_PATH,
+  });
+  res.clearCookie(OAUTH_RETURN_TO_COOKIE, {
     httpOnly: true,
     secure: true,
     sameSite: "none",
@@ -545,7 +586,7 @@ router.get("/auth/google/callback", async (req, res) => {
           res.redirect(`${LOGIN_PATH}?error=google_failed`);
           return;
         }
-        res.redirect("/");
+        res.redirect(returnTo ?? "/");
 
         // Same shared trigger as password login — see comment there.
         runReminderAlerts().catch((err: unknown) =>

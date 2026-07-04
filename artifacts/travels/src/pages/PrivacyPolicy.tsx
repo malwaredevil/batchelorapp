@@ -5,13 +5,13 @@ export default function PrivacyPolicy() {
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto max-w-3xl px-4 py-10 space-y-8">
-        <Link
+        <a
           href="/login"
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back
-        </Link>
+        </a>
 
         <div className="space-y-2">
           <h1 className="font-serif text-3xl text-foreground">Privacy Policy</h1>

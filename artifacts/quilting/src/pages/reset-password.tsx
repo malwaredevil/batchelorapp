@@ -104,7 +104,12 @@ export default function ResetPassword() {
               Your password has been changed successfully. You can now sign in
               with your new password.
             </p>
-            <Button className="w-full" onClick={() => navigate("/login")}>
+            <Button
+              className="w-full"
+              onClick={() => {
+                window.location.href = "/login";
+              }}
+            >
               Sign in
             </Button>
           </div>

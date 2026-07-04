@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "wouter";
 import { useForgotPassword } from "@workspace/api-client-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -48,7 +47,7 @@ export default function ForgotPassword() {
               If that email is in our system, a reset link is on its way. Check
               your inbox (and spam folder).
             </p>
-            <Link href="/login">
+            <a href="/login">
               <Button
                 variant="outline"
                 className="w-full h-11 gap-2 font-semibold"
@@ -56,7 +55,7 @@ export default function ForgotPassword() {
                 <ArrowLeft className="h-4 w-4" />
                 Back to sign in
               </Button>
-            </Link>
+            </a>
           </div>
         ) : (
           <form
@@ -95,7 +94,7 @@ export default function ForgotPassword() {
               Send reset link
             </Button>
 
-            <Link href="/login">
+            <a href="/login">
               <Button
                 type="button"
                 variant="ghost"
@@ -104,7 +103,7 @@ export default function ForgotPassword() {
                 <ArrowLeft className="h-4 w-4" />
                 Back to sign in
               </Button>
-            </Link>
+            </a>
           </form>
         )}
 

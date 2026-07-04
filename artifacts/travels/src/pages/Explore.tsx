@@ -11,11 +11,26 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Compass, Search, MapPin, Clock, Globe, Sparkles, ChevronDown, ChevronUp, Navigation, ExternalLink } from "lucide-react";
+import {
+  Compass,
+  Search,
+  MapPin,
+  Clock,
+  Globe,
+  Sparkles,
+  ChevronDown,
+  ChevronUp,
+  Navigation,
+  ExternalLink,
+} from "lucide-react";
 import { toast } from "sonner";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 
-function HighlightCard({ h }: { h: { name: string; description: string; category: string } }) {
+function HighlightCard({
+  h,
+}: {
+  h: { name: string; description: string; category: string };
+}) {
   return (
     <div className="border border-border/60 rounded-lg p-3 space-y-1">
       <div className="flex items-start justify-between gap-2">
@@ -29,6 +44,18 @@ function HighlightCard({ h }: { h: { name: string; description: string; category
   );
 }
 
+function currentTimeInZone(timeZoneId: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: timeZoneId,
+    }).format(new Date());
+  } catch {
+    return "";
+  }
+}
+
 function ExploreResult({ result }: { result: ExploreDestinationResult }) {
   const qc = useQueryClient();
   const [, setLocation] = useLocation();
@@ -37,6 +64,7 @@ function ExploreResult({ result }: { result: ExploreDestinationResult }) {
   const { overview } = result;
   const highlights = overview.highlights ?? [];
   const displayed = showAll ? highlights : highlights.slice(0, 3);
+  const tz = result.timezone;
 
   const handleAddToWishlist = () => {
     createTrip.mutate(
@@ -63,7 +91,9 @@ function ExploreResult({ result }: { result: ExploreDestinationResult }) {
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="font-serif text-2xl text-foreground">{result.destination}</h2>
+          <h2 className="font-serif text-2xl text-foreground">
+            {result.destination}
+          </h2>
           <div className="flex items-center gap-3 mt-0.5 flex-wrap">
             {result.distanceKm != null && (
               <p className="text-sm text-muted-foreground flex items-center gap-1">
@@ -84,7 +114,11 @@ function ExploreResult({ result }: { result: ExploreDestinationResult }) {
             )}
           </div>
         </div>
-        <Button onClick={handleAddToWishlist} disabled={createTrip.isPending} variant="outline">
+        <Button
+          onClick={handleAddToWishlist}
+          disabled={createTrip.isPending}
+          variant="outline"
+        >
           <MapPin className="w-4 h-4 mr-2" />
           {createTrip.isPending ? "Adding..." : "Add to wishlist"}
         </Button>
@@ -93,7 +127,9 @@ function ExploreResult({ result }: { result: ExploreDestinationResult }) {
       {overview.description && (
         <Card className="border-border/50">
           <CardContent className="py-4">
-            <p className="text-foreground leading-relaxed">{overview.description}</p>
+            <p className="text-foreground leading-relaxed">
+              {overview.description}
+            </p>
           </CardContent>
         </Card>
       )}
@@ -107,7 +143,24 @@ function ExploreResult({ result }: { result: ExploreDestinationResult }) {
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
                   Best time to visit
                 </p>
-                <p className="text-sm text-foreground">{overview.bestTimeToVisit}</p>
+                <p className="text-sm text-foreground">
+                  {overview.bestTimeToVisit}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        {tz && (
+          <Card className="border-border/50">
+            <CardContent className="py-3 flex items-start gap-3">
+              <Clock className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                  Local time
+                </p>
+                <p className="text-sm text-foreground">
+                  {currentTimeInZone(tz.timeZoneId)} · {tz.timeZoneName}
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -122,7 +175,9 @@ function ExploreResult({ result }: { result: ExploreDestinationResult }) {
                 </p>
                 <p className="text-sm text-foreground">
                   {overview.practicalInfo.currency}
-                  {overview.practicalInfo.language ? ` · ${overview.practicalInfo.language}` : ""}
+                  {overview.practicalInfo.language
+                    ? ` · ${overview.practicalInfo.language}`
+                    : ""}
                 </p>
               </div>
             </CardContent>
@@ -136,7 +191,9 @@ function ExploreResult({ result }: { result: ExploreDestinationResult }) {
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
                   Getting around
                 </p>
-                <p className="text-sm text-foreground">{overview.practicalInfo.transit}</p>
+                <p className="text-sm text-foreground">
+                  {overview.practicalInfo.transit}
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -147,7 +204,9 @@ function ExploreResult({ result }: { result: ExploreDestinationResult }) {
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
                 Tipping culture
               </p>
-              <p className="text-sm text-foreground">{overview.practicalInfo.tipping}</p>
+              <p className="text-sm text-foreground">
+                {overview.practicalInfo.tipping}
+              </p>
             </CardContent>
           </Card>
         )}
@@ -172,7 +231,8 @@ function ExploreResult({ result }: { result: ExploreDestinationResult }) {
                 </>
               ) : (
                 <>
-                  <ChevronDown className="w-4 h-4" /> Show all {highlights.length} highlights
+                  <ChevronDown className="w-4 h-4" /> Show all{" "}
+                  {highlights.length} highlights
                 </>
               )}
             </button>
@@ -190,16 +250,23 @@ export default function Explore() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (!destination.trim()) return;
-    explore.mutate({ destination: destination.trim() }, {
-      onError: () => toast.error("Failed to explore destination. Try again."),
-    });
+    explore.mutate(
+      { destination: destination.trim() },
+      {
+        onError: () => toast.error("Failed to explore destination. Try again."),
+      },
+    );
   };
 
   usePageAssistantContext(
     "explore",
     `On the Explore page.` +
-      (destination.trim() ? ` User has typed "${destination.trim()}" in the destination search box.` : "") +
-      (explore.data ? ` Currently showing AI overview results for "${destination.trim()}".` : ""),
+      (destination.trim()
+        ? ` User has typed "${destination.trim()}" in the destination search box.`
+        : "") +
+      (explore.data
+        ? ` Currently showing AI overview results for "${destination.trim()}".`
+        : ""),
   );
 
   return (
@@ -221,7 +288,10 @@ export default function Explore() {
             onChange={(e) => setDestination(e.target.value)}
           />
         </div>
-        <Button type="submit" disabled={explore.isPending || !destination.trim()}>
+        <Button
+          type="submit"
+          disabled={explore.isPending || !destination.trim()}
+        >
           {explore.isPending ? (
             <>
               <Sparkles className="w-4 h-4 mr-2 animate-pulse" />
@@ -255,7 +325,8 @@ export default function Explore() {
             <Compass className="w-10 h-10 text-muted-foreground/40" />
             <p className="font-medium text-foreground">Where to next?</p>
             <p className="text-sm text-muted-foreground max-w-xs">
-              Search any city, region, or country and get an AI-generated overview with highlights and practical tips.
+              Search any city, region, or country and get an AI-generated
+              overview with highlights and practical tips.
             </p>
           </CardContent>
         </Card>

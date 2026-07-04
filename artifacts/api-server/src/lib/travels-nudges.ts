@@ -13,9 +13,14 @@
  */
 import { pool } from "@workspace/db";
 import { logger } from "./logger";
+import { getAirQuality, getPollenForecast } from "./travels/google-maps";
 
 // How close a trip's start date has to be before we start nudging about it.
 const NUDGE_WINDOW_DAYS = 3;
+
+// AQI thresholds per Google's Universal AQI scale (0-100, higher = worse).
+const AQI_UNHEALTHY_THRESHOLD = 100;
+const HIGH_POLLEN_CATEGORIES = new Set(["High", "Very High"]);
 
 type PackingItem = { item: string; packed: boolean };
 type ItineraryDay = { activities?: unknown[] } | Record<string, unknown>;
@@ -42,9 +47,11 @@ export async function computeAndStoreNudges(): Promise<void> {
       start_date: string;
       packing_list: PackingItem[] | null;
       itinerary: ItineraryDay[] | null;
+      lat: number | null;
+      lng: number | null;
     }>(
       `SELECT id, user_id, destination, start_date::text AS start_date,
-              packing_list, itinerary
+              packing_list, itinerary, lat, lng
          FROM travels_trips
         WHERE start_date IS NOT NULL
           AND start_date >= CURRENT_DATE
@@ -53,12 +60,17 @@ export async function computeAndStoreNudges(): Promise<void> {
       [NUDGE_WINDOW_DAYS],
     );
 
-    const candidates: { userId: number; tripId: number; nudgeKey: string; message: string }[] =
-      [];
+    const candidates: {
+      userId: number;
+      tripId: number;
+      nudgeKey: string;
+      message: string;
+    }[] = [];
 
     for (const trip of trips) {
       const days = daysUntil(trip.start_date);
-      const dayLabel = days <= 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} days`;
+      const dayLabel =
+        days <= 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} days`;
 
       const packingList = trip.packing_list ?? [];
       if (packingList.length === 0) {
@@ -79,6 +91,43 @@ export async function computeAndStoreNudges(): Promise<void> {
           message: `Your trip to ${trip.destination} kicks off ${dayLabel} but there's no itinerary yet — want me to put one together?`,
         });
       }
+
+      if (trip.lat != null && trip.lng != null) {
+        const [airQuality, pollen] = await Promise.all([
+          getAirQuality(trip.lat, trip.lng).catch((err: unknown) => {
+            logger.warn(
+              { err, tripId: trip.id },
+              "travels-nudges: air quality lookup failed",
+            );
+            return null;
+          }),
+          getPollenForecast(trip.lat, trip.lng).catch((err: unknown) => {
+            logger.warn(
+              { err, tripId: trip.id },
+              "travels-nudges: pollen lookup failed",
+            );
+            return null;
+          }),
+        ]);
+
+        if (airQuality && airQuality.aqi >= AQI_UNHEALTHY_THRESHOLD) {
+          candidates.push({
+            userId: trip.user_id,
+            tripId: trip.id,
+            nudgeKey: `air_quality:${trip.id}:${trip.start_date}`,
+            message: `Air quality in ${trip.destination} is currently "${airQuality.category}" (AQI ${airQuality.aqi}) ahead of your trip ${dayLabel}. You may want to pack a mask or plan more indoor time.`,
+          });
+        }
+
+        if (pollen && HIGH_POLLEN_CATEGORIES.has(pollen.overallCategory)) {
+          candidates.push({
+            userId: trip.user_id,
+            tripId: trip.id,
+            nudgeKey: `pollen:${trip.id}:${trip.start_date}`,
+            message: `Pollen levels in ${trip.destination} are "${pollen.overallCategory}" ahead of your trip ${dayLabel}. If anyone in your group has allergies, it might be worth packing medication.`,
+          });
+        }
+      }
     }
 
     for (const candidate of candidates) {
@@ -86,7 +135,12 @@ export async function computeAndStoreNudges(): Promise<void> {
         `INSERT INTO travels_assistant_nudges (user_id, trip_id, nudge_key, message)
          VALUES ($1, $2, $3, $4)
          ON CONFLICT (user_id, nudge_key) DO NOTHING`,
-        [candidate.userId, candidate.tripId, candidate.nudgeKey, candidate.message],
+        [
+          candidate.userId,
+          candidate.tripId,
+          candidate.nudgeKey,
+          candidate.message,
+        ],
       );
     }
 

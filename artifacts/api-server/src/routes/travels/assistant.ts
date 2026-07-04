@@ -35,6 +35,8 @@ import { webSearch } from "../../lib/web-search";
 import { consultExperts } from "../../lib/expert-consult";
 import {
   getWeatherForecast,
+  getAirQuality,
+  getPollenForecast,
   searchPlaces,
   computeRoute,
   type TravelMode,
@@ -73,7 +75,11 @@ const ChatBody = z.object({
 // confirm/skip before the next appears; "all_at_once" shows every proposed
 // action together with one Confirm all / Cancel all; "auto_run" executes
 // them immediately with no confirmation step and reports back afterward.
-const ACTION_CONFIRMATION_MODES = ["one_by_one", "all_at_once", "auto_run"] as const;
+const ACTION_CONFIRMATION_MODES = [
+  "one_by_one",
+  "all_at_once",
+  "auto_run",
+] as const;
 type ActionConfirmationMode = (typeof ACTION_CONFIRMATION_MODES)[number];
 
 const SettingsBody = z
@@ -81,9 +87,12 @@ const SettingsBody = z
     enabled: z.boolean().optional(),
     actionConfirmationMode: z.enum(ACTION_CONFIRMATION_MODES).optional(),
   })
-  .refine((v) => v.enabled !== undefined || v.actionConfirmationMode !== undefined, {
-    message: "At least one setting must be provided",
-  });
+  .refine(
+    (v) => v.enabled !== undefined || v.actionConfirmationMode !== undefined,
+    {
+      message: "At least one setting must be provided",
+    },
+  );
 
 // Copied intentionally from routes/travels/trips.ts and wishlist.ts, which
 // each keep their own small copy of this helper rather than sharing one.
@@ -98,7 +107,8 @@ async function geocodeDestination(
     });
     if (!res.ok) return null;
     const data = (await res.json()) as Array<{ lat: string; lon: string }>;
-    if (data[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    if (data[0])
+      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
     return null;
   } catch {
     return null;
@@ -109,7 +119,10 @@ async function getTripLabelInfo(
   tripId: number,
 ): Promise<{ title: string; destination: string } | null> {
   const [trip] = await db
-    .select({ title: travelsTrips.title, destination: travelsTrips.destination })
+    .select({
+      title: travelsTrips.title,
+      destination: travelsTrips.destination,
+    })
     .from(travelsTrips)
     .where(eq(travelsTrips.id, tripId));
   return trip ?? null;
@@ -137,7 +150,10 @@ async function getReminderLabelInfo(
 
 async function getDocumentLabelInfo(
   documentId: number,
-): Promise<{ documentType: string | null; originalFilename: string | null } | null> {
+): Promise<{
+  documentType: string | null;
+  originalFilename: string | null;
+} | null> {
   const [item] = await db
     .select({
       documentType: travelsTripDocuments.documentType,
@@ -148,7 +164,13 @@ async function getDocumentLabelInfo(
   return item ?? null;
 }
 
-const TRIP_STATUS_ENUM = ["wishlist", "planning", "booked", "active", "completed"] as const;
+const TRIP_STATUS_ENUM = [
+  "wishlist",
+  "planning",
+  "booked",
+  "active",
+  "completed",
+] as const;
 
 // ---------------------------------------------------------------------------
 // Action registry. Each entry is the single source of truth for one
@@ -303,8 +325,14 @@ const SendEmailActionPayload = z.object({
 });
 
 const ActionBody = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("create_trip"), payload: CreateTripActionPayload }),
-  z.object({ type: z.literal("add_wishlist"), payload: AddWishlistActionPayload }),
+  z.object({
+    type: z.literal("create_trip"),
+    payload: CreateTripActionPayload,
+  }),
+  z.object({
+    type: z.literal("add_wishlist"),
+    payload: AddWishlistActionPayload,
+  }),
   z.object({
     type: z.literal("add_packing_item"),
     payload: AddPackingItemActionPayload,
@@ -317,7 +345,10 @@ const ActionBody = z.discriminatedUnion("type", [
     type: z.literal("update_trip_details"),
     payload: UpdateTripDetailsActionPayload,
   }),
-  z.object({ type: z.literal("cancel_trip"), payload: CancelTripActionPayload }),
+  z.object({
+    type: z.literal("cancel_trip"),
+    payload: CancelTripActionPayload,
+  }),
   z.object({
     type: z.literal("mark_wishlist_done"),
     payload: MarkWishlistDoneActionPayload,
@@ -330,13 +361,22 @@ const ActionBody = z.discriminatedUnion("type", [
     type: z.literal("remove_packing_item"),
     payload: RemovePackingItemActionPayload,
   }),
-  z.object({ type: z.literal("add_reminder"), payload: AddReminderActionPayload }),
+  z.object({
+    type: z.literal("add_reminder"),
+    payload: AddReminderActionPayload,
+  }),
   z.object({
     type: z.literal("sync_reminder_to_calendar"),
     payload: SyncReminderToCalendarActionPayload,
   }),
-  z.object({ type: z.literal("edit_reminder"), payload: EditReminderActionPayload }),
-  z.object({ type: z.literal("delete_reminder"), payload: DeleteReminderActionPayload }),
+  z.object({
+    type: z.literal("edit_reminder"),
+    payload: EditReminderActionPayload,
+  }),
+  z.object({
+    type: z.literal("delete_reminder"),
+    payload: DeleteReminderActionPayload,
+  }),
   z.object({
     type: z.literal("add_itinerary_day"),
     payload: AddItineraryDayActionPayload,
@@ -345,10 +385,22 @@ const ActionBody = z.discriminatedUnion("type", [
     type: z.literal("regenerate_itinerary_day"),
     payload: RegenerateItineraryDayActionPayload,
   }),
-  z.object({ type: z.literal("add_connected_calendar"), payload: AddConnectedCalendarActionPayload }),
-  z.object({ type: z.literal("disconnect_calendar"), payload: DisconnectCalendarActionPayload }),
-  z.object({ type: z.literal("rescan_document"), payload: RescanDocumentActionPayload }),
-  z.object({ type: z.literal("generate_itinerary"), payload: GenerateItineraryActionPayload }),
+  z.object({
+    type: z.literal("add_connected_calendar"),
+    payload: AddConnectedCalendarActionPayload,
+  }),
+  z.object({
+    type: z.literal("disconnect_calendar"),
+    payload: DisconnectCalendarActionPayload,
+  }),
+  z.object({
+    type: z.literal("rescan_document"),
+    payload: RescanDocumentActionPayload,
+  }),
+  z.object({
+    type: z.literal("generate_itinerary"),
+    payload: GenerateItineraryActionPayload,
+  }),
   z.object({
     type: z.literal("confirm_itinerary_activity"),
     payload: ConfirmItineraryActivityActionPayload,
@@ -367,7 +419,8 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
   switch (action.type) {
     case "create_trip":
       return `Create a trip to ${action.payload.destination}${
-        action.payload.title && action.payload.title !== action.payload.destination
+        action.payload.title &&
+        action.payload.title !== action.payload.destination
           ? ` ("${action.payload.title}")`
           : ""
       }`;
@@ -395,7 +448,9 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
     }
     case "cancel_trip": {
       const trip = await getTripLabelInfo(action.payload.tripId);
-      return trip ? `Cancel your trip to ${trip.destination}` : `Cancel this trip`;
+      return trip
+        ? `Cancel your trip to ${trip.destination}`
+        : `Cancel this trip`;
     }
     case "mark_wishlist_done": {
       const item = await getWishlistLabelInfo(action.payload.wishlistId);
@@ -431,15 +486,25 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
       const reminder = await getReminderLabelInfo(action.payload.reminderId);
       const name = reminder ? `"${reminder.title}"` : "this reminder";
       const changes: string[] = [];
-      if (action.payload.title !== undefined) changes.push(`title to "${action.payload.title}"`);
+      if (action.payload.title !== undefined)
+        changes.push(`title to "${action.payload.title}"`);
       if (action.payload.description !== undefined) changes.push(`description`);
       if (action.payload.dueDate !== undefined)
-        changes.push(action.payload.dueDate ? `due date to ${action.payload.dueDate}` : "clear the due date");
+        changes.push(
+          action.payload.dueDate
+            ? `due date to ${action.payload.dueDate}`
+            : "clear the due date",
+        );
       if (action.payload.done !== undefined)
         changes.push(action.payload.done ? "mark as done" : "mark as not done");
-      if (action.payload.recipientEmails !== undefined) changes.push(`recipients`);
+      if (action.payload.recipientEmails !== undefined)
+        changes.push(`recipients`);
       if (action.payload.syncToCalendar !== undefined)
-        changes.push(action.payload.syncToCalendar ? "sync to the calendar" : "stop syncing to the calendar");
+        changes.push(
+          action.payload.syncToCalendar
+            ? "sync to the calendar"
+            : "stop syncing to the calendar",
+        );
       return `Update ${name}${changes.length ? `: ${changes.join(", ")}` : ""}`;
     }
     case "delete_reminder": {
@@ -502,7 +567,10 @@ type ActionExecutor = (
 ) => Promise<{ status: number; body: unknown }>;
 
 const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
-  create_trip: (async (payload: z.infer<typeof CreateTripActionPayload>, userId: number) => {
+  create_trip: (async (
+    payload: z.infer<typeof CreateTripActionPayload>,
+    userId: number,
+  ) => {
     const coords = await geocodeDestination(payload.destination);
     const [row] = await db
       .insert(travelsTrips)
@@ -520,7 +588,10 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     return { status: 201, body: { type: "create_trip", result: row } };
   }) as ActionExecutor,
 
-  add_wishlist: (async (payload: z.infer<typeof AddWishlistActionPayload>, userId: number) => {
+  add_wishlist: (async (
+    payload: z.infer<typeof AddWishlistActionPayload>,
+    userId: number,
+  ) => {
     const coords = await geocodeDestination(payload.destination);
     const [row] = await db
       .insert(travelsWishlist)
@@ -542,10 +613,16 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     const [trip] = await db
       .select({ id: travelsTrips.id, packingList: travelsTrips.packingList })
       .from(travelsTrips)
-      .where(and(eq(travelsTrips.id, payload.tripId), eq(travelsTrips.userId, userId)));
+      .where(
+        and(
+          eq(travelsTrips.id, payload.tripId),
+          eq(travelsTrips.userId, userId),
+        ),
+      );
     if (!trip) return { status: 404, body: { error: "Trip not found" } };
     const existing =
-      (trip.packingList as Array<{ item: string; packed: boolean }> | null) ?? [];
+      (trip.packingList as Array<{ item: string; packed: boolean }> | null) ??
+      [];
     const updatedList = [...existing, { item: payload.item, packed: false }];
     const [row] = await db
       .update(travelsTrips)
@@ -562,7 +639,12 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     const [existing] = await db
       .select({ id: travelsTrips.id })
       .from(travelsTrips)
-      .where(and(eq(travelsTrips.id, payload.tripId), eq(travelsTrips.userId, userId)));
+      .where(
+        and(
+          eq(travelsTrips.id, payload.tripId),
+          eq(travelsTrips.userId, userId),
+        ),
+      );
     if (!existing) return { status: 404, body: { error: "Trip not found" } };
     const [row] = await db
       .update(travelsTrips)
@@ -579,10 +661,16 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     const [existing] = await db
       .select({ id: travelsTrips.id })
       .from(travelsTrips)
-      .where(and(eq(travelsTrips.id, payload.tripId), eq(travelsTrips.userId, userId)));
+      .where(
+        and(
+          eq(travelsTrips.id, payload.tripId),
+          eq(travelsTrips.userId, userId),
+        ),
+      );
     if (!existing) return { status: 404, body: { error: "Trip not found" } };
     const updates: Partial<typeof travelsTrips.$inferInsert> = {};
-    if (payload.destination !== undefined) updates.destination = payload.destination;
+    if (payload.destination !== undefined)
+      updates.destination = payload.destination;
     if (payload.startDate !== undefined) updates.startDate = payload.startDate;
     if (payload.endDate !== undefined) updates.endDate = payload.endDate;
     if (payload.notes !== undefined) updates.notes = payload.notes;
@@ -598,11 +686,19 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     return { status: 200, body: { type: "update_trip_details", result: row } };
   }) as ActionExecutor,
 
-  cancel_trip: (async (payload: z.infer<typeof CancelTripActionPayload>, userId: number) => {
+  cancel_trip: (async (
+    payload: z.infer<typeof CancelTripActionPayload>,
+    userId: number,
+  ) => {
     const [existing] = await db
       .select({ id: travelsTrips.id })
       .from(travelsTrips)
-      .where(and(eq(travelsTrips.id, payload.tripId), eq(travelsTrips.userId, userId)));
+      .where(
+        and(
+          eq(travelsTrips.id, payload.tripId),
+          eq(travelsTrips.userId, userId),
+        ),
+      );
     if (!existing) return { status: 404, body: { error: "Trip not found" } };
 
     // Same cleanup order as DELETE /trips/:id — remove storage objects
@@ -621,14 +717,21 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
       ...docs.map((d) => deleteDocument(d.storagePath)),
     ]);
 
-    await db.delete(travelsTripPhotos).where(eq(travelsTripPhotos.tripId, payload.tripId));
+    await db
+      .delete(travelsTripPhotos)
+      .where(eq(travelsTripPhotos.tripId, payload.tripId));
     await db
       .delete(travelsTripDocuments)
       .where(eq(travelsTripDocuments.tripId, payload.tripId));
-    await db.delete(travelsReminders).where(eq(travelsReminders.tripId, payload.tripId));
+    await db
+      .delete(travelsReminders)
+      .where(eq(travelsReminders.tripId, payload.tripId));
     await db.delete(travelsTrips).where(eq(travelsTrips.id, payload.tripId));
 
-    return { status: 200, body: { type: "cancel_trip", result: { id: payload.tripId } } };
+    return {
+      status: 200,
+      body: { type: "cancel_trip", result: { id: payload.tripId } },
+    };
   }) as ActionExecutor,
 
   mark_wishlist_done: (async (
@@ -639,9 +742,13 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
       .select({ id: travelsWishlist.id })
       .from(travelsWishlist)
       .where(
-        and(eq(travelsWishlist.id, payload.wishlistId), eq(travelsWishlist.userId, userId)),
+        and(
+          eq(travelsWishlist.id, payload.wishlistId),
+          eq(travelsWishlist.userId, userId),
+        ),
       );
-    if (!existing) return { status: 404, body: { error: "Wishlist item not found" } };
+    if (!existing)
+      return { status: 404, body: { error: "Wishlist item not found" } };
     const [row] = await db
       .update(travelsWishlist)
       .set({ done: payload.done ?? true })
@@ -658,13 +765,22 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
       .select({ id: travelsWishlist.id })
       .from(travelsWishlist)
       .where(
-        and(eq(travelsWishlist.id, payload.wishlistId), eq(travelsWishlist.userId, userId)),
+        and(
+          eq(travelsWishlist.id, payload.wishlistId),
+          eq(travelsWishlist.userId, userId),
+        ),
       );
-    if (!existing) return { status: 404, body: { error: "Wishlist item not found" } };
-    await db.delete(travelsWishlist).where(eq(travelsWishlist.id, payload.wishlistId));
+    if (!existing)
+      return { status: 404, body: { error: "Wishlist item not found" } };
+    await db
+      .delete(travelsWishlist)
+      .where(eq(travelsWishlist.id, payload.wishlistId));
     return {
       status: 200,
-      body: { type: "remove_wishlist_item", result: { id: payload.wishlistId } },
+      body: {
+        type: "remove_wishlist_item",
+        result: { id: payload.wishlistId },
+      },
     };
   }) as ActionExecutor,
 
@@ -675,10 +791,16 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     const [trip] = await db
       .select({ id: travelsTrips.id, packingList: travelsTrips.packingList })
       .from(travelsTrips)
-      .where(and(eq(travelsTrips.id, payload.tripId), eq(travelsTrips.userId, userId)));
+      .where(
+        and(
+          eq(travelsTrips.id, payload.tripId),
+          eq(travelsTrips.userId, userId),
+        ),
+      );
     if (!trip) return { status: 404, body: { error: "Trip not found" } };
     const existingList =
-      (trip.packingList as Array<{ item: string; packed: boolean }> | null) ?? [];
+      (trip.packingList as Array<{ item: string; packed: boolean }> | null) ??
+      [];
     const filteredList = existingList.filter(
       (entry) => entry.item.toLowerCase() !== payload.item.toLowerCase(),
     );
@@ -690,11 +812,19 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     return { status: 200, body: { type: "remove_packing_item", result: row } };
   }) as ActionExecutor,
 
-  add_reminder: (async (payload: z.infer<typeof AddReminderActionPayload>, userId: number) => {
+  add_reminder: (async (
+    payload: z.infer<typeof AddReminderActionPayload>,
+    userId: number,
+  ) => {
     const [trip] = await db
       .select({ id: travelsTrips.id, title: travelsTrips.title })
       .from(travelsTrips)
-      .where(and(eq(travelsTrips.id, payload.tripId), eq(travelsTrips.userId, userId)));
+      .where(
+        and(
+          eq(travelsTrips.id, payload.tripId),
+          eq(travelsTrips.userId, userId),
+        ),
+      );
     if (!trip) return { status: 404, body: { error: "Trip not found" } };
 
     const syncToCalendar = payload.syncToCalendar ?? true;
@@ -764,10 +894,16 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
       row.alertDaysBefore,
     );
 
-    return { status: 200, body: { type: "sync_reminder_to_calendar", result: row } };
+    return {
+      status: 200,
+      body: { type: "sync_reminder_to_calendar", result: row },
+    };
   }) as ActionExecutor,
 
-  edit_reminder: (async (payload: z.infer<typeof EditReminderActionPayload>, userId: number) => {
+  edit_reminder: (async (
+    payload: z.infer<typeof EditReminderActionPayload>,
+    userId: number,
+  ) => {
     const [existing] = await db
       .select()
       .from(travelsReminders)
@@ -782,11 +918,14 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
 
     const updates: Partial<typeof travelsReminders.$inferInsert> = {};
     if (payload.title !== undefined) updates.title = payload.title;
-    if (payload.description !== undefined) updates.description = payload.description;
+    if (payload.description !== undefined)
+      updates.description = payload.description;
     if (payload.dueDate !== undefined) updates.dueDate = payload.dueDate;
     if (payload.done !== undefined) updates.done = payload.done;
-    if (payload.recipientEmails !== undefined) updates.recipientEmails = payload.recipientEmails;
-    if (payload.syncToCalendar !== undefined) updates.syncToCalendar = payload.syncToCalendar;
+    if (payload.recipientEmails !== undefined)
+      updates.recipientEmails = payload.recipientEmails;
+    if (payload.syncToCalendar !== undefined)
+      updates.syncToCalendar = payload.syncToCalendar;
 
     const [row] = await db
       .update(travelsReminders)
@@ -816,7 +955,10 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     return { status: 200, body: { type: "edit_reminder", result: row } };
   }) as ActionExecutor,
 
-  delete_reminder: (async (payload: z.infer<typeof DeleteReminderActionPayload>, userId: number) => {
+  delete_reminder: (async (
+    payload: z.infer<typeof DeleteReminderActionPayload>,
+    userId: number,
+  ) => {
     const [existing] = await db
       .select()
       .from(travelsReminders)
@@ -830,9 +972,14 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     }
 
     await deleteAllReminderCalendarEvents(payload.reminderId);
-    await db.delete(travelsReminders).where(eq(travelsReminders.id, payload.reminderId));
+    await db
+      .delete(travelsReminders)
+      .where(eq(travelsReminders.id, payload.reminderId));
 
-    return { status: 200, body: { type: "delete_reminder", result: { id: payload.reminderId } } };
+    return {
+      status: 200,
+      body: { type: "delete_reminder", result: { id: payload.reminderId } },
+    };
   }) as ActionExecutor,
 
   add_itinerary_day: (async (
@@ -842,11 +989,17 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     const [trip] = await db
       .select({ id: travelsTrips.id, itinerary: travelsTrips.itinerary })
       .from(travelsTrips)
-      .where(and(eq(travelsTrips.id, payload.tripId), eq(travelsTrips.userId, userId)));
+      .where(
+        and(
+          eq(travelsTrips.id, payload.tripId),
+          eq(travelsTrips.userId, userId),
+        ),
+      );
     if (!trip) return { status: 404, body: { error: "Trip not found" } };
 
     const existing =
-      (trip.itinerary as { days: Array<Record<string, unknown>> } | null)?.days ?? [];
+      (trip.itinerary as { days: Array<Record<string, unknown>> } | null)
+        ?.days ?? [];
     const newDay = {
       date: payload.date ?? "",
       title: payload.title,
@@ -878,7 +1031,12 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     const [trip] = await db
       .select({ id: travelsTrips.id })
       .from(travelsTrips)
-      .where(and(eq(travelsTrips.id, payload.tripId), eq(travelsTrips.userId, userId)));
+      .where(
+        and(
+          eq(travelsTrips.id, payload.tripId),
+          eq(travelsTrips.userId, userId),
+        ),
+      );
     if (!trip) return { status: 404, body: { error: "Trip not found" } };
 
     const dayIndex = payload.dayNumber - 1;
@@ -889,7 +1047,10 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
         ["food", "history", "culture"],
         dayIndex,
       );
-      return { status: 200, body: { type: "regenerate_itinerary_day", result: { itinerary } } };
+      return {
+        status: 200,
+        body: { type: "regenerate_itinerary_day", result: { itinerary } },
+      };
     } catch (err) {
       if (err instanceof ItineraryActionError) {
         return { status: err.status, body: { error: err.message } };
@@ -902,7 +1063,11 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     userId: number,
   ) => {
     const accessToken = await getValidAccessToken(userId);
-    if (!accessToken) return { status: 409, body: { error: "Google Calendar is not connected." } };
+    if (!accessToken)
+      return {
+        status: 409,
+        body: { error: "Google Calendar is not connected." },
+      };
     const [row] = await db
       .insert(travelsConnectedCalendars)
       .values({
@@ -913,7 +1078,10 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
         primaryColor: payload.primaryColor ?? "#4285f4",
       })
       .onConflictDoUpdate({
-        target: [travelsConnectedCalendars.userId, travelsConnectedCalendars.googleCalendarId],
+        target: [
+          travelsConnectedCalendars.userId,
+          travelsConnectedCalendars.googleCalendarId,
+        ],
         set: { summary: payload.calendarSummary, updatedAt: new Date() },
       })
       .returning();
@@ -921,11 +1089,17 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
       status: 200,
       body: {
         type: "add_connected_calendar",
-        result: { googleCalendarId: row.googleCalendarId, calendarSummary: row.summary },
+        result: {
+          googleCalendarId: row.googleCalendarId,
+          calendarSummary: row.summary,
+        },
       },
     };
   }) as ActionExecutor,
-  disconnect_calendar: (async (_payload: z.infer<typeof DisconnectCalendarActionPayload>, userId: number) => {
+  disconnect_calendar: (async (
+    _payload: z.infer<typeof DisconnectCalendarActionPayload>,
+    userId: number,
+  ) => {
     await db
       .delete(travelsGoogleCalendarConnections)
       .where(eq(travelsGoogleCalendarConnections.userId, userId));
@@ -938,12 +1112,25 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     const [trip] = await db
       .select({ id: travelsTrips.id })
       .from(travelsTrips)
-      .where(and(eq(travelsTrips.id, payload.tripId), eq(travelsTrips.userId, userId)));
+      .where(
+        and(
+          eq(travelsTrips.id, payload.tripId),
+          eq(travelsTrips.userId, userId),
+        ),
+      );
     if (!trip) return { status: 404, body: { error: "Trip not found" } };
 
-    const result = await rescanTripDocument(payload.tripId, payload.documentId, logger);
-    if (!result.ok) return { status: result.status, body: { error: result.error } };
-    return { status: 200, body: { type: "rescan_document", result: result.document } };
+    const result = await rescanTripDocument(
+      payload.tripId,
+      payload.documentId,
+      logger,
+    );
+    if (!result.ok)
+      return { status: result.status, body: { error: result.error } };
+    return {
+      status: 200,
+      body: { type: "rescan_document", result: result.document },
+    };
   }) as ActionExecutor,
   generate_itinerary: (async (
     payload: z.infer<typeof GenerateItineraryActionPayload>,
@@ -952,16 +1139,24 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     const [trip] = await db
       .select({ id: travelsTrips.id })
       .from(travelsTrips)
-      .where(and(eq(travelsTrips.id, payload.tripId), eq(travelsTrips.userId, userId)));
+      .where(
+        and(
+          eq(travelsTrips.id, payload.tripId),
+          eq(travelsTrips.userId, userId),
+        ),
+      );
     if (!trip) return { status: 404, body: { error: "Trip not found" } };
 
     try {
-      const itinerary = await generateItineraryForTrip(payload.tripId, "balanced", [
-        "food",
-        "history",
-        "culture",
-      ]);
-      return { status: 200, body: { type: "generate_itinerary", result: { itinerary } } };
+      const itinerary = await generateItineraryForTrip(
+        payload.tripId,
+        "balanced",
+        ["food", "history", "culture"],
+      );
+      return {
+        status: 200,
+        body: { type: "generate_itinerary", result: { itinerary } },
+      };
     } catch (err) {
       if (err instanceof ItineraryActionError) {
         return { status: err.status, body: { error: err.message } };
@@ -976,16 +1171,26 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     const [trip] = await db
       .select({ id: travelsTrips.id, itinerary: travelsTrips.itinerary })
       .from(travelsTrips)
-      .where(and(eq(travelsTrips.id, payload.tripId), eq(travelsTrips.userId, userId)));
+      .where(
+        and(
+          eq(travelsTrips.id, payload.tripId),
+          eq(travelsTrips.userId, userId),
+        ),
+      );
     if (!trip) return { status: 404, body: { error: "Trip not found" } };
 
-    const itinerary = trip.itinerary as { days?: Array<{ activities?: Array<Record<string, unknown>> }> } | null;
+    const itinerary = trip.itinerary as {
+      days?: Array<{ activities?: Array<Record<string, unknown>> }>;
+    } | null;
     const dayIndex = payload.dayNumber - 1;
     const activityIndex = payload.activityNumber - 1;
     const day = itinerary?.days?.[dayIndex];
     const activity = day?.activities?.[activityIndex];
     if (!itinerary?.days || !day || !activity) {
-      return { status: 400, body: { error: "Day or activity number out of range" } };
+      return {
+        status: 400,
+        body: { error: "Day or activity number out of range" },
+      };
     }
 
     const days = itinerary.days.map((d, i) =>
@@ -994,7 +1199,11 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
             ...d,
             activities: (d.activities ?? []).map((a, ai) =>
               ai === activityIndex
-                ? { ...a, status: payload.confirmed === false ? "tentative" : "confirmed" }
+                ? {
+                    ...a,
+                    status:
+                      payload.confirmed === false ? "tentative" : "confirmed",
+                  }
                 : a,
             ),
           }
@@ -1006,7 +1215,10 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
       .set({ itinerary: newItinerary })
       .where(eq(travelsTrips.id, payload.tripId))
       .returning();
-    return { status: 200, body: { type: "confirm_itinerary_activity", result: row } };
+    return {
+      status: 200,
+      body: { type: "confirm_itinerary_activity", result: row },
+    };
   }) as ActionExecutor,
   remove_itinerary_activity: (async (
     payload: z.infer<typeof RemoveItineraryActivityActionPayload>,
@@ -1015,21 +1227,36 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
     const [trip] = await db
       .select({ id: travelsTrips.id, itinerary: travelsTrips.itinerary })
       .from(travelsTrips)
-      .where(and(eq(travelsTrips.id, payload.tripId), eq(travelsTrips.userId, userId)));
+      .where(
+        and(
+          eq(travelsTrips.id, payload.tripId),
+          eq(travelsTrips.userId, userId),
+        ),
+      );
     if (!trip) return { status: 404, body: { error: "Trip not found" } };
 
-    const itinerary = trip.itinerary as { days?: Array<{ activities?: Array<Record<string, unknown>> }> } | null;
+    const itinerary = trip.itinerary as {
+      days?: Array<{ activities?: Array<Record<string, unknown>> }>;
+    } | null;
     const dayIndex = payload.dayNumber - 1;
     const activityIndex = payload.activityNumber - 1;
     const day = itinerary?.days?.[dayIndex];
     const activity = day?.activities?.[activityIndex];
     if (!itinerary?.days || !day || !activity) {
-      return { status: 400, body: { error: "Day or activity number out of range" } };
+      return {
+        status: 400,
+        body: { error: "Day or activity number out of range" },
+      };
     }
 
     const days = itinerary.days.map((d, i) =>
       i === dayIndex
-        ? { ...d, activities: (d.activities ?? []).filter((_, ai) => ai !== activityIndex) }
+        ? {
+            ...d,
+            activities: (d.activities ?? []).filter(
+              (_, ai) => ai !== activityIndex,
+            ),
+          }
         : d,
     );
     const newItinerary = { days };
@@ -1038,22 +1265,35 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
       .set({ itinerary: newItinerary })
       .where(eq(travelsTrips.id, payload.tripId))
       .returning();
-    return { status: 200, body: { type: "remove_itinerary_activity", result: row } };
+    return {
+      status: 200,
+      body: { type: "remove_itinerary_activity", result: row },
+    };
   }) as ActionExecutor,
-  send_email: (async (payload: z.infer<typeof SendEmailActionPayload>, userId: number) => {
+  send_email: (async (
+    payload: z.infer<typeof SendEmailActionPayload>,
+    userId: number,
+  ) => {
     if (!resendConfigured()) {
-      return { status: 503, body: { error: "Email sending isn't configured yet." } };
+      return {
+        status: 503,
+        body: { error: "Email sending isn't configured yet." },
+      };
     }
     const [user] = await db
       .select({ email: appUsers.email })
       .from(appUsers)
       .where(eq(appUsers.id, userId));
-    if (!user?.email) return { status: 404, body: { error: "No email address on file" } };
+    if (!user?.email)
+      return { status: 404, body: { error: "No email address on file" } };
 
     await sendAssistantEmail(user.email, payload.subject, payload.body);
     return {
       status: 200,
-      body: { type: "send_email", result: { sentTo: user.email, subject: payload.subject } },
+      body: {
+        type: "send_email",
+        result: { sentTo: user.email, subject: payload.subject },
+      },
     };
   }) as ActionExecutor,
 };
@@ -1071,7 +1311,7 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "create_trip",
       description:
-        "Propose creating a new trip. Ask permission in your reply's visible text first (e.g. \"Want me to create a trip to Rome for August?\"), then call this.",
+        'Propose creating a new trip. Ask permission in your reply\'s visible text first (e.g. "Want me to create a trip to Rome for August?"), then call this.',
       parameters: {
         type: "object",
         properties: {
@@ -1139,7 +1379,7 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "update_trip_details",
       description:
-        'Propose editing a trip\'s destination, dates, and/or notes, e.g. "push my Rome trip back a week" or "add a note that we\'re flying instead of driving". Not for status changes (use update_trip_status). Include only the field(s) that actually change; you must include at least one. Only call this if the trip\'s numeric id is visible on screen; never guess an id, and never guess new dates the user didn\'t specify — compute exact dates from what you can see on screen, or ask instead of guessing.',
+        "Propose editing a trip's destination, dates, and/or notes, e.g. \"push my Rome trip back a week\" or \"add a note that we're flying instead of driving\". Not for status changes (use update_trip_status). Include only the field(s) that actually change; you must include at least one. Only call this if the trip's numeric id is visible on screen; never guess an id, and never guess new dates the user didn't specify — compute exact dates from what you can see on screen, or ask instead of guessing.",
       parameters: {
         type: "object",
         properties: {
@@ -1158,7 +1398,7 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "cancel_trip",
       description:
-        "Propose permanently deleting a trip and everything attached to it (photos, documents, reminders). Only call this if the trip's numeric id is visible on screen; never guess an id. Since this is destructive, your visible reply text must clearly say it will DELETE the trip, not just \"cancel\" it ambiguously.",
+        'Propose permanently deleting a trip and everything attached to it (photos, documents, reminders). Only call this if the trip\'s numeric id is visible on screen; never guess an id. Since this is destructive, your visible reply text must clearly say it will DELETE the trip, not just "cancel" it ambiguously.',
       parameters: {
         type: "object",
         properties: { tripId: { type: "integer" } },
@@ -1216,7 +1456,7 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "add_reminder",
       description:
-        'Propose creating a new reminder for a trip, e.g. "remind me to check in for our flight" or "remind me to book the hotel by Friday". Only call this if the trip\'s numeric id is visible on screen; never guess an id — offer to open the trip instead if you don\'t have one. If the user gives (or you can see on screen) a specific date the reminder is about, set dueDate to that exact date; never invent a date. If the user asks to also notify/email someone (a connected household member), include their email(s) in recipientEmails; never invent an email address you can\'t see on screen or that the user didn\'t give you. syncToCalendar defaults to true (syncs to the Travel Calendar automatically if connected) — only set it to false if the user explicitly asks not to add it to the calendar.',
+        "Propose creating a new reminder for a trip, e.g. \"remind me to check in for our flight\" or \"remind me to book the hotel by Friday\". Only call this if the trip's numeric id is visible on screen; never guess an id — offer to open the trip instead if you don't have one. If the user gives (or you can see on screen) a specific date the reminder is about, set dueDate to that exact date; never invent a date. If the user asks to also notify/email someone (a connected household member), include their email(s) in recipientEmails; never invent an email address you can't see on screen or that the user didn't give you. syncToCalendar defaults to true (syncs to the Travel Calendar automatically if connected) — only set it to false if the user explicitly asks not to add it to the calendar.",
       parameters: {
         type: "object",
         properties: {
@@ -1227,7 +1467,8 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           recipientEmails: {
             type: "array",
             items: { type: "string" },
-            description: "Email addresses to also notify, if the user asked for that",
+            description:
+              "Email addresses to also notify, if the user asked for that",
           },
           syncToCalendar: { type: "boolean" },
         },
@@ -1299,13 +1540,16 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "add_itinerary_day",
       description:
-        'Propose adding a new day to a trip\'s itinerary, e.g. "add a day trip to Kyoto on the 14th". Only call this if the trip\'s numeric id is visible on screen; never guess an id — offer to open the trip instead if you don\'t have one. Use the exact date the user gave (YYYY-MM-DD) if known; never invent a date. Optionally include a single starting activity if the user described one.',
+        "Propose adding a new day to a trip's itinerary, e.g. \"add a day trip to Kyoto on the 14th\". Only call this if the trip's numeric id is visible on screen; never guess an id — offer to open the trip instead if you don't have one. Use the exact date the user gave (YYYY-MM-DD) if known; never invent a date. Optionally include a single starting activity if the user described one.",
       parameters: {
         type: "object",
         properties: {
           tripId: { type: "integer" },
           date: { type: "string", description: "YYYY-MM-DD, if known" },
-          title: { type: "string", description: "Short theme/title for the day" },
+          title: {
+            type: "string",
+            description: "Short theme/title for the day",
+          },
           activityName: { type: "string" },
           activityTime: { type: "string", description: "HH:MM, e.g. 09:00" },
           activityDescription: { type: "string" },
@@ -1324,7 +1568,10 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
         type: "object",
         properties: {
           tripId: { type: "integer" },
-          dayNumber: { type: "integer", description: "1-based day number as shown on screen" },
+          dayNumber: {
+            type: "integer",
+            description: "1-based day number as shown on screen",
+          },
         },
         required: ["tripId", "dayNumber"],
       },
@@ -1339,9 +1586,19 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       parameters: {
         type: "object",
         properties: {
-          googleCalendarId: { type: "string", description: "Exact calendarId as shown on screen" },
-          calendarSummary: { type: "string", description: "The calendar's display name, as shown on screen" },
-          primaryColor: { type: "string", description: "Optional hex color for the overlay, if the user specified one" },
+          googleCalendarId: {
+            type: "string",
+            description: "Exact calendarId as shown on screen",
+          },
+          calendarSummary: {
+            type: "string",
+            description: "The calendar's display name, as shown on screen",
+          },
+          primaryColor: {
+            type: "string",
+            description:
+              "Optional hex color for the overlay, if the user specified one",
+          },
         },
         required: ["googleCalendarId", "calendarSummary"],
       },
@@ -1400,14 +1657,19 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
         type: "object",
         properties: {
           tripId: { type: "integer" },
-          dayNumber: { type: "integer", description: "1-based day number as shown on screen" },
+          dayNumber: {
+            type: "integer",
+            description: "1-based day number as shown on screen",
+          },
           activityNumber: {
             type: "integer",
-            description: "1-based activity number within that day, as shown on screen",
+            description:
+              "1-based activity number within that day, as shown on screen",
           },
           confirmed: {
             type: "boolean",
-            description: "true (default) to mark firm/confirmed, false to revert to tentative",
+            description:
+              "true (default) to mark firm/confirmed, false to revert to tentative",
           },
         },
         required: ["tripId", "dayNumber", "activityNumber"],
@@ -1424,10 +1686,14 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
         type: "object",
         properties: {
           tripId: { type: "integer" },
-          dayNumber: { type: "integer", description: "1-based day number as shown on screen" },
+          dayNumber: {
+            type: "integer",
+            description: "1-based day number as shown on screen",
+          },
           activityNumber: {
             type: "integer",
-            description: "1-based activity number within that day, as shown on screen",
+            description:
+              "1-based activity number within that day, as shown on screen",
           },
         },
         required: ["tripId", "dayNumber", "activityNumber"],
@@ -1439,12 +1705,15 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "send_email",
       description:
-        'Propose emailing the user a copy of something you just told them, e.g. after listing recommendations, an itinerary summary, or packing tips: "want me to email you that list?" This always sends to the user\'s own registered account email — never ask for or accept a different address, and never use this to email anyone else. Write `subject` as a short descriptive title and `body` as plain text (no markdown/HTML) using blank lines between paragraphs; it will be nicely formatted automatically. Offer this proactively when you\'ve just produced a substantial list or summary the user might want to keep, but don\'t call it until the user agrees.',
+        "Propose emailing the user a copy of something you just told them, e.g. after listing recommendations, an itinerary summary, or packing tips: \"want me to email you that list?\" This always sends to the user's own registered account email — never ask for or accept a different address, and never use this to email anyone else. Write `subject` as a short descriptive title and `body` as plain text (no markdown/HTML) using blank lines between paragraphs; it will be nicely formatted automatically. Offer this proactively when you've just produced a substantial list or summary the user might want to keep, but don't call it until the user agrees.",
       parameters: {
         type: "object",
         properties: {
           subject: { type: "string", description: "Short email subject line" },
-          body: { type: "string", description: "Plain text email body, blank line between paragraphs" },
+          body: {
+            type: "string",
+            description: "Plain text email body, blank line between paragraphs",
+          },
         },
         required: ["subject", "body"],
       },
@@ -1465,10 +1734,14 @@ const NAVIGATE_ALLOWED_PATHS = [
   "/settings",
 ] as const;
 // "/trips/:id" is also allowed with a concrete numeric id, e.g. "/trips/42".
-const NAVIGATE_PATH_RE = /^\/(trips\/\d+|trips|map|explore|wishlist|destinations|settings)?$/;
+const NAVIGATE_PATH_RE =
+  /^\/(trips\/\d+|trips|map|explore|wishlist|destinations|settings)?$/;
 
 const NavigateToolPayload = z.object({
-  path: z.string().max(50).regex(NAVIGATE_PATH_RE, "not an allowed in-app path"),
+  path: z
+    .string()
+    .max(50)
+    .regex(NAVIGATE_PATH_RE, "not an allowed in-app path"),
   reason: z.string().min(1).max(300),
 });
 
@@ -1514,9 +1787,33 @@ const FindNearbyPlacesToolPayload = z.object({
 const GET_ROUTE_INFO_TOOL_NAME = "get_route_info";
 
 const GetRouteInfoToolPayload = z.object({
-  origin: z.object({ lat: z.number(), lng: z.number(), label: z.string().max(200) }),
-  destination: z.object({ lat: z.number(), lng: z.number(), label: z.string().max(200) }),
+  origin: z.object({
+    lat: z.number(),
+    lng: z.number(),
+    label: z.string().max(200),
+  }),
+  destination: z.object({
+    lat: z.number(),
+    lng: z.number(),
+    label: z.string().max(200),
+  }),
   mode: z.enum(["DRIVE", "WALK", "BICYCLE", "TRANSIT"]).default("WALK"),
+});
+
+const GET_AIR_QUALITY_TOOL_NAME = "get_air_quality";
+
+const GetAirQualityToolPayload = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  locationName: z.string().max(200),
+});
+
+const GET_POLLEN_FORECAST_TOOL_NAME = "get_pollen_forecast";
+
+const GetPollenForecastToolPayload = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  locationName: z.string().max(200),
 });
 
 const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
@@ -1535,7 +1832,10 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
             description:
               'One of the listed static paths, or "/trips/{id}" with a real numeric id substituted in, e.g. "/trips/42".',
           },
-          reason: { type: "string", description: "Short reason shown to the user" },
+          reason: {
+            type: "string",
+            description: "Short reason shown to the user",
+          },
         },
         required: ["path", "reason"],
       },
@@ -1569,7 +1869,7 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
             type: "string",
             enum: [...ACTION_CONFIRMATION_MODES],
             description:
-              'one_by_one = confirm each proposed action individually before the next is shown (default, safest). all_at_once = show every proposed action together with one Confirm all / Cancel all. auto_run = execute proposed actions immediately with no confirmation and report back afterward.',
+              "one_by_one = confirm each proposed action individually before the next is shown (default, safest). all_at_once = show every proposed action together with one Confirm all / Cancel all. auto_run = execute proposed actions immediately with no confirmation and report back afterward.",
           },
         },
         required: ["mode"],
@@ -1585,7 +1885,10 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       parameters: {
         type: "object",
         properties: {
-          query: { type: "string", description: "A focused, specific search query" },
+          query: {
+            type: "string",
+            description: "A focused, specific search query",
+          },
         },
         required: ["query"],
       },
@@ -1596,7 +1899,7 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: CONSULT_EXPERTS_TOOL_NAME,
       description:
-        "Get a cross-checked panel opinion instead of answering purely from your own single perspective. Use this when the user is asking for expertise, advice, a recommendation, or a judgment call where being wrong or one-sided actually matters — e.g. \"which of these two flights should I book\", \"is this itinerary too packed\", \"what should I pack for hiking with a bad knee\", \"how should I negotiate this hotel rate\", \"is it worth paying for travel insurance here\". Do NOT use it for simple facts (answer directly), anything needing current/live data (use web_search instead), or casual chit-chat. Pass a standalone `question` (it won't see this conversation) plus optional `context` with only the specific relevant details (e.g. dates, constraints, preferences) — not the whole conversation. Takes a bit longer than a normal reply since it consults more than one source; that's expected.",
+        'Get a cross-checked panel opinion instead of answering purely from your own single perspective. Use this when the user is asking for expertise, advice, a recommendation, or a judgment call where being wrong or one-sided actually matters — e.g. "which of these two flights should I book", "is this itinerary too packed", "what should I pack for hiking with a bad knee", "how should I negotiate this hotel rate", "is it worth paying for travel insurance here". Do NOT use it for simple facts (answer directly), anything needing current/live data (use web_search instead), or casual chit-chat. Pass a standalone `question` (it won\'t see this conversation) plus optional `context` with only the specific relevant details (e.g. dates, constraints, preferences) — not the whole conversation. Takes a bit longer than a normal reply since it consults more than one source; that\'s expected.',
       parameters: {
         type: "object",
         properties: {
@@ -1606,7 +1909,8 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           },
           context: {
             type: "string",
-            description: "Optional short background details relevant to the question",
+            description:
+              "Optional short background details relevant to the question",
           },
         },
         required: ["question"],
@@ -1624,7 +1928,10 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
         properties: {
           lat: { type: "number", description: "Latitude" },
           lng: { type: "number", description: "Longitude" },
-          locationName: { type: "string", description: "Human-readable place name, for your own reply" },
+          locationName: {
+            type: "string",
+            description: "Human-readable place name, for your own reply",
+          },
         },
         required: ["lat", "lng", "locationName"],
       },
@@ -1635,13 +1942,23 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: FIND_NEARBY_PLACES_TOOL_NAME,
       description:
-        "Search for real places (restaurants, museums, attractions, hotels, etc.) using Google Places — call this whenever the user asks for recommendations or \"what's near X\" instead of relying on general knowledge, since this returns real, current places with ratings. Provide lat/lng (from on-screen trip/destination context) to bias results near a specific place when relevant.",
+        'Search for real places (restaurants, museums, attractions, hotels, etc.) using Google Places — call this whenever the user asks for recommendations or "what\'s near X" instead of relying on general knowledge, since this returns real, current places with ratings. Provide lat/lng (from on-screen trip/destination context) to bias results near a specific place when relevant.',
       parameters: {
         type: "object",
         properties: {
-          query: { type: "string", description: "What to search for, e.g. \"sushi restaurants\" or \"museums in Kyoto\"" },
-          lat: { type: "number", description: "Optional latitude to bias results near a location" },
-          lng: { type: "number", description: "Optional longitude to bias results near a location" },
+          query: {
+            type: "string",
+            description:
+              'What to search for, e.g. "sushi restaurants" or "museums in Kyoto"',
+          },
+          lat: {
+            type: "number",
+            description: "Optional latitude to bias results near a location",
+          },
+          lng: {
+            type: "number",
+            description: "Optional longitude to bias results near a location",
+          },
         },
         required: ["query"],
       },
@@ -1661,7 +1978,10 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
             properties: {
               lat: { type: "number" },
               lng: { type: "number" },
-              label: { type: "string", description: "Human-readable name, for your own reply" },
+              label: {
+                type: "string",
+                description: "Human-readable name, for your own reply",
+              },
             },
             required: ["lat", "lng", "label"],
           },
@@ -1670,7 +1990,10 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
             properties: {
               lat: { type: "number" },
               lng: { type: "number" },
-              label: { type: "string", description: "Human-readable name, for your own reply" },
+              label: {
+                type: "string",
+                description: "Human-readable name, for your own reply",
+              },
             },
             required: ["lat", "lng", "label"],
           },
@@ -1684,10 +2007,53 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: GET_AIR_QUALITY_TOOL_NAME,
+      description:
+        "Get real current air quality (Universal AQI 0-100+, category, dominant pollutant) for a place using Google's Air Quality API — call this whenever the user asks about air quality, pollution, smog, or whether it's a good idea to pack a mask, or when giving packing/health advice for a destination with known air quality concerns. Requires real lat/lng from on-screen context; never invent coordinates.",
+      parameters: {
+        type: "object",
+        properties: {
+          lat: { type: "number", description: "Latitude" },
+          lng: { type: "number", description: "Longitude" },
+          locationName: {
+            type: "string",
+            description: "Human-readable place name, for your own reply",
+          },
+        },
+        required: ["lat", "lng", "locationName"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: GET_POLLEN_FORECAST_TOOL_NAME,
+      description:
+        "Get a real pollen forecast (grass/tree/weed pollen categories) for a place using Google's Pollen API — call this whenever the user asks about pollen, allergies, or hay fever risk for a trip, or when giving packing advice and someone in the household has allergies. Requires real lat/lng from on-screen context; never invent coordinates.",
+      parameters: {
+        type: "object",
+        properties: {
+          lat: { type: "number", description: "Latitude" },
+          lng: { type: "number", description: "Longitude" },
+          locationName: {
+            type: "string",
+            description: "Human-readable place name, for your own reply",
+          },
+        },
+        required: ["lat", "lng", "locationName"],
+      },
+    },
+  },
 ];
 
 const ACTION_TOOL_NAMES = new Set<string>(
-  ACTION_TOOLS.map((t) => (t as OpenAI.Chat.Completions.ChatCompletionFunctionTool).function.name),
+  ACTION_TOOLS.map(
+    (t) =>
+      (t as OpenAI.Chat.Completions.ChatCompletionFunctionTool).function.name,
+  ),
 );
 
 async function getOrCreateConversation(userId: number) {
@@ -1721,11 +2087,17 @@ type ProposedAction = { type: string; label: string; payload: unknown };
 // malformed/unsafe write-action to the confirmation UI. Called repeatedly
 // as the argument buffer grows during streaming, so the `action` SSE event
 // can fire the instant a fully-formed call arrives, not just at stream end.
-async function tryBuildAction(name: string, argsBuffer: string): Promise<ProposedAction | null> {
+async function tryBuildAction(
+  name: string,
+  argsBuffer: string,
+): Promise<ProposedAction | null> {
   if (!ACTION_TOOL_NAMES.has(name)) return null;
   try {
     const parsedPayload: unknown = JSON.parse(argsBuffer);
-    const parsedAction = ActionBody.safeParse({ type: name, payload: parsedPayload });
+    const parsedAction = ActionBody.safeParse({
+      type: name,
+      payload: parsedPayload,
+    });
     if (!parsedAction.success) return null;
     return {
       type: parsedAction.data.type,
@@ -1748,9 +2120,17 @@ async function applyUnseenNudges(userId: number): Promise<ChatMessage[]> {
   const history = (conversation?.messages as ChatMessage[] | null) ?? [];
 
   const unseen = await db
-    .select({ id: travelsAssistantNudges.id, message: travelsAssistantNudges.message })
+    .select({
+      id: travelsAssistantNudges.id,
+      message: travelsAssistantNudges.message,
+    })
     .from(travelsAssistantNudges)
-    .where(and(eq(travelsAssistantNudges.userId, userId), isNull(travelsAssistantNudges.seenAt)))
+    .where(
+      and(
+        eq(travelsAssistantNudges.userId, userId),
+        isNull(travelsAssistantNudges.seenAt),
+      ),
+    )
     .orderBy(travelsAssistantNudges.createdAt);
 
   if (unseen.length === 0) return history;
@@ -1768,7 +2148,12 @@ async function applyUnseenNudges(userId: number): Promise<ChatMessage[]> {
   await db
     .update(travelsAssistantNudges)
     .set({ seenAt: new Date() })
-    .where(and(eq(travelsAssistantNudges.userId, userId), isNull(travelsAssistantNudges.seenAt)));
+    .where(
+      and(
+        eq(travelsAssistantNudges.userId, userId),
+        isNull(travelsAssistantNudges.seenAt),
+      ),
+    );
 
   return updatedHistory;
 }
@@ -1787,7 +2172,12 @@ router.get("/assistant/nudges/unseen-count", async (req, res) => {
   const rows = await db
     .select({ id: travelsAssistantNudges.id })
     .from(travelsAssistantNudges)
-    .where(and(eq(travelsAssistantNudges.userId, userId), isNull(travelsAssistantNudges.seenAt)));
+    .where(
+      and(
+        eq(travelsAssistantNudges.userId, userId),
+        isNull(travelsAssistantNudges.seenAt),
+      ),
+    );
   res.json({ count: rows.length });
 });
 
@@ -1825,20 +2215,25 @@ router.post("/assistant/chat", async (req, res) => {
       : "(nothing remembered yet)";
 
   const [settingsRow] = await db
-    .select({ actionConfirmationMode: travelsAssistantSettings.actionConfirmationMode })
+    .select({
+      actionConfirmationMode: travelsAssistantSettings.actionConfirmationMode,
+    })
     .from(travelsAssistantSettings)
     .where(eq(travelsAssistantSettings.userId, userId));
   const actionConfirmationMode: ActionConfirmationMode =
-    (settingsRow?.actionConfirmationMode as ActionConfirmationMode | undefined) ?? "one_by_one";
+    (settingsRow?.actionConfirmationMode as
+      | ActionConfirmationMode
+      | undefined) ?? "one_by_one";
 
-  const CONFIRMATION_MODE_EXPLANATION: Record<ActionConfirmationMode, string> = {
-    one_by_one:
-      'one_by_one — the user reviews and confirms/skips each proposed action individually, one at a time.',
-    all_at_once:
-      'all_at_once — the user sees every proposed action from this turn together and confirms or cancels them as a group.',
-    auto_run:
-      'auto_run — proposed actions run immediately with no confirmation step; you should report what you did (or if something failed) after the fact.',
-  };
+  const CONFIRMATION_MODE_EXPLANATION: Record<ActionConfirmationMode, string> =
+    {
+      one_by_one:
+        "one_by_one — the user reviews and confirms/skips each proposed action individually, one at a time.",
+      all_at_once:
+        "all_at_once — the user sees every proposed action from this turn together and confirms or cancels them as a group.",
+      auto_run:
+        "auto_run — proposed actions run immediately with no confirmation step; you should report what you did (or if something failed) after the fact.",
+    };
 
   const systemPrompt = `You are elAIne, a warm, personable AI assistant built into a family travel-planning app. You are talking with ${userName}.
 
@@ -1883,7 +2278,7 @@ WEB SEARCH: You have a real-time web_search tool, unlike a plain language model 
 
 EXPERT ADVICE: For genuine expertise/advice/recommendation questions — a judgment call where being one-sided could actually steer the user wrong (packing/gear advice for specific constraints, which option to book, negotiating tactics, whether something is a good idea, etc.) — use consult_experts rather than just answering solo; it cross-checks more than one independent source and gives you back a single synthesized answer to relay. Don't use it for simple facts, small talk, or anything that needs web_search instead (current/live data). It takes a bit longer than a normal reply — that's expected, not a malfunction.
 
-LIVE MAPS DATA: You also have three Google Maps-backed tools for real, current data instead of guessing — prefer these over web_search when they apply, since they return structured, accurate data rather than a text summary. get_weather_forecast gives a real multi-day forecast for a place (use it for "what's the weather", packing-for-climate, or rain-risk questions). find_nearby_places gives real restaurants/attractions/hotels/etc. with ratings (use it for recommendations or "what's near X"). get_route_info gives real distance/time between two places for a given travel mode (use it for "how far"/"how long to get there" questions). All three need real lat/lng — pull coordinates from the on-screen state above (trip/destination coordinates) or from a place returned by find_nearby_places; never invent coordinates. If you don't have any usable coordinates on screen, ask the user which trip/destination they mean rather than guessing.
+LIVE MAPS DATA: You also have five Google Maps-backed tools for real, current data instead of guessing — prefer these over web_search when they apply, since they return structured, accurate data rather than a text summary. get_weather_forecast gives a real multi-day forecast for a place (use it for "what's the weather", packing-for-climate, or rain-risk questions). find_nearby_places gives real restaurants/attractions/hotels/etc. with ratings (use it for recommendations or "what's near X"). get_route_info gives real distance/time between two places for a given travel mode (use it for "how far"/"how long to get there" questions). get_air_quality gives real current AQI/category/dominant pollutant (use it for pollution/smog questions or when giving packing/health advice for a destination). get_pollen_forecast gives real grass/tree/weed pollen categories (use it for allergy/hay-fever questions or packing advice when someone has allergies). When someone asks "what should I pack" for a trip, proactively check weather, and check air quality/pollen too if it's relevant (long trip, known allergy mentioned, or the destination is known for pollution) rather than only guessing from general knowledge. All five need real lat/lng — pull coordinates from the on-screen state above (trip/destination coordinates) or from a place returned by find_nearby_places; never invent coordinates. If you don't have any usable coordinates on screen, ask the user which trip/destination they mean rather than guessing.
 
 Keep replies concise and easy to read in a chat bubble.`;
 
@@ -1912,7 +2307,9 @@ Keep replies concise and easy to read in a chat bubble.`;
   const resolvedActions: ProposedAction[] = [];
   let navigate: { path: string; reason: string } | null = null;
   let updatedActionConfirmationMode: ActionConfirmationMode | null = null;
-  const executedActions: Array<ProposedAction & { status: number; result: unknown }> = [];
+  const executedActions: Array<
+    ProposedAction & { status: number; result: unknown }
+  > = [];
 
   // web_search is the one tool whose result the model needs back before it
   // can write its final reply — unlike the other "soft" tools (navigate,
@@ -1937,7 +2334,10 @@ Keep replies concise and easy to read in a chat bubble.`;
     // arrives as growing string fragments across multiple chunks — this is
     // the standard OpenAI/OpenRouter streaming tool-call shape. `id` only
     // arrives on a tool call's first chunk, alongside its name.
-    const toolCallAcc = new Map<number, { id: string; name: string; args: string }>();
+    const toolCallAcc = new Map<
+      number,
+      { id: string; name: string; args: string }
+    >();
 
     try {
       await callModelWithSubagent(
@@ -1966,7 +2366,11 @@ Keep replies concise and easy to read in a chat bubble.`;
             }
 
             for (const tc of delta.tool_calls ?? []) {
-              const acc = toolCallAcc.get(tc.index) ?? { id: "", name: "", args: "" };
+              const acc = toolCallAcc.get(tc.index) ?? {
+                id: "",
+                name: "",
+                args: "",
+              };
               if (tc.id) acc.id = tc.id;
               if (tc.function?.name) acc.name = tc.function.name;
               if (tc.function?.arguments) acc.args += tc.function.arguments;
@@ -2007,6 +2411,8 @@ Keep replies concise and easy to read in a chat bubble.`;
       GET_WEATHER_TOOL_NAME,
       FIND_NEARBY_PLACES_TOOL_NAME,
       GET_ROUTE_INFO_TOOL_NAME,
+      GET_AIR_QUALITY_TOOL_NAME,
+      GET_POLLEN_FORECAST_TOOL_NAME,
     ]);
     const hardToolCalls: Array<{ id: string; name: string; args: string }> = [];
 
@@ -2022,7 +2428,10 @@ Keep replies concise and easy to read in a chat bubble.`;
           if (parsed.success) {
             await db
               .insert(travelsHouseholdMemory)
-              .values({ content: parsed.data.content, createdByUserId: userId });
+              .values({
+                content: parsed.data.content,
+                createdByUserId: userId,
+              });
           }
         } catch {
           // Malformed JSON from the model — drop it, keep the reply text.
@@ -2040,7 +2449,10 @@ Keep replies concise and easy to read in a chat bubble.`;
               .values({ userId, actionConfirmationMode: parsed.data.mode })
               .onConflictDoUpdate({
                 target: travelsAssistantSettings.userId,
-                set: { actionConfirmationMode: parsed.data.mode, updatedAt: new Date() },
+                set: {
+                  actionConfirmationMode: parsed.data.mode,
+                  updatedAt: new Date(),
+                },
               });
           }
         } catch {
@@ -2069,7 +2481,10 @@ Keep replies concise and easy to read in a chat bubble.`;
         const finalAction = await tryBuildAction(name, args);
         if (!finalAction) continue;
         const executor = ACTION_EXECUTORS[finalAction.type as ActionType];
-        const { status, body } = await executor(finalAction.payload as never, userId);
+        const { status, body } = await executor(
+          finalAction.payload as never,
+          userId,
+        );
         executedActions.push({ ...finalAction, status, result: body });
         continue;
       }
@@ -2095,9 +2510,15 @@ Keep replies concise and easy to read in a chat bubble.`;
       [GET_WEATHER_TOOL_NAME]: "checking the forecast",
       [FIND_NEARBY_PLACES_TOOL_NAME]: "looking up places",
       [GET_ROUTE_INFO_TOOL_NAME]: "checking travel times",
+      [GET_AIR_QUALITY_TOOL_NAME]: "checking air quality",
+      [GET_POLLEN_FORECAST_TOOL_NAME]: "checking pollen levels",
     };
-    const statusMessage = [...distinctHardToolNames].map((n) => STATUS_LABELS[n]).join(", ");
-    sendEvent("status", { message: `${statusMessage.charAt(0).toUpperCase()}${statusMessage.slice(1)}…` });
+    const statusMessage = [...distinctHardToolNames]
+      .map((n) => STATUS_LABELS[n])
+      .join(", ");
+    sendEvent("status", {
+      message: `${statusMessage.charAt(0).toUpperCase()}${statusMessage.slice(1)}…`,
+    });
 
     // Feed tool results back so the model can write its real answer next
     // round. Reset rawContent first — models essentially never emit text
@@ -2119,7 +2540,9 @@ Keep replies concise and easy to read in a chat bubble.`;
         let resultText: string;
         try {
           if (call.name === WEB_SEARCH_TOOL_NAME) {
-            const parsed = WebSearchToolPayload.safeParse(JSON.parse(call.args));
+            const parsed = WebSearchToolPayload.safeParse(
+              JSON.parse(call.args),
+            );
             if (!parsed.success) {
               resultText = "Invalid search query — ask the user to rephrase.";
             } else {
@@ -2131,20 +2554,32 @@ Keep replies concise and easy to read in a chat bubble.`;
                 : "No results found for this search.";
             }
           } else if (call.name === CONSULT_EXPERTS_TOOL_NAME) {
-            const parsed = ConsultExpertsToolPayload.safeParse(JSON.parse(call.args));
+            const parsed = ConsultExpertsToolPayload.safeParse(
+              JSON.parse(call.args),
+            );
             if (!parsed.success) {
               resultText = "Invalid question — ask the user to rephrase.";
             } else {
-              const { answer } = await consultExperts(parsed.data.question, parsed.data.context);
+              const { answer } = await consultExperts(
+                parsed.data.question,
+                parsed.data.context,
+              );
               resultText =
-                answer || "No panel opinion could be gathered — answer from your own best judgment instead.";
+                answer ||
+                "No panel opinion could be gathered — answer from your own best judgment instead.";
             }
           } else if (call.name === GET_WEATHER_TOOL_NAME) {
-            const parsed = GetWeatherToolPayload.safeParse(JSON.parse(call.args));
+            const parsed = GetWeatherToolPayload.safeParse(
+              JSON.parse(call.args),
+            );
             if (!parsed.success) {
-              resultText = "Invalid location — ask the user to clarify or use on-screen coordinates.";
+              resultText =
+                "Invalid location — ask the user to clarify or use on-screen coordinates.";
             } else {
-              const forecast = await getWeatherForecast(parsed.data.lat, parsed.data.lng);
+              const forecast = await getWeatherForecast(
+                parsed.data.lat,
+                parsed.data.lng,
+              );
               resultText =
                 forecast.length > 0
                   ? `Forecast for ${parsed.data.locationName}:\n` +
@@ -2160,11 +2595,17 @@ Keep replies concise and easy to read in a chat bubble.`;
                   : `No forecast data available for ${parsed.data.locationName}.`;
             }
           } else if (call.name === FIND_NEARBY_PLACES_TOOL_NAME) {
-            const parsed = FindNearbyPlacesToolPayload.safeParse(JSON.parse(call.args));
+            const parsed = FindNearbyPlacesToolPayload.safeParse(
+              JSON.parse(call.args),
+            );
             if (!parsed.success) {
               resultText = "Invalid place search — ask the user to rephrase.";
             } else {
-              const places = await searchPlaces(parsed.data.query, parsed.data.lat, parsed.data.lng);
+              const places = await searchPlaces(
+                parsed.data.query,
+                parsed.data.lat,
+                parsed.data.lng,
+              );
               resultText =
                 places.length > 0
                   ? places
@@ -2176,9 +2617,12 @@ Keep replies concise and easy to read in a chat bubble.`;
                   : "No places found for that search.";
             }
           } else if (call.name === GET_ROUTE_INFO_TOOL_NAME) {
-            const parsed = GetRouteInfoToolPayload.safeParse(JSON.parse(call.args));
+            const parsed = GetRouteInfoToolPayload.safeParse(
+              JSON.parse(call.args),
+            );
             if (!parsed.success) {
-              resultText = "Invalid route request — ask the user to clarify origin/destination.";
+              resultText =
+                "Invalid route request — ask the user to clarify origin/destination.";
             } else {
               const route = await computeRoute(
                 parsed.data.origin,
@@ -2191,14 +2635,57 @@ Keep replies concise and easy to read in a chat bubble.`;
                 ? `${parsed.data.origin.label} to ${parsed.data.destination.label} by ${parsed.data.mode.toLowerCase()}: ${(route.distanceMeters / 1000).toFixed(1)} km, about ${Math.round(route.durationSeconds / 60)} minutes.`
                 : `No route found between ${parsed.data.origin.label} and ${parsed.data.destination.label}.`;
             }
+          } else if (call.name === GET_AIR_QUALITY_TOOL_NAME) {
+            const parsed = GetAirQualityToolPayload.safeParse(
+              JSON.parse(call.args),
+            );
+            if (!parsed.success) {
+              resultText =
+                "Invalid location — ask the user to clarify or use on-screen coordinates.";
+            } else {
+              const airQuality = await getAirQuality(
+                parsed.data.lat,
+                parsed.data.lng,
+              );
+              resultText = airQuality
+                ? `Air quality in ${parsed.data.locationName}: Universal AQI ${airQuality.aqi} (${airQuality.category}), dominant pollutant ${airQuality.dominantPollutant}.`
+                : `No air quality data available for ${parsed.data.locationName}.`;
+            }
+          } else if (call.name === GET_POLLEN_FORECAST_TOOL_NAME) {
+            const parsed = GetPollenForecastToolPayload.safeParse(
+              JSON.parse(call.args),
+            );
+            if (!parsed.success) {
+              resultText =
+                "Invalid location — ask the user to clarify or use on-screen coordinates.";
+            } else {
+              const pollen = await getPollenForecast(
+                parsed.data.lat,
+                parsed.data.lng,
+              );
+              resultText = pollen
+                ? `Pollen forecast for ${parsed.data.locationName} (${pollen.date}): overall ${pollen.overallCategory}. ` +
+                  pollen.types
+                    .map((t) => `${t.displayName}: ${t.category}`)
+                    .join(", ")
+                : `No pollen data available for ${parsed.data.locationName}.`;
+            }
           } else {
             resultText = "Unsupported tool.";
           }
         } catch (err) {
-          req.log.error({ err, tool: call.name }, "elAIne hard tool call failed");
-          resultText = "That lookup failed — tell the user you couldn't get that information right now.";
+          req.log.error(
+            { err, tool: call.name },
+            "elAIne hard tool call failed",
+          );
+          resultText =
+            "That lookup failed — tell the user you couldn't get that information right now.";
         }
-        messages.push({ role: "tool", tool_call_id: call.id, content: resultText });
+        messages.push({
+          role: "tool",
+          tool_call_id: call.id,
+          content: resultText,
+        });
       }),
     );
   }
@@ -2222,7 +2709,8 @@ Keep replies concise and easy to read in a chat bubble.`;
     navigate,
     actions: resolvedActions,
     executedActions,
-    actionConfirmationMode: updatedActionConfirmationMode ?? actionConfirmationMode,
+    actionConfirmationMode:
+      updatedActionConfirmationMode ?? actionConfirmationMode,
     messages: updatedHistory,
   });
   res.end();
@@ -2248,7 +2736,8 @@ router.get("/assistant/settings", async (req, res) => {
   res.json({
     enabled: row?.enabled ?? true,
     actionConfirmationMode:
-      (row?.actionConfirmationMode as ActionConfirmationMode | undefined) ?? "one_by_one",
+      (row?.actionConfirmationMode as ActionConfirmationMode | undefined) ??
+      "one_by_one",
   });
 });
 
@@ -2301,7 +2790,9 @@ router.delete("/assistant/memory/:id", async (req, res) => {
     res.status(404).json({ error: "Not found" });
     return;
   }
-  await db.delete(travelsHouseholdMemory).where(eq(travelsHouseholdMemory.id, id));
+  await db
+    .delete(travelsHouseholdMemory)
+    .where(eq(travelsHouseholdMemory.id, id));
   res.status(204).end();
 });
 

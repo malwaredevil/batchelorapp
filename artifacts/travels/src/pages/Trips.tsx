@@ -14,15 +14,33 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, Plus, Plane, ArrowRight, Filter, X } from "lucide-react";
 import { toast } from "sonner";
 import { MagnetCheckDialog } from "@/components/MagnetCheckDialog";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 
-const ALL_STATUSES: TripStatus[] = ["wishlist", "planning", "booked", "active", "completed"];
+const ALL_STATUSES: TripStatus[] = [
+  "wishlist",
+  "planning",
+  "booked",
+  "active",
+  "completed",
+];
 
 const STATUS_LABELS: Record<TripStatus, string> = {
   wishlist: "Wishlist",
@@ -33,10 +51,10 @@ const STATUS_LABELS: Record<TripStatus, string> = {
 };
 
 const STATUS_COLORS: Record<TripStatus, string> = {
-  wishlist:  "bg-yellow-50 text-yellow-700 border-yellow-200",
-  planning:  "bg-orange-50 text-orange-700 border-orange-200",
-  booked:    "bg-green-50  text-green-700  border-green-200",
-  active:    "bg-orange-50 text-orange-700 border-orange-200",
+  wishlist: "bg-yellow-50 text-yellow-700 border-yellow-200",
+  planning: "bg-orange-50 text-orange-700 border-orange-200",
+  booked: "bg-green-50  text-green-700  border-green-200",
+  active: "bg-orange-50 text-orange-700 border-orange-200",
   completed: "bg-red-50    text-red-700    border-red-200",
 };
 
@@ -161,7 +179,9 @@ function CreateTripDialog({
             <Label>Transport to destination</Label>
             <Select
               value={form.transportTo ?? "none"}
-              onValueChange={(v) => set("transportTo", v === "none" ? undefined : v)}
+              onValueChange={(v) =>
+                set("transportTo", v === "none" ? undefined : v)
+              }
             >
               <SelectTrigger>
                 <SelectValue placeholder="Not set" />
@@ -175,7 +195,11 @@ function CreateTripDialog({
             </Select>
           </div>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => onOpenChange(false)}
+            >
               Cancel
             </Button>
             <Button type="submit" disabled={createTrip.isPending}>
@@ -193,11 +217,15 @@ const FAMILY_MEMBERS = ["John", "Ashley", "Karis", "Angela"] as const;
 export default function Trips() {
   const search = useSearch();
   const searchParams = new URLSearchParams(search);
-  const initialStatus = (searchParams.get("status") ?? "all") as TripStatus | "all";
+  const initialStatus = (searchParams.get("status") ?? "all") as
+    | TripStatus
+    | "all";
   const initialYear = searchParams.get("year");
   const initialDestination = searchParams.get("destination");
   const { data: trips = [], isLoading } = useListTrips();
-  const [filterStatus, setFilterStatus] = useState<TripStatus | "all">(initialStatus);
+  const [filterStatus, setFilterStatus] = useState<TripStatus | "all">(
+    initialStatus,
+  );
   const [filterYear, setFilterYear] = useState<number | "all">(
     initialYear ? Number(initialYear) : "all",
   );
@@ -208,7 +236,11 @@ export default function Trips() {
   const [creating, setCreating] = useState(false);
 
   const availableYears = Array.from(
-    new Set(trips.filter((t) => t.startDate).map((t) => new Date(t.startDate!).getFullYear())),
+    new Set(
+      trips
+        .filter((t) => t.startDate)
+        .map((t) => new Date(t.startDate!).getFullYear()),
+    ),
   ).sort((a, b) => b - a);
 
   const filtered = trips.filter((t) => {
@@ -240,7 +272,10 @@ export default function Trips() {
   );
 
   const hasActiveFilters =
-    filterStatus !== "all" || filterYear !== "all" || filterPerson.length > 0 || !!filterDestination;
+    filterStatus !== "all" ||
+    filterYear !== "all" ||
+    filterPerson.length > 0 ||
+    !!filterDestination;
   const clearFilters = () => {
     setFilterStatus("all");
     setFilterYear("all");
@@ -253,7 +288,9 @@ export default function Trips() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="font-serif text-3xl text-foreground">Trips</h1>
-          <p className="text-muted-foreground mt-1">Your full travel pipeline.</p>
+          <p className="text-muted-foreground mt-1">
+            Your full travel pipeline.
+          </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <MagnetCheckDialog />
@@ -302,7 +339,9 @@ export default function Trips() {
           {availableYears.length > 0 && (
             <Select
               value={String(filterYear)}
-              onValueChange={(v) => setFilterYear(v === "all" ? "all" : Number(v))}
+              onValueChange={(v) =>
+                setFilterYear(v === "all" ? "all" : Number(v))
+              }
             >
               <SelectTrigger className="h-8 w-32 text-xs">
                 <SelectValue />
@@ -310,7 +349,9 @@ export default function Trips() {
               <SelectContent>
                 <SelectItem value="all">All years</SelectItem>
                 {availableYears.map((y) => (
-                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                  <SelectItem key={y} value={String(y)}>
+                    {y}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -386,15 +427,22 @@ export default function Trips() {
               <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">
                 {STATUS_LABELS[status]}
               </h2>
-              <div className="space-y-2">
+              <div className="flex flex-col gap-2">
                 {grouped[status].map((trip) => (
-                  <Link key={trip.id} href={`/trips/${trip.id}`}>
+                  <Link
+                    key={trip.id}
+                    href={`/trips/${trip.id}`}
+                    className="block"
+                  >
                     <Card className="border-border/50 hover:border-primary/30 hover:shadow-sm transition-all cursor-pointer group">
                       <CardContent className="flex items-center gap-4 py-4 px-4">
-                        {(status === "active" || status === "completed") && (
-                          trip.iconPhotoId != null ? (
+                        {(status === "active" || status === "completed") &&
+                          (trip.iconPhotoId != null ? (
                             <img
-                              src={getTripPhotoImageUrl(trip.id, trip.iconPhotoId)}
+                              src={getTripPhotoImageUrl(
+                                trip.id,
+                                trip.iconPhotoId,
+                              )}
                               alt=""
                               className="w-12 h-12 rounded-lg object-cover shrink-0"
                             />
@@ -402,33 +450,41 @@ export default function Trips() {
                             <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center shrink-0">
                               <Plane className="w-5 h-5 text-muted-foreground/40" />
                             </div>
-                          )
-                        )}
+                          ))}
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-foreground truncate">{trip.title}</p>
+                          <p className="font-medium text-foreground truncate">
+                            {trip.title}
+                          </p>
                           <p className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5">
                             <MapPin className="w-3 h-3 shrink-0" />
                             {trip.destination}
                           </p>
                           {trip.startDate && (
                             <p className="text-xs text-muted-foreground mt-1">
-                              {new Date(trip.startDate).toLocaleDateString("en-GB", {
-                                day: "numeric",
-                                month: "short",
-                                year: "numeric",
-                              })}
+                              {new Date(trip.startDate).toLocaleDateString(
+                                "en-GB",
+                                {
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                },
+                              )}
                               {trip.endDate && (
                                 <>
-                                  {" "}—{" "}
-                                  {new Date(trip.endDate).toLocaleDateString("en-GB", {
-                                    day: "numeric",
-                                    month: "short",
-                                    year: "numeric",
-                                  })}
+                                  {" "}
+                                  —{" "}
+                                  {new Date(trip.endDate).toLocaleDateString(
+                                    "en-GB",
+                                    {
+                                      day: "numeric",
+                                      month: "short",
+                                      year: "numeric",
+                                    },
+                                  )}
                                 </>
-                              )}
-                              {" "}
-                              &middot; {trip.travellerCount} traveller{trip.travellerCount !== 1 ? "s" : ""}
+                              )}{" "}
+                              &middot; {trip.travellerCount} traveller
+                              {trip.travellerCount !== 1 ? "s" : ""}
                             </p>
                           )}
                         </div>

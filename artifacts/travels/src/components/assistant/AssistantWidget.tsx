@@ -48,7 +48,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ElaineAvatar, ElaineWordmark } from "./ElaineAvatar";
+import { ElaineAvatar, ElaineName, ElaineWordmark } from "./ElaineAvatar";
 import { useAssistantPageContextReader } from "@/lib/assistant-context";
 
 const HIDE_FOR_VISIT_KEY = "elaine_hidden_for_visit";
@@ -165,7 +165,11 @@ export function AssistantWidget() {
       {
         onSuccess: () => {
           setOpen(false);
-          toast.info("elAIne is turned off. Re-enable her anytime from Settings.");
+          toast.info(
+            <>
+              <ElaineName /> is turned off. Re-enable her anytime from Settings.
+            </>,
+          );
         },
       },
     );
@@ -243,7 +247,11 @@ export function AssistantWidget() {
         },
       );
     } catch {
-      toast.error("elAIne couldn't respond just now. Please try again.");
+      toast.error(
+        <>
+          <ElaineName /> couldn't respond just now. Please try again.
+        </>,
+      );
       setMessages((prev) => prev.slice(0, -1));
       setPendingActions([]);
     } finally {
@@ -303,7 +311,11 @@ export function AssistantWidget() {
           toast.success("Done!");
         },
         onError: () => {
-          toast.error("elAIne couldn't do that just now. Please try again.");
+          toast.error(
+            <>
+              <ElaineName /> couldn't do that just now. Please try again.
+            </>,
+          );
         },
       },
     );
@@ -367,7 +379,7 @@ export function AssistantWidget() {
                     Hide for this visit
                   </DropdownMenuItem>
                   <DropdownMenuItem onSelect={handleTurnOff} className="cursor-pointer text-destructive focus:text-destructive">
-                    Turn off elAIne
+                    Turn off <ElaineName />
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -382,7 +394,8 @@ export function AssistantWidget() {
               <div className="flex flex-col items-center gap-2 py-8 text-center">
                 <ElaineAvatar size={48} />
                 <p className="text-sm text-muted-foreground">
-                  Hi, I'm elAIne! Ask me anything about your trips, or whatever's on your screen.
+                  Hi, I'm <ElaineName />! Ask me anything about your trips, or whatever's on your
+                  screen.
                 </p>
               </div>
             )}

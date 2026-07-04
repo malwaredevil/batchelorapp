@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, Search, Plane, Users, ChevronDown, ChevronUp, Globe } from "lucide-react";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 const STATUS_COLORS: Record<TripStatus, string> = {
   wishlist:  "bg-yellow-50 text-yellow-700 border-yellow-200",
@@ -401,6 +402,15 @@ export default function Destinations() {
     );
 
   const totalVisits = groups.reduce((sum, g) => sum + g.trips.length, 0);
+
+  usePageAssistantContext(
+    "destinations",
+    isLoading
+      ? undefined
+      : `Destinations page: a browsable/searchable list of every place the household has been or wants to go, grouped by destination with trip history. ${groups.length} distinct destination(s), ${totalVisits} total trip(s) across them.${
+          search.trim() ? ` User is currently searching for "${search.trim()}".` : ""
+        }${filterPerson.length > 0 ? ` Filtered to traveler(s): ${filterPerson.join(", ")}.` : ""}`,
+  );
 
   return (
     <div className="space-y-6">

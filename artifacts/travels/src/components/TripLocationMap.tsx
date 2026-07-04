@@ -1,5 +1,5 @@
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { MapPlaceResult } from "@workspace/api-client-react";
 
 const DESTINATION_COLOR = "#2563eb";
@@ -78,6 +78,7 @@ export function TripLocationMap({ lat, lng, places }: TripLocationMapProps) {
   const placeMarkersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
   const latestPropsRef = useRef({ lat, lng, places });
   latestPropsRef.current = { lat, lng, places };
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -132,6 +133,11 @@ export function TripLocationMap({ lat, lng, places }: TripLocationMapProps) {
       })
       .catch((err) => {
         console.error("Failed to load Google Maps", err);
+        if (!cancelled) {
+          setLoadError(
+            "Map is currently unavailable (the Google Maps API key may not be authorized for this domain).",
+          );
+        }
       });
 
     return () => {
@@ -156,26 +162,41 @@ export function TripLocationMap({ lat, lng, places }: TripLocationMapProps) {
     const map = mapRef.current;
     if (!map || typeof google === "undefined") return;
 
-    placeMarkersRef.current.forEach((m) => (m.map = null));
-    placeMarkersRef.current = [];
+    try {
+      placeMarkersRef.current.forEach((m) => (m.map = null));
+      placeMarkersRef.current = [];
 
-    places
-      .filter((p) => p.lat != null && p.lng != null)
-      .forEach((place) => {
-        const marker = new google.maps.marker.AdvancedMarkerElement({
-          map,
-          position: { lat: place.lat!, lng: place.lng! },
-          content: makePinElement(PLACE_COLOR, 0.85),
-          title: place.name,
+      places
+        .filter((p) => p.lat != null && p.lng != null)
+        .forEach((place) => {
+          const marker = new google.maps.marker.AdvancedMarkerElement({
+            map,
+            position: { lat: place.lat!, lng: place.lng! },
+            content: makePinElement(PLACE_COLOR, 0.85),
+            title: place.name,
+          });
+          marker.addListener("click", () => {
+            infoWindowRef.current?.setContent(placePopupHtml(place));
+            infoWindowRef.current?.open({ map, anchor: marker });
+          });
+          placeMarkersRef.current.push(marker);
         });
-        marker.addListener("click", () => {
-          infoWindowRef.current?.setContent(placePopupHtml(place));
-          infoWindowRef.current?.open({ map, anchor: marker });
-        });
-        placeMarkersRef.current.push(marker);
-      });
+    } catch (err) {
+      console.error("Failed to render nearby place markers", err);
+      setLoadError(
+        "Map is currently unavailable (the Google Maps API key may not be authorized for this domain).",
+      );
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [places]);
+
+  if (loadError) {
+    return (
+      <div className="w-full h-64 sm:h-full min-h-64 rounded-lg border border-border/50 bg-secondary flex items-center justify-center p-4">
+        <p className="text-sm text-muted-foreground text-center">{loadError}</p>
+      </div>
+    );
+  }
 
   return (
     <div

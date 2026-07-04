@@ -18,8 +18,9 @@
  *   Travels:  travels_trips, travels_trip_documents, travels_trip_photos,
  *             travels_wishlist, travels_reminders, travels_reminder_alert_log,
  *             travels_calendar_settings, travels_google_calendar_connections,
- *             travels_reminder_calendar_events, travels_assistant_conversations,
- *             travels_assistant_settings, travels_household_memory
+ *             travels_connected_calendars, travels_reminder_calendar_events,
+ *             travels_assistant_conversations, travels_assistant_settings,
+ *             travels_household_memory
  *
  * What is intentionally skipped:
  *   - embedding / visual_embedding columns (require pgvector, unavailable on Replit DB)
@@ -341,6 +342,18 @@ CREATE TABLE IF NOT EXISTS travels_google_calendar_connections (
   calendar_summary          TEXT,
   created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS travels_connected_calendars (
+  id                   SERIAL PRIMARY KEY,
+  user_id              INTEGER NOT NULL,
+  google_calendar_id   TEXT NOT NULL,
+  summary              TEXT NOT NULL,
+  source               TEXT NOT NULL DEFAULT 'picked',
+  primary_color        TEXT NOT NULL DEFAULT '#4285f4',
+  is_travel_calendar   BOOLEAN NOT NULL DEFAULT false,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS travels_reminder_calendar_events (
@@ -830,6 +843,23 @@ async function main() {
     },
   );
   await resetSequence(dest, "travels_google_calendar_connections", "id");
+
+  summary["travels_connected_calendars"] = await copyTable(source, dest, {
+    table: "travels_connected_calendars",
+    columns: [
+      "id",
+      "user_id",
+      "google_calendar_id",
+      "summary",
+      "source",
+      "primary_color",
+      "is_travel_calendar",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_connected_calendars", "id");
 
   summary["travels_reminder_calendar_events"] = await copyTable(
     source,

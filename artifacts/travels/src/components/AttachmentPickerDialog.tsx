@@ -218,7 +218,9 @@ export function AttachmentPickerDialog({
                     }
                     placeholder="Document title…"
                     className="h-8 text-sm"
-                    autoFocus={selectedAttachments[0]?.attachmentId === a.attachmentId}
+                    autoFocus={
+                      selectedAttachments[0]?.attachmentId === a.attachmentId
+                    }
                   />
                 </div>
               ))}

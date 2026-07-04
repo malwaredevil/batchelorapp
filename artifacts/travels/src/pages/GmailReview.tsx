@@ -317,89 +317,93 @@ function SuggestionsTab({
 
   return (
     <>
-    <ul className="divide-y divide-card-border rounded-xl border border-card-border bg-card overflow-hidden">
-      {suggestions.map((s) => {
-        const extracted = (s.extractedData ?? {}) as Record<string, unknown>;
-        return (
-          <li
-            key={s.id}
-            className="p-4 space-y-3 transition-colors hover:bg-muted/30 cursor-pointer"
-            onClick={() => onView(s.gmailMessageId)}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-3 min-w-0">
-                <SenderAvatar from={s.fromAddress} className="h-9 w-9 mt-0.5" />
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-foreground truncate hover:underline">
-                    {s.subject || "(no subject)"}
-                  </p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {getDisplayName(s.fromAddress)} · {formatDate(s.receivedAt)}
-                  </p>
+      <ul className="divide-y divide-card-border rounded-xl border border-card-border bg-card overflow-hidden">
+        {suggestions.map((s) => {
+          const extracted = (s.extractedData ?? {}) as Record<string, unknown>;
+          return (
+            <li
+              key={s.id}
+              className="p-4 space-y-3 transition-colors hover:bg-muted/30 cursor-pointer"
+              onClick={() => onView(s.gmailMessageId)}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3 min-w-0">
+                  <SenderAvatar
+                    from={s.fromAddress}
+                    className="h-9 w-9 mt-0.5"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate hover:underline">
+                      {s.subject || "(no subject)"}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {getDisplayName(s.fromAddress)} ·{" "}
+                      {formatDate(s.receivedAt)}
+                    </p>
+                  </div>
+                </div>
+                {typeof extracted.documentType === "string" && (
+                  <span className="shrink-0 rounded-full bg-sky-100 px-2.5 py-1 text-[11px] font-medium capitalize text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
+                    {extracted.documentType.replace(/_/g, " ")}
+                  </span>
+                )}
+              </div>
+
+              {(typeof extracted.providerName === "string" ||
+                typeof extracted.referenceNumber === "string") && (
+                <p className="text-xs text-muted-foreground pl-12">
+                  {[extracted.providerName, extracted.referenceNumber]
+                    .filter(
+                      (v): v is string => typeof v === "string" && v.length > 0,
+                    )
+                    .join(" · ")}
+                </p>
+              )}
+
+              <div
+                className="flex flex-col sm:flex-row gap-2 sm:items-center pl-12"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <TripPicker
+                  trips={trips}
+                  value={selectedTrip[s.id] ?? ""}
+                  onChange={(v) =>
+                    setSelectedTrip((prev) => ({ ...prev, [s.id]: v }))
+                  }
+                  disabled={link.isPending}
+                />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => handleLink(s)}
+                    disabled={link.isPending || !selectedTrip[s.id]}
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                    Add to trip
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleDismiss(s)}
+                    disabled={dismiss.isPending}
+                  >
+                    <XCircle className="h-3.5 w-3.5 mr-1.5" />
+                    Dismiss
+                  </Button>
                 </div>
               </div>
-              {typeof extracted.documentType === "string" && (
-                <span className="shrink-0 rounded-full bg-sky-100 px-2.5 py-1 text-[11px] font-medium capitalize text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
-                  {extracted.documentType.replace(/_/g, " ")}
-                </span>
-              )}
-            </div>
-
-            {(typeof extracted.providerName === "string" ||
-              typeof extracted.referenceNumber === "string") && (
-              <p className="text-xs text-muted-foreground pl-12">
-                {[extracted.providerName, extracted.referenceNumber]
-                  .filter(
-                    (v): v is string => typeof v === "string" && v.length > 0,
-                  )
-                  .join(" · ")}
-              </p>
-            )}
-
-            <div
-              className="flex flex-col sm:flex-row gap-2 sm:items-center pl-12"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <TripPicker
-                trips={trips}
-                value={selectedTrip[s.id] ?? ""}
-                onChange={(v) =>
-                  setSelectedTrip((prev) => ({ ...prev, [s.id]: v }))
-                }
-                disabled={link.isPending}
-              />
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  onClick={() => handleLink(s)}
-                  disabled={link.isPending || !selectedTrip[s.id]}
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-                  Add to trip
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleDismiss(s)}
-                  disabled={dismiss.isPending}
-                >
-                  <XCircle className="h-3.5 w-3.5 mr-1.5" />
-                  Dismiss
-                </Button>
-              </div>
-            </div>
-          </li>
-        );
-      })}
-    </ul>
-    {linkTarget && (
-      <AttachmentPickerDialog
-        messageId={linkTarget.messageId}
-        onClose={() => setLinkTarget(null)}
-        onConfirm={handleConfirmLink}
-        isLinking={link.isPending}
-      />
-    )}
+            </li>
+          );
+        })}
+      </ul>
+      {linkTarget && (
+        <AttachmentPickerDialog
+          messageId={linkTarget.messageId}
+          onClose={() => setLinkTarget(null)}
+          onConfirm={handleConfirmLink}
+          isLinking={link.isPending}
+        />
+      )}
     </>
   );
 }
@@ -437,7 +441,9 @@ function InboxBrowserTab({
   const bulkUnlink = useBulkUnlinkGmailMessages();
   const [selectedTrip, setSelectedTrip] = useState<Record<string, string>>({});
   const [checked, setChecked] = useState<Record<string, boolean>>({});
-  const [checkedLinked, setCheckedLinked] = useState<Record<string, boolean>>({});
+  const [checkedLinked, setCheckedLinked] = useState<Record<string, boolean>>(
+    {},
+  );
   const [bulkTripId, setBulkTripId] = useState("");
   const [unlinkTarget, setUnlinkTarget] = useState<GmailInboxMessage | null>(
     null,
@@ -549,9 +555,7 @@ function InboxBrowserTab({
         qc.invalidateQueries({ queryKey: inboxQueryKey });
         setUnlinkTarget(null);
         toast(
-          savedDocName
-            ? `"${savedDocName}" deleted`
-            : "Trip document deleted",
+          savedDocName ? `"${savedDocName}" deleted` : "Trip document deleted",
           {
             description: savedTripTitle
               ? `Removed from ${savedTripTitle}`
@@ -642,14 +646,15 @@ function InboxBrowserTab({
   function handleBulkUnlink() {
     if (selectedLinkedIds.length === 0) return;
     // Snapshot the per-message trip IDs before the mutation clears the UI
-    const pendingItems: { messageId: string; tripId: number }[] = selectedLinkedIds
-      .map((id) => {
-        const msg = (data?.messages ?? []).find((m) => m.id === id);
-        return msg?.linkedTripId != null
-          ? { messageId: id, tripId: msg.linkedTripId }
-          : null;
-      })
-      .filter((x): x is { messageId: string; tripId: number } => x !== null);
+    const pendingItems: { messageId: string; tripId: number }[] =
+      selectedLinkedIds
+        .map((id) => {
+          const msg = (data?.messages ?? []).find((m) => m.id === id);
+          return msg?.linkedTripId != null
+            ? { messageId: id, tripId: msg.linkedTripId }
+            : null;
+        })
+        .filter((x): x is { messageId: string; tripId: number } => x !== null);
 
     bulkUnlink.mutate(
       { messageIds: selectedLinkedIds },

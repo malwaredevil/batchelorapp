@@ -294,7 +294,9 @@ export default function FabricDetail() {
   function handleSaveCategories() {
     const merged = [
       ...(allCategories ?? []),
-      ...localNewCats.filter((nc) => !(allCategories ?? []).some((a) => a.id === nc.id)),
+      ...localNewCats.filter(
+        (nc) => !(allCategories ?? []).some((a) => a.id === nc.id),
+      ),
     ];
     const categoryNames = merged
       .filter((c) => selectedCategoryIds.includes(c.id))
@@ -407,11 +409,19 @@ export default function FabricDetail() {
                 }}
                 autoFocus
               />
-              <Button size="sm" onClick={handleRename} disabled={updateFabric.isPending}>
+              <Button
+                size="sm"
+                onClick={handleRename}
+                disabled={updateFabric.isPending}
+              >
                 <Check className="mr-1.5 h-3.5 w-3.5" />
                 Save
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setRenamingName(false)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRenamingName(false)}
+              >
                 <XIcon className="mr-1.5 h-3.5 w-3.5" />
                 Cancel
               </Button>
@@ -424,11 +434,19 @@ export default function FabricDetail() {
               <div className="flex shrink-0 gap-1">
                 {isEditing ? (
                   <>
-                    <Button size="sm" onClick={handleSave} disabled={updateFabric.isPending}>
+                    <Button
+                      size="sm"
+                      onClick={handleSave}
+                      disabled={updateFabric.isPending}
+                    >
                       <Check className="mr-1.5 h-3.5 w-3.5" />
                       Save
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => setIsEditing(false)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsEditing(false)}
+                    >
                       <XIcon className="mr-1.5 h-3.5 w-3.5" />
                       Cancel
                     </Button>
@@ -442,17 +460,31 @@ export default function FabricDetail() {
                       disabled={reanalyzeFabric.isPending}
                       title="Re-run AI analysis on this fabric's photo"
                     >
-                      <RefreshCw className={`h-4 w-4 ${reanalyzeFabric.isPending ? "animate-spin" : ""}`} />
+                      <RefreshCw
+                        className={`h-4 w-4 ${reanalyzeFabric.isPending ? "animate-spin" : ""}`}
+                      />
                     </Button>
                     <Button
                       variant="outline"
                       size="icon"
                       onClick={() => toggleLock("name")}
                       disabled={updateFabric.isPending}
-                      title={lockedFields.includes("name") ? "Name is locked — click to unlock." : "Name is unlocked — click to lock."}
-                      className={lockedFields.includes("name") ? "border-red-400 text-red-600 hover:border-red-500 hover:text-red-700" : "border-green-400 text-green-600 hover:border-green-500 hover:text-green-700"}
+                      title={
+                        lockedFields.includes("name")
+                          ? "Name is locked — click to unlock."
+                          : "Name is unlocked — click to lock."
+                      }
+                      className={
+                        lockedFields.includes("name")
+                          ? "border-red-400 text-red-600 hover:border-red-500 hover:text-red-700"
+                          : "border-green-400 text-green-600 hover:border-green-500 hover:text-green-700"
+                      }
                     >
-                      {lockedFields.includes("name") ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
+                      {lockedFields.includes("name") ? (
+                        <Lock className="h-4 w-4" />
+                      ) : (
+                        <LockOpen className="h-4 w-4" />
+                      )}
                     </Button>
                     <Button
                       variant="outline"
@@ -466,7 +498,9 @@ export default function FabricDetail() {
                       variant="outline"
                       size="icon"
                       title="Download photo"
-                      onClick={() => downloadCollectionImage(f.imageUrl, f.name)}
+                      onClick={() =>
+                        downloadCollectionImage(f.imageUrl, f.name)
+                      }
                     >
                       <Download className="h-4 w-4" />
                     </Button>
@@ -474,7 +508,12 @@ export default function FabricDetail() {
                       variant="ghost"
                       size="icon"
                       className="text-destructive hover:bg-destructive/10"
-                      onClick={() => { if (confirm("Delete this fabric? This cannot be undone.")) deleteFabric.mutate({ id: fabricId }); }}
+                      onClick={() => {
+                        if (
+                          confirm("Delete this fabric? This cannot be undone.")
+                        )
+                          deleteFabric.mutate({ id: fabricId });
+                      }}
                       disabled={deleteFabric.isPending}
                     >
                       <Trash2 className="h-4 w-4" />
@@ -773,7 +812,9 @@ export default function FabricDetail() {
                 selectedIds={selectedCategoryIds}
                 onToggle={(id) =>
                   setSelectedCategoryIds((prev) =>
-                    prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+                    prev.includes(id)
+                      ? prev.filter((x) => x !== id)
+                      : [...prev, id],
                   )
                 }
                 onCreated={(cat) =>
@@ -788,7 +829,9 @@ export default function FabricDetail() {
                   selectedIds={selectedCategoryIds}
                   onToggle={(id) =>
                     setSelectedCategoryIds((prev) =>
-                      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+                      prev.includes(id)
+                        ? prev.filter((x) => x !== id)
+                        : [...prev, id],
                     )
                   }
                   onCreated={(cat) => {
@@ -800,11 +843,20 @@ export default function FabricDetail() {
                   disabled={updateFabric.isPending}
                 />
                 <div className="mt-3 flex gap-2">
-                  <Button size="sm" onClick={handleSaveCategories} disabled={updateFabric.isPending}>
+                  <Button
+                    size="sm"
+                    onClick={handleSaveCategories}
+                    disabled={updateFabric.isPending}
+                  >
                     <Check className="mr-1.5 h-3.5 w-3.5" />
                     {updateFabric.isPending ? "Saving…" : "Save"}
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => setCatEditing(false)} disabled={updateFabric.isPending}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setCatEditing(false)}
+                    disabled={updateFabric.isPending}
+                  >
                     <XIcon className="mr-1.5 h-3.5 w-3.5" />
                     Cancel
                   </Button>
@@ -819,9 +871,15 @@ export default function FabricDetail() {
                     className="border-transparent"
                     style={(() => {
                       const palette = cat.bgColor
-                        ? { bgColor: cat.bgColor, textColor: cat.textColor ?? "#fff" }
+                        ? {
+                            bgColor: cat.bgColor,
+                            textColor: cat.textColor ?? "#fff",
+                          }
                         : getCategoryPalette(cat.name);
-                      return { backgroundColor: palette.bgColor, color: palette.textColor };
+                      return {
+                        backgroundColor: palette.bgColor,
+                        color: palette.textColor,
+                      };
                     })()}
                   >
                     {cat.name}
@@ -830,7 +888,8 @@ export default function FabricDetail() {
               </div>
             ) : (
               <p className="text-xs italic text-muted-foreground">
-                No categories — click <Pencil className="inline h-2.5 w-2.5" /> to add
+                No categories — click <Pencil className="inline h-2.5 w-2.5" />{" "}
+                to add
               </p>
             )}
           </section>

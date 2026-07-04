@@ -102,9 +102,7 @@ export function AppSwitcher() {
         >
           <AppLogo className="h-7 w-7 shrink-0" />
           <div className="text-left leading-tight">
-            <p className="text-sm font-bold leading-none">
-              Ashley's Quilting
-            </p>
+            <p className="text-sm font-bold leading-none">Ashley's Quilting</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">
               {pillSubtitle}
             </p>
@@ -124,9 +122,7 @@ export function AppSwitcher() {
             <Home className="h-4 w-4" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold leading-none">
-              Batchelor Hub
-            </p>
+            <p className="text-sm font-semibold leading-none">Batchelor Hub</p>
             <p className="text-[11px] text-muted-foreground mt-0.5">
               Home — all your collections
             </p>

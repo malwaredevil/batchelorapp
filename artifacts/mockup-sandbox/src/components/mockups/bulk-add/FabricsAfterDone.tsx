@@ -17,8 +17,18 @@ const fabrics: Fabric[] = [
   { id: 3, name: "", type: "", color: "#e87a7a", status: "processing" },
   // Existing fabrics already in collection
   { id: 4, name: "Blue Floral Batik", type: "Batik", color: "#b3c9e8" },
-  { id: 5, name: "Moda Grunge Basics — Bluebell", type: "Solid", color: "#9bc4e8" },
-  { id: 6, name: "Red Geometric Cotton Print", type: "Geometric", color: "#e89b9b" },
+  {
+    id: 5,
+    name: "Moda Grunge Basics — Bluebell",
+    type: "Solid",
+    color: "#9bc4e8",
+  },
+  {
+    id: 6,
+    name: "Red Geometric Cotton Print",
+    type: "Geometric",
+    color: "#e89b9b",
+  },
   { id: 7, name: "Forest Flora Batik", type: "Batik", color: "#7ab87a" },
   { id: 8, name: "Cream Linen Texture", type: "Solid", color: "#e8d9b3" },
 ];
@@ -47,10 +57,14 @@ export function FabricsAfterDone() {
             <div
               key={label}
               className={`rounded-xl border p-3 ${
-                active ? "border-primary/40 bg-primary/5" : "border-border/50 bg-card"
+                active
+                  ? "border-primary/40 bg-primary/5"
+                  : "border-border/50 bg-card"
               }`}
             >
-              <p className={`text-lg font-bold ${active ? "text-primary" : "text-foreground"}`}>
+              <p
+                className={`text-lg font-bold ${active ? "text-primary" : "text-foreground"}`}
+              >
                 {value}
               </p>
               <p className="text-[10px] font-medium text-muted-foreground leading-tight mt-0.5">
@@ -64,7 +78,9 @@ export function FabricsAfterDone() {
         <div className="mb-4 flex items-start justify-between">
           <div>
             <h1 className="text-xl font-bold tracking-tight">Fabrics</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">49 in your stash</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              49 in your stash
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <button className="flex items-center gap-1.5 rounded-lg border border-border/70 bg-card px-3 py-2 text-xs font-medium text-foreground shadow-sm">
@@ -91,7 +107,9 @@ export function FabricsAfterDone() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <div className="h-9 rounded-lg border border-border/60 bg-card pl-9 flex items-center">
-              <span className="text-xs text-muted-foreground">Search fabrics…</span>
+              <span className="text-xs text-muted-foreground">
+                Search fabrics…
+              </span>
             </div>
           </div>
           <button className="flex h-9 items-center gap-1.5 rounded-lg border border-border/60 bg-card px-3 text-xs text-muted-foreground">
@@ -115,7 +133,10 @@ export function FabricsAfterDone() {
                 {/* Image area */}
                 <div
                   className="relative aspect-square"
-                  style={{ backgroundColor: fabric.color + (isProcessing ? "80" : "60") }}
+                  style={{
+                    backgroundColor:
+                      fabric.color + (isProcessing ? "80" : "60"),
+                  }}
                 >
                   {/* Spinning badge — top-right, same as bulk-analyze maintenance page */}
                   {isProcessing && (
@@ -134,8 +155,12 @@ export function FabricsAfterDone() {
                     </>
                   ) : (
                     <>
-                      <p className="text-[11px] font-semibold text-foreground truncate">{fabric.name}</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{fabric.type}</p>
+                      <p className="text-[11px] font-semibold text-foreground truncate">
+                        {fabric.name}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {fabric.type}
+                      </p>
                     </>
                   )}
                 </div>

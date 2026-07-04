@@ -52,9 +52,14 @@ export async function sendReminderAlertEmail(
 
   const days = parseInt(alertType, 10);
   const label = alertLabel(isNaN(days) ? 0 : days);
-  const formatted = new Date(dueDate + "T12:00:00Z").toLocaleDateString("en-GB", {
-    day: "numeric", month: "long", year: "numeric",
-  });
+  const formatted = new Date(dueDate + "T12:00:00Z").toLocaleDateString(
+    "en-GB",
+    {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    },
+  );
 
   const { error } = await getResend().emails.send({
     from,
@@ -134,7 +139,10 @@ export async function sendAssistantEmail(
 
   const paragraphsHtml = body
     .split(/\n{2,}/)
-    .map((p) => `<p style="margin: 0 0 16px; font-size: 14px; color: #333; white-space: pre-line;">${escapeHtml(p.trim())}</p>`)
+    .map(
+      (p) =>
+        `<p style="margin: 0 0 16px; font-size: 14px; color: #333; white-space: pre-line;">${escapeHtml(p.trim())}</p>`,
+    )
     .join("");
 
   const { error } = await getResend().emails.send({

@@ -23,9 +23,13 @@ function getServiceAccount(): ServiceAccount {
   if (!env.googleWalletServiceAccountJson) {
     throw new Error("GOOGLE_WALLET_SERVICE_ACCOUNT_JSON is not configured");
   }
-  const parsed = JSON.parse(env.googleWalletServiceAccountJson) as Partial<ServiceAccount>;
+  const parsed = JSON.parse(
+    env.googleWalletServiceAccountJson,
+  ) as Partial<ServiceAccount>;
   if (!parsed.client_email || !parsed.private_key) {
-    throw new Error("GOOGLE_WALLET_SERVICE_ACCOUNT_JSON is missing client_email/private_key");
+    throw new Error(
+      "GOOGLE_WALLET_SERVICE_ACCOUNT_JSON is missing client_email/private_key",
+    );
   }
   return { client_email: parsed.client_email, private_key: parsed.private_key };
 }
@@ -46,7 +50,11 @@ function base64url(input: Buffer | string): string {
     .replace(/=+$/g, "");
 }
 
-function signRs256(headerObj: unknown, payloadObj: unknown, privateKey: string): string {
+function signRs256(
+  headerObj: unknown,
+  payloadObj: unknown,
+  privateKey: string,
+): string {
   const header = base64url(JSON.stringify(headerObj));
   const payload = base64url(JSON.stringify(payloadObj));
   const signingInput = `${header}.${payload}`;
@@ -90,10 +98,18 @@ async function getAccessToken(): Promise<string> {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Google Wallet token exchange failed (${res.status}): ${text.slice(0, 300)}`);
+    throw new Error(
+      `Google Wallet token exchange failed (${res.status}): ${text.slice(0, 300)}`,
+    );
   }
-  const data = (await res.json()) as { access_token: string; expires_in: number };
-  cachedToken = { token: data.access_token, expiresAt: Date.now() + data.expires_in * 1000 };
+  const data = (await res.json()) as {
+    access_token: string;
+    expires_in: number;
+  };
+  cachedToken = {
+    token: data.access_token,
+    expiresAt: Date.now() + data.expires_in * 1000,
+  };
   return data.access_token;
 }
 
@@ -111,7 +127,10 @@ export async function ensureTripDocumentClassExists(): Promise<void> {
 
   const getRes = await fetch(
     `https://walletobjects.googleapis.com/walletobjects/v1/genericClass/${classId}`,
-    { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000) },
+    {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(8000),
+    },
   );
   if (getRes.ok) return; // already exists
 
@@ -119,14 +138,19 @@ export async function ensureTripDocumentClassExists(): Promise<void> {
     "https://walletobjects.googleapis.com/walletobjects/v1/genericClass",
     {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({ id: classId }),
       signal: AbortSignal.timeout(8000),
     },
   );
   if (!createRes.ok && createRes.status !== 409) {
     const text = await createRes.text().catch(() => "");
-    throw new Error(`Failed to create Wallet pass class (${createRes.status}): ${text.slice(0, 300)}`);
+    throw new Error(
+      `Failed to create Wallet pass class (${createRes.status}): ${text.slice(0, 300)}`,
+    );
   }
 }
 
@@ -145,18 +169,26 @@ function str(v: unknown): string {
   return typeof v === "string" && v.trim() ? v.trim() : "";
 }
 
-function buildRow(label: string, value: string): { header: string; body: string } | null {
+function buildRow(
+  label: string,
+  value: string,
+): { header: string; body: string } | null {
   if (!value) return null;
   return { header: label, body: value };
 }
 
-export async function buildSaveToWalletUrl(input: TripDocumentPassInput): Promise<string> {
+export async function buildSaveToWalletUrl(
+  input: TripDocumentPassInput,
+): Promise<string> {
   const account = getServiceAccount();
   await ensureTripDocumentClassExists();
   const classId = getTripDocumentClassId();
   const ed = input.extractedData ?? {};
 
-  const typeLabel = (input.documentType ?? "travel_document").replace(/_/g, " ");
+  const typeLabel = (input.documentType ?? "travel_document").replace(
+    /_/g,
+    " ",
+  );
   const cardTitle =
     str(ed.providerName) ||
     str(ed.hotelName) ||
@@ -173,7 +205,10 @@ export async function buildSaveToWalletUrl(input: TripDocumentPassInput): Promis
     buildRow("Hotel", str(ed.hotelName)),
     buildRow("Check-in", str(ed.checkInDate)),
     buildRow("Check-out", str(ed.checkOutDate)),
-    buildRow("Confirmation #", str(ed.confirmationNumber) || str(ed.referenceNumber)),
+    buildRow(
+      "Confirmation #",
+      str(ed.confirmationNumber) || str(ed.referenceNumber),
+    ),
   ].filter((r): r is { header: string; body: string } => r != null);
 
   const objectId = `${getIssuerId()}.travel_doc_${input.documentId}`;
@@ -182,7 +217,12 @@ export async function buildSaveToWalletUrl(input: TripDocumentPassInput): Promis
     id: objectId,
     classId,
     genericType: "GENERIC_TYPE_UNSPECIFIED",
-    cardTitle: { defaultValue: { language: "en-US", value: typeLabel.replace(/\b\w/g, (c) => c.toUpperCase()) } },
+    cardTitle: {
+      defaultValue: {
+        language: "en-US",
+        value: typeLabel.replace(/\b\w/g, (c) => c.toUpperCase()),
+      },
+    },
     subheader: { defaultValue: { language: "en-US", value: cardTitle } },
     header: { defaultValue: { language: "en-US", value: cardTitle } },
     textModulesData: rows.slice(0, 10),

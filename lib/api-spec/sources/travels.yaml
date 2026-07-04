@@ -636,7 +636,14 @@ components:
 
     TravelsStatsResponse:
       type: object
-      required: [totalTrips, completedTrips, upcomingTrips, uniqueDestinations, nextTrip]
+      required:
+        [
+          totalTrips,
+          completedTrips,
+          upcomingTrips,
+          uniqueDestinations,
+          nextTrip,
+        ]
       properties:
         totalTrips:
           type: integer

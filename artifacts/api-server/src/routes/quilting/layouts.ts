@@ -199,8 +199,11 @@ async function fetchBlockCellsMap(
     const fabRows = await db
       .select({ id: fabrics.id, dominantColors: fabrics.dominantColors })
       .from(fabrics)
-      .where(and(inArray(fabrics.id, [...allFabricIds]), eq(fabrics.userId, userId)));
-    for (const fr of fabRows) fabricColorMap.set(fr.id, fr.dominantColors ?? []);
+      .where(
+        and(inArray(fabrics.id, [...allFabricIds]), eq(fabrics.userId, userId)),
+      );
+    for (const fr of fabRows)
+      fabricColorMap.set(fr.id, fr.dominantColors ?? []);
   }
 
   const HEX_RE_LOCAL = /#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?/g;
@@ -216,7 +219,8 @@ async function fetchBlockCellsMap(
       }
       if (!matched) {
         // Non-fabric cell: extract hex colour codes (handles "nwse:#xxx:#yyy" etc.)
-        for (const hm of cell.matchAll(HEX_RE_LOCAL)) effective.push(hm[0].toLowerCase());
+        for (const hm of cell.matchAll(HEX_RE_LOCAL))
+          effective.push(hm[0].toLowerCase());
       }
     }
     m.set(r.id, effective);
@@ -300,7 +304,11 @@ router.get("/layouts", async (req, res) => {
 
   res.json(
     rows.map((r) =>
-      serialize(r, catMap.get(r.id) ?? [], extractLayoutColors(r, blockCellsMap)),
+      serialize(
+        r,
+        catMap.get(r.id) ?? [],
+        extractLayoutColors(r, blockCellsMap),
+      ),
     ),
   );
 });
@@ -368,7 +376,13 @@ router.get("/layouts/:id", async (req, res) => {
     ),
   ];
   const blockCellsMap = await fetchBlockCellsMap(blockIds, userId);
-  res.json(serialize(row, catMap.get(id) ?? [], extractLayoutColors(row, blockCellsMap)));
+  res.json(
+    serialize(
+      row,
+      catMap.get(id) ?? [],
+      extractLayoutColors(row, blockCellsMap),
+    ),
+  );
 });
 
 router.patch("/layouts/:id", async (req, res) => {
@@ -400,7 +414,7 @@ router.patch("/layouts/:id", async (req, res) => {
   if ("borderColor" in data) update.borderColor = data.borderColor ?? null;
   if ("cornerstoneColor" in data)
     update.cornerstoneColor = data.cornerstoneColor ?? null;
-  let row: (typeof layouts.$inferSelect) | undefined;
+  let row: typeof layouts.$inferSelect | undefined;
   if (Object.keys(update).length > 0) {
     const [updated] = await db
       .update(layouts)

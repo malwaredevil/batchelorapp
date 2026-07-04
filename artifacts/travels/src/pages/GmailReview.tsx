@@ -14,7 +14,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -49,7 +55,11 @@ function formatDate(value: string | null): string {
   if (!value) return "Unknown date";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "Unknown date";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 const AVATAR_PALETTE = [
@@ -78,11 +88,18 @@ function getInitials(from: string | null | undefined): string {
 function getAvatarColor(from: string | null | undefined): string {
   const name = getDisplayName(from);
   let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  for (let i = 0; i < name.length; i++)
+    hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
   return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
 }
 
-function SenderAvatar({ from, className }: { from: string | null | undefined; className?: string }) {
+function SenderAvatar({
+  from,
+  className,
+}: {
+  from: string | null | undefined;
+  className?: string;
+}) {
   return (
     <div
       className={cn(
@@ -131,7 +148,10 @@ function ViewMessageDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const { data, isLoading, isError } = useGetGmailMessage(messageId ?? "", {
-    query: { enabled: !!messageId, queryKey: getGetGmailMessageQueryKey(messageId ?? "") },
+    query: {
+      enabled: !!messageId,
+      queryKey: getGetGmailMessageQueryKey(messageId ?? ""),
+    },
   });
 
   return (
@@ -139,11 +159,15 @@ function ViewMessageDialog({
       <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto p-0 gap-0">
         {isLoading || !data ? (
           <div className="p-8">
-            <p className="text-sm text-muted-foreground py-6 text-center">Loading email…</p>
+            <p className="text-sm text-muted-foreground py-6 text-center">
+              Loading email…
+            </p>
           </div>
         ) : isError ? (
           <div className="p-8">
-            <p className="text-sm text-destructive py-6 text-center">Could not load this email.</p>
+            <p className="text-sm text-destructive py-6 text-center">
+              Could not load this email.
+            </p>
           </div>
         ) : (
           <>
@@ -227,22 +251,31 @@ function SuggestionsTab({
           toast.success("Added as trip document(s)");
         },
         onError: (err) =>
-          toast.error(err instanceof Error ? err.message : "Could not link this email"),
+          toast.error(
+            err instanceof Error ? err.message : "Could not link this email",
+          ),
       },
     );
   }
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground py-8 text-center">Loading suggestions…</p>;
+    return (
+      <p className="text-sm text-muted-foreground py-8 text-center">
+        Loading suggestions…
+      </p>
+    );
   }
 
   if (suggestions.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-card-border p-8 text-center space-y-1">
         <Mail className="h-8 w-8 mx-auto text-muted-foreground" />
-        <p className="text-sm font-medium text-foreground">No pending suggestions</p>
+        <p className="text-sm font-medium text-foreground">
+          No pending suggestions
+        </p>
         <p className="text-xs text-muted-foreground">
-          Run a scan or check back after your next automatic scan (every 6 hours).
+          Run a scan or check back after your next automatic scan (every 6
+          hours).
         </p>
       </div>
     );
@@ -277,10 +310,13 @@ function SuggestionsTab({
               )}
             </div>
 
-            {(typeof extracted.providerName === "string" || typeof extracted.referenceNumber === "string") && (
+            {(typeof extracted.providerName === "string" ||
+              typeof extracted.referenceNumber === "string") && (
               <p className="text-xs text-muted-foreground pl-12">
                 {[extracted.providerName, extracted.referenceNumber]
-                  .filter((v): v is string => typeof v === "string" && v.length > 0)
+                  .filter(
+                    (v): v is string => typeof v === "string" && v.length > 0,
+                  )
                   .join(" · ")}
               </p>
             )}
@@ -292,7 +328,9 @@ function SuggestionsTab({
               <TripPicker
                 trips={trips}
                 value={selectedTrip[s.id] ?? ""}
-                onChange={(v) => setSelectedTrip((prev) => ({ ...prev, [s.id]: v }))}
+                onChange={(v) =>
+                  setSelectedTrip((prev) => ({ ...prev, [s.id]: v }))
+                }
                 disabled={link.isPending}
               />
               <div className="flex gap-2">
@@ -336,7 +374,9 @@ function InboxBrowserTab({
   // History of page tokens visited so far for the current query/page-size, so the user can
   // step back with "Previous" as well as forward with "Next" (Gmail's API only exposes a
   // forward cursor, so "Previous" replays the token we already fetched with).
-  const [pageHistory, setPageHistory] = useState<(string | undefined)[]>([undefined]);
+  const [pageHistory, setPageHistory] = useState<(string | undefined)[]>([
+    undefined,
+  ]);
   const [pageIndex, setPageIndex] = useState(0);
   const pageToken = pageHistory[pageIndex];
   const [showIgnored, setShowIgnored] = useState(false);
@@ -353,7 +393,11 @@ function InboxBrowserTab({
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [bulkTripId, setBulkTripId] = useState("");
 
-  const inboxQueryKey = getGetGmailInboxQueryKey({ q: committedQuery || undefined, pageToken, maxResults: pageSize });
+  const inboxQueryKey = getGetGmailInboxQueryKey({
+    q: committedQuery || undefined,
+    pageToken,
+    maxResults: pageSize,
+  });
 
   function resetPaging() {
     setPageHistory([undefined]);
@@ -373,7 +417,10 @@ function InboxBrowserTab({
 
   function handleNextPage() {
     if (!data?.nextPageToken) return;
-    setPageHistory((h) => [...h.slice(0, pageIndex + 1), data.nextPageToken ?? undefined]);
+    setPageHistory((h) => [
+      ...h.slice(0, pageIndex + 1),
+      data.nextPageToken ?? undefined,
+    ]);
     setPageIndex((i) => i + 1);
   }
 
@@ -394,7 +441,10 @@ function InboxBrowserTab({
           qc.invalidateQueries({ queryKey: inboxQueryKey });
           toast.success("Added as trip document(s)");
         },
-        onError: (err) => toast.error(err instanceof Error ? err.message : "Could not link this email"),
+        onError: (err) =>
+          toast.error(
+            err instanceof Error ? err.message : "Could not link this email",
+          ),
       },
     );
   }
@@ -419,7 +469,9 @@ function InboxBrowserTab({
     });
   }
 
-  const selectableMessages = (data?.messages ?? []).filter((m) => !m.alreadyLinked);
+  const selectableMessages = (data?.messages ?? []).filter(
+    (m) => !m.alreadyLinked,
+  );
   const selectedIds = Object.keys(checked).filter((id) => checked[id]);
 
   function toggleChecked(id: string) {
@@ -439,20 +491,31 @@ function InboxBrowserTab({
         onSuccess: (result) => {
           qc.invalidateQueries({ queryKey: inboxQueryKey });
           setChecked({});
-          const failed = result.results.filter((r) => r.status === "failed").length;
-          const linked = result.results.filter((r) => r.status === "linked").length;
+          const failed = result.results.filter(
+            (r) => r.status === "failed",
+          ).length;
+          const linked = result.results.filter(
+            (r) => r.status === "linked",
+          ).length;
           if (failed > 0) {
-            toast.error(`Added ${linked} email(s); ${failed} could not be imported.`);
+            toast.error(
+              `Added ${linked} email(s); ${failed} could not be imported.`,
+            );
           } else {
             toast.success(`Added ${linked} email(s) as trip document(s)`);
           }
         },
-        onError: (err) => toast.error(err instanceof Error ? err.message : "Bulk import failed"),
+        onError: (err) =>
+          toast.error(
+            err instanceof Error ? err.message : "Bulk import failed",
+          ),
       },
     );
   }
 
-  const visibleMessages = (data?.messages ?? []).filter((m) => showIgnored || !m.alreadyIgnored);
+  const visibleMessages = (data?.messages ?? []).filter(
+    (m) => showIgnored || !m.alreadyIgnored,
+  );
 
   return (
     <div className="space-y-4">
@@ -463,7 +526,7 @@ function InboxBrowserTab({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            placeholder='Gmail search, e.g. from:delta.com'
+            placeholder="Gmail search, e.g. from:delta.com"
             className="pl-8"
           />
         </div>
@@ -479,7 +542,10 @@ function InboxBrowserTab({
             checked={showIgnored}
             onCheckedChange={(v) => setShowIgnored(v === true)}
           />
-          <label htmlFor="show-ignored" className="text-xs text-muted-foreground cursor-pointer select-none">
+          <label
+            htmlFor="show-ignored"
+            className="text-xs text-muted-foreground cursor-pointer select-none"
+          >
             Show ignored emails
           </label>
         </div>
@@ -487,7 +553,10 @@ function InboxBrowserTab({
           <label htmlFor="page-size" className="text-xs text-muted-foreground">
             Per page
           </label>
-          <Select value={String(pageSize)} onValueChange={(v) => handlePageSizeChange(Number(v))}>
+          <Select
+            value={String(pageSize)}
+            onValueChange={(v) => handlePageSizeChange(Number(v))}
+          >
             <SelectTrigger id="page-size" className="h-8 w-[80px]">
               <SelectValue />
             </SelectTrigger>
@@ -502,9 +571,20 @@ function InboxBrowserTab({
 
       {selectedIds.length > 0 && (
         <div className="flex flex-col sm:flex-row gap-2 sm:items-center rounded-xl border border-card-border bg-muted/50 p-3">
-          <p className="text-sm font-medium text-foreground">{selectedIds.length} selected</p>
-          <TripPicker trips={trips} value={bulkTripId} onChange={setBulkTripId} disabled={bulkLink.isPending} />
-          <Button size="sm" onClick={handleBulkLink} disabled={bulkLink.isPending || !bulkTripId}>
+          <p className="text-sm font-medium text-foreground">
+            {selectedIds.length} selected
+          </p>
+          <TripPicker
+            trips={trips}
+            value={bulkTripId}
+            onChange={setBulkTripId}
+            disabled={bulkLink.isPending}
+          />
+          <Button
+            size="sm"
+            onClick={handleBulkLink}
+            disabled={bulkLink.isPending || !bulkTripId}
+          >
             {bulkLink.isPending ? (
               <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
             ) : (
@@ -512,19 +592,28 @@ function InboxBrowserTab({
             )}
             Add {selectedIds.length} to trip
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => setChecked({})} disabled={bulkLink.isPending}>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setChecked({})}
+            disabled={bulkLink.isPending}
+          >
             Clear
           </Button>
         </div>
       )}
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground py-8 text-center">Loading your inbox…</p>
+        <p className="text-sm text-muted-foreground py-8 text-center">
+          Loading your inbox…
+        </p>
       ) : visibleMessages.length === 0 ? (
         <div className="rounded-xl border border-dashed border-card-border p-8 text-center space-y-1">
           <Mail className="h-8 w-8 mx-auto text-muted-foreground" />
           <p className="text-sm font-medium text-foreground">
-            {committedQuery ? "No matching emails found." : "No emails on this page."}
+            {committedQuery
+              ? "No matching emails found."
+              : "No emails on this page."}
           </p>
           <p className="text-xs text-muted-foreground">
             {committedQuery
@@ -559,7 +648,9 @@ function InboxBrowserTab({
                     <p className="text-xs text-muted-foreground truncate">
                       {getDisplayName(m.from)} · {formatDate(m.date)}
                     </p>
-                    <p className="text-xs text-muted-foreground truncate mt-1">{m.snippet}</p>
+                    <p className="text-xs text-muted-foreground truncate mt-1">
+                      {m.snippet}
+                    </p>
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
@@ -584,15 +675,26 @@ function InboxBrowserTab({
                   <TripPicker
                     trips={trips}
                     value={selectedTrip[m.id] ?? ""}
-                    onChange={(v) => setSelectedTrip((prev) => ({ ...prev, [m.id]: v }))}
+                    onChange={(v) =>
+                      setSelectedTrip((prev) => ({ ...prev, [m.id]: v }))
+                    }
                     disabled={link.isPending}
                   />
                   <div className="flex gap-2">
-                    <Button size="sm" onClick={() => handleLink(m)} disabled={link.isPending || !selectedTrip[m.id]}>
+                    <Button
+                      size="sm"
+                      onClick={() => handleLink(m)}
+                      disabled={link.isPending || !selectedTrip[m.id]}
+                    >
                       <Paperclip className="h-3.5 w-3.5 mr-1.5" />
                       Add to trip
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => handleIgnore(m)} disabled={ignore.isPending}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleIgnore(m)}
+                      disabled={ignore.isPending}
+                    >
                       Not travel
                     </Button>
                   </div>
@@ -619,12 +721,26 @@ function InboxBrowserTab({
 
       {visibleMessages.length > 0 && (pageIndex > 0 || data?.nextPageToken) && (
         <div className="flex items-center justify-center gap-2">
-          <Button variant="outline" size="sm" onClick={handlePreviousPage} disabled={pageIndex === 0 || isFetching}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handlePreviousPage}
+            disabled={pageIndex === 0 || isFetching}
+          >
             Previous
           </Button>
-          <span className="text-xs text-muted-foreground">Page {pageIndex + 1}</span>
-          <Button variant="outline" size="sm" onClick={handleNextPage} disabled={!data?.nextPageToken || isFetching}>
-            {isFetching ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : null}
+          <span className="text-xs text-muted-foreground">
+            Page {pageIndex + 1}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleNextPage}
+            disabled={!data?.nextPageToken || isFetching}
+          >
+            {isFetching ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+            ) : null}
             Next
           </Button>
         </div>
@@ -653,14 +769,19 @@ export default function GmailReview() {
     scan.mutate(undefined, {
       onSuccess: (result) => {
         qc.invalidateQueries({ queryKey: getGetGmailSuggestionsQueryKey() });
-        toast.success(`Scanned ${result.scanned} emails — ${result.suggested} new suggestion(s)`);
+        toast.success(
+          `Scanned ${result.scanned} emails — ${result.suggested} new suggestion(s)`,
+        );
       },
-      onError: () => toast.error("Could not scan Gmail right now. Please try again."),
+      onError: () =>
+        toast.error("Could not scan Gmail right now. Please try again."),
     });
   }
 
   if (statusLoading) {
-    return <p className="text-sm text-muted-foreground py-8 text-center">Loading…</p>;
+    return (
+      <p className="text-sm text-muted-foreground py-8 text-center">Loading…</p>
+    );
   }
 
   if (!status?.connected) {
@@ -669,7 +790,8 @@ export default function GmailReview() {
         <div>
           <h1 className="font-serif text-3xl text-foreground">Gmail</h1>
           <p className="text-muted-foreground mt-1">
-            Connect your Gmail account from Settings to scan for travel confirmations.
+            Connect your Gmail account from Settings to scan for travel
+            confirmations.
           </p>
         </div>
         <div className="rounded-xl border border-dashed border-card-border p-8 text-center space-y-2">
@@ -690,10 +812,16 @@ export default function GmailReview() {
           <h1 className="font-serif text-3xl text-foreground">Gmail</h1>
           <p className="text-muted-foreground mt-1">
             Connected as {status.googleEmail}
-            {status.lastScanAt ? ` · last scanned ${formatDate(status.lastScanAt)}` : ""}
+            {status.lastScanAt
+              ? ` · last scanned ${formatDate(status.lastScanAt)}`
+              : ""}
           </p>
         </div>
-        <Button variant="outline" onClick={handleScan} disabled={scan.isPending}>
+        <Button
+          variant="outline"
+          onClick={handleScan}
+          disabled={scan.isPending}
+        >
           {scan.isPending ? (
             <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
           ) : (

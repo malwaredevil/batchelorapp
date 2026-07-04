@@ -10,7 +10,10 @@ import { z } from "zod/v4";
 import { db, appUsers, travelsConnectedCalendars } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { getValidAccessToken } from "../../lib/google-calendar-tokens";
-import { listCalendarEvents, createCalendarEvent } from "../../lib/google-calendar";
+import {
+  listCalendarEvents,
+  createCalendarEvent,
+} from "../../lib/google-calendar";
 import { logger } from "../../lib/logger";
 
 const router: IRouter = Router();
@@ -74,7 +77,10 @@ router.post("/connected-calendars", requireAuth, async (req, res) => {
       .returning();
     res.status(201).json(row);
   } catch (err) {
-    logger.error({ err, userId }, "connected-calendars: failed to add calendar");
+    logger.error(
+      { err, userId },
+      "connected-calendars: failed to add calendar",
+    );
     res.status(500).json({ error: "Could not connect calendar." });
   }
 });
@@ -132,12 +138,15 @@ router.delete("/connected-calendars/:id", requireAuth, async (req, res) => {
   }
   if (row.isTravelCalendar) {
     res.status(409).json({
-      error: "This calendar is the shared Travel calendar. Reassign it before disconnecting.",
+      error:
+        "This calendar is the shared Travel calendar. Reassign it before disconnecting.",
     });
     return;
   }
 
-  await db.delete(travelsConnectedCalendars).where(eq(travelsConnectedCalendars.id, id));
+  await db
+    .delete(travelsConnectedCalendars)
+    .where(eq(travelsConnectedCalendars.id, id));
   res.status(204).send();
 });
 
@@ -149,7 +158,9 @@ router.put("/connected-calendars/:id/travel", requireAuth, async (req, res) => {
   const id = Number(req.params["id"]);
 
   if (!(await isOwnerUser(userId))) {
-    res.status(403).json({ error: "Only the app owner can assign the Travel calendar." });
+    res
+      .status(403)
+      .json({ error: "Only the app owner can assign the Travel calendar." });
     return;
   }
 
@@ -226,7 +237,10 @@ router.get("/connected-calendars/:id/events", requireAuth, async (req, res) => {
     );
     res.json(events);
   } catch (err) {
-    logger.error({ err, calendarId: row.googleCalendarId }, "connected-calendars: failed to list events");
+    logger.error(
+      { err, calendarId: row.googleCalendarId },
+      "connected-calendars: failed to list events",
+    );
     res.status(502).json({ error: "Could not reach Google Calendar." });
   }
 });
@@ -245,39 +259,50 @@ const EventBody = z.object({
 // the current user's own connected Google calendars. Ownership-scoped the
 // same way as the GET .../events route above; never accepts another user's
 // connected-calendar id.
-router.post("/connected-calendars/:id/events", requireAuth, async (req, res) => {
-  const userId = req.session.userId!;
-  const id = Number(req.params["id"]);
-  const body = EventBody.parse(req.body);
+router.post(
+  "/connected-calendars/:id/events",
+  requireAuth,
+  async (req, res) => {
+    const userId = req.session.userId!;
+    const id = Number(req.params["id"]);
+    const body = EventBody.parse(req.body);
 
-  const [row] = await db
-    .select()
-    .from(travelsConnectedCalendars)
-    .where(
-      and(
-        eq(travelsConnectedCalendars.id, id),
-        eq(travelsConnectedCalendars.userId, userId),
-      ),
-    )
-    .limit(1);
-  if (!row) {
-    res.status(404).json({ error: "Connected calendar not found." });
-    return;
-  }
+    const [row] = await db
+      .select()
+      .from(travelsConnectedCalendars)
+      .where(
+        and(
+          eq(travelsConnectedCalendars.id, id),
+          eq(travelsConnectedCalendars.userId, userId),
+        ),
+      )
+      .limit(1);
+    if (!row) {
+      res.status(404).json({ error: "Connected calendar not found." });
+      return;
+    }
 
-  const accessToken = await getValidAccessToken(userId);
-  if (!accessToken) {
-    res.status(502).json({ error: "Could not connect to Google Calendar." });
-    return;
-  }
+    const accessToken = await getValidAccessToken(userId);
+    if (!accessToken) {
+      res.status(502).json({ error: "Could not connect to Google Calendar." });
+      return;
+    }
 
-  try {
-    const event = await createCalendarEvent(accessToken, row.googleCalendarId, body);
-    res.status(201).json(event);
-  } catch (err) {
-    logger.error({ err, calendarId: row.googleCalendarId }, "connected-calendars: failed to create event");
-    res.status(502).json({ error: "Could not reach Google Calendar." });
-  }
-});
+    try {
+      const event = await createCalendarEvent(
+        accessToken,
+        row.googleCalendarId,
+        body,
+      );
+      res.status(201).json(event);
+    } catch (err) {
+      logger.error(
+        { err, calendarId: row.googleCalendarId },
+        "connected-calendars: failed to create event",
+      );
+      res.status(502).json({ error: "Could not reach Google Calendar." });
+    }
+  },
+);
 
 export default router;

@@ -1,7 +1,13 @@
 import avatarSrc from "@/assets/elaine-avatar.png";
 import { cn } from "@/lib/utils";
 
-export function ElaineAvatar({ className, size = 40 }: { className?: string; size?: number }) {
+export function ElaineAvatar({
+  className,
+  size = 40,
+}: {
+  className?: string;
+  size?: number;
+}) {
   return (
     <img
       src={avatarSrc}

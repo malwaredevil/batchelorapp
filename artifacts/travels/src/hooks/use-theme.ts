@@ -52,7 +52,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   // React to changes made by the hub or other sub-apps on the same origin
   useEffect(() => {
     function onStorage(e: StorageEvent) {
-      if (e.key === STORAGE_KEY && (e.newValue === "light" || e.newValue === "dark")) {
+      if (
+        e.key === STORAGE_KEY &&
+        (e.newValue === "light" || e.newValue === "dark")
+      ) {
         setThemeState(e.newValue);
       }
     }

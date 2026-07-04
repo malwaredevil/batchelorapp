@@ -4,29 +4,38 @@ import type { Trip, TripStatus } from "@workspace/api-client-react";
 
 // ─── Scale ───────────────────────────────────────────────────────────────────
 const TIMELINE_START = new Date("2024-01-01");
-const PX_PER_MONTH = 130;  // pixels per calendar month
-const CHIP_MIN_W = 88;     // minimum chip width in px
-const LANE_H = 36;         // height of each swim-lane
-const AXIS_H = 40;         // height of the month/year axis
-const PADDING_X = 16;      // left/right padding
+const PX_PER_MONTH = 130; // pixels per calendar month
+const CHIP_MIN_W = 88; // minimum chip width in px
+const LANE_H = 36; // height of each swim-lane
+const AXIS_H = 40; // height of the month/year axis
+const PADDING_X = 16; // left/right padding
 
 // ─── Colours ─────────────────────────────────────────────────────────────────
-const STATUS_COLORS: Record<TripStatus, { bg: string; border: string; text: string }> = {
+const STATUS_COLORS: Record<
+  TripStatus,
+  { bg: string; border: string; text: string }
+> = {
   completed: { bg: "#fef2f2", border: "#ef4444", text: "#7f1d1d" },
-  booked:    { bg: "#f0fdf4", border: "#22c55e", text: "#14532d" },
-  active:    { bg: "#fff7ed", border: "#f97316", text: "#7c2d12" },
-  planning:  { bg: "#fff7ed", border: "#f97316", text: "#7c2d12" },
-  wishlist:  { bg: "#fefce8", border: "#eab308", text: "#713f12" },
+  booked: { bg: "#f0fdf4", border: "#22c55e", text: "#14532d" },
+  active: { bg: "#fff7ed", border: "#f97316", text: "#7c2d12" },
+  planning: { bg: "#fff7ed", border: "#f97316", text: "#7c2d12" },
+  wishlist: { bg: "#fefce8", border: "#eab308", text: "#713f12" },
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function monthsBetween(a: Date, b: Date): number {
-  return (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth());
+  return (
+    (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth())
+  );
 }
 
 function dateToX(date: Date): number {
   const months = monthsBetween(TIMELINE_START, date);
-  const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  const daysInMonth = new Date(
+    date.getFullYear(),
+    date.getMonth() + 1,
+    0,
+  ).getDate();
   const dayFraction = (date.getDate() - 1) / daysInMonth;
   return PADDING_X + (months + dayFraction) * PX_PER_MONTH;
 }
@@ -49,7 +58,9 @@ function assignLanes(trips: Trip[]): LanedTrip[] {
 
   for (const t of sorted) {
     const x = dateToX(new Date(t.startDate!));
-    const endDate = t.endDate ? new Date(t.endDate) : new Date(new Date(t.startDate!).getTime() + 2 * 86400000);
+    const endDate = t.endDate
+      ? new Date(t.endDate)
+      : new Date(new Date(t.startDate!).getTime() + 2 * 86400000);
     const endX = Math.max(dateToX(endDate), x + CHIP_MIN_W);
     const w = Math.max(endX - x, CHIP_MIN_W);
 
@@ -64,7 +75,8 @@ function assignLanes(trips: Trip[]): LanedTrip[] {
 
 // ─── Axis months ─────────────────────────────────────────────────────────────
 function buildMonths(totalMonths: number) {
-  const months: { label: string; x: number; isJan: boolean; year: number }[] = [];
+  const months: { label: string; x: number; isJan: boolean; year: number }[] =
+    [];
   for (let i = 0; i <= totalMonths; i++) {
     const d = new Date(TIMELINE_START);
     d.setMonth(d.getMonth() + i);
@@ -93,14 +105,17 @@ export default function TripTimeline({ trips }: Props) {
 
   // Extend timeline to 2 months past last trip or today, whichever is later
   const lastTripDate = trips.reduce<Date | null>((max, t) => {
-    const d = t.endDate ? new Date(t.endDate) : t.startDate ? new Date(t.startDate) : null;
+    const d = t.endDate
+      ? new Date(t.endDate)
+      : t.startDate
+        ? new Date(t.startDate)
+        : null;
     return d && (!max || d > max) ? d : max;
   }, null);
 
-  const timelineEnd = new Date(Math.max(
-    today.getTime(),
-    lastTripDate ? lastTripDate.getTime() : 0
-  ));
+  const timelineEnd = new Date(
+    Math.max(today.getTime(), lastTripDate ? lastTripDate.getTime() : 0),
+  );
   timelineEnd.setMonth(timelineEnd.getMonth() + 2);
 
   const totalMonths = Math.ceil(monthsBetween(TIMELINE_START, timelineEnd));
@@ -131,23 +146,31 @@ export default function TripTimeline({ trips }: Props) {
         className="overflow-x-auto rounded-xl border border-border/50 bg-card"
         style={{ userSelect: "none" }}
       >
-        <div style={{ position: "relative", width: totalWidth, height: totalHeight, minWidth: "100%" }}>
-
+        <div
+          style={{
+            position: "relative",
+            width: totalWidth,
+            height: totalHeight,
+            minWidth: "100%",
+          }}
+        >
           {/* ── Year banners ─────────────────────────────────────── */}
-          {months.filter((m) => m.isJan).map((m) => (
-            <div
-              key={m.year}
-              style={{
-                position: "absolute",
-                left: m.x,
-                top: 0,
-                height: lanesHeight,
-                width: 1,
-                background: "hsl(var(--border))",
-                opacity: 0.6,
-              }}
-            />
-          ))}
+          {months
+            .filter((m) => m.isJan)
+            .map((m) => (
+              <div
+                key={m.year}
+                style={{
+                  position: "absolute",
+                  left: m.x,
+                  top: 0,
+                  height: lanesHeight,
+                  width: 1,
+                  background: "hsl(var(--border))",
+                  opacity: 0.6,
+                }}
+              />
+            ))}
 
           {/* ── Today line ───────────────────────────────────────── */}
           <div
@@ -207,7 +230,9 @@ export default function TripTimeline({ trips }: Props) {
                   transition: "filter 0.1s",
                   gap: 4,
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.filter = "brightness(0.93)")}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.filter = "brightness(0.93)")
+                }
                 onMouseLeave={(e) => (e.currentTarget.style.filter = "")}
               >
                 <span
@@ -255,14 +280,23 @@ export default function TripTimeline({ trips }: Props) {
                 }}
               >
                 {m.isJan && (
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "hsl(var(--foreground))", lineHeight: 1 }}>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "hsl(var(--foreground))",
+                      lineHeight: 1,
+                    }}
+                  >
                     {m.year}
                   </span>
                 )}
                 <span
                   style={{
                     fontSize: 10,
-                    color: m.isJan ? "hsl(var(--foreground))" : "hsl(var(--muted-foreground))",
+                    color: m.isJan
+                      ? "hsl(var(--foreground))"
+                      : "hsl(var(--muted-foreground))",
                     fontWeight: m.isJan ? 600 : 400,
                     lineHeight: 1,
                   }}

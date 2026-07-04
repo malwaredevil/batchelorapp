@@ -19,17 +19,16 @@ function requireMapsKey(): string {
 
 const DEFAULT_TIMEOUT_MS = 8000;
 
-async function fetchJson<T>(
-  url: string,
-  init?: RequestInit,
-): Promise<T> {
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...init,
     signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Google Maps API request failed (${res.status}): ${text.slice(0, 300)}`);
+    throw new Error(
+      `Google Maps API request failed (${res.status}): ${text.slice(0, 300)}`,
+    );
   }
   return (await res.json()) as T;
 }
@@ -70,10 +69,12 @@ export async function getWeatherForecast(
     const pad = (n: number) => String(n).padStart(2, "0");
     return {
       date: `${year}-${pad(month)}-${pad(day)}`,
-      conditionDescription: d.daytimeForecast?.weatherCondition?.description?.text ?? "Unknown",
+      conditionDescription:
+        d.daytimeForecast?.weatherCondition?.description?.text ?? "Unknown",
       maxTempC: d.maxTemperature?.degrees ?? null,
       minTempC: d.minTemperature?.degrees ?? null,
-      precipitationChancePercent: d.daytimeForecast?.precipitation?.probability?.percent ?? null,
+      precipitationChancePercent:
+        d.daytimeForecast?.precipitation?.probability?.percent ?? null,
     };
   });
 }
@@ -87,7 +88,10 @@ export interface TimeZoneInfo {
   dstOffsetSeconds: number;
 }
 
-export async function getTimeZone(lat: number, lng: number): Promise<TimeZoneInfo | null> {
+export async function getTimeZone(
+  lat: number,
+  lng: number,
+): Promise<TimeZoneInfo | null> {
   const key = requireMapsKey();
   const timestamp = Math.floor(Date.now() / 1000);
   const url = `https://maps.googleapis.com/maps/api/timezone/json?location=${lat},${lng}&timestamp=${timestamp}&key=${key}`;
@@ -115,11 +119,18 @@ export interface AirQualityInfo {
   dominantPollutant: string;
 }
 
-export async function getAirQuality(lat: number, lng: number): Promise<AirQualityInfo | null> {
+export async function getAirQuality(
+  lat: number,
+  lng: number,
+): Promise<AirQualityInfo | null> {
   const key = requireMapsKey();
   const url = `https://airquality.googleapis.com/v1/currentConditions:lookup?key=${key}`;
   const data = await fetchJson<{
-    indexes?: Array<{ aqi: number; category: string; dominantPollutant: string }>;
+    indexes?: Array<{
+      aqi: number;
+      category: string;
+      dominantPollutant: string;
+    }>;
   }>(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -127,7 +138,11 @@ export async function getAirQuality(lat: number, lng: number): Promise<AirQualit
   });
   const index = data.indexes?.[0];
   if (!index) return null;
-  return { aqi: index.aqi, category: index.category, dominantPollutant: index.dominantPollutant };
+  return {
+    aqi: index.aqi,
+    category: index.category,
+    dominantPollutant: index.dominantPollutant,
+  };
 }
 
 // ── Pollen ───────────────────────────────────────────────────────────────
@@ -138,7 +153,10 @@ export interface PollenInfo {
   types: Array<{ code: string; displayName: string; category: string }>;
 }
 
-export async function getPollenForecast(lat: number, lng: number): Promise<PollenInfo | null> {
+export async function getPollenForecast(
+  lat: number,
+  lng: number,
+): Promise<PollenInfo | null> {
   const key = requireMapsKey();
   const url =
     `https://pollen.googleapis.com/v1/forecast:lookup?key=${key}` +
@@ -188,10 +206,15 @@ export async function fetchStaticMapImage(
   const url =
     `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=${zoom}` +
     `&size=${size}&scale=2&markers=color:red%7C${lat},${lng}&key=${key}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS) });
+  const res = await fetch(url, {
+    signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+  });
   if (!res.ok) throw new Error(`Static Maps request failed (${res.status})`);
   const buffer = Buffer.from(await res.arrayBuffer());
-  return { buffer, contentType: res.headers.get("content-type") ?? "image/png" };
+  return {
+    buffer,
+    contentType: res.headers.get("content-type") ?? "image/png",
+  };
 }
 
 export async function fetchStreetViewImage(
@@ -203,13 +226,21 @@ export async function fetchStreetViewImage(
   const key = requireMapsKey();
   const size = `${Math.min(width, 640)}x${Math.min(height, 640)}`;
   const url = `https://maps.googleapis.com/maps/api/streetview?size=${size}&location=${lat},${lng}&key=${key}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS) });
+  const res = await fetch(url, {
+    signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+  });
   if (!res.ok) throw new Error(`Street View request failed (${res.status})`);
   const buffer = Buffer.from(await res.arrayBuffer());
-  return { buffer, contentType: res.headers.get("content-type") ?? "image/jpeg" };
+  return {
+    buffer,
+    contentType: res.headers.get("content-type") ?? "image/jpeg",
+  };
 }
 
-export async function hasStreetView(lat: number, lng: number): Promise<boolean> {
+export async function hasStreetView(
+  lat: number,
+  lng: number,
+): Promise<boolean> {
   const key = requireMapsKey();
   const url = `https://maps.googleapis.com/maps/api/streetview/metadata?location=${lat},${lng}&key=${key}`;
   const data = await fetchJson<{ status: string }>(url);
@@ -329,7 +360,10 @@ export async function lookupOrRequestAerialView(
   try {
     const data = await fetchJson<{
       state: AerialViewState;
-      uris?: { mp4?: { landscapeUri?: string }; thumbnail?: { landscapeUri?: string } };
+      uris?: {
+        mp4?: { landscapeUri?: string };
+        thumbnail?: { landscapeUri?: string };
+      };
     }>(lookupUrl);
     if (data.state === "ACTIVE") {
       return {
@@ -416,7 +450,8 @@ export async function computeRoute(
   return {
     distanceMeters: route.distanceMeters,
     durationSeconds: seconds,
-    optimizedIntermediateWaypointIndex: route.optimizedIntermediateWaypointIndex,
+    optimizedIntermediateWaypointIndex:
+      route.optimizedIntermediateWaypointIndex,
     encodedPolyline: route.polyline?.encodedPolyline,
   };
 }
@@ -438,7 +473,11 @@ export async function getIsochrone(
   const data = await fetchJson<{
     polygons?: Array<{
       travelDurationSeconds: string | number;
-      shape?: { polygon?: { coordinates?: Array<{ latitude: number; longitude: number }[]> } };
+      shape?: {
+        polygon?: {
+          coordinates?: Array<{ latitude: number; longitude: number }[]>;
+        };
+      };
     }>;
   }>("https://isochrones.googleapis.com/v1/isochrones:generate", {
     method: "POST",
@@ -447,7 +486,8 @@ export async function getIsochrone(
       location: { latitude: lat, longitude: lng },
       travelDuration: `${travelDurationSeconds}s`,
       travelMode: mode,
-      routingPreference: mode === "DRIVE" ? "TRAFFIC_AWARE" : "ROUTING_PREFERENCE_UNSPECIFIED",
+      routingPreference:
+        mode === "DRIVE" ? "TRAFFIC_AWARE" : "ROUTING_PREFERENCE_UNSPECIFIED",
       enableSmoothing: true,
       travelDirection: "TRAVEL_DIRECTION_UNSPECIFIED",
     }),

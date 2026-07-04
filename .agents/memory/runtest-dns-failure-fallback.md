@@ -17,6 +17,7 @@ the app-level DB connection (which goes through Supabase's pooler/REST, not
 direct DNS from the test sandbox) is broken.
 
 **How to apply:**
+
 - Retry once if you hit this — it can be transient — but don't loop on the
   identical error more than twice.
 - If it persists, fall back to `curl` with a cookie jar against

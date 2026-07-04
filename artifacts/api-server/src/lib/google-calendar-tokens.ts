@@ -52,7 +52,10 @@ export async function getTravelCalendarConnection(): Promise<TravelCalendarConne
     .from(travelsConnectedCalendars)
     .innerJoin(
       travelsGoogleCalendarConnections,
-      eq(travelsGoogleCalendarConnections.userId, travelsConnectedCalendars.userId),
+      eq(
+        travelsGoogleCalendarConnections.userId,
+        travelsConnectedCalendars.userId,
+      ),
     )
     .where(eq(travelsConnectedCalendars.isTravelCalendar, true))
     .limit(1);
@@ -80,7 +83,10 @@ export async function getUserConnectedCalendars(
 
 /** Every connected calendar across every user — used by the AI trip scan. */
 export async function getAllConnectedCalendars(): Promise<ConnectedCalendar[]> {
-  return db.select().from(travelsConnectedCalendars).orderBy(asc(travelsConnectedCalendars.id));
+  return db
+    .select()
+    .from(travelsConnectedCalendars)
+    .orderBy(asc(travelsConnectedCalendars.id));
 }
 
 export async function getConnectedCalendarById(

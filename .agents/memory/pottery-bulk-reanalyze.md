@@ -6,6 +6,7 @@ description: Express router ordering rule for the bulk-reanalyze endpoint vs /:i
 # Pottery bulk reanalyze — route ordering
 
 ## Rule
+
 `router.post("/items/bulk-reanalyze", ...)` must be declared **before** any `router.X("/items/:id", ...)` route.
 
 **Why:** Express matches routes top-to-bottom. If `/:id` comes first, the literal string `"bulk-reanalyze"` is captured as the `:id` param and the bulk route is never reached.

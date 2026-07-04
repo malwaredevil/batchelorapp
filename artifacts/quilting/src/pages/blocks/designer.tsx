@@ -249,9 +249,24 @@ function encodeXSplit(tl: string, tr: string, bl: string, br: string): string {
 // Block transform helpers — rotate 90° CW, flip H, flip V
 // ---------------------------------------------------------------------------
 
-const QCYCLE: Record<string, string> = { ne: "se", se: "sw", sw: "nw", nw: "ne" };
-const QFLIP_H: Record<string, string> = { ne: "nw", nw: "ne", se: "sw", sw: "se" };
-const QFLIP_V: Record<string, string> = { ne: "se", se: "ne", nw: "sw", sw: "nw" };
+const QCYCLE: Record<string, string> = {
+  ne: "se",
+  se: "sw",
+  sw: "nw",
+  nw: "ne",
+};
+const QFLIP_H: Record<string, string> = {
+  ne: "nw",
+  nw: "ne",
+  se: "sw",
+  sw: "se",
+};
+const QFLIP_V: Record<string, string> = {
+  ne: "se",
+  se: "ne",
+  nw: "sw",
+  sw: "nw",
+};
 
 function rotateQlines(dirs: string[], map: Record<string, string>): string {
   const QORDER = ["ne", "se", "sw", "nw"];
@@ -269,13 +284,12 @@ function encodeLineCell(type: "nwse" | "nesw", cs: number, ce: number): string {
 function rotateCellContent90CW(cell: string): string {
   const p = parseCell(cell);
   switch (p.kind) {
-    case "solid":   return cell;
+    case "solid":
+      return cell;
     case "triangle":
       // nwse(A=upper-right, B=lower-left) → nesw(A=upper-left, B=lower-right): A→B-slot, B→A-slot
       // nesw(A=upper-left, B=lower-right) → nwse(A=upper-right, B=lower-left): A→A-slot, B→B-slot
-      return p.type === "nwse"
-        ? `nesw:${p.b}:${p.a}`
-        : `nwse:${p.a}:${p.b}`;
+      return p.type === "nwse" ? `nesw:${p.b}:${p.a}` : `nwse:${p.a}:${p.b}`;
     case "quad":
       // Each triangle rotates CW: T→R, R→B, B→L, L→T → new quad T'=L, R'=T, B'=R, L'=B
       return `quad:${p.left}:${p.top}:${p.right}:${p.bottom}`;
@@ -301,7 +315,8 @@ function rotateCellContent90CW(cell: string): string {
       return p.h ? "seam-midline-v" : "seam-midline-h";
     case "qlines":
       return rotateQlines(p.dirs, QCYCLE);
-    default: return cell;
+    default:
+      return cell;
   }
 }
 
@@ -309,14 +324,16 @@ function rotateCellContent90CW(cell: string): string {
 function flipCellContentH(cell: string): string {
   const p = parseCell(cell);
   switch (p.kind) {
-    case "solid":   return cell;
+    case "solid":
+      return cell;
     case "triangle":
       // Diagonal direction flips; each colour stays in the same relative position (A→A, B→B)
       return p.type === "nwse" ? `nesw:${p.a}:${p.b}` : `nwse:${p.a}:${p.b}`;
     case "quad":
       // L↔R, T and B stay
       return `quad:${p.top}:${p.left}:${p.bottom}:${p.right}`;
-    case "hsplit": return cell; // horizontal split — unchanged by H-flip
+    case "hsplit":
+      return cell; // horizontal split — unchanged by H-flip
     case "vsplit":
       return `vsplit:${p.right}:${p.left}`;
     case "xsplit":
@@ -327,10 +344,12 @@ function flipCellContentH(cell: string): string {
         : encodeLineCell("nwse", p.cs, p.ce);
     case "xline":
       return encodeXline(p.neswCs, p.neswCe, p.nwseCs, p.nwseCe);
-    case "midline": return cell;
+    case "midline":
+      return cell;
     case "qlines":
       return rotateQlines(p.dirs, QFLIP_H);
-    default: return cell;
+    default:
+      return cell;
   }
 }
 
@@ -338,7 +357,8 @@ function flipCellContentH(cell: string): string {
 function flipCellContentV(cell: string): string {
   const p = parseCell(cell);
   switch (p.kind) {
-    case "solid":   return cell;
+    case "solid":
+      return cell;
     case "triangle":
       // Diagonal direction flips; A and B swap slots
       return p.type === "nwse" ? `nesw:${p.b}:${p.a}` : `nwse:${p.b}:${p.a}`;
@@ -347,7 +367,8 @@ function flipCellContentV(cell: string): string {
       return `quad:${p.bottom}:${p.right}:${p.top}:${p.left}`;
     case "hsplit":
       return `hsplit:${p.bottom}:${p.top}`;
-    case "vsplit": return cell; // vertical split — unchanged by V-flip
+    case "vsplit":
+      return cell; // vertical split — unchanged by V-flip
     case "xsplit":
       return `xsplit:${p.bl}:${p.br}:${p.tl}:${p.tr}`;
     case "line":
@@ -356,10 +377,12 @@ function flipCellContentV(cell: string): string {
         : encodeLineCell("nwse", p.cs, p.ce);
     case "xline":
       return encodeXline(p.neswCs, p.neswCe, p.nwseCs, p.nwseCe);
-    case "midline": return cell;
+    case "midline":
+      return cell;
     case "qlines":
       return rotateQlines(p.dirs, QFLIP_V);
-    default: return cell;
+    default:
+      return cell;
   }
 }
 
@@ -380,13 +403,20 @@ function applyRotate90CW(
     for (let col = 0; col < gridW; col++) {
       const newRow = col;
       const newCol = gridH - 1 - row;
-      newCells[newRow * newW + newCol] = rotateCellContent90CW(cells[row * gridW + col] ?? "");
+      newCells[newRow * newW + newCol] = rotateCellContent90CW(
+        cells[row * gridW + col] ?? "",
+      );
     }
   }
   const newSeams: SeamLine[] = seams.map((s) =>
     s.axis === "h"
       ? { ...s, axis: "v" as const, pos: 2 * gridH - s.pos, cellIdx: s.cellIdx }
-      : { ...s, axis: "h" as const, pos: s.pos, cellIdx: gridH - 1 - s.cellIdx },
+      : {
+          ...s,
+          axis: "h" as const,
+          pos: s.pos,
+          cellIdx: gridH - 1 - s.cellIdx,
+        },
   );
   return { cells: newCells, seams: newSeams, newW, newH };
 }
@@ -3150,40 +3180,73 @@ export default function BlockDesigner() {
 
   function handleRotateCW() {
     pushHistory(cells, seams);
-    const { cells: c, seams: s, newW, newH } = applyRotate90CW(cells, seams, gridW, gridH);
-    setGridW(newW); setGridH(newH); setCells(c); setSeams(s); setIsDirty(true);
+    const {
+      cells: c,
+      seams: s,
+      newW,
+      newH,
+    } = applyRotate90CW(cells, seams, gridW, gridH);
+    setGridW(newW);
+    setGridH(newH);
+    setCells(c);
+    setSeams(s);
+    setIsDirty(true);
   }
 
   function handleRotateCCW() {
     pushHistory(cells, seams);
-    let c = cells, s = seams, w = gridW, h = gridH;
+    let c = cells,
+      s = seams,
+      w = gridW,
+      h = gridH;
     for (let i = 0; i < 3; i++) {
       const r = applyRotate90CW(c, s, w, h);
-      c = r.cells; s = r.seams; w = r.newW; h = r.newH;
+      c = r.cells;
+      s = r.seams;
+      w = r.newW;
+      h = r.newH;
     }
-    setGridW(w); setGridH(h); setCells(c); setSeams(s); setIsDirty(true);
+    setGridW(w);
+    setGridH(h);
+    setCells(c);
+    setSeams(s);
+    setIsDirty(true);
   }
 
   function handleRotate180() {
     pushHistory(cells, seams);
-    let c = cells, s = seams, w = gridW, h = gridH;
+    let c = cells,
+      s = seams,
+      w = gridW,
+      h = gridH;
     for (let i = 0; i < 2; i++) {
       const r = applyRotate90CW(c, s, w, h);
-      c = r.cells; s = r.seams; w = r.newW; h = r.newH;
+      c = r.cells;
+      s = r.seams;
+      w = r.newW;
+      h = r.newH;
     }
-    setGridW(w); setGridH(h); setCells(c); setSeams(s); setIsDirty(true);
+    setGridW(w);
+    setGridH(h);
+    setCells(c);
+    setSeams(s);
+    setIsDirty(true);
   }
 
   function handleFlipHorizontal() {
     pushHistory(cells, seams);
     const { cells: c, seams: s } = applyFlipH(cells, seams, gridW, gridH);
-    setCells(c); setSeams(s); setIsDirty(true);
+    setCells(c);
+    setSeams(s);
+    setIsDirty(true);
   }
 
   function handleFlipVertical() {
     pushHistory(cells, seams);
     const { cells: c, seams: s } = applyFlipV(cells, seams, gridW, gridH);
-    setCells(c); setSeams(s); setIsDirty(true);
+    setCells(c);
+    setSeams(s);
+    setIsDirty(true);
   }
 
   function handleClear() {

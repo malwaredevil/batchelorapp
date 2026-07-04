@@ -1,12 +1,31 @@
 import { useRef, useState } from "react";
 import { Link } from "wouter";
-import { useCheckMagnet, getTripPhotoImageUrl, type MagnetCheckResult } from "@workspace/api-client-react";
+import {
+  useCheckMagnet,
+  getTripPhotoImageUrl,
+  type MagnetCheckResult,
+} from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Camera, CheckCircle2, HelpCircle, Search, XCircle } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  Camera,
+  CheckCircle2,
+  HelpCircle,
+  Search,
+  XCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 
-const VERDICT_COPY: Record<MagnetCheckResult["verdict"], { label: string; icon: React.ReactNode; className: string }> = {
+const VERDICT_COPY: Record<
+  MagnetCheckResult["verdict"],
+  { label: string; icon: React.ReactNode; className: string }
+> = {
   likely_owned: {
     label: "You already have this magnet",
     icon: <CheckCircle2 className="w-5 h-5 text-green-600" />,
@@ -35,7 +54,8 @@ export function MagnetCheckDialog({
   const fileRef = useRef<HTMLInputElement>(null);
   const checkMagnet = useCheckMagnet({
     mutation: {
-      onError: (err) => toast.error(err instanceof Error ? err.message : "Check failed"),
+      onError: (err) =>
+        toast.error(err instanceof Error ? err.message : "Check failed"),
     },
   });
 
@@ -72,7 +92,13 @@ export function MagnetCheckDialog({
         </Button>
       )}
 
-      <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) reset(); }}>
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) reset();
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Do I have this magnet?</DialogTitle>
@@ -92,7 +118,11 @@ export function MagnetCheckDialog({
             />
 
             {preview ? (
-              <img src={preview} alt="Magnet to check" className="w-full aspect-square object-cover rounded-lg" />
+              <img
+                src={preview}
+                alt="Magnet to check"
+                className="w-full aspect-square object-cover rounded-lg"
+              />
             ) : (
               <button
                 onClick={() => fileRef.current?.click()}
@@ -104,37 +134,59 @@ export function MagnetCheckDialog({
             )}
 
             {preview && (
-              <Button variant="outline" size="sm" className="w-full" onClick={() => fileRef.current?.click()}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => fileRef.current?.click()}
+              >
                 <Camera className="w-3.5 h-3.5 mr-1.5" />
                 Try another photo
               </Button>
             )}
 
             {checkMagnet.isPending && (
-              <p className="text-sm text-center text-muted-foreground">Checking your collection...</p>
+              <p className="text-sm text-center text-muted-foreground">
+                Checking your collection...
+              </p>
             )}
 
             {result && (
               <div className="space-y-3">
-                <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium ${VERDICT_COPY[result.verdict].className}`}>
+                <div
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium ${VERDICT_COPY[result.verdict].className}`}
+                >
                   {VERDICT_COPY[result.verdict].icon}
                   {VERDICT_COPY[result.verdict].label}
                 </div>
 
                 {result.matches.length > 0 && (
                   <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Closest matches</p>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">
+                      Closest matches
+                    </p>
                     {result.matches.map((match) => (
-                      <Link key={match.photoId} href={`/trips/${match.tripId}`} onClick={() => setOpen(false)}>
+                      <Link
+                        key={match.photoId}
+                        href={`/trips/${match.tripId}`}
+                        onClick={() => setOpen(false)}
+                      >
                         <div className="flex items-center gap-3 rounded-lg border border-border/50 p-2 hover:border-primary/30 transition-colors cursor-pointer">
                           <img
-                            src={getTripPhotoImageUrl(match.tripId, match.photoId)}
+                            src={getTripPhotoImageUrl(
+                              match.tripId,
+                              match.photoId,
+                            )}
                             alt=""
                             className="w-12 h-12 rounded-md object-cover shrink-0"
                           />
                           <div className="min-w-0">
-                            <p className="text-sm font-medium truncate">{match.tripTitle}</p>
-                            <p className="text-xs text-muted-foreground">{Math.round(match.similarity * 100)}% similar</p>
+                            <p className="text-sm font-medium truncate">
+                              {match.tripTitle}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {Math.round(match.similarity * 100)}% similar
+                            </p>
                           </div>
                         </div>
                       </Link>

@@ -28,7 +28,10 @@ function makeSelectBuilder() {
     limit() {
       return resultPromise;
     },
-    then(onFulfilled: (value: unknown[]) => unknown, onRejected?: (reason: unknown) => unknown) {
+    then(
+      onFulfilled: (value: unknown[]) => unknown,
+      onRejected?: (reason: unknown) => unknown,
+    ) {
       return resultPromise.then(onFulfilled, onRejected);
     },
   };
@@ -95,11 +98,14 @@ vi.mock("@workspace/db", async (importOriginal) => {
 
 const getValidGmailAccessToken = vi.fn();
 vi.mock("../../lib/gmail-tokens", () => ({
-  getValidGmailAccessToken: (...args: unknown[]) => getValidGmailAccessToken(...args),
+  getValidGmailAccessToken: (...args: unknown[]) =>
+    getValidGmailAccessToken(...args),
 }));
 
 const gmailOAuthEnabled = vi.fn(() => true);
-const generateAuthUrl = vi.fn(() => "https://accounts.google.com/o/oauth2/v2/auth?mock=1");
+const generateAuthUrl = vi.fn(
+  () => "https://accounts.google.com/o/oauth2/v2/auth?mock=1",
+);
 vi.mock("../../lib/gmail-oauth", () => ({
   createGmailOAuthClient: () => ({ generateAuthUrl }),
   gmailOAuthEnabled: () => gmailOAuthEnabled(),
@@ -140,12 +146,14 @@ vi.mock("../../lib/gmail-scan", () => ({
 
 const markMessageAsIngestedTravel = vi.fn().mockResolvedValue(undefined);
 vi.mock("../../lib/gmail-labels", () => ({
-  markMessageAsIngestedTravel: (...args: unknown[]) => markMessageAsIngestedTravel(...args),
+  markMessageAsIngestedTravel: (...args: unknown[]) =>
+    markMessageAsIngestedTravel(...args),
 }));
 
 const syncItineraryFromDocument = vi.fn().mockResolvedValue(undefined);
 vi.mock("./documents", () => ({
-  syncItineraryFromDocument: (...args: unknown[]) => syncItineraryFromDocument(...args),
+  syncItineraryFromDocument: (...args: unknown[]) =>
+    syncItineraryFromDocument(...args),
 }));
 
 vi.mock("../../middleware/auth", () => ({
@@ -219,11 +227,20 @@ describe("GET /api/travels/gmail/status", () => {
     const res = await request(app).get("/api/travels/gmail/status");
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ connected: false, googleEmail: null, lastScanAt: null });
+    expect(res.body).toEqual({
+      connected: false,
+      googleEmail: null,
+      lastScanAt: null,
+    });
   });
 
   it("reports connected with the stored google email", async () => {
-    selectQueue.push([{ googleEmail: "someone@gmail.com", lastScanAt: "2026-01-01T00:00:00.000Z" }]);
+    selectQueue.push([
+      {
+        googleEmail: "someone@gmail.com",
+        lastScanAt: "2026-01-01T00:00:00.000Z",
+      },
+    ]);
     const app = await buildApp();
 
     const res = await request(app).get("/api/travels/gmail/status");
@@ -275,7 +292,9 @@ describe("POST /api/travels/gmail/suggestions/:id/dismiss", () => {
     lastReturning = [];
     const app = await buildApp();
 
-    const res = await request(app).post("/api/travels/gmail/suggestions/99/dismiss");
+    const res = await request(app).post(
+      "/api/travels/gmail/suggestions/99/dismiss",
+    );
 
     expect(res.status).toBe(404);
   });
@@ -284,7 +303,9 @@ describe("POST /api/travels/gmail/suggestions/:id/dismiss", () => {
     lastReturning = [{ id: 5, userId: TEST_USER_ID, status: "dismissed" }];
     const app = await buildApp();
 
-    const res = await request(app).post("/api/travels/gmail/suggestions/5/dismiss");
+    const res = await request(app).post(
+      "/api/travels/gmail/suggestions/5/dismiss",
+    );
 
     expect(res.status).toBe(200);
     expect(updateCalls[0]?.set).toMatchObject({ status: "dismissed" });
@@ -293,7 +314,9 @@ describe("POST /api/travels/gmail/suggestions/:id/dismiss", () => {
   it("400s on a non-numeric id", async () => {
     const app = await buildApp();
 
-    const res = await request(app).post("/api/travels/gmail/suggestions/not-a-number/dismiss");
+    const res = await request(app).post(
+      "/api/travels/gmail/suggestions/not-a-number/dismiss",
+    );
 
     expect(res.status).toBe(400);
   });
@@ -317,8 +340,20 @@ describe("GET /api/travels/gmail/inbox", () => {
       nextPageToken: null,
     });
     getMessageSummary
-      .mockResolvedValueOnce({ id: "msg-1", threadId: "t1", subject: "Flight", from: "a@delta.com", date: null })
-      .mockResolvedValueOnce({ id: "msg-2", threadId: "t2", subject: "Hotel", from: "b@marriott.com", date: null });
+      .mockResolvedValueOnce({
+        id: "msg-1",
+        threadId: "t1",
+        subject: "Flight",
+        from: "a@delta.com",
+        date: null,
+      })
+      .mockResolvedValueOnce({
+        id: "msg-2",
+        threadId: "t2",
+        subject: "Hotel",
+        from: "b@marriott.com",
+        date: null,
+      });
     selectQueue.push([{ gmailMessageId: "msg-1", status: "linked" }]);
     const app = await buildApp();
 
@@ -338,7 +373,12 @@ describe("GET /api/travels/gmail/inbox", () => {
 
     await request(app).get("/api/travels/gmail/inbox");
 
-    expect(searchMessagesPage).toHaveBeenCalledWith("mock-access-token", "in:inbox", undefined, 20);
+    expect(searchMessagesPage).toHaveBeenCalledWith(
+      "mock-access-token",
+      "in:inbox",
+      undefined,
+      20,
+    );
   });
 
   it("clamps maxResults to the allowed range", async () => {
@@ -351,8 +391,20 @@ describe("GET /api/travels/gmail/inbox", () => {
     await request(app).get("/api/travels/gmail/inbox?maxResults=5");
     await request(app).get("/api/travels/gmail/inbox?maxResults=500");
 
-    expect(searchMessagesPage).toHaveBeenNthCalledWith(1, "mock-access-token", "in:inbox", undefined, 10);
-    expect(searchMessagesPage).toHaveBeenNthCalledWith(2, "mock-access-token", "in:inbox", undefined, 50);
+    expect(searchMessagesPage).toHaveBeenNthCalledWith(
+      1,
+      "mock-access-token",
+      "in:inbox",
+      undefined,
+      10,
+    );
+    expect(searchMessagesPage).toHaveBeenNthCalledWith(
+      2,
+      "mock-access-token",
+      "in:inbox",
+      undefined,
+      50,
+    );
   });
 });
 
@@ -391,7 +443,9 @@ describe("POST /api/travels/gmail/messages/:messageId/link", () => {
       .send({ tripId: 7 });
 
     expect(res.status).toBe(409);
-    expect(res.body).toEqual({ error: "This email is already linked to a trip." });
+    expect(res.body).toEqual({
+      error: "This email is already linked to a trip.",
+    });
   });
 
   it("imports the email body as a document when there is no attachment", async () => {
@@ -468,7 +522,11 @@ describe("POST /api/travels/gmail/messages/:messageId/link", () => {
       date: null,
       textBody: "See attachments.",
       attachments: [
-        { filename: "flight.pdf", mimeType: "application/pdf", attachmentId: "a1" },
+        {
+          filename: "flight.pdf",
+          mimeType: "application/pdf",
+          attachmentId: "a1",
+        },
         { filename: "receipt.jpg", mimeType: "image/jpeg", attachmentId: "a2" },
       ],
     });
@@ -508,7 +566,13 @@ describe("GET /api/travels/gmail/messages/:messageId", () => {
       from: "a@delta.com",
       date: "2026-01-01T00:00:00.000Z",
       textBody: "Your flight is confirmed.",
-      attachments: [{ filename: "flight.pdf", mimeType: "application/pdf", attachmentId: "a1" }],
+      attachments: [
+        {
+          filename: "flight.pdf",
+          mimeType: "application/pdf",
+          attachmentId: "a1",
+        },
+      ],
     });
     const app = await buildApp();
 
@@ -517,7 +581,9 @@ describe("GET /api/travels/gmail/messages/:messageId", () => {
     expect(res.status).toBe(200);
     expect(res.body.subject).toBe("Flight confirmation");
     expect(res.body.textBody).toBe("Your flight is confirmed.");
-    expect(res.body.attachments).toEqual([{ filename: "flight.pdf", mimeType: "application/pdf" }]);
+    expect(res.body.attachments).toEqual([
+      { filename: "flight.pdf", mimeType: "application/pdf" },
+    ]);
   });
 });
 
@@ -584,7 +650,11 @@ describe("POST /api/travels/gmail/messages/bulk-link", () => {
     expect(res.body.results).toEqual([
       { messageId: "msg-1", status: "linked" },
       { messageId: "msg-2", status: "already_linked" },
-      { messageId: "msg-3", status: "failed", error: "Could not import this email." },
+      {
+        messageId: "msg-3",
+        status: "failed",
+        error: "Could not import this email.",
+      },
     ]);
   });
 });
@@ -594,7 +664,9 @@ describe("POST /api/travels/gmail/messages/:messageId/ignore", () => {
     getValidGmailAccessToken.mockResolvedValue(null);
     const app = await buildApp();
 
-    const res = await request(app).post("/api/travels/gmail/messages/msg-1/ignore");
+    const res = await request(app).post(
+      "/api/travels/gmail/messages/msg-1/ignore",
+    );
 
     expect(res.status).toBe(409);
   });
@@ -610,12 +682,18 @@ describe("POST /api/travels/gmail/messages/:messageId/ignore", () => {
     });
     const app = await buildApp();
 
-    const res = await request(app).post("/api/travels/gmail/messages/msg-1/ignore");
+    const res = await request(app).post(
+      "/api/travels/gmail/messages/msg-1/ignore",
+    );
 
     expect(res.status).toBe(204);
-    expect(updateCalls.some((c) => c.table === "upsert" && (c.set as { status?: string }).status === "ignored")).toBe(
-      true,
-    );
+    expect(
+      updateCalls.some(
+        (c) =>
+          c.table === "upsert" &&
+          (c.set as { status?: string }).status === "ignored",
+      ),
+    ).toBe(true);
   });
 });
 
@@ -624,7 +702,9 @@ describe("POST /api/travels/gmail/messages/:messageId/reconsider", () => {
     selectQueue.push([]); // no existing decision
     const app = await buildApp();
 
-    const res = await request(app).post("/api/travels/gmail/messages/msg-1/reconsider");
+    const res = await request(app).post(
+      "/api/travels/gmail/messages/msg-1/reconsider",
+    );
 
     expect(res.status).toBe(404);
   });
@@ -633,7 +713,9 @@ describe("POST /api/travels/gmail/messages/:messageId/reconsider", () => {
     selectQueue.push([{ status: "linked" }]);
     const app = await buildApp();
 
-    const res = await request(app).post("/api/travels/gmail/messages/msg-1/reconsider");
+    const res = await request(app).post(
+      "/api/travels/gmail/messages/msg-1/reconsider",
+    );
 
     expect(res.status).toBe(409);
   });
@@ -642,7 +724,9 @@ describe("POST /api/travels/gmail/messages/:messageId/reconsider", () => {
     selectQueue.push([{ status: "ignored" }]);
     const app = await buildApp();
 
-    const res = await request(app).post("/api/travels/gmail/messages/msg-1/reconsider");
+    const res = await request(app).post(
+      "/api/travels/gmail/messages/msg-1/reconsider",
+    );
 
     expect(res.status).toBe(204);
     expect(deleteCalls).toHaveLength(1);
@@ -652,7 +736,9 @@ describe("POST /api/travels/gmail/messages/:messageId/reconsider", () => {
     selectQueue.push([{ status: "dismissed" }]);
     const app = await buildApp();
 
-    const res = await request(app).post("/api/travels/gmail/messages/msg-2/reconsider");
+    const res = await request(app).post(
+      "/api/travels/gmail/messages/msg-2/reconsider",
+    );
 
     expect(res.status).toBe(204);
     expect(deleteCalls).toHaveLength(1);
@@ -688,6 +774,8 @@ describe("POST /api/travels/gmail/scan", () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ scanned: 10, suggested: 2 });
-    expect(updateCalls.some((c) => "lastScanAt" in (c.set as object))).toBe(true);
+    expect(updateCalls.some((c) => "lastScanAt" in (c.set as object))).toBe(
+      true,
+    );
   });
 });

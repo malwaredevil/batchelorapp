@@ -36,7 +36,11 @@ type ItineraryActivity = {
   proximity?: string;
   tip?: string;
 };
-type ItineraryDay = { date?: string; title?: string; activities?: ItineraryActivity[] };
+type ItineraryDay = {
+  date?: string;
+  title?: string;
+  activities?: ItineraryActivity[];
+};
 type Itinerary = { days?: ItineraryDay[] };
 
 export interface TripForCalendarSync {
@@ -109,10 +113,14 @@ function buildDesiredItems(trip: TripForCalendarSync): DesiredItem[] {
     for (const activity of day.activities ?? []) {
       if (!activity?.name) continue;
       const itemKey = `activity:${day.date}:${shortHash(`${activity.name}|${activity.time ?? ""}`)}`;
-      const descParts = [activity.description, activity.proximity, activity.tip].filter(
-        (s): s is string => Boolean(s && s.trim()),
-      );
-      const timed = activity.time ? activityDateTime(day.date, activity.time) : null;
+      const descParts = [
+        activity.description,
+        activity.proximity,
+        activity.tip,
+      ].filter((s): s is string => Boolean(s && s.trim()));
+      const timed = activity.time
+        ? activityDateTime(day.date, activity.time)
+        : null;
       const allDay = !timed;
       const start = timed ?? day.date;
       const end = timed ? addHourIso(timed) : day.date;
@@ -120,7 +128,8 @@ function buildDesiredItems(trip: TripForCalendarSync): DesiredItem[] {
         itemKey,
         input: {
           title: activity.name,
-          description: descParts.length > 0 ? descParts.join("\n\n") : undefined,
+          description:
+            descParts.length > 0 ? descParts.join("\n\n") : undefined,
           allDay,
           start,
           end,
@@ -139,7 +148,9 @@ function buildDesiredItems(trip: TripForCalendarSync): DesiredItem[] {
  * no-op (fast) if nothing changed and if no household calendar is
  * configured.
  */
-export async function syncTripCalendarEvents(trip: TripForCalendarSync): Promise<void> {
+export async function syncTripCalendarEvents(
+  trip: TripForCalendarSync,
+): Promise<void> {
   try {
     const connection = await getTravelCalendarConnection();
     if (!connection) return;
@@ -158,11 +169,19 @@ export async function syncTripCalendarEvents(trip: TripForCalendarSync): Promise
     // Delete mapping rows (and their Google events) for items no longer present.
     for (const row of existing) {
       if (!desiredByKey.has(row.itemKey)) {
-        await deleteCalendarEvent(accessToken, connection.googleCalendarId, row.googleEventId).catch(
-          (err: unknown) =>
-            logger.warn({ err, tripId: trip.id, itemKey: row.itemKey }, "trip-calendar-sync: delete failed"),
+        await deleteCalendarEvent(
+          accessToken,
+          connection.googleCalendarId,
+          row.googleEventId,
+        ).catch((err: unknown) =>
+          logger.warn(
+            { err, tripId: trip.id, itemKey: row.itemKey },
+            "trip-calendar-sync: delete failed",
+          ),
         );
-        await db.delete(travelsTripCalendarEvents).where(eq(travelsTripCalendarEvents.id, row.id));
+        await db
+          .delete(travelsTripCalendarEvents)
+          .where(eq(travelsTripCalendarEvents.id, row.id));
       }
     }
 
@@ -171,7 +190,11 @@ export async function syncTripCalendarEvents(trip: TripForCalendarSync): Promise
       const hash = contentHash(item.input);
       const existingRow = existingByKey.get(item.itemKey);
       if (!existingRow) {
-        const event = await createCalendarEvent(accessToken, connection.googleCalendarId, item.input);
+        const event = await createCalendarEvent(
+          accessToken,
+          connection.googleCalendarId,
+          item.input,
+        );
         await db.insert(travelsTripCalendarEvents).values({
           tripId: trip.id,
           itemKey: item.itemKey,
@@ -193,7 +216,10 @@ export async function syncTripCalendarEvents(trip: TripForCalendarSync): Promise
       }
     }
   } catch (err) {
-    logger.warn({ err, tripId: trip.id }, "trip-calendar-sync: reconciliation failed");
+    logger.warn(
+      { err, tripId: trip.id },
+      "trip-calendar-sync: reconciliation failed",
+    );
   }
 }
 
@@ -234,11 +260,16 @@ export async function applyCalendarEventEditToTrip(
       .where(eq(travelsTripCalendarEvents.googleEventId, googleEventId));
     if (!row || row.kind === "suggested_event") return;
 
-    const [trip] = await db.select().from(travelsTrips).where(eq(travelsTrips.id, row.tripId));
+    const [trip] = await db
+      .select()
+      .from(travelsTrips)
+      .where(eq(travelsTrips.id, row.tripId));
     if (!trip) return;
 
     if (row.kind === "trip") {
-      const title = input.title.startsWith("Trip: ") ? input.title.slice("Trip: ".length) : input.title;
+      const title = input.title.startsWith("Trip: ")
+        ? input.title.slice("Trip: ".length)
+        : input.title;
       const startDate = dateOnly(input.start);
       const endDate = dateOnly(input.end);
       await db
@@ -251,7 +282,10 @@ export async function applyCalendarEventEditToTrip(
         .update(travelsTripCalendarEvents)
         .set({ contentHash: newHash, updatedAt: new Date() })
         .where(eq(travelsTripCalendarEvents.id, row.id));
-      logger.info({ tripId: trip.id }, "trip-calendar-sync: reverse-synced trip fields from calendar edit");
+      logger.info(
+        { tripId: trip.id },
+        "trip-calendar-sync: reverse-synced trip fields from calendar edit",
+      );
       return;
     }
 
@@ -292,7 +326,11 @@ export async function applyCalendarEventEditToTrip(
       if (clash.length === 0) {
         await db
           .update(travelsTripCalendarEvents)
-          .set({ itemKey: newItemKey, contentHash: newHash, updatedAt: new Date() })
+          .set({
+            itemKey: newItemKey,
+            contentHash: newHash,
+            updatedAt: new Date(),
+          })
           .where(eq(travelsTripCalendarEvents.id, row.id));
       } else {
         await db
@@ -311,7 +349,10 @@ export async function applyCalendarEventEditToTrip(
       "trip-calendar-sync: reverse-synced itinerary activity from calendar edit",
     );
   } catch (err) {
-    logger.warn({ err, googleEventId }, "trip-calendar-sync: reverse-sync failed");
+    logger.warn(
+      { err, googleEventId },
+      "trip-calendar-sync: reverse-sync failed",
+    );
   }
 }
 
@@ -328,17 +369,27 @@ export async function deleteTripCalendarEvents(tripId: number): Promise<void> {
       .where(eq(travelsTripCalendarEvents.tripId, tripId));
     if (rows.length === 0) return;
 
-    const accessToken = connection ? await getValidAccessToken(connection.userId) : null;
+    const accessToken = connection
+      ? await getValidAccessToken(connection.userId)
+      : null;
 
     if (accessToken && connection) {
       for (const row of rows) {
-        await deleteCalendarEvent(accessToken, connection.googleCalendarId, row.googleEventId).catch(
-          (err: unknown) =>
-            logger.warn({ err, tripId, itemKey: row.itemKey }, "trip-calendar-sync: delete-on-cleanup failed"),
+        await deleteCalendarEvent(
+          accessToken,
+          connection.googleCalendarId,
+          row.googleEventId,
+        ).catch((err: unknown) =>
+          logger.warn(
+            { err, tripId, itemKey: row.itemKey },
+            "trip-calendar-sync: delete-on-cleanup failed",
+          ),
         );
       }
     }
-    await db.delete(travelsTripCalendarEvents).where(eq(travelsTripCalendarEvents.tripId, tripId));
+    await db
+      .delete(travelsTripCalendarEvents)
+      .where(eq(travelsTripCalendarEvents.tripId, tripId));
   } catch (err) {
     logger.warn({ err, tripId }, "trip-calendar-sync: delete-all failed");
   }

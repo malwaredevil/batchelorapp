@@ -4,12 +4,15 @@ import crypto from "crypto";
 import { resolveDatabaseUrl, sslConfig } from "@workspace/db";
 
 const newUsers = [
-  { email: "batchelorkm@gmail.com",         displayName: "Karis" },
+  { email: "batchelorkm@gmail.com", displayName: "Karis" },
   { email: "angela.batchelor.fi@gmail.com", displayName: "Angela" },
 ];
 
 async function main() {
-  const client = new pg.Client({ connectionString: resolveDatabaseUrl(), ssl: sslConfig });
+  const client = new pg.Client({
+    connectionString: resolveDatabaseUrl(),
+    ssl: sslConfig,
+  });
   await client.connect();
 
   for (const u of newUsers) {
@@ -36,11 +39,18 @@ async function main() {
       [email, passwordHash, u.displayName],
     );
 
-    console.log(`✅ Created (id ${insert.rows[0].id}): ${email}  —  display name "${u.displayName}"`);
-    console.log(`   → They need to use Forgot Password on the login page to set their own password.`);
+    console.log(
+      `✅ Created (id ${insert.rows[0].id}): ${email}  —  display name "${u.displayName}"`,
+    );
+    console.log(
+      `   → They need to use Forgot Password on the login page to set their own password.`,
+    );
   }
 
   await client.end();
 }
 
-main().catch((err) => { console.error(err); process.exit(1); });
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

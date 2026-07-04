@@ -104,7 +104,11 @@ router.post("/travel-calendar/events", requireAuth, async (req, res) => {
     return;
   }
   try {
-    const event = await createCalendarEvent(accessToken, connection.googleCalendarId, body);
+    const event = await createCalendarEvent(
+      accessToken,
+      connection.googleCalendarId,
+      body,
+    );
     res.status(201).json(event);
   } catch (err) {
     logger.error({ err }, "travel-calendar: failed to create event");
@@ -113,54 +117,66 @@ router.post("/travel-calendar/events", requireAuth, async (req, res) => {
 });
 
 // PATCH /travel-calendar/events/:eventId
-router.patch("/travel-calendar/events/:eventId", requireAuth, async (req, res) => {
-  const connection = await getTravelCalendarConnection();
-  if (!connection) {
-    res.status(409).json({ error: "No shared Travel calendar configured." });
-    return;
-  }
-  const eventId = String(req.params["eventId"]);
-  const body = EventBody.parse(req.body);
-  const accessToken = await getValidAccessToken(connection.userId);
-  if (!accessToken) {
-    res.status(502).json({ error: "Could not connect to Google Calendar." });
-    return;
-  }
-  try {
-    const event = await updateCalendarEvent(
-      accessToken,
-      connection.googleCalendarId,
-      eventId,
-      body,
-    );
-    res.json(event);
-    void applyCalendarEventEditToTrip(eventId, body);
-  } catch (err) {
-    logger.error({ err }, "travel-calendar: failed to update event");
-    res.status(502).json({ error: "Could not reach Google Calendar." });
-  }
-});
+router.patch(
+  "/travel-calendar/events/:eventId",
+  requireAuth,
+  async (req, res) => {
+    const connection = await getTravelCalendarConnection();
+    if (!connection) {
+      res.status(409).json({ error: "No shared Travel calendar configured." });
+      return;
+    }
+    const eventId = String(req.params["eventId"]);
+    const body = EventBody.parse(req.body);
+    const accessToken = await getValidAccessToken(connection.userId);
+    if (!accessToken) {
+      res.status(502).json({ error: "Could not connect to Google Calendar." });
+      return;
+    }
+    try {
+      const event = await updateCalendarEvent(
+        accessToken,
+        connection.googleCalendarId,
+        eventId,
+        body,
+      );
+      res.json(event);
+      void applyCalendarEventEditToTrip(eventId, body);
+    } catch (err) {
+      logger.error({ err }, "travel-calendar: failed to update event");
+      res.status(502).json({ error: "Could not reach Google Calendar." });
+    }
+  },
+);
 
 // DELETE /travel-calendar/events/:eventId
-router.delete("/travel-calendar/events/:eventId", requireAuth, async (req, res) => {
-  const connection = await getTravelCalendarConnection();
-  if (!connection) {
-    res.status(409).json({ error: "No shared Travel calendar configured." });
-    return;
-  }
-  const eventId = String(req.params["eventId"]);
-  const accessToken = await getValidAccessToken(connection.userId);
-  if (!accessToken) {
-    res.status(502).json({ error: "Could not connect to Google Calendar." });
-    return;
-  }
-  try {
-    await deleteCalendarEvent(accessToken, connection.googleCalendarId, eventId);
-    res.status(204).send();
-  } catch (err) {
-    logger.error({ err }, "travel-calendar: failed to delete event");
-    res.status(502).json({ error: "Could not reach Google Calendar." });
-  }
-});
+router.delete(
+  "/travel-calendar/events/:eventId",
+  requireAuth,
+  async (req, res) => {
+    const connection = await getTravelCalendarConnection();
+    if (!connection) {
+      res.status(409).json({ error: "No shared Travel calendar configured." });
+      return;
+    }
+    const eventId = String(req.params["eventId"]);
+    const accessToken = await getValidAccessToken(connection.userId);
+    if (!accessToken) {
+      res.status(502).json({ error: "Could not connect to Google Calendar." });
+      return;
+    }
+    try {
+      await deleteCalendarEvent(
+        accessToken,
+        connection.googleCalendarId,
+        eventId,
+      );
+      res.status(204).send();
+    } catch (err) {
+      logger.error({ err }, "travel-calendar: failed to delete event");
+      res.status(502).json({ error: "Could not reach Google Calendar." });
+    }
+  },
+);
 
 export default router;

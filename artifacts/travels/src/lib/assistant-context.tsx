@@ -1,4 +1,10 @@
-import React, { createContext, useCallback, useContext, useRef, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useRef,
+  useState,
+} from "react";
 
 // Lets any page publish a description of what's currently on screen —
 // including in-progress, unsaved field values — so elAIne can answer
@@ -12,8 +18,14 @@ interface AssistantContextValue {
 
 const AssistantContext = createContext<AssistantContextValue | null>(null);
 
-export function AssistantContextProvider({ children }: { children: React.ReactNode }) {
-  const contextsRef = useRef(new Map<string, { text: string | undefined; order: number }>());
+export function AssistantContextProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const contextsRef = useRef(
+    new Map<string, { text: string | undefined; order: number }>(),
+  );
   const orderRef = useRef(0);
   const [, forceRender] = useState(0);
 
@@ -51,7 +63,9 @@ export function AssistantContextProvider({ children }: { children: React.ReactNo
 function useAssistantContextInternal() {
   const ctx = useContext(AssistantContext);
   if (!ctx) {
-    throw new Error("useAssistantContext must be used within AssistantContextProvider");
+    throw new Error(
+      "useAssistantContext must be used within AssistantContextProvider",
+    );
   }
   return ctx;
 }
@@ -60,7 +74,10 @@ function useAssistantContextInternal() {
 // `text` should be a short, plain-language description — page name plus
 // any in-progress field values worth knowing about. Pass undefined text (or
 // unmount) to clear it. Re-registers whenever `text` changes.
-export function usePageAssistantContext(pageId: string, text: string | undefined) {
+export function usePageAssistantContext(
+  pageId: string,
+  text: string | undefined,
+) {
   const { setPageContext } = useAssistantContextInternal();
   React.useEffect(() => {
     setPageContext(pageId, text);

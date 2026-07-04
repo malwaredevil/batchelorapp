@@ -1,7 +1,11 @@
 import { Router, type IRouter } from "express";
 import { and, desc, eq, or, isNull } from "drizzle-orm";
 import { z } from "zod/v4";
-import { db, travelsCalendarTripSuggestions, travelsTrips } from "@workspace/db";
+import {
+  db,
+  travelsCalendarTripSuggestions,
+  travelsTrips,
+} from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { scanCalendarForTripSuggestions } from "../../lib/travels-calendar-scan";
 import { linkExistingCalendarEvent } from "../../lib/trip-calendar-sync";
@@ -46,8 +50,13 @@ router.post("/calendar-trip-suggestions/scan", async (req, res) => {
     const result = await scanCalendarForTripSuggestions();
     res.json(result);
   } catch (err) {
-    logger.error({ err, userId: req.session.userId }, "calendar-trip-suggestions: manual scan failed");
-    res.status(502).json({ error: "Could not scan your connected calendars right now." });
+    logger.error(
+      { err, userId: req.session.userId },
+      "calendar-trip-suggestions: manual scan failed",
+    );
+    res
+      .status(502)
+      .json({ error: "Could not scan your connected calendars right now." });
   }
 });
 
@@ -62,7 +71,9 @@ router.post("/calendar-trip-suggestions/:id/dismiss", async (req, res) => {
   const [updated] = await db
     .update(travelsCalendarTripSuggestions)
     .set({ status: "dismissed", updatedAt: new Date() })
-    .where(and(eq(travelsCalendarTripSuggestions.id, id), visibleToUser(userId)))
+    .where(
+      and(eq(travelsCalendarTripSuggestions.id, id), visibleToUser(userId)),
+    )
     .returning();
   if (!updated) {
     res.status(404).json({ error: "Not found" });
@@ -91,7 +102,9 @@ router.post("/calendar-trip-suggestions/:id/accept", async (req, res) => {
   const [suggestion] = await db
     .select()
     .from(travelsCalendarTripSuggestions)
-    .where(and(eq(travelsCalendarTripSuggestions.id, id), visibleToUser(userId)));
+    .where(
+      and(eq(travelsCalendarTripSuggestions.id, id), visibleToUser(userId)),
+    );
 
   if (!suggestion || suggestion.status !== "pending") {
     res.status(404).json({ error: "Not found" });

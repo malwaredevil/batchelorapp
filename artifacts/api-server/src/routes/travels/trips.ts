@@ -1,11 +1,20 @@
 import { Router, type IRouter } from "express";
 import { eq, asc } from "drizzle-orm";
 import { z } from "zod/v4";
-import { db, travelsTrips, travelsTripDocuments, travelsTripPhotos, travelsReminders } from "@workspace/db";
+import {
+  db,
+  travelsTrips,
+  travelsTripDocuments,
+  travelsTripPhotos,
+  travelsReminders,
+} from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { deleteTripPhoto } from "../../lib/travels/storage";
 import { deleteDocument } from "../../lib/travels-storage";
-import { syncTripCalendarEvents, deleteTripCalendarEvents } from "../../lib/trip-calendar-sync";
+import {
+  syncTripCalendarEvents,
+  deleteTripCalendarEvents,
+} from "../../lib/trip-calendar-sync";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -28,7 +37,8 @@ async function geocodeDestination(
     });
     if (!res.ok) return null;
     const data = (await res.json()) as Array<{ lat: string; lon: string }>;
-    if (data[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    if (data[0])
+      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
     return null;
   } catch {
     return null;
@@ -66,7 +76,9 @@ const UpdateTripBody = CreateTripBody.partial().extend({
   // update, which would silently reset status/hasRentalCar/travellerCount
   // on every single-field PATCH. Override with plain optionals (no default)
   // so omitted keys are left untouched.
-  status: z.enum(["wishlist", "planning", "booked", "active", "completed"]).optional(),
+  status: z
+    .enum(["wishlist", "planning", "booked", "active", "completed"])
+    .optional(),
   hasRentalCar: z.boolean().optional(),
   travellerCount: z.number().int().min(1).optional(),
 });
@@ -105,7 +117,10 @@ router.post("/trips", async (req, res) => {
     .insert(travelsTrips)
     .values({
       ...body,
-      theOneThing: (normalizedOneThing ?? null) as unknown as Record<string, unknown>,
+      theOneThing: (normalizedOneThing ?? null) as unknown as Record<
+        string,
+        unknown
+      >,
       travelers: (body.travelers ?? null) as unknown as Record<string, unknown>,
       userId,
       ...(coords ?? {}),
@@ -243,7 +258,9 @@ router.delete("/trips/:id", async (req, res) => {
 
   // Delete child rows first, then the trip
   await db.delete(travelsTripPhotos).where(eq(travelsTripPhotos.tripId, id));
-  await db.delete(travelsTripDocuments).where(eq(travelsTripDocuments.tripId, id));
+  await db
+    .delete(travelsTripDocuments)
+    .where(eq(travelsTripDocuments.tripId, id));
   await db.delete(travelsReminders).where(eq(travelsReminders.tripId, id));
   await db.delete(travelsTrips).where(eq(travelsTrips.id, id));
 

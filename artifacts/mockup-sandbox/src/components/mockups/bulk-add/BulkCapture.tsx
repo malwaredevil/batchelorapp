@@ -1,4 +1,11 @@
-import { Camera, CheckCircle2, Loader2, X, ArrowLeft, AlertCircle } from "lucide-react";
+import {
+  Camera,
+  CheckCircle2,
+  Loader2,
+  X,
+  ArrowLeft,
+  AlertCircle,
+} from "lucide-react";
 
 type ItemStatus = "processing" | "done" | "error";
 
@@ -10,13 +17,13 @@ interface QueueItem {
 }
 
 const queueItems: QueueItem[] = [
-  { id: 1, thumb: "#b3c9e8", status: "done",       name: "Blue Floral Batik" },
-  { id: 2, thumb: "#e8d4b3", status: "done",       name: "Cream Linen Texture" },
-  { id: 3, thumb: "#e87a7a", status: "processing"  },
-  { id: 4, thumb: "#7ab87a", status: "processing"  },
+  { id: 1, thumb: "#b3c9e8", status: "done", name: "Blue Floral Batik" },
+  { id: 2, thumb: "#e8d4b3", status: "done", name: "Cream Linen Texture" },
+  { id: 3, thumb: "#e87a7a", status: "processing" },
+  { id: 4, thumb: "#7ab87a", status: "processing" },
 ];
 
-const doneCount  = queueItems.filter((i) => i.status === "done").length;
+const doneCount = queueItems.filter((i) => i.status === "done").length;
 const totalCount = queueItems.length;
 
 export function BulkCapture() {
@@ -53,8 +60,12 @@ export function BulkCapture() {
           <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
             <Camera className="h-7 w-7 text-primary" />
           </div>
-          <p className="text-sm font-semibold text-foreground">Tap to capture</p>
-          <p className="mt-1 text-xs text-muted-foreground">Tap again after each shot to add more</p>
+          <p className="text-sm font-semibold text-foreground">
+            Tap to capture
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Tap again after each shot to add more
+          </p>
 
           {/* Count badge */}
           <div className="absolute right-3 top-3 rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-bold text-primary-foreground">
@@ -98,18 +109,30 @@ export function BulkCapture() {
             <div className="flex-1 min-w-0">
               {item.status === "done" ? (
                 <>
-                  <p className="truncate text-sm font-medium text-foreground">{item.name}</p>
-                  <p className="text-[10px] text-muted-foreground">Saved to collection</p>
+                  <p className="truncate text-sm font-medium text-foreground">
+                    {item.name}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Saved to collection
+                  </p>
                 </>
               ) : item.status === "error" ? (
                 <>
-                  <p className="truncate text-sm font-medium text-destructive">Upload failed</p>
-                  <p className="text-[10px] text-muted-foreground">Tap to retry</p>
+                  <p className="truncate text-sm font-medium text-destructive">
+                    Upload failed
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Tap to retry
+                  </p>
                 </>
               ) : (
                 <>
-                  <p className="truncate text-sm font-medium text-muted-foreground">Analysing…</p>
-                  <p className="text-[10px] text-muted-foreground">AI cataloguing in progress</p>
+                  <p className="truncate text-sm font-medium text-muted-foreground">
+                    Analysing…
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    AI cataloguing in progress
+                  </p>
                 </>
               )}
             </div>

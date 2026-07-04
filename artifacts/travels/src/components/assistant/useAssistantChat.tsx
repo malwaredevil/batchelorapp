@@ -42,29 +42,40 @@ export function useAssistantChat({ active }: { active: boolean }) {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [initialized, setInitialized] = useState(false);
-  const [pendingNavigate, setPendingNavigate] = useState<{ path: string; reason: string } | null>(null);
+  const [pendingNavigate, setPendingNavigate] = useState<{
+    path: string;
+    reason: string;
+  } | null>(null);
   const [pendingActions, setPendingActions] = useState<AssistantAction[]>([]);
   const [confirmingAll, setConfirmingAll] = useState(false);
-  const [executedActions, setExecutedActions] = useState<ExecutedAssistantAction[]>([]);
+  const [executedActions, setExecutedActions] = useState<
+    ExecutedAssistantAction[]
+  >([]);
   const [actionDone, setActionDone] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [magnetPreview, setMagnetPreview] = useState<string | null>(null);
-  const [magnetResult, setMagnetResult] = useState<MagnetCheckResult | null>(null);
+  const [magnetResult, setMagnetResult] = useState<MagnetCheckResult | null>(
+    null,
+  );
   const magnetFileRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   const { data: settings } = useGetAssistantSettings();
   const updateSettings = useUpdateAssistantSettings();
   const { data: conversation } = useGetAssistantConversation({
-    query: { enabled: active && !initialized, queryKey: getGetAssistantConversationQueryKey() },
+    query: {
+      enabled: active && !initialized,
+      queryKey: getGetAssistantConversationQueryKey(),
+    },
   });
   const newConversation = useNewAssistantConversation();
   const executeAction = useExecuteAssistantAction();
   const checkMagnet = useCheckMagnet({
     mutation: {
-      onError: (err) => toast.error(err instanceof Error ? err.message : "Check failed"),
+      onError: (err) =>
+        toast.error(err instanceof Error ? err.message : "Check failed"),
     },
   });
 
@@ -72,7 +83,9 @@ export function useAssistantChat({ active }: { active: boolean }) {
     if (conversation && !initialized) {
       setMessages(conversation.messages);
       setInitialized(true);
-      qc.invalidateQueries({ queryKey: getGetAssistantNudgesUnseenCountQueryKey() });
+      qc.invalidateQueries({
+        queryKey: getGetAssistantNudgesUnseenCountQueryKey(),
+      });
     }
   }, [conversation, initialized, qc]);
 
@@ -141,8 +154,12 @@ export function useAssistantChat({ active }: { active: boolean }) {
               qc.invalidateQueries({ queryKey: getListTripsQueryKey() });
               qc.invalidateQueries({ queryKey: getListWishlistQueryKey() });
             }
-            if (result.actionConfirmationMode !== settings?.actionConfirmationMode) {
-              qc.invalidateQueries({ queryKey: getGetAssistantSettingsQueryKey() });
+            if (
+              result.actionConfirmationMode !== settings?.actionConfirmationMode
+            ) {
+              qc.invalidateQueries({
+                queryKey: getGetAssistantSettingsQueryKey(),
+              });
             }
           },
         },
@@ -190,7 +207,10 @@ export function useAssistantChat({ active }: { active: boolean }) {
         qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
       }
     }
-    if (action.type === "add_connected_calendar" || action.type === "disconnect_calendar") {
+    if (
+      action.type === "add_connected_calendar" ||
+      action.type === "disconnect_calendar"
+    ) {
       qc.invalidateQueries({ queryKey: getGetCalendarStatusQueryKey() });
       qc.invalidateQueries({ queryKey: getListCalendarsQueryKey() });
       qc.invalidateQueries({ queryKey: getListConnectedCalendarsQueryKey() });
@@ -230,7 +250,10 @@ export function useAssistantChat({ active }: { active: boolean }) {
     let failed = 0;
     for (const action of pendingActions) {
       try {
-        await executeAction.mutateAsync({ type: action.type, payload: action.payload });
+        await executeAction.mutateAsync({
+          type: action.type,
+          payload: action.payload,
+        });
         invalidateActionQueries(action);
       } catch {
         failed += 1;
@@ -239,7 +262,9 @@ export function useAssistantChat({ active }: { active: boolean }) {
     setConfirmingAll(false);
     setPendingActions([]);
     if (failed > 0) {
-      toast.error(`${failed} of ${pendingActions.length} action(s) couldn't be done.`);
+      toast.error(
+        `${failed} of ${pendingActions.length} action(s) couldn't be done.`,
+      );
     } else {
       setActionDone(true);
       toast.success("Done!");

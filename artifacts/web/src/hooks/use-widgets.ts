@@ -2,8 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { WIDGETS, type WidgetEntry } from "@/config/apps";
 
 // ── Slot types (static catalogue widget OR configurable RSS instance) ──────────
-export interface StaticSlot { t: "s"; id: string }
-export interface RssSlot { t: "r"; iid: string; title: string; url: string }
+export interface StaticSlot {
+  t: "s";
+  id: string;
+}
+export interface RssSlot {
+  t: "r";
+  iid: string;
+  title: string;
+  url: string;
+}
 export type WidgetSlot = StaticSlot | RssSlot;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -62,11 +70,16 @@ function readLocalStorage(): WidgetSlot[] | null {
 function writeLocalStorage(slots: WidgetSlot[]) {
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(slots));
-  } catch { /* quota full */ }
+  } catch {
+    /* quota full */
+  }
 }
 
 // ── Server sync ───────────────────────────────────────────────────────────────
-const PREFS_URL = `${import.meta.env.BASE_URL}api/hub/preferences`.replace(/\/\//g, "/");
+const PREFS_URL = `${import.meta.env.BASE_URL}api/hub/preferences`.replace(
+  /\/\//g,
+  "/",
+);
 
 async function fetchServerPrefs(): Promise<WidgetSlot[] | null> {
   try {
@@ -90,7 +103,9 @@ async function saveServerPrefs(slots: WidgetSlot[]): Promise<void> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ slots }),
     });
-  } catch { /* silent — localStorage still has it */ }
+  } catch {
+    /* silent — localStorage still has it */
+  }
 }
 
 function genIid(): string {
@@ -114,7 +129,9 @@ export function useWidgets() {
     () => readLocalStorage() ?? DEFAULT_SLOTS,
   );
   const [serverReady, setServerReady] = useState(false);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
 
   // Hydrate from server on mount
   useEffect(() => {

@@ -632,162 +632,181 @@ function LayoutCard({
   const [zoomOpen, setZoomOpen] = useState(false);
   return (
     <>
-    <div className="group relative overflow-hidden rounded-xl border border-card-border bg-card transition-shadow hover:shadow-md">
-      <Link href={`/layouts/${layout.id}`} className="block">
-        <div className="relative flex aspect-square items-center justify-center overflow-hidden bg-white p-2">
-          <LayoutPreview
-            layout={layout}
-            blocks={blocks}
-            size={160}
-            fabricUrlMap={fabricUrlMap}
-          />
-          <button
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setZoomOpen(true); }}
-            className="absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/70"
-            title="Zoom preview"
-          >
-            <ZoomIn className="h-3.5 w-3.5" />
-          </button>
-        </div>
-        <div className="border-t border-card-border px-3 py-2 pr-8">
-          <p className="truncate text-sm font-semibold text-foreground">
-            {layout.name}
-          </p>
-          <div className="mt-1.5 flex flex-wrap gap-1">
+      <div className="group relative overflow-hidden rounded-xl border border-card-border bg-card transition-shadow hover:shadow-md">
+        <Link href={`/layouts/${layout.id}`} className="block">
+          <div className="relative flex aspect-square items-center justify-center overflow-hidden bg-white p-2">
+            <LayoutPreview
+              layout={layout}
+              blocks={blocks}
+              size={160}
+              fabricUrlMap={fabricUrlMap}
+            />
             <button
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                onFilterBySize?.(`${layout.rows}×${layout.cols}`);
+                setZoomOpen(true);
               }}
-              className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-all hover:ring-2 hover:ring-primary/50 cursor-pointer"
+              className="absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/70"
+              title="Zoom preview"
             >
-              {layout.rows}×{layout.cols} blocks
+              <ZoomIn className="h-3.5 w-3.5" />
             </button>
-            {(() => {
-              const qs = computeQuiltSize(layout, blockMap);
-              if (!qs) return null;
-              return (
-                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                  {fmtInch(qs.w)} × {fmtInch(qs.h)}{qs.mixed ? " (approx)" : ""}
-                </span>
-              );
-            })()}
-            {layout.categories.map((cat) => (
+          </div>
+          <div className="border-t border-card-border px-3 py-2 pr-8">
+            <p className="truncate text-sm font-semibold text-foreground">
+              {layout.name}
+            </p>
+            <div className="mt-1.5 flex flex-wrap gap-1">
               <button
-                key={cat.id}
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  onFilterByCategory?.(cat.id);
+                  onFilterBySize?.(`${layout.rows}×${layout.cols}`);
                 }}
-                className="rounded-full px-2 py-0.5 text-[10px] font-medium leading-tight transition-all hover:ring-2 hover:ring-primary/50 cursor-pointer"
-                style={(() => {
-                  const palette = cat.bgColor
-                    ? { bgColor: cat.bgColor, textColor: cat.textColor ?? "#fff" }
-                    : getCategoryPalette(cat.name);
-                  return { backgroundColor: palette.bgColor, color: palette.textColor };
-                })()}
+                className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-all hover:ring-2 hover:ring-primary/50 cursor-pointer"
               >
-                {cat.name}
+                {layout.rows}×{layout.cols} blocks
               </button>
-            ))}
-          </div>
-          {(layout.dominantColors ?? []).length > 0 && (
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {(layout.dominantColors ?? []).map((hex) => (
+              {(() => {
+                const qs = computeQuiltSize(layout, blockMap);
+                if (!qs) return null;
+                return (
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    {fmtInch(qs.w)} × {fmtInch(qs.h)}
+                    {qs.mixed ? " (approx)" : ""}
+                  </span>
+                );
+              })()}
+              {layout.categories.map((cat) => (
                 <button
-                  key={hex}
-                  title={hex}
+                  key={cat.id}
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    onFilterByColor?.(hex);
+                    onFilterByCategory?.(cat.id);
                   }}
-                  className="h-4 w-4 rounded-full border border-black/10 transition-transform hover:scale-110"
-                  style={{ backgroundColor: hex }}
-                />
+                  className="rounded-full px-2 py-0.5 text-[10px] font-medium leading-tight transition-all hover:ring-2 hover:ring-primary/50 cursor-pointer"
+                  style={(() => {
+                    const palette = cat.bgColor
+                      ? {
+                          bgColor: cat.bgColor,
+                          textColor: cat.textColor ?? "#fff",
+                        }
+                      : getCategoryPalette(cat.name);
+                    return {
+                      backgroundColor: palette.bgColor,
+                      color: palette.textColor,
+                    };
+                  })()}
+                >
+                  {cat.name}
+                </button>
               ))}
             </div>
-          )}
-        </div>
-      </Link>
+            {(layout.dominantColors ?? []).length > 0 && (
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {(layout.dominantColors ?? []).map((hex) => (
+                  <button
+                    key={hex}
+                    title={hex}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onFilterByColor?.(hex);
+                    }}
+                    className="h-4 w-4 rounded-full border border-black/10 transition-transform hover:scale-110"
+                    style={{ backgroundColor: hex }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </Link>
 
-      <div className="absolute right-2 top-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 rounded-full bg-background/80 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
-            >
-              <MoreVertical className="h-3.5 w-3.5" />
-              <span className="sr-only">Options</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => navigate(`/layouts/${layout.id}`)}>
-              <ExternalLink className="mr-2 h-3.5 w-3.5" />
-              Open
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate(`/layouts/${layout.id}/edit`)}>
-              <Pencil className="mr-2 h-3.5 w-3.5" />
-              Edit
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onDuplicate(layout)}>
-              <Copy className="mr-2 h-3.5 w-3.5" />
-              Duplicate
-            </DropdownMenuItem>
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>
-                <Download className="mr-2 h-3.5 w-3.5" />
-                Export
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuItem
-                  onClick={() => void exportLayoutAsPng(layout, blockMap)}
-                >
-                  <FileImage className="mr-2 h-3.5 w-3.5" />
-                  PNG
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => void exportLayoutAsJpeg(layout, blockMap)}
-                >
-                  <FileImage className="mr-2 h-3.5 w-3.5" />
-                  JPEG
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => exportLayoutAsSvg(layout, blockMap)}
-                >
-                  <FileCode2 className="mr-2 h-3.5 w-3.5" />
-                  SVG
-                </DropdownMenuItem>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-            <DropdownMenuItem onClick={() => onEditCategories?.()}>
-              <Tag className="mr-2 h-3.5 w-3.5" />
-              Set categories
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              onClick={() => onDelete(layout.id)}
-            >
-              <Trash2 className="mr-2 h-3.5 w-3.5" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="absolute right-2 top-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-full bg-background/80 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
+              >
+                <MoreVertical className="h-3.5 w-3.5" />
+                <span className="sr-only">Options</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => navigate(`/layouts/${layout.id}`)}
+              >
+                <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                Open
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => navigate(`/layouts/${layout.id}/edit`)}
+              >
+                <Pencil className="mr-2 h-3.5 w-3.5" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onDuplicate(layout)}>
+                <Copy className="mr-2 h-3.5 w-3.5" />
+                Duplicate
+              </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <Download className="mr-2 h-3.5 w-3.5" />
+                  Export
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem
+                    onClick={() => void exportLayoutAsPng(layout, blockMap)}
+                  >
+                    <FileImage className="mr-2 h-3.5 w-3.5" />
+                    PNG
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => void exportLayoutAsJpeg(layout, blockMap)}
+                  >
+                    <FileImage className="mr-2 h-3.5 w-3.5" />
+                    JPEG
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => exportLayoutAsSvg(layout, blockMap)}
+                  >
+                    <FileCode2 className="mr-2 h-3.5 w-3.5" />
+                    SVG
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuItem onClick={() => onEditCategories?.()}>
+                <Tag className="mr-2 h-3.5 w-3.5" />
+                Set categories
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={() => onDelete(layout.id)}
+              >
+                <Trash2 className="mr-2 h-3.5 w-3.5" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
-    </div>
-    <PreviewZoomModal open={zoomOpen} onClose={() => setZoomOpen(false)} title={layout.name}>
-      <LayoutPreview
-        layout={layout}
-        blocks={blocks}
-        size={600}
-        fabricUrlMap={fabricUrlMap}
-      />
-    </PreviewZoomModal>
+      <PreviewZoomModal
+        open={zoomOpen}
+        onClose={() => setZoomOpen(false)}
+        title={layout.name}
+      >
+        <LayoutPreview
+          layout={layout}
+          blocks={blocks}
+          size={600}
+          fabricUrlMap={fabricUrlMap}
+        />
+      </PreviewZoomModal>
     </>
   );
 }
@@ -808,7 +827,8 @@ export default function Layouts() {
     [fabricsList],
   );
 
-  const [categoryEditItem, setCategoryEditItem] = useState<LayoutSummary | null>(null);
+  const [categoryEditItem, setCategoryEditItem] =
+    useState<LayoutSummary | null>(null);
 
   const updateLayoutCategories = useUpdateLayout({
     mutation: {
@@ -895,7 +915,10 @@ export default function Layouts() {
     const result: string[] = [];
     for (const l of (layoutList ?? []) as LayoutSummary[]) {
       for (const c of l.dominantColors ?? []) {
-        if (!seen.has(c)) { seen.add(c); result.push(c); }
+        if (!seen.has(c)) {
+          seen.add(c);
+          result.push(c);
+        }
       }
     }
     return result;
@@ -913,7 +936,10 @@ export default function Layouts() {
         !l.categories.some((c) => activeCatIds.has(c.id))
       )
         return false;
-      if (colorFilter.length > 0 && !colorFilter.every((c) => (l.dominantColors ?? []).includes(c)))
+      if (
+        colorFilter.length > 0 &&
+        !colorFilter.every((c) => (l.dominantColors ?? []).includes(c))
+      )
         return false;
       return true;
     })
@@ -963,11 +989,36 @@ export default function Layouts() {
       {stats && (
         <div className="mb-6 hidden sm:grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {[
-            { label: "Fabrics", value: stats.totalFabrics, sub: "in your stash", href: "/fabrics" },
-            { label: "Patterns", value: stats.totalPatterns, sub: "saved", href: "/patterns" },
-            { label: "Quilts", value: stats.totalQuilts, sub: "in collection", href: "/quilts" },
-            { label: "Blocks", value: stats.totalBlocks, sub: "designed", href: "/blocks" },
-            { label: "Layouts", value: stats.totalLayouts, sub: "arranged", href: "/layouts" },
+            {
+              label: "Fabrics",
+              value: stats.totalFabrics,
+              sub: "in your stash",
+              href: "/fabrics",
+            },
+            {
+              label: "Patterns",
+              value: stats.totalPatterns,
+              sub: "saved",
+              href: "/patterns",
+            },
+            {
+              label: "Quilts",
+              value: stats.totalQuilts,
+              sub: "in collection",
+              href: "/quilts",
+            },
+            {
+              label: "Blocks",
+              value: stats.totalBlocks,
+              sub: "designed",
+              href: "/blocks",
+            },
+            {
+              label: "Layouts",
+              value: stats.totalLayouts,
+              sub: "arranged",
+              href: "/layouts",
+            },
           ].map(({ label, value, sub, href }) => (
             <Link
               key={label}
@@ -975,7 +1026,9 @@ export default function Layouts() {
               className="rounded-xl border border-card-border bg-card p-4 block hover:shadow-sm hover:border-primary/30 transition-all"
             >
               <p className="text-2xl font-bold text-foreground">{value}</p>
-              <p className="text-sm font-medium text-foreground mt-0.5">{label}</p>
+              <p className="text-sm font-medium text-foreground mt-0.5">
+                {label}
+              </p>
               <p className="text-xs text-muted-foreground">{sub}</p>
             </Link>
           ))}
@@ -1037,7 +1090,9 @@ export default function Layouts() {
                   ) : (
                     <SortAsc className="h-3.5 w-3.5" />
                   )}
-                  <span className="hidden sm:inline">{SORT_LABELS[sortBy]}</span>
+                  <span className="hidden sm:inline">
+                    {SORT_LABELS[sortBy]}
+                  </span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -1063,7 +1118,9 @@ export default function Layouts() {
                   title={hex}
                   onClick={() =>
                     setColorFilter((prev) =>
-                      prev.includes(hex) ? prev.filter((c) => c !== hex) : [...prev, hex]
+                      prev.includes(hex)
+                        ? prev.filter((c) => c !== hex)
+                        : [...prev, hex],
                     )
                   }
                   className={cn(
@@ -1203,7 +1260,9 @@ export default function Layouts() {
               onFilterByCategory={toggleCat}
               onFilterByColor={(hex) =>
                 setColorFilter((prev) =>
-                  prev.includes(hex) ? prev.filter((c) => c !== hex) : [...prev, hex]
+                  prev.includes(hex)
+                    ? prev.filter((c) => c !== hex)
+                    : [...prev, hex],
                 )
               }
               fabricUrlMap={fabricUrlMap}
@@ -1216,7 +1275,9 @@ export default function Layouts() {
         open={categoryEditItem !== null}
         onClose={() => setCategoryEditItem(null)}
         title={categoryEditItem?.name ?? ""}
-        currentCategories={(categoryEditItem?.categories ?? []) as unknown as QuiltingCategory[]}
+        currentCategories={
+          (categoryEditItem?.categories ?? []) as unknown as QuiltingCategory[]
+        }
         allCategories={allCategories ?? []}
         onSave={(names) => {
           if (categoryEditItem) {

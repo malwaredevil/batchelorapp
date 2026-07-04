@@ -56,9 +56,10 @@ async function tripExists(tripId: number): Promise<boolean> {
 // proxied through the Travel calendar owner's Google token. Returns null
 // when no Travel calendar is configured, in which case reminders simply
 // don't sync to Google.
-export async function getReminderSyncTarget(): Promise<
-  { userId: number; calendarId: string } | null
-> {
+export async function getReminderSyncTarget(): Promise<{
+  userId: number;
+  calendarId: string;
+} | null> {
   const connection = await getTravelCalendarConnection();
   if (!connection) return null;
   return { userId: connection.userId, calendarId: connection.googleCalendarId };
@@ -87,7 +88,11 @@ export async function syncReminderCalendarEvents(
     for (const row of existing) {
       const accessToken = await getValidAccessToken(row.userId);
       if (accessToken) {
-        await deleteReminderEvent(accessToken, row.calendarId, row.googleEventId);
+        await deleteReminderEvent(
+          accessToken,
+          row.calendarId,
+          row.googleEventId,
+        );
       }
     }
     if (existing.length > 0) {
@@ -101,7 +106,8 @@ export async function syncReminderCalendarEvents(
   // If the Travel calendar was reassigned to a different owner/calendar
   // since the last sync, drop any stale event(s) tied to the old one first.
   const stale = existing.filter(
-    (row) => row.userId !== target.userId || row.calendarId !== target.calendarId,
+    (row) =>
+      row.userId !== target.userId || row.calendarId !== target.calendarId,
   );
   for (const row of stale) {
     const staleToken = await getValidAccessToken(row.userId);
@@ -122,17 +128,23 @@ export async function syncReminderCalendarEvents(
   if (!accessToken) return;
 
   const current = existing.find(
-    (row) => row.userId === target.userId && row.calendarId === target.calendarId,
+    (row) =>
+      row.userId === target.userId && row.calendarId === target.calendarId,
   );
 
   try {
     if (current) {
-      await updateReminderEvent(accessToken, current.calendarId, current.googleEventId, {
-        title,
-        dueDate,
-        description: `Trip reminder: ${tripTitle}`,
-        alertDaysBefore,
-      });
+      await updateReminderEvent(
+        accessToken,
+        current.calendarId,
+        current.googleEventId,
+        {
+          title,
+          dueDate,
+          description: `Trip reminder: ${tripTitle}`,
+          alertDaysBefore,
+        },
+      );
     } else {
       const event = await createReminderEvent(accessToken, {
         calendarId: target.calendarId,
@@ -195,12 +207,18 @@ export async function pullReminderAlertDaysFromCalendar(
     const accessToken = await getValidAccessToken(row.userId);
     if (!accessToken) return currentAlertDaysBefore;
 
-    const googleDays = await getReminderEventAlertDays(accessToken, row.calendarId, row.googleEventId);
+    const googleDays = await getReminderEventAlertDays(
+      accessToken,
+      row.calendarId,
+      row.googleEventId,
+    );
     if (!googleDays || googleDays.length === 0) return currentAlertDaysBefore;
 
     const sameSet =
       googleDays.length === currentAlertDaysBefore.length &&
-      [...googleDays].sort().every((d, i) => d === [...currentAlertDaysBefore].sort()[i]);
+      [...googleDays]
+        .sort()
+        .every((d, i) => d === [...currentAlertDaysBefore].sort()[i]);
     if (sameSet) return currentAlertDaysBefore;
 
     await db
@@ -234,8 +252,14 @@ router.get("/reminders", async (req, res) => {
 // GET /trips/:id/reminders
 router.get("/trips/:id/reminders", async (req, res) => {
   const tripId = parseInt(req.params.id, 10);
-  if (isNaN(tripId)) { res.status(400).json({ error: "Invalid id" }); return; }
-  if (!(await tripExists(tripId))) { res.status(404).json({ error: "Not found" }); return; }
+  if (isNaN(tripId)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  if (!(await tripExists(tripId))) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
 
   const rows = await db
     .select()
@@ -250,12 +274,18 @@ router.get("/trips/:id/reminders", async (req, res) => {
 router.post("/trips/:id/reminders", async (req, res) => {
   const userId = req.session.userId!;
   const tripId = parseInt(req.params.id, 10);
-  if (isNaN(tripId)) { res.status(400).json({ error: "Invalid id" }); return; }
+  if (isNaN(tripId)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
   const [trip] = await db
     .select({ id: travelsTrips.id, title: travelsTrips.title })
     .from(travelsTrips)
     .where(eq(travelsTrips.id, tripId));
-  if (!trip) { res.status(404).json({ error: "Not found" }); return; }
+  if (!trip) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
 
   const body = CreateReminderBody.parse(req.body);
   const syncToCalendar = body.syncToCalendar ?? true;
@@ -270,7 +300,9 @@ router.post("/trips/:id/reminders", async (req, res) => {
       done: false,
       recipientEmails: body.recipientEmails ?? [],
       syncToCalendar,
-      ...(body.alertDaysBefore !== undefined ? { alertDaysBefore: body.alertDaysBefore } : {}),
+      ...(body.alertDaysBefore !== undefined
+        ? { alertDaysBefore: body.alertDaysBefore }
+        : {}),
     })
     .returning();
 
@@ -293,7 +325,10 @@ router.post("/trips/:id/reminders", async (req, res) => {
 router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
   const tripId = parseInt(req.params.id, 10);
   const reminderId = parseInt(req.params.reminderId, 10);
-  if (isNaN(tripId) || isNaN(reminderId)) { res.status(400).json({ error: "Invalid id" }); return; }
+  if (isNaN(tripId) || isNaN(reminderId)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
 
   const body = UpdateReminderBody.parse(req.body);
   const updateData: Record<string, unknown> = {};
@@ -301,9 +336,12 @@ router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
   if (body.description !== undefined) updateData.description = body.description;
   if (body.dueDate !== undefined) updateData.dueDate = body.dueDate;
   if (body.done !== undefined) updateData.done = body.done;
-  if (body.recipientEmails !== undefined) updateData.recipientEmails = body.recipientEmails;
-  if (body.syncToCalendar !== undefined) updateData.syncToCalendar = body.syncToCalendar;
-  if (body.alertDaysBefore !== undefined) updateData.alertDaysBefore = body.alertDaysBefore;
+  if (body.recipientEmails !== undefined)
+    updateData.recipientEmails = body.recipientEmails;
+  if (body.syncToCalendar !== undefined)
+    updateData.syncToCalendar = body.syncToCalendar;
+  if (body.alertDaysBefore !== undefined)
+    updateData.alertDaysBefore = body.alertDaysBefore;
 
   const [updated] = await db
     .update(travelsReminders)
@@ -316,7 +354,10 @@ router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
     )
     .returning();
 
-  if (!updated) { res.status(404).json({ error: "Not found" }); return; }
+  if (!updated) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
 
   if (
     body.title !== undefined ||
@@ -332,7 +373,9 @@ router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
       .where(eq(travelsTrips.id, tripId));
     const tripTitle = trip?.title ?? "Trip";
 
-    const target = updated.syncToCalendar ? await getReminderSyncTarget() : null;
+    const target = updated.syncToCalendar
+      ? await getReminderSyncTarget()
+      : null;
     await syncReminderCalendarEvents(
       updated.id,
       tripTitle,
@@ -350,7 +393,10 @@ router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
 router.delete("/trips/:id/reminders/:reminderId", async (req, res) => {
   const tripId = parseInt(req.params.id, 10);
   const reminderId = parseInt(req.params.reminderId, 10);
-  if (isNaN(tripId) || isNaN(reminderId)) { res.status(400).json({ error: "Invalid id" }); return; }
+  if (isNaN(tripId) || isNaN(reminderId)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
 
   const [existing] = await db
     .select({ id: travelsReminders.id })
@@ -362,7 +408,10 @@ router.delete("/trips/:id/reminders/:reminderId", async (req, res) => {
       ),
     );
 
-  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (!existing) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
 
   await deleteAllReminderCalendarEvents(existing.id);
 

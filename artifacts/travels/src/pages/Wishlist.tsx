@@ -91,7 +91,10 @@ function getContentBlocks(doc: Document): Element[] {
 }
 
 /** Merge saved dates with new HTML: keep old dates by index, assign today to new blocks. */
-function mergeDates(newHtml: string, oldDates: (string | null)[]): (string | null)[] {
+function mergeDates(
+  newHtml: string,
+  oldDates: (string | null)[],
+): (string | null)[] {
   if (!newHtml?.trim()) return [];
   try {
     const doc = new DOMParser().parseFromString(newHtml, "text/html");
@@ -120,9 +123,10 @@ function buildDisplayHtml(notes: WishlistNotes): string {
       const d = dates[i];
       if (!d) return;
       // For <li>, append inside its inner <p> so the span stays inline
-      const target = block.tagName.toLowerCase() === "li"
-        ? (block.querySelector("p") ?? block)
-        : block;
+      const target =
+        block.tagName.toLowerCase() === "li"
+          ? (block.querySelector("p") ?? block)
+          : block;
       const span = doc.createElement("span");
       span.className = "note-date";
       span.textContent = ` (${d})`;
@@ -153,9 +157,10 @@ function ToolBtn({
       title={title}
       onClick={onClick}
       className={`flex items-center justify-center w-7 h-7 rounded text-sm transition-colors
-        ${active
-          ? "bg-primary text-primary-foreground"
-          : "text-muted-foreground hover:text-foreground hover:bg-muted"
+        ${
+          active
+            ? "bg-primary text-primary-foreground"
+            : "text-muted-foreground hover:text-foreground hover:bg-muted"
         }`}
     >
       {children}
@@ -180,7 +185,12 @@ function NoteEditor({
 }) {
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ heading: false, codeBlock: false, code: false, blockquote: false }),
+      StarterKit.configure({
+        heading: false,
+        codeBlock: false,
+        code: false,
+        blockquote: false,
+      }),
       UnderlineExt,
       Highlight.configure({ multicolor: false }),
       TextAlign.configure({ types: ["paragraph", "listItem"] }),
@@ -204,37 +214,73 @@ function NoteEditor({
     <div className="tiptap-wishlist mt-1.5 rounded-lg border border-primary/40 bg-background shadow-sm overflow-hidden">
       {/* Toolbar */}
       <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-border/50 bg-muted/30 flex-wrap">
-        <ToolBtn title="Bold" active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}>
+        <ToolBtn
+          title="Bold"
+          active={editor.isActive("bold")}
+          onClick={() => editor.chain().focus().toggleBold().run()}
+        >
           <Bold className="w-3.5 h-3.5" strokeWidth={2.5} />
         </ToolBtn>
-        <ToolBtn title="Italic" active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()}>
+        <ToolBtn
+          title="Italic"
+          active={editor.isActive("italic")}
+          onClick={() => editor.chain().focus().toggleItalic().run()}
+        >
           <Italic className="w-3.5 h-3.5" />
         </ToolBtn>
-        <ToolBtn title="Underline" active={editor.isActive("underline")} onClick={() => editor.chain().focus().toggleUnderline().run()}>
+        <ToolBtn
+          title="Underline"
+          active={editor.isActive("underline")}
+          onClick={() => editor.chain().focus().toggleUnderline().run()}
+        >
           <Underline className="w-3.5 h-3.5" />
         </ToolBtn>
-        <ToolBtn title="Highlight" active={editor.isActive("highlight")} onClick={() => editor.chain().focus().toggleHighlight().run()}>
+        <ToolBtn
+          title="Highlight"
+          active={editor.isActive("highlight")}
+          onClick={() => editor.chain().focus().toggleHighlight().run()}
+        >
           <Highlighter className="w-3.5 h-3.5" />
         </ToolBtn>
 
         <Divider />
 
-        <ToolBtn title="Bullet list" active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()}>
+        <ToolBtn
+          title="Bullet list"
+          active={editor.isActive("bulletList")}
+          onClick={() => editor.chain().focus().toggleBulletList().run()}
+        >
           <List className="w-3.5 h-3.5" />
         </ToolBtn>
-        <ToolBtn title="Numbered list" active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()}>
+        <ToolBtn
+          title="Numbered list"
+          active={editor.isActive("orderedList")}
+          onClick={() => editor.chain().focus().toggleOrderedList().run()}
+        >
           <ListOrdered className="w-3.5 h-3.5" />
         </ToolBtn>
 
         <Divider />
 
-        <ToolBtn title="Align left" active={editor.isActive({ textAlign: "left" })} onClick={() => editor.chain().focus().setTextAlign("left").run()}>
+        <ToolBtn
+          title="Align left"
+          active={editor.isActive({ textAlign: "left" })}
+          onClick={() => editor.chain().focus().setTextAlign("left").run()}
+        >
           <AlignLeft className="w-3.5 h-3.5" />
         </ToolBtn>
-        <ToolBtn title="Align centre" active={editor.isActive({ textAlign: "center" })} onClick={() => editor.chain().focus().setTextAlign("center").run()}>
+        <ToolBtn
+          title="Align centre"
+          active={editor.isActive({ textAlign: "center" })}
+          onClick={() => editor.chain().focus().setTextAlign("center").run()}
+        >
           <AlignCenter className="w-3.5 h-3.5" />
         </ToolBtn>
-        <ToolBtn title="Align right" active={editor.isActive({ textAlign: "right" })} onClick={() => editor.chain().focus().setTextAlign("right").run()}>
+        <ToolBtn
+          title="Align right"
+          active={editor.isActive({ textAlign: "right" })}
+          onClick={() => editor.chain().focus().setTextAlign("right").run()}
+        >
           <AlignRight className="w-3.5 h-3.5" />
         </ToolBtn>
 
@@ -268,7 +314,8 @@ function WishlistRow({ item }: { item: WishlistItem }) {
   const removeItem = useDeleteWishlistItem();
   const [editing, setEditing] = useState(false);
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: getListWishlistQueryKey() });
+  const invalidate = () =>
+    qc.invalidateQueries({ queryKey: getListWishlistQueryKey() });
 
   const notes = parseNotes(item.notes);
   const displayHtml = buildDisplayHtml(notes);
@@ -280,7 +327,10 @@ function WishlistRow({ item }: { item: WishlistItem }) {
       updateItem.mutate(
         { id: item.id, body: { notes: value } },
         {
-          onSuccess: () => { invalidate(); setEditing(false); },
+          onSuccess: () => {
+            invalidate();
+            setEditing(false);
+          },
           onError: () => toast.error("Failed to save note"),
         },
       );
@@ -290,7 +340,10 @@ function WishlistRow({ item }: { item: WishlistItem }) {
 
   function handleDelete() {
     removeItem.mutate(item.id, {
-      onSuccess: () => { invalidate(); toast.success("Removed"); },
+      onSuccess: () => {
+        invalidate();
+        toast.success("Removed");
+      },
       onError: () => toast.error("Failed to remove"),
     });
   }
@@ -301,7 +354,9 @@ function WishlistRow({ item }: { item: WishlistItem }) {
 
       <div className="flex-1 min-w-0 space-y-2">
         <div className="flex items-start justify-between gap-2">
-          <p className="font-medium text-foreground leading-snug">{item.destination}</p>
+          <p className="font-medium text-foreground leading-snug">
+            {item.destination}
+          </p>
           <button
             onClick={handleDelete}
             className="shrink-0 p-1 text-muted-foreground hover:text-destructive transition-colors rounded hover:bg-destructive/10 opacity-0 group-hover:opacity-100"
@@ -313,10 +368,13 @@ function WishlistRow({ item }: { item: WishlistItem }) {
         {item.targetDate && (
           <p className="text-xs text-muted-foreground flex items-center gap-1">
             <Calendar className="w-3 h-3" />
-            {new Date(item.targetDate + "T00:00:00").toLocaleDateString("en-US", {
-              month: "short",
-              year: "numeric",
-            })}
+            {new Date(item.targetDate + "T00:00:00").toLocaleDateString(
+              "en-US",
+              {
+                month: "short",
+                year: "numeric",
+              },
+            )}
           </p>
         )}
 
@@ -356,7 +414,12 @@ export default function Wishlist() {
   const [newDate, setNewDate] = useState("");
 
   const sortedItems = useMemo(
-    () => [...items].sort((a, b) => a.destination.localeCompare(b.destination, undefined, { sensitivity: "base" })),
+    () =>
+      [...items].sort((a, b) =>
+        a.destination.localeCompare(b.destination, undefined, {
+          sensitivity: "base",
+        }),
+      ),
     [items],
   );
 
@@ -364,12 +427,18 @@ export default function Wishlist() {
     "wishlist",
     `Viewing wishlist with ${items.length} destination(s): ${sortedItems
       .slice(0, 15)
-      .map((i) => `${i.destination} (wishlistId: ${i.id}${i.done ? ", done" : ""})`)
+      .map(
+        (i) =>
+          `${i.destination} (wishlistId: ${i.id}${i.done ? ", done" : ""})`,
+      )
       .join(", ")}.` +
-      (newDest.trim() ? ` User is currently typing a new wishlist entry: "${newDest.trim()}"${newDate ? ` targeting ${newDate}` : ""}.` : ""),
+      (newDest.trim()
+        ? ` User is currently typing a new wishlist entry: "${newDest.trim()}"${newDate ? ` targeting ${newDate}` : ""}.`
+        : ""),
   );
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: getListWishlistQueryKey() });
+  const invalidate = () =>
+    qc.invalidateQueries({ queryKey: getListWishlistQueryKey() });
 
   function handleAdd() {
     const dest = newDest.trim();
@@ -396,7 +465,9 @@ export default function Wishlist() {
           Wishlist
         </h1>
         <p className="text-muted-foreground mt-1">
-          {isLoading ? "Loading…" : `${items.length} place${items.length !== 1 ? "s" : ""} to visit`}
+          {isLoading
+            ? "Loading…"
+            : `${items.length} place${items.length !== 1 ? "s" : ""} to visit`}
         </p>
       </div>
 
@@ -416,7 +487,10 @@ export default function Wishlist() {
               onChange={(e) => setNewDate(e.target.value)}
               className="sm:w-44"
             />
-            <Button onClick={handleAdd} disabled={!newDest.trim() || create.isPending}>
+            <Button
+              onClick={handleAdd}
+              disabled={!newDest.trim() || create.isPending}
+            >
               <Plus className="w-4 h-4 mr-1.5" />
               Add
             </Button>
@@ -433,7 +507,9 @@ export default function Wishlist() {
       ) : items.length === 0 ? (
         <div className="text-center py-12">
           <Star className="w-8 h-8 text-muted-foreground mx-auto mb-3 opacity-40" />
-          <p className="text-muted-foreground">No destinations yet — add some places you want to visit!</p>
+          <p className="text-muted-foreground">
+            No destinations yet — add some places you want to visit!
+          </p>
         </div>
       ) : (
         <div className="space-y-2">

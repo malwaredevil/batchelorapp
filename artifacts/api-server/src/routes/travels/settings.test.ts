@@ -104,13 +104,18 @@ beforeEach(() => {
 
 describe("GET /api/travels/settings", () => {
   it("returns reminderEmail and timezone for the current user", async () => {
-    selectQueue.push([{ travelsReminderEmail: "me@example.com", timezone: "America/New_York" }]);
+    selectQueue.push([
+      { travelsReminderEmail: "me@example.com", timezone: "America/New_York" },
+    ]);
     const app = await buildApp();
 
     const res = await request(app).get("/api/travels/settings");
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ reminderEmail: "me@example.com", timezone: "America/New_York" });
+    expect(res.body).toEqual({
+      reminderEmail: "me@example.com",
+      timezone: "America/New_York",
+    });
   });
 
   it("defaults both fields to null when the user row is missing values", async () => {
@@ -162,7 +167,9 @@ describe("PUT /api/travels/settings/timezone", () => {
   it("rejects a missing timezone field", async () => {
     const app = await buildApp();
 
-    const res = await request(app).put("/api/travels/settings/timezone").send({});
+    const res = await request(app)
+      .put("/api/travels/settings/timezone")
+      .send({});
 
     expect(res.status).toBe(400);
   });

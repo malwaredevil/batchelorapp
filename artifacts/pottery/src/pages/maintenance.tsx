@@ -316,7 +316,9 @@ export default function Maintenance() {
               </span>
               <button
                 type="button"
-                onClick={() => { stopRequestedRef.current = true; }}
+                onClick={() => {
+                  stopRequestedRef.current = true;
+                }}
                 className="flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                 aria-label="Stop after current batch finishes"
               >

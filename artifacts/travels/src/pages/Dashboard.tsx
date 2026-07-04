@@ -15,12 +15,30 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Plane, MapPin, CheckCircle, Calendar, Clock, ArrowRight, Moon, Bell, Square, Edit2, X } from "lucide-react";
+import {
+  Plane,
+  MapPin,
+  CheckCircle,
+  Calendar,
+  Clock,
+  ArrowRight,
+  Moon,
+  Bell,
+  Square,
+  Edit2,
+  X,
+} from "lucide-react";
 import TripTimeline from "@/components/TripTimeline";
 import { ReminderEditDialog } from "@/components/ReminderEditDialog";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 
-const STATUS_ORDER: TripStatus[] = ["active", "booked", "planning", "wishlist", "completed"];
+const STATUS_ORDER: TripStatus[] = [
+  "active",
+  "booked",
+  "planning",
+  "wishlist",
+  "completed",
+];
 
 const STATUS_LABELS: Record<TripStatus, string> = {
   wishlist: "Wishlist",
@@ -31,22 +49,36 @@ const STATUS_LABELS: Record<TripStatus, string> = {
 };
 
 const STATUS_COLORS: Record<TripStatus, string> = {
-  wishlist:  "bg-yellow-50 text-yellow-700 border-yellow-200",
-  planning:  "bg-orange-50 text-orange-700 border-orange-200",
-  booked:    "bg-green-50  text-green-700  border-green-200",
-  active:    "bg-orange-50 text-orange-700 border-orange-200",
+  wishlist: "bg-yellow-50 text-yellow-700 border-yellow-200",
+  planning: "bg-orange-50 text-orange-700 border-orange-200",
+  booked: "bg-green-50  text-green-700  border-green-200",
+  active: "bg-orange-50 text-orange-700 border-orange-200",
   completed: "bg-red-50    text-red-700    border-red-200",
 };
 
-function StatCard({ icon, label, value, href }: { icon: React.ReactNode; label: string; value: string | number; href?: string }) {
+function StatCard({
+  icon,
+  label,
+  value,
+  href,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string | number;
+  href?: string;
+}) {
   const inner = (
-    <Card className={`border-border/50 transition-colors ${href ? "hover:bg-muted/50 cursor-pointer" : ""}`}>
+    <Card
+      className={`border-border/50 transition-colors ${href ? "hover:bg-muted/50 cursor-pointer" : ""}`}
+    >
       <CardContent className="flex items-center gap-4 py-5">
         <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center text-primary shrink-0">
           {icon}
         </div>
         <div>
-          <p className="text-2xl font-semibold text-foreground leading-none">{value}</p>
+          <p className="text-2xl font-semibold text-foreground leading-none">
+            {value}
+          </p>
           <p className="text-sm text-muted-foreground mt-1">{label}</p>
         </div>
       </CardContent>
@@ -72,10 +104,16 @@ function TripRow({ trip }: { trip: Trip }) {
         <div className="flex items-center gap-3 shrink-0 ml-4">
           {trip.startDate && (
             <span className="text-xs text-muted-foreground hidden sm:block">
-              {new Date(trip.startDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+              {new Date(trip.startDate).toLocaleDateString("en-GB", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              })}
             </span>
           )}
-          <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${STATUS_COLORS[trip.status]}`}>
+          <span
+            className={`text-xs px-2 py-0.5 rounded-full border font-medium ${STATUS_COLORS[trip.status]}`}
+          >
             {STATUS_LABELS[trip.status]}
           </span>
           <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -90,7 +128,9 @@ function daysUntil(dateStr: string): number {
   today.setHours(0, 0, 0, 0);
   const target = new Date(dateStr);
   target.setHours(0, 0, 0, 0);
-  return Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  return Math.round(
+    (target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+  );
 }
 
 export default function Dashboard() {
@@ -101,7 +141,8 @@ export default function Dashboard() {
   const updateReminder = useUpdateReminder();
   const deleteReminder = useDeleteReminder({
     mutation: {
-      onSuccess: () => qc.invalidateQueries({ queryKey: getListAllRemindersQueryKey(true) }),
+      onSuccess: () =>
+        qc.invalidateQueries({ queryKey: getListAllRemindersQueryKey(true) }),
     },
   });
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
@@ -113,7 +154,8 @@ export default function Dashboard() {
       : `Dashboard page (home screen): shows trip stats, a countdown to the next upcoming trip${
           stats?.nextTrip ? ` (${stats.nextTrip.destination})` : ""
         }, ${pendingReminders.length} pending reminder(s), and every trip grouped by status. Trip counts by status: ${STATUS_ORDER.map(
-          (s) => `${STATUS_LABELS[s]}=${trips.filter((t) => t.status === s).length}`,
+          (s) =>
+            `${STATUS_LABELS[s]}=${trips.filter((t) => t.status === s).length}`,
         ).join(", ")}.`,
   );
 
@@ -135,15 +177,18 @@ export default function Dashboard() {
     (s) => groupedTrips[s].length > 0 && s !== "completed",
   );
 
-  const nextTripCountdown =
-    stats?.nextTrip?.startDate ? daysUntil(stats.nextTrip.startDate) : null;
+  const nextTripCountdown = stats?.nextTrip?.startDate
+    ? daysUntil(stats.nextTrip.startDate)
+    : null;
 
   return (
     <div className="space-y-8">
       <div>
         <h1 className="font-serif text-3xl text-foreground">Your Travels</h1>
         <p className="text-muted-foreground mt-1">
-          {statsLoading ? "Loading..." : "A quiet record of adventures past and future."}
+          {statsLoading
+            ? "Loading..."
+            : "A quiet record of adventures past and future."}
         </p>
       </div>
 
@@ -181,7 +226,8 @@ export default function Dashboard() {
           <CardHeader className="pb-2 pt-4 px-4">
             <CardTitle className="text-sm font-semibold flex items-center gap-2 text-yellow-800 dark:text-yellow-300">
               <Bell className="w-4 h-4" />
-              {pendingReminders.length} pending reminder{pendingReminders.length !== 1 ? "s" : ""}
+              {pendingReminders.length} pending reminder
+              {pendingReminders.length !== 1 ? "s" : ""}
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-3 space-y-1.5">
@@ -195,8 +241,17 @@ export default function Dashboard() {
                     title="Mark as done"
                     onClick={() => {
                       updateReminder.mutate(
-                        { tripId: r.tripId, reminderId: r.id, body: { done: true } },
-                        { onSuccess: () => qc.invalidateQueries({ queryKey: getListAllRemindersQueryKey(true) }) },
+                        {
+                          tripId: r.tripId,
+                          reminderId: r.id,
+                          body: { done: true },
+                        },
+                        {
+                          onSuccess: () =>
+                            qc.invalidateQueries({
+                              queryKey: getListAllRemindersQueryKey(true),
+                            }),
+                        },
                       );
                     }}
                   >
@@ -219,9 +274,14 @@ export default function Dashboard() {
                     )}
                   </div>
                   {r.dueDate && (
-                    <span className={`text-xs shrink-0 ${overdue ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
+                    <span
+                      className={`text-xs shrink-0 ${overdue ? "text-red-600 font-semibold" : "text-muted-foreground"}`}
+                    >
                       {overdue ? "Overdue · " : ""}
-                      {new Date(r.dueDate).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                      {new Date(r.dueDate).toLocaleDateString("en-GB", {
+                        day: "numeric",
+                        month: "short",
+                      })}
                     </span>
                   )}
                   <button
@@ -234,7 +294,12 @@ export default function Dashboard() {
                   <button
                     className="shrink-0 text-yellow-700/60 hover:text-destructive dark:text-yellow-400/60"
                     title="Delete reminder"
-                    onClick={() => deleteReminder.mutate({ tripId: r.tripId, reminderId: r.id })}
+                    onClick={() =>
+                      deleteReminder.mutate({
+                        tripId: r.tripId,
+                        reminderId: r.id,
+                      })
+                    }
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -252,7 +317,9 @@ export default function Dashboard() {
       <ReminderEditDialog
         reminder={editingReminder}
         open={!!editingReminder}
-        onOpenChange={(open) => { if (!open) setEditingReminder(null); }}
+        onOpenChange={(open) => {
+          if (!open) setEditingReminder(null);
+        }}
       />
 
       {/* Next trip countdown */}
@@ -273,11 +340,14 @@ export default function Dashboard() {
                 </p>
                 <p className="text-sm text-muted-foreground">
                   {stats.nextTrip.destination} &middot;{" "}
-                  {new Date(stats.nextTrip.startDate).toLocaleDateString("en-GB", {
-                    weekday: "long",
-                    day: "numeric",
-                    month: "long",
-                  })}
+                  {new Date(stats.nextTrip.startDate).toLocaleDateString(
+                    "en-GB",
+                    {
+                      weekday: "long",
+                      day: "numeric",
+                      month: "long",
+                    },
+                  )}
                 </p>
               </div>
               <ArrowRight className="w-4 h-4 text-muted-foreground/50 shrink-0" />
@@ -342,7 +412,8 @@ export default function Dashboard() {
                     <div className="px-4 py-3">
                       <Link href="/trips?status=completed">
                         <span className="text-sm text-primary hover:underline">
-                          View all {groupedTrips.completed.length} completed trips
+                          View all {groupedTrips.completed.length} completed
+                          trips
                         </span>
                       </Link>
                     </div>
@@ -356,7 +427,9 @@ export default function Dashboard() {
 
       {/* Year-by-year summary */}
       {(() => {
-        const completed = trips.filter((t) => t.status === "completed" && t.startDate);
+        const completed = trips.filter(
+          (t) => t.status === "completed" && t.startDate,
+        );
         if (completed.length === 0) return null;
 
         const byYear: Record<number, { trips: Trip[]; nights: number }> = {};
@@ -366,7 +439,9 @@ export default function Dashboard() {
           byYear[year].trips.push(t);
           if (t.endDate && t.startDate) {
             const nights = Math.round(
-              (new Date(t.endDate).getTime() - new Date(t.startDate).getTime()) / 86400000,
+              (new Date(t.endDate).getTime() -
+                new Date(t.startDate).getTime()) /
+                86400000,
             );
             if (nights > 0) byYear[year].nights += nights;
           }
@@ -383,15 +458,20 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {years.map((year) => {
                 const { trips: yTrips, nights } = byYear[year];
-                const destinations = [...new Set(yTrips.map((t) => t.destination))];
+                const destinations = [
+                  ...new Set(yTrips.map((t) => t.destination)),
+                ];
                 return (
                   <Card key={year} className="border-border/50">
                     <CardContent className="py-4">
-                      <p className="font-semibold text-foreground text-lg">{year}</p>
+                      <p className="font-semibold text-foreground text-lg">
+                        {year}
+                      </p>
                       <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Plane className="w-3.5 h-3.5" />
-                          {yTrips.length} {yTrips.length === 1 ? "trip" : "trips"}
+                          {yTrips.length}{" "}
+                          {yTrips.length === 1 ? "trip" : "trips"}
                         </span>
                         {nights > 0 && (
                           <span className="flex items-center gap-1">
@@ -402,7 +482,9 @@ export default function Dashboard() {
                       </div>
                       <div className="flex flex-wrap gap-1 mt-2.5">
                         {destinations.map((d) => {
-                          const tripsForTag = yTrips.filter((t) => t.destination === d);
+                          const tripsForTag = yTrips.filter(
+                            (t) => t.destination === d,
+                          );
                           const href =
                             tripsForTag.length === 1
                               ? `/trips/${tripsForTag[0]!.id}`
@@ -426,9 +508,7 @@ export default function Dashboard() {
       })()}
 
       {/* ── Trip Timeline ───────────────────────────── */}
-      {!tripsLoading && trips.length > 0 && (
-        <TripTimeline trips={trips} />
-      )}
+      {!tripsLoading && trips.length > 0 && <TripTimeline trips={trips} />}
     </div>
   );
 }

@@ -216,8 +216,7 @@ export default function BulkAddFabric() {
                 {item.status === "done" && (
                   <CheckCircle2 className="h-5 w-5 shrink-0 text-green-500" />
                 )}
-                {(item.status === "processing" ||
-                  item.status === "queued") && (
+                {(item.status === "processing" || item.status === "queued") && (
                   <Loader2 className="h-5 w-5 shrink-0 animate-spin text-primary" />
                 )}
                 {item.status === "error" && (

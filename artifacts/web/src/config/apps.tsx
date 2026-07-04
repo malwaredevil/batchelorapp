@@ -1,7 +1,26 @@
 import {
-  Wind, Package, Shirt, ShoppingBag, Activity,
-  FlaskConical, Scissors, Layers, Zap, Camera, FileText, Clock,
-  Target, Star, Image, BookOpen, Link, Rss, Globe, Plane, Bell, MapPin,
+  Wind,
+  Package,
+  Shirt,
+  ShoppingBag,
+  Activity,
+  FlaskConical,
+  Scissors,
+  Layers,
+  Zap,
+  Camera,
+  FileText,
+  Clock,
+  Target,
+  Star,
+  Image,
+  BookOpen,
+  Link,
+  Rss,
+  Globe,
+  Plane,
+  Bell,
+  MapPin,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -46,11 +65,7 @@ export type AppEntry = {
   description: string;
 };
 
-export type WidgetCategory =
-  | "collections"
-  | "tools"
-  | "media"
-  | "inspiration";
+export type WidgetCategory = "collections" | "tools" | "media" | "inspiration";
 
 export type WidgetEntry = {
   id: string;
@@ -118,7 +133,8 @@ export const WIDGETS: WidgetEntry[] = [
   {
     id: "pottery-stats",
     title: "Pottery Stats",
-    description: "Live piece counts, unique items, and category breakdown from your pottery collection.",
+    description:
+      "Live piece counts, unique items, and category breakdown from your pottery collection.",
     icon: Package,
     category: "collections",
     body: <PotteryStatsWidget />,
@@ -126,7 +142,8 @@ export const WIDGETS: WidgetEntry[] = [
   {
     id: "quilting-stats",
     title: "Quilting Stats",
-    description: "Fabrics, blocks, and layouts at a glance — live from your quilting collection.",
+    description:
+      "Fabrics, blocks, and layouts at a glance — live from your quilting collection.",
     icon: Shirt,
     category: "collections",
     body: <QuiltingStatsWidget />,
@@ -134,7 +151,8 @@ export const WIDGETS: WidgetEntry[] = [
   {
     id: "shopping-list",
     title: "Shopping List",
-    description: "Top wanted and ordered items from your quilting shopping list.",
+    description:
+      "Top wanted and ordered items from your quilting shopping list.",
     icon: ShoppingBag,
     category: "collections",
     body: <ShoppingListWidget />,
@@ -144,7 +162,8 @@ export const WIDGETS: WidgetEntry[] = [
   {
     id: "travel-stats",
     title: "Travel Stats",
-    description: "Live counts of trips, destinations, completed and upcoming — straight from your travels.",
+    description:
+      "Live counts of trips, destinations, completed and upcoming — straight from your travels.",
     icon: Globe,
     category: "collections",
     body: <TravelStatsWidget />,
@@ -152,7 +171,8 @@ export const WIDGETS: WidgetEntry[] = [
   {
     id: "next-trip",
     title: "Next Trip",
-    description: "Your next upcoming trip with destination and a live day countdown.",
+    description:
+      "Your next upcoming trip with destination and a live day countdown.",
     icon: Plane,
     category: "collections",
     body: <NextTripWidget />,
@@ -160,7 +180,8 @@ export const WIDGETS: WidgetEntry[] = [
   {
     id: "trip-reminders",
     title: "Trip Reminders",
-    description: "Upcoming pre-departure reminders across all your planned trips.",
+    description:
+      "Upcoming pre-departure reminders across all your planned trips.",
     icon: Bell,
     category: "collections",
     body: <TripRemindersWidget />,
@@ -176,7 +197,8 @@ export const WIDGETS: WidgetEntry[] = [
   {
     id: "activity",
     title: "Recent Activity",
-    description: "Latest additions and edits across both your pottery and quilting collections.",
+    description:
+      "Latest additions and edits across both your pottery and quilting collections.",
     icon: Activity,
     category: "collections",
     body: <ActivityWidget />,
@@ -200,7 +222,8 @@ export const WIDGETS: WidgetEntry[] = [
   {
     id: "fabric-stash",
     title: "Fabric Stash",
-    description: "A quick count of your fabric stash with a direct link to browse or add.",
+    description:
+      "A quick count of your fabric stash with a direct link to browse or add.",
     icon: Shirt,
     category: "collections",
     body: <FabricStashWidget />,
@@ -208,7 +231,8 @@ export const WIDGETS: WidgetEntry[] = [
   {
     id: "blocks",
     title: "Block Designer",
-    description: "How many blocks you've designed, with quick access to create a new one.",
+    description:
+      "How many blocks you've designed, with quick access to create a new one.",
     icon: Scissors,
     category: "collections",
     body: <BlockDesignerWidget />,
@@ -216,7 +240,8 @@ export const WIDGETS: WidgetEntry[] = [
   {
     id: "layouts",
     title: "Quilt Layouts",
-    description: "Number of layouts planned, with a direct link to the layout composer.",
+    description:
+      "Number of layouts planned, with a direct link to the layout composer.",
     icon: Layers,
     category: "collections",
     body: <LayoutsWidget />,
@@ -224,7 +249,8 @@ export const WIDGETS: WidgetEntry[] = [
   {
     id: "photo-of-day",
     title: "Photo of the Day",
-    description: "A random piece from your pottery collection as daily inspiration.",
+    description:
+      "A random piece from your pottery collection as daily inspiration.",
     icon: Image,
     category: "collections",
     body: <PhotoOfDayWidget />,
@@ -234,7 +260,8 @@ export const WIDGETS: WidgetEntry[] = [
   {
     id: "quick-add",
     title: "Quick Add",
-    description: "One-tap buttons to add a pottery piece, fabric, block, or use the AI camera.",
+    description:
+      "One-tap buttons to add a pottery piece, fabric, block, or use the AI camera.",
     icon: Zap,
     category: "tools",
     body: <QuickAddWidget />,
@@ -242,7 +269,8 @@ export const WIDGETS: WidgetEntry[] = [
   {
     id: "ai-search",
     title: "AI Search",
-    description: '"Do I own this?" — photo or text search across both your pottery and fabric collections.',
+    description:
+      '"Do I own this?" — photo or text search across both your pottery and fabric collections.',
     icon: Camera,
     category: "tools",
     body: <AiSearchWidget />,
@@ -250,7 +278,8 @@ export const WIDGETS: WidgetEntry[] = [
   {
     id: "notes",
     title: "Sticky Notes",
-    description: "A small scratchpad — jot ideas, reminders, or glaze recipes on the hub. Saved locally.",
+    description:
+      "A small scratchpad — jot ideas, reminders, or glaze recipes on the hub. Saved locally.",
     icon: FileText,
     category: "tools",
     body: <NotesWidget />,
@@ -266,7 +295,8 @@ export const WIDGETS: WidgetEntry[] = [
   {
     id: "goals",
     title: "Goals",
-    description: "Track personal goals — items to add, yardage to use, layouts to complete.",
+    description:
+      "Track personal goals — items to add, yardage to use, layouts to complete.",
     icon: Target,
     category: "tools",
     body: <GoalsWidget />,
@@ -274,7 +304,8 @@ export const WIDGETS: WidgetEntry[] = [
   {
     id: "maker-links",
     title: "Maker Links",
-    description: "A pinned list of your favourite craft websites, suppliers, and references.",
+    description:
+      "A pinned list of your favourite craft websites, suppliers, and references.",
     icon: Link,
     category: "tools",
     body: <MakerLinksWidget />,
@@ -284,7 +315,8 @@ export const WIDGETS: WidgetEntry[] = [
   {
     id: "weather",
     title: "Local Weather",
-    description: "Current conditions at your studio location — useful for kiln and drying decisions.",
+    description:
+      "Current conditions at your studio location — useful for kiln and drying decisions.",
     icon: Wind,
     category: "media",
     body: <StudioWeather />,
@@ -304,7 +336,8 @@ export const WIDGETS: WidgetEntry[] = [
   {
     id: "glaze-tip",
     title: "Glaze Tip",
-    description: "A rotating ceramic technique tip from a curated library — something new each visit.",
+    description:
+      "A rotating ceramic technique tip from a curated library — something new each visit.",
     icon: FlaskConical,
     category: "inspiration",
     body: <GlazeTipWidget />,
@@ -312,7 +345,8 @@ export const WIDGETS: WidgetEntry[] = [
   {
     id: "pattern-idea",
     title: "Pattern Idea",
-    description: "A curated quilt pattern suggestion — with difficulty level and a link to try it.",
+    description:
+      "A curated quilt pattern suggestion — with difficulty level and a link to try it.",
     icon: Scissors,
     category: "inspiration",
     body: <PatternIdeaWidget />,
@@ -320,7 +354,8 @@ export const WIDGETS: WidgetEntry[] = [
   {
     id: "inspiration",
     title: "Daily Inspiration",
-    description: "A short rotating quote about pottery and quilting craft to start your session.",
+    description:
+      "A short rotating quote about pottery and quilting craft to start your session.",
     icon: BookOpen,
     category: "inspiration",
     body: <InspirationWidget />,

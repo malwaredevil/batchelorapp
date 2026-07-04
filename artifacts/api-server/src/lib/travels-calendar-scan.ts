@@ -17,7 +17,10 @@ import {
   travelsCalendarTripSuggestions,
   travelsTripCalendarEvents,
 } from "@workspace/db";
-import { getAllConnectedCalendars, getValidAccessToken } from "./google-calendar-tokens";
+import {
+  getAllConnectedCalendars,
+  getValidAccessToken,
+} from "./google-calendar-tokens";
 import { listCalendarEvents, type CalendarEvent } from "./google-calendar";
 import { callModel, MODELS } from "./ai-client";
 import { logger } from "./logger";
@@ -115,8 +118,12 @@ export async function scanCalendarForTripSuggestions(): Promise<{
   if (calendars.length === 0) return { scanned: 0, created: 0 };
 
   const now = new Date();
-  const timeMin = new Date(now.getTime() - SCAN_WINDOW_DAYS_PAST * 86_400_000).toISOString();
-  const timeMax = new Date(now.getTime() + SCAN_WINDOW_DAYS_FUTURE * 86_400_000).toISOString();
+  const timeMin = new Date(
+    now.getTime() - SCAN_WINDOW_DAYS_PAST * 86_400_000,
+  ).toISOString();
+  const timeMax = new Date(
+    now.getTime() + SCAN_WINDOW_DAYS_FUTURE * 86_400_000,
+  ).toISOString();
 
   // Track which connected calendar (owner + shared/personal) each event
   // came from, so the resulting suggestion can be scoped to the right
@@ -124,7 +131,10 @@ export async function scanCalendarForTripSuggestions(): Promise<{
   // suggestion visible to other household members.
   const accessTokenByUser = new Map<number, string | null>();
   const events: CalendarEvent[] = [];
-  const eventSource = new Map<string, { userId: number; isFromSharedCalendar: boolean }>();
+  const eventSource = new Map<
+    string,
+    { userId: number; isFromSharedCalendar: boolean }
+  >();
   for (const cal of calendars) {
     let accessToken = accessTokenByUser.get(cal.userId);
     if (accessToken === undefined) {
@@ -133,13 +143,24 @@ export async function scanCalendarForTripSuggestions(): Promise<{
     }
     if (!accessToken) continue;
     try {
-      const calEvents = await listCalendarEvents(accessToken, cal.googleCalendarId, timeMin, timeMax);
+      const calEvents = await listCalendarEvents(
+        accessToken,
+        cal.googleCalendarId,
+        timeMin,
+        timeMax,
+      );
       for (const e of calEvents) {
-        eventSource.set(e.id, { userId: cal.userId, isFromSharedCalendar: cal.isTravelCalendar });
+        eventSource.set(e.id, {
+          userId: cal.userId,
+          isFromSharedCalendar: cal.isTravelCalendar,
+        });
       }
       events.push(...calEvents);
     } catch (err) {
-      logger.warn({ err, calendarId: cal.googleCalendarId }, "travels-calendar-scan: could not list events");
+      logger.warn(
+        { err, calendarId: cal.googleCalendarId },
+        "travels-calendar-scan: could not list events",
+      );
     }
   }
 
@@ -147,9 +168,11 @@ export async function scanCalendarForTripSuggestions(): Promise<{
   // calendar no longer needs a colorId check — a trip-sync-created event on
   // that calendar is already linked via travels_trip_calendar_events.
   const linkedEventIds = new Set(
-    (await db.select({ googleEventId: travelsTripCalendarEvents.googleEventId }).from(
-      travelsTripCalendarEvents,
-    )).map((r) => r.googleEventId),
+    (
+      await db
+        .select({ googleEventId: travelsTripCalendarEvents.googleEventId })
+        .from(travelsTripCalendarEvents)
+    ).map((r) => r.googleEventId),
   );
 
   const candidates = events.filter((e) => !linkedEventIds.has(e.id));
@@ -168,16 +191,23 @@ export async function scanCalendarForTripSuggestions(): Promise<{
   let created = 0;
 
   for (const trip of aiTrips) {
-    const relatedEventIds = (trip.relatedEventIds ?? []).filter((id) => validEventIds.has(id));
+    const relatedEventIds = (trip.relatedEventIds ?? []).filter((id) =>
+      validEventIds.has(id),
+    );
     if (relatedEventIds.length === 0) continue;
 
     // A cluster is treated as shared if any related event came from the
     // Travel calendar; otherwise it's scoped to the owner of the personal
     // calendar the events came from (falling back to the first related
     // event's owner if a cluster somehow spans multiple personal owners).
-    const sources = relatedEventIds.map((id) => eventSource.get(id)).filter((s) => s !== undefined);
+    const sources = relatedEventIds
+      .map((id) => eventSource.get(id))
+      .filter((s) => s !== undefined);
     const isFromSharedCalendar = sources.some((s) => s.isFromSharedCalendar);
-    const ownerUserId = sources.find((s) => !s.isFromSharedCalendar)?.userId ?? sources[0]?.userId ?? null;
+    const ownerUserId =
+      sources.find((s) => !s.isFromSharedCalendar)?.userId ??
+      sources[0]?.userId ??
+      null;
 
     const dedupeKey = dedupeKeyFor(relatedEventIds);
     const result = await db
@@ -200,7 +230,10 @@ export async function scanCalendarForTripSuggestions(): Promise<{
   }
 
   if (created > 0) {
-    logger.info({ created, scanned: events.length }, "travels-calendar-scan: created new suggestions");
+    logger.info(
+      { created, scanned: events.length },
+      "travels-calendar-scan: created new suggestions",
+    );
   }
 
   return { scanned: events.length, created };
@@ -228,5 +261,7 @@ export function startCalendarTripScanScheduler(): void {
 
   interval.unref();
 
-  logger.info("travels-calendar-scan: started (in-process fallback, runs daily)");
+  logger.info(
+    "travels-calendar-scan: started (in-process fallback, runs daily)",
+  );
 }

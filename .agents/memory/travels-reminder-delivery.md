@@ -6,6 +6,7 @@ description: How reliable delivery for scheduled reminder alerts is guaranteed, 
 # Travels reminder email delivery
 
 ## Resend sandbox mode blocks non-owner recipients
+
 This project's Resend account has no verified sending domain, so it runs in
 Resend's default sandbox mode: `resend.emails.send()` only succeeds when
 `to` is the account owner's own signup address. Sends to any other address
@@ -26,6 +27,7 @@ agent can complete unilaterally. Until verified, treat any "email delivered
 to a non-owner address" claim as unverified.
 
 ## Sender addresses / env vars
+
 Reminder alerts send from `RESEND_REMINDER_FROM_EMAIL` (default
 `Batchelor Travels <travel.alert@app.batchelor.app>`); password-reset emails
 send from `RESEND_FROM_EMAIL` (`Batchelor <noreply@app.batchelor.app>`). Both
@@ -41,6 +43,7 @@ Required records for `app.batchelor.app` (host names are relative to the
 `v=spf1 include:amazonses.com ~all`. Region is us-east-1.
 
 ## Delivery must not depend on the web server staying awake
+
 The Travels app deploys as an `autoscale` deployment, which can be fully
 asleep for long stretches. An in-process `setInterval` scheduler inside the
 API server is not sufficient on its own to guarantee a reminder fires on
@@ -55,11 +58,12 @@ same idempotent `travels_reminder_alert_log` dedupe table, and the SQL
 check uses a catch-up range (`due_date BETWEEN CURRENT_DATE AND
 CURRENT_DATE + N days`, not an exact-day match) so a missed run still fires
 next time instead of silently skipping the reminder. A per-recipient retry
-loop only marks an alert as sent once *every* recipient succeeds, so one
+loop only marks an alert as sent once _every_ recipient succeeds, so one
 failing address doesn't block delivery being retried for the rest, and
 vice versa doesn't get marked done if partially failed.
 
 ## `runReminderAlerts()` is one shared function, invoked from three trigger points
+
 `runReminderAlerts()` always scans **all** users'/trips' reminders — it is
 never scoped to a specific caller. It is invoked from: (1) server boot +
 hourly in-process interval, (2) the standalone Scheduled Deployment script,

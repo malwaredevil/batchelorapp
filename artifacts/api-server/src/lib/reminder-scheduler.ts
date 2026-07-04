@@ -1,5 +1,9 @@
 import { pool } from "@workspace/db";
-import { sendReminderAlertEmail, resendConfigured, type ReminderAlertType } from "./email";
+import {
+  sendReminderAlertEmail,
+  resendConfigured,
+  type ReminderAlertType,
+} from "./email";
 import { pullReminderAlertDaysFromCalendar } from "../routes/travels/reminders";
 import { logger } from "./logger";
 
@@ -21,7 +25,11 @@ function alertTypeForDays(days: number): ReminderAlertType {
 // run — skipping the alert entirely or firing it a day early/late.
 export function daysUntilDue(dueDate: string, now: Date = new Date()): number {
   const dueMidnightUtc = new Date(`${dueDate}T00:00:00Z`).getTime();
-  const nowMidnightUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const nowMidnightUtc = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+  );
   return Math.round((dueMidnightUtc - nowMidnightUtc) / 86_400_000);
 }
 
@@ -77,7 +85,8 @@ export async function runReminderAlerts(): Promise<void> {
 
       for (const days of alertDaysBefore) {
         if (dueInDays !== days) continue;
-        const type = alertTypeForDays(days) ?? (`${days}_day` as ReminderAlertType);
+        const type =
+          alertTypeForDays(days) ?? (`${days}_day` as ReminderAlertType);
 
         const { rows: alreadySent } = await client.query<{ id: number }>(
           `SELECT id FROM travels_reminder_alert_log WHERE reminder_id = $1 AND alert_type = $2`,
@@ -121,7 +130,11 @@ export async function runReminderAlerts(): Promise<void> {
           );
 
           logger.info(
-            { reminderId: row.reminder_id, alertType: type, recipientCount: successCount },
+            {
+              reminderId: row.reminder_id,
+              alertType: type,
+              recipientCount: successCount,
+            },
             "reminder-scheduler: alert email(s) sent",
           );
         } else {

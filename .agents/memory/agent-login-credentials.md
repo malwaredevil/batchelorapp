@@ -8,6 +8,7 @@ Preferred method: the dev-only `SCREENSHOT_AUTH_TOKEN` cookie-free bypass. The a
 Fallback method (real credentials): `AGENT_LOGIN_EMAIL` / `AGENT_LOGIN_PASSWORD` secrets (a real account) still exist for flows the token bypass doesn't cover (e.g. `runTest()` interactive login steps, or verifying the password-login path itself). `AGENT_LOGIN_PASSWORD` is not referenced anywhere in code as of the token-bypass work — it's kept only for this manual/interactive fallback.
 
 **How to apply:**
+
 - For screenshots/manual browsing of authenticated pages: use the screenshot-token bypass — check how the frontend/app expects the token wired (query param on first load) rather than defaulting straight to `runTest()`.
 - For `runTest()` test plans needing the real login form: reference the env vars by name in the plan text (e.g. "enter the email from env var AGENT_LOGIN_EMAIL") — do NOT try to read `process.env.AGENT_LOGIN_EMAIL` from the `code_execution` sandbox, it is not populated there.
 - For curl-based API verification: log in via `POST /api/auth/login` with `-c cookies.txt` against `https://$REPLIT_DEV_DOMAIN` (must be HTTPS, not localhost — see session-cookie-https-only.md), then reuse the cookie jar for authenticated requests. The screenshot token can also be sent as an `X-Screenshot-Token` header directly in curl, skipping login entirely.

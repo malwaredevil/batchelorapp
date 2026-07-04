@@ -337,8 +337,7 @@ export async function analyzePotteryZones(
     const rawZones = Array.isArray(raw.zones) ? raw.zones : [];
     const zones: PotterySurfaceZone[] = rawZones
       .filter(
-        (z): z is Record<string, unknown> =>
-          z != null && typeof z === "object",
+        (z): z is Record<string, unknown> => z != null && typeof z === "object",
       )
       .map((z) => ({
         name: asString(z.name) ?? "body",
@@ -348,7 +347,12 @@ export async function analyzePotteryZones(
       }));
 
     const complexity = asString(raw.patternComplexity);
-    const validComplexities = ["plain", "simple", "moderate", "complex"] as const;
+    const validComplexities = [
+      "plain",
+      "simple",
+      "moderate",
+      "complex",
+    ] as const;
     const patternComplexity = validComplexities.includes(
       complexity as (typeof validComplexities)[number],
     )
@@ -411,7 +415,12 @@ export async function locateBackstampAndEnhanceMaker(
       (c, model, tools) =>
         c.chat.completions.create({
           model,
-          ...(tools ? { tools: tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[] } : {}),
+          ...(tools
+            ? {
+                tools:
+                  tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[],
+              }
+            : {}),
           response_format: { type: "json_object" },
           max_tokens: 512,
           messages: [

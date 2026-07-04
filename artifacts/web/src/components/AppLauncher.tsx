@@ -75,7 +75,11 @@ const ADD_ACTIONS = [
 const POTTERY_QUICK_LINKS = [
   { label: "Collection", icon: Package, href: `${base}pottery/` },
   { label: "Compare", icon: Camera, href: `${base}pottery/compare` },
-  { label: "Maintenance", icon: FlaskConical, href: `${base}pottery/maintenance` },
+  {
+    label: "Maintenance",
+    icon: FlaskConical,
+    href: `${base}pottery/maintenance`,
+  },
 ];
 
 const QUILTING_QUICK_LINKS = [
@@ -123,7 +127,9 @@ function WidgetLibraryModal({
     return matchCat && matchSearch;
   });
 
-  const staticEnabledCount = WIDGETS.filter((w) => !w.multi && isStaticEnabled(w.id)).length;
+  const staticEnabledCount = WIDGETS.filter(
+    (w) => !w.multi && isStaticEnabled(w.id),
+  ).length;
 
   return (
     <div
@@ -244,11 +250,17 @@ function WidgetLibraryModal({
                       }`}
                     >
                       {added ? (
-                        <><Check className="w-3 h-3" /> Added — click to remove</>
+                        <>
+                          <Check className="w-3 h-3" /> Added — click to remove
+                        </>
                       ) : isMulti ? (
-                        <><Plus className="w-3 h-3" /> Add another RSS feed</>
+                        <>
+                          <Plus className="w-3 h-3" /> Add another RSS feed
+                        </>
                       ) : (
-                        <><Plus className="w-3 h-3" /> Add to dashboard</>
+                        <>
+                          <Plus className="w-3 h-3" /> Add to dashboard
+                        </>
                       )}
                     </button>
                   </div>
@@ -273,9 +285,20 @@ function AppHeroCard({
   expanded,
   onToggle,
 }: {
-  app: { id: string; name: string; href: string; image: string; updated: string; description: string };
+  app: {
+    id: string;
+    name: string;
+    href: string;
+    image: string;
+    updated: string;
+    description: string;
+  };
   stats: { value: string; label: string }[];
-  quickLinks: { label: string; icon: React.FC<{ className?: string }>; href: string }[];
+  quickLinks: {
+    label: string;
+    icon: React.FC<{ className?: string }>;
+    href: string;
+  }[];
   accentBorderColor: string;
   accentSectionBg: string;
   accentIconColor: string;
@@ -301,7 +324,9 @@ function AppHeroCard({
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
           <div className="absolute bottom-4 left-6 right-6 flex justify-between items-end">
-            <h2 className="text-3xl font-bold text-white tracking-tight">{app.name}</h2>
+            <h2 className="text-3xl font-bold text-white tracking-tight">
+              {app.name}
+            </h2>
             <Badge className="bg-white/20 hover:bg-white/30 text-white backdrop-blur-md border-0">
               {app.updated}
             </Badge>
@@ -316,7 +341,9 @@ function AppHeroCard({
                 key={s.label}
                 className="flex-1 flex flex-col space-y-1 p-3 rounded-lg bg-secondary/50"
               >
-                <span className="text-2xl font-bold text-primary">{s.value}</span>
+                <span className="text-2xl font-bold text-primary">
+                  {s.value}
+                </span>
                 <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
                   {s.label}
                 </span>
@@ -360,7 +387,9 @@ function AppHeroCard({
                   className={`flex flex-col items-center gap-1.5 p-2.5 rounded-lg border bg-card hover:bg-background transition-all text-center ${accentBorderColor}`}
                 >
                   <link.icon className={`w-4 h-4 ${accentIconColor}`} />
-                  <div className="text-xs font-semibold leading-none">{link.label}</div>
+                  <div className="text-xs font-semibold leading-none">
+                    {link.label}
+                  </div>
                 </a>
               ))}
             </div>
@@ -422,23 +451,77 @@ export function AppLauncher() {
   function liveStats(appId: string): { value: string; label: string }[] {
     if (appId === "pottery") {
       return [
-        { value: potteryStatsData?.totalItems != null ? String(potteryStatsData.totalItems) : "—", label: "Total" },
-        { value: potteryStatsData?.uniqueItems != null ? String(potteryStatsData.uniqueItems) : "—", label: "Unique" },
-        { value: potteryCategoriesData != null ? String(potteryCategoriesData.length) : "—", label: "Categories" },
+        {
+          value:
+            potteryStatsData?.totalItems != null
+              ? String(potteryStatsData.totalItems)
+              : "—",
+          label: "Total",
+        },
+        {
+          value:
+            potteryStatsData?.uniqueItems != null
+              ? String(potteryStatsData.uniqueItems)
+              : "—",
+          label: "Unique",
+        },
+        {
+          value:
+            potteryCategoriesData != null
+              ? String(potteryCategoriesData.length)
+              : "—",
+          label: "Categories",
+        },
       ];
     }
     if (appId === "quilting") {
       return [
-        { value: quiltingStatsData?.totalFabrics != null ? String(quiltingStatsData.totalFabrics) : "—", label: "Fabrics" },
-        { value: quiltingStatsData?.totalBlocks != null ? String(quiltingStatsData.totalBlocks) : "—", label: "Blocks" },
-        { value: quiltingStatsData?.totalLayouts != null ? String(quiltingStatsData.totalLayouts) : "—", label: "Layouts" },
+        {
+          value:
+            quiltingStatsData?.totalFabrics != null
+              ? String(quiltingStatsData.totalFabrics)
+              : "—",
+          label: "Fabrics",
+        },
+        {
+          value:
+            quiltingStatsData?.totalBlocks != null
+              ? String(quiltingStatsData.totalBlocks)
+              : "—",
+          label: "Blocks",
+        },
+        {
+          value:
+            quiltingStatsData?.totalLayouts != null
+              ? String(quiltingStatsData.totalLayouts)
+              : "—",
+          label: "Layouts",
+        },
       ];
     }
     if (appId === "travels") {
       return [
-        { value: travelsStatsData?.totalTrips != null ? String(travelsStatsData.totalTrips) : "—", label: "Trips" },
-        { value: travelsStatsData?.completedTrips != null ? String(travelsStatsData.completedTrips) : "—", label: "Done" },
-        { value: travelsStatsData?.upcomingTrips != null ? String(travelsStatsData.upcomingTrips) : "—", label: "Upcoming" },
+        {
+          value:
+            travelsStatsData?.totalTrips != null
+              ? String(travelsStatsData.totalTrips)
+              : "—",
+          label: "Trips",
+        },
+        {
+          value:
+            travelsStatsData?.completedTrips != null
+              ? String(travelsStatsData.completedTrips)
+              : "—",
+          label: "Done",
+        },
+        {
+          value:
+            travelsStatsData?.upcomingTrips != null
+              ? String(travelsStatsData.upcomingTrips)
+              : "—",
+          label: "Upcoming",
+        },
       ];
     }
     const app = APPS.find((a) => a.id === appId);
@@ -462,7 +545,10 @@ export function AppLauncher() {
 
   async function signOut() {
     try {
-      await fetch(`${base}api/auth/logout`, { method: "POST", credentials: "include" });
+      await fetch(`${base}api/auth/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
     } finally {
       window.location.href = base;
     }
@@ -496,15 +582,23 @@ export function AppLauncher() {
               aria-label="Toggle dark mode"
               className="text-muted-foreground hover:text-foreground"
             >
-              {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              {isDark ? (
+                <Sun className="w-5 h-5" />
+              ) : (
+                <Moon className="w-5 h-5" />
+              )}
             </Button>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="flex items-center gap-3 pl-3 border-l border-border outline-none">
                   <div className="flex-col items-end hidden sm:flex">
-                    <span className="text-sm font-medium leading-none">{displayName}</span>
-                    <span className="text-xs text-muted-foreground">{user?.email}</span>
+                    <span className="text-sm font-medium leading-none">
+                      {displayName}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {user?.email}
+                    </span>
                   </div>
                   <Avatar className="h-9 w-9 border border-border">
                     <AvatarFallback className="bg-primary text-primary-foreground">
@@ -517,7 +611,9 @@ export function AppLauncher() {
                 <DropdownMenuLabel>
                   <div className="flex flex-col">
                     <span className="font-medium">{displayName}</span>
-                    <span className="text-xs font-normal text-muted-foreground">{user?.email}</span>
+                    <span className="text-xs font-normal text-muted-foreground">
+                      {user?.email}
+                    </span>
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
@@ -549,7 +645,10 @@ export function AppLauncher() {
               <CommandItem
                 key={app.id}
                 value={app.name}
-                onSelect={() => { setSearchOpen(false); navigate(app.href); }}
+                onSelect={() => {
+                  setSearchOpen(false);
+                  navigate(app.href);
+                }}
               >
                 <LayoutGrid className="w-4 h-4 mr-2" />
                 Open {app.name}
@@ -557,17 +656,45 @@ export function AppLauncher() {
             ))}
           </CommandGroup>
           <CommandGroup heading="Quick actions">
-            <CommandItem value="Add Pottery piece" onSelect={() => { setSearchOpen(false); navigate(`${base}pottery/add`); }}>
-              <Plus className="w-4 h-4 mr-2" />Add Pottery piece
+            <CommandItem
+              value="Add Pottery piece"
+              onSelect={() => {
+                setSearchOpen(false);
+                navigate(`${base}pottery/add`);
+              }}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Pottery piece
             </CommandItem>
-            <CommandItem value="Add Fabric" onSelect={() => { setSearchOpen(false); navigate(`${base}quilting/fabrics/add`); }}>
-              <Plus className="w-4 h-4 mr-2" />Add Fabric
+            <CommandItem
+              value="Add Fabric"
+              onSelect={() => {
+                setSearchOpen(false);
+                navigate(`${base}quilting/fabrics/add`);
+              }}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Fabric
             </CommandItem>
-            <CommandItem value="Do I own this?" onSelect={() => { setSearchOpen(false); navigate(`${base}pottery/compare`); }}>
-              <Camera className="w-4 h-4 mr-2" />Do I own this?
+            <CommandItem
+              value="Do I own this?"
+              onSelect={() => {
+                setSearchOpen(false);
+                navigate(`${base}pottery/compare`);
+              }}
+            >
+              <Camera className="w-4 h-4 mr-2" />
+              Do I own this?
             </CommandItem>
-            <CommandItem value="Shopping List" onSelect={() => { setSearchOpen(false); navigate(`${base}quilting/shopping`); }}>
-              <ShoppingBag className="w-4 h-4 mr-2" />Shopping List
+            <CommandItem
+              value="Shopping List"
+              onSelect={() => {
+                setSearchOpen(false);
+                navigate(`${base}quilting/shopping`);
+              }}
+            >
+              <ShoppingBag className="w-4 h-4 mr-2" />
+              Shopping List
             </CommandItem>
           </CommandGroup>
         </CommandList>
@@ -575,28 +702,34 @@ export function AppLauncher() {
 
       {/* Main content — max-w-6xl matches header */}
       <main className="flex-1 mx-auto w-full max-w-6xl px-4 pb-12 pt-6 space-y-10">
-
         {/* Welcome + actions */}
         <div className="flex flex-col lg:flex-row gap-8 justify-between items-start">
           <div className="space-y-1">
             <h1 className="text-3xl font-bold tracking-tight text-foreground">
               Welcome back, {firstName}.
             </h1>
-            <p className="text-base text-muted-foreground">One account, every collection.</p>
+            <p className="text-base text-muted-foreground">
+              One account, every collection.
+            </p>
           </div>
 
           <div className="flex flex-wrap gap-3">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm">
-                  <Plus className="w-4 h-4 mr-2" />Add Item
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Item
                   <ChevronDown className="w-3.5 h-3.5 ml-1 opacity-70" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 {ADD_ACTIONS.map((a) => (
-                  <DropdownMenuItem key={a.href} onSelect={() => navigate(a.href)}>
-                    <Plus className="w-4 h-4 mr-2 text-muted-foreground" />{a.label}
+                  <DropdownMenuItem
+                    key={a.href}
+                    onSelect={() => navigate(a.href)}
+                  >
+                    <Plus className="w-4 h-4 mr-2 text-muted-foreground" />
+                    {a.label}
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
@@ -605,22 +738,33 @@ export function AppLauncher() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="secondary">
-                  <Camera className="w-4 h-4 mr-2" />Do I own this?
+                  <Camera className="w-4 h-4 mr-2" />
+                  Do I own this?
                   <ChevronDown className="w-3.5 h-3.5 ml-1 opacity-70" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => navigate(`${base}pottery/compare`)}>
-                  <Camera className="w-4 h-4 mr-2 text-muted-foreground" />Pottery piece
+                <DropdownMenuItem
+                  onSelect={() => navigate(`${base}pottery/compare`)}
+                >
+                  <Camera className="w-4 h-4 mr-2 text-muted-foreground" />
+                  Pottery piece
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => navigate(`${base}quilting/compare`)}>
-                  <Camera className="w-4 h-4 mr-2 text-muted-foreground" />Fabric
+                <DropdownMenuItem
+                  onSelect={() => navigate(`${base}quilting/compare`)}
+                >
+                  <Camera className="w-4 h-4 mr-2 text-muted-foreground" />
+                  Fabric
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <Button variant="outline" onClick={() => navigate(`${base}quilting/shopping`)}>
-              <ShoppingBag className="w-4 h-4 mr-2" />Shopping List
+            <Button
+              variant="outline"
+              onClick={() => navigate(`${base}quilting/shopping`)}
+            >
+              <ShoppingBag className="w-4 h-4 mr-2" />
+              Shopping List
             </Button>
           </div>
         </div>
@@ -705,7 +849,10 @@ export function AppLauncher() {
                 onClick={() => setCustomizing((c) => !c)}
               >
                 {customizing ? (
-                  <><Check className="w-4 h-4 mr-1" />Done</>
+                  <>
+                    <Check className="w-4 h-4 mr-1" />
+                    Done
+                  </>
                 ) : (
                   "Customize"
                 )}
@@ -721,7 +868,8 @@ export function AppLauncher() {
               <PlusCircle className="w-8 h-8" />
               <span className="font-medium">Add your first widget</span>
               <span className="text-xs max-w-[200px] text-center">
-                Choose from {WIDGETS.length} widgets — stats, tools, RSS feeds, and more
+                Choose from {WIDGETS.length} widgets — stats, tools, RSS feeds,
+                and more
               </span>
             </button>
           ) : (
@@ -792,7 +940,9 @@ export function AppLauncher() {
                   <PlusCircle className="w-4 h-4" />
                   <span>Add widget</span>
                   <Rss className="w-3.5 h-3.5 opacity-60" />
-                  <span className="text-muted-foreground/60 text-xs">+ RSS feeds</span>
+                  <span className="text-muted-foreground/60 text-xs">
+                    + RSS feeds
+                  </span>
                 </button>
               )}
             </>
@@ -813,10 +963,26 @@ export function AppLauncher() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { title: "Added 'Speckled Mug'", cat: "Pottery", time: "2 hours ago" },
-              { title: "Updated Fabric Stash", cat: "Quilting", time: "Yesterday" },
-              { title: "Added 'Large Serving Bowl'", cat: "Pottery", time: "2 days ago" },
-              { title: "Completed 'Star Pattern'", cat: "Quilting", time: "Last week" },
+              {
+                title: "Added 'Speckled Mug'",
+                cat: "Pottery",
+                time: "2 hours ago",
+              },
+              {
+                title: "Updated Fabric Stash",
+                cat: "Quilting",
+                time: "Yesterday",
+              },
+              {
+                title: "Added 'Large Serving Bowl'",
+                cat: "Pottery",
+                time: "2 days ago",
+              },
+              {
+                title: "Completed 'Star Pattern'",
+                cat: "Quilting",
+                time: "Last week",
+              },
             ].map((item, i) => (
               <div
                 key={i}
@@ -826,10 +992,14 @@ export function AppLauncher() {
                   {item.cat.charAt(0)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{item.title}</p>
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {item.title}
+                  </p>
                   <p className="text-xs text-muted-foreground">{item.cat}</p>
                 </div>
-                <span className="text-xs text-muted-foreground whitespace-nowrap">{item.time}</span>
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  {item.time}
+                </span>
               </div>
             ))}
           </div>

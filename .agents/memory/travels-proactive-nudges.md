@@ -15,9 +15,10 @@ would require diffing to avoid duplicates. A separate table with a unique
 NOTHING`), and a `seen_at` column tracks delivery independently of chat history mutation.
 
 **How to apply:**
+
 - Background job only inserts candidate rows; it never touches the conversation table.
 - The read path that the client already polls/fetches (here: `GET
-  /assistant/conversation`) is responsible for folding unseen rows into the visible
+/assistant/conversation`) is responsible for folding unseen rows into the visible
   chat history and marking them seen, atomically, in the same request — that's the
   single moment a nudge "becomes real" to the user.
 - A separate lightweight `unseen-count` endpoint (not the full conversation) backs a

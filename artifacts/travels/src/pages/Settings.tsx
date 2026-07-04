@@ -1,12 +1,35 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Link } from "wouter";
-import { Mail, Bell, Save, X, Send, CalendarDays, CheckCircle2, XCircle, LogIn, LogOut, Trash2, Plane, Pencil, Plus, Clock, RefreshCw } from "lucide-react";
+import {
+  Mail,
+  Bell,
+  Save,
+  X,
+  Send,
+  CalendarDays,
+  CheckCircle2,
+  XCircle,
+  LogIn,
+  LogOut,
+  Trash2,
+  Plane,
+  Pencil,
+  Plus,
+  Clock,
+  RefreshCw,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   useGetTravelsSettings,
   useUpdateTravelsSettings,
@@ -40,7 +63,11 @@ import {
   type ActionConfirmationMode,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ElaineAvatar, ElaineName, ElaineWordmark } from "@/components/assistant/ElaineAvatar";
+import {
+  ElaineAvatar,
+  ElaineName,
+  ElaineWordmark,
+} from "@/components/assistant/ElaineAvatar";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 
 export default function Settings() {
@@ -103,7 +130,8 @@ export default function Settings() {
               : "Reminder email cleared",
           );
         },
-        onError: () => toast.error("Could not save settings. Please try again."),
+        onError: () =>
+          toast.error("Could not save settings. Please try again."),
       },
     );
   }
@@ -124,7 +152,9 @@ export default function Settings() {
     <div className="space-y-6 max-w-lg">
       <div>
         <h1 className="font-serif text-3xl text-foreground">Settings</h1>
-        <p className="text-muted-foreground mt-1">Manage your travel notification preferences.</p>
+        <p className="text-muted-foreground mt-1">
+          Manage your travel notification preferences.
+        </p>
       </div>
 
       <div className="rounded-xl border border-card-border bg-card p-6 space-y-5">
@@ -135,7 +165,8 @@ export default function Settings() {
           <div>
             <h2 className="font-semibold text-foreground">Reminder alerts</h2>
             <p className="text-sm text-muted-foreground">
-              Receive emails when a reminder is 14 days, 7 days, and 3 days away.
+              Receive emails when a reminder is 14 days, 7 days, and 3 days
+              away.
             </p>
           </div>
         </div>
@@ -177,15 +208,19 @@ export default function Settings() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Leave blank to disable email alerts. Only reminders with a due date set will trigger emails.
+            Leave blank to disable email alerts. Only reminders with a due date
+            set will trigger emails.
           </p>
         </div>
 
         <div className="flex items-center justify-between gap-3 rounded-lg border border-card-border p-4">
           <div>
-            <p className="text-sm font-medium text-foreground">Test email delivery</p>
+            <p className="text-sm font-medium text-foreground">
+              Test email delivery
+            </p>
             <p className="text-xs text-muted-foreground">
-              Sends a sample reminder email to your own account address right now.
+              Sends a sample reminder email to your own account address right
+              now.
             </p>
           </div>
           <Button
@@ -200,12 +235,14 @@ export default function Settings() {
         </div>
 
         <div className="rounded-lg bg-muted/50 p-4 space-y-1.5">
-          <p className="text-xs font-medium text-foreground">When you'll receive alerts</p>
+          <p className="text-xs font-medium text-foreground">
+            When you'll receive alerts
+          </p>
           <ul className="text-xs text-muted-foreground space-y-1">
             {[
               { label: "2 weeks before", detail: "14 days" },
-              { label: "1 week before",  detail: "7 days"  },
-              { label: "3 days before",  detail: "3 days"  },
+              { label: "1 week before", detail: "7 days" },
+              { label: "3 days before", detail: "3 days" },
             ].map(({ label, detail }) => (
               <li key={detail} className="flex items-center gap-2">
                 <span className="h-1.5 w-1.5 rounded-full bg-sky-400 shrink-0" />
@@ -214,7 +251,8 @@ export default function Settings() {
             ))}
           </ul>
           <p className="text-xs text-muted-foreground pt-1">
-            Each alert fires once per reminder. Marking a reminder as done stops further alerts.
+            Each alert fires once per reminder. Marking a reminder as done stops
+            further alerts.
           </p>
         </div>
       </div>
@@ -279,7 +317,8 @@ function TimezoneCard() {
           );
           toast.success("Timezone updated");
         },
-        onError: () => toast.error("Could not update timezone. Please try again."),
+        onError: () =>
+          toast.error("Could not update timezone. Please try again."),
       },
     );
   }
@@ -293,7 +332,8 @@ function TimezoneCard() {
         <div>
           <h2 className="font-semibold text-foreground">Your timezone</h2>
           <p className="text-sm text-muted-foreground">
-            Used to show flight, train, and hotel times consistently across your trips.
+            Used to show flight, train, and hotel times consistently across your
+            trips.
           </p>
         </div>
       </div>
@@ -306,7 +346,11 @@ function TimezoneCard() {
           disabled={isLoading || updateTimezone.isPending}
         >
           <SelectTrigger id="timezone-select" className="w-full sm:w-72">
-            <SelectValue placeholder={browserTz ? `Not set (detected: ${browserTz})` : "Not set"} />
+            <SelectValue
+              placeholder={
+                browserTz ? `Not set (detected: ${browserTz})` : "Not set"
+              }
+            />
           </SelectTrigger>
           <SelectContent>
             {timezoneOptions.map((tz) => (
@@ -370,8 +414,8 @@ function GmailSyncCard() {
         <div>
           <h2 className="font-semibold text-foreground">Gmail scanning</h2>
           <p className="text-sm text-muted-foreground">
-            Automatically find flight, train, and hotel confirmations in your inbox and suggest
-            them as trip documents. Read-only access — see our{" "}
+            Automatically find flight, train, and hotel confirmations in your
+            inbox and suggest them as trip documents. Read-only access — see our{" "}
             <Link href="/privacy" className="underline hover:text-foreground">
               Privacy Policy
             </Link>{" "}
@@ -413,7 +457,11 @@ function GmailSyncCard() {
               <Button variant="outline" size="sm" asChild>
                 <Link href="/gmail">Review suggestions</Link>
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setConfirmingDisconnect(true)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmingDisconnect(true)}
+              >
                 <LogOut className="h-3.5 w-3.5 mr-1.5" />
                 Disconnect
               </Button>
@@ -432,9 +480,11 @@ function GmailSyncCard() {
 
 function ElaineSettingsCard() {
   const qc = useQueryClient();
-  const { data: assistantSettings, isLoading: settingsLoading } = useGetAssistantSettings();
+  const { data: assistantSettings, isLoading: settingsLoading } =
+    useGetAssistantSettings();
   const updateAssistantSettings = useUpdateAssistantSettings();
-  const { data: memory = [], isLoading: memoryLoading } = useListHouseholdMemory();
+  const { data: memory = [], isLoading: memoryLoading } =
+    useListHouseholdMemory();
   const deleteMemory = useDeleteHouseholdMemory();
 
   function handleToggle(enabled: boolean) {
@@ -489,7 +539,8 @@ function ElaineSettingsCard() {
 
   function handleDeleteMemory(id: number) {
     deleteMemory.mutate(id, {
-      onSuccess: () => qc.invalidateQueries({ queryKey: getListHouseholdMemoryQueryKey() }),
+      onSuccess: () =>
+        qc.invalidateQueries({ queryKey: getListHouseholdMemoryQueryKey() }),
       onError: () => toast.error("Failed to remove memory"),
     });
   }
@@ -502,7 +553,9 @@ function ElaineSettingsCard() {
           <h2 className="font-serif text-lg text-foreground flex items-center gap-1.5">
             <ElaineWordmark />
           </h2>
-          <p className="text-xs text-muted-foreground">Your household's travel assistant</p>
+          <p className="text-xs text-muted-foreground">
+            Your household's travel assistant
+          </p>
         </div>
       </div>
 
@@ -527,21 +580,28 @@ function ElaineSettingsCard() {
           How <ElaineName /> confirms actions
         </p>
         <p className="text-xs text-muted-foreground pb-1">
-          When <ElaineName /> proposes a change (like adding a reminder or trip), choose how you
-          want to approve it. You can also just tell her in chat to switch modes.
+          When <ElaineName /> proposes a change (like adding a reminder or
+          trip), choose how you want to approve it. You can also just tell her
+          in chat to switch modes.
         </p>
         <Select
           value={assistantSettings?.actionConfirmationMode ?? "one_by_one"}
-          onValueChange={(value) => handleModeChange(value as ActionConfirmationMode)}
+          onValueChange={(value) =>
+            handleModeChange(value as ActionConfirmationMode)
+          }
           disabled={settingsLoading || updateAssistantSettings.isPending}
         >
           <SelectTrigger className="w-full sm:w-72">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="one_by_one">One at a time (safest, default)</SelectItem>
+            <SelectItem value="one_by_one">
+              One at a time (safest, default)
+            </SelectItem>
             <SelectItem value="all_at_once">All together</SelectItem>
-            <SelectItem value="auto_run">Run automatically, no confirmation</SelectItem>
+            <SelectItem value="auto_run">
+              Run automatically, no confirmation
+            </SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -551,11 +611,16 @@ function ElaineSettingsCard() {
           What <ElaineName /> remembers
         </p>
         <p className="text-xs text-muted-foreground pb-1">
-          Shared facts <ElaineName /> has picked up about your household's travel preferences.
+          Shared facts <ElaineName /> has picked up about your household's
+          travel preferences.
         </p>
-        {memoryLoading && <p className="text-xs text-muted-foreground">Loading…</p>}
+        {memoryLoading && (
+          <p className="text-xs text-muted-foreground">Loading…</p>
+        )}
         {!memoryLoading && memory.length === 0 && (
-          <p className="text-xs text-muted-foreground italic">Nothing remembered yet.</p>
+          <p className="text-xs text-muted-foreground italic">
+            Nothing remembered yet.
+          </p>
         )}
         {memory.length > 0 && (
           <ul className="space-y-1.5">
@@ -625,11 +690,18 @@ function ColorSwatchPicker({
 function CalendarSyncCard() {
   const qc = useQueryClient();
   const { data: status, isLoading: statusLoading } = useGetCalendarStatus();
-  const { data: calendars = [], isLoading: calendarsLoading } = useListCalendars<CalendarListItem[]>({
-    query: { enabled: !!status?.connected, queryKey: getListCalendarsQueryKey() },
-  });
+  const { data: calendars = [], isLoading: calendarsLoading } =
+    useListCalendars<CalendarListItem[]>({
+      query: {
+        enabled: !!status?.connected,
+        queryKey: getListCalendarsQueryKey(),
+      },
+    });
   const { data: connectedCalendars = [] } = useListConnectedCalendars({
-    query: { enabled: !!status?.connected, queryKey: getListConnectedCalendarsQueryKey() },
+    query: {
+      enabled: !!status?.connected,
+      queryKey: getListConnectedCalendarsQueryKey(),
+    },
   });
   const { data: travelStatus } = useGetTravelCalendarStatus();
   const disconnectCalendar = useDisconnectCalendar();
@@ -639,10 +711,14 @@ function CalendarSyncCard() {
   const setTravelCalendar = useSetTravelCalendar();
 
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<number | null>(null);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<number | null>(
+    null,
+  );
   const [editingColorId, setEditingColorId] = useState<number | null>(null);
   const [addingCalendarId, setAddingCalendarId] = useState<string>("");
-  const [newCalendarColor, setNewCalendarColor] = useState(CALENDAR_COLOR_PRESETS[0]);
+  const [newCalendarColor, setNewCalendarColor] = useState(
+    CALENDAR_COLOR_PRESETS[0],
+  );
   const [manualEntryOpen, setManualEntryOpen] = useState(false);
   const [manualCalendarId, setManualCalendarId] = useState("");
   const [manualCalendarSummary, setManualCalendarSummary] = useState("");
@@ -662,7 +738,10 @@ function CalendarSyncCard() {
       return "Settings page: Google Calendar is NOT connected for this user. Connecting requires clicking the Connect button (an OAuth redirect Elaine cannot trigger herself) — offer to take them to Settings if they're elsewhere.";
     }
     const connectedList = connectedCalendars
-      .map((c) => `"${c.summary}"${c.isTravelCalendar ? " (Travel calendar)" : ""}`)
+      .map(
+        (c) =>
+          `"${c.summary}"${c.isTravelCalendar ? " (Travel calendar)" : ""}`,
+      )
       .join("; ");
     return (
       `Settings page: Google Calendar is connected${status.googleEmail ? ` as ${status.googleEmail}` : ""}. ` +
@@ -686,7 +765,9 @@ function CalendarSyncCard() {
         setConfirmingDisconnect(false);
         qc.invalidateQueries({ queryKey: getGetCalendarStatusQueryKey() });
         qc.invalidateQueries({ queryKey: getListConnectedCalendarsQueryKey() });
-        qc.invalidateQueries({ queryKey: getGetTravelCalendarStatusQueryKey() });
+        qc.invalidateQueries({
+          queryKey: getGetTravelCalendarStatusQueryKey(),
+        });
         toast.success("Google Calendar disconnected");
       },
       onError: () => toast.error("Could not disconnect. Please try again."),
@@ -697,10 +778,17 @@ function CalendarSyncCard() {
     const cal = addableCalendars.find((c) => c.id === addingCalendarId);
     if (!cal) return;
     addCalendar.mutate(
-      { googleCalendarId: cal.id, summary: cal.summary, primaryColor: newCalendarColor, source: "picked" },
+      {
+        googleCalendarId: cal.id,
+        summary: cal.summary,
+        primaryColor: newCalendarColor,
+        source: "picked",
+      },
       {
         onSuccess: () => {
-          qc.invalidateQueries({ queryKey: getListConnectedCalendarsQueryKey() });
+          qc.invalidateQueries({
+            queryKey: getListConnectedCalendarsQueryKey(),
+          });
           toast.success(`Added "${cal.summary}"`);
           setAddingCalendarId("");
           setNewCalendarColor(CALENDAR_COLOR_PRESETS[0]);
@@ -715,17 +803,27 @@ function CalendarSyncCard() {
     const summary = manualCalendarSummary.trim() || id;
     if (!id) return;
     addCalendar.mutate(
-      { googleCalendarId: id, summary, primaryColor: newCalendarColor, source: "manual" },
+      {
+        googleCalendarId: id,
+        summary,
+        primaryColor: newCalendarColor,
+        source: "manual",
+      },
       {
         onSuccess: () => {
-          qc.invalidateQueries({ queryKey: getListConnectedCalendarsQueryKey() });
+          qc.invalidateQueries({
+            queryKey: getListConnectedCalendarsQueryKey(),
+          });
           toast.success(`Added "${summary}"`);
           setManualCalendarId("");
           setManualCalendarSummary("");
           setNewCalendarColor(CALENDAR_COLOR_PRESETS[0]);
           setManualEntryOpen(false);
         },
-        onError: () => toast.error("Could not add calendar. Check the calendar ID and try again."),
+        onError: () =>
+          toast.error(
+            "Could not add calendar. Check the calendar ID and try again.",
+          ),
       },
     );
   }
@@ -735,7 +833,9 @@ function CalendarSyncCard() {
       { id: cal.id, body: { primaryColor: hex } },
       {
         onSuccess: () => {
-          qc.invalidateQueries({ queryKey: getListConnectedCalendarsQueryKey() });
+          qc.invalidateQueries({
+            queryKey: getListConnectedCalendarsQueryKey(),
+          });
           setEditingColorId(null);
         },
         onError: () => toast.error("Could not update color. Please try again."),
@@ -747,11 +847,14 @@ function CalendarSyncCard() {
     deleteCalendar.mutate(id, {
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: getListConnectedCalendarsQueryKey() });
-        qc.invalidateQueries({ queryKey: getGetTravelCalendarStatusQueryKey() });
+        qc.invalidateQueries({
+          queryKey: getGetTravelCalendarStatusQueryKey(),
+        });
         setConfirmingDeleteId(null);
         toast.success("Calendar removed");
       },
-      onError: () => toast.error("Could not remove calendar. Please try again."),
+      onError: () =>
+        toast.error("Could not remove calendar. Please try again."),
     });
   }
 
@@ -759,10 +862,15 @@ function CalendarSyncCard() {
     setTravelCalendar.mutate(cal.id, {
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: getListConnectedCalendarsQueryKey() });
-        qc.invalidateQueries({ queryKey: getGetTravelCalendarStatusQueryKey() });
-        toast.success(`"${cal.summary}" is now the shared Travel calendar for everyone`);
+        qc.invalidateQueries({
+          queryKey: getGetTravelCalendarStatusQueryKey(),
+        });
+        toast.success(
+          `"${cal.summary}" is now the shared Travel calendar for everyone`,
+        );
       },
-      onError: () => toast.error("Could not set the Travel calendar. Please try again."),
+      onError: () =>
+        toast.error("Could not set the Travel calendar. Please try again."),
     });
   }
 
@@ -773,10 +881,13 @@ function CalendarSyncCard() {
           <CalendarDays className="h-4 w-4" />
         </span>
         <div>
-          <h2 className="font-semibold text-foreground">Your Google Calendars</h2>
+          <h2 className="font-semibold text-foreground">
+            Your Google Calendars
+          </h2>
           <p className="text-sm text-muted-foreground">
-            Connect your Google account, then add as many of your calendars as you like. Each gets
-            its own overlay color on the Travel Calendar page.{" "}
+            Connect your Google account, then add as many of your calendars as
+            you like. Each gets its own overlay color on the Travel Calendar
+            page.{" "}
             {travelStatus?.isOwner
               ? "As the app owner, you can also assign one connected calendar as the shared Travel calendar."
               : "Only the app owner can assign the shared Travel calendar."}
@@ -795,7 +906,9 @@ function CalendarSyncCard() {
             </p>
             {confirmingDisconnect ? (
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Disconnect?</span>
+                <span className="text-xs text-muted-foreground">
+                  Disconnect?
+                </span>
                 <Button
                   variant="destructive"
                   size="sm"
@@ -828,14 +941,19 @@ function CalendarSyncCard() {
           {connectedCalendars.length > 0 && (
             <ul className="space-y-2">
               {connectedCalendars.map((cal) => (
-                <li key={cal.id} className="rounded-lg border border-card-border p-3 space-y-2">
+                <li
+                  key={cal.id}
+                  className="rounded-lg border border-card-border p-3 space-y-2"
+                >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <span
                         className="inline-block h-3 w-3 shrink-0 rounded-full"
                         style={{ backgroundColor: cal.primaryColor }}
                       />
-                      <span className="truncate text-sm font-medium text-foreground">{cal.summary}</span>
+                      <span className="truncate text-sm font-medium text-foreground">
+                        {cal.summary}
+                      </span>
                       {cal.isTravelCalendar && (
                         <span className="flex shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
                           <Plane className="h-2.5 w-2.5" /> Travel
@@ -847,7 +965,11 @@ function CalendarSyncCard() {
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7"
-                        onClick={() => setEditingColorId(editingColorId === cal.id ? null : cal.id)}
+                        onClick={() =>
+                          setEditingColorId(
+                            editingColorId === cal.id ? null : cal.id,
+                          )
+                        }
                         aria-label="Edit color"
                       >
                         <Pencil className="h-3.5 w-3.5" />
@@ -911,12 +1033,19 @@ function CalendarSyncCard() {
           <div className="space-y-2 rounded-lg border border-dashed border-card-border p-3">
             <Label htmlFor="add-calendar">Add a calendar</Label>
             {calendarsLoading ? (
-              <p className="text-xs text-muted-foreground">Loading your Google calendars…</p>
+              <p className="text-xs text-muted-foreground">
+                Loading your Google calendars…
+              </p>
             ) : addableCalendars.length === 0 ? (
-              <p className="text-xs text-muted-foreground">All of your Google calendars are already connected.</p>
+              <p className="text-xs text-muted-foreground">
+                All of your Google calendars are already connected.
+              </p>
             ) : (
               <>
-                <Select value={addingCalendarId} onValueChange={setAddingCalendarId}>
+                <Select
+                  value={addingCalendarId}
+                  onValueChange={setAddingCalendarId}
+                >
                   <SelectTrigger id="add-calendar">
                     <SelectValue placeholder="Choose a calendar" />
                   </SelectTrigger>
@@ -932,7 +1061,10 @@ function CalendarSyncCard() {
                 {addingCalendarId && (
                   <div className="space-y-2 pt-1">
                     <Label className="text-xs">Overlay color</Label>
-                    <ColorSwatchPicker value={newCalendarColor} onChange={setNewCalendarColor} />
+                    <ColorSwatchPicker
+                      value={newCalendarColor}
+                      onChange={setNewCalendarColor}
+                    />
                     <Button
                       size="sm"
                       onClick={handleAddCalendar}
@@ -963,7 +1095,10 @@ function CalendarSyncCard() {
                   onChange={(e) => setManualCalendarSummary(e.target.value)}
                 />
                 <Label className="text-xs">Overlay color</Label>
-                <ColorSwatchPicker value={newCalendarColor} onChange={setNewCalendarColor} />
+                <ColorSwatchPicker
+                  value={newCalendarColor}
+                  onChange={setNewCalendarColor}
+                />
                 <div className="flex gap-2">
                   <Button
                     size="sm"
@@ -1011,9 +1146,10 @@ function CalendarSyncCard() {
       )}
 
       <p className="text-xs text-muted-foreground pt-1">
-        Reminders with a due date sync automatically to your primary Google calendar. Events on
-        the shared Travel calendar are visible and editable by everyone; events on your other
-        connected calendars appear as read-only overlays on the Travel Calendar page.
+        Reminders with a due date sync automatically to your primary Google
+        calendar. Events on the shared Travel calendar are visible and editable
+        by everyone; events on your other connected calendars appear as
+        read-only overlays on the Travel Calendar page.
       </p>
     </div>
   );

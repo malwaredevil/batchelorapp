@@ -402,6 +402,85 @@ export const computeRouteInfo = (
     body: JSON.stringify(body),
   });
 
+export interface TimeZoneResult {
+  timeZoneId: string;
+  timeZoneName: string;
+  rawOffsetSeconds: number;
+  dstOffsetSeconds: number;
+}
+
+export const getTimeZoneInfo = (
+  lat: number,
+  lng: number,
+  options?: RequestInit,
+): Promise<{ timeZone: TimeZoneResult }> =>
+  customFetch<{ timeZone: TimeZoneResult }>(
+    `/api/travels/maps/timezone?lat=${lat}&lng=${lng}`,
+    options,
+  );
+
+export interface AirQualityResult {
+  aqi: number;
+  category: string;
+  dominantPollutant: string;
+}
+
+export const getAirQualityInfo = (
+  lat: number,
+  lng: number,
+  options?: RequestInit,
+): Promise<{ airQuality: AirQualityResult | null }> =>
+  customFetch<{ airQuality: AirQualityResult | null }>(
+    `/api/travels/maps/air-quality?lat=${lat}&lng=${lng}`,
+    options,
+  );
+
+export interface PollenResult {
+  date: string;
+  overallCategory: string;
+  types: { code: string; displayName: string; category: string }[];
+}
+
+export const getPollenInfo = (
+  lat: number,
+  lng: number,
+  options?: RequestInit,
+): Promise<{ pollen: PollenResult | null }> =>
+  customFetch<{ pollen: PollenResult | null }>(
+    `/api/travels/maps/pollen?lat=${lat}&lng=${lng}`,
+    options,
+  );
+
+export const getNearbyPlaceCountInfo = (
+  lat: number,
+  lng: number,
+  type: string,
+  radiusMeters?: number,
+  options?: RequestInit,
+): Promise<{ count: number }> => {
+  const params = new URLSearchParams({ lat: String(lat), lng: String(lng), type });
+  if (radiusMeters != null) params.set("radiusMeters", String(radiusMeters));
+  return customFetch<{ count: number }>(
+    `/api/travels/maps/nearby-count?${params.toString()}`,
+    options,
+  );
+};
+
+export interface AerialViewResult {
+  state: "ACTIVE" | "PROCESSING" | "NOT_FOUND";
+  videoUrl?: string;
+  thumbnailUrl?: string;
+}
+
+export const getAerialViewInfo = (
+  address: string,
+  options?: RequestInit,
+): Promise<AerialViewResult> =>
+  customFetch<AerialViewResult>(
+    `/api/travels/maps/aerial-view?address=${encodeURIComponent(address)}`,
+    options,
+  );
+
 export const exploreDestination = (
   body: ExploreDestinationBody,
   options?: RequestInit,

@@ -14,6 +14,7 @@ import {
   Mail,
   Menu,
   MessageCircle,
+  Sparkles,
 } from "lucide-react";
 import { AppSwitcher } from "@/components/AppSwitcher";
 import { useLogout, getGetCurrentUserQueryKey } from "@workspace/api-client-react";
@@ -59,7 +60,10 @@ const PLAN_NAV_ITEMS: NavItem[] = [
   { href: "/elaine", label: "Elaine", icon: MessageCircle },
 ];
 
-const ACCOUNT_NAV_ITEMS: NavItem[] = [{ href: "/settings", label: "Settings", icon: Settings }];
+const ACCOUNT_NAV_ITEMS: NavItem[] = [
+  { href: "/google-apis", label: "Google APIs", icon: Sparkles },
+  { href: "/settings", label: "Settings", icon: Settings },
+];
 
 const ALL_NAV_ITEMS: NavItem[] = [
   ...PRIMARY_NAV_ITEMS,

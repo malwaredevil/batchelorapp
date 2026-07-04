@@ -1455,12 +1455,11 @@ const NAVIGATE_ALLOWED_PATHS = [
   "/map",
   "/explore",
   "/wishlist",
-  "/import",
   "/destinations",
   "/settings",
 ] as const;
 // "/trips/:id" is also allowed with a concrete numeric id, e.g. "/trips/42".
-const NAVIGATE_PATH_RE = /^\/(trips\/\d+|trips|map|explore|wishlist|import|destinations|settings)?$/;
+const NAVIGATE_PATH_RE = /^\/(trips\/\d+|trips|map|explore|wishlist|destinations|settings)?$/;
 
 const NavigateToolPayload = z.object({
   path: z.string().max(50).regex(NAVIGATE_PATH_RE, "not an allowed in-app path"),
@@ -1752,7 +1751,6 @@ APP MAP (every page in this app, so you can always explain what a page is for or
 - Explore ("/explore"): AI-powered destination search/inspiration — search for a place and get an AI overview and suggestions, with the option to add it to the wishlist.
 - Wishlist ("/wishlist"): destinations the household wants to visit someday but hasn't booked yet.
 - Destinations ("/destinations"): a browsable, searchable list of every place the household has been or wants to go, grouped and with trip history per destination.
-- Import ("/import"): a one-time spreadsheet importer for bulk-loading past/planned trips and wishlist items from an Excel file.
 - Travel Calendar ("/travel-calendar"): a shared household calendar view (month/week/list) overlaying each connected member's Google Calendar plus AI-detected trip-date suggestions.
 - Gmail ("/gmail"): review AI-found travel emails (flights, hotels, etc.), manually browse/search the connected inbox, and link emails as trip documents.
 - Settings ("/settings"): manage account/profile, connect Gmail and Google Calendar, and configure how you (elAIne) behave — enabled/disabled, action confirmation mode, and what you remember about the household.

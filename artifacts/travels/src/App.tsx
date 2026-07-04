@@ -16,7 +16,6 @@ import TripDetail from "@/pages/TripDetail";
 import WorldMap from "@/pages/WorldMap";
 import Explore from "@/pages/Explore";
 import Wishlist from "@/pages/Wishlist";
-import Import from "@/pages/Import";
 import Destinations from "@/pages/Destinations";
 import Settings from "@/pages/Settings";
 import TravelCalendar from "@/pages/TravelCalendar";
@@ -76,14 +75,6 @@ function Router() {
         <ProtectedRoute>
           <Layout>
             <Wishlist />
-          </Layout>
-        </ProtectedRoute>
-      </Route>
-
-      <Route path="/import">
-        <ProtectedRoute>
-          <Layout>
-            <Import />
           </Layout>
         </ProtectedRoute>
       </Route>

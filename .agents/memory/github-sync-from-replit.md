@@ -57,9 +57,15 @@ a merge commit; never force-push to "fix" it.
   (free) or GHAS is purchased. A committed `codeql.yml` would just fail to upload
   results on a private repo, so don't add one as a workaround.
 
-## CI lint gate is intentionally absent
+## CI now has a Lint gate, and it's red on ~219 pre-existing files
 
-- Root `package.json` has no `lint` script and the repo isn't Prettier-formatted,
-  so a required Lint check would be permanently red and block Dependabot
-  auto-merge. CI runs Typecheck + Build API server only until a formatting pass is
-  done through a normal push flow.
+- A `Lint` job (`pnpm run lint` → `prettier --check .`) was added to CI at some
+  point after the "lint gate absent" note above was written — don't trust that
+  note, verify current `.github/workflows/*.yml` and `package.json` scripts.
+- As of 2026-07-04 the Lint job fails on ~219 pre-existing files repo-wide
+  (unrelated to any single feature session) — verified by checking CI runs
+  before a session's own commits landed. Don't attempt to silently fix this by
+  reformatting the whole repo inside an unrelated feature task; it's a big,
+  separate diff. Only format the files you actually touched
+  (`npx prettier --write <your files>`) and flag the repo-wide debt to the user
+  (tracked as a GitHub issue) instead of doing a mass reformat unprompted.

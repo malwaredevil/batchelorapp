@@ -20,6 +20,10 @@ import {
   useDeleteReminder,
   useListTravelsAppUsers,
   useGetCalendarStatus,
+  useGetTravelCalendarStatus,
+  useCreateTravelCalendarEvent,
+  useListConnectedCalendars,
+  useCreateConnectedCalendarEvent,
   useGetCardLayout,
   useUpdateCardLayout,
   useGetTripCardCollapse,
@@ -67,6 +71,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
 import {
   ArrowLeft,
   MapPin,
@@ -1652,6 +1664,39 @@ export default function TripDetail({ id }: { id: number }) {
   const deleteTripDocument = useDeleteTripDocument();
   const { data: allHighlights = [] } = useGetHighlights();
 
+  const { data: travelCalendarStatus } = useGetTravelCalendarStatus();
+  const { data: connectedCalendars = [] } = useListConnectedCalendars();
+  const createTravelCalendarEvent = useCreateTravelCalendarEvent();
+  const createConnectedCalendarEvent = useCreateConnectedCalendarEvent();
+
+  function tripCalendarEventBody() {
+    return {
+      title: trip!.title,
+      description: trip!.notes ?? undefined,
+      location: trip!.destination,
+      allDay: true,
+      start: trip!.startDate!,
+      end: trip!.endDate ?? trip!.startDate!,
+    };
+  }
+
+  function addTripToTravelCalendar() {
+    createTravelCalendarEvent.mutate(tripCalendarEventBody(), {
+      onSuccess: () => toast.success("Added to Travel calendar"),
+      onError: () => toast.error("Couldn't add to Travel calendar"),
+    });
+  }
+
+  function addTripToConnectedCalendar(calendarId: number, summary: string) {
+    createConnectedCalendarEvent.mutate(
+      { id: calendarId, body: tripCalendarEventBody() },
+      {
+        onSuccess: () => toast.success(`Added to ${summary}`),
+        onError: () => toast.error(`Couldn't add to ${summary}`),
+      },
+    );
+  }
+
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [itinStyle, setItinStyle] = useState<"relaxed" | "balanced" | "packed">("balanced");
@@ -2083,7 +2128,63 @@ export default function TripDetail({ id }: { id: number }) {
             )}
           />
         </div>
-        <div className="flex gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
+          {canCalendar && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5">
+                  <Calendar className="w-4 h-4" />
+                  Add to Calendar
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                {travelCalendarStatus?.configured && (
+                  <DropdownMenuItem onClick={addTripToTravelCalendar}>
+                    <CalendarCheck className="w-4 h-4 mr-2" />
+                    Add to Travel calendar
+                  </DropdownMenuItem>
+                )}
+                {connectedCalendars.length > 0 && (
+                  <>
+                    {travelCalendarStatus?.configured && <DropdownMenuSeparator />}
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      My calendars
+                    </DropdownMenuLabel>
+                    {connectedCalendars.map((cal) => (
+                      <DropdownMenuItem
+                        key={cal.id}
+                        onClick={() => addTripToConnectedCalendar(cal.id, cal.summary)}
+                      >
+                        <span
+                          className="w-2.5 h-2.5 rounded-full mr-2 shrink-0"
+                          style={{ backgroundColor: cal.primaryColor }}
+                        />
+                        {cal.summary}
+                      </DropdownMenuItem>
+                    ))}
+                  </>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <a
+                    href={buildCalendarUrl(
+                      trip.title,
+                      trip.destination,
+                      trip.startDate!,
+                      trip.endDate ?? trip.startDate!,
+                      trip.notes,
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Open in Google Calendar
+                  </a>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -2269,25 +2370,6 @@ export default function TripDetail({ id }: { id: number }) {
           />
         </CardContent>
       </Card>
-
-      {/* Google Calendar link — always visible, not part of the reorderable cards */}
-      {canCalendar && (
-        <a
-          href={buildCalendarUrl(
-            trip.title,
-            trip.destination,
-            trip.startDate!,
-            trip.endDate ?? trip.startDate!,
-            trip.notes,
-          )}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
-        >
-          <Calendar className="w-4 h-4" />
-          Add to Google Calendar
-        </a>
-      )}
 
       {/* Reorderable / collapsible cards — order and collapse state are per-user */}
       <DndContext

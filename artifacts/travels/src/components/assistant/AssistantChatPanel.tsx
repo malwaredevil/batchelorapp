@@ -16,6 +16,64 @@ import { Textarea } from "@/components/ui/textarea";
 import { ElaineAvatar, ElaineName } from "./ElaineAvatar";
 import type { AssistantChat } from "./useAssistantChat";
 
+/** Splits a stored message content into display text + citation URL list.
+ *  \x1f (ASCII unit separator) is the delimiter — safe in PostgreSQL JSONB
+ *  (unlike \x00) and never emitted by the model. */
+function parseMessageCitations(content: string): {
+  text: string;
+  citations: string[];
+} {
+  const nullIdx = content.indexOf("\x1f");
+  if (nullIdx === -1) return { text: content, citations: [] };
+  const suffix = content.slice(nullIdx + 1);
+  let citations: string[] = [];
+  try {
+    citations = JSON.parse(suffix);
+    if (!Array.isArray(citations)) citations = [];
+  } catch {
+    citations = [];
+  }
+  return { text: content.slice(0, nullIdx), citations };
+}
+
+/** Renders message text with [N] citation markers turned into clickable links. */
+function MessageText({
+  text,
+  citations,
+}: {
+  text: string;
+  citations: string[];
+}) {
+  if (citations.length === 0) return <>{text}</>;
+  const parts = text.split(/(\[\d+\])/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        const m = part.match(/^\[(\d+)\]$/);
+        if (m) {
+          const idx = parseInt(m[1], 10) - 1;
+          const url = citations[idx];
+          if (url) {
+            return (
+              <a
+                key={i}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block rounded bg-primary/10 px-0.5 text-xs font-semibold text-primary hover:bg-primary/20"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {part}
+              </a>
+            );
+          }
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </>
+  );
+}
+
 const MAGNET_VERDICT_COPY: Record<
   MagnetCheckResult["verdict"],
   { label: string; icon: React.ReactNode; className: string }
@@ -103,25 +161,56 @@ export function AssistantChatPanel({
             </div>
           ))}
 
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex gap-2.5 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-          >
-            {msg.role === "assistant" && (
+        {messages.map((msg, i) => {
+          if (msg.role === "user") {
+            return (
+              <div key={i} className="flex gap-2.5 justify-end">
+                <div
+                  className={`${bubbleWidthClass} whitespace-pre-wrap rounded-2xl rounded-tr-sm bg-primary px-3.5 py-2.5 text-sm leading-relaxed text-primary-foreground`}
+                >
+                  {msg.content}
+                </div>
+              </div>
+            );
+          }
+          const { text, citations } = parseMessageCitations(msg.content);
+          return (
+            <div key={i} className="flex gap-2.5 justify-start">
               <ElaineAvatar size={avatarSize} className="mt-0.5" />
-            )}
-            <div
-              className={`${bubbleWidthClass} whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
-                msg.role === "user"
-                  ? "rounded-tr-sm bg-primary text-primary-foreground"
-                  : "rounded-tl-sm bg-muted text-foreground"
-              }`}
-            >
-              {msg.content}
+              <div className={`${bubbleWidthClass} flex flex-col gap-1.5`}>
+                <div className="whitespace-pre-wrap rounded-2xl rounded-tl-sm bg-muted px-3.5 py-2.5 text-sm leading-relaxed text-foreground">
+                  <MessageText text={text} citations={citations} />
+                </div>
+                {citations.length > 0 && (
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 px-1">
+                    {citations.map((url, ci) => {
+                      let host = url;
+                      try {
+                        host = new URL(url).hostname.replace(/^www\./, "");
+                      } catch {
+                        // keep raw url
+                      }
+                      return (
+                        <a
+                          key={ci}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                        >
+                          <span className="font-semibold text-primary">
+                            [{ci + 1}]
+                          </span>
+                          <span className="max-w-[180px] truncate">{host}</span>
+                        </a>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {isStreaming && (
           <div className="flex gap-2.5 justify-start">

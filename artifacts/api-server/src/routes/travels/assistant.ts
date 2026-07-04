@@ -2300,6 +2300,9 @@ Keep replies concise and easy to read in a chat bubble.`;
   }
 
   let rawContent = "";
+  // Citation URLs collected from web_search calls, in tool-call order.
+  // Embedded into the final assistant message content so they survive refresh.
+  const allCitations: string[] = [];
   // Proposed (not-yet-executed) actions for one_by_one / all_at_once modes,
   // in the order the model produced them.
   const resolvedActions: ProposedAction[] = [];
@@ -2531,6 +2534,8 @@ Keep replies concise and easy to read in a chat bubble.`;
     });
     rawContent = "";
 
+    const webSearchCitations = new Map<string, string[]>();
+
     await Promise.all(
       hardToolCalls.map(async (call) => {
         let resultText: string;
@@ -2543,9 +2548,10 @@ Keep replies concise and easy to read in a chat bubble.`;
               resultText = "Invalid search query — ask the user to rephrase.";
             } else {
               const { answer, citations } = await webSearch(parsed.data.query);
+              webSearchCitations.set(call.id, citations);
               resultText = answer
                 ? citations.length > 0
-                  ? `${answer}\n\nSources: ${citations.join(", ")}`
+                  ? `${answer}\n\nSources:\n${citations.map((url, i) => `[${i + 1}] ${url}`).join("\n")}`
                   : answer
                 : "No results found for this search.";
             }
@@ -2684,9 +2690,22 @@ Keep replies concise and easy to read in a chat bubble.`;
         });
       }),
     );
+
+    // Collect citations from this round's web searches, in tool-call order,
+    // into the outer allCitations array so they survive the loop.
+    for (const call of hardToolCalls) {
+      if (call.name === WEB_SEARCH_TOOL_NAME) {
+        allCitations.push(...(webSearchCitations.get(call.id) ?? []));
+      }
+    }
   }
 
-  const content = rawContent.trim();
+  // \x1f (ASCII unit separator) is the delimiter before the citation list.
+  // \x00 (null byte) is rejected by PostgreSQL JSONB — \x1f is safe and
+  // will never appear in model-generated text.
+  const citationSuffix =
+    allCitations.length > 0 ? `\x1f${JSON.stringify(allCitations)}` : "";
+  const content = rawContent.trim() + citationSuffix;
 
   const updatedHistory: ChatMessage[] = [
     ...history,

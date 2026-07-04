@@ -3778,7 +3778,8 @@ export default function TripDetail({ id }: { id: number }) {
                         >
                           <div className="space-y-4">
                             <div className="flex items-center justify-between gap-2 flex-wrap">
-                              <h2 className="font-serif text-xl text-foreground">
+                              <h2 className="font-serif text-xl text-foreground flex items-center gap-2">
+                                <CalendarCheck className="w-5 h-5" />
                                 Itinerary
                               </h2>
                               <div className="flex items-center gap-2 flex-wrap">
@@ -4023,7 +4024,8 @@ export default function TripDetail({ id }: { id: number }) {
                         >
                           <div className="space-y-4">
                             <div className="flex items-center justify-between">
-                              <h2 className="font-serif text-xl text-foreground">
+                              <h2 className="font-serif text-xl text-foreground flex items-center gap-2">
+                                <FileText className="w-5 h-5" />
                                 Documents
                               </h2>
                               <label className="cursor-pointer">
@@ -4149,7 +4151,8 @@ export default function TripDetail({ id }: { id: number }) {
                               }
                             >
                               <div className="space-y-4">
-                                <h2 className="font-serif text-xl text-foreground">
+                                <h2 className="font-serif text-xl text-foreground flex items-center gap-2">
+                                  <Briefcase className="w-5 h-5" />
                                   Packing List
                                 </h2>
                                 <Card className="border-border/50">
@@ -4172,7 +4175,8 @@ export default function TripDetail({ id }: { id: number }) {
                               }
                             >
                               <div className="space-y-4">
-                                <h2 className="font-serif text-xl text-foreground">
+                                <h2 className="font-serif text-xl text-foreground flex items-center gap-2">
+                                  <CheckSquare className="w-5 h-5" />
                                   To-Do List
                                 </h2>
                                 <Card className="border-border/50">

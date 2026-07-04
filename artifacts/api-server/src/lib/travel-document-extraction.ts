@@ -14,39 +14,108 @@ const DOCUMENT_ADVISOR_INSTRUCTIONS =
   "You are a meticulous travel-document reviewer. You will be asked to double-check a specific extracted date, time, or field against source text/an image. Read character-by-character, flag any ambiguity (e.g. DD/MM vs MM/DD, transposed digits, issue date vs travel date), and give your best final answer plus a one-line reason.";
 
 const RESPONSE_SCHEMA_BLOCK = `{
-  "documentType": "flight_ticket | hotel_confirmation | car_rental | train_ticket | boarding_pass | travel_insurance | other",
-  "providerName": "airline/hotel/rental company name",
-  "referenceNumber": "booking/confirmation/ticket number",
-  "passengerNames": ["name1", "name2"],
-  "fromLocation": "departure city/airport",
-  "toLocation": "destination city/airport",
-  "departureDateTime": "ISO date-time string of the actual first-leg travel departure (NOT the issue/booking date)",
-  "arrivalDateTime": "ISO date-time string if present",
-  "checkInDate": "date string for hotels",
-  "checkOutDate": "date string for hotels",
-  "flightNumber": "flight number if applicable",
-  "seatNumbers": ["seat numbers"],
-  "vehicleClass": "car class if rental",
-  "pickupLocation": "rental pickup location",
-  "pickupDateTime": "ISO date-time string for rental pickup if present",
-  "dropoffLocation": "rental dropoff location",
-  "dropoffDateTime": "ISO date-time string for rental drop-off if present",
-  "returnFlightNumber": "return/inbound flight number, ONLY if a separate return leg is present",
-  "returnFromLocation": "return leg departure city/airport, ONLY if a separate return leg is present",
-  "returnToLocation": "return leg destination city/airport, ONLY if a separate return leg is present",
-  "returnDepartureDateTime": "ISO date-time string of the return leg departure, ONLY if a separate return leg is present",
-  "returnArrivalDateTime": "ISO date-time string of the return leg arrival, ONLY if a separate return leg is present",
-  "notes": "any other important information, including any date ambiguity or additional legs"
+  "documentType": "flight_ticket | boarding_pass | hotel_confirmation | car_rental | train_ticket | bus_ticket | ferry | cruise | travel_insurance | visa | tour | activity | event_ticket | restaurant_reservation | airport_transfer | other",
+
+  "providerName": "airline / hotel / car company / railway / ferry / cruise line / tour operator / restaurant / insurer / venue name",
+  "referenceNumber": "booking, confirmation, ticket, or policy number",
+  "passengerNames": ["array of passenger or guest names"],
+
+  "fromLocation": "departure city, airport, station, port, venue address, or meeting point",
+  "toLocation": "arrival city, airport, station, or drop-off location",
+
+  "departureDateTime": "ISO date-time of first-leg departure / check-in / event / reservation — NOT the issue or purchase date",
+  "arrivalDateTime": "ISO date-time of first-leg arrival if present",
+
+  "checkInDate": "hotel/accommodation check-in date",
+  "checkOutDate": "hotel/accommodation check-out date",
+
+  "flightNumber": "flight designator (e.g. BA417)",
+  "seatNumbers": ["array of seat, berth, or row numbers — flight, train, bus, event"],
+
+  "vehicleClass": "car rental or transfer vehicle class / type (e.g. Economy, SUV)",
+  "pickupLocation": "car rental or transfer pickup address / branch",
+  "pickupDateTime": "ISO date-time of car rental pickup or transfer pickup",
+  "dropoffLocation": "car rental drop-off address / branch",
+  "dropoffDateTime": "ISO date-time of car rental drop-off",
+
+  "trainNumber": "train service designator (e.g. IC1234, AVE 3141, TGV 6203, Eurostar 9030)",
+  "busNumber": "bus or coach service / route number",
+  "departureStation": "railway or bus station name at origin",
+  "arrivalStation": "railway or bus station name at destination",
+  "coachNumber": "carriage or coach number on a train",
+
+  "ferryName": "vessel name for ferry or water transport",
+  "departurePort": "departure port (ferry or cruise)",
+  "arrivalPort": "arrival port (ferry)",
+  "cabinNumber": "cabin or stateroom number (ferry or cruise)",
+
+  "shipName": "cruise ship name",
+  "disembarkationDate": "cruise disembarkation / end date",
+
+  "activityName": "name of the tour, activity, excursion, or experience",
+  "duration": "duration of tour or activity (e.g. '3 hours', 'full day')",
+
+  "eventName": "concert, show, exhibition, museum, attraction, or event name",
+  "venue": "venue name (events and activities)",
+
+  "partySize": "number of guests for a restaurant reservation or group booking",
+
+  "transferType": "ground transfer type (taxi, shuttle, private car, limousine, minibus)",
+
+  "policyNumber": "insurance policy or certificate number",
+  "coverageType": "travel insurance coverage type (e.g. Single Trip, Annual Multi-Trip, Backpacker)",
+  "coverageStartDate": "insurance coverage start date",
+  "coverageEndDate": "insurance coverage end date",
+  "emergencyPhone": "24-hour emergency assistance phone number (insurance documents)",
+
+  "visaType": "visa category (Tourist, Business, Transit, Student, Work, etc.)",
+  "entryType": "single or multiple entry",
+  "validFrom": "visa validity start date",
+  "validTo": "visa validity end date",
+  "issuedBy": "issuing country or authority (visa, ETA, ESTA, border pass)",
+
+  "returnFlightNumber": "return/inbound flight number — ONLY if a separate return leg is present",
+  "returnFromLocation": "return leg origin — ONLY if a separate return leg is present",
+  "returnToLocation": "return leg destination — ONLY if a separate return leg is present",
+  "returnDepartureDateTime": "ISO date-time of return leg departure — ONLY if a separate return leg is present",
+  "returnArrivalDateTime": "ISO date-time of return leg arrival — ONLY if a separate return leg is present",
+
+  "notes": "any other important information including ambiguities, extra legs, special conditions, or fields that didn't fit above"
 }`;
 
-const DATE_RULES = `IMPORTANT date-extraction rules:
-- Many documents show several dates: the date the ticket/booking was ISSUED or PURCHASED, and the date(s) travel actually OCCURS. "departureDateTime" must be the actual travel departure date/time of the FIRST outbound leg — never the issue date, purchase date, or booking date. If separate "Issued on"/"Booked on" and "Departure"/"Travel date" fields exist, always prefer the travel date.
-- If there are multiple flight legs/segments (e.g. a connection or a multi-city itinerary), use the departure date/time of the very first segment for "departureDateTime", and note any later legs in "notes".
-- ROUND-TRIP TICKETS: if BOTH an outbound flight and a separate return/inbound flight are shown (a different flight number, and/or "from"/"to" reversed, and/or a later date), you MUST extract the return leg into the separate "returnFlightNumber", "returnFromLocation", "returnToLocation", "returnDepartureDateTime", and "returnArrivalDateTime" fields below — do not leave it only in "notes". Only fill these fields if a genuinely separate return leg is present; leave them out entirely for one-way tickets.
-- CAR RENTALS: set documentType to "car_rental". The key dates are "pickupDateTime" (when you collect the car — look for "Pick-up", "Pickup date/time", "Start date", "Rental begins") and "dropoffDateTime" (when you return it — look for "Drop-off", "Return date/time", "End date", "Rental ends"). Do NOT use "departureDateTime"/"arrivalDateTime" for car rentals — those are for flights only. Extract "pickupLocation" (city, airport code, or branch address) and "dropoffLocation" similarly; if both locations are the same, copy the value to both fields. Extract "vehicleClass" (e.g. "Economy", "Compact", "SUV", "Full-size") if shown. Put the rental company in "providerName" and the booking/confirmation number in "referenceNumber".
-- Read every digit of the date and time carefully, character by character, before writing it out — transposed digits (e.g. reading "10:30" as "01:30", or "14" as "41") are a common and costly mistake. Double-check your extracted value against the source before finalizing it.
-- Dates can be written ambiguously (e.g. "03/04/2026"). Use surrounding context (day-of-week labels, month names spelled out, airport/country of origin) to disambiguate DD/MM vs MM/DD. If genuinely ambiguous, state your best guess in "departureDateTime" and mention the ambiguity in "notes".
-- Always output "departureDateTime" (and any other date/time field) as a full ISO 8601 string including year. Never omit the year or leave it as the current year by assumption if a different year is printed on the source.`;
+const DATE_RULES = `IMPORTANT extraction rules by document type:
+
+FLIGHTS & BOARDING PASSES: documentType = "flight_ticket" or "boarding_pass". Use "departureDateTime" for the actual travel departure (never the booking/issue date). For round-trips with a separate inbound leg shown, populate all "return*" fields. Multiple intermediate segments → use first segment for departureDateTime, note others.
+
+TRAINS & RAIL: documentType = "train_ticket". Use "departureDateTime"/"arrivalDateTime" for travel times. Put service designator in "trainNumber" (e.g. "IC1234", "AVE 3141", "Eurostar 9032"). Put station names in "departureStation"/"arrivalStation". Do NOT use "flightNumber" for trains.
+
+BUS & COACH: documentType = "bus_ticket". Use "departureDateTime"/"arrivalDateTime". Route or service number → "busNumber". Stop or terminal names → "departureStation"/"arrivalStation".
+
+CAR RENTALS: documentType = "car_rental". Use "pickupDateTime"/"dropoffDateTime" (NOT "departureDateTime"/"arrivalDateTime"). Pickup and drop-off addresses/branch names → "pickupLocation"/"dropoffLocation". If both locations are the same, copy the value to both. Vehicle category → "vehicleClass".
+
+AIRPORT TRANSFERS & TAXIS: documentType = "airport_transfer". Use "pickupDateTime" and "pickupLocation". Destination → "toLocation". Vehicle type → "vehicleClass" or "transferType".
+
+FERRIES & WATER TRANSPORT: documentType = "ferry". Use "departureDateTime"/"arrivalDateTime". Port names → "departurePort"/"arrivalPort". Vessel name → "ferryName". Cabin/berth → "cabinNumber".
+
+CRUISES: documentType = "cruise". Ship name → "shipName". Home port and embarkation date → "departurePort" and "departureDateTime". Disembarkation date → "disembarkationDate". Cabin → "cabinNumber".
+
+HOTELS & ACCOMMODATION (Airbnb, hostel, villa, apartment, guesthouse): documentType = "hotel_confirmation". Check-in and check-out → "checkInDate"/"checkOutDate". Do NOT use "departureDateTime" for hotel dates.
+
+TRAVEL INSURANCE: documentType = "travel_insurance". Policy number → "policyNumber". Insurer → "providerName". Coverage type → "coverageType". Coverage period → "coverageStartDate"/"coverageEndDate". Emergency phone → "emergencyPhone". Do NOT use "departureDateTime" for insurance dates.
+
+VISAS & ENTRY DOCUMENTS (ETA, ESTA, eVisa, border pass): documentType = "visa". Issuing country or authority → "issuedBy". Visa category → "visaType". Entry restriction → "entryType". Validity period → "validFrom"/"validTo". Document number → "referenceNumber".
+
+TOURS, ACTIVITIES & EXCURSIONS: documentType = "tour" or "activity". Activity name → "activityName". Operator → "providerName". Meeting point or address → "fromLocation". Start date/time → "departureDateTime". Duration → "duration" (e.g. "3 hours", "full day").
+
+EVENTS, CONCERTS, SHOWS & ATTRACTIONS (museum, gallery, opera, theatre, festival): documentType = "event_ticket". Event name → "eventName". Venue → "venue". Date/time → "departureDateTime". Seat(s) → "seatNumbers". Organiser or venue operator → "providerName".
+
+RESTAURANT RESERVATIONS: documentType = "restaurant_reservation". Restaurant name → "providerName". Reservation date/time → "departureDateTime". Number of guests → "partySize". Address → "fromLocation".
+
+DATE FORMAT RULES (all document types):
+- Never use the booking/issue/purchase date for any date field — always prefer the actual travel/event/stay date.
+- Output ALL dates and times as full ISO 8601 strings with year (e.g. "2026-08-14T10:30:00"). Never omit the year.
+- Read every digit character-by-character to avoid transpositions (e.g. "10:30" vs "01:30").
+- Resolve DD/MM vs MM/DD ambiguity using context: day-of-week labels, month names, country of origin.`;
 
 function parseAiExtractionJson(result: string): Record<string, unknown> {
   try {

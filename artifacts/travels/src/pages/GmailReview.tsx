@@ -9,7 +9,6 @@ import {
   XCircle,
   Paperclip,
   RefreshCw,
-  Eye,
   Undo2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -254,12 +253,16 @@ function SuggestionsTab({
       {suggestions.map((s) => {
         const extracted = (s.extractedData ?? {}) as Record<string, unknown>;
         return (
-          <li key={s.id} className="p-4 space-y-3 transition-colors hover:bg-muted/30">
+          <li
+            key={s.id}
+            className="p-4 space-y-3 transition-colors hover:bg-muted/30 cursor-pointer"
+            onClick={() => onView(s.gmailMessageId)}
+          >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-3 min-w-0">
                 <SenderAvatar from={s.fromAddress} className="h-9 w-9 mt-0.5" />
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-foreground truncate">
+                  <p className="text-sm font-semibold text-foreground truncate hover:underline">
                     {s.subject || "(no subject)"}
                   </p>
                   <p className="text-xs text-muted-foreground truncate">
@@ -282,7 +285,10 @@ function SuggestionsTab({
               </p>
             )}
 
-            <div className="flex flex-col sm:flex-row gap-2 sm:items-center pl-12">
+            <div
+              className="flex flex-col sm:flex-row gap-2 sm:items-center pl-12"
+              onClick={(e) => e.stopPropagation()}
+            >
               <TripPicker
                 trips={trips}
                 value={selectedTrip[s.id] ?? ""}
@@ -297,10 +303,6 @@ function SuggestionsTab({
                 >
                   <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
                   Add to trip
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => onView(s.gmailMessageId)}>
-                  <Eye className="h-3.5 w-3.5 mr-1.5" />
-                  View
                 </Button>
                 <Button
                   size="sm"
@@ -533,7 +535,11 @@ function InboxBrowserTab({
       ) : (
         <ul className="divide-y divide-card-border rounded-xl border border-card-border bg-card overflow-hidden">
           {visibleMessages.map((m) => (
-            <li key={m.id} className="p-4 space-y-3 transition-colors hover:bg-muted/30">
+            <li
+              key={m.id}
+              className="p-4 space-y-3 transition-colors hover:bg-muted/30 cursor-pointer"
+              onClick={() => onView(m.id)}
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3 min-w-0">
                   {selectableMessages.some((s) => s.id === m.id) && (
@@ -541,12 +547,15 @@ function InboxBrowserTab({
                       className="mt-2.5"
                       checked={!!checked[m.id]}
                       onCheckedChange={() => toggleChecked(m.id)}
+                      onClick={(e) => e.stopPropagation()}
                       aria-label="Select email"
                     />
                   )}
                   <SenderAvatar from={m.from} className="h-9 w-9 mt-0.5" />
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-foreground truncate">{m.subject || "(no subject)"}</p>
+                    <p className="text-sm font-semibold text-foreground truncate hover:underline">
+                      {m.subject || "(no subject)"}
+                    </p>
                     <p className="text-xs text-muted-foreground truncate">
                       {getDisplayName(m.from)} · {formatDate(m.date)}
                     </p>
@@ -564,14 +573,14 @@ function InboxBrowserTab({
                       Ignored
                     </span>
                   )}
-                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => onView(m.id)}>
-                    <Eye className="h-3.5 w-3.5" />
-                  </Button>
                 </div>
               </div>
 
               {!m.alreadyLinked && !m.alreadyIgnored && (
-                <div className="flex flex-col sm:flex-row gap-2 sm:items-center pl-12">
+                <div
+                  className="flex flex-col sm:flex-row gap-2 sm:items-center pl-12"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <TripPicker
                     trips={trips}
                     value={selectedTrip[m.id] ?? ""}
@@ -591,7 +600,7 @@ function InboxBrowserTab({
               )}
 
               {m.alreadyIgnored && !m.alreadyLinked && (
-                <div className="pl-12">
+                <div className="pl-12" onClick={(e) => e.stopPropagation()}>
                   <Button
                     size="sm"
                     variant="outline"

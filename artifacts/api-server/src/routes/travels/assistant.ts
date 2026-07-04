@@ -33,6 +33,12 @@ import { generateItineraryForTrip, ItineraryActionError } from "./ai";
 import { sendAssistantEmail, resendConfigured } from "../../lib/email";
 import { webSearch } from "../../lib/web-search";
 import { consultExperts } from "../../lib/expert-consult";
+import {
+  getWeatherForecast,
+  searchPlaces,
+  computeRoute,
+  type TravelMode,
+} from "../../lib/travels/google-maps";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -1489,6 +1495,30 @@ const ConsultExpertsToolPayload = z.object({
   context: z.string().max(1000).optional(),
 });
 
+const GET_WEATHER_TOOL_NAME = "get_weather_forecast";
+
+const GetWeatherToolPayload = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  locationName: z.string().max(200),
+});
+
+const FIND_NEARBY_PLACES_TOOL_NAME = "find_nearby_places";
+
+const FindNearbyPlacesToolPayload = z.object({
+  query: z.string().min(1).max(200),
+  lat: z.number().min(-90).max(90).optional(),
+  lng: z.number().min(-180).max(180).optional(),
+});
+
+const GET_ROUTE_INFO_TOOL_NAME = "get_route_info";
+
+const GetRouteInfoToolPayload = z.object({
+  origin: z.object({ lat: z.number(), lng: z.number(), label: z.string().max(200) }),
+  destination: z.object({ lat: z.number(), lng: z.number(), label: z.string().max(200) }),
+  mode: z.enum(["DRIVE", "WALK", "BICYCLE", "TRANSIT"]).default("WALK"),
+});
+
 const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: "function",
@@ -1580,6 +1610,77 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           },
         },
         required: ["question"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: GET_WEATHER_TOOL_NAME,
+      description:
+        "Get a live multi-day weather forecast for a specific place using Google's Weather API — call this whenever the user asks about weather, what to pack for the climate, or whether a planned day might be rained out, instead of guessing or using web_search for this. Requires a real lat/lng — use coordinates you can see on screen (e.g. a trip's destination) or from a prior find_nearby_places/geocode result; never invent coordinates.",
+      parameters: {
+        type: "object",
+        properties: {
+          lat: { type: "number", description: "Latitude" },
+          lng: { type: "number", description: "Longitude" },
+          locationName: { type: "string", description: "Human-readable place name, for your own reply" },
+        },
+        required: ["lat", "lng", "locationName"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: FIND_NEARBY_PLACES_TOOL_NAME,
+      description:
+        "Search for real places (restaurants, museums, attractions, hotels, etc.) using Google Places — call this whenever the user asks for recommendations or \"what's near X\" instead of relying on general knowledge, since this returns real, current places with ratings. Provide lat/lng (from on-screen trip/destination context) to bias results near a specific place when relevant.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "What to search for, e.g. \"sushi restaurants\" or \"museums in Kyoto\"" },
+          lat: { type: "number", description: "Optional latitude to bias results near a location" },
+          lng: { type: "number", description: "Optional longitude to bias results near a location" },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: GET_ROUTE_INFO_TOOL_NAME,
+      description:
+        "Get real driving/walking/biking/transit distance and time between two real places using Google Routes — call this whenever the user asks how far something is or how long it'll take to get somewhere, instead of guessing. Requires real lat/lng for both ends (from on-screen context or a prior find_nearby_places result); never invent coordinates.",
+      parameters: {
+        type: "object",
+        properties: {
+          origin: {
+            type: "object",
+            properties: {
+              lat: { type: "number" },
+              lng: { type: "number" },
+              label: { type: "string", description: "Human-readable name, for your own reply" },
+            },
+            required: ["lat", "lng", "label"],
+          },
+          destination: {
+            type: "object",
+            properties: {
+              lat: { type: "number" },
+              lng: { type: "number" },
+              label: { type: "string", description: "Human-readable name, for your own reply" },
+            },
+            required: ["lat", "lng", "label"],
+          },
+          mode: {
+            type: "string",
+            enum: ["DRIVE", "WALK", "BICYCLE", "TRANSIT"],
+            description: "Travel mode, defaults to WALK if unspecified",
+          },
+        },
+        required: ["origin", "destination"],
       },
     },
   },
@@ -1782,6 +1883,8 @@ WEB SEARCH: You have a real-time web_search tool, unlike a plain language model 
 
 EXPERT ADVICE: For genuine expertise/advice/recommendation questions — a judgment call where being one-sided could actually steer the user wrong (packing/gear advice for specific constraints, which option to book, negotiating tactics, whether something is a good idea, etc.) — use consult_experts rather than just answering solo; it cross-checks more than one independent source and gives you back a single synthesized answer to relay. Don't use it for simple facts, small talk, or anything that needs web_search instead (current/live data). It takes a bit longer than a normal reply — that's expected, not a malfunction.
 
+LIVE MAPS DATA: You also have three Google Maps-backed tools for real, current data instead of guessing — prefer these over web_search when they apply, since they return structured, accurate data rather than a text summary. get_weather_forecast gives a real multi-day forecast for a place (use it for "what's the weather", packing-for-climate, or rain-risk questions). find_nearby_places gives real restaurants/attractions/hotels/etc. with ratings (use it for recommendations or "what's near X"). get_route_info gives real distance/time between two places for a given travel mode (use it for "how far"/"how long to get there" questions). All three need real lat/lng — pull coordinates from the on-screen state above (trip/destination coordinates) or from a place returned by find_nearby_places; never invent coordinates. If you don't have any usable coordinates on screen, ask the user which trip/destination they mean rather than guessing.
+
 Keep replies concise and easy to read in a chat bubble.`;
 
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
@@ -1898,17 +2001,18 @@ Keep replies concise and easy to read in a chat bubble.`;
     // Resolve any tool calls not already handled mid-stream. Content no
     // longer needs cleanup here — unlike the old regex-directive scheme, tool
     // calls arrive as a structured field separate from the reply text.
-    const webSearchCalls: Array<{ id: string; args: string }> = [];
-    const consultExpertsCalls: Array<{ id: string; args: string }> = [];
+    const HARD_TOOL_NAMES = new Set([
+      WEB_SEARCH_TOOL_NAME,
+      CONSULT_EXPERTS_TOOL_NAME,
+      GET_WEATHER_TOOL_NAME,
+      FIND_NEARBY_PLACES_TOOL_NAME,
+      GET_ROUTE_INFO_TOOL_NAME,
+    ]);
+    const hardToolCalls: Array<{ id: string; name: string; args: string }> = [];
 
     for (const [index, { id, name, args }] of toolCallAcc.entries()) {
-      if (name === WEB_SEARCH_TOOL_NAME) {
-        if (id) webSearchCalls.push({ id, args });
-        continue;
-      }
-
-      if (name === CONSULT_EXPERTS_TOOL_NAME) {
-        if (id) consultExpertsCalls.push({ id, args });
+      if (HARD_TOOL_NAMES.has(name)) {
+        if (id) hardToolCalls.push({ id, name, args });
         continue;
       }
 
@@ -1979,21 +2083,21 @@ Keep replies concise and easy to read in a chat bubble.`;
       }
     }
 
-    const hardToolCalls = [...webSearchCalls, ...consultExpertsCalls];
     if (hardToolCalls.length === 0 || round === MAX_ROUNDS - 1) break;
 
     // Let the user know why the reply is taking longer than usual instead of
     // leaving them wondering if elAIne is hung — this round can involve
     // several sequential/parallel model calls before she writes anything.
-    if (webSearchCalls.length > 0 && consultExpertsCalls.length > 0) {
-      sendEvent("status", { message: "Searching the web and checking in with a couple of experts…" });
-    } else if (webSearchCalls.length > 0) {
-      sendEvent("status", {
-        message: webSearchCalls.length > 1 ? "Searching the web for a few things…" : "Searching the web…",
-      });
-    } else {
-      sendEvent("status", { message: "Checking in with a couple of experts…" });
-    }
+    const distinctHardToolNames = new Set(hardToolCalls.map((c) => c.name));
+    const STATUS_LABELS: Record<string, string> = {
+      [WEB_SEARCH_TOOL_NAME]: "searching the web",
+      [CONSULT_EXPERTS_TOOL_NAME]: "checking in with a couple of experts",
+      [GET_WEATHER_TOOL_NAME]: "checking the forecast",
+      [FIND_NEARBY_PLACES_TOOL_NAME]: "looking up places",
+      [GET_ROUTE_INFO_TOOL_NAME]: "checking travel times",
+    };
+    const statusMessage = [...distinctHardToolNames].map((n) => STATUS_LABELS[n]).join(", ");
+    sendEvent("status", { message: `${statusMessage.charAt(0).toUpperCase()}${statusMessage.slice(1)}…` });
 
     // Feed tool results back so the model can write its real answer next
     // round. Reset rawContent first — models essentially never emit text
@@ -2002,55 +2106,101 @@ Keep replies concise and easy to read in a chat bubble.`;
     messages.push({
       role: "assistant",
       content: rawContent || null,
-      tool_calls: hardToolCalls.map((c, i) => ({
+      tool_calls: hardToolCalls.map((c) => ({
         id: c.id,
         type: "function",
-        function: {
-          name: i < webSearchCalls.length ? WEB_SEARCH_TOOL_NAME : CONSULT_EXPERTS_TOOL_NAME,
-          arguments: c.args,
-        },
+        function: { name: c.name, arguments: c.args },
       })),
     });
     rawContent = "";
 
-    await Promise.all([
-      ...webSearchCalls.map(async (call) => {
+    await Promise.all(
+      hardToolCalls.map(async (call) => {
         let resultText: string;
         try {
-          const parsed = WebSearchToolPayload.safeParse(JSON.parse(call.args));
-          if (!parsed.success) {
-            resultText = "Invalid search query — ask the user to rephrase.";
+          if (call.name === WEB_SEARCH_TOOL_NAME) {
+            const parsed = WebSearchToolPayload.safeParse(JSON.parse(call.args));
+            if (!parsed.success) {
+              resultText = "Invalid search query — ask the user to rephrase.";
+            } else {
+              const { answer, citations } = await webSearch(parsed.data.query);
+              resultText = answer
+                ? citations.length > 0
+                  ? `${answer}\n\nSources: ${citations.join(", ")}`
+                  : answer
+                : "No results found for this search.";
+            }
+          } else if (call.name === CONSULT_EXPERTS_TOOL_NAME) {
+            const parsed = ConsultExpertsToolPayload.safeParse(JSON.parse(call.args));
+            if (!parsed.success) {
+              resultText = "Invalid question — ask the user to rephrase.";
+            } else {
+              const { answer } = await consultExperts(parsed.data.question, parsed.data.context);
+              resultText =
+                answer || "No panel opinion could be gathered — answer from your own best judgment instead.";
+            }
+          } else if (call.name === GET_WEATHER_TOOL_NAME) {
+            const parsed = GetWeatherToolPayload.safeParse(JSON.parse(call.args));
+            if (!parsed.success) {
+              resultText = "Invalid location — ask the user to clarify or use on-screen coordinates.";
+            } else {
+              const forecast = await getWeatherForecast(parsed.data.lat, parsed.data.lng);
+              resultText =
+                forecast.length > 0
+                  ? `Forecast for ${parsed.data.locationName}:\n` +
+                    forecast
+                      .map(
+                        (d) =>
+                          `${d.date}: ${d.conditionDescription}, ${d.minTempC ?? "?"}–${d.maxTempC ?? "?"}°C` +
+                          (d.precipitationChancePercent != null
+                            ? `, ${d.precipitationChancePercent}% chance of rain`
+                            : ""),
+                      )
+                      .join("\n")
+                  : `No forecast data available for ${parsed.data.locationName}.`;
+            }
+          } else if (call.name === FIND_NEARBY_PLACES_TOOL_NAME) {
+            const parsed = FindNearbyPlacesToolPayload.safeParse(JSON.parse(call.args));
+            if (!parsed.success) {
+              resultText = "Invalid place search — ask the user to rephrase.";
+            } else {
+              const places = await searchPlaces(parsed.data.query, parsed.data.lat, parsed.data.lng);
+              resultText =
+                places.length > 0
+                  ? places
+                      .map(
+                        (p) =>
+                          `${p.name} — ${p.address}${p.rating != null ? ` (${p.rating}★, ${p.userRatingCount ?? 0} ratings)` : ""}`,
+                      )
+                      .join("\n")
+                  : "No places found for that search.";
+            }
+          } else if (call.name === GET_ROUTE_INFO_TOOL_NAME) {
+            const parsed = GetRouteInfoToolPayload.safeParse(JSON.parse(call.args));
+            if (!parsed.success) {
+              resultText = "Invalid route request — ask the user to clarify origin/destination.";
+            } else {
+              const route = await computeRoute(
+                parsed.data.origin,
+                parsed.data.destination,
+                [],
+                parsed.data.mode as TravelMode,
+                false,
+              );
+              resultText = route
+                ? `${parsed.data.origin.label} to ${parsed.data.destination.label} by ${parsed.data.mode.toLowerCase()}: ${(route.distanceMeters / 1000).toFixed(1)} km, about ${Math.round(route.durationSeconds / 60)} minutes.`
+                : `No route found between ${parsed.data.origin.label} and ${parsed.data.destination.label}.`;
+            }
           } else {
-            const { answer, citations } = await webSearch(parsed.data.query);
-            resultText = answer
-              ? citations.length > 0
-                ? `${answer}\n\nSources: ${citations.join(", ")}`
-                : answer
-              : "No results found for this search.";
+            resultText = "Unsupported tool.";
           }
         } catch (err) {
-          req.log.error({ err }, "elAIne web_search tool failed");
-          resultText = "Search failed — tell the user you couldn't look this up right now.";
+          req.log.error({ err, tool: call.name }, "elAIne hard tool call failed");
+          resultText = "That lookup failed — tell the user you couldn't get that information right now.";
         }
         messages.push({ role: "tool", tool_call_id: call.id, content: resultText });
       }),
-      ...consultExpertsCalls.map(async (call) => {
-        let resultText: string;
-        try {
-          const parsed = ConsultExpertsToolPayload.safeParse(JSON.parse(call.args));
-          if (!parsed.success) {
-            resultText = "Invalid question — ask the user to rephrase.";
-          } else {
-            const { answer } = await consultExperts(parsed.data.question, parsed.data.context);
-            resultText = answer || "No panel opinion could be gathered — answer from your own best judgment instead.";
-          }
-        } catch (err) {
-          req.log.error({ err }, "elAIne consult_experts tool failed");
-          resultText = "Expert consultation failed — answer from your own best judgment instead.";
-        }
-        messages.push({ role: "tool", tool_call_id: call.id, content: resultText });
-      }),
-    ]);
+    );
   }
 
   const content = rawContent.trim();

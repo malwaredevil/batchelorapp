@@ -308,6 +308,98 @@ export const rescanTripDocument = (
 export const getTripDocumentDownloadUrl = (tripId: number, docId: number) =>
   `/api/travels/trips/${tripId}/documents/${docId}/download`;
 
+export const getTripDocumentWalletPassUrl = (
+  tripId: number,
+  docId: number,
+  options?: RequestInit,
+): Promise<{ saveUrl: string }> =>
+  customFetch<{ saveUrl: string }>(
+    `/api/travels/trips/${tripId}/documents/${docId}/wallet-pass`,
+    { ...options, method: "POST" },
+  );
+
+// ---------------------------------------------------------------------------
+// Google Maps Platform-backed helpers (weather, places, routes, images)
+// ---------------------------------------------------------------------------
+
+export interface DailyWeather {
+  date: string;
+  conditionDescription: string;
+  maxTempC: number | null;
+  minTempC: number | null;
+  precipitationChancePercent: number | null;
+}
+
+export const getWeatherForecast = (
+  lat: number,
+  lng: number,
+  options?: RequestInit,
+): Promise<{ forecast: DailyWeather[] }> =>
+  customFetch<{ forecast: DailyWeather[] }>(
+    `/api/travels/maps/weather?lat=${lat}&lng=${lng}`,
+    options,
+  );
+
+export interface MapPlaceResult {
+  id: string;
+  name: string;
+  address: string;
+  rating: number | null;
+  userRatingCount: number | null;
+  lat: number | null;
+  lng: number | null;
+}
+
+export const searchNearbyPlaces = (
+  query: string,
+  lat?: number,
+  lng?: number,
+  options?: RequestInit,
+): Promise<{ places: MapPlaceResult[] }> => {
+  const params = new URLSearchParams({ q: query });
+  if (lat != null) params.set("lat", String(lat));
+  if (lng != null) params.set("lng", String(lng));
+  return customFetch<{ places: MapPlaceResult[] }>(
+    `/api/travels/maps/places/search?${params.toString()}`,
+    options,
+  );
+};
+
+export const getStaticMapImageUrl = (
+  lat: number,
+  lng: number,
+  width = 400,
+  height = 240,
+  zoom = 12,
+) => `/api/travels/maps/static-map?lat=${lat}&lng=${lng}&width=${width}&height=${height}&zoom=${zoom}`;
+
+export const getStreetViewImageUrl = (lat: number, lng: number, width = 400, height = 240) =>
+  `/api/travels/maps/street-view?lat=${lat}&lng=${lng}&width=${width}&height=${height}`;
+
+export interface RouteInfoResult {
+  distanceMeters: number;
+  durationSeconds: number;
+  optimizedIntermediateWaypointIndex?: number[];
+  encodedPolyline?: string;
+}
+
+export const computeRouteInfo = (
+  body: {
+    origin: { lat: number; lng: number };
+    destination: { lat: number; lng: number };
+    intermediates?: { lat: number; lng: number }[];
+    mode?: "DRIVE" | "WALK" | "BICYCLE" | "TRANSIT";
+    optimizeWaypoints?: boolean;
+  },
+  options?: RequestInit,
+): Promise<RouteInfoResult> =>
+  customFetch<RouteInfoResult>(`/api/travels/maps/route`, {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(body),
+  });
+
 export const exploreDestination = (
   body: ExploreDestinationBody,
   options?: RequestInit,
@@ -569,6 +661,28 @@ export function useRescanTripDocument<TError = unknown, TContext = unknown>(
     TripDocument,
     { tripId: number; docId: number }
   > = ({ tripId, docId }) => rescanTripDocument(tripId, docId);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+export function useGetTripDocumentWalletPass<TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      { saveUrl: string },
+      TError,
+      { tripId: number; docId: number },
+      TContext
+    >;
+  },
+): UseMutationResult<
+  { saveUrl: string },
+  TError,
+  { tripId: number; docId: number },
+  TContext
+> {
+  const mutationFn: MutationFunction<
+    { saveUrl: string },
+    { tripId: number; docId: number }
+  > = ({ tripId, docId }) => getTripDocumentWalletPassUrl(tripId, docId);
   return useMutation({ mutationFn, ...options?.mutation });
 }
 

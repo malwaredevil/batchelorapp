@@ -270,11 +270,12 @@ function SuggestionsTab({
   function handleConfirmLink(
     attachmentIds: string[],
     includeEmailBody: boolean,
+    titles: Record<string, string>,
   ) {
     if (!linkTarget) return;
     const { messageId, tripId } = linkTarget;
     link.mutate(
-      { messageId, tripId, attachmentIds, includeEmailBody },
+      { messageId, tripId, attachmentIds, includeEmailBody, titles },
       {
         onSuccess: () => {
           qc.invalidateQueries({ queryKey: getGetGmailSuggestionsQueryKey() });
@@ -494,11 +495,12 @@ function InboxBrowserTab({
   function handleConfirmLink(
     attachmentIds: string[],
     includeEmailBody: boolean,
+    titles: Record<string, string>,
   ) {
     if (!linkTarget) return;
     const { messageId, tripId } = linkTarget;
     link.mutate(
-      { messageId, tripId, attachmentIds, includeEmailBody },
+      { messageId, tripId, attachmentIds, includeEmailBody, titles },
       {
         onSuccess: () => {
           qc.invalidateQueries({ queryKey: inboxQueryKey });

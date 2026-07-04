@@ -1288,13 +1288,14 @@ function DocumentRow({
           isLinking={linkGmail.isPending}
           defaultAllUnchecked
           onClose={() => setAddMoreOpen(false)}
-          onConfirm={(attachmentIds, includeEmailBody) => {
+          onConfirm={(attachmentIds, includeEmailBody, titles) => {
             linkGmail.mutate(
               {
                 messageId: doc.gmailMessageId!,
                 tripId,
                 attachmentIds,
                 includeEmailBody,
+                titles,
               },
               {
                 onSuccess: () => {

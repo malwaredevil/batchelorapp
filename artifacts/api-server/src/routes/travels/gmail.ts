@@ -455,6 +455,8 @@ const LinkBody = z.object({
   // everything" behaviour used by undo-relink and bulk-link.
   attachmentIds: z.array(z.string().min(1)).optional(),
   includeEmailBody: z.boolean().optional(),
+  // Optional per-item title overrides: keys are attachmentId or "body".
+  titles: z.record(z.string(), z.string()).optional(),
 });
 
 const MAX_BULK_LINK_MESSAGES = 25;
@@ -487,6 +489,8 @@ async function linkMessageToTrip(
   // and/or the email body. When absent, falls back to the legacy behaviour:
   // process all attachments if any exist, otherwise the email body.
   attachmentFilter?: { attachmentIds: string[]; includeEmailBody: boolean },
+  // Optional title overrides keyed by attachmentId or "body".
+  titles?: Record<string, string>,
 ): Promise<LinkedDocumentResult[]> {
   const full = await getMessage(accessToken, messageId);
   const parsed = parseGmailMessage(full);
@@ -544,6 +548,7 @@ async function linkMessageToTrip(
         documentType:
           (extractedData.documentType as string | undefined) ?? null,
         originalFilename: attachment.filename,
+        title: titles?.[attachment.attachmentId] ?? null,
         extractedData,
         gmailMessageId: messageId,
       })
@@ -580,6 +585,7 @@ async function linkMessageToTrip(
         documentType:
           (extractedData.documentType as string | undefined) ?? null,
         originalFilename,
+        title: titles?.["body"] ?? null,
         extractedData,
         gmailMessageId: messageId,
       })
@@ -739,6 +745,7 @@ router.post("/gmail/messages/:messageId/link", async (req, res) => {
       body.tripId,
       existingDecision,
       attachmentFilter,
+      body.titles,
     );
     res
       .status(201)

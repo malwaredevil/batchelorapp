@@ -1717,6 +1717,8 @@ export interface LinkGmailMessageBody {
   attachmentIds?: string[];
   /** When true, the email body text is also saved as a document. */
   includeEmailBody?: boolean;
+  /** Per-item title overrides: keys are attachmentId or "body". */
+  titles?: Record<string, string>;
 }
 
 const linkGmailMessageFn = (messageId: string, body: LinkGmailMessageBody): Promise<unknown> =>

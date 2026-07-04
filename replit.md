@@ -65,14 +65,17 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
 - All three "optional" AI secrets (OPENROUTER_API_KEY, JINA_API_KEY, VOYAGE_API_KEY) are required
 - Single combined domain: app.batchelor.app (target), pottery.batchelor.app + quilting.batchelor.app (decommissioned after go-live)
 - When the user has queued multiple feature requests, don't silently barrel from one to the next. If a step needs something from the user (a manual action, a confirmation, a choice), stop and ask a simple yes/no or short question via user_query before proceeding — don't let the queue push past unanswered questions.
-- Pre-publish checklist — run this every time before creating a checkpoint (or immediately after), not just when explicitly asked:
-  1. Log in with `AGENT_LOGIN_EMAIL`/`AGENT_LOGIN_PASSWORD` whenever UI browsing is needed — always allowed, no need to ask.
-  2. Deep end-to-end code review of everything added/changed.
-  3. Full E2E UI/UX testing of new/changed features (diff Replit vs GitHub if unsure what changed).
-  4. Confirm the change cannot harm the shared production Supabase DB (pottery + quilting also live there) — no `drizzle-kit push --force`, additive-only migrations only.
-  5. Run the Supabase → Replit built-in DB backup (`pnpm --filter @workspace/scripts run backup-to-replit`).
-  6. Sync GitHub repo + Issues, address any findings, and repeat steps 2-6 until Replit and GitHub are in sync with all checks passing on the latest state.
-  7. Only then (re)publish.
+- Pre-publish checklist — run this every time before creating a checkpoint (or immediately after), not just when explicitly asked. Gated in stages; do not move to the next stage until the current one passes:
+  - Stage 1 — review:
+    1. Log in with `AGENT_LOGIN_EMAIL`/`AGENT_LOGIN_PASSWORD` whenever UI browsing is needed — always allowed, no need to ask.
+    2. Deep end-to-end code review of everything added/changed (verify it works as intended, not just that it typechecks).
+    3. Full E2E UI/UX testing of new/changed features (diff Replit vs GitHub if unsure what changed).
+  - Stage 2 — DB safety (only after stage 1 passes):
+    4. Confirm the change cannot harm the shared production Supabase DB (pottery + quilting also live there) — no `drizzle-kit push --force`, additive-only migrations only.
+  - Stage 3 — backup + sync (only after stage 2 passes):
+    5. Run the Supabase → Replit built-in DB backup (`pnpm --filter @workspace/scripts run backup-to-replit`).
+    6. Sync GitHub repo + Issues, and address any workflow validation findings (e.g. CodeQL) both in Replit and in the GitHub repo. Repeat stages 1-3 until Replit and GitHub are in sync with all checks passing on the latest state.
+  - Only once all stages pass: (re)publish.
 
 ## Gotchas
 

@@ -37,3 +37,4 @@
 - [Fragment-in-flex gap spacing bug](fragment-in-flex-gap-spacing-bug.md) — a component returning a bare Fragment breaks apart into huge gaps when placed in a flex+gap container; wrap in a single span.
 - [React hook called after an early return](react-hooks-after-early-return.md) — "Rendered more hooks" crash that survives reload means a hook call is textually after a loading/null guard, not an HMR artifact; audit call-site position, not just the value passed in.
 - [Google Maps shared loader + custom marker icons](google-maps-shared-loader.md) — extract the js-api-loader singleton into one shared module; AdvancedMarkerElement accepts any SVG DOM node as `content`, not just PinElement.
+- [Automated screenshot tool needs a cookie-free auth path](screenshot-tool-cookie-bypass.md) — app_preview hits plain HTTP internally, dropping Secure+SameSite=None cookies; use a header-based dev-only token bypass in the shared fetch client + auth middleware instead.

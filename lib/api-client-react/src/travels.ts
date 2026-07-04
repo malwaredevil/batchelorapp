@@ -1541,6 +1541,7 @@ export interface GmailInboxMessage {
   alreadyIgnored: boolean;
   linkedTripTitle: string | null;
   linkedDocumentName: string | null;
+  linkedTripId: number | null;
 }
 
 export interface GmailInboxPage {

@@ -411,7 +411,7 @@ router.get("/gmail/inbox", async (req, res) => {
     }
     const linkedInfoByMessageId = new Map<
       string,
-      { linkedTripTitle: string | null; linkedDocumentName: string | null }
+      { linkedTripTitle: string | null; linkedDocumentName: string | null; linkedTripId: number }
     >();
     for (const d of decisions) {
       if (d.status !== "linked" || d.tripDocumentId == null) continue;
@@ -420,6 +420,7 @@ router.get("/gmail/inbox", async (req, res) => {
       linkedInfoByMessageId.set(d.gmailMessageId, {
         linkedTripTitle: tripTitleById.get(docInfo.tripId) ?? null,
         linkedDocumentName: docInfo.name,
+        linkedTripId: docInfo.tripId,
       });
     }
 
@@ -434,6 +435,7 @@ router.get("/gmail/inbox", async (req, res) => {
             decided.has(`${s.id}:ignored`) || decided.has(`${s.id}:dismissed`),
           linkedTripTitle: linkedInfo?.linkedTripTitle ?? null,
           linkedDocumentName: linkedInfo?.linkedDocumentName ?? null,
+          linkedTripId: linkedInfo?.linkedTripId ?? null,
         };
       });
     res.json({ messages, nextPageToken: page.nextPageToken ?? null });

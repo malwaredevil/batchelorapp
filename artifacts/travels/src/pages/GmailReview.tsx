@@ -488,11 +488,44 @@ function InboxBrowserTab({
   function handleConfirmUnlink() {
     const m = unlinkTarget;
     if (!m) return;
-    unlink.mutate(m.id, {
+    const savedId = m.id;
+    const savedTripId = m.linkedTripId;
+    const savedTripTitle = m.linkedTripTitle;
+    const savedDocName = m.linkedDocumentName;
+    unlink.mutate(savedId, {
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: inboxQueryKey });
-        toast.success("Unlinked — this email can be added again");
         setUnlinkTarget(null);
+        toast(
+          savedDocName
+            ? `"${savedDocName}" deleted`
+            : "Trip document deleted",
+          {
+            description: savedTripTitle
+              ? `Removed from ${savedTripTitle}`
+              : "This email can be added to a trip again",
+            duration: 6000,
+            action:
+              savedTripId != null
+                ? {
+                    label: "Undo",
+                    onClick: () => {
+                      link.mutate(
+                        { messageId: savedId, tripId: savedTripId },
+                        {
+                          onSuccess: () => {
+                            qc.invalidateQueries({ queryKey: inboxQueryKey });
+                            toast.success("Re-linked successfully");
+                          },
+                          onError: () =>
+                            toast.error("Could not re-link this email"),
+                        },
+                      );
+                    },
+                  }
+                : undefined,
+          },
+        );
       },
       onError: (err) => {
         toast.error(

@@ -42,6 +42,34 @@ const OAUTH_COOKIE_PATH = "/api/travels/gmail";
 const DEFAULT_INBOX_QUERY =
   '(subject:(flight OR itinerary OR "boarding pass" OR "e-ticket" OR eticket OR reservation OR booking OR confirmation OR "check-in" OR hotel OR train OR "car rental" OR "rental car")) -category:promotions -category:social';
 
+// Gmail enforces a per-user *concurrent* request cap (distinct from its
+// per-second quota) — an unbounded Promise.all over ~25 message-summary
+// fetches reliably triggers 429 "Too many concurrent requests for user" and
+// silently drops those rows (each summary fetch is individually caught and
+// filtered to null downstream). Cap concurrency to stay under that limit.
+const GMAIL_SUMMARY_CONCURRENCY = 5;
+
+async function getMessageSummariesLimited(
+  accessToken: string,
+  messageIds: string[],
+): Promise<(Awaited<ReturnType<typeof getMessageSummary>> | null)[]> {
+  const results: (Awaited<ReturnType<typeof getMessageSummary>> | null)[] = new Array(
+    messageIds.length,
+  ).fill(null);
+  let nextIndex = 0;
+  async function worker(): Promise<void> {
+    for (;;) {
+      const i = nextIndex++;
+      if (i >= messageIds.length) return;
+      results[i] = await getMessageSummary(accessToken, messageIds[i]!).catch(() => null);
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(GMAIL_SUMMARY_CONCURRENCY, messageIds.length) }, worker),
+  );
+  return results;
+}
+
 function callbackUrl(req: { protocol: string; get: (h: string) => string | undefined }): string {
   const host = req.get("host");
   return `${req.protocol}://${host}/api/travels/gmail/callback`;
@@ -249,8 +277,9 @@ router.get("/gmail/inbox", async (req, res) => {
 
   try {
     const page = await searchMessagesPage(accessToken, q, pageToken, 25);
-    const summaries = await Promise.all(
-      page.messages.map((m) => getMessageSummary(accessToken, m.id).catch(() => null)),
+    const summaries = await getMessageSummariesLimited(
+      accessToken,
+      page.messages.map((m) => m.id),
     );
     const decided = new Set(
       (

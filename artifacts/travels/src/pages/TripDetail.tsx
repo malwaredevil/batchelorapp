@@ -407,20 +407,30 @@ function DocumentRow({
     );
   };
 
-  const keyFields: Array<{ key: string; label: string }> = [
-    // Flight-related fields grouped together
-    { key: "referenceNumber", label: "Ref" },
-    { key: "airline", label: "Airline" },
-    { key: "departureDateTime", label: "Departure" },
-    { key: "flightNumber", label: "Flight" },
-    { key: "returnDepartureDateTime", label: "Return" },
-    { key: "returnFlightNumber", label: "Return flight" },
-    // Hotel-related fields grouped together
-    { key: "hotelName", label: "Hotel" },
-    { key: "confirmationNumber", label: "Confirmation" },
-    { key: "checkInDate", label: "Check-in" },
-    { key: "checkOutDate", label: "Check-out" },
-  ];
+  // AI extraction stores the airline/hotel name under `providerName` and the
+  // booking/confirmation number under `referenceNumber` (see
+  // travel-document-extraction.ts). Older `airline`/`hotelName`/
+  // `confirmationNumber` keys are never populated, so map the display fields to
+  // the canonical keys and show the group relevant to the document type.
+  const docType = (doc.documentType ?? "").toLowerCase();
+  const isHotel = docType.includes("hotel");
+  const keyFields: Array<{ key: string; label: string }> = isHotel
+    ? [
+        // Hotel-related fields grouped together
+        { key: "providerName", label: "Hotel" },
+        { key: "referenceNumber", label: "Confirmation" },
+        { key: "checkInDate", label: "Check-in" },
+        { key: "checkOutDate", label: "Check-out" },
+      ]
+    : [
+        // Flight-related fields grouped together
+        { key: "referenceNumber", label: "Ref" },
+        { key: "providerName", label: "Airline" },
+        { key: "departureDateTime", label: "Departure" },
+        { key: "flightNumber", label: "Flight" },
+        { key: "returnDepartureDateTime", label: "Return" },
+        { key: "returnFlightNumber", label: "Return flight" },
+      ];
 
   const saveExtractedField = (key: string, rawValue: string) => {
     const value = rawValue.trim();

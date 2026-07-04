@@ -7,8 +7,8 @@ A component that returns a bare Fragment (`<>text<span>styled</span>text</>`) lo
 in isolated/prose contexts (paragraphs, headings), but breaks visually when a caller
 places it inside a `flex ... gap-*` container (e.g. a shadcn `DropdownMenuItem`,
 `flex items-center gap-2`). Each Fragment child (text run or element) becomes its own
-anonymous flex item, and the container's `gap` is applied *between* them — turning
-"Turn off Elaine" into "Turn off  El  AI  ne" with huge spacing.
+anonymous flex item, and the container's `gap` is applied _between_ them — turning
+"Turn off Elaine" into "Turn off El AI ne" with huge spacing.
 
 **Why:** Fragments don't create a DOM wrapper, so flex layout treats each of their
 children as independent flex items rather than as one inline unit.

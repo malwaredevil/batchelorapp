@@ -71,7 +71,10 @@ router.get("/dev/screenshot-login", async (req, res) => {
     req.session.userId = user.id;
     req.session.save((saveErr) => {
       if (saveErr) {
-        req.log.error({ err: saveErr }, "screenshot-login: session save failed");
+        req.log.error(
+          { err: saveErr },
+          "screenshot-login: session save failed",
+        );
         res.status(500).json({ error: "Could not create session." });
         return;
       }

@@ -8,6 +8,7 @@ import {
   useDeleteTripDocument,
   useUpdateTripDocument,
   useRescanTripDocument,
+  useGetTripDocumentWalletPass,
   useGetHighlights,
   useListTripPhotos,
   useUploadTripPhoto,
@@ -26,6 +27,9 @@ import {
   getGetTravelsStatsQueryKey,
   getListTripPhotosQueryKey,
   getListRemindersQueryKey,
+  getWeatherForecast,
+  searchNearbyPlaces,
+  getStaticMapImageUrl,
   type UpdateTripBody,
   type TripStatus,
   type TransportTo,
@@ -39,7 +43,7 @@ import { OneThingInput } from "@/components/OneThingInput";
 import { MagnetCheckDialog } from "@/components/MagnetCheckDialog";
 import { ReminderEditDialog } from "@/components/ReminderEditDialog";
 import { usePageAssistantContext } from "@/lib/assistant-context";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -78,10 +82,13 @@ import {
   Lock,
   LockOpen,
   ScanSearch,
+  Wallet,
   Magnet,
   Star,
   CalendarCheck,
   CalendarPlus,
+  Cloud,
+  Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { InlineField, InlineTextField, InlineTextareaField, InlineDateField } from "@/components/InlineField";
@@ -241,6 +248,7 @@ function DocumentRow({
   const qc = useQueryClient();
   const updateTripDocument = useUpdateTripDocument();
   const rescanTripDocument = useRescanTripDocument();
+  const walletPass = useGetTripDocumentWalletPass();
   const ext = doc.originalFilename?.split(".").pop()?.toLowerCase();
   const ed = doc.extractedData as Record<string, unknown> | null;
   const lockedFields = doc.lockedFields ?? [];
@@ -270,6 +278,18 @@ function DocumentRow({
           toast.success("Document re-scanned");
         },
         onError: () => toast.error("Failed to re-scan document"),
+      },
+    );
+  };
+
+  const handleAddToWallet = () => {
+    walletPass.mutate(
+      { tripId, docId: doc.id },
+      {
+        onSuccess: ({ saveUrl }) => {
+          window.open(saveUrl, "_blank", "noopener,noreferrer");
+        },
+        onError: () => toast.error("Couldn't create a Google Wallet pass for this document"),
       },
     );
   };
@@ -357,6 +377,14 @@ function DocumentRow({
         >
           <ScanSearch className={`w-4 h-4 ${rescanTripDocument.isPending ? "animate-pulse" : ""}`} />
         </button>
+        <button
+          onClick={handleAddToWallet}
+          disabled={walletPass.isPending}
+          className="p-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+          title="Add to Google Wallet"
+        >
+          <Wallet className={`w-4 h-4 ${walletPass.isPending ? "animate-pulse" : ""}`} />
+        </button>
         <a
           href={getTripDocumentDownloadUrl(tripId, doc.id)}
           target="_blank"
@@ -373,6 +401,123 @@ function DocumentRow({
         </button>
       </div>
     </div>
+  );
+}
+
+function TripWeatherAndPlaces({
+  tripId,
+  lat,
+  lng,
+}: {
+  tripId: number;
+  lat: number;
+  lng: number;
+}) {
+  const [placeQuery, setPlaceQuery] = useState("restaurants");
+  const [searchTerm, setSearchTerm] = useState("restaurants");
+
+  const weatherQuery = useQuery({
+    queryKey: ["travels-weather", tripId],
+    queryFn: () => getWeatherForecast(lat, lng),
+    staleTime: 1000 * 60 * 30,
+  });
+
+  const placesQuery = useQuery({
+    queryKey: ["travels-nearby-places", tripId, searchTerm],
+    queryFn: () => searchNearbyPlaces(searchTerm, lat, lng),
+    staleTime: 1000 * 60 * 10,
+  });
+
+  return (
+    <Card className="border-border/50">
+      <CardContent className="py-4 space-y-4">
+        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+          <Cloud className="w-4 h-4" />
+          Weather &amp; nearby
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <img
+            src={getStaticMapImageUrl(lat, lng)}
+            alt="Destination map"
+            className="w-full h-40 object-cover rounded-lg border border-border/50 bg-secondary"
+            loading="lazy"
+          />
+          <div className="space-y-1.5">
+            {weatherQuery.isLoading && (
+              <p className="text-sm text-muted-foreground">Loading forecast…</p>
+            )}
+            {weatherQuery.isError && (
+              <p className="text-sm text-muted-foreground">Weather forecast unavailable</p>
+            )}
+            {weatherQuery.data?.forecast?.length === 0 && !weatherQuery.isLoading && (
+              <p className="text-sm text-muted-foreground">No forecast available (too far out)</p>
+            )}
+            <ul className="space-y-1">
+              {weatherQuery.data?.forecast?.slice(0, 5).map((day) => (
+                <li key={day.date} className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">{formatDate(day.date)}</span>
+                  <span className="text-foreground truncate max-w-[45%] text-right">
+                    {day.conditionDescription}
+                  </span>
+                  <span className="text-foreground font-medium tabular-nums">
+                    {day.maxTempC != null ? `${Math.round(day.maxTempC)}°` : "—"}
+                    {day.minTempC != null ? ` / ${Math.round(day.minTempC)}°` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        <div className="pt-2 border-t border-border/50 space-y-2">
+          <div className="flex items-center gap-2">
+            <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+            <Input
+              value={placeQuery}
+              onChange={(e) => setPlaceQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && placeQuery.trim()) setSearchTerm(placeQuery.trim());
+              }}
+              placeholder="Search nearby (restaurants, museums, coffee...)"
+              className="h-8"
+            />
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={!placeQuery.trim()}
+              onClick={() => setSearchTerm(placeQuery.trim())}
+            >
+              Search
+            </Button>
+          </div>
+          {placesQuery.isLoading && (
+            <p className="text-sm text-muted-foreground">Searching…</p>
+          )}
+          {placesQuery.isError && (
+            <p className="text-sm text-muted-foreground">Couldn't search nearby places</p>
+          )}
+          {placesQuery.data?.places?.length === 0 && !placesQuery.isLoading && (
+            <p className="text-sm text-muted-foreground">No results found</p>
+          )}
+          <ul className="space-y-2">
+            {placesQuery.data?.places?.slice(0, 6).map((place) => (
+              <li key={place.id} className="text-sm">
+                <p className="text-foreground font-medium">{place.name}</p>
+                <p className="text-muted-foreground text-xs">
+                  {place.address}
+                  {place.rating != null && (
+                    <>
+                      {" · "}⭐ {place.rating}
+                      {place.userRatingCount != null ? ` (${place.userRatingCount})` : ""}
+                    </>
+                  )}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1932,6 +2077,11 @@ export default function TripDetail({ id }: { id: number }) {
           />
         </CardContent>
       </Card>
+
+      {/* Maps: weather, static map & nearby places */}
+      {trip.lat != null && trip.lng != null && (
+        <TripWeatherAndPlaces tripId={trip.id} lat={trip.lat} lng={trip.lng} />
+      )}
 
       {/* Photos */}
       {trip && (

@@ -14,6 +14,8 @@ import connectedCalendarsRouter from "./connected-calendars";
 import calendarTripSuggestionsRouter from "./calendar-trip-suggestions";
 import assistantRouter from "./assistant";
 import gmailRouter from "./gmail";
+import mapsRouter from "./maps";
+import walletRouter from "./wallet";
 
 const router: IRouter = Router();
 
@@ -32,5 +34,7 @@ router.use(connectedCalendarsRouter);
 router.use(calendarTripSuggestionsRouter);
 router.use(assistantRouter);
 router.use(gmailRouter);
+router.use(mapsRouter);
+router.use(walletRouter);
 
 export default router;

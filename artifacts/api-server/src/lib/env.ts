@@ -19,5 +19,8 @@ export const env = {
   voyageApiKey: optional("VOYAGE_API_KEY"),
   googleClientId: optional("GOOGLE_CLIENT_ID"),
   googleClientSecret: optional("GOOGLE_CLIENT_SECRET"),
+  googleMapsApiKey: optional("GOOGLE_MAPS_API_KEY"),
+  googleWalletServiceAccountJson: optional("GOOGLE_WALLET_SERVICE_ACCOUNT_JSON"),
+  googleWalletIssuerId: optional("GOOGLE_WALLET_ISSUER_ID"),
   isProduction: process.env.NODE_ENV === "production",
 };

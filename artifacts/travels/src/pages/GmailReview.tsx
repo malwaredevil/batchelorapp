@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -44,12 +44,57 @@ import {
   type Trip,
 } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/lib/assistant-context";
+import { cn } from "@/lib/utils";
 
 function formatDate(value: string | null): string {
   if (!value) return "Unknown date";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "Unknown date";
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+const AVATAR_PALETTE = [
+  "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
+  "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+  "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+  "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
+  "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300",
+];
+
+function getDisplayName(from: string | null | undefined): string {
+  if (!from) return "Unknown sender";
+  const match = from.match(/^"?([^"<]+)"?\s*<[^>]+>$/);
+  return match ? match[1].trim() : from.replace(/<[^>]+>/, "").trim() || from;
+}
+
+function getInitials(from: string | null | undefined): string {
+  const name = getDisplayName(from);
+  const parts = name.split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function getAvatarColor(from: string | null | undefined): string {
+  const name = getDisplayName(from);
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
+}
+
+function SenderAvatar({ from, className }: { from: string | null | undefined; className?: string }) {
+  return (
+    <div
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+        getAvatarColor(from),
+        className,
+      )}
+    >
+      {getInitials(from)}
+    </div>
+  );
 }
 
 function TripPicker({
@@ -92,36 +137,54 @@ function ViewMessageDialog({
 
   return (
     <Dialog open={!!messageId} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{data?.subject || "(no subject)"}</DialogTitle>
-          <DialogDescription>
-            {data ? `${data.from} · ${formatDate(data.date)}` : "Loading…"}
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto p-0 gap-0">
         {isLoading || !data ? (
-          <p className="text-sm text-muted-foreground py-6 text-center">Loading email…</p>
-        ) : isError ? (
-          <p className="text-sm text-destructive py-6 text-center">Could not load this email.</p>
-        ) : (
-          <div className="space-y-3">
-            {data.attachments.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {data.attachments.map((a, i) => (
-                  <span
-                    key={i}
-                    className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
-                  >
-                    <Paperclip className="h-3 w-3" />
-                    {a.filename}
-                  </span>
-                ))}
-              </div>
-            )}
-            <p className="text-sm text-foreground whitespace-pre-wrap">
-              {data.textBody || "(no body content)"}
-            </p>
+          <div className="p-8">
+            <p className="text-sm text-muted-foreground py-6 text-center">Loading email…</p>
           </div>
+        ) : isError ? (
+          <div className="p-8">
+            <p className="text-sm text-destructive py-6 text-center">Could not load this email.</p>
+          </div>
+        ) : (
+          <>
+            <DialogHeader className="border-b border-card-border px-6 py-5">
+              <DialogTitle className="font-serif text-xl text-foreground leading-snug pr-6">
+                {data.subject || "(no subject)"}
+              </DialogTitle>
+              <DialogDescription asChild>
+                <div className="flex items-center gap-3 pt-2">
+                  <SenderAvatar from={data.from} className="h-9 w-9 text-sm" />
+                  <div className="min-w-0 text-left">
+                    <p className="text-sm font-medium text-foreground truncate">
+                      {getDisplayName(data.from)}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {data.from} · {formatDate(data.date)}
+                    </p>
+                  </div>
+                </div>
+              </DialogDescription>
+            </DialogHeader>
+            <div className="px-6 py-5 space-y-4">
+              {data.attachments.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {data.attachments.map((a, i) => (
+                    <span
+                      key={i}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-card-border bg-muted/60 px-3 py-1.5 text-[11px] font-medium text-muted-foreground"
+                    >
+                      <Paperclip className="h-3 w-3" />
+                      {a.filename}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                {data.textBody || "(no body content)"}
+              </p>
+            </div>
+          </>
         )}
       </DialogContent>
     </Dialog>
@@ -187,17 +250,22 @@ function SuggestionsTab({
   }
 
   return (
-    <ul className="space-y-3">
+    <ul className="divide-y divide-card-border rounded-xl border border-card-border bg-card overflow-hidden">
       {suggestions.map((s) => {
         const extracted = (s.extractedData ?? {}) as Record<string, unknown>;
         return (
-          <li key={s.id} className="rounded-xl border border-card-border bg-card p-4 space-y-3">
+          <li key={s.id} className="p-4 space-y-3 transition-colors hover:bg-muted/30">
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">{s.subject || "(no subject)"}</p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {s.fromAddress} · {formatDate(s.receivedAt)}
-                </p>
+              <div className="flex items-start gap-3 min-w-0">
+                <SenderAvatar from={s.fromAddress} className="h-9 w-9 mt-0.5" />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground truncate">
+                    {s.subject || "(no subject)"}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {getDisplayName(s.fromAddress)} · {formatDate(s.receivedAt)}
+                  </p>
+                </div>
               </div>
               {typeof extracted.documentType === "string" && (
                 <span className="shrink-0 rounded-full bg-sky-100 px-2.5 py-1 text-[11px] font-medium capitalize text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
@@ -207,14 +275,14 @@ function SuggestionsTab({
             </div>
 
             {(typeof extracted.providerName === "string" || typeof extracted.referenceNumber === "string") && (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground pl-12">
                 {[extracted.providerName, extracted.referenceNumber]
                   .filter((v): v is string => typeof v === "string" && v.length > 0)
                   .join(" · ")}
               </p>
             )}
 
-            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-center pl-12">
               <TripPicker
                 trips={trips}
                 value={selectedTrip[s.id] ?? ""}
@@ -264,6 +332,9 @@ function InboxBrowserTab({
   const [committedQuery, setCommittedQuery] = useState("");
   const [pageToken, setPageToken] = useState<string | undefined>(undefined);
   const [showIgnored, setShowIgnored] = useState(false);
+  const [autoPageCount, setAutoPageCount] = useState(0);
+  const isDefaultQuery = committedQuery === "";
+  const MAX_AUTO_PAGES = 4;
   const { data, isLoading, isFetching } = useGetGmailInbox({ q: committedQuery || undefined, pageToken });
   const link = useLinkGmailMessage();
   const ignore = useIgnoreGmailMessage();
@@ -275,8 +346,28 @@ function InboxBrowserTab({
 
   const inboxQueryKey = getGetGmailInboxQueryKey({ q: committedQuery || undefined, pageToken });
 
+  // The default (unsearched) inbox query is a narrow travel-keyword filter. It's common for
+  // the first page (or several) to have zero matches even though later pages do. Rather than
+  // dead-ending the user on an empty state with a lone "Load more" button, keep paging
+  // automatically (bounded) until we find something or exhaust a reasonable number of pages.
+  useEffect(() => {
+    if (
+      isDefaultQuery &&
+      !isFetching &&
+      data &&
+      data.messages.length === 0 &&
+      data.nextPageToken &&
+      autoPageCount < MAX_AUTO_PAGES
+    ) {
+      setAutoPageCount((c) => c + 1);
+      setPageToken(data.nextPageToken ?? undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDefaultQuery, isFetching, data, autoPageCount]);
+
   function handleSearch() {
     setPageToken(undefined);
+    setAutoPageCount(0);
     setCommittedQuery(query.trim());
     setChecked({});
   }
@@ -401,30 +492,51 @@ function InboxBrowserTab({
         </div>
       )}
 
-      {isLoading ? (
-        <p className="text-sm text-muted-foreground py-8 text-center">Searching your inbox…</p>
+      {isLoading || (isFetching && isDefaultQuery && (data?.messages.length ?? 0) === 0) ? (
+        <p className="text-sm text-muted-foreground py-8 text-center">
+          {isDefaultQuery && autoPageCount > 0
+            ? "Still searching your inbox for travel-related emails…"
+            : "Searching your inbox…"}
+        </p>
       ) : visibleMessages.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-card-border p-8 text-center">
-          <p className="text-sm text-muted-foreground">No matching emails found.</p>
+        <div className="rounded-xl border border-dashed border-card-border p-8 text-center space-y-1">
+          <Mail className="h-8 w-8 mx-auto text-muted-foreground" />
+          <p className="text-sm font-medium text-foreground">No matching emails found.</p>
+          {isDefaultQuery ? (
+            data?.nextPageToken ? (
+              <p className="text-xs text-muted-foreground">
+                We searched several pages of your inbox for travel-related emails without a match.
+                Keep looking, or try a custom search above (e.g. <code>from:delta.com</code>).
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                We searched your whole inbox for travel-related emails and found no matches. Try a
+                custom search above (e.g. <code>from:delta.com</code>).
+              </p>
+            )
+          ) : (
+            <p className="text-xs text-muted-foreground">Try a different search term.</p>
+          )}
         </div>
       ) : (
-        <ul className="space-y-3">
+        <ul className="divide-y divide-card-border rounded-xl border border-card-border bg-card overflow-hidden">
           {visibleMessages.map((m) => (
-            <li key={m.id} className="rounded-xl border border-card-border bg-card p-4 space-y-3">
+            <li key={m.id} className="p-4 space-y-3 transition-colors hover:bg-muted/30">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3 min-w-0">
                   {selectableMessages.some((s) => s.id === m.id) && (
                     <Checkbox
-                      className="mt-1"
+                      className="mt-2.5"
                       checked={!!checked[m.id]}
                       onCheckedChange={() => toggleChecked(m.id)}
                       aria-label="Select email"
                     />
                   )}
+                  <SenderAvatar from={m.from} className="h-9 w-9 mt-0.5" />
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">{m.subject || "(no subject)"}</p>
+                    <p className="text-sm font-semibold text-foreground truncate">{m.subject || "(no subject)"}</p>
                     <p className="text-xs text-muted-foreground truncate">
-                      {m.from} · {formatDate(m.date)}
+                      {getDisplayName(m.from)} · {formatDate(m.date)}
                     </p>
                     <p className="text-xs text-muted-foreground truncate mt-1">{m.snippet}</p>
                   </div>
@@ -447,7 +559,7 @@ function InboxBrowserTab({
               </div>
 
               {!m.alreadyLinked && !m.alreadyIgnored && (
-                <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                <div className="flex flex-col sm:flex-row gap-2 sm:items-center pl-12">
                   <TripPicker
                     trips={trips}
                     value={selectedTrip[m.id] ?? ""}
@@ -467,24 +579,35 @@ function InboxBrowserTab({
               )}
 
               {m.alreadyIgnored && !m.alreadyLinked && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleReconsider(m)}
-                  disabled={reconsider.isPending}
-                >
-                  <Undo2 className="h-3.5 w-3.5 mr-1.5" />
-                  Reconsider
-                </Button>
+                <div className="pl-12">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleReconsider(m)}
+                    disabled={reconsider.isPending}
+                  >
+                    <Undo2 className="h-3.5 w-3.5 mr-1.5" />
+                    Reconsider
+                  </Button>
+                </div>
               )}
             </li>
           ))}
         </ul>
       )}
 
-      {data?.nextPageToken && (
+      {data?.nextPageToken && visibleMessages.length > 0 && (
         <div className="flex justify-center">
-          <Button variant="outline" size="sm" onClick={() => setPageToken(data.nextPageToken!)} disabled={isFetching}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setAutoPageCount(0);
+              setPageToken(data.nextPageToken ?? undefined);
+            }}
+            disabled={isFetching}
+          >
+            {isFetching ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : null}
             Load more
           </Button>
         </div>

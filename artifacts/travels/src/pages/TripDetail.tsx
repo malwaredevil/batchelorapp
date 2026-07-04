@@ -505,7 +505,7 @@ function DayCard({
             <div className="px-4 py-3 border-t border-border/50">
               {addingActivity ? (
                 <div className="space-y-2">
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <Input
                       placeholder="Activity name *"
                       value={actForm.name}
@@ -523,7 +523,7 @@ function DayCard({
                     value={actForm.description}
                     onChange={(e) => setActForm((f) => ({ ...f, description: e.target.value }))}
                   />
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <Input
                       placeholder="Tip (optional)"
                       value={actForm.tip}
@@ -2085,7 +2085,7 @@ export default function TripDetail({ id }: { id: number }) {
           <Card className="border-border/50">
             <CardContent className="py-4 space-y-3">
               <p className="text-sm font-medium text-foreground">New day</p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label>Title *</Label>
                   <Input

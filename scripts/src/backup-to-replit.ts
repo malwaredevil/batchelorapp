@@ -276,10 +276,13 @@ CREATE TABLE IF NOT EXISTS travels_trip_documents (
   trip_id           INTEGER NOT NULL,
   user_id           INTEGER NOT NULL,
   storage_path      TEXT NOT NULL,
+  title             TEXT,
   document_type     TEXT,
   original_filename TEXT,
   extracted_data    JSONB,
   locked_fields     TEXT[] NOT NULL DEFAULT '{}',
+  gmail_message_id  TEXT,
+  icon_override     TEXT,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -433,6 +436,22 @@ CREATE TABLE IF NOT EXISTS travels_trip_card_collapse_state (
   collapsed_cards   TEXT[] NOT NULL DEFAULT '{}'::text[],
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS travels_custom_document_types (
+  id          SERIAL PRIMARY KEY,
+  user_id     INTEGER NOT NULL,
+  type_key    TEXT NOT NULL,
+  type_name   TEXT NOT NULL,
+  description TEXT,
+  icon_name   TEXT,
+  color_key   TEXT,
+  fields      JSONB NOT NULL DEFAULT '[]',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE travels_trip_documents ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE travels_trip_documents ADD COLUMN IF NOT EXISTS gmail_message_id TEXT;
+ALTER TABLE travels_trip_documents ADD COLUMN IF NOT EXISTS icon_override TEXT;
 `;
 
 async function copyTable(
@@ -797,10 +816,13 @@ async function main() {
       "trip_id",
       "user_id",
       "storage_path",
+      "title",
       "document_type",
       "original_filename",
       "extracted_data",
       "locked_fields",
+      "gmail_message_id",
+      "icon_override",
       "created_at",
     ],
     orderBy: "id",

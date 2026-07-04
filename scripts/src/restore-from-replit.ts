@@ -352,7 +352,7 @@ async function main() {
 
   // ── Travels ───────────────────────────────────────────────────────────────
   await dest.query(
-    "TRUNCATE travels_trip_card_collapse_state, travels_card_layout_preferences, travels_gmail_scan_decisions, travels_gmail_connections, travels_household_memory, travels_assistant_settings, travels_assistant_conversations, travels_reminder_calendar_events, travels_connected_calendars, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_trip_photos, travels_trip_documents CASCADE",
+    "TRUNCATE travels_custom_document_types, travels_trip_card_collapse_state, travels_card_layout_preferences, travels_gmail_scan_decisions, travels_gmail_connections, travels_household_memory, travels_assistant_settings, travels_assistant_conversations, travels_reminder_calendar_events, travels_connected_calendars, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_trip_photos, travels_trip_documents CASCADE",
   );
   await dest.query("TRUNCATE travels_trips CASCADE");
 
@@ -396,10 +396,13 @@ async function main() {
       "trip_id",
       "user_id",
       "storage_path",
+      "title",
       "document_type",
       "original_filename",
       "extracted_data",
       "locked_fields",
+      "gmail_message_id",
+      "icon_override",
       "created_at",
     ],
     orderBy: "id",

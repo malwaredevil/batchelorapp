@@ -19,10 +19,21 @@ wishlist items, reminders) had zero disaster-recovery coverage for an unknown
 period, and the restore script's `app_users` column list was also stale/
 incomplete.
 
-**How to apply:** whenever a new app, table, or column is added to
-`lib/db/src/schema/*`, cross-check that same table/column against both
-`backup-to-replit.ts` and `restore-from-replit.ts` (DEST_SCHEMA definitions,
-the `copyTable()` calls, and — for restore — the `TRUNCATE` list) before
-considering the feature "done" or running a pre-publish backup. Don't trust a
-green backup run alone; confirm the new table's name actually appears in the
-printed row-count summary.
+**How to apply — three things to update for every new table/column:**
+
+1. **DEST_SCHEMA** (`backup-to-replit.ts` const at the top): add `CREATE TABLE IF NOT EXISTS`
+   for new tables. For **new columns on existing tables**, add `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`
+   statements AFTER the CREATE TABLE block — the Replit DB already has the table so `CREATE TABLE IF NOT EXISTS`
+   won't add new columns; only `ALTER TABLE` will. Forgetting this causes a `42703` (column not found)
+   error on the `INSERT INTO` inside `copyTable()`.
+
+2. **`copyTable()` calls**: add new column names to the `columns` array for the
+   relevant table in both `backup-to-replit.ts` and `restore-from-replit.ts`.
+
+3. **TRUNCATE list** (restore script only): add new tables to the TRUNCATE
+   statement before the `travels_trips` cascade so FK constraints don't block.
+
+Don't trust a green backup run alone; confirm the new table's name actually
+appears in the printed row-count summary. If the source table has data and the
+DEST_SCHEMA is missing, the TRUNCATE inside `copyTable()` will throw `42P01`
+(relation not found) — that is the specific failure mode.

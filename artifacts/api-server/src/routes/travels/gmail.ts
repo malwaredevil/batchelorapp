@@ -399,7 +399,9 @@ router.get("/gmail/inbox", async (req, res) => {
         });
       }
     }
-    const tripIds = [...new Set([...docInfoById.values()].map((v) => v.tripId))];
+    const tripIds = [
+      ...new Set([...docInfoById.values()].map((v) => v.tripId)),
+    ];
     const tripTitleById = new Map<number, string>();
     if (tripIds.length > 0) {
       for (const t of await db
@@ -411,7 +413,11 @@ router.get("/gmail/inbox", async (req, res) => {
     }
     const linkedInfoByMessageId = new Map<
       string,
-      { linkedTripTitle: string | null; linkedDocumentName: string | null; linkedTripId: number }
+      {
+        linkedTripTitle: string | null;
+        linkedDocumentName: string | null;
+        linkedTripId: number;
+      }
     >();
     for (const d of decisions) {
       if (d.status !== "linked" || d.tripDocumentId == null) continue;

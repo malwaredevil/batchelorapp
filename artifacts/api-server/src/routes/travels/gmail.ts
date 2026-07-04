@@ -774,6 +774,94 @@ router.post("/gmail/messages/bulk-link", async (req, res) => {
   res.json({ results: outcomes });
 });
 
+// POST /gmail/messages/bulk-unlink — reverse "linked" decisions for multiple
+// selected emails in one request. Applies the same teardown as the single
+// unlink: removes the referenced trip document (storage + DB row + derived
+// itinerary entries) then deletes the decision row, freeing each email to be
+// re-added. Capped at 25 messages per request (matching bulk-link). Results
+// are per-message so the client can offer a targeted "Undo" action.
+router.post("/gmail/messages/bulk-unlink", async (req, res) => {
+  const userId = req.session.userId!;
+  const { messageIds } = req.body as { messageIds?: unknown };
+  if (
+    !Array.isArray(messageIds) ||
+    messageIds.length === 0 ||
+    messageIds.length > 25 ||
+    messageIds.some((id) => typeof id !== "string")
+  ) {
+    res.status(400).json({
+      error: "messageIds must be a non-empty string array of at most 25 items.",
+    });
+    return;
+  }
+
+  const outcomes: {
+    messageId: string;
+    status: "unlinked" | "not_linked" | "failed";
+    tripId: number | null;
+  }[] = [];
+
+  for (const messageId of messageIds as string[]) {
+    try {
+      const decision = await loadExistingDecision(userId, messageId);
+      if (!decision || decision.status !== "linked") {
+        outcomes.push({ messageId, status: "not_linked", tripId: null });
+        continue;
+      }
+      const { tripId, tripDocumentId } = decision;
+      if (tripId != null && tripDocumentId != null) {
+        const [doc] = await db
+          .select()
+          .from(travelsTripDocuments)
+          .where(
+            and(
+              eq(travelsTripDocuments.id, tripDocumentId),
+              eq(travelsTripDocuments.userId, userId),
+            ),
+          );
+        if (doc) {
+          try {
+            await deleteDocument(doc.storagePath);
+          } catch (err) {
+            logger.warn(
+              { err, userId, messageId, docId: tripDocumentId },
+              "gmail bulk-unlink: storage delete failed — removing DB record anyway",
+            );
+          }
+          await db
+            .delete(travelsTripDocuments)
+            .where(eq(travelsTripDocuments.id, tripDocumentId));
+          try {
+            await syncItineraryFromDocument(tripId, tripDocumentId, {});
+          } catch (err) {
+            logger.warn(
+              { err, userId, messageId, docId: tripDocumentId },
+              "gmail bulk-unlink: failed to purge itinerary entries",
+            );
+          }
+        }
+      }
+      await db
+        .delete(travelsGmailScanDecisions)
+        .where(
+          and(
+            eq(travelsGmailScanDecisions.userId, userId),
+            eq(travelsGmailScanDecisions.gmailMessageId, messageId),
+          ),
+        );
+      outcomes.push({ messageId, status: "unlinked", tripId: tripId ?? null });
+    } catch (err) {
+      logger.error(
+        { err, userId, messageId },
+        "gmail bulk-unlink: failed for message",
+      );
+      outcomes.push({ messageId, status: "failed", tripId: null });
+    }
+  }
+
+  res.json({ results: outcomes });
+});
+
 // POST /gmail/messages/:messageId/ignore — manual-mode equivalent of
 // dismissing a suggestion: permanently mark a browsed email as not
 // travel-related so it never appears in future scans or browse results as

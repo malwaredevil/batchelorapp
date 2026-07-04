@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { Router, type IRouter } from "express";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
 import {
   db,
@@ -333,25 +333,109 @@ router.get("/gmail/inbox", async (req, res) => {
       accessToken,
       page.messages.map((m) => m.id),
     );
+    // Bound the decision lookup to just the message IDs on this inbox page so
+    // query volume stays flat as the user's decision history grows.
+    const pageMessageIds = page.messages.map((m) => m.id);
+    const decisions =
+      pageMessageIds.length > 0
+        ? await db
+            .select({
+              gmailMessageId: travelsGmailScanDecisions.gmailMessageId,
+              status: travelsGmailScanDecisions.status,
+              tripDocumentId: travelsGmailScanDecisions.tripDocumentId,
+            })
+            .from(travelsGmailScanDecisions)
+            .where(
+              and(
+                eq(travelsGmailScanDecisions.userId, userId),
+                inArray(
+                  travelsGmailScanDecisions.gmailMessageId,
+                  pageMessageIds,
+                ),
+              ),
+            )
+        : [];
     const decided = new Set(
-      (
-        await db
-          .select({
-            gmailMessageId: travelsGmailScanDecisions.gmailMessageId,
-            status: travelsGmailScanDecisions.status,
-          })
-          .from(travelsGmailScanDecisions)
-          .where(eq(travelsGmailScanDecisions.userId, userId))
-      ).map((r) => `${r.gmailMessageId}:${r.status}`),
+      decisions.map((r) => `${r.gmailMessageId}:${r.status}`),
     );
+
+    // For linked emails, resolve the document filename + its trip title so the
+    // client can show exactly what an "unlink" would delete in a confirm
+    // dialog. Everything is anchored to the requesting user's OWN trip
+    // documents (travels_trip_documents.userId = userId): we only ever reveal a
+    // trip title for a trip the user's own document belongs to, so a stray
+    // decision row can never leak an unrelated trip's title. Trips themselves
+    // are household-shared, so no extra per-user trip filter is applied (that
+    // would wrongly hide titles for trips created by another household member).
+    const linkedDocIds = [
+      ...new Set(
+        decisions
+          .filter((d) => d.status === "linked" && d.tripDocumentId != null)
+          .map((d) => d.tripDocumentId as number),
+      ),
+    ];
+    const docInfoById = new Map<
+      number,
+      { tripId: number; name: string | null }
+    >();
+    if (linkedDocIds.length > 0) {
+      for (const d of await db
+        .select({
+          id: travelsTripDocuments.id,
+          tripId: travelsTripDocuments.tripId,
+          originalFilename: travelsTripDocuments.originalFilename,
+          documentType: travelsTripDocuments.documentType,
+        })
+        .from(travelsTripDocuments)
+        .where(
+          and(
+            eq(travelsTripDocuments.userId, userId),
+            inArray(travelsTripDocuments.id, linkedDocIds),
+          ),
+        )) {
+        docInfoById.set(d.id, {
+          tripId: d.tripId,
+          name: d.originalFilename ?? d.documentType ?? null,
+        });
+      }
+    }
+    const tripIds = [...new Set([...docInfoById.values()].map((v) => v.tripId))];
+    const tripTitleById = new Map<number, string>();
+    if (tripIds.length > 0) {
+      for (const t of await db
+        .select({ id: travelsTrips.id, title: travelsTrips.title })
+        .from(travelsTrips)
+        .where(inArray(travelsTrips.id, tripIds))) {
+        tripTitleById.set(t.id, t.title);
+      }
+    }
+    const linkedInfoByMessageId = new Map<
+      string,
+      { linkedTripTitle: string | null; linkedDocumentName: string | null }
+    >();
+    for (const d of decisions) {
+      if (d.status !== "linked" || d.tripDocumentId == null) continue;
+      const docInfo = docInfoById.get(d.tripDocumentId);
+      if (!docInfo) continue;
+      linkedInfoByMessageId.set(d.gmailMessageId, {
+        linkedTripTitle: tripTitleById.get(docInfo.tripId) ?? null,
+        linkedDocumentName: docInfo.name,
+      });
+    }
+
     const messages = summaries
       .filter((s): s is NonNullable<typeof s> => s !== null)
-      .map((s) => ({
-        ...s,
-        alreadyLinked: decided.has(`${s.id}:linked`),
-        alreadyIgnored:
-          decided.has(`${s.id}:ignored`) || decided.has(`${s.id}:dismissed`),
-      }));
+      .map((s) => {
+        const linkedInfo = linkedInfoByMessageId.get(s.id);
+        return {
+          ...s,
+          alreadyLinked: decided.has(`${s.id}:linked`),
+          alreadyIgnored:
+            decided.has(`${s.id}:ignored`) || decided.has(`${s.id}:dismissed`),
+          linkedTripTitle: linkedInfo?.linkedTripTitle ?? null,
+          linkedDocumentName: linkedInfo?.linkedDocumentName ?? null,
+        };
+      });
     res.json({ messages, nextPageToken: page.nextPageToken ?? null });
   } catch (err) {
     logger.error({ err, userId }, "gmail: inbox search failed");

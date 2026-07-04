@@ -1539,6 +1539,8 @@ export interface GmailInboxMessage {
   snippet: string;
   alreadyLinked: boolean;
   alreadyIgnored: boolean;
+  linkedTripTitle: string | null;
+  linkedDocumentName: string | null;
 }
 
 export interface GmailInboxPage {

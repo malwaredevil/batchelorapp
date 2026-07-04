@@ -16,16 +16,31 @@ function makePinIcon(color: string, size = 30) {
 const DESTINATION_COLOR = "#2563eb";
 const PLACE_COLOR = "#f97316";
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function placePopupHtml(place: MapPlaceResult): string {
   const ratingHtml =
     place.rating != null
       ? `<p style="font-size:12px;color:#6b7280;margin:2px 0 0">⭐ ${place.rating}${place.userRatingCount != null ? ` (${place.userRatingCount})` : ""}</p>`
       : "";
+  const nameHtml = place.googleMapsUri
+    ? `<a href="${escapeHtml(place.googleMapsUri)}" target="_blank" rel="noopener noreferrer" style="font-weight:600;font-size:13px;line-height:1.3;color:#2563eb;text-decoration:none">${escapeHtml(place.name)}</a>`
+    : `<p style="font-weight:600;font-size:13px;margin:0 0 2px;line-height:1.3">${escapeHtml(place.name)}</p>`;
+  const websiteHtml = place.websiteUri
+    ? `<a href="${escapeHtml(place.websiteUri)}" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:#2563eb;text-decoration:underline">Website</a>`
+    : "";
   return `
     <div style="min-width:160px;padding:2px 1px;font-family:inherit">
-      <p style="font-weight:600;font-size:13px;margin:0 0 2px;line-height:1.3">${place.name}</p>
-      <p style="font-size:11px;color:#9ca3af;margin:0">${place.address}</p>
+      ${nameHtml}
+      <p style="font-size:11px;color:#9ca3af;margin:2px 0 0">${escapeHtml(place.address)}</p>
       ${ratingHtml}
+      ${websiteHtml ? `<p style="margin:4px 0 0">${websiteHtml}</p>` : ""}
     </div>`;
 }
 

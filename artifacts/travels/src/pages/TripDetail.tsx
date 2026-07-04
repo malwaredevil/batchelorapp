@@ -88,11 +88,13 @@ import {
   CalendarPlus,
   Cloud,
   Search,
+  Globe,
+  UtensilsCrossed,
 } from "lucide-react";
 import { toast } from "sonner";
 import { InlineField, InlineTextField, InlineTextareaField, InlineDateField } from "@/components/InlineField";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { getWeatherIcon } from "@/lib/weather-icons";
+import { WeatherIcon, formatTempRangeC, formatTempRangeF } from "@/lib/weather-icons";
 import { TripLocationMap } from "@/components/TripLocationMap";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -453,29 +455,29 @@ function TripWeatherAndPlaces({
             {weatherQuery.data?.forecast?.length === 0 && !weatherQuery.isLoading && (
               <p className="text-sm text-muted-foreground">No forecast available (too far out)</p>
             )}
-            <ul className="space-y-1">
-              {weatherQuery.data?.forecast?.slice(0, 5).map((day) => {
-                const WeatherIcon = getWeatherIcon(day.conditionDescription);
-                return (
-                  <li key={day.date} className="flex items-center justify-between text-sm gap-2">
-                    <span className="text-muted-foreground shrink-0">{formatDate(day.date)}</span>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="flex items-center justify-center shrink-0 cursor-default">
-                          <WeatherIcon className="w-4 h-4 text-foreground/80" />
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        {day.conditionDescription ?? "Unknown conditions"}
-                      </TooltipContent>
-                    </Tooltip>
-                    <span className="text-foreground font-medium tabular-nums ml-auto">
-                      {day.maxTempC != null ? `${Math.round(day.maxTempC)}°` : "—"}
-                      {day.minTempC != null ? ` / ${Math.round(day.minTempC)}°` : ""}
-                    </span>
-                  </li>
-                );
-              })}
+            <ul className="space-y-1.5">
+              {weatherQuery.data?.forecast?.slice(0, 5).map((day) => (
+                <li
+                  key={day.date}
+                  className="flex items-center gap-3 rounded-lg border-2 border-sky-100 bg-gradient-to-br from-sky-50/70 to-transparent p-2 dark:border-sky-900/40 dark:from-sky-950/20"
+                >
+                  <WeatherIcon condition={day.conditionDescription} size={34} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">{formatDate(day.date)}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {day.conditionDescription ?? "Unknown"}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right leading-tight">
+                    <p className="text-sm font-semibold tabular-nums text-foreground">
+                      {formatTempRangeC(day.maxTempC, day.minTempC)}
+                    </p>
+                    <p className="text-[11px] tabular-nums text-muted-foreground">
+                      {formatTempRangeF(day.maxTempC, day.minTempC)}
+                    </p>
+                  </div>
+                </li>
+              ))}
             </ul>
           </div>
         </div>
@@ -512,17 +514,67 @@ function TripWeatherAndPlaces({
           )}
           <ul className="space-y-2">
             {placesQuery.data?.places?.slice(0, 6).map((place) => (
-              <li key={place.id} className="text-sm">
-                <p className="text-foreground font-medium">{place.name}</p>
-                <p className="text-muted-foreground text-xs">
-                  {place.address}
-                  {place.rating != null && (
-                    <>
-                      {" · "}⭐ {place.rating}
-                      {place.userRatingCount != null ? ` (${place.userRatingCount})` : ""}
-                    </>
+              <li
+                key={place.id}
+                className="flex items-start justify-between gap-2 rounded-md border border-border/40 p-2 text-sm transition-colors hover:border-border"
+              >
+                <div className="min-w-0">
+                  {place.googleMapsUri ? (
+                    <a
+                      href={place.googleMapsUri}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block truncate font-medium text-foreground hover:text-primary hover:underline"
+                    >
+                      {place.name}
+                    </a>
+                  ) : (
+                    <p className="truncate font-medium text-foreground">{place.name}</p>
                   )}
-                </p>
+                  <p className="text-muted-foreground text-xs">
+                    {place.address}
+                    {place.rating != null && (
+                      <>
+                        {" · "}⭐ {place.rating}
+                        {place.userRatingCount != null ? ` (${place.userRatingCount})` : ""}
+                      </>
+                    )}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-0.5">
+                  {place.websiteUri && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <a
+                          href={place.websiteUri}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`${place.name} website`}
+                          className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-primary"
+                        >
+                          <Globe className="h-4 w-4" />
+                        </a>
+                      </TooltipTrigger>
+                      <TooltipContent>Visit website</TooltipContent>
+                    </Tooltip>
+                  )}
+                  {place.googleMapsUri && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <a
+                          href={place.googleMapsUri}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`${place.name} menu on Google Maps`}
+                          className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-primary"
+                        >
+                          <UtensilsCrossed className="h-4 w-4" />
+                        </a>
+                      </TooltipTrigger>
+                      <TooltipContent>View menu on Google Maps</TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
               </li>
             ))}
           </ul>

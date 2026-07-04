@@ -226,6 +226,11 @@ export interface PlaceResult {
   userRatingCount: number | null;
   lat: number | null;
   lng: number | null;
+  // Google's own place page — shows reviews, photos, and (for restaurants
+  // that have supplied one to Google) a Menu tab.
+  googleMapsUri: string | null;
+  // The business's own website, when Google has one on file.
+  websiteUri: string | null;
 }
 
 export async function searchPlaces(
@@ -248,6 +253,8 @@ export async function searchPlaces(
       rating?: number;
       userRatingCount?: number;
       location?: { latitude: number; longitude: number };
+      googleMapsUri?: string;
+      websiteUri?: string;
     }>;
   }>("https://places.googleapis.com/v1/places:searchText", {
     method: "POST",
@@ -255,7 +262,7 @@ export async function searchPlaces(
       "Content-Type": "application/json",
       "X-Goog-Api-Key": key,
       "X-Goog-FieldMask":
-        "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.location",
+        "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.location,places.googleMapsUri,places.websiteUri",
     },
     body: JSON.stringify(body),
   });
@@ -268,6 +275,8 @@ export async function searchPlaces(
     userRatingCount: p.userRatingCount ?? null,
     lat: p.location?.latitude ?? null,
     lng: p.location?.longitude ?? null,
+    googleMapsUri: p.googleMapsUri ?? null,
+    websiteUri: p.websiteUri ?? null,
   }));
 }
 

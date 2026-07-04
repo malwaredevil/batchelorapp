@@ -13,6 +13,7 @@ import {
   CalendarDays,
   Mail,
   Menu,
+  MessageCircle,
 } from "lucide-react";
 import { AppSwitcher } from "@/components/AppSwitcher";
 import { useLogout, getGetCurrentUserQueryKey } from "@workspace/api-client-react";
@@ -55,6 +56,7 @@ const DISCOVER_NAV_ITEMS: NavItem[] = [
 const PLAN_NAV_ITEMS: NavItem[] = [
   { href: "/travel-calendar", label: "Travel Calendar", icon: CalendarDays },
   { href: "/gmail", label: "Gmail", icon: Mail },
+  { href: "/elaine", label: "Elaine", icon: MessageCircle },
 ];
 
 const ACCOUNT_NAV_ITEMS: NavItem[] = [{ href: "/settings", label: "Settings", icon: Settings }];

@@ -29,7 +29,6 @@ import {
   getListRemindersQueryKey,
   getWeatherForecast,
   searchNearbyPlaces,
-  getStaticMapImageUrl,
   type UpdateTripBody,
   type TripStatus,
   type TransportTo,
@@ -92,6 +91,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { InlineField, InlineTextField, InlineTextareaField, InlineDateField } from "@/components/InlineField";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { getWeatherIcon } from "@/lib/weather-icons";
+import { TripLocationMap } from "@/components/TripLocationMap";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -436,11 +438,10 @@ function TripWeatherAndPlaces({
           Weather &amp; nearby
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
-          <img
-            src={getStaticMapImageUrl(lat, lng)}
-            alt="Destination map"
-            className="w-full h-40 object-cover rounded-lg border border-border/50 bg-secondary"
-            loading="lazy"
+          <TripLocationMap
+            lat={lat}
+            lng={lng}
+            places={placesQuery.data?.places ?? []}
           />
           <div className="space-y-1.5">
             {weatherQuery.isLoading && (
@@ -453,18 +454,28 @@ function TripWeatherAndPlaces({
               <p className="text-sm text-muted-foreground">No forecast available (too far out)</p>
             )}
             <ul className="space-y-1">
-              {weatherQuery.data?.forecast?.slice(0, 5).map((day) => (
-                <li key={day.date} className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">{formatDate(day.date)}</span>
-                  <span className="text-foreground truncate max-w-[45%] text-right">
-                    {day.conditionDescription}
-                  </span>
-                  <span className="text-foreground font-medium tabular-nums">
-                    {day.maxTempC != null ? `${Math.round(day.maxTempC)}°` : "—"}
-                    {day.minTempC != null ? ` / ${Math.round(day.minTempC)}°` : ""}
-                  </span>
-                </li>
-              ))}
+              {weatherQuery.data?.forecast?.slice(0, 5).map((day) => {
+                const WeatherIcon = getWeatherIcon(day.conditionDescription);
+                return (
+                  <li key={day.date} className="flex items-center justify-between text-sm gap-2">
+                    <span className="text-muted-foreground shrink-0">{formatDate(day.date)}</span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="flex items-center justify-center shrink-0 cursor-default">
+                          <WeatherIcon className="w-4 h-4 text-foreground/80" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {day.conditionDescription ?? "Unknown conditions"}
+                      </TooltipContent>
+                    </Tooltip>
+                    <span className="text-foreground font-medium tabular-nums ml-auto">
+                      {day.maxTempC != null ? `${Math.round(day.maxTempC)}°` : "—"}
+                      {day.minTempC != null ? ` / ${Math.round(day.minTempC)}°` : ""}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         </div>

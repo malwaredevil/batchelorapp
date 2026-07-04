@@ -21,7 +21,8 @@
  *             travels_connected_calendars, travels_reminder_calendar_events,
  *             travels_assistant_conversations, travels_assistant_settings,
  *             travels_household_memory, travels_gmail_connections,
- *             travels_gmail_scan_decisions
+ *             travels_gmail_scan_decisions, travels_card_layout_preferences,
+ *             travels_trip_card_collapse_state, travels_custom_document_types
  *
  * What is intentionally skipped:
  *   - embedding / visual_embedding columns (require pgvector, unavailable on Replit DB)
@@ -994,6 +995,23 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "travels_trip_card_collapse_state", "id");
+
+  summary["travels_custom_document_types"] = await copyTable(source, dest, {
+    table: "travels_custom_document_types",
+    columns: [
+      "id",
+      "user_id",
+      "type_key",
+      "type_name",
+      "description",
+      "icon_name",
+      "color_key",
+      "fields",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_custom_document_types", "id");
 
   // ── Record backup history ─────────────────────────────────────────────────
   const note = Object.entries(summary)

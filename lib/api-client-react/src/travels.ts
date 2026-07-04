@@ -59,6 +59,19 @@ export interface TripDocument {
   extractedData?: Record<string, unknown> | null;
   lockedFields?: string[];
   gmailMessageId?: string | null;
+  iconOverride?: string | null;
+  createdAt: string;
+}
+
+export interface CustomDocumentType {
+  id: number;
+  userId: number;
+  typeKey: string;
+  typeName: string;
+  description: string | null;
+  iconName: string | null;
+  colorKey: string | null;
+  fields: Array<{ key: string; label: string }> | null;
   createdAt: string;
 }
 
@@ -289,7 +302,13 @@ export const deleteTripDocument = (
 export const updateTripDocument = (
   tripId: number,
   docId: number,
-  body: { extractedData?: Record<string, unknown>; lockedFields?: string[]; title?: string | null },
+  body: {
+    extractedData?: Record<string, unknown>;
+    lockedFields?: string[];
+    title?: string | null;
+    documentType?: string | null;
+    iconOverride?: string | null;
+  },
   options?: RequestInit,
 ): Promise<TripDocument> =>
   customFetch<TripDocument>(`/api/travels/trips/${tripId}/documents/${docId}`, {
@@ -298,6 +317,46 @@ export const updateTripDocument = (
     headers: { "Content-Type": "application/json", ...options?.headers },
     body: JSON.stringify(body),
   });
+
+export const listCustomDocumentTypes = (
+  options?: RequestInit,
+): Promise<CustomDocumentType[]> =>
+  customFetch<CustomDocumentType[]>("/api/travels/document-types", {
+    ...options,
+    method: "GET",
+  });
+
+export const createCustomDocumentType = (
+  body: {
+    typeKey: string;
+    typeName: string;
+    description?: string;
+    iconName?: string;
+    colorKey?: string;
+    fields?: Array<{ key: string; label: string }>;
+  },
+  options?: RequestInit,
+): Promise<CustomDocumentType> =>
+  customFetch<CustomDocumentType>("/api/travels/document-types", {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(body),
+  });
+
+export const suggestDocumentType = (
+  body: { typeName: string; description?: string },
+  options?: RequestInit,
+): Promise<{ iconName: string; colorKey: string; fields: Array<{ key: string; label: string }> }> =>
+  customFetch<{ iconName: string; colorKey: string; fields: Array<{ key: string; label: string }> }>(
+    "/api/travels/document-types/suggest",
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(body),
+    },
+  );
 
 export const rescanTripDocument = (
   tripId: number,
@@ -696,37 +755,108 @@ export function useDeleteTripDocument<TError = unknown, TContext = unknown>(
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
+type UpdateTripDocumentBody = {
+  extractedData?: Record<string, unknown>;
+  lockedFields?: string[];
+  title?: string | null;
+  documentType?: string | null;
+  iconOverride?: string | null;
+};
+
 export function useUpdateTripDocument<TError = unknown, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
       TripDocument,
       TError,
-      {
-        tripId: number;
-        docId: number;
-        body: { extractedData?: Record<string, unknown>; lockedFields?: string[]; title?: string | null };
-      },
+      { tripId: number; docId: number; body: UpdateTripDocumentBody },
       TContext
     >;
   },
 ): UseMutationResult<
   TripDocument,
   TError,
-  {
-    tripId: number;
-    docId: number;
-    body: { extractedData?: Record<string, unknown>; lockedFields?: string[]; title?: string | null };
-  },
+  { tripId: number; docId: number; body: UpdateTripDocumentBody },
   TContext
 > {
   const mutationFn: MutationFunction<
     TripDocument,
-    {
-      tripId: number;
-      docId: number;
-      body: { extractedData?: Record<string, unknown>; lockedFields?: string[]; title?: string | null };
-    }
+    { tripId: number; docId: number; body: UpdateTripDocumentBody }
   > = ({ tripId, docId, body }) => updateTripDocument(tripId, docId, body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+export function useListCustomDocumentTypes<TError = unknown>(
+  options?: { query?: Partial<UseQueryOptions<CustomDocumentType[], TError>> },
+): UseQueryResult<CustomDocumentType[], TError> {
+  return useQuery({
+    queryKey: ["travels", "document-types"],
+    queryFn: () => listCustomDocumentTypes(),
+    ...options?.query,
+  });
+}
+
+export function useCreateCustomDocumentType<TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      CustomDocumentType,
+      TError,
+      {
+        typeKey: string;
+        typeName: string;
+        description?: string;
+        iconName?: string;
+        colorKey?: string;
+        fields?: Array<{ key: string; label: string }>;
+      },
+      TContext
+    >;
+  },
+): UseMutationResult<
+  CustomDocumentType,
+  TError,
+  {
+    typeKey: string;
+    typeName: string;
+    description?: string;
+    iconName?: string;
+    colorKey?: string;
+    fields?: Array<{ key: string; label: string }>;
+  },
+  TContext
+> {
+  const mutationFn: MutationFunction<
+    CustomDocumentType,
+    {
+      typeKey: string;
+      typeName: string;
+      description?: string;
+      iconName?: string;
+      colorKey?: string;
+      fields?: Array<{ key: string; label: string }>;
+    }
+  > = (body) => createCustomDocumentType(body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+export function useSuggestDocumentType<TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      { iconName: string; colorKey: string; fields: Array<{ key: string; label: string }> },
+      TError,
+      { typeName: string; description?: string },
+      TContext
+    >;
+  },
+): UseMutationResult<
+  { iconName: string; colorKey: string; fields: Array<{ key: string; label: string }> },
+  TError,
+  { typeName: string; description?: string },
+  TContext
+> {
+  const mutationFn: MutationFunction<
+    { iconName: string; colorKey: string; fields: Array<{ key: string; label: string }> },
+    { typeName: string; description?: string }
+  > = (body) => suggestDocumentType(body);
   return useMutation({ mutationFn, ...options?.mutation });
 }
 

@@ -70,6 +70,7 @@ export const travelsTripDocuments = pgTable(
       .notNull()
       .default(sql`'{}'::text[]`),
     gmailMessageId: text("gmail_message_id"),
+    iconOverride: text("icon_override"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -662,3 +663,34 @@ export type TravelsTripCardCollapseStateRow =
   typeof travelsTripCardCollapseState.$inferSelect;
 export type InsertTravelsTripCardCollapseState =
   typeof travelsTripCardCollapseState.$inferInsert;
+
+// User-defined custom document types — trained by the user to help the AI
+// recognise new document categories not in the built-in list.
+export const travelsCustomDocumentTypes = pgTable(
+  "travels_custom_document_types",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull(),
+    typeKey: text("type_key").notNull(),
+    typeName: text("type_name").notNull(),
+    description: text("description"),
+    iconName: text("icon_name"),
+    colorKey: text("color_key"),
+    fields: jsonb("fields"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("travels_custom_document_types_user_id_type_key_idx").on(
+      table.userId,
+      table.typeKey,
+    ),
+    index("travels_custom_document_types_user_id_idx").on(table.userId),
+  ],
+).enableRLS();
+
+export type TravelsCustomDocumentTypeRow =
+  typeof travelsCustomDocumentTypes.$inferSelect;
+export type InsertTravelsCustomDocumentType =
+  typeof travelsCustomDocumentTypes.$inferInsert;

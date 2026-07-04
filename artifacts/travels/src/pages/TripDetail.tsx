@@ -1677,30 +1677,9 @@ export default function TripDetail({ id }: { id: number }) {
     );
   };
 
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        <div className="h-8 w-64 rounded bg-muted animate-pulse" />
-        <div className="h-32 rounded-xl bg-muted animate-pulse" />
-        <div className="h-48 rounded-xl bg-muted animate-pulse" />
-      </div>
-    );
-  }
-
-  if (!trip) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground">Trip not found.</p>
-        <Button variant="ghost" className="mt-4" onClick={() => setLocation("/trips")}>
-          Back to trips
-        </Button>
-      </div>
-    );
-  }
-
-  const packingList = (trip.packingList ?? []) as PackingItem[];
-  const todoList = (trip.todoList ?? []) as TodoItem[];
-  const documents = trip.documents ?? [];
+  const packingList = (trip?.packingList ?? []) as PackingItem[];
+  const todoList = (trip?.todoList ?? []) as TodoItem[];
+  const documents = trip?.documents ?? [];
 
   const DOCUMENT_FIELD_LABELS: Array<[string, string]> = [
     ["providerName", "provider"],
@@ -1738,7 +1717,9 @@ export default function TripDetail({ id }: { id: number }) {
 
   usePageAssistantContext(
     "trip-detail",
-    `Viewing trip "${trip.title}" to ${trip.destination} (tripId: ${trip.id}, status: ${trip.status}${
+    !trip
+      ? undefined
+      : `Viewing trip "${trip.title}" to ${trip.destination} (tripId: ${trip.id}, status: ${trip.status}${
       trip.startDate ? `, starts ${trip.startDate}` : ""
     }${trip.endDate ? `, ends ${trip.endDate}` : ""}). ` +
       `Packing list has ${packingList.length} item(s), ${packingList.filter((p) => p.packed).length} packed${
@@ -1791,6 +1772,28 @@ export default function TripDetail({ id }: { id: number }) {
         : "No itinerary generated yet for this trip.") +
       (addingDay ? ` User is currently adding a new itinerary day with title "${dayForm.title}" on ${dayForm.date}.` : ""),
   );
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <div className="h-8 w-64 rounded bg-muted animate-pulse" />
+        <div className="h-32 rounded-xl bg-muted animate-pulse" />
+        <div className="h-48 rounded-xl bg-muted animate-pulse" />
+      </div>
+    );
+  }
+
+  if (!trip) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-muted-foreground">Trip not found.</p>
+        <Button variant="ghost" className="mt-4" onClick={() => setLocation("/trips")}>
+          Back to trips
+        </Button>
+      </div>
+    );
+  }
+
   const canCalendar =
     (trip.status === "booked" || trip.status === "active") &&
     trip.startDate;

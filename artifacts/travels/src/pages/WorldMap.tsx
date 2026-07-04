@@ -13,6 +13,7 @@ import {
   getListWishlistQueryKey,
 } from "@workspace/api-client-react";
 import { Globe, MapPin, LocateFixed } from "lucide-react";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 const WISH_COLOR = "#eab308";
 const MAP_COLORS = {
@@ -219,6 +220,13 @@ export default function WorldMap() {
   const resetViewRef = useRef<(() => void) | null>(null);
 
   const isLoading = tripsLoading || wishlistLoading;
+
+  usePageAssistantContext(
+    "world-map",
+    isLoading
+      ? undefined
+      : `World Map page: an interactive map plotting every trip and wishlist destination as color-coded pins/stars (booked=green, planning=orange, completed=red, wishlist=yellow star). Showing ${trips.length} trip(s) and ${wishlistItems.length} wishlist destination(s).`,
+  );
 
   // Geocode wishlist items that have no coordinates, persisting results back to server
   const geocodingRef = useRef(false);

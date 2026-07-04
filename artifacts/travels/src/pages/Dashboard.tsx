@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Plane, MapPin, CheckCircle, Calendar, Clock, ArrowRight, Moon, Bell, Square, Edit2, X } from "lucide-react";
 import TripTimeline from "@/components/TripTimeline";
 import { ReminderEditDialog } from "@/components/ReminderEditDialog";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 const STATUS_ORDER: TripStatus[] = ["active", "booked", "planning", "wishlist", "completed"];
 
@@ -104,6 +105,17 @@ export default function Dashboard() {
     },
   });
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
+
+  usePageAssistantContext(
+    "dashboard",
+    statsLoading || tripsLoading
+      ? undefined
+      : `Dashboard page (home screen): shows trip stats, a countdown to the next upcoming trip${
+          stats?.nextTrip ? ` (${stats.nextTrip.destination})` : ""
+        }, ${pendingReminders.length} pending reminder(s), and every trip grouped by status. Trip counts by status: ${STATUS_ORDER.map(
+          (s) => `${STATUS_LABELS[s]}=${trips.filter((t) => t.status === s).length}`,
+        ).join(", ")}.`,
+  );
 
   const groupedTrips = STATUS_ORDER.reduce<Record<TripStatus, Trip[]>>(
     (acc, status) => {

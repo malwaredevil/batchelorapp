@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import * as XLSX from "@e965/xlsx";
 import { useQueryClient } from "@tanstack/react-query";
 import { getListTripsQueryKey, getGetTravelsStatsQueryKey, getListWishlistQueryKey } from "@workspace/api-client-react";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 interface ParsedTrip {
   title: string;
@@ -176,6 +177,21 @@ export default function Import() {
     wishlistCreated: number;
     wishlistSkipped: number;
   } | null>(null);
+
+  usePageAssistantContext(
+    "import",
+    `Import page: a one-time spreadsheet importer for bulk-loading past/planned trips and wishlist items from an Excel/CSV file (.xlsx, .xls, .ods, .csv). Current step: ${step}${
+      fileName ? ` (file: ${fileName})` : ""
+    }${
+      parsed
+        ? `. Parsed ${parsed.trips.length} trip(s) and ${parsed.wishlistItems.length} wishlist item(s) ready to import.`
+        : "."
+    }${
+      importResult
+        ? ` Last import result: ${importResult.tripsCreated} trip(s) created (${importResult.tripsSkipped} skipped), ${importResult.wishlistCreated} wishlist item(s) created (${importResult.wishlistSkipped} skipped).`
+        : ""
+    }`,
+  );
 
   const handleFile = useCallback((file: File) => {
     if (!file.name.match(/\.(xlsx|xls|ods|csv)$/i)) {

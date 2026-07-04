@@ -1,5 +1,3 @@
-import "leaflet/dist/leaflet.css";
-import L from "leaflet";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
@@ -14,6 +12,9 @@ import {
 } from "@workspace/api-client-react";
 import { Globe, MapPin, LocateFixed } from "lucide-react";
 import { usePageAssistantContext } from "@/lib/assistant-context";
+import { loadGoogleMaps, svgToMarkerContent } from "@/lib/google-maps-loader";
+
+const WORLD_MAP_ID = "travels-world-map";
 
 const WISH_COLOR = "#eab308";
 const MAP_COLORS = {
@@ -39,24 +40,12 @@ function getMapStatus(trip: Trip): MapStatus | null {
   return end < today ? "completed" : "booked";
 }
 
-function makeStarIcon(color: string, size = 28) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="${size}" height="${size}"><polygon points="14,2 17.5,11 27,11 19.5,16.5 22.5,26 14,20.5 5.5,26 8.5,16.5 1,11 10.5,11" fill="${color}" stroke="white" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
-  return L.icon({
-    iconUrl: `data:image/svg+xml;base64,${btoa(svg)}`,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-    popupAnchor: [0, -(size / 2 + 4)],
-  });
+function makeStarSvg(color: string, size = 28) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="${size}" height="${size}" style="cursor:pointer"><polygon points="14,2 17.5,11 27,11 19.5,16.5 22.5,26 14,20.5 5.5,26 8.5,16.5 1,11 10.5,11" fill="${color}" stroke="white" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
 }
 
-function makePinIcon(color: string) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 32" width="24" height="32"><path d="M12 0C7.6 0 4 3.6 4 8c0 5.4 8 24 8 24s8-18.6 8-24c0-4.4-3.6-8-8-8z" fill="${color}" stroke="white" stroke-width="1.5"/><circle cx="12" cy="8" r="3.5" fill="white"/></svg>`;
-  return L.icon({
-    iconUrl: `data:image/svg+xml;base64,${btoa(svg)}`,
-    iconSize: [24, 32],
-    iconAnchor: [12, 32],
-    popupAnchor: [0, -34],
-  });
+function makePinSvg(color: string) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 32" width="24" height="32" style="cursor:pointer"><path d="M12 0C7.6 0 4 3.6 4 8c0 5.4 8 24 8 24s8-18.6 8-24c0-4.4-3.6-8-8-8z" fill="${color}" stroke="white" stroke-width="1.5"/><circle cx="12" cy="8" r="3.5" fill="white"/></svg>`;
 }
 
 const MAP_STATUS_LABELS: Record<MapStatus, string> = {
@@ -129,84 +118,159 @@ interface MapPanelProps {
 
 function MapPanel({ trips, wishlistItems, isLoading, onNavigate, resetViewRef }: MapPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<L.Map | null>(null);
+  const mapRef = useRef<google.maps.Map | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
-    const map = L.map(containerRef.current, { center: [30, 10], zoom: 2, zoomControl: true });
-    L.tileLayer(
-      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
-      {
-        attribution:
-          "Tiles &copy; Esri &mdash; Sources: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2012",
-        maxZoom: 19,
-      },
-    ).addTo(map);
-    mapRef.current = map;
-    return () => { map.remove(); mapRef.current = null; };
+    let cancelled = false;
+    loadGoogleMaps()
+      .then(([{ Map }]) => {
+        if (cancelled || !containerRef.current) return;
+        const map = new Map(containerRef.current, {
+          center: { lat: 30, lng: 10 },
+          zoom: 2,
+          mapId: WORLD_MAP_ID,
+          streetViewControl: false,
+          mapTypeControl: false,
+          fullscreenControl: false,
+        });
+        mapRef.current = map;
+        setMapReady(true);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setLoadError(err instanceof Error ? err.message : "Failed to load Google Maps");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || isLoading) return;
+    if (!map || isLoading || !mapReady) return;
 
-    const markers: L.Marker[] = [];
+    let markers: google.maps.marker.AdvancedMarkerElement[] = [];
+    let infoWindow: google.maps.InfoWindow | null = null;
 
-    // Trip markers — only those with a computable map status
-    trips
-      .filter((t) => t.lat != null && t.lng != null)
-      .forEach((trip) => {
-        const mapStatus = getMapStatus(trip);
-        if (!mapStatus) return; // planning/active with no end date → skip
-        const icon = mapStatus === "wishlist"
-          ? makeStarIcon(MAP_COLORS.wishlist)
-          : makePinIcon(MAP_COLORS[mapStatus]);
-        const marker = L.marker([trip.lat!, trip.lng!], { icon });
-        marker.bindPopup(tripPopupHtml(trip, mapStatus), { maxWidth: 260 });
-        marker.addTo(map);
-        markers.push(marker);
-      });
+    try {
+      const { AdvancedMarkerElement } = google.maps.marker;
+      infoWindow = new google.maps.InfoWindow({ maxWidth: 260 });
 
-    // Wishlist item markers (yellow star, slightly smaller)
-    wishlistItems
-      .filter((w) => w.lat != null && w.lng != null)
-      .forEach((item) => {
-        const marker = L.marker([item.lat!, item.lng!], { icon: makeStarIcon(WISH_COLOR, 26) });
-        marker.bindPopup(wishlistPopupHtml(item), { maxWidth: 240 });
-        marker.addTo(map);
-        markers.push(marker);
-      });
+      const attachPopupNav = (win: google.maps.InfoWindow) => {
+        const listener = google.maps.event.addListener(win, "domready", () => {
+          const link = document.querySelector<HTMLAnchorElement>(
+            ".gm-style-iw a[data-trip-id]",
+          );
+          if (link) {
+            link.addEventListener("click", (e) => {
+              e.preventDefault();
+              onNavigate(`/trips/${link.dataset.tripId}`);
+            });
+          }
+        });
+        return listener;
+      };
+      const domReadyListener = attachPopupNav(infoWindow);
 
-    // Navigate on trip popup link click
-    const handlePopupClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      const link = target.closest<HTMLAnchorElement>("a[data-trip-id]");
-      if (link) { e.preventDefault(); onNavigate(`/trips/${link.dataset.tripId}`); }
-    };
-    const container = map.getContainer();
-    container.addEventListener("click", handlePopupClick);
+      // Trip markers — only those with a computable map status
+      trips
+        .filter((t) => t.lat != null && t.lng != null)
+        .forEach((trip) => {
+          const mapStatus = getMapStatus(trip);
+          if (!mapStatus) return; // planning/active with no end date → skip
+          const content = svgToMarkerContent(
+            mapStatus === "wishlist"
+              ? makeStarSvg(MAP_COLORS.wishlist)
+              : makePinSvg(MAP_COLORS[mapStatus]),
+          );
+          const marker = new AdvancedMarkerElement({
+            map,
+            position: { lat: trip.lat!, lng: trip.lng! },
+            content,
+            title: trip.title,
+          });
+          marker.addListener("click", () => {
+            infoWindow!.setContent(tripPopupHtml(trip, mapStatus));
+            infoWindow!.open({ map, anchor: marker });
+          });
+          markers.push(marker);
+        });
 
-    // Fit bounds to all plotted points once, and store as the "home" view for recenter
-    const allPoints: [number, number][] = [
-      ...trips.filter((t) => t.lat != null).map((t) => [t.lat!, t.lng!] as [number, number]),
-      ...wishlistItems.filter((w) => w.lat != null).map((w) => [w.lat!, w.lng!] as [number, number]),
-    ];
-    if (allPoints.length === 1) {
-      map.setView(allPoints[0], 8);
-      resetViewRef.current = () => map.setView(allPoints[0], 8);
-    } else if (allPoints.length > 1) {
-      map.fitBounds(L.latLngBounds(allPoints), { padding: [40, 40], maxZoom: 10 });
-      const bounds = L.latLngBounds(allPoints);
-      resetViewRef.current = () => map.fitBounds(bounds, { padding: [40, 40], maxZoom: 10 });
-    } else {
-      resetViewRef.current = () => map.setView([30, 10], 2);
+      // Wishlist item markers (yellow star, slightly smaller)
+      wishlistItems
+        .filter((w) => w.lat != null && w.lng != null)
+        .forEach((item) => {
+          const content = svgToMarkerContent(makeStarSvg(WISH_COLOR, 26));
+          const marker = new AdvancedMarkerElement({
+            map,
+            position: { lat: item.lat!, lng: item.lng! },
+            content,
+            title: item.destination,
+          });
+          marker.addListener("click", () => {
+            infoWindow!.setContent(wishlistPopupHtml(item));
+            infoWindow!.open({ map, anchor: marker });
+          });
+          markers.push(marker);
+        });
+
+      // Fit bounds to all plotted points once, and store as the "home" view for recenter
+      const allPoints: google.maps.LatLngLiteral[] = [
+        ...trips
+          .filter((t) => t.lat != null)
+          .map((t) => ({ lat: t.lat!, lng: t.lng! })),
+        ...wishlistItems
+          .filter((w) => w.lat != null)
+          .map((w) => ({ lat: w.lat!, lng: w.lng! })),
+      ];
+      if (allPoints.length === 1) {
+        map.setCenter(allPoints[0]);
+        map.setZoom(8);
+        resetViewRef.current = () => {
+          map.setCenter(allPoints[0]);
+          map.setZoom(8);
+        };
+      } else if (allPoints.length > 1) {
+        const bounds = new google.maps.LatLngBounds();
+        allPoints.forEach((p) => bounds.extend(p));
+        map.fitBounds(bounds, 40);
+        resetViewRef.current = () => map.fitBounds(bounds, 40);
+      } else {
+        resetViewRef.current = () => {
+          map.setCenter({ lat: 30, lng: 10 });
+          map.setZoom(2);
+        };
+      }
+
+      return () => {
+        markers.forEach((m) => (m.map = null));
+        markers = [];
+        google.maps.event.removeListener(domReadyListener);
+        infoWindow?.close();
+      };
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to render map markers");
+      return () => {
+        markers.forEach((m) => (m.map = null));
+        infoWindow?.close();
+      };
     }
+  }, [trips, wishlistItems, isLoading, onNavigate, mapReady]);
 
-    return () => {
-      markers.forEach((m) => m.remove());
-      container.removeEventListener("click", handlePopupClick);
-    };
-  }, [trips, wishlistItems, isLoading, onNavigate]);
+  if (loadError) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center gap-2 bg-muted/30 text-center px-6">
+        <Globe className="w-8 h-8 text-muted-foreground/40" />
+        <p className="text-sm text-muted-foreground max-w-sm">
+          Map is currently unavailable (the Google Maps API key may not be authorized for this
+          domain).
+        </p>
+      </div>
+    );
+  }
 
   return <div ref={containerRef} style={{ height: "100%", width: "100%" }} />;
 }

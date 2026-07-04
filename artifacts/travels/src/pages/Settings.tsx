@@ -40,7 +40,7 @@ import {
   type ActionConfirmationMode,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ElaineAvatar, ElaineWordmark } from "@/components/assistant/ElaineAvatar";
+import { ElaineAvatar, ElaineName, ElaineWordmark } from "@/components/assistant/ElaineAvatar";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 
 export default function Settings() {
@@ -443,9 +443,24 @@ function ElaineSettingsCard() {
       {
         onSuccess: (result) => {
           qc.setQueryData(getGetAssistantSettingsQueryKey(), result);
-          toast.success(enabled ? "elAIne is back!" : "elAIne is turned off");
+          toast.success(
+            enabled ? (
+              <>
+                <ElaineName /> is back!
+              </>
+            ) : (
+              <>
+                <ElaineName /> is turned off
+              </>
+            ),
+          );
         },
-        onError: () => toast.error("Failed to update elAIne settings"),
+        onError: () =>
+          toast.error(
+            <>
+              Failed to update <ElaineName /> settings
+            </>,
+          ),
       },
     );
   }
@@ -456,9 +471,18 @@ function ElaineSettingsCard() {
       {
         onSuccess: (result) => {
           qc.setQueryData(getGetAssistantSettingsQueryKey(), result);
-          toast.success("Updated how elAIne confirms actions");
+          toast.success(
+            <>
+              Updated how <ElaineName /> confirms actions
+            </>,
+          );
         },
-        onError: () => toast.error("Failed to update elAIne settings"),
+        onError: () =>
+          toast.error(
+            <>
+              Failed to update <ElaineName /> settings
+            </>,
+          ),
       },
     );
   }
@@ -484,7 +508,9 @@ function ElaineSettingsCard() {
 
       <div className="flex items-center justify-between gap-3 rounded-lg border border-card-border p-4">
         <div>
-          <p className="text-sm font-medium text-foreground">Enable elAIne</p>
+          <p className="text-sm font-medium text-foreground">
+            Enable <ElaineName />
+          </p>
           <p className="text-xs text-muted-foreground">
             Shows the floating assistant bubble across every page.
           </p>
@@ -497,10 +523,12 @@ function ElaineSettingsCard() {
       </div>
 
       <div className="space-y-2 rounded-lg border border-card-border p-4">
-        <p className="text-sm font-medium text-foreground">How elAIne confirms actions</p>
+        <p className="text-sm font-medium text-foreground">
+          How <ElaineName /> confirms actions
+        </p>
         <p className="text-xs text-muted-foreground pb-1">
-          When elAIne proposes a change (like adding a reminder or trip), choose how you want to
-          approve it. You can also just tell her in chat to switch modes.
+          When <ElaineName /> proposes a change (like adding a reminder or trip), choose how you
+          want to approve it. You can also just tell her in chat to switch modes.
         </p>
         <Select
           value={assistantSettings?.actionConfirmationMode ?? "one_by_one"}
@@ -519,9 +547,11 @@ function ElaineSettingsCard() {
       </div>
 
       <div className="space-y-2">
-        <p className="text-sm font-medium text-foreground">What elAIne remembers</p>
+        <p className="text-sm font-medium text-foreground">
+          What <ElaineName /> remembers
+        </p>
         <p className="text-xs text-muted-foreground pb-1">
-          Shared facts elAIne has picked up about your household's travel preferences.
+          Shared facts <ElaineName /> has picked up about your household's travel preferences.
         </p>
         {memoryLoading && <p className="text-xs text-muted-foreground">Loading…</p>}
         {!memoryLoading && memory.length === 0 && (

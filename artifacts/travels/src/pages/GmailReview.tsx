@@ -52,6 +52,8 @@ import {
   useUnlinkGmailMessage,
   useGetGmailMessage,
   useBulkLinkGmailMessages,
+  useBulkUnlinkGmailMessages,
+  relinkGmailMessagesAfterUndo,
   useListTrips,
   getGetGmailSuggestionsQueryKey,
   getGetGmailInboxQueryKey,
@@ -402,8 +404,10 @@ function InboxBrowserTab({
   const reconsider = useReconsiderGmailMessage();
   const unlink = useUnlinkGmailMessage();
   const bulkLink = useBulkLinkGmailMessages();
+  const bulkUnlink = useBulkUnlinkGmailMessages();
   const [selectedTrip, setSelectedTrip] = useState<Record<string, string>>({});
   const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [checkedLinked, setCheckedLinked] = useState<Record<string, boolean>>({});
   const [bulkTripId, setBulkTripId] = useState("");
   const [unlinkTarget, setUnlinkTarget] = useState<GmailInboxMessage | null>(
     null,
@@ -540,9 +544,16 @@ function InboxBrowserTab({
     (m) => !m.alreadyLinked,
   );
   const selectedIds = Object.keys(checked).filter((id) => checked[id]);
+  const selectedLinkedIds = Object.keys(checkedLinked).filter(
+    (id) => checkedLinked[id],
+  );
 
   function toggleChecked(id: string) {
     setChecked((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
+
+  function toggleCheckedLinked(id: string) {
+    setCheckedLinked((prev) => ({ ...prev, [id]: !prev[id] }));
   }
 
   function handleBulkLink() {
@@ -575,6 +586,79 @@ function InboxBrowserTab({
         onError: (err) =>
           toast.error(
             err instanceof Error ? err.message : "Bulk import failed",
+          ),
+      },
+    );
+  }
+
+  function handleBulkUnlink() {
+    if (selectedLinkedIds.length === 0) return;
+    // Snapshot the per-message trip IDs before the mutation clears the UI
+    const pendingItems: { messageId: string; tripId: number }[] = selectedLinkedIds
+      .map((id) => {
+        const msg = (data?.messages ?? []).find((m) => m.id === id);
+        return msg?.linkedTripId != null
+          ? { messageId: id, tripId: msg.linkedTripId }
+          : null;
+      })
+      .filter((x): x is { messageId: string; tripId: number } => x !== null);
+
+    bulkUnlink.mutate(
+      { messageIds: selectedLinkedIds },
+      {
+        onSuccess: (result) => {
+          qc.invalidateQueries({ queryKey: inboxQueryKey });
+          setCheckedLinked({});
+          const unlinkedCount = result.results.filter(
+            (r) => r.status === "unlinked",
+          ).length;
+          const failed = result.results.filter(
+            (r) => r.status === "failed",
+          ).length;
+          const successItems = pendingItems.filter((p) =>
+            result.results.some(
+              (r) => r.messageId === p.messageId && r.status === "unlinked",
+            ),
+          );
+          if (failed > 0) {
+            toast.error(
+              `Unlinked ${unlinkedCount} email(s); ${failed} could not be removed.`,
+            );
+          } else {
+            toast(
+              unlinkedCount === 1
+                ? "1 email unlinked"
+                : `${unlinkedCount} emails unlinked`,
+              {
+                description: "Documents deleted. Emails can be re-added.",
+                duration: 6000,
+                action:
+                  successItems.length > 0
+                    ? {
+                        label: "Undo",
+                        onClick: () => {
+                          relinkGmailMessagesAfterUndo(successItems)
+                            .then(() => {
+                              qc.invalidateQueries({
+                                queryKey: inboxQueryKey,
+                              });
+                              toast.success(
+                                `Re-linked ${successItems.length} email(s)`,
+                              );
+                            })
+                            .catch(() =>
+                              toast.error("Could not re-link some emails"),
+                            );
+                        },
+                      }
+                    : undefined,
+              },
+            );
+          }
+        },
+        onError: (err) =>
+          toast.error(
+            err instanceof Error ? err.message : "Bulk unlink failed",
           ),
       },
     );
@@ -664,6 +748,35 @@ function InboxBrowserTab({
             variant="ghost"
             onClick={() => setChecked({})}
             disabled={bulkLink.isPending}
+          >
+            Clear
+          </Button>
+        </div>
+      )}
+
+      {selectedLinkedIds.length > 0 && (
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-center rounded-xl border border-destructive/30 bg-destructive/5 p-3">
+          <p className="text-sm font-medium text-foreground">
+            {selectedLinkedIds.length} linked selected
+          </p>
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={handleBulkUnlink}
+            disabled={bulkUnlink.isPending}
+          >
+            {bulkUnlink.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+            ) : (
+              <Link2Off className="h-3.5 w-3.5 mr-1.5" />
+            )}
+            Unlink {selectedLinkedIds.length}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setCheckedLinked({})}
+            disabled={bulkUnlink.isPending}
           >
             Clear
           </Button>
@@ -783,7 +896,15 @@ function InboxBrowserTab({
               )}
 
               {m.alreadyLinked && (
-                <div className="pl-12" onClick={(e) => e.stopPropagation()}>
+                <div
+                  className="flex items-center gap-2 pl-12"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Checkbox
+                    checked={!!checkedLinked[m.id]}
+                    onCheckedChange={() => toggleCheckedLinked(m.id)}
+                    aria-label="Select linked email"
+                  />
                   <Button
                     size="sm"
                     variant="outline"

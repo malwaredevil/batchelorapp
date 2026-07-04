@@ -1668,6 +1668,10 @@ export interface GmailBulkLinkResult {
   results: { messageId: string; status: "linked" | "already_linked" | "failed"; error?: string }[];
 }
 
+export interface GmailBulkUnlinkResult {
+  results: { messageId: string; status: "unlinked" | "not_linked" | "failed"; tripId: number | null }[];
+}
+
 const bulkLinkGmailMessagesFn = (body: {
   messageIds: string[];
   tripId: number;
@@ -1693,6 +1697,52 @@ export function useBulkLinkGmailMessages(
   > = (body) => bulkLinkGmailMessagesFn(body);
   return useMutation({ mutationFn, ...options?.mutation });
 }
+
+const bulkUnlinkGmailMessagesFn = (body: {
+  messageIds: string[];
+}): Promise<GmailBulkUnlinkResult> =>
+  customFetch<GmailBulkUnlinkResult>(
+    `/api/travels/gmail/messages/bulk-unlink`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+
+export function useBulkUnlinkGmailMessages(
+  options?: {
+    mutation?: UseMutationOptions<
+      GmailBulkUnlinkResult,
+      unknown,
+      { messageIds: string[] }
+    >;
+  },
+) {
+  const mutationFn: MutationFunction<
+    GmailBulkUnlinkResult,
+    { messageIds: string[] }
+  > = (body) => bulkUnlinkGmailMessagesFn(body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+// Helper used by the undo-bulk-unlink flow: re-links a set of emails back to
+// their original trips. Groups by tripId and calls bulk-link once per trip so
+// the AI extraction runs on a proper trip context.
+export const relinkGmailMessagesAfterUndo = (
+  items: { messageId: string; tripId: number }[],
+): Promise<void> => {
+  const byTrip = new Map<number, string[]>();
+  for (const { messageId, tripId } of items) {
+    if (!byTrip.has(tripId)) byTrip.set(tripId, []);
+    byTrip.get(tripId)!.push(messageId);
+  }
+  return Promise.all(
+    [...byTrip.entries()].map(([tripId, messageIds]) =>
+      bulkLinkGmailMessagesFn({ messageIds, tripId }),
+    ),
+  ).then(() => undefined);
+};
 
 // ---------------------------------------------------------------------------
 // Google Calendar OAuth (per-user account connection)

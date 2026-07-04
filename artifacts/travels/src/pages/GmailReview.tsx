@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -330,12 +330,19 @@ function InboxBrowserTab({
   const qc = useQueryClient();
   const [query, setQuery] = useState("");
   const [committedQuery, setCommittedQuery] = useState("");
-  const [pageToken, setPageToken] = useState<string | undefined>(undefined);
+  const [pageSize, setPageSize] = useState(20);
+  // History of page tokens visited so far for the current query/page-size, so the user can
+  // step back with "Previous" as well as forward with "Next" (Gmail's API only exposes a
+  // forward cursor, so "Previous" replays the token we already fetched with).
+  const [pageHistory, setPageHistory] = useState<(string | undefined)[]>([undefined]);
+  const [pageIndex, setPageIndex] = useState(0);
+  const pageToken = pageHistory[pageIndex];
   const [showIgnored, setShowIgnored] = useState(false);
-  const [autoPageCount, setAutoPageCount] = useState(0);
-  const isDefaultQuery = committedQuery === "";
-  const MAX_AUTO_PAGES = 4;
-  const { data, isLoading, isFetching } = useGetGmailInbox({ q: committedQuery || undefined, pageToken });
+  const { data, isLoading, isFetching } = useGetGmailInbox({
+    q: committedQuery || undefined,
+    pageToken,
+    maxResults: pageSize,
+  });
   const link = useLinkGmailMessage();
   const ignore = useIgnoreGmailMessage();
   const reconsider = useReconsiderGmailMessage();
@@ -344,32 +351,32 @@ function InboxBrowserTab({
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [bulkTripId, setBulkTripId] = useState("");
 
-  const inboxQueryKey = getGetGmailInboxQueryKey({ q: committedQuery || undefined, pageToken });
+  const inboxQueryKey = getGetGmailInboxQueryKey({ q: committedQuery || undefined, pageToken, maxResults: pageSize });
 
-  // The default (unsearched) inbox query is a narrow travel-keyword filter. It's common for
-  // the first page (or several) to have zero matches even though later pages do. Rather than
-  // dead-ending the user on an empty state with a lone "Load more" button, keep paging
-  // automatically (bounded) until we find something or exhaust a reasonable number of pages.
-  useEffect(() => {
-    if (
-      isDefaultQuery &&
-      !isFetching &&
-      data &&
-      data.messages.length === 0 &&
-      data.nextPageToken &&
-      autoPageCount < MAX_AUTO_PAGES
-    ) {
-      setAutoPageCount((c) => c + 1);
-      setPageToken(data.nextPageToken ?? undefined);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDefaultQuery, isFetching, data, autoPageCount]);
+  function resetPaging() {
+    setPageHistory([undefined]);
+    setPageIndex(0);
+  }
 
   function handleSearch() {
-    setPageToken(undefined);
-    setAutoPageCount(0);
+    resetPaging();
     setCommittedQuery(query.trim());
     setChecked({});
+  }
+
+  function handlePageSizeChange(size: number) {
+    setPageSize(size);
+    resetPaging();
+  }
+
+  function handleNextPage() {
+    if (!data?.nextPageToken) return;
+    setPageHistory((h) => [...h.slice(0, pageIndex + 1), data.nextPageToken ?? undefined]);
+    setPageIndex((i) => i + 1);
+  }
+
+  function handlePreviousPage() {
+    setPageIndex((i) => Math.max(0, i - 1));
   }
 
   function handleLink(m: GmailInboxMessage) {
@@ -463,15 +470,32 @@ function InboxBrowserTab({
         </Button>
       </div>
 
-      <div className="flex items-center gap-2">
-        <Checkbox
-          id="show-ignored"
-          checked={showIgnored}
-          onCheckedChange={(v) => setShowIgnored(v === true)}
-        />
-        <label htmlFor="show-ignored" className="text-xs text-muted-foreground cursor-pointer select-none">
-          Show ignored emails
-        </label>
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="show-ignored"
+            checked={showIgnored}
+            onCheckedChange={(v) => setShowIgnored(v === true)}
+          />
+          <label htmlFor="show-ignored" className="text-xs text-muted-foreground cursor-pointer select-none">
+            Show ignored emails
+          </label>
+        </div>
+        <div className="flex items-center gap-2">
+          <label htmlFor="page-size" className="text-xs text-muted-foreground">
+            Per page
+          </label>
+          <Select value={String(pageSize)} onValueChange={(v) => handlePageSizeChange(Number(v))}>
+            <SelectTrigger id="page-size" className="h-8 w-[80px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="10">10</SelectItem>
+              <SelectItem value="20">20</SelectItem>
+              <SelectItem value="50">50</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {selectedIds.length > 0 && (
@@ -492,31 +516,19 @@ function InboxBrowserTab({
         </div>
       )}
 
-      {isLoading || (isFetching && isDefaultQuery && (data?.messages.length ?? 0) === 0) ? (
-        <p className="text-sm text-muted-foreground py-8 text-center">
-          {isDefaultQuery && autoPageCount > 0
-            ? "Still searching your inbox for travel-related emails…"
-            : "Searching your inbox…"}
-        </p>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground py-8 text-center">Loading your inbox…</p>
       ) : visibleMessages.length === 0 ? (
         <div className="rounded-xl border border-dashed border-card-border p-8 text-center space-y-1">
           <Mail className="h-8 w-8 mx-auto text-muted-foreground" />
-          <p className="text-sm font-medium text-foreground">No matching emails found.</p>
-          {isDefaultQuery ? (
-            data?.nextPageToken ? (
-              <p className="text-xs text-muted-foreground">
-                We searched several pages of your inbox for travel-related emails without a match.
-                Keep looking, or try a custom search above (e.g. <code>from:delta.com</code>).
-              </p>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                We searched your whole inbox for travel-related emails and found no matches. Try a
-                custom search above (e.g. <code>from:delta.com</code>).
-              </p>
-            )
-          ) : (
-            <p className="text-xs text-muted-foreground">Try a different search term.</p>
-          )}
+          <p className="text-sm font-medium text-foreground">
+            {committedQuery ? "No matching emails found." : "No emails on this page."}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {committedQuery
+              ? "Try a different search term."
+              : "Try going back a page, or search above (e.g. from:delta.com)."}
+          </p>
         </div>
       ) : (
         <ul className="divide-y divide-card-border rounded-xl border border-card-border bg-card overflow-hidden">
@@ -596,19 +608,15 @@ function InboxBrowserTab({
         </ul>
       )}
 
-      {data?.nextPageToken && visibleMessages.length > 0 && (
-        <div className="flex justify-center">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setAutoPageCount(0);
-              setPageToken(data.nextPageToken ?? undefined);
-            }}
-            disabled={isFetching}
-          >
+      {visibleMessages.length > 0 && (pageIndex > 0 || data?.nextPageToken) && (
+        <div className="flex items-center justify-center gap-2">
+          <Button variant="outline" size="sm" onClick={handlePreviousPage} disabled={pageIndex === 0 || isFetching}>
+            Previous
+          </Button>
+          <span className="text-xs text-muted-foreground">Page {pageIndex + 1}</span>
+          <Button variant="outline" size="sm" onClick={handleNextPage} disabled={!data?.nextPageToken || isFetching}>
             {isFetching ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : null}
-            Load more
+            Next
           </Button>
         </div>
       )}

@@ -57,6 +57,7 @@ export interface TripDocument {
   originalFilename?: string | null;
   extractedData?: Record<string, unknown> | null;
   lockedFields?: string[];
+  gmailMessageId?: string | null;
   createdAt: string;
 }
 

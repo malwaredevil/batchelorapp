@@ -28,6 +28,7 @@ import {
   useUpdateCardLayout,
   useGetTripCardCollapse,
   useUpdateTripCardCollapse,
+  useLinkGmailMessage,
   getTripDocumentDownloadUrl,
   getTripPhotoImageUrl,
   getListTripsQueryKey,
@@ -51,6 +52,7 @@ import {
 import { OneThingInput } from "@/components/OneThingInput";
 import { MagnetCheckDialog } from "@/components/MagnetCheckDialog";
 import { ReminderEditDialog } from "@/components/ReminderEditDialog";
+import { AttachmentPickerDialog } from "@/components/AttachmentPickerDialog";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
@@ -140,6 +142,7 @@ import {
   UtensilsCrossed,
   Wind,
   Flower2,
+  Paperclip,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -663,6 +666,8 @@ function DocumentRow({
   const updateTripDocument = useUpdateTripDocument();
   const rescanTripDocument = useRescanTripDocument();
   const walletPass = useGetTripDocumentWalletPass();
+  const linkGmail = useLinkGmailMessage();
+  const [addMoreOpen, setAddMoreOpen] = useState(false);
   const ext = doc.originalFilename?.split(".").pop()?.toLowerCase();
   const ed = doc.extractedData as Record<string, unknown> | null;
   const lockedFields = doc.lockedFields ?? [];
@@ -733,6 +738,7 @@ function DocumentRow({
   };
 
   return (
+    <>
     <div className="flex items-start gap-3 py-3 border-b border-border/50 last:border-0">
       <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center shrink-0 text-muted-foreground text-xs font-mono uppercase">
         {ext ?? "doc"}
@@ -829,17 +835,52 @@ function DocumentRow({
           target="_blank"
           rel="noopener noreferrer"
           className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+          title="Download"
         >
           <ExternalLink className="w-4 h-4" />
         </a>
+        {doc.gmailMessageId && (
+          <button
+            type="button"
+            onClick={() => setAddMoreOpen(true)}
+            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+            title="Add more from this email"
+          >
+            <Paperclip className="w-4 h-4" />
+          </button>
+        )}
         <button
           onClick={() => onDelete(doc.id)}
           className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+          title="Remove document"
         >
           <Trash2 className="w-4 h-4" />
         </button>
       </div>
     </div>
+
+    {addMoreOpen && doc.gmailMessageId && (
+      <AttachmentPickerDialog
+        messageId={doc.gmailMessageId}
+        isLinking={linkGmail.isPending}
+        defaultAllUnchecked
+        onClose={() => setAddMoreOpen(false)}
+        onConfirm={(attachmentIds, includeEmailBody) => {
+          linkGmail.mutate(
+            { messageId: doc.gmailMessageId!, tripId, attachmentIds, includeEmailBody },
+            {
+              onSuccess: () => {
+                qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
+                setAddMoreOpen(false);
+                toast.success("Documents added from email");
+              },
+              onError: () => toast.error("Failed to add documents from email"),
+            },
+          );
+        }}
+      />
+    )}
+    </>
   );
 }
 

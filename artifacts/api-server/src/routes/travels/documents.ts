@@ -582,12 +582,34 @@ router.delete("/trips/:id/documents/:docId", async (req, res) => {
       ),
     );
 
+  // Strip the sourceDocumentId link from any itinerary activities that were
+  // derived from this document, but keep the activities themselves — the user
+  // may have already confirmed or edited them and shouldn't lose that work.
   try {
-    await syncItineraryFromDocument(tripId, docId, {});
+    const [tripRow] = await db
+      .select({ itinerary: travelsTrips.itinerary })
+      .from(travelsTrips)
+      .where(eq(travelsTrips.id, tripId));
+    if (tripRow && isItinerary(tripRow.itinerary)) {
+      const itinerary: Itinerary = {
+        days: tripRow.itinerary.days.map((day) => ({
+          ...day,
+          activities: (day.activities ?? []).map((a) =>
+            a.sourceDocumentId === docId
+              ? { ...a, sourceDocumentId: undefined, sourceField: undefined }
+              : a,
+          ),
+        })),
+      };
+      await db
+        .update(travelsTrips)
+        .set({ itinerary })
+        .where(eq(travelsTrips.id, tripId));
+    }
   } catch (err) {
     req.log.warn(
       { err },
-      "Failed to purge itinerary entries for deleted document",
+      "Failed to detach itinerary activities from deleted document",
     );
   }
 

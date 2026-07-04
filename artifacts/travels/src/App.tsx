@@ -20,6 +20,7 @@ import Destinations from "@/pages/Destinations";
 import Settings from "@/pages/Settings";
 import TravelCalendar from "@/pages/TravelCalendar";
 import GmailReview from "@/pages/GmailReview";
+import ElaineChat from "@/pages/ElaineChat";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import NotFound from "@/pages/not-found";
 
@@ -107,6 +108,14 @@ function Router() {
         <ProtectedRoute>
           <Layout>
             <GmailReview />
+          </Layout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/elaine">
+        <ProtectedRoute>
+          <Layout>
+            <ElaineChat />
           </Layout>
         </ProtectedRoute>
       </Route>

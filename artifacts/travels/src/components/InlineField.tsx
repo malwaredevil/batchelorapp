@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Check, X, Pencil, Calendar, Upload, Hash } from "lucide-react";
+import { Check, X, Pencil, Calendar, Upload, Hash, Copy } from "lucide-react";
+import { toast } from "sonner";
 
 export type InlineFieldIconType = "text" | "date" | "number" | "upload" | "custom";
 
@@ -25,6 +26,12 @@ interface InlineFieldBaseProps<T> {
   emptyText?: string;
   className?: string;
   layout?: "row" | "stack";
+  /**
+   * Enables the copy-to-clipboard button. Defaults to `true` whenever the
+   * field's value is a non-empty string; pass `false` to opt out, or a
+   * function to derive the copyable text from a non-string value type.
+   */
+  copyable?: boolean | ((value: T) => string | null | undefined);
 }
 
 interface InlineFieldCustomProps<T> extends InlineFieldBaseProps<T> {
@@ -48,11 +55,13 @@ export function InlineField<T>({
   emptyText = "Not set",
   className,
   layout = "stack",
+  copyable,
   renderDisplay,
   renderEditor,
 }: InlineFieldCustomProps<T>) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<T>(value);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!editing) setDraft(value);
@@ -71,6 +80,27 @@ export function InlineField<T>({
   const iconNode = icon ?? <IconComp className="w-3.5 h-3.5" />;
 
   const empty = isEmpty ? isEmpty(value) : value == null || value === "";
+
+  const copyText =
+    typeof copyable === "function"
+      ? copyable(value)
+      : copyable === false
+        ? undefined
+        : typeof value === "string"
+          ? value
+          : undefined;
+  const showCopy = !empty && !!copyText;
+
+  const handleCopy = async () => {
+    if (!copyText) return;
+    try {
+      await navigator.clipboard.writeText(copyText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("Couldn't copy to clipboard");
+    }
+  };
 
   if (editing) {
     return (
@@ -116,14 +146,35 @@ export function InlineField<T>({
           renderDisplay(value)
         )}
       </div>
-      <button
-        type="button"
-        onClick={() => setEditing(true)}
-        className="shrink-0 text-muted-foreground/60 hover:text-foreground mt-0.5"
-        title={`Edit ${label.toLowerCase()}`}
+      {/*
+        Buttons stay subtly visible by default (touch devices have no hover
+        state to reveal them), but on hover-capable pointers they're hidden
+        until the row is hovered or a button inside receives keyboard focus.
+      */}
+      <div
+        className="shrink-0 flex items-center gap-0.5 mt-0.5 opacity-60 transition-opacity
+          [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100
+          focus-within:opacity-100"
       >
-        {iconNode}
-      </button>
+        {showCopy && (
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="p-1 text-muted-foreground/60 hover:text-foreground rounded"
+            title={copied ? "Copied!" : `Copy ${label.toLowerCase()}`}
+          >
+            {copied ? <Check className="w-3.5 h-3.5 text-primary" /> : <Copy className="w-3.5 h-3.5" />}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="p-1 text-muted-foreground/60 hover:text-foreground rounded"
+          title={`Edit ${label.toLowerCase()}`}
+        >
+          {iconNode}
+        </button>
+      </div>
     </div>
   );
 }

@@ -431,6 +431,137 @@ describe("POST /api/travels/gmail/messages/:messageId/link", () => {
 
     expect(res.status).toBe(400);
   });
+
+  it("attaches every attachment as its own separate trip document", async () => {
+    getValidGmailAccessToken.mockResolvedValue("mock-access-token");
+    selectQueue.push([{ id: 7 }]); // trip lookup
+    selectQueue.push([]); // no existing decision
+    getMessage.mockResolvedValue({ threadId: "t1" });
+    parseGmailMessage.mockReturnValue({
+      subject: "Trip confirmation",
+      from: "a@delta.com",
+      date: null,
+      textBody: "See attachments.",
+      attachments: [
+        { filename: "flight.pdf", mimeType: "application/pdf", attachmentId: "a1" },
+        { filename: "receipt.jpg", mimeType: "image/jpeg", attachmentId: "a2" },
+      ],
+    });
+    getAttachment.mockResolvedValue(Buffer.from("binary"));
+    lastReturning = [{ id: 60, tripId: 7 }];
+    const app = await buildApp();
+
+    const res = await request(app)
+      .post("/api/travels/gmail/messages/msg-1/link")
+      .send({ tripId: 7 });
+
+    expect(res.status).toBe(201);
+    expect(getAttachment).toHaveBeenCalledTimes(2);
+    expect(uploadDocument).toHaveBeenCalledTimes(2);
+    expect(extractFromPdf).toHaveBeenCalledTimes(1);
+    expect(extractFromImage).toHaveBeenCalledTimes(1);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body).toHaveLength(2);
+  });
+});
+
+describe("GET /api/travels/gmail/messages/:messageId", () => {
+  it("409s when Gmail is not connected", async () => {
+    getValidGmailAccessToken.mockResolvedValue(null);
+    const app = await buildApp();
+
+    const res = await request(app).get("/api/travels/gmail/messages/msg-1");
+
+    expect(res.status).toBe(409);
+  });
+
+  it("returns the full parsed message content", async () => {
+    getValidGmailAccessToken.mockResolvedValue("mock-access-token");
+    getMessage.mockResolvedValue({ threadId: "t1" });
+    parseGmailMessage.mockReturnValue({
+      subject: "Flight confirmation",
+      from: "a@delta.com",
+      date: "2026-01-01T00:00:00.000Z",
+      textBody: "Your flight is confirmed.",
+      attachments: [{ filename: "flight.pdf", mimeType: "application/pdf", attachmentId: "a1" }],
+    });
+    const app = await buildApp();
+
+    const res = await request(app).get("/api/travels/gmail/messages/msg-1");
+
+    expect(res.status).toBe(200);
+    expect(res.body.subject).toBe("Flight confirmation");
+    expect(res.body.textBody).toBe("Your flight is confirmed.");
+    expect(res.body.attachments).toEqual([{ filename: "flight.pdf", mimeType: "application/pdf" }]);
+  });
+});
+
+describe("POST /api/travels/gmail/messages/bulk-link", () => {
+  it("409s when Gmail is not connected", async () => {
+    getValidGmailAccessToken.mockResolvedValue(null);
+    const app = await buildApp();
+
+    const res = await request(app)
+      .post("/api/travels/gmail/messages/bulk-link")
+      .send({ messageIds: ["msg-1"], tripId: 7 });
+
+    expect(res.status).toBe(409);
+  });
+
+  it("404s when the trip does not exist", async () => {
+    getValidGmailAccessToken.mockResolvedValue("mock-access-token");
+    selectQueue.push([]); // trip lookup finds nothing
+    const app = await buildApp();
+
+    const res = await request(app)
+      .post("/api/travels/gmail/messages/bulk-link")
+      .send({ messageIds: ["msg-1"], tripId: 999 });
+
+    expect(res.status).toBe(404);
+  });
+
+  it("rejects more than the max batch size", async () => {
+    getValidGmailAccessToken.mockResolvedValue("mock-access-token");
+    const app = await buildApp();
+    const messageIds = Array.from({ length: 26 }, (_, i) => `msg-${i}`);
+
+    const res = await request(app)
+      .post("/api/travels/gmail/messages/bulk-link")
+      .send({ messageIds, tripId: 7 });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("links each message independently and reports per-message outcomes, including partial failure", async () => {
+    getValidGmailAccessToken.mockResolvedValue("mock-access-token");
+    selectQueue.push([{ id: 7 }]); // trip lookup
+    selectQueue.push([]); // existing decision for msg-1 (none)
+    selectQueue.push([{ status: "linked" }]); // existing decision for msg-2 (already linked)
+    selectQueue.push([]); // existing decision for msg-3 (none) — will fail
+    getMessage
+      .mockResolvedValueOnce({ threadId: "t1" })
+      .mockRejectedValueOnce(new Error("gmail api down"));
+    parseGmailMessage.mockReturnValue({
+      subject: "Hotel confirmation",
+      from: "a@marriott.com",
+      date: null,
+      textBody: "Your stay is confirmed.",
+      attachments: [],
+    });
+    lastReturning = [{ id: 61, tripId: 7 }];
+    const app = await buildApp();
+
+    const res = await request(app)
+      .post("/api/travels/gmail/messages/bulk-link")
+      .send({ messageIds: ["msg-1", "msg-2", "msg-3"], tripId: 7 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.results).toEqual([
+      { messageId: "msg-1", status: "linked" },
+      { messageId: "msg-2", status: "already_linked" },
+      { messageId: "msg-3", status: "failed", error: "Could not import this email." },
+    ]);
+  });
 });
 
 describe("POST /api/travels/gmail/messages/:messageId/ignore", () => {
@@ -460,6 +591,46 @@ describe("POST /api/travels/gmail/messages/:messageId/ignore", () => {
     expect(updateCalls.some((c) => c.table === "upsert" && (c.set as { status?: string }).status === "ignored")).toBe(
       true,
     );
+  });
+});
+
+describe("POST /api/travels/gmail/messages/:messageId/reconsider", () => {
+  it("404s when no decision exists for the message", async () => {
+    selectQueue.push([]); // no existing decision
+    const app = await buildApp();
+
+    const res = await request(app).post("/api/travels/gmail/messages/msg-1/reconsider");
+
+    expect(res.status).toBe(404);
+  });
+
+  it("409s when the decision is not ignored/dismissed", async () => {
+    selectQueue.push([{ status: "linked" }]);
+    const app = await buildApp();
+
+    const res = await request(app).post("/api/travels/gmail/messages/msg-1/reconsider");
+
+    expect(res.status).toBe(409);
+  });
+
+  it("deletes an ignored decision so the message can be re-selected", async () => {
+    selectQueue.push([{ status: "ignored" }]);
+    const app = await buildApp();
+
+    const res = await request(app).post("/api/travels/gmail/messages/msg-1/reconsider");
+
+    expect(res.status).toBe(204);
+    expect(deleteCalls).toHaveLength(1);
+  });
+
+  it("deletes a dismissed decision so the message can be re-selected", async () => {
+    selectQueue.push([{ status: "dismissed" }]);
+    const app = await buildApp();
+
+    const res = await request(app).post("/api/travels/gmail/messages/msg-2/reconsider");
+
+    expect(res.status).toBe(204);
+    expect(deleteCalls).toHaveLength(1);
   });
 });
 

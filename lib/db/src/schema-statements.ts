@@ -824,4 +824,25 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE travels_trip_card_collapse_state ENABLE ROW LEVEL SECURITY`,
   `CREATE UNIQUE INDEX IF NOT EXISTS travels_trip_card_collapse_state_user_id_trip_id_idx
      ON travels_trip_card_collapse_state (user_id, trip_id)`,
+
+  // ── Per-document icon override ────────────────────────────────────────────
+  `ALTER TABLE travels_trip_documents ADD COLUMN IF NOT EXISTS icon_override TEXT`,
+
+  // ── User-defined (trained) custom document types ──────────────────────────
+  `CREATE TABLE IF NOT EXISTS travels_custom_document_types (
+    id           SERIAL PRIMARY KEY,
+    user_id      INTEGER NOT NULL,
+    type_key     TEXT NOT NULL,
+    type_name    TEXT NOT NULL,
+    description  TEXT,
+    icon_name    TEXT,
+    color_key    TEXT,
+    fields       JSONB,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_custom_document_types ENABLE ROW LEVEL SECURITY`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS travels_custom_document_types_user_id_type_key_idx
+     ON travels_custom_document_types (user_id, type_key)`,
+  `CREATE INDEX IF NOT EXISTS travels_custom_document_types_user_id_idx
+     ON travels_custom_document_types (user_id)`,
 ];

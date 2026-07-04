@@ -585,6 +585,23 @@ async function main() {
   });
   await resetSequence(dest, "travels_trip_card_collapse_state", "id");
 
+  await copyTable(source, dest, {
+    table: "travels_custom_document_types",
+    columns: [
+      "id",
+      "user_id",
+      "type_key",
+      "type_name",
+      "description",
+      "icon_name",
+      "color_key",
+      "fields",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_custom_document_types", "id");
+
   await dest.query("SET session_replication_role = DEFAULT");
 
   console.log("\n✓ Restore complete.");

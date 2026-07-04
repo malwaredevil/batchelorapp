@@ -29,6 +29,9 @@ import {
   useGetTripCardCollapse,
   useUpdateTripCardCollapse,
   useLinkGmailMessage,
+  useListCustomDocumentTypes,
+  useCreateCustomDocumentType,
+  useSuggestDocumentType,
   getTripDocumentDownloadUrl,
   getTripPhotoImageUrl,
   getListTripsQueryKey,
@@ -48,6 +51,7 @@ import {
   type PhotoType,
   type Reminder,
   type TravelsAppUser,
+  type CustomDocumentType,
 } from "@workspace/api-client-react";
 import { OneThingInput } from "@/components/OneThingInput";
 import { MagnetCheckDialog } from "@/components/MagnetCheckDialog";
@@ -149,6 +153,16 @@ import {
   Compass,
   Ticket,
   Bus,
+  Ship,
+  Receipt,
+  Package,
+  CreditCard,
+  Briefcase,
+  Tag,
+  Building2,
+  Stamp,
+  Leaf,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -168,6 +182,7 @@ import {
   formatTempRangeF,
 } from "@/lib/weather-icons";
 import { TripLocationMap } from "@/components/TripLocationMap";
+import { DocTypeTrainingDialog } from "@/components/DocTypeTrainingDialog";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -382,7 +397,9 @@ function edKeyToLabel(key: string): string {
  * isn't a system key.  Arrays (e.g. seatNumbers, passengerNames) are joined
  * so they render as readable comma-separated text.
  */
-function genericFields(ed: Record<string, unknown> | null | undefined): FieldSpec[] {
+function genericFields(
+  ed: Record<string, unknown> | null | undefined,
+): FieldSpec[] {
   if (!ed) return [];
   return Object.entries(ed)
     .filter(([k, v]) => !SYSTEM_ED_KEYS.has(k) && v != null && v !== "")
@@ -541,12 +558,7 @@ const DOC_TYPE_LOOKUP: Array<[(t: string) => boolean, FieldSpec[]]> = [
     CAR_RENTAL_FIELDS,
   ],
   // Water
-  [
-    (t) =>
-      t.includes("cruise") ||
-      t.includes("cruise ship"),
-    CRUISE_FIELDS,
-  ],
+  [(t) => t.includes("cruise") || t.includes("cruise ship"), CRUISE_FIELDS],
   [
     (t) =>
       t.includes("ferry") ||
@@ -574,10 +586,7 @@ const DOC_TYPE_LOOKUP: Array<[(t: string) => boolean, FieldSpec[]]> = [
     BUS_FIELDS,
   ],
   // Documents
-  [
-    (t) => t.includes("insurance"),
-    INSURANCE_FIELDS,
-  ],
+  [(t) => t.includes("insurance"), INSURANCE_FIELDS],
   [
     (t) =>
       t.includes("visa") ||
@@ -647,6 +656,121 @@ const DOC_TYPE_LOOKUP: Array<[(t: string) => boolean, FieldSpec[]]> = [
 /** Keys whose values should render with an ISO date-time placeholder in the edit input. */
 const DATE_LIKE_KEYS = new Set(["validFrom", "validTo"]);
 
+// ─── Icon + colour lookup tables (DocTypeVisual, icon picker, training dialog) ─
+
+const ICON_COMPONENTS: Record<string, React.ElementType> = {
+  Plane,
+  Train,
+  Bus,
+  Car,
+  Ship,
+  Anchor,
+  BedDouble,
+  Shield,
+  Globe,
+  Compass,
+  Ticket,
+  UtensilsCrossed,
+  FileText,
+  Receipt,
+  Package,
+  CreditCard,
+  Briefcase,
+  Tag,
+  Building2,
+  MapPin,
+  Camera,
+  Stamp,
+  Leaf,
+  Star,
+  AlertCircle,
+};
+
+const COLOR_CLASSES: Record<string, { bg: string; fg: string }> = {
+  blue: {
+    bg: "bg-blue-100 dark:bg-blue-950",
+    fg: "text-blue-600 dark:text-blue-400",
+  },
+  violet: {
+    bg: "bg-violet-100 dark:bg-violet-950",
+    fg: "text-violet-600 dark:text-violet-400",
+  },
+  teal: {
+    bg: "bg-teal-100 dark:bg-teal-950",
+    fg: "text-teal-600 dark:text-teal-400",
+  },
+  orange: {
+    bg: "bg-orange-100 dark:bg-orange-950",
+    fg: "text-orange-600 dark:text-orange-400",
+  },
+  green: {
+    bg: "bg-green-100 dark:bg-green-950",
+    fg: "text-green-600 dark:text-green-400",
+  },
+  amber: {
+    bg: "bg-amber-100 dark:bg-amber-950",
+    fg: "text-amber-600 dark:text-amber-400",
+  },
+  red: {
+    bg: "bg-red-100 dark:bg-red-950",
+    fg: "text-red-600 dark:text-red-400",
+  },
+  indigo: {
+    bg: "bg-indigo-100 dark:bg-indigo-950",
+    fg: "text-indigo-600 dark:text-indigo-400",
+  },
+  rose: {
+    bg: "bg-rose-100 dark:bg-rose-950",
+    fg: "text-rose-600 dark:text-rose-400",
+  },
+  emerald: {
+    bg: "bg-emerald-100 dark:bg-emerald-950",
+    fg: "text-emerald-600 dark:text-emerald-400",
+  },
+  sky: {
+    bg: "bg-sky-100 dark:bg-sky-950",
+    fg: "text-sky-600 dark:text-sky-400",
+  },
+  slate: {
+    bg: "bg-slate-100 dark:bg-slate-800",
+    fg: "text-slate-500 dark:text-slate-400",
+  },
+  pink: {
+    bg: "bg-pink-100 dark:bg-pink-950",
+    fg: "text-pink-600 dark:text-pink-400",
+  },
+  cyan: {
+    bg: "bg-cyan-100 dark:bg-cyan-950",
+    fg: "text-cyan-600 dark:text-cyan-400",
+  },
+};
+
+const STANDARD_DOC_TYPES: { key: string; label: string }[] = [
+  { key: "flight_ticket", label: "Flight Ticket" },
+  { key: "boarding_pass", label: "Boarding Pass" },
+  { key: "hotel_confirmation", label: "Hotel Confirmation" },
+  { key: "car_rental", label: "Car Rental" },
+  { key: "train_ticket", label: "Train Ticket" },
+  { key: "bus_ticket", label: "Bus Ticket" },
+  { key: "ferry", label: "Ferry Ticket" },
+  { key: "cruise", label: "Cruise Confirmation" },
+  { key: "travel_insurance", label: "Travel Insurance" },
+  { key: "visa", label: "Visa / Entry Document" },
+  { key: "tour", label: "Tour Booking" },
+  { key: "activity", label: "Activity Booking" },
+  { key: "event_ticket", label: "Event Ticket" },
+  { key: "restaurant_reservation", label: "Restaurant Reservation" },
+  { key: "airport_transfer", label: "Airport Transfer" },
+];
+
+function allDocTypeOptions(customTypes: CustomDocumentType[]) {
+  const custom = customTypes.map((ct) => ({
+    key: ct.typeKey,
+    label: ct.typeName,
+  }));
+  return [...STANDARD_DOC_TYPES, ...custom, { key: "other", label: "Other" }];
+}
+
 function getFieldsForDocType(
   docType: string,
   ed: Record<string, unknown> | null | undefined,
@@ -673,41 +797,100 @@ function getDocVisualStyle(
 ): DocVisualStyle {
   const t = (documentType ?? "").toLowerCase();
   if (t.includes("flight") || t.includes("boarding"))
-    return { Icon: Plane, bg: "bg-blue-100 dark:bg-blue-950", fg: "text-blue-600 dark:text-blue-400" };
+    return {
+      Icon: Plane,
+      bg: "bg-blue-100 dark:bg-blue-950",
+      fg: "text-blue-600 dark:text-blue-400",
+    };
   if (t.includes("hotel") || t === "accommodation")
-    return { Icon: BedDouble, bg: "bg-green-100 dark:bg-green-950", fg: "text-green-600 dark:text-green-400" };
+    return {
+      Icon: BedDouble,
+      bg: "bg-green-100 dark:bg-green-950",
+      fg: "text-green-600 dark:text-green-400",
+    };
   if (t === "car_rental")
-    return { Icon: Car, bg: "bg-orange-100 dark:bg-orange-950", fg: "text-orange-600 dark:text-orange-400" };
+    return {
+      Icon: Car,
+      bg: "bg-orange-100 dark:bg-orange-950",
+      fg: "text-orange-600 dark:text-orange-400",
+    };
   if (t.includes("train"))
-    return { Icon: Train, bg: "bg-violet-100 dark:bg-violet-950", fg: "text-violet-600 dark:text-violet-400" };
+    return {
+      Icon: Train,
+      bg: "bg-violet-100 dark:bg-violet-950",
+      fg: "text-violet-600 dark:text-violet-400",
+    };
   if (t.includes("bus") || t.includes("coach"))
-    return { Icon: Bus, bg: "bg-teal-100 dark:bg-teal-950", fg: "text-teal-600 dark:text-teal-400" };
+    return {
+      Icon: Bus,
+      bg: "bg-teal-100 dark:bg-teal-950",
+      fg: "text-teal-600 dark:text-teal-400",
+    };
   if (t.includes("ferry") || t.includes("cruise"))
-    return { Icon: Anchor, bg: "bg-sky-100 dark:bg-sky-950", fg: "text-sky-600 dark:text-sky-400" };
+    return {
+      Icon: Anchor,
+      bg: "bg-sky-100 dark:bg-sky-950",
+      fg: "text-sky-600 dark:text-sky-400",
+    };
   if (t.includes("insurance"))
-    return { Icon: Shield, bg: "bg-amber-100 dark:bg-amber-950", fg: "text-amber-600 dark:text-amber-400" };
-  if (t.includes("visa") || t.includes("esta") || t.includes("eta") || t.includes("entry"))
-    return { Icon: Globe, bg: "bg-indigo-100 dark:bg-indigo-950", fg: "text-indigo-600 dark:text-indigo-400" };
+    return {
+      Icon: Shield,
+      bg: "bg-amber-100 dark:bg-amber-950",
+      fg: "text-amber-600 dark:text-amber-400",
+    };
+  if (
+    t.includes("visa") ||
+    t.includes("esta") ||
+    t.includes("eta") ||
+    t.includes("entry")
+  )
+    return {
+      Icon: Globe,
+      bg: "bg-indigo-100 dark:bg-indigo-950",
+      fg: "text-indigo-600 dark:text-indigo-400",
+    };
   if (t.includes("tour") || t.includes("activity") || t.includes("excursion"))
-    return { Icon: Compass, bg: "bg-emerald-100 dark:bg-emerald-950", fg: "text-emerald-600 dark:text-emerald-400" };
+    return {
+      Icon: Compass,
+      bg: "bg-emerald-100 dark:bg-emerald-950",
+      fg: "text-emerald-600 dark:text-emerald-400",
+    };
   if (t.includes("event") || t.includes("concert") || t.includes("show"))
-    return { Icon: Ticket, bg: "bg-rose-100 dark:bg-rose-950", fg: "text-rose-600 dark:text-rose-400" };
+    return {
+      Icon: Ticket,
+      bg: "bg-rose-100 dark:bg-rose-950",
+      fg: "text-rose-600 dark:text-rose-400",
+    };
   if (t.includes("restaurant") || t.includes("dining"))
-    return { Icon: UtensilsCrossed, bg: "bg-red-100 dark:bg-red-950", fg: "text-red-600 dark:text-red-400" };
+    return {
+      Icon: UtensilsCrossed,
+      bg: "bg-red-100 dark:bg-red-950",
+      fg: "text-red-600 dark:text-red-400",
+    };
   if (t.includes("transfer") || t.includes("taxi") || t.includes("shuttle"))
-    return { Icon: Car, bg: "bg-slate-100 dark:bg-slate-800", fg: "text-slate-500 dark:text-slate-400" };
+    return {
+      Icon: Car,
+      bg: "bg-slate-100 dark:bg-slate-800",
+      fg: "text-slate-500 dark:text-slate-400",
+    };
   // File-type fallbacks
   if (ext === "pdf")
-    return { Icon: FileText, bg: "bg-red-50 dark:bg-red-950/60", fg: "text-red-500 dark:text-red-400" };
+    return {
+      Icon: FileText,
+      bg: "bg-red-50 dark:bg-red-950/60",
+      fg: "text-red-500 dark:text-red-400",
+    };
   return { Icon: FileText, bg: "bg-secondary", fg: "text-muted-foreground" };
 }
 
 function DocTypeVisual({
   doc,
   tripId,
+  customTypes,
 }: {
   doc: TripDocument;
   tripId: number;
+  customTypes?: CustomDocumentType[];
 }) {
   const [imgError, setImgError] = useState(false);
   const ext = doc.originalFilename?.split(".").pop()?.toLowerCase();
@@ -724,9 +907,41 @@ function DocTypeVisual({
     );
   }
 
+  // Per-document icon override (user-chosen)
+  if (doc.iconOverride && ICON_COMPONENTS[doc.iconOverride]) {
+    const OverrideIcon = ICON_COMPONENTS[doc.iconOverride];
+    const { bg, fg } = COLOR_CLASSES.slate;
+    return (
+      <div
+        className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${bg}`}
+      >
+        <OverrideIcon className={`w-4 h-4 ${fg}`} />
+      </div>
+    );
+  }
+
+  // Custom document type with its own icon + colour
+  if (customTypes && doc.documentType) {
+    const ct = customTypes.find((t) => t.typeKey === doc.documentType);
+    if (ct?.iconName && ICON_COMPONENTS[ct.iconName]) {
+      const CtIcon = ICON_COMPONENTS[ct.iconName];
+      const { bg, fg } =
+        COLOR_CLASSES[ct.colorKey ?? "slate"] ?? COLOR_CLASSES.slate;
+      return (
+        <div
+          className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${bg}`}
+        >
+          <CtIcon className={`w-4 h-4 ${fg}`} />
+        </div>
+      );
+    }
+  }
+
   const { Icon, bg, fg } = getDocVisualStyle(doc.documentType, ext);
   return (
-    <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${bg}`}>
+    <div
+      className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${bg}`}
+    >
       <Icon className={`w-4 h-4 ${fg}`} />
     </div>
   );
@@ -752,6 +967,34 @@ function DocumentRow({
   const ed = doc.extractedData as Record<string, unknown> | null;
   const lockedFields = doc.lockedFields ?? [];
   const titleLocked = lockedFields.includes("title");
+  const docTypeLocked = lockedFields.includes("documentType");
+  const [showTrainDialog, setShowTrainDialog] = useState(false);
+  const [showIconPicker, setShowIconPicker] = useState(false);
+  const { data: customTypes = [] } = useListCustomDocumentTypes();
+
+  const saveDocumentType = (value: string) => {
+    updateTripDocument.mutate(
+      { tripId, docId: doc.id, body: { documentType: value } },
+      {
+        onSuccess: () => {
+          qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
+          if (value === "other") setShowTrainDialog(true);
+        },
+        onError: () => toast.error("Failed to update document type"),
+      },
+    );
+  };
+
+  const saveIconOverride = (iconName: string | null) => {
+    updateTripDocument.mutate(
+      { tripId, docId: doc.id, body: { iconOverride: iconName } },
+      {
+        onSuccess: () =>
+          qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) }),
+        onError: () => toast.error("Failed to save icon"),
+      },
+    );
+  };
 
   const saveTitle = () => {
     const val = titleDraft.trim();
@@ -760,7 +1003,8 @@ function DocumentRow({
     updateTripDocument.mutate(
       { tripId, docId: doc.id, body: { title: val || null } },
       {
-        onSuccess: () => qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) }),
+        onSuccess: () =>
+          qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) }),
         onError: () => toast.error("Failed to save title"),
       },
     );
@@ -833,191 +1077,294 @@ function DocumentRow({
 
   return (
     <>
-    <div className="flex items-start gap-3 py-3 border-b border-border/50 last:border-0">
-      <DocTypeVisual doc={doc} tripId={tripId} />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start gap-0.5 -ml-0.5">
-          {editingTitle ? (
-            <input
-              autoFocus
-              className="flex-1 text-sm font-medium bg-transparent border-b border-primary/60 outline-none pb-0.5 min-w-0"
-              value={titleDraft}
-              onChange={(e) => setTitleDraft(e.target.value)}
-              onBlur={() => saveTitle()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") saveTitle();
-                if (e.key === "Escape") setEditingTitle(false);
-              }}
-              placeholder={doc.originalFilename ?? "Add a title…"}
-            />
-          ) : (
+      <div className="flex items-start gap-3 py-3 border-b border-border/50 last:border-0">
+        <button
+          type="button"
+          onClick={() => setShowIconPicker(true)}
+          className="shrink-0 rounded-lg transition-opacity hover:opacity-70"
+          title="Click to change icon"
+        >
+          <DocTypeVisual doc={doc} tripId={tripId} customTypes={customTypes} />
+        </button>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start gap-0.5 -ml-0.5">
+            {editingTitle ? (
+              <input
+                autoFocus
+                className="flex-1 text-sm font-medium bg-transparent border-b border-primary/60 outline-none pb-0.5 min-w-0"
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onBlur={() => saveTitle()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") saveTitle();
+                  if (e.key === "Escape") setEditingTitle(false);
+                }}
+                placeholder={doc.originalFilename ?? "Add a title…"}
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setTitleDraft(doc.title ?? "");
+                  setEditingTitle(true);
+                }}
+                className="flex-1 text-left text-sm font-medium text-foreground truncate hover:text-primary transition-colors pl-0.5"
+                title="Click to edit title"
+              >
+                {doc.title || doc.originalFilename || "Untitled"}
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => {
-                setTitleDraft(doc.title ?? "");
-                setEditingTitle(true);
-              }}
-              className="flex-1 text-left text-sm font-medium text-foreground truncate hover:text-primary transition-colors pl-0.5"
-              title="Click to edit title"
+              onClick={() => toggleFieldLock("title")}
+              className={`shrink-0 p-0.5 mt-0.5 transition-colors ${
+                titleLocked
+                  ? "text-amber-500 hover:text-amber-600"
+                  : "text-muted-foreground/25 hover:text-muted-foreground"
+              }`}
+              title={
+                titleLocked
+                  ? "Title locked — AI won't overwrite on rescan"
+                  : "Click to lock title"
+              }
             >
-              {doc.title || doc.originalFilename || "Untitled"}
+              {titleLocked ? (
+                <Lock className="w-3 h-3" />
+              ) : (
+                <LockOpen className="w-3 h-3" />
+              )}
+            </button>
+          </div>
+          {doc.title &&
+            doc.originalFilename &&
+            doc.title !== doc.originalFilename && (
+              <p className="text-[11px] text-muted-foreground/50 truncate leading-tight pl-0.5">
+                {doc.originalFilename}
+              </p>
+            )}
+          <div className="flex items-center gap-1">
+            <Select
+              value={doc.documentType ?? "other"}
+              onValueChange={saveDocumentType}
+              disabled={docTypeLocked}
+            >
+              <SelectTrigger className="h-5 text-xs border-0 bg-transparent px-0.5 py-0 gap-0.5 text-muted-foreground hover:text-foreground focus:ring-0 w-auto max-w-[190px] [&>svg]:w-3 [&>svg]:h-3 [&>svg]:opacity-50">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {allDocTypeOptions(customTypes).map((opt) => (
+                  <SelectItem key={opt.key} value={opt.key} className="text-xs">
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <button
+              type="button"
+              onClick={() => toggleFieldLock("documentType")}
+              className={`shrink-0 p-0.5 transition-colors ${
+                docTypeLocked
+                  ? "text-amber-500 hover:text-amber-600"
+                  : "text-muted-foreground/25 hover:text-muted-foreground"
+              }`}
+              title={
+                docTypeLocked
+                  ? "Document type locked"
+                  : "Click to lock document type"
+              }
+            >
+              {docTypeLocked ? (
+                <Lock className="w-3 h-3" />
+              ) : (
+                <LockOpen className="w-3 h-3" />
+              )}
+            </button>
+            {(!ed || Object.keys(ed).length === 0) && (
+              <span
+                title="AI hasn't extracted details yet — click the scan icon to retry"
+                className="inline-flex items-center gap-1 text-xs text-amber-500"
+              >
+                <Sparkles className="w-3 h-3 animate-pulse" />
+                <span className="text-[11px]">Processing…</span>
+              </span>
+            )}
+          </div>
+          <div className="mt-1.5 space-y-1">
+            {keyFields.map(({ key, label }) => {
+              const isLocked = lockedFields.includes(key);
+              const isDateField =
+                key.toLowerCase().includes("date") || DATE_LIKE_KEYS.has(key);
+              const rawValue = ed?.[key] != null ? String(ed[key]) : "";
+              return (
+                <div key={key} className="flex items-start gap-1">
+                  <div className="flex-1 min-w-0">
+                    <InlineTextField
+                      label={label}
+                      value={rawValue}
+                      onSave={(v) => saveExtractedField(key, v)}
+                      saving={updateTripDocument.isPending}
+                      placeholder={isDateField ? "e.g. 2026-08-14" : undefined}
+                      displayValue={(v) => formatExtractedValue(v)}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => toggleFieldLock(key)}
+                    className={`p-1 shrink-0 transition-colors mt-4 ${
+                      isLocked
+                        ? "text-amber-500 hover:text-amber-600"
+                        : "text-muted-foreground/50 hover:text-foreground"
+                    }`}
+                    title={
+                      isLocked
+                        ? "Locked — AI rescan won't overwrite"
+                        : "Unlocked — AI rescan may update"
+                    }
+                  >
+                    {isLocked ? (
+                      <Lock className="w-3.5 h-3.5" />
+                    ) : (
+                      <LockOpen className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={handleRescan}
+            disabled={rescanTripDocument.isPending}
+            className="p-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+            title="Re-scan document with AI (locked fields are preserved)"
+          >
+            <ScanSearch
+              className={`w-4 h-4 ${rescanTripDocument.isPending ? "animate-pulse" : ""}`}
+            />
+          </button>
+          <button
+            onClick={handleAddToWallet}
+            disabled={walletPass.isPending}
+            className="p-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+            title="Add to Google Wallet"
+          >
+            <Wallet
+              className={`w-4 h-4 ${walletPass.isPending ? "animate-pulse" : ""}`}
+            />
+          </button>
+          <a
+            href={getTripDocumentDownloadUrl(tripId, doc.id)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+            title="Download"
+          >
+            <ExternalLink className="w-4 h-4" />
+          </a>
+          {doc.gmailMessageId && (
+            <button
+              type="button"
+              onClick={() => setAddMoreOpen(true)}
+              className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+              title="Add more from this email"
+            >
+              <Paperclip className="w-4 h-4" />
             </button>
           )}
           <button
-            type="button"
-            onClick={() => toggleFieldLock("title")}
-            className={`shrink-0 p-0.5 mt-0.5 transition-colors ${
-              titleLocked
-                ? "text-amber-500 hover:text-amber-600"
-                : "text-muted-foreground/25 hover:text-muted-foreground"
-            }`}
-            title={titleLocked ? "Title locked — AI won't overwrite on rescan" : "Click to lock title"}
+            onClick={() => onDelete(doc.id)}
+            className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+            title="Remove document"
           >
-            {titleLocked ? (
-              <Lock className="w-3 h-3" />
-            ) : (
-              <LockOpen className="w-3 h-3" />
-            )}
+            <Trash2 className="w-4 h-4" />
           </button>
         </div>
-        {doc.title && doc.originalFilename && doc.title !== doc.originalFilename && (
-          <p className="text-[11px] text-muted-foreground/50 truncate leading-tight pl-0.5">
-            {doc.originalFilename}
-          </p>
-        )}
-        <div className="flex items-center gap-1.5">
-          {doc.documentType && (
-            <p className="text-xs text-muted-foreground capitalize">
-              {doc.documentType.replace(/_/g, " ")}
-            </p>
-          )}
-          {(!ed || Object.keys(ed).length === 0) && (
-            <span
-              title="AI hasn't extracted details yet — click the scan icon to retry"
-              className="inline-flex items-center gap-1 text-xs text-amber-500"
-            >
-              <Sparkles className="w-3 h-3 animate-pulse" />
-              <span className="text-[11px]">Processing…</span>
-            </span>
-          )}
-        </div>
-        <div className="mt-1.5 space-y-1">
-          {keyFields.map(({ key, label }) => {
-            const isLocked = lockedFields.includes(key);
-            const isDateField =
-              key.toLowerCase().includes("date") ||
-              DATE_LIKE_KEYS.has(key);
-            const rawValue = ed?.[key] != null ? String(ed[key]) : "";
-            return (
-              <div key={key} className="flex items-start gap-1">
-                <div className="flex-1 min-w-0">
-                  <InlineTextField
-                    label={label}
-                    value={rawValue}
-                    onSave={(v) => saveExtractedField(key, v)}
-                    saving={updateTripDocument.isPending}
-                    placeholder={
-                      isDateField ? "e.g. 2026-08-14" : undefined
-                    }
-                    displayValue={(v) => formatExtractedValue(v)}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => toggleFieldLock(key)}
-                  className={`p-1 shrink-0 transition-colors mt-4 ${
-                    isLocked
-                      ? "text-amber-500 hover:text-amber-600"
-                      : "text-muted-foreground/50 hover:text-foreground"
-                  }`}
-                  title={
-                    isLocked
-                      ? "Locked — AI rescan won't overwrite"
-                      : "Unlocked — AI rescan may update"
-                  }
-                >
-                  {isLocked ? (
-                    <Lock className="w-3.5 h-3.5" />
-                  ) : (
-                    <LockOpen className="w-3.5 h-3.5" />
-                  )}
-                </button>
-              </div>
-            );
-          })}
-        </div>
       </div>
-      <div className="flex items-center gap-1 shrink-0">
-        <button
-          onClick={handleRescan}
-          disabled={rescanTripDocument.isPending}
-          className="p-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-          title="Re-scan document with AI (locked fields are preserved)"
-        >
-          <ScanSearch
-            className={`w-4 h-4 ${rescanTripDocument.isPending ? "animate-pulse" : ""}`}
-          />
-        </button>
-        <button
-          onClick={handleAddToWallet}
-          disabled={walletPass.isPending}
-          className="p-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-          title="Add to Google Wallet"
-        >
-          <Wallet
-            className={`w-4 h-4 ${walletPass.isPending ? "animate-pulse" : ""}`}
-          />
-        </button>
-        <a
-          href={getTripDocumentDownloadUrl(tripId, doc.id)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-          title="Download"
-        >
-          <ExternalLink className="w-4 h-4" />
-        </a>
-        {doc.gmailMessageId && (
-          <button
-            type="button"
-            onClick={() => setAddMoreOpen(true)}
-            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-            title="Add more from this email"
-          >
-            <Paperclip className="w-4 h-4" />
-          </button>
-        )}
-        <button
-          onClick={() => onDelete(doc.id)}
-          className="p-1 text-muted-foreground hover:text-destructive transition-colors"
-          title="Remove document"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
-      </div>
-    </div>
 
-    {addMoreOpen && doc.gmailMessageId && (
-      <AttachmentPickerDialog
-        messageId={doc.gmailMessageId}
-        isLinking={linkGmail.isPending}
-        defaultAllUnchecked
-        onClose={() => setAddMoreOpen(false)}
-        onConfirm={(attachmentIds, includeEmailBody) => {
-          linkGmail.mutate(
-            { messageId: doc.gmailMessageId!, tripId, attachmentIds, includeEmailBody },
-            {
-              onSuccess: () => {
-                qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
-                setAddMoreOpen(false);
-                toast.success("Documents added from email");
+      {addMoreOpen && doc.gmailMessageId && (
+        <AttachmentPickerDialog
+          messageId={doc.gmailMessageId}
+          isLinking={linkGmail.isPending}
+          defaultAllUnchecked
+          onClose={() => setAddMoreOpen(false)}
+          onConfirm={(attachmentIds, includeEmailBody) => {
+            linkGmail.mutate(
+              {
+                messageId: doc.gmailMessageId!,
+                tripId,
+                attachmentIds,
+                includeEmailBody,
               },
-              onError: () => toast.error("Failed to add documents from email"),
-            },
-          );
-        }}
-      />
-    )}
+              {
+                onSuccess: () => {
+                  qc.invalidateQueries({
+                    queryKey: getGetTripQueryKey(tripId),
+                  });
+                  setAddMoreOpen(false);
+                  toast.success("Documents added from email");
+                },
+                onError: () =>
+                  toast.error("Failed to add documents from email"),
+              },
+            );
+          }}
+        />
+      )}
+
+      {/* Icon picker dialog */}
+      {showIconPicker && (
+        <Dialog open onOpenChange={(open) => !open && setShowIconPicker(false)}>
+          <DialogContent className="max-w-xs">
+            <DialogHeader>
+              <DialogTitle className="text-sm">Choose icon</DialogTitle>
+            </DialogHeader>
+            <div className="grid grid-cols-6 gap-1 py-1">
+              {Object.entries(ICON_COMPONENTS).map(([name, IconComp]) => {
+                const active = doc.iconOverride === name;
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    title={name}
+                    className={`p-2 rounded-lg flex items-center justify-center transition-colors ${
+                      active
+                        ? "bg-primary/10 ring-1 ring-primary/30 text-primary"
+                        : "hover:bg-muted text-muted-foreground"
+                    }`}
+                    onClick={() => {
+                      saveIconOverride(active ? null : name);
+                      setShowIconPicker(false);
+                    }}
+                  >
+                    <IconComp className="w-4 h-4" />
+                  </button>
+                );
+              })}
+            </div>
+            {doc.iconOverride && (
+              <button
+                type="button"
+                className="text-xs text-muted-foreground hover:text-foreground pt-1"
+                onClick={() => {
+                  saveIconOverride(null);
+                  setShowIconPicker(false);
+                }}
+              >
+                Reset to default
+              </button>
+            )}
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Custom document type training dialog */}
+      {showTrainDialog && (
+        <DocTypeTrainingDialog
+          onClose={() => setShowTrainDialog(false)}
+          onSaved={() => setShowTrainDialog(false)}
+        />
+      )}
     </>
   );
 }
@@ -3699,32 +4046,57 @@ export default function TripDetail({ id }: { id: number }) {
                               </label>
 
                               {pendingFile && (
-                                <Dialog open onOpenChange={(open) => { if (!open && !uploadingDoc) setPendingFile(null); }}>
+                                <Dialog
+                                  open
+                                  onOpenChange={(open) => {
+                                    if (!open && !uploadingDoc)
+                                      setPendingFile(null);
+                                  }}
+                                >
                                   <DialogContent className="max-w-sm">
                                     <DialogHeader>
-                                      <DialogTitle>Name this document</DialogTitle>
+                                      <DialogTitle>
+                                        Name this document
+                                      </DialogTitle>
                                     </DialogHeader>
                                     <div className="space-y-3 py-1">
                                       <div className="space-y-1.5">
-                                        <Label htmlFor="doc-title-input">Title</Label>
+                                        <Label htmlFor="doc-title-input">
+                                          Title
+                                        </Label>
                                         <Input
                                           id="doc-title-input"
                                           value={pendingTitle}
-                                          onChange={(e) => setPendingTitle(e.target.value)}
+                                          onChange={(e) =>
+                                            setPendingTitle(e.target.value)
+                                          }
                                           placeholder="e.g. BA417 London → Rome · 15 Jul"
-                                          onKeyDown={(e) => { if (e.key === "Enter") handleUploadConfirm(); }}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter")
+                                              handleUploadConfirm();
+                                          }}
                                           autoFocus
                                         />
                                         <p className="text-[11px] text-muted-foreground">
-                                          {pendingFile.name} · Leave blank and AI will suggest one.
+                                          {pendingFile.name} · Leave blank and
+                                          AI will suggest one.
                                         </p>
                                       </div>
                                     </div>
                                     <DialogFooter>
-                                      <Button variant="outline" size="sm" onClick={() => setPendingFile(null)} disabled={uploadingDoc}>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setPendingFile(null)}
+                                        disabled={uploadingDoc}
+                                      >
                                         Cancel
                                       </Button>
-                                      <Button size="sm" onClick={handleUploadConfirm} disabled={uploadingDoc}>
+                                      <Button
+                                        size="sm"
+                                        onClick={handleUploadConfirm}
+                                        disabled={uploadingDoc}
+                                      >
                                         {uploadingDoc ? "Uploading…" : "Upload"}
                                       </Button>
                                     </DialogFooter>

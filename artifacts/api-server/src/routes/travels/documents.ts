@@ -340,9 +340,10 @@ router.post("/trips/:id/documents", upload.single("file"), async (req, res) => {
     req.log.warn({ err }, "OCR extraction failed — storing without data");
   }
 
-  const userTitle = typeof req.body?.title === "string" && req.body.title.trim()
-    ? req.body.title.trim()
-    : null;
+  const userTitle =
+    typeof req.body?.title === "string" && req.body.title.trim()
+      ? req.body.title.trim()
+      : null;
   const aiTitle = (extractedData.title as string | undefined) ?? null;
 
   const [doc] = await db
@@ -375,19 +376,27 @@ router.patch("/trips/:id/documents/:docId", async (req, res) => {
     return;
   }
 
-  const { extractedData, lockedFields, title } = req.body as {
-    extractedData?: Record<string, unknown>;
-    lockedFields?: string[];
-    title?: string | null;
-  };
+  const { extractedData, lockedFields, title, documentType, iconOverride } =
+    req.body as {
+      extractedData?: Record<string, unknown>;
+      lockedFields?: string[];
+      title?: string | null;
+      documentType?: string | null;
+      iconOverride?: string | null;
+    };
   const hasTitle = title !== undefined;
+  const hasDocumentType = documentType !== undefined;
+  const hasIconOverride = iconOverride !== undefined;
   if (
     (!extractedData || typeof extractedData !== "object") &&
     !Array.isArray(lockedFields) &&
-    !hasTitle
+    !hasTitle &&
+    !hasDocumentType &&
+    !hasIconOverride
   ) {
     res.status(400).json({
-      error: "extractedData object, lockedFields array, or title is required",
+      error:
+        "extractedData object, lockedFields array, title, documentType, or iconOverride is required",
     });
     return;
   }
@@ -418,10 +427,14 @@ router.patch("/trips/:id/documents/:docId", async (req, res) => {
     extractedData?: Record<string, unknown>;
     lockedFields?: string[];
     title?: string | null;
+    documentType?: string | null;
+    iconOverride?: string | null;
   } = {};
   if (extractedData) updateValues.extractedData = merged;
   if (Array.isArray(lockedFields)) updateValues.lockedFields = lockedFields;
   if (hasTitle) updateValues.title = title ?? null;
+  if (hasDocumentType) updateValues.documentType = documentType ?? null;
+  if (hasIconOverride) updateValues.iconOverride = iconOverride ?? null;
 
   const [updated] = await db
     .update(travelsTripDocuments)

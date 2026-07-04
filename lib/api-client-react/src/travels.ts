@@ -53,6 +53,7 @@ export interface TripDocument {
   tripId: number;
   userId: number;
   storagePath: string;
+  title?: string | null;
   documentType?: string | null;
   originalFilename?: string | null;
   extractedData?: Record<string, unknown> | null;
@@ -288,7 +289,7 @@ export const deleteTripDocument = (
 export const updateTripDocument = (
   tripId: number,
   docId: number,
-  body: { extractedData?: Record<string, unknown>; lockedFields?: string[] },
+  body: { extractedData?: Record<string, unknown>; lockedFields?: string[]; title?: string | null },
   options?: RequestInit,
 ): Promise<TripDocument> =>
   customFetch<TripDocument>(`/api/travels/trips/${tripId}/documents/${docId}`, {
@@ -703,7 +704,7 @@ export function useUpdateTripDocument<TError = unknown, TContext = unknown>(
       {
         tripId: number;
         docId: number;
-        body: { extractedData?: Record<string, unknown>; lockedFields?: string[] };
+        body: { extractedData?: Record<string, unknown>; lockedFields?: string[]; title?: string | null };
       },
       TContext
     >;
@@ -714,7 +715,7 @@ export function useUpdateTripDocument<TError = unknown, TContext = unknown>(
   {
     tripId: number;
     docId: number;
-    body: { extractedData?: Record<string, unknown>; lockedFields?: string[] };
+    body: { extractedData?: Record<string, unknown>; lockedFields?: string[]; title?: string | null };
   },
   TContext
 > {
@@ -723,7 +724,7 @@ export function useUpdateTripDocument<TError = unknown, TContext = unknown>(
     {
       tripId: number;
       docId: number;
-      body: { extractedData?: Record<string, unknown>; lockedFields?: string[] };
+      body: { extractedData?: Record<string, unknown>; lockedFields?: string[]; title?: string | null };
     }
   > = ({ tripId, docId, body }) => updateTripDocument(tripId, docId, body);
   return useMutation({ mutationFn, ...options?.mutation });

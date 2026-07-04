@@ -747,8 +747,24 @@ function DocumentRow({
   const walletPass = useGetTripDocumentWalletPass();
   const linkGmail = useLinkGmailMessage();
   const [addMoreOpen, setAddMoreOpen] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
   const ed = doc.extractedData as Record<string, unknown> | null;
   const lockedFields = doc.lockedFields ?? [];
+  const titleLocked = lockedFields.includes("title");
+
+  const saveTitle = () => {
+    const val = titleDraft.trim();
+    setEditingTitle(false);
+    if (val === (doc.title ?? "")) return;
+    updateTripDocument.mutate(
+      { tripId, docId: doc.id, body: { title: val || null } },
+      {
+        onSuccess: () => qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) }),
+        onError: () => toast.error("Failed to save title"),
+      },
+    );
+  };
 
   const toggleFieldLock = (key: string) => {
     const isLocked = lockedFields.includes(key);
@@ -820,9 +836,55 @@ function DocumentRow({
     <div className="flex items-start gap-3 py-3 border-b border-border/50 last:border-0">
       <DocTypeVisual doc={doc} tripId={tripId} />
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-foreground truncate">
-          {doc.originalFilename ?? "Document"}
-        </p>
+        <div className="flex items-start gap-0.5 -ml-0.5">
+          {editingTitle ? (
+            <input
+              autoFocus
+              className="flex-1 text-sm font-medium bg-transparent border-b border-primary/60 outline-none pb-0.5 min-w-0"
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={() => saveTitle()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveTitle();
+                if (e.key === "Escape") setEditingTitle(false);
+              }}
+              placeholder={doc.originalFilename ?? "Add a title…"}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setTitleDraft(doc.title ?? "");
+                setEditingTitle(true);
+              }}
+              className="flex-1 text-left text-sm font-medium text-foreground truncate hover:text-primary transition-colors pl-0.5"
+              title="Click to edit title"
+            >
+              {doc.title || doc.originalFilename || "Untitled"}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => toggleFieldLock("title")}
+            className={`shrink-0 p-0.5 mt-0.5 transition-colors ${
+              titleLocked
+                ? "text-amber-500 hover:text-amber-600"
+                : "text-muted-foreground/25 hover:text-muted-foreground"
+            }`}
+            title={titleLocked ? "Title locked — AI won't overwrite on rescan" : "Click to lock title"}
+          >
+            {titleLocked ? (
+              <Lock className="w-3 h-3" />
+            ) : (
+              <LockOpen className="w-3 h-3" />
+            )}
+          </button>
+        </div>
+        {doc.title && doc.originalFilename && doc.title !== doc.originalFilename && (
+          <p className="text-[11px] text-muted-foreground/50 truncate leading-tight pl-0.5">
+            {doc.originalFilename}
+          </p>
+        )}
         <div className="flex items-center gap-1.5">
           {doc.documentType && (
             <p className="text-xs text-muted-foreground capitalize">
@@ -2445,6 +2507,8 @@ export default function TripDetail({ id }: { id: number }) {
   }
 
   const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [pendingTitle, setPendingTitle] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [itinStyle, setItinStyle] = useState<"relaxed" | "balanced" | "packed">(
     "balanced",
@@ -2493,13 +2557,27 @@ export default function TripDetail({ id }: { id: number }) {
     });
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFilePicked = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    e.target.value = "";
+    const defaultTitle = file.name
+      .replace(/\.[^.]+$/, "")
+      .replace(/[-_]+/g, " ")
+      .trim();
+    setPendingFile(file);
+    setPendingTitle(defaultTitle);
+  };
+
+  const handleUploadConfirm = async () => {
+    if (!pendingFile) return;
     setUploadingDoc(true);
     try {
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", pendingFile);
+      if (pendingTitle.trim()) {
+        formData.append("title", pendingTitle.trim());
+      }
       const res = await fetch(`/api/travels/trips/${id}/documents`, {
         method: "POST",
         body: formData,
@@ -2507,11 +2585,11 @@ export default function TripDetail({ id }: { id: number }) {
       if (!res.ok) throw new Error("Upload failed");
       invalidate();
       toast.success("Document uploaded");
+      setPendingFile(null);
     } catch {
       toast.error("Failed to upload document");
     } finally {
       setUploadingDoc(false);
-      e.target.value = "";
     }
   };
 
@@ -3605,7 +3683,7 @@ export default function TripDetail({ id }: { id: number }) {
                                   type="file"
                                   className="hidden"
                                   accept=".pdf,.jpg,.jpeg,.png,.webp"
-                                  onChange={handleFileUpload}
+                                  onChange={handleFilePicked}
                                   disabled={uploadingDoc}
                                 />
                                 <span
@@ -3619,6 +3697,40 @@ export default function TripDetail({ id }: { id: number }) {
                                   {uploadingDoc ? "Uploading..." : "Upload"}
                                 </span>
                               </label>
+
+                              {pendingFile && (
+                                <Dialog open onOpenChange={(open) => { if (!open && !uploadingDoc) setPendingFile(null); }}>
+                                  <DialogContent className="max-w-sm">
+                                    <DialogHeader>
+                                      <DialogTitle>Name this document</DialogTitle>
+                                    </DialogHeader>
+                                    <div className="space-y-3 py-1">
+                                      <div className="space-y-1.5">
+                                        <Label htmlFor="doc-title-input">Title</Label>
+                                        <Input
+                                          id="doc-title-input"
+                                          value={pendingTitle}
+                                          onChange={(e) => setPendingTitle(e.target.value)}
+                                          placeholder="e.g. BA417 London → Rome · 15 Jul"
+                                          onKeyDown={(e) => { if (e.key === "Enter") handleUploadConfirm(); }}
+                                          autoFocus
+                                        />
+                                        <p className="text-[11px] text-muted-foreground">
+                                          {pendingFile.name} · Leave blank and AI will suggest one.
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <DialogFooter>
+                                      <Button variant="outline" size="sm" onClick={() => setPendingFile(null)} disabled={uploadingDoc}>
+                                        Cancel
+                                      </Button>
+                                      <Button size="sm" onClick={handleUploadConfirm} disabled={uploadingDoc}>
+                                        {uploadingDoc ? "Uploading…" : "Upload"}
+                                      </Button>
+                                    </DialogFooter>
+                                  </DialogContent>
+                                </Dialog>
+                              )}
                             </div>
 
                             <Card className="border-border/50">

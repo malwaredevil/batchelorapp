@@ -14,6 +14,7 @@ const DOCUMENT_ADVISOR_INSTRUCTIONS =
   "You are a meticulous travel-document reviewer. You will be asked to double-check a specific extracted date, time, or field against source text/an image. Read character-by-character, flag any ambiguity (e.g. DD/MM vs MM/DD, transposed digits, issue date vs travel date), and give your best final answer plus a one-line reason.";
 
 const RESPONSE_SCHEMA_BLOCK = `{
+  "title": "short human-friendly label (e.g. 'BA417 London → Rome · 15 Jul', 'Marriott Florence · 14–17 Jul', 'Europcar Milan pickup · 10 Aug'). Omit document type words like 'Booking' or 'Confirmation'.",
   "documentType": "flight_ticket | boarding_pass | hotel_confirmation | car_rental | train_ticket | bus_ticket | ferry | cruise | travel_insurance | visa | tour | activity | event_ticket | restaurant_reservation | airport_transfer | other",
 
   "providerName": "airline / hotel / car company / railway / ferry / cruise line / tour operator / restaurant / insurer / venue name",

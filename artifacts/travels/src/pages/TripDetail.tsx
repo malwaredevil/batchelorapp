@@ -408,16 +408,18 @@ function DocumentRow({
   };
 
   const keyFields: Array<{ key: string; label: string }> = [
+    // Flight-related fields grouped together
     { key: "referenceNumber", label: "Ref" },
-    { key: "confirmationNumber", label: "Confirmation" },
-    { key: "departureDateTime", label: "Departure" },
-    { key: "checkInDate", label: "Check-in" },
-    { key: "checkOutDate", label: "Check-out" },
-    { key: "flightNumber", label: "Flight" },
     { key: "airline", label: "Airline" },
-    { key: "hotelName", label: "Hotel" },
+    { key: "departureDateTime", label: "Departure" },
+    { key: "flightNumber", label: "Flight" },
     { key: "returnDepartureDateTime", label: "Return" },
     { key: "returnFlightNumber", label: "Return flight" },
+    // Hotel-related fields grouped together
+    { key: "hotelName", label: "Hotel" },
+    { key: "confirmationNumber", label: "Confirmation" },
+    { key: "checkInDate", label: "Check-in" },
+    { key: "checkOutDate", label: "Check-out" },
   ];
 
   const saveExtractedField = (key: string, rawValue: string) => {

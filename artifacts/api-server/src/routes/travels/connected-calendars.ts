@@ -10,7 +10,7 @@ import { z } from "zod/v4";
 import { db, appUsers, travelsConnectedCalendars } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { getValidAccessToken } from "../../lib/google-calendar-tokens";
-import { listCalendarEvents } from "../../lib/google-calendar";
+import { listCalendarEvents, createCalendarEvent } from "../../lib/google-calendar";
 import { logger } from "../../lib/logger";
 
 const router: IRouter = Router();
@@ -227,6 +227,55 @@ router.get("/connected-calendars/:id/events", requireAuth, async (req, res) => {
     res.json(events);
   } catch (err) {
     logger.error({ err, calendarId: row.googleCalendarId }, "connected-calendars: failed to list events");
+    res.status(502).json({ error: "Could not reach Google Calendar." });
+  }
+});
+
+const EventBody = z.object({
+  title: z.string().min(1),
+  description: z.string().nullish(),
+  location: z.string().nullish(),
+  allDay: z.boolean(),
+  start: z.string().min(1),
+  end: z.string().min(1),
+  colorId: z.string().nullish(),
+});
+
+// POST /connected-calendars/:id/events — create an event directly on one of
+// the current user's own connected Google calendars. Ownership-scoped the
+// same way as the GET .../events route above; never accepts another user's
+// connected-calendar id.
+router.post("/connected-calendars/:id/events", requireAuth, async (req, res) => {
+  const userId = req.session.userId!;
+  const id = Number(req.params["id"]);
+  const body = EventBody.parse(req.body);
+
+  const [row] = await db
+    .select()
+    .from(travelsConnectedCalendars)
+    .where(
+      and(
+        eq(travelsConnectedCalendars.id, id),
+        eq(travelsConnectedCalendars.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!row) {
+    res.status(404).json({ error: "Connected calendar not found." });
+    return;
+  }
+
+  const accessToken = await getValidAccessToken(userId);
+  if (!accessToken) {
+    res.status(502).json({ error: "Could not connect to Google Calendar." });
+    return;
+  }
+
+  try {
+    const event = await createCalendarEvent(accessToken, row.googleCalendarId, body);
+    res.status(201).json(event);
+  } catch (err) {
+    logger.error({ err, calendarId: row.googleCalendarId }, "connected-calendars: failed to create event");
     res.status(502).json({ error: "Could not reach Google Calendar." });
   }
 });

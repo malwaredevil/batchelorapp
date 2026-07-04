@@ -1813,6 +1813,30 @@ export function useListConnectedCalendarEvents<TData = TravelCalendarEvent[], TE
   return { ...query, queryKey: queryOpts.queryKey };
 }
 
+const postConnectedCalendarEventFn = (
+  id: number,
+  body: TravelCalendarEventInput,
+): Promise<TravelCalendarEvent> =>
+  customFetch<TravelCalendarEvent>(`/api/travels/connected-calendars/${id}/events`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export function useCreateConnectedCalendarEvent(
+  options?: {
+    mutation?: UseMutationOptions<
+      TravelCalendarEvent,
+      unknown,
+      { id: number; body: TravelCalendarEventInput }
+    >;
+  },
+) {
+  const mutationFn = ({ id, body }: { id: number; body: TravelCalendarEventInput }) =>
+    postConnectedCalendarEventFn(id, body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
 // ---------------------------------------------------------------------------
 // Travel Calendar (shared, owner-assignable calendar — view/add/edit/delete
 // events; every app_user may act on it, not just the owner)

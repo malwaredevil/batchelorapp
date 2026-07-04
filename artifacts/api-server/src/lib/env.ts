@@ -20,7 +20,9 @@ export const env = {
   googleClientId: optional("GOOGLE_CLIENT_ID"),
   googleClientSecret: optional("GOOGLE_CLIENT_SECRET"),
   googleMapsApiKey: optional("GOOGLE_MAPS_API_KEY"),
-  googleWalletServiceAccountJson: optional("GOOGLE_WALLET_SERVICE_ACCOUNT_JSON"),
+  googleWalletServiceAccountJson: optional(
+    "GOOGLE_WALLET_SERVICE_ACCOUNT_JSON",
+  ),
   googleWalletIssuerId: optional("GOOGLE_WALLET_ISSUER_ID"),
   isProduction: process.env.NODE_ENV === "production",
   // Dev-only automation: lets the automated screenshot tool log in as a fixed

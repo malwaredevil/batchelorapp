@@ -508,7 +508,9 @@ router.get("/auth/google/callback", async (req, res) => {
 
   const { code, state } = req.query;
   const expectedState = req.signedCookies?.[OAUTH_STATE_COOKIE];
-  const returnTo = sanitizeReturnTo(req.signedCookies?.[OAUTH_RETURN_TO_COOKIE]);
+  const returnTo = sanitizeReturnTo(
+    req.signedCookies?.[OAUTH_RETURN_TO_COOKIE],
+  );
   // One-time use: clear the state cookies regardless of outcome. The
   // attributes must match those they were set with so every browser reliably
   // deletes them.

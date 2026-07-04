@@ -1,6 +1,16 @@
 import { useState } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Pencil, Trash2, Scissors, ZoomIn, Copy, Tag, Check, X as XIcon } from "lucide-react";
+import {
+  ArrowLeft,
+  Pencil,
+  Trash2,
+  Scissors,
+  ZoomIn,
+  Copy,
+  Tag,
+  Check,
+  X as XIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -44,7 +54,9 @@ export default function BlockDetail() {
 
   const { data: fabrics = [] } = useListFabrics();
   const { data: allCategories } = useListQuiltingCategories();
-  const numMap = buildFabricUrlMap(fabrics as Parameters<typeof buildFabricUrlMap>[0]);
+  const numMap = buildFabricUrlMap(
+    fabrics as Parameters<typeof buildFabricUrlMap>[0],
+  );
 
   const deleteBlock = useDeleteBlock({
     mutation: {
@@ -90,7 +102,9 @@ export default function BlockDetail() {
   function handleSaveCategories() {
     const merged = [
       ...(allCategories ?? []),
-      ...localNewCats.filter((nc) => !(allCategories ?? []).some((a) => a.id === nc.id)),
+      ...localNewCats.filter(
+        (nc) => !(allCategories ?? []).some((a) => a.id === nc.id),
+      ),
     ];
     const categoryNames = merged
       .filter((c) => selectedCatIds.includes(c.id))
@@ -134,7 +148,12 @@ export default function BlockDetail() {
     blockSizeInches?: number | null;
     seamAllowanceInches?: number | null;
     dominantColors?: string[];
-    categories: Array<{ id: number; name: string; bgColor: string | null; textColor: string | null }>;
+    categories: Array<{
+      id: number;
+      name: string;
+      bgColor: string | null;
+      textColor: string | null;
+    }>;
   };
 
   const cells = b.cells;
@@ -159,7 +178,13 @@ export default function BlockDetail() {
           className="relative flex aspect-square cursor-zoom-in items-center justify-center overflow-hidden rounded-2xl border border-card-border bg-white p-4 group"
           onClick={() => setZoomOpen(true)}
         >
-          <BlockPreviewSvg cells={cells} gridSize={gridSize} size={280} tileCount={1} fabricUrlMap={numMap} />
+          <BlockPreviewSvg
+            cells={cells}
+            gridSize={gridSize}
+            size={280}
+            tileCount={1}
+            fabricUrlMap={numMap}
+          />
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/20 group-hover:opacity-100">
             <ZoomIn className="h-10 w-10 text-white drop-shadow-lg" />
           </div>
@@ -241,7 +266,9 @@ export default function BlockDetail() {
               {b.blockSizeInches != null && (
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Finished size</span>
-                  <span className="font-medium">{fmtInch(b.blockSizeInches)}</span>
+                  <span className="font-medium">
+                    {fmtInch(b.blockSizeInches)}
+                  </span>
                 </div>
               )}
               {b.seamAllowanceInches != null && (
@@ -302,7 +329,9 @@ export default function BlockDetail() {
                   selectedIds={selectedCatIds}
                   onToggle={(id) =>
                     setSelectedCatIds((prev) =>
-                      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+                      prev.includes(id)
+                        ? prev.filter((x) => x !== id)
+                        : [...prev, id],
                     )
                   }
                   onCreated={(cat) => {
@@ -337,14 +366,20 @@ export default function BlockDetail() {
               <div className="flex flex-wrap gap-1.5">
                 {b.categories.map((cat) => {
                   const palette = cat.bgColor
-                    ? { bgColor: cat.bgColor, textColor: cat.textColor ?? "#fff" }
+                    ? {
+                        bgColor: cat.bgColor,
+                        textColor: cat.textColor ?? "#fff",
+                      }
                     : getCategoryPalette(cat.name);
                   return (
                     <Badge
                       key={cat.id}
                       variant="outline"
                       className="border-transparent"
-                      style={{ backgroundColor: palette.bgColor, color: palette.textColor }}
+                      style={{
+                        backgroundColor: palette.bgColor,
+                        color: palette.textColor,
+                      }}
                     >
                       {cat.name}
                     </Badge>
@@ -353,14 +388,25 @@ export default function BlockDetail() {
               </div>
             ) : (
               <p className="text-xs italic text-muted-foreground">
-                No categories — click <Pencil className="inline h-2.5 w-2.5" /> to add
+                No categories — click <Pencil className="inline h-2.5 w-2.5" />{" "}
+                to add
               </p>
             )}
           </section>
         </div>
       </div>
-      <PreviewZoomModal open={zoomOpen} onClose={() => setZoomOpen(false)} title={b.name}>
-        <BlockPreviewSvg cells={cells} gridSize={gridSize} size={500} tileCount={1} fabricUrlMap={numMap} />
+      <PreviewZoomModal
+        open={zoomOpen}
+        onClose={() => setZoomOpen(false)}
+        title={b.name}
+      >
+        <BlockPreviewSvg
+          cells={cells}
+          gridSize={gridSize}
+          size={500}
+          tileCount={1}
+          fabricUrlMap={numMap}
+        />
       </PreviewZoomModal>
     </div>
   );

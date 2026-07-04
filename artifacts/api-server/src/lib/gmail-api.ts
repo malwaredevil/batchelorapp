@@ -6,16 +6,16 @@ import { logger } from "./logger";
 
 const GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1";
 
-async function gmailApiJson<T>(
-  accessToken: string,
-  path: string,
-): Promise<T> {
+async function gmailApiJson<T>(accessToken: string, path: string): Promise<T> {
   const res = await fetch(`${GMAIL_API_BASE}${path}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    logger.warn({ status: res.status, path, body: body.slice(0, 500) }, "gmail-api: request failed");
+    logger.warn(
+      { status: res.status, path, body: body.slice(0, 500) },
+      "gmail-api: request failed",
+    );
     throw new Error(`Gmail API request failed (${res.status})`);
   }
   return res.json() as Promise<T>;
@@ -91,7 +91,10 @@ export async function searchMessagesPage(
   pageToken?: string,
   maxResults = 25,
 ): Promise<{ messages: GmailMessageListItem[]; nextPageToken?: string }> {
-  const params = new URLSearchParams({ q: query, maxResults: String(maxResults) });
+  const params = new URLSearchParams({
+    q: query,
+    maxResults: String(maxResults),
+  });
   if (pageToken) params.set("pageToken", pageToken);
   const page = await gmailApiJson<{
     messages?: GmailMessageListItem[];
@@ -155,7 +158,10 @@ export async function getAttachment(
   return Buffer.from(data.data, "base64url");
 }
 
-export function findHeader(payload: GmailMessagePart | undefined, name: string): string | null {
+export function findHeader(
+  payload: GmailMessagePart | undefined,
+  name: string,
+): string | null {
   const header = payload?.headers?.find(
     (h) => h.name.toLowerCase() === name.toLowerCase(),
   );
@@ -198,9 +204,11 @@ export function parseGmailMessage(message: GmailMessage): ParsedGmailMessage {
   const subject = findHeader(message.payload, "Subject");
   const from = findHeader(message.payload, "From");
   const dateHeader = findHeader(message.payload, "Date");
-  const date = dateHeader ? new Date(dateHeader) : message.internalDate
-    ? new Date(Number(message.internalDate))
-    : null;
+  const date = dateHeader
+    ? new Date(dateHeader)
+    : message.internalDate
+      ? new Date(Number(message.internalDate))
+      : null;
 
   let textBody = "";
   const attachments: GmailAttachmentRef[] = [];
@@ -208,7 +216,11 @@ export function parseGmailMessage(message: GmailMessage): ParsedGmailMessage {
   function walk(part: GmailMessagePart | undefined): void {
     if (!part) return;
     const mimeType = part.mimeType ?? "";
-    if (part.filename && part.body?.attachmentId && INLINE_ATTACHMENT_TYPES.has(mimeType)) {
+    if (
+      part.filename &&
+      part.body?.attachmentId &&
+      INLINE_ATTACHMENT_TYPES.has(mimeType)
+    ) {
       attachments.push({
         filename: part.filename,
         mimeType,

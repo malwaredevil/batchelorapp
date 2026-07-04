@@ -909,15 +909,11 @@ async function main() {
   });
   await resetSequence(dest, "travels_connected_calendars", "id");
 
-  summary["travels_reminder_calendar_events"] = await copyTable(
-    source,
-    dest,
-    {
-      table: "travels_reminder_calendar_events",
-      columns: ["id", "reminder_id", "user_id", "google_event_id", "created_at"],
-      orderBy: "id",
-    },
-  );
+  summary["travels_reminder_calendar_events"] = await copyTable(source, dest, {
+    table: "travels_reminder_calendar_events",
+    columns: ["id", "reminder_id", "user_id", "google_event_id", "created_at"],
+    orderBy: "id",
+  });
   await resetSequence(dest, "travels_reminder_calendar_events", "id");
 
   // ── elAIne assistant ──────────────────────────────────────────────────────

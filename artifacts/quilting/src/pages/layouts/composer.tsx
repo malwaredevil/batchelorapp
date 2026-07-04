@@ -1150,7 +1150,9 @@ export default function LayoutComposer() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => requestNav(layoutId ? `/layouts/${layoutId}` : "/layouts")}
+          onClick={() =>
+            requestNav(layoutId ? `/layouts/${layoutId}` : "/layouts")
+          }
           className="h-8 w-8"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -1196,9 +1198,19 @@ export default function LayoutComposer() {
                 </div>
                 {(
                   [
-                    { key: "brightness", label: "Brightness", min: 50, max: 150 },
+                    {
+                      key: "brightness",
+                      label: "Brightness",
+                      min: 50,
+                      max: 150,
+                    },
                     { key: "contrast", label: "Contrast", min: 50, max: 150 },
-                    { key: "saturation", label: "Saturation", min: 0, max: 200 },
+                    {
+                      key: "saturation",
+                      label: "Saturation",
+                      min: 0,
+                      max: 200,
+                    },
                   ] as const
                 ).map(({ key, label, min, max }) => (
                   <div key={key} className="mb-3 last:mb-0">

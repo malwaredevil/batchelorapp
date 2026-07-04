@@ -73,7 +73,10 @@ const dbMock = {
       return this;
     },
     onConflictDoUpdate(config: unknown) {
-      updateCalls.push({ table: "upsert", set: (config as { set: unknown }).set });
+      updateCalls.push({
+        table: "upsert",
+        set: (config as { set: unknown }).set,
+      });
       return this;
     },
     returning() {
@@ -106,7 +109,8 @@ class FakeItineraryActionError extends Error {
 }
 const generateItineraryForTrip = vi.fn();
 vi.mock("./ai", () => ({
-  generateItineraryForTrip: (...args: unknown[]) => generateItineraryForTrip(...args),
+  generateItineraryForTrip: (...args: unknown[]) =>
+    generateItineraryForTrip(...args),
   ItineraryActionError: FakeItineraryActionError,
 }));
 
@@ -178,7 +182,10 @@ describe("POST /api/travels/assistant/action", () => {
 
       const res = await request(app)
         .post("/api/travels/assistant/action")
-        .send({ type: "update_trip_status", payload: { tripId: 7, status: "booked" } });
+        .send({
+          type: "update_trip_status",
+          payload: { tripId: 7, status: "booked" },
+        });
 
       expect(res.status).toBe(200);
       expect(res.body).toEqual({
@@ -195,7 +202,10 @@ describe("POST /api/travels/assistant/action", () => {
 
       const res = await request(app)
         .post("/api/travels/assistant/action")
-        .send({ type: "update_trip_status", payload: { tripId: 999, status: "booked" } });
+        .send({
+          type: "update_trip_status",
+          payload: { tripId: 999, status: "booked" },
+        });
 
       expect(res.status).toBe(404);
       expect(res.body).toEqual({ error: "Trip not found" });
@@ -207,7 +217,10 @@ describe("POST /api/travels/assistant/action", () => {
 
       const res = await request(app)
         .post("/api/travels/assistant/action")
-        .send({ type: "update_trip_status", payload: { tripId: 7, status: "not-a-status" } });
+        .send({
+          type: "update_trip_status",
+          payload: { tripId: 7, status: "not-a-status" },
+        });
 
       expect(res.status).toBe(400);
     });
@@ -216,7 +229,10 @@ describe("POST /api/travels/assistant/action", () => {
   describe("cancel_trip", () => {
     it("deletes photos, documents, reminders, then the trip, and cleans up storage", async () => {
       selectQueue.push([{ id: 7 }]); // existence check
-      selectQueue.push([{ storagePath: "photo-1.jpg" }, { storagePath: "photo-2.jpg" }]); // photos
+      selectQueue.push([
+        { storagePath: "photo-1.jpg" },
+        { storagePath: "photo-2.jpg" },
+      ]); // photos
       selectQueue.push([{ storagePath: "doc-1.pdf" }]); // documents
       const app = await buildApp();
 
@@ -282,7 +298,10 @@ describe("POST /api/travels/assistant/action", () => {
 
       const res = await request(app)
         .post("/api/travels/assistant/action")
-        .send({ type: "mark_wishlist_done", payload: { wishlistId: 3, done: false } });
+        .send({
+          type: "mark_wishlist_done",
+          payload: { wishlistId: 3, done: false },
+        });
 
       expect(res.status).toBe(200);
       expect(updateCalls[0]?.set).toEqual({ done: false });
@@ -350,7 +369,10 @@ describe("POST /api/travels/assistant/action", () => {
 
       const res = await request(app)
         .post("/api/travels/assistant/action")
-        .send({ type: "remove_packing_item", payload: { tripId: 7, item: "sunscreen" } });
+        .send({
+          type: "remove_packing_item",
+          payload: { tripId: 7, item: "sunscreen" },
+        });
 
       expect(res.status).toBe(200);
       expect(res.body).toEqual({
@@ -368,7 +390,10 @@ describe("POST /api/travels/assistant/action", () => {
 
       const res = await request(app)
         .post("/api/travels/assistant/action")
-        .send({ type: "remove_packing_item", payload: { tripId: 999, item: "Sunscreen" } });
+        .send({
+          type: "remove_packing_item",
+          payload: { tripId: 999, item: "Sunscreen" },
+        });
 
       expect(res.status).toBe(404);
       expect(res.body).toEqual({ error: "Trip not found" });
@@ -378,7 +403,12 @@ describe("POST /api/travels/assistant/action", () => {
   describe("add_itinerary_day", () => {
     it("appends a new day (with an optional activity) to the itinerary", async () => {
       selectQueue.push([
-        { id: 7, itinerary: { days: [{ date: "2026-07-13", title: "Arrival", activities: [] }] } },
+        {
+          id: 7,
+          itinerary: {
+            days: [{ date: "2026-07-13", title: "Arrival", activities: [] }],
+          },
+        },
       ]);
       lastReturning = [
         {
@@ -418,7 +448,10 @@ describe("POST /api/travels/assistant/action", () => {
         });
 
       expect(res.status).toBe(200);
-      expect(res.body).toEqual({ type: "add_itinerary_day", result: lastReturning[0] });
+      expect(res.body).toEqual({
+        type: "add_itinerary_day",
+        result: lastReturning[0],
+      });
       expect(updateCalls[0]?.set).toEqual({
         itinerary: {
           days: [
@@ -427,7 +460,13 @@ describe("POST /api/travels/assistant/action", () => {
               date: "2026-07-14",
               title: "Kyoto day trip",
               activities: [
-                { time: "09:00", name: "Fushimi Inari", description: "", proximity: "", tip: "" },
+                {
+                  time: "09:00",
+                  name: "Fushimi Inari",
+                  description: "",
+                  proximity: "",
+                  tip: "",
+                },
               ],
             },
           ],
@@ -437,12 +476,20 @@ describe("POST /api/travels/assistant/action", () => {
 
     it("works when the trip has no itinerary yet", async () => {
       selectQueue.push([{ id: 7, itinerary: null }]);
-      lastReturning = [{ id: 7, itinerary: { days: [{ date: "", title: "Day 1", activities: [] }] } }];
+      lastReturning = [
+        {
+          id: 7,
+          itinerary: { days: [{ date: "", title: "Day 1", activities: [] }] },
+        },
+      ];
       const app = await buildApp();
 
       const res = await request(app)
         .post("/api/travels/assistant/action")
-        .send({ type: "add_itinerary_day", payload: { tripId: 7, title: "Day 1" } });
+        .send({
+          type: "add_itinerary_day",
+          payload: { tripId: 7, title: "Day 1" },
+        });
 
       expect(res.status).toBe(200);
       expect(updateCalls[0]?.set).toEqual({
@@ -456,7 +503,10 @@ describe("POST /api/travels/assistant/action", () => {
 
       const res = await request(app)
         .post("/api/travels/assistant/action")
-        .send({ type: "add_itinerary_day", payload: { tripId: 999, title: "Day 1" } });
+        .send({
+          type: "add_itinerary_day",
+          payload: { tripId: 999, title: "Day 1" },
+        });
 
       expect(res.status).toBe(404);
       expect(res.body).toEqual({ error: "Trip not found" });
@@ -473,12 +523,19 @@ describe("POST /api/travels/assistant/action", () => {
 
       const res = await request(app)
         .post("/api/travels/assistant/action")
-        .send({ type: "regenerate_itinerary_day", payload: { tripId: 7, dayNumber: 2 } });
+        .send({
+          type: "regenerate_itinerary_day",
+          payload: { tripId: 7, dayNumber: 2 },
+        });
 
       expect(res.status).toBe(200);
       expect(res.body).toEqual({
         type: "regenerate_itinerary_day",
-        result: { itinerary: { days: [{ date: "2026-07-14", title: "Refreshed", activities: [] }] } },
+        result: {
+          itinerary: {
+            days: [{ date: "2026-07-14", title: "Refreshed", activities: [] }],
+          },
+        },
       });
       expect(generateItineraryForTrip).toHaveBeenCalledWith(
         7,
@@ -497,7 +554,10 @@ describe("POST /api/travels/assistant/action", () => {
 
       const res = await request(app)
         .post("/api/travels/assistant/action")
-        .send({ type: "regenerate_itinerary_day", payload: { tripId: 7, dayNumber: 99 } });
+        .send({
+          type: "regenerate_itinerary_day",
+          payload: { tripId: 7, dayNumber: 99 },
+        });
 
       expect(res.status).toBe(400);
       expect(res.body).toEqual({ error: "Day index out of range" });
@@ -508,7 +568,10 @@ describe("POST /api/travels/assistant/action", () => {
 
       const res = await request(app)
         .post("/api/travels/assistant/action")
-        .send({ type: "regenerate_itinerary_day", payload: { tripId: 7, dayNumber: 0 } });
+        .send({
+          type: "regenerate_itinerary_day",
+          payload: { tripId: 7, dayNumber: 0 },
+        });
 
       expect(res.status).toBe(400);
       expect(generateItineraryForTrip).not.toHaveBeenCalled();
@@ -518,12 +581,17 @@ describe("POST /api/travels/assistant/action", () => {
   describe("add_packing_item", () => {
     it("adds the item when the trip belongs to the caller", async () => {
       selectQueue.push([{ id: 7, packingList: [] }]);
-      lastReturning = [{ id: 7, packingList: [{ item: "Sunscreen", packed: false }] }];
+      lastReturning = [
+        { id: 7, packingList: [{ item: "Sunscreen", packed: false }] },
+      ];
       const app = await buildApp();
 
       const res = await request(app)
         .post("/api/travels/assistant/action")
-        .send({ type: "add_packing_item", payload: { tripId: 7, item: "Sunscreen" } });
+        .send({
+          type: "add_packing_item",
+          payload: { tripId: 7, item: "Sunscreen" },
+        });
 
       expect(res.status).toBe(200);
       expect(updateCalls[0]?.set).toEqual({
@@ -537,7 +605,10 @@ describe("POST /api/travels/assistant/action", () => {
 
       const res = await request(app)
         .post("/api/travels/assistant/action")
-        .send({ type: "add_packing_item", payload: { tripId: 7, item: "Sunscreen" } });
+        .send({
+          type: "add_packing_item",
+          payload: { tripId: 7, item: "Sunscreen" },
+        });
 
       expect(res.status).toBe(404);
       expect(res.body).toEqual({ error: "Trip not found" });
@@ -549,13 +620,22 @@ describe("POST /api/travels/assistant/action", () => {
     it("creates a reminder when the trip belongs to the caller", async () => {
       selectQueue.push([{ id: 7, title: "Rome" }]);
       lastReturning = [
-        { id: 1, tripId: 7, title: "Check in", dueDate: null, recipientEmails: [] },
+        {
+          id: 1,
+          tripId: 7,
+          title: "Check in",
+          dueDate: null,
+          recipientEmails: [],
+        },
       ];
       const app = await buildApp();
 
       const res = await request(app)
         .post("/api/travels/assistant/action")
-        .send({ type: "add_reminder", payload: { tripId: 7, title: "Check in" } });
+        .send({
+          type: "add_reminder",
+          payload: { tripId: 7, title: "Check in" },
+        });
 
       expect(res.status).toBe(201);
       expect(insertCalls).toHaveLength(1);
@@ -567,7 +647,10 @@ describe("POST /api/travels/assistant/action", () => {
 
       const res = await request(app)
         .post("/api/travels/assistant/action")
-        .send({ type: "add_reminder", payload: { tripId: 7, title: "Check in" } });
+        .send({
+          type: "add_reminder",
+          payload: { tripId: 7, title: "Check in" },
+        });
 
       expect(res.status).toBe(404);
       expect(res.body).toEqual({ error: "Trip not found" });
@@ -577,7 +660,9 @@ describe("POST /api/travels/assistant/action", () => {
 
   describe("sync_reminder_to_calendar", () => {
     it("404s when the reminder belongs to a different user, without updating it", async () => {
-      selectQueue.push([{ id: 1, tripId: 7, userId: 999, recipientEmails: [] }]);
+      selectQueue.push([
+        { id: 1, tripId: 7, userId: 999, recipientEmails: [] },
+      ]);
       const app = await buildApp();
 
       const res = await request(app)
@@ -600,7 +685,10 @@ describe("POST /api/travels/assistant/action", () => {
 
       const res = await request(app)
         .post("/api/travels/assistant/action")
-        .send({ type: "update_trip_status", payload: { tripId: 7, status: "booked" } });
+        .send({
+          type: "update_trip_status",
+          payload: { tripId: 7, status: "booked" },
+        });
 
       expect(res.status).toBe(404);
       expect(updateCalls).toHaveLength(0);
@@ -612,7 +700,10 @@ describe("POST /api/travels/assistant/action", () => {
 
       const res = await request(app)
         .post("/api/travels/assistant/action")
-        .send({ type: "update_trip_details", payload: { tripId: 7, notes: "hi" } });
+        .send({
+          type: "update_trip_details",
+          payload: { tripId: 7, notes: "hi" },
+        });
 
       expect(res.status).toBe(404);
       expect(updateCalls).toHaveLength(0);
@@ -662,7 +753,10 @@ describe("POST /api/travels/assistant/action", () => {
 
       const res = await request(app)
         .post("/api/travels/assistant/action")
-        .send({ type: "remove_packing_item", payload: { tripId: 7, item: "Sunscreen" } });
+        .send({
+          type: "remove_packing_item",
+          payload: { tripId: 7, item: "Sunscreen" },
+        });
 
       expect(res.status).toBe(404);
       expect(updateCalls).toHaveLength(0);
@@ -674,7 +768,10 @@ describe("POST /api/travels/assistant/action", () => {
 
       const res = await request(app)
         .post("/api/travels/assistant/action")
-        .send({ type: "add_itinerary_day", payload: { tripId: 7, title: "Day 1" } });
+        .send({
+          type: "add_itinerary_day",
+          payload: { tripId: 7, title: "Day 1" },
+        });
 
       expect(res.status).toBe(404);
       expect(updateCalls).toHaveLength(0);
@@ -686,7 +783,10 @@ describe("POST /api/travels/assistant/action", () => {
 
       const res = await request(app)
         .post("/api/travels/assistant/action")
-        .send({ type: "regenerate_itinerary_day", payload: { tripId: 7, dayNumber: 1 } });
+        .send({
+          type: "regenerate_itinerary_day",
+          payload: { tripId: 7, dayNumber: 1 },
+        });
 
       expect(res.status).toBe(404);
       expect(generateItineraryForTrip).not.toHaveBeenCalled();
@@ -729,7 +829,10 @@ describe("GET /api/travels/assistant/settings", () => {
     const res = await request(app).get("/api/travels/assistant/settings");
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ enabled: true, actionConfirmationMode: "one_by_one" });
+    expect(res.body).toEqual({
+      enabled: true,
+      actionConfirmationMode: "one_by_one",
+    });
   });
 
   it("returns the stored mode when a row exists", async () => {
@@ -739,7 +842,10 @@ describe("GET /api/travels/assistant/settings", () => {
     const res = await request(app).get("/api/travels/assistant/settings");
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ enabled: false, actionConfirmationMode: "auto_run" });
+    expect(res.body).toEqual({
+      enabled: false,
+      actionConfirmationMode: "auto_run",
+    });
   });
 });
 
@@ -753,7 +859,10 @@ describe("PUT /api/travels/assistant/settings", () => {
       .send({ actionConfirmationMode: "all_at_once" });
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ enabled: true, actionConfirmationMode: "all_at_once" });
+    expect(res.body).toEqual({
+      enabled: true,
+      actionConfirmationMode: "all_at_once",
+    });
     expect(updateCalls[0]?.set).toEqual({
       enabled: true,
       actionConfirmationMode: "all_at_once",
@@ -762,7 +871,9 @@ describe("PUT /api/travels/assistant/settings", () => {
   });
 
   it("merges a mode-only patch on top of an existing enabled value", async () => {
-    selectQueue.push([{ enabled: false, actionConfirmationMode: "one_by_one" }]);
+    selectQueue.push([
+      { enabled: false, actionConfirmationMode: "one_by_one" },
+    ]);
     const app = await buildApp();
 
     const res = await request(app)
@@ -770,7 +881,10 @@ describe("PUT /api/travels/assistant/settings", () => {
       .send({ actionConfirmationMode: "auto_run" });
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ enabled: false, actionConfirmationMode: "auto_run" });
+    expect(res.body).toEqual({
+      enabled: false,
+      actionConfirmationMode: "auto_run",
+    });
     expect(updateCalls[0]?.set).toMatchObject({
       enabled: false,
       actionConfirmationMode: "auto_run",
@@ -778,7 +892,9 @@ describe("PUT /api/travels/assistant/settings", () => {
   });
 
   it("preserves the existing mode when only enabled is patched", async () => {
-    selectQueue.push([{ enabled: true, actionConfirmationMode: "all_at_once" }]);
+    selectQueue.push([
+      { enabled: true, actionConfirmationMode: "all_at_once" },
+    ]);
     const app = await buildApp();
 
     const res = await request(app)
@@ -786,7 +902,10 @@ describe("PUT /api/travels/assistant/settings", () => {
       .send({ enabled: false });
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ enabled: false, actionConfirmationMode: "all_at_once" });
+    expect(res.body).toEqual({
+      enabled: false,
+      actionConfirmationMode: "all_at_once",
+    });
   });
 
   it("rejects an invalid actionConfirmationMode value", async () => {
@@ -802,7 +921,9 @@ describe("PUT /api/travels/assistant/settings", () => {
   it("rejects an empty body", async () => {
     const app = await buildApp();
 
-    const res = await request(app).put("/api/travels/assistant/settings").send({});
+    const res = await request(app)
+      .put("/api/travels/assistant/settings")
+      .send({});
 
     expect(res.status).toBe(400);
   });

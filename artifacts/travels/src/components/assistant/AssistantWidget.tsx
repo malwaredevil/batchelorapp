@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { useLocation, Link } from "wouter";
-import { MessageCircle, X, MoreVertical, RotateCcw, Maximize2 } from "lucide-react";
+import {
+  MessageCircle,
+  X,
+  MoreVertical,
+  RotateCcw,
+  Maximize2,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   useGetAssistantNudgesUnseenCount,
@@ -28,7 +34,8 @@ export function AssistantWidget() {
   );
 
   const chat = useAssistantChat({ active: open });
-  const { settings, updateSettings, messages, isStreaming, streamingContent } = chat;
+  const { settings, updateSettings, messages, isStreaming, streamingContent } =
+    chat;
 
   // Proactive nudges (e.g. "your trip starts in 2 days...") are computed by
   // a background job and surfaced as a badge on the closed floating button.
@@ -88,7 +95,12 @@ export function AssistantWidget() {
             </div>
             <div className="flex items-center gap-1">
               <Link href="/elaine">
-                <Button variant="ghost" size="icon" className="h-8 w-8" title="Open full-screen chat">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  title="Open full-screen chat"
+                >
                   <Maximize2 className="h-4 w-4" />
                 </Button>
               </Link>
@@ -99,20 +111,34 @@ export function AssistantWidget() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuItem onSelect={chat.handleNewConversation} className="cursor-pointer">
+                  <DropdownMenuItem
+                    onSelect={chat.handleNewConversation}
+                    className="cursor-pointer"
+                  >
                     <RotateCcw className="h-3.5 w-3.5 mr-2" />
                     New conversation
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={handleHideForVisit} className="cursor-pointer">
+                  <DropdownMenuItem
+                    onSelect={handleHideForVisit}
+                    className="cursor-pointer"
+                  >
                     Hide for this visit
                   </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={handleTurnOff} className="cursor-pointer text-destructive focus:text-destructive">
+                  <DropdownMenuItem
+                    onSelect={handleTurnOff}
+                    className="cursor-pointer text-destructive focus:text-destructive"
+                  >
                     Turn off <ElaineName />
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setOpen(false)}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setOpen(false)}
+              >
                 <X className="h-4 w-4" />
               </Button>
             </div>

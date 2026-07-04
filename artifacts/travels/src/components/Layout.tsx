@@ -17,7 +17,10 @@ import {
   Sparkles,
 } from "lucide-react";
 import { AppSwitcher } from "@/components/AppSwitcher";
-import { useLogout, getGetCurrentUserQueryKey } from "@workspace/api-client-react";
+import {
+  useLogout,
+  getGetCurrentUserQueryKey,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -121,10 +124,17 @@ function NavGroupMenu({
         {items.map((item) => {
           const active = isActive(location, item.href);
           return (
-            <DropdownMenuItem key={item.href} asChild className="cursor-pointer">
+            <DropdownMenuItem
+              key={item.href}
+              asChild
+              className="cursor-pointer"
+            >
               <Link
                 href={item.href}
-                className={cn("flex items-center gap-2", active && "text-primary font-medium")}
+                className={cn(
+                  "flex items-center gap-2",
+                  active && "text-primary font-medium",
+                )}
               >
                 <item.icon className="h-4 w-4" />
                 {item.label}
@@ -159,7 +169,9 @@ export function Layout({ children }: { children: ReactNode }) {
     return <>{children}</>;
   }
 
-  const moreActive = MOBILE_MORE_ITEMS.some((item) => isActive(location, item.href));
+  const moreActive = MOBILE_MORE_ITEMS.some((item) =>
+    isActive(location, item.href),
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -187,8 +199,18 @@ export function Layout({ children }: { children: ReactNode }) {
                   </Link>
                 );
               })}
-              <NavGroupMenu label="Discover" icon={Compass} items={DISCOVER_NAV_ITEMS} location={location} />
-              <NavGroupMenu label="Plan" icon={CalendarDays} items={PLAN_NAV_ITEMS} location={location} />
+              <NavGroupMenu
+                label="Discover"
+                icon={Compass}
+                items={DISCOVER_NAV_ITEMS}
+                location={location}
+              />
+              <NavGroupMenu
+                label="Plan"
+                icon={CalendarDays}
+                items={PLAN_NAV_ITEMS}
+                location={location}
+              />
             </nav>
 
             <DropdownMenu>
@@ -252,7 +274,9 @@ export function Layout({ children }: { children: ReactNode }) {
               onClick={() => setMoreOpen(true)}
               className={cn(
                 "flex flex-col items-center gap-1 px-3 py-1 rounded-xl transition-colors",
-                moreActive ? "text-primary" : "text-muted-foreground hover:text-foreground",
+                moreActive
+                  ? "text-primary"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               <Menu className="h-5 w-5" />

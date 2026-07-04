@@ -59,7 +59,10 @@ function tripPopupHtml(trip: Trip, mapStatus: MapStatus): string {
   const color = MAP_COLORS[mapStatus];
   const label = MAP_STATUS_LABELS[mapStatus];
   const dateStr = trip.startDate
-    ? new Date(trip.startDate).toLocaleDateString("en-GB", { month: "short", year: "numeric" })
+    ? new Date(trip.startDate).toLocaleDateString("en-GB", {
+        month: "short",
+        year: "numeric",
+      })
     : "";
   const oneThing =
     trip.theOneThing && trip.theOneThing.length > 0
@@ -82,7 +85,10 @@ function tripPopupHtml(trip: Trip, mapStatus: MapStatus): string {
 
 function wishlistPopupHtml(item: WishlistItem): string {
   const dateStr = item.targetDate
-    ? new Date(item.targetDate).toLocaleDateString("en-GB", { month: "short", year: "numeric" })
+    ? new Date(item.targetDate).toLocaleDateString("en-GB", {
+        month: "short",
+        year: "numeric",
+      })
     : "";
   const notes = item.notes
     ? `<p style="font-size:12px;color:#6b7280;font-style:italic;margin:4px 0 0">${item.notes}</p>`
@@ -98,12 +104,17 @@ function wishlistPopupHtml(item: WishlistItem): string {
     </div>`;
 }
 
-async function geocodeDestination(destination: string): Promise<{ lat: number; lng: number } | null> {
+async function geocodeDestination(
+  destination: string,
+): Promise<{ lat: number; lng: number } | null> {
   try {
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(destination)}&format=json&limit=1`;
-    const res = await fetch(url, { headers: { "User-Agent": "batchelor-travels/1.0" } });
+    const res = await fetch(url, {
+      headers: { "User-Agent": "batchelor-travels/1.0" },
+    });
     const data = (await res.json()) as Array<{ lat: string; lon: string }>;
-    if (data[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    if (data[0])
+      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
   } catch {}
   return null;
 }
@@ -116,7 +127,13 @@ interface MapPanelProps {
   resetViewRef: React.MutableRefObject<(() => void) | null>;
 }
 
-function MapPanel({ trips, wishlistItems, isLoading, onNavigate, resetViewRef }: MapPanelProps) {
+function MapPanel({
+  trips,
+  wishlistItems,
+  isLoading,
+  onNavigate,
+  resetViewRef,
+}: MapPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -141,7 +158,9 @@ function MapPanel({ trips, wishlistItems, isLoading, onNavigate, resetViewRef }:
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        setLoadError(err instanceof Error ? err.message : "Failed to load Google Maps");
+        setLoadError(
+          err instanceof Error ? err.message : "Failed to load Google Maps",
+        );
       });
     return () => {
       cancelled = true;
@@ -252,7 +271,9 @@ function MapPanel({ trips, wishlistItems, isLoading, onNavigate, resetViewRef }:
         infoWindow?.close();
       };
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Failed to render map markers");
+      setLoadError(
+        err instanceof Error ? err.message : "Failed to render map markers",
+      );
       return () => {
         markers.forEach((m) => (m.map = null));
         infoWindow?.close();
@@ -265,8 +286,8 @@ function MapPanel({ trips, wishlistItems, isLoading, onNavigate, resetViewRef }:
       <div className="h-full flex flex-col items-center justify-center gap-2 bg-muted/30 text-center px-6">
         <Globe className="w-8 h-8 text-muted-foreground/40" />
         <p className="text-sm text-muted-foreground max-w-sm">
-          Map is currently unavailable (the Google Maps API key may not be authorized for this
-          domain).
+          Map is currently unavailable (the Google Maps API key may not be
+          authorized for this domain).
         </p>
       </div>
     );
@@ -279,7 +300,8 @@ export default function WorldMap() {
   const [, navigate] = useLocation();
   const qc = useQueryClient();
   const { data: trips = [], isLoading: tripsLoading } = useListTrips();
-  const { data: wishlistItems = [], isLoading: wishlistLoading } = useListWishlist();
+  const { data: wishlistItems = [], isLoading: wishlistLoading } =
+    useListWishlist();
   const updateWishlistItem = useUpdateWishlistItem();
   const resetViewRef = useRef<(() => void) | null>(null);
 
@@ -306,7 +328,10 @@ export default function WorldMap() {
       if (coords) {
         updateWishlistItem.mutate(
           { id: item.id, body: { lat: coords.lat, lng: coords.lng } },
-          { onSuccess: () => qc.invalidateQueries({ queryKey: getListWishlistQueryKey() }) },
+          {
+            onSuccess: () =>
+              qc.invalidateQueries({ queryKey: getListWishlistQueryKey() }),
+          },
         );
       }
     }
@@ -321,8 +346,12 @@ export default function WorldMap() {
 
   const mappedTrips = trips.filter((t) => t.lat != null && t.lng != null);
   const unmappedTrips = trips.filter((t) => t.lat == null || t.lng == null);
-  const mappedWishlist = wishlistItems.filter((w) => w.lat != null && w.lng != null);
-  const unmappedWishlist = wishlistItems.filter((w) => w.lat == null || w.lng == null);
+  const mappedWishlist = wishlistItems.filter(
+    (w) => w.lat != null && w.lng != null,
+  );
+  const unmappedWishlist = wishlistItems.filter(
+    (w) => w.lat == null || w.lng == null,
+  );
 
   const totalMapped = mappedTrips.length + mappedWishlist.length;
   const totalAll = trips.length + wishlistItems.length;
@@ -346,24 +375,45 @@ export default function WorldMap() {
         {/* Legend */}
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 items-center">
           <div className="flex items-center gap-1.5">
-            <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: MAP_COLORS.booked }} />
+            <span
+              className="inline-block w-2.5 h-2.5 rounded-full"
+              style={{ background: MAP_COLORS.booked }}
+            />
             <span className="text-xs text-muted-foreground">Booked</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: MAP_COLORS.completed }} />
+            <span
+              className="inline-block w-2.5 h-2.5 rounded-full"
+              style={{ background: MAP_COLORS.completed }}
+            />
             <span className="text-xs text-muted-foreground">Completed</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: MAP_COLORS.planning }} />
+            <span
+              className="inline-block w-2.5 h-2.5 rounded-full"
+              style={{ background: MAP_COLORS.planning }}
+            />
             <span className="text-xs text-muted-foreground">Planning</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="text-sm leading-none" style={{ color: WISH_COLOR }}>★</span>
+            <span
+              className="text-sm leading-none"
+              style={{ color: WISH_COLOR }}
+            >
+              ★
+            </span>
             <span className="text-xs text-muted-foreground">Wishlist trip</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="text-sm leading-none" style={{ color: WISH_COLOR }}>★</span>
-            <span className="text-xs text-muted-foreground">Wishlist destination</span>
+            <span
+              className="text-sm leading-none"
+              style={{ color: WISH_COLOR }}
+            >
+              ★
+            </span>
+            <span className="text-xs text-muted-foreground">
+              Wishlist destination
+            </span>
           </div>
         </div>
       </div>
@@ -403,7 +453,9 @@ export default function WorldMap() {
       {!isLoading && unmappedWishlist.length > 0 && (
         <p className="text-xs text-muted-foreground flex items-center gap-1.5">
           <span className="animate-pulse">⭐</span>
-          Locating {unmappedWishlist.length} wishlist destination{unmappedWishlist.length !== 1 ? "s" : ""} — they'll appear on the map shortly…
+          Locating {unmappedWishlist.length} wishlist destination
+          {unmappedWishlist.length !== 1 ? "s" : ""} — they'll appear on the map
+          shortly…
         </p>
       )}
 
@@ -421,7 +473,12 @@ export default function WorldMap() {
                 onClick={() => navigate(`/trips/${t.id}`)}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-muted hover:bg-muted/70 text-sm transition-colors"
               >
-                <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: MAP_COLORS[getMapStatus(t) ?? "booked"] }} />
+                <span
+                  className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{
+                    background: MAP_COLORS[getMapStatus(t) ?? "booked"],
+                  }}
+                />
                 {t.title}
               </button>
             ))}
@@ -432,7 +489,9 @@ export default function WorldMap() {
       {!isLoading && totalAll === 0 && (
         <div className="flex flex-col items-center gap-3 py-16 text-center">
           <Globe className="w-12 h-12 text-muted-foreground/30" />
-          <p className="text-muted-foreground">No trips or wishlist destinations yet.</p>
+          <p className="text-muted-foreground">
+            No trips or wishlist destinations yet.
+          </p>
         </div>
       )}
     </div>

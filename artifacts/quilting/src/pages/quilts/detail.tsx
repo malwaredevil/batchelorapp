@@ -225,7 +225,9 @@ export default function QuiltDetail() {
   function handleSaveCategories() {
     const merged = [
       ...(allCategories ?? []),
-      ...localNewCats.filter((nc) => !(allCategories ?? []).some((a) => a.id === nc.id)),
+      ...localNewCats.filter(
+        (nc) => !(allCategories ?? []).some((a) => a.id === nc.id),
+      ),
     ];
     const categoryNames = merged
       .filter((c) => selectedCategoryIds.includes(c.id))
@@ -332,11 +334,19 @@ export default function QuiltDetail() {
                 }}
                 autoFocus
               />
-              <Button size="sm" onClick={handleRename} disabled={updateQuilt.isPending}>
+              <Button
+                size="sm"
+                onClick={handleRename}
+                disabled={updateQuilt.isPending}
+              >
                 <Check className="mr-1.5 h-3.5 w-3.5" />
                 Save
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setRenamingName(false)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRenamingName(false)}
+              >
                 <XIcon className="mr-1.5 h-3.5 w-3.5" />
                 Cancel
               </Button>
@@ -349,11 +359,19 @@ export default function QuiltDetail() {
               <div className="flex shrink-0 flex-wrap gap-1">
                 {isEditing ? (
                   <>
-                    <Button size="sm" onClick={handleSave} disabled={updateQuilt.isPending}>
+                    <Button
+                      size="sm"
+                      onClick={handleSave}
+                      disabled={updateQuilt.isPending}
+                    >
                       <Check className="mr-1.5 h-3.5 w-3.5" />
                       Save
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => setIsEditing(false)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsEditing(false)}
+                    >
                       <XIcon className="mr-1.5 h-3.5 w-3.5" />
                       Cancel
                     </Button>
@@ -367,17 +385,31 @@ export default function QuiltDetail() {
                       disabled={reanalyzeQuilt.isPending}
                       title="Re-run AI analysis"
                     >
-                      <RefreshCw className={`h-4 w-4 ${reanalyzeQuilt.isPending ? "animate-spin" : ""}`} />
+                      <RefreshCw
+                        className={`h-4 w-4 ${reanalyzeQuilt.isPending ? "animate-spin" : ""}`}
+                      />
                     </Button>
                     <Button
                       variant="outline"
                       size="icon"
                       onClick={() => toggleLock("name")}
                       disabled={updateQuilt.isPending}
-                      title={lockedFields.includes("name") ? "Name locked — click to unlock." : "Name unlocked — click to lock."}
-                      className={lockedFields.includes("name") ? "border-red-400 text-red-600 hover:border-red-500 hover:text-red-700" : "border-green-400 text-green-600 hover:border-green-500 hover:text-green-700"}
+                      title={
+                        lockedFields.includes("name")
+                          ? "Name locked — click to unlock."
+                          : "Name unlocked — click to lock."
+                      }
+                      className={
+                        lockedFields.includes("name")
+                          ? "border-red-400 text-red-600 hover:border-red-500 hover:text-red-700"
+                          : "border-green-400 text-green-600 hover:border-green-500 hover:text-green-700"
+                      }
                     >
-                      {lockedFields.includes("name") ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
+                      {lockedFields.includes("name") ? (
+                        <Lock className="h-4 w-4" />
+                      ) : (
+                        <LockOpen className="h-4 w-4" />
+                      )}
                     </Button>
                     <Button
                       variant="outline"
@@ -391,7 +423,9 @@ export default function QuiltDetail() {
                       variant="outline"
                       size="icon"
                       title="Download photo"
-                      onClick={() => downloadCollectionImage(q.imageUrl, q.name)}
+                      onClick={() =>
+                        downloadCollectionImage(q.imageUrl, q.name)
+                      }
                     >
                       <Download className="h-4 w-4" />
                     </Button>
@@ -399,11 +433,17 @@ export default function QuiltDetail() {
                       data={{
                         type: "quilt",
                         name: q.name,
-                        subtitle: q.recipient ? `Made for ${q.recipient}` : undefined,
+                        subtitle: q.recipient
+                          ? `Made for ${q.recipient}`
+                          : undefined,
                         details: {
                           Completed: q.dateCompleted ?? undefined,
-                          Size: q.sizeWidth && q.sizeHeight ? `${q.sizeWidth}" × ${q.sizeHeight}"` : undefined,
-                          "Fabrics used": q.linkedFabrics?.length ?? q.linkedFabricIds.length,
+                          Size:
+                            q.sizeWidth && q.sizeHeight
+                              ? `${q.sizeWidth}" × ${q.sizeHeight}"`
+                              : undefined,
+                          "Fabrics used":
+                            q.linkedFabrics?.length ?? q.linkedFabricIds.length,
                         },
                         hashtags: ["#finishedquilt", "#handmadequilt"],
                       }}
@@ -412,7 +452,12 @@ export default function QuiltDetail() {
                       variant="ghost"
                       size="icon"
                       className="text-destructive hover:bg-destructive/10"
-                      onClick={() => { if (confirm("Delete this quilt? This cannot be undone.")) deleteQuilt.mutate({ id: quiltId }); }}
+                      onClick={() => {
+                        if (
+                          confirm("Delete this quilt? This cannot be undone.")
+                        )
+                          deleteQuilt.mutate({ id: quiltId });
+                      }}
                       disabled={deleteQuilt.isPending}
                     >
                       <Trash2 className="h-4 w-4" />
@@ -527,7 +572,9 @@ export default function QuiltDetail() {
                       className="h-6 w-6 rounded-full border border-black/10 shadow-sm"
                       style={{ backgroundColor: hex }}
                     />
-                    <span className="font-mono text-xs text-muted-foreground">{hex}</span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {hex}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -555,7 +602,9 @@ export default function QuiltDetail() {
                 selectedIds={selectedCategoryIds}
                 onToggle={(id) =>
                   setSelectedCategoryIds((prev) =>
-                    prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+                    prev.includes(id)
+                      ? prev.filter((x) => x !== id)
+                      : [...prev, id],
                   )
                 }
                 onCreated={(cat) =>
@@ -570,7 +619,9 @@ export default function QuiltDetail() {
                   selectedIds={selectedCategoryIds}
                   onToggle={(id) =>
                     setSelectedCategoryIds((prev) =>
-                      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+                      prev.includes(id)
+                        ? prev.filter((x) => x !== id)
+                        : [...prev, id],
                     )
                   }
                   onCreated={(cat) => {
@@ -582,11 +633,20 @@ export default function QuiltDetail() {
                   disabled={updateQuilt.isPending}
                 />
                 <div className="mt-3 flex gap-2">
-                  <Button size="sm" onClick={handleSaveCategories} disabled={updateQuilt.isPending}>
+                  <Button
+                    size="sm"
+                    onClick={handleSaveCategories}
+                    disabled={updateQuilt.isPending}
+                  >
                     <Check className="mr-1.5 h-3.5 w-3.5" />
                     {updateQuilt.isPending ? "Saving…" : "Save"}
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => setCatEditing(false)} disabled={updateQuilt.isPending}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setCatEditing(false)}
+                    disabled={updateQuilt.isPending}
+                  >
                     <XIcon className="mr-1.5 h-3.5 w-3.5" />
                     Cancel
                   </Button>
@@ -601,9 +661,15 @@ export default function QuiltDetail() {
                     className="border-transparent"
                     style={(() => {
                       const palette = cat.bgColor
-                        ? { bgColor: cat.bgColor, textColor: cat.textColor ?? "#fff" }
+                        ? {
+                            bgColor: cat.bgColor,
+                            textColor: cat.textColor ?? "#fff",
+                          }
                         : getCategoryPalette(cat.name);
-                      return { backgroundColor: palette.bgColor, color: palette.textColor };
+                      return {
+                        backgroundColor: palette.bgColor,
+                        color: palette.textColor,
+                      };
                     })()}
                   >
                     {cat.name}
@@ -612,7 +678,8 @@ export default function QuiltDetail() {
               </div>
             ) : (
               <p className="text-xs italic text-muted-foreground">
-                No categories — click <Pencil className="inline h-2.5 w-2.5" /> to add
+                No categories — click <Pencil className="inline h-2.5 w-2.5" />{" "}
+                to add
               </p>
             )}
           </section>

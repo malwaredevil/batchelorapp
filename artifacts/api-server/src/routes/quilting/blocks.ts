@@ -278,9 +278,14 @@ router.get("/blocks", async (req, res) => {
     .orderBy(desc(blocks.createdAt));
   const [catMap, fabricColorMap] = await Promise.all([
     fetchBlockCategories(rows.map((r) => r.id)),
-    buildFabricColorMap(rows.map((r) => r.cells), userId),
+    buildFabricColorMap(
+      rows.map((r) => r.cells),
+      userId,
+    ),
   ]);
-  res.json(rows.map((r) => serialize(r, catMap.get(r.id) ?? [], fabricColorMap)));
+  res.json(
+    rows.map((r) => serialize(r, catMap.get(r.id) ?? [], fabricColorMap)),
+  );
 });
 
 router.post("/blocks", async (req, res) => {
@@ -369,7 +374,7 @@ router.patch("/blocks/:id", async (req, res) => {
   if ("seamAllowanceInches" in data)
     update.seamAllowanceInches = data.seamAllowanceInches ?? null;
 
-  let row: (typeof blocks.$inferSelect) | undefined;
+  let row: typeof blocks.$inferSelect | undefined;
   if (Object.keys(update).length > 0) {
     const [updated] = await db
       .update(blocks)

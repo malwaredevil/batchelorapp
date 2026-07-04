@@ -66,7 +66,9 @@ router.get("/hub/preferences", requireAuth, async (req, res) => {
       return;
     }
 
-    const slots = user.hubWidgetIds ? parseStoredSlots(user.hubWidgetIds) : null;
+    const slots = user.hubWidgetIds
+      ? parseStoredSlots(user.hubWidgetIds)
+      : null;
     res.json({ slots });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch hub preferences");
@@ -78,7 +80,9 @@ router.put("/hub/preferences", requireAuth, async (req, res) => {
   const userId = req.session.userId!;
   const parsed = PreferencesBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
+    res
+      .status(400)
+      .json({ error: "Invalid body", details: parsed.error.issues });
     return;
   }
 
@@ -122,12 +126,17 @@ function isPrivateIp(ip: string): boolean {
   if (version === 6) {
     const normalized = ip.toLowerCase();
     if (normalized === "::1" || normalized === "::") return true; // loopback / unspecified
-    if (normalized.startsWith("fe8") || normalized.startsWith("fe9")) return true; // link-local
-    if (normalized.startsWith("fea") || normalized.startsWith("feb")) return true; // link-local
+    if (normalized.startsWith("fe8") || normalized.startsWith("fe9"))
+      return true; // link-local
+    if (normalized.startsWith("fea") || normalized.startsWith("feb"))
+      return true; // link-local
     if (normalized.startsWith("fc") || normalized.startsWith("fd")) return true; // unique local (fc00::/7)
     // IPv4-mapped / IPv4-compatible IPv6 addresses (e.g. ::ffff:127.0.0.1)
     const mapped = normalized.match(/(\d+\.\d+\.\d+\.\d+)$/);
-    if (mapped && (normalized.includes("::ffff:") || normalized.includes("::"))) {
+    if (
+      mapped &&
+      (normalized.includes("::ffff:") || normalized.includes("::"))
+    ) {
       if (isPrivateIp(mapped[1])) return true;
     }
     return false;
@@ -139,11 +148,15 @@ function isPrivateIp(ip: string): boolean {
 async function resolveSafeAddresses(hostname: string): Promise<string[]> {
   let records: dns.LookupAddress[];
   try {
-    records = await dns.promises.lookup(hostname, { all: true, verbatim: true });
+    records = await dns.promises.lookup(hostname, {
+      all: true,
+      verbatim: true,
+    });
   } catch {
     throw new Error("DNS resolution failed");
   }
-  if (records.length === 0) throw new Error("DNS resolution returned no addresses");
+  if (records.length === 0)
+    throw new Error("DNS resolution returned no addresses");
   for (const record of records) {
     if (isPrivateIp(record.address)) {
       throw new Error("Destination resolves to an internal address");
@@ -165,7 +178,12 @@ function pinnedLookup(addresses: string[]) {
     callback: LookupCallback,
   ): void => {
     const family = isIP(addresses[0] ?? "");
-    if (typeof options === "object" && options !== null && "all" in options && options.all) {
+    if (
+      typeof options === "object" &&
+      options !== null &&
+      "all" in options &&
+      options.all
+    ) {
       callback(
         null,
         addresses.map((address) => ({ address, family: isIP(address) })),
@@ -258,17 +276,26 @@ function unescapeHtml(s: string): string {
 function extractText(raw: string): string {
   const cdataMatch = raw.match(/^\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*$/);
   if (cdataMatch) return cdataMatch[1].trim();
-  return unescapeHtml(raw.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+  return unescapeHtml(raw.replace(/<[^>]+>/g, " "))
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function parseRss(xml: string): {
   feedTitle: string;
-  items: Array<{ title: string; link: string; pubDate: string; description: string }>;
+  items: Array<{
+    title: string;
+    link: string;
+    pubDate: string;
+    description: string;
+  }>;
 } {
   const feedTitleMatch = xml.match(
     /<channel[^>]*>[\s\S]*?<title[^>]*>([\s\S]*?)<\/title>/,
   );
-  const feedTitle = feedTitleMatch ? extractText(feedTitleMatch[1]) : "RSS Feed";
+  const feedTitle = feedTitleMatch
+    ? extractText(feedTitleMatch[1])
+    : "RSS Feed";
 
   // Handle both RSS <item> and Atom <entry>
   const tagRe = /<(?:item|entry)[^>]*>([\s\S]*?)<\/(?:item|entry)>/g;
@@ -276,8 +303,7 @@ function parseRss(xml: string): {
 
   const items = itemMatches.slice(0, 8).map((m) => {
     const item = m[1];
-    const titleRaw =
-      item.match(/<title[^>]*>([\s\S]*?)<\/title>/)?.[1] ?? "";
+    const titleRaw = item.match(/<title[^>]*>([\s\S]*?)<\/title>/)?.[1] ?? "";
     // RSS uses <link>, Atom uses <link href="..."/>
     const linkRaw =
       item.match(/<link[^>]*>([\s\S]*?)<\/link>/)?.[1] ??
@@ -442,7 +468,9 @@ router.put("/hub/weather-config", requireAuth, async (req, res) => {
   const userId = req.session.userId!;
   const parsed = WeatherConfigBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
+    res
+      .status(400)
+      .json({ error: "Invalid body", details: parsed.error.issues });
     return;
   }
 

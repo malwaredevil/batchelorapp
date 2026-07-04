@@ -10,7 +10,13 @@ import {
   type Reminder,
   type TravelsAppUser,
 } from "@workspace/api-client-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,7 +31,11 @@ interface ReminderEditDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function ReminderEditDialog({ reminder, open, onOpenChange }: ReminderEditDialogProps) {
+export function ReminderEditDialog({
+  reminder,
+  open,
+  onOpenChange,
+}: ReminderEditDialogProps) {
   const qc = useQueryClient();
   const { data: appUsers = [] } = useListTravelsAppUsers();
   const { data: calendarStatus } = useGetCalendarStatus();
@@ -47,7 +57,11 @@ export function ReminderEditDialog({ reminder, open, onOpenChange }: ReminderEdi
       setDueDate(reminder.dueDate ?? "");
       setRecipients(reminder.recipientEmails);
       setSync(reminder.syncToCalendar);
-      setAlertDays(reminder.alertDaysBefore && reminder.alertDaysBefore.length > 0 ? reminder.alertDaysBefore : [0]);
+      setAlertDays(
+        reminder.alertDaysBefore && reminder.alertDaysBefore.length > 0
+          ? reminder.alertDaysBefore
+          : [0],
+      );
       setCustomEmail("");
       setConfirmingDelete(false);
     }
@@ -57,7 +71,9 @@ export function ReminderEditDialog({ reminder, open, onOpenChange }: ReminderEdi
 
   function toggleAlertDay(day: number) {
     setAlertDays((prev) => {
-      const next = prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day];
+      const next = prev.includes(day)
+        ? prev.filter((d) => d !== day)
+        : [...prev, day];
       return next.length > 0 ? next : [0];
     });
   }
@@ -91,7 +107,9 @@ export function ReminderEditDialog({ reminder, open, onOpenChange }: ReminderEdi
   });
 
   function toggleRecipient(email: string) {
-    setRecipients((prev) => (prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email]));
+    setRecipients((prev) =>
+      prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email],
+    );
   }
 
   function addCustomEmail() {
@@ -129,7 +147,9 @@ export function ReminderEditDialog({ reminder, open, onOpenChange }: ReminderEdi
     deleteReminder.mutate({ tripId: reminder.tripId, reminderId: reminder.id });
   }
 
-  const extraRecipients = recipients.filter((e) => !appUsers.some((u: TravelsAppUser) => u.email === e));
+  const extraRecipients = recipients.filter(
+    (e) => !appUsers.some((u: TravelsAppUser) => u.email === e),
+  );
 
   if (!reminder) return null;
 
@@ -171,11 +191,16 @@ export function ReminderEditDialog({ reminder, open, onOpenChange }: ReminderEdi
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Send alerts to</Label>
+            <Label className="text-xs text-muted-foreground">
+              Send alerts to
+            </Label>
             {appUsers.length > 0 && (
               <div className="flex flex-wrap gap-x-4 gap-y-1.5">
                 {appUsers.map((u: TravelsAppUser) => (
-                  <label key={u.id} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                  <label
+                    key={u.id}
+                    className="flex items-center gap-1.5 text-sm cursor-pointer"
+                  >
                     <Checkbox
                       checked={recipients.includes(u.email)}
                       onCheckedChange={() => toggleRecipient(u.email)}
@@ -183,7 +208,9 @@ export function ReminderEditDialog({ reminder, open, onOpenChange }: ReminderEdi
                     {u.displayName ? (
                       <span>
                         {u.displayName}{" "}
-                        <span className="text-muted-foreground">({u.email})</span>
+                        <span className="text-muted-foreground">
+                          ({u.email})
+                        </span>
                       </span>
                     ) : (
                       u.email
@@ -199,20 +226,36 @@ export function ReminderEditDialog({ reminder, open, onOpenChange }: ReminderEdi
                 value={customEmail}
                 onChange={(e) => setCustomEmail(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") { e.preventDefault(); addCustomEmail(); }
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addCustomEmail();
+                  }
                 }}
                 className="flex-1"
               />
-              <Button size="sm" variant="outline" type="button" onClick={addCustomEmail}>
+              <Button
+                size="sm"
+                variant="outline"
+                type="button"
+                onClick={addCustomEmail}
+              >
                 Add
               </Button>
             </div>
             {extraRecipients.length > 0 && (
               <div className="flex flex-wrap gap-1.5 pt-1">
                 {extraRecipients.map((e) => (
-                  <span key={e} className="inline-flex items-center gap-1 text-xs bg-muted rounded-full px-2 py-0.5">
+                  <span
+                    key={e}
+                    className="inline-flex items-center gap-1 text-xs bg-muted rounded-full px-2 py-0.5"
+                  >
                     <Mail className="w-3 h-3" /> {e}
-                    <button type="button" onClick={() => setRecipients((prev) => prev.filter((r) => r !== e))}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setRecipients((prev) => prev.filter((r) => r !== e))
+                      }
+                    >
                       <X className="w-3 h-3" />
                     </button>
                   </span>
@@ -224,12 +267,17 @@ export function ReminderEditDialog({ reminder, open, onOpenChange }: ReminderEdi
           {travelCalendarConnected && (
             <div className="space-y-1.5 pt-1">
               <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <Checkbox checked={sync} onCheckedChange={(v) => setSync(!!v)} />
+                <Checkbox
+                  checked={sync}
+                  onCheckedChange={(v) => setSync(!!v)}
+                />
                 Sync to Travel Calendar
               </label>
               {sync && (
                 <div className="pl-6 space-y-1">
-                  <Label className="text-xs text-muted-foreground">Remind me</Label>
+                  <Label className="text-xs text-muted-foreground">
+                    Remind me
+                  </Label>
                   <div className="flex flex-wrap gap-1.5">
                     {ALERT_DAY_OPTIONS.map((day) => (
                       <button
@@ -242,7 +290,9 @@ export function ReminderEditDialog({ reminder, open, onOpenChange }: ReminderEdi
                             : "bg-background text-muted-foreground border-card-border hover:border-primary/50"
                         }`}
                       >
-                        {day === 0 ? "On the day" : `${day} day${day > 1 ? "s" : ""} before`}
+                        {day === 0
+                          ? "On the day"
+                          : `${day} day${day > 1 ? "s" : ""} before`}
                       </button>
                     ))}
                   </div>
@@ -255,11 +305,22 @@ export function ReminderEditDialog({ reminder, open, onOpenChange }: ReminderEdi
         <DialogFooter className="flex flex-row items-center sm:justify-between gap-2">
           {confirmingDelete ? (
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Delete this reminder?</span>
-              <Button size="sm" variant="destructive" onClick={handleDelete} disabled={deleteReminder.isPending}>
+              <span className="text-sm text-muted-foreground">
+                Delete this reminder?
+              </span>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={handleDelete}
+                disabled={deleteReminder.isPending}
+              >
                 Confirm
               </Button>
-              <Button size="sm" variant="outline" onClick={() => setConfirmingDelete(false)}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setConfirmingDelete(false)}
+              >
                 Cancel
               </Button>
             </div>
@@ -275,10 +336,18 @@ export function ReminderEditDialog({ reminder, open, onOpenChange }: ReminderEdi
           )}
           {!confirmingDelete && (
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => onOpenChange(false)}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+              >
                 Cancel
               </Button>
-              <Button size="sm" onClick={handleSave} disabled={updateReminder.isPending}>
+              <Button
+                size="sm"
+                onClick={handleSave}
+                disabled={updateReminder.isPending}
+              >
                 <Save className="w-3.5 h-3.5 mr-1.5" /> Save
               </Button>
             </div>

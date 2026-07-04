@@ -106,175 +106,186 @@ function FabricCard({
   const [zoomOpen, setZoomOpen] = useState(false);
   return (
     <>
-    <div
-      className="group relative overflow-hidden rounded-xl border border-card-border bg-card transition-shadow hover:shadow-md"
-      onClick={() => {
-        if (isBulkMode) onToggleSelect(fabric.id);
-      }}
-    >
-      {isBulkMode && (
-        <div
-          className={`absolute left-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full shadow-sm transition-colors ${isSelected ? "bg-primary text-primary-foreground" : "bg-background/90 text-muted-foreground"}`}
-        >
-          {isSelected ? (
-            <CheckSquare className="h-4 w-4" />
-          ) : (
-            <Square className="h-4 w-4" />
-          )}
-        </div>
-      )}
-      <Link
-        href={`/fabrics/${fabric.id}`}
-        className={`block ${isBulkMode ? "pointer-events-none" : ""}`}
+      <div
+        className="group relative overflow-hidden rounded-xl border border-card-border bg-card transition-shadow hover:shadow-md"
+        onClick={() => {
+          if (isBulkMode) onToggleSelect(fabric.id);
+        }}
       >
-        <div className="relative aspect-square overflow-hidden bg-muted">
-          <img
-            src={fabric.imageUrl}
-            alt={fabric.name}
-            className="h-full w-full object-cover transition-transform group-hover:scale-105"
-          />
-          <button
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setZoomOpen(true); }}
-            className="absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/70"
-            title="Zoom preview"
+        {isBulkMode && (
+          <div
+            className={`absolute left-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full shadow-sm transition-colors ${isSelected ? "bg-primary text-primary-foreground" : "bg-background/90 text-muted-foreground"}`}
           >
-            <ZoomIn className="h-3.5 w-3.5" />
-          </button>
-        </div>
-        <div className="p-3 pr-8">
-          <p className="truncate text-sm font-semibold text-foreground">
-            {fabric.name}
-          </p>
-          {fabric.designer && (
-            <p className="truncate text-xs text-muted-foreground">
-              {fabric.designer}
-            </p>
-          )}
-          <div className="mt-1.5 flex flex-wrap items-center gap-1">
-            {fabric.printType && (
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onFilterByPrintType?.(fabric.printType!);
-                }}
-                className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground capitalize transition-all hover:ring-2 hover:ring-primary/50 cursor-pointer"
-              >
-                {fabric.printType}
-              </button>
+            {isSelected ? (
+              <CheckSquare className="h-4 w-4" />
+            ) : (
+              <Square className="h-4 w-4" />
             )}
-            {(fabric.categories ?? []).map((cat) => (
-              <button
-                key={cat.id}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onFilterByCategory?.(cat.id);
-                }}
-                className="rounded-full px-2 py-0.5 text-[10px] font-medium leading-tight transition-all hover:opacity-80 cursor-pointer"
-                style={(() => {
-                  const p = cat.bgColor
-                    ? { bgColor: cat.bgColor, textColor: cat.textColor ?? "#fff" }
-                    : getCategoryPalette(cat.name);
-                  return { backgroundColor: p.bgColor, color: p.textColor };
-                })()}
-              >
-                {cat.name}
-              </button>
-            ))}
-            <span className="ml-auto text-xs font-medium text-primary shrink-0">
-              {fabric.quantity} {fabric.quantityUnit}
-            </span>
           </div>
-          {fabric.dominantColors.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1">
-              {fabric.dominantColors.slice(0, 6).map((c, i) => (
+        )}
+        <Link
+          href={`/fabrics/${fabric.id}`}
+          className={`block ${isBulkMode ? "pointer-events-none" : ""}`}
+        >
+          <div className="relative aspect-square overflow-hidden bg-muted">
+            <img
+              src={fabric.imageUrl}
+              alt={fabric.name}
+              className="h-full w-full object-cover transition-transform group-hover:scale-105"
+            />
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setZoomOpen(true);
+              }}
+              className="absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/70"
+              title="Zoom preview"
+            >
+              <ZoomIn className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <div className="p-3 pr-8">
+            <p className="truncate text-sm font-semibold text-foreground">
+              {fabric.name}
+            </p>
+            {fabric.designer && (
+              <p className="truncate text-xs text-muted-foreground">
+                {fabric.designer}
+              </p>
+            )}
+            <div className="mt-1.5 flex flex-wrap items-center gap-1">
+              {fabric.printType && (
                 <button
-                  key={i}
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    onFilterByColor?.(c);
+                    onFilterByPrintType?.(fabric.printType!);
                   }}
-                  title={c}
-                  aria-label={`Filter by ${c}`}
-                  aria-pressed={(activeColor ?? []).includes(c)}
-                  className={`h-4 w-4 rounded-full border transition-transform hover:scale-110 ${
-                    (activeColor ?? []).includes(c)
-                      ? "ring-2 ring-primary ring-offset-1 scale-110"
-                      : "border-border/40"
-                  }`}
-                  style={{ backgroundColor: colorToHex(c) }}
-                />
+                  className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground capitalize transition-all hover:ring-2 hover:ring-primary/50 cursor-pointer"
+                >
+                  {fabric.printType}
+                </button>
+              )}
+              {(fabric.categories ?? []).map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onFilterByCategory?.(cat.id);
+                  }}
+                  className="rounded-full px-2 py-0.5 text-[10px] font-medium leading-tight transition-all hover:opacity-80 cursor-pointer"
+                  style={(() => {
+                    const p = cat.bgColor
+                      ? {
+                          bgColor: cat.bgColor,
+                          textColor: cat.textColor ?? "#fff",
+                        }
+                      : getCategoryPalette(cat.name);
+                    return { backgroundColor: p.bgColor, color: p.textColor };
+                  })()}
+                >
+                  {cat.name}
+                </button>
               ))}
+              <span className="ml-auto text-xs font-medium text-primary shrink-0">
+                {fabric.quantity} {fabric.quantityUnit}
+              </span>
             </div>
-          )}
-        </div>
-      </Link>
+            {fabric.dominantColors.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {fabric.dominantColors.slice(0, 6).map((c, i) => (
+                  <button
+                    key={i}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onFilterByColor?.(c);
+                    }}
+                    title={c}
+                    aria-label={`Filter by ${c}`}
+                    aria-pressed={(activeColor ?? []).includes(c)}
+                    className={`h-4 w-4 rounded-full border transition-transform hover:scale-110 ${
+                      (activeColor ?? []).includes(c)
+                        ? "ring-2 ring-primary ring-offset-1 scale-110"
+                        : "border-border/40"
+                    }`}
+                    style={{ backgroundColor: colorToHex(c) }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </Link>
 
-      {!isBulkMode && (
-        <div className="absolute right-2 top-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 rounded-full bg-background/80 opacity-100 shadow-sm transition-opacity md:opacity-0 md:group-hover:opacity-100 hover:opacity-100"
-              >
-                <MoreVertical className="h-3.5 w-3.5" />
-                <span className="sr-only">Options</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => navigate(`/fabrics/${fabric.id}`)}
-              >
-                <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                Open
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => navigate(`/fabrics/${fabric.id}?edit=1`)}
-              >
-                <Pencil className="mr-2 h-3.5 w-3.5" />
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onReanalyze(fabric.id)}>
-                <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                Refresh AI
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() =>
-                  downloadCollectionImage(fabric.imageUrl, fabric.name)
-                }
-              >
-                <Download className="mr-2 h-3.5 w-3.5" />
-                Download photo
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onEditCategories?.()}>
-                <Tag className="mr-2 h-3.5 w-3.5" />
-                Set categories
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={() => onDelete(fabric.id)}
-              >
-                <Trash2 className="mr-2 h-3.5 w-3.5" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      )}
-    </div>
-    <PreviewZoomModal open={zoomOpen} onClose={() => setZoomOpen(false)} title={fabric.name}>
-      <img
-        src={fabric.imageUrl}
-        alt={fabric.name}
-        className="max-h-[85vh] max-w-[85vw] rounded object-contain"
-        draggable={false}
-      />
-    </PreviewZoomModal>
+        {!isBulkMode && (
+          <div className="absolute right-2 top-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-full bg-background/80 opacity-100 shadow-sm transition-opacity md:opacity-0 md:group-hover:opacity-100 hover:opacity-100"
+                >
+                  <MoreVertical className="h-3.5 w-3.5" />
+                  <span className="sr-only">Options</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => navigate(`/fabrics/${fabric.id}`)}
+                >
+                  <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                  Open
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => navigate(`/fabrics/${fabric.id}?edit=1`)}
+                >
+                  <Pencil className="mr-2 h-3.5 w-3.5" />
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onReanalyze(fabric.id)}>
+                  <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                  Refresh AI
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() =>
+                    downloadCollectionImage(fabric.imageUrl, fabric.name)
+                  }
+                >
+                  <Download className="mr-2 h-3.5 w-3.5" />
+                  Download photo
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onEditCategories?.()}>
+                  <Tag className="mr-2 h-3.5 w-3.5" />
+                  Set categories
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={() => onDelete(fabric.id)}
+                >
+                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
+      </div>
+      <PreviewZoomModal
+        open={zoomOpen}
+        onClose={() => setZoomOpen(false)}
+        title={fabric.name}
+      >
+        <img
+          src={fabric.imageUrl}
+          alt={fabric.name}
+          className="max-h-[85vh] max-w-[85vw] rounded object-contain"
+          draggable={false}
+        />
+      </PreviewZoomModal>
     </>
   );
 }
@@ -292,7 +303,8 @@ export default function Fabrics() {
   const uploadingItems = pendingItems.filter((i) => i.status === "uploading");
   const { data: fabrics, isLoading, isError } = useListFabrics();
   const { data: stats } = useGetStats();
-  const [categoryEditItem, setCategoryEditItem] = useState<FabricSummary | null>(null);
+  const [categoryEditItem, setCategoryEditItem] =
+    useState<FabricSummary | null>(null);
   const { data: categoryApiList } = useListQuiltingCategories();
 
   const updateFabricCategories = useUpdateFabric({
@@ -456,11 +468,36 @@ export default function Fabrics() {
       {stats && (
         <div className="mb-6 hidden sm:grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {[
-            { label: "Fabrics", value: stats.totalFabrics, sub: "in your stash", href: "/fabrics" },
-            { label: "Patterns", value: stats.totalPatterns, sub: "saved", href: "/patterns" },
-            { label: "Quilts", value: stats.totalQuilts, sub: "in collection", href: "/quilts" },
-            { label: "Blocks", value: stats.totalBlocks, sub: "designed", href: "/blocks" },
-            { label: "Layouts", value: stats.totalLayouts, sub: "arranged", href: "/layouts" },
+            {
+              label: "Fabrics",
+              value: stats.totalFabrics,
+              sub: "in your stash",
+              href: "/fabrics",
+            },
+            {
+              label: "Patterns",
+              value: stats.totalPatterns,
+              sub: "saved",
+              href: "/patterns",
+            },
+            {
+              label: "Quilts",
+              value: stats.totalQuilts,
+              sub: "in collection",
+              href: "/quilts",
+            },
+            {
+              label: "Blocks",
+              value: stats.totalBlocks,
+              sub: "designed",
+              href: "/blocks",
+            },
+            {
+              label: "Layouts",
+              value: stats.totalLayouts,
+              sub: "arranged",
+              href: "/layouts",
+            },
           ].map(({ label, value, sub, href }) => (
             <Link
               key={label}
@@ -468,7 +505,9 @@ export default function Fabrics() {
               className="rounded-xl border border-card-border bg-card p-4 block hover:shadow-sm hover:border-primary/30 transition-all"
             >
               <p className="text-2xl font-bold text-foreground">{value}</p>
-              <p className="text-sm font-medium text-foreground mt-0.5">{label}</p>
+              <p className="text-sm font-medium text-foreground mt-0.5">
+                {label}
+              </p>
               <p className="text-xs text-muted-foreground">{sub}</p>
             </Link>
           ))}
@@ -515,7 +554,9 @@ export default function Fabrics() {
         <div className="mb-4 flex items-center gap-2.5 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5">
           <RefreshCw className="h-4 w-4 shrink-0 animate-spin text-primary" />
           <p className="text-sm font-medium text-primary">
-            Adding {uploadingItems.length} fabric{uploadingItems.length !== 1 ? "s" : ""} — AI cataloguing in progress…
+            Adding {uploadingItems.length} fabric
+            {uploadingItems.length !== 1 ? "s" : ""} — AI cataloguing in
+            progress…
           </p>
         </div>
       )}
@@ -613,7 +654,9 @@ export default function Fabrics() {
                   key={color}
                   onClick={() =>
                     setColorFilter((prev) =>
-                      prev.includes(color) ? prev.filter((c) => c !== color) : [...prev, color]
+                      prev.includes(color)
+                        ? prev.filter((c) => c !== color)
+                        : [...prev, color],
                     )
                   }
                   title={color}
@@ -666,7 +709,10 @@ export default function Fabrics() {
                   className="rounded-full border px-3 py-1 text-xs font-medium transition"
                   style={(() => {
                     const palette = cat.bgColor
-                      ? { bgColor: cat.bgColor, textColor: cat.textColor ?? "#fff" }
+                      ? {
+                          bgColor: cat.bgColor,
+                          textColor: cat.textColor ?? "#fff",
+                        }
                       : getCategoryPalette(cat.name);
                     const active = categoryFilter === cat.id;
                     return {
@@ -765,37 +811,44 @@ export default function Fabrics() {
               </div>
             </div>
           ))}
-          {sorted && sorted.map((fabric) => (
-            <FabricCard
-              key={fabric.id}
-              fabric={fabric as FabricSummary}
-              onDelete={handleDelete}
-              onReanalyze={handleReanalyze}
-              isBulkMode={isBulkMode}
-              isSelected={selectedIds.has(fabric.id)}
-              onToggleSelect={toggleSelect}
-              activeColor={colorFilter}
-              onFilterByPrintType={(pt) =>
-                setPrintTypeFilter((prev) => (prev === pt ? null : pt))
-              }
-              onFilterByCategory={(id) =>
-                setCategoryFilter((prev) => (prev === id ? null : id))
-              }
-              onFilterByColor={(c) =>
-                setColorFilter((prev) =>
-                  prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]
-                )
-              }
-              onEditCategories={() => setCategoryEditItem(fabric as FabricSummary)}
-            />
-          ))}
+          {sorted &&
+            sorted.map((fabric) => (
+              <FabricCard
+                key={fabric.id}
+                fabric={fabric as FabricSummary}
+                onDelete={handleDelete}
+                onReanalyze={handleReanalyze}
+                isBulkMode={isBulkMode}
+                isSelected={selectedIds.has(fabric.id)}
+                onToggleSelect={toggleSelect}
+                activeColor={colorFilter}
+                onFilterByPrintType={(pt) =>
+                  setPrintTypeFilter((prev) => (prev === pt ? null : pt))
+                }
+                onFilterByCategory={(id) =>
+                  setCategoryFilter((prev) => (prev === id ? null : id))
+                }
+                onFilterByColor={(c) =>
+                  setColorFilter((prev) =>
+                    prev.includes(c)
+                      ? prev.filter((x) => x !== c)
+                      : [...prev, c],
+                  )
+                }
+                onEditCategories={() =>
+                  setCategoryEditItem(fabric as FabricSummary)
+                }
+              />
+            ))}
         </div>
       )}
       <CategoryEditDialog
         open={categoryEditItem !== null}
         onClose={() => setCategoryEditItem(null)}
         title={categoryEditItem?.name ?? ""}
-        currentCategories={(categoryEditItem?.categories ?? []) as unknown as QuiltingCategory[]}
+        currentCategories={
+          (categoryEditItem?.categories ?? []) as unknown as QuiltingCategory[]
+        }
         allCategories={categoryApiList ?? []}
         onSave={(names) => {
           if (categoryEditItem) {

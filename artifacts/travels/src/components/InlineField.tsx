@@ -5,9 +5,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Check, X, Pencil, Calendar, Upload, Hash, Copy } from "lucide-react";
 import { toast } from "sonner";
 
-export type InlineFieldIconType = "text" | "date" | "number" | "upload" | "custom";
+export type InlineFieldIconType =
+  | "text"
+  | "date"
+  | "number"
+  | "upload"
+  | "custom";
 
-const ICONS: Record<InlineFieldIconType, React.ComponentType<{ className?: string }>> = {
+const ICONS: Record<
+  InlineFieldIconType,
+  React.ComponentType<{ className?: string }>
+> = {
   text: Pencil,
   date: Calendar,
   number: Hash,
@@ -36,7 +44,12 @@ interface InlineFieldBaseProps<T> {
 
 interface InlineFieldCustomProps<T> extends InlineFieldBaseProps<T> {
   renderDisplay: (value: T) => React.ReactNode;
-  renderEditor: (draft: T, setDraft: (v: T) => void, commit: () => void, cancel: () => void) => React.ReactNode;
+  renderEditor: (
+    draft: T,
+    setDraft: (v: T) => void,
+    commit: () => void,
+    cancel: () => void,
+  ) => React.ReactNode;
 }
 
 /**
@@ -106,8 +119,14 @@ export function InlineField<T>({
     return (
       <div className={className}>
         <p className="text-xs text-muted-foreground mb-1">{label}</p>
-        <div className={layout === "row" ? "flex items-start gap-2" : "space-y-1.5"}>
-          <div className="flex-1 min-w-0">{renderEditor(draft, setDraft, commit, cancel)}</div>
+        <div
+          className={
+            layout === "row" ? "flex items-start gap-2" : "space-y-1.5"
+          }
+        >
+          <div className="flex-1 min-w-0">
+            {renderEditor(draft, setDraft, commit, cancel)}
+          </div>
           <div className="flex gap-1 shrink-0">
             <Button
               type="button"
@@ -163,7 +182,11 @@ export function InlineField<T>({
             className="p-1 text-muted-foreground/60 hover:text-foreground rounded"
             title={copied ? "Copied!" : `Copy ${label.toLowerCase()}`}
           >
-            {copied ? <Check className="w-3.5 h-3.5 text-primary" /> : <Copy className="w-3.5 h-3.5" />}
+            {copied ? (
+              <Check className="w-3.5 h-3.5 text-primary" />
+            ) : (
+              <Copy className="w-3.5 h-3.5" />
+            )}
           </button>
         )}
         <button
@@ -186,13 +209,19 @@ interface PresetProps extends InlineFieldBaseProps<string> {
   displayValue?: (value: string) => React.ReactNode;
 }
 
-export function InlineTextField({ displayValue, placeholder, ...props }: PresetProps) {
+export function InlineTextField({
+  displayValue,
+  placeholder,
+  ...props
+}: PresetProps) {
   return (
     <InlineField
       {...props}
       iconType={props.iconType ?? "text"}
       renderDisplay={(v) => (
-        <p className="text-sm text-foreground break-words">{displayValue ? displayValue(v) : v}</p>
+        <p className="text-sm text-foreground break-words">
+          {displayValue ? displayValue(v) : v}
+        </p>
       )}
       renderEditor={(draft, setDraft, commit, cancel) => (
         <Input
@@ -210,7 +239,11 @@ export function InlineTextField({ displayValue, placeholder, ...props }: PresetP
   );
 }
 
-export function InlineTextareaField({ displayValue, placeholder, ...props }: PresetProps & { rows?: number }) {
+export function InlineTextareaField({
+  displayValue,
+  placeholder,
+  ...props
+}: PresetProps & { rows?: number }) {
   return (
     <InlineField
       {...props}
@@ -237,13 +270,21 @@ export function InlineTextareaField({ displayValue, placeholder, ...props }: Pre
   );
 }
 
-export function InlineDateField(props: InlineFieldBaseProps<string> & { displayValue?: (value: string) => React.ReactNode }) {
+export function InlineDateField(
+  props: InlineFieldBaseProps<string> & {
+    displayValue?: (value: string) => React.ReactNode;
+  },
+) {
   const { displayValue, ...rest } = props;
   return (
     <InlineField
       {...rest}
       iconType="date"
-      renderDisplay={(v) => <p className="text-sm text-foreground">{displayValue ? displayValue(v) : v}</p>}
+      renderDisplay={(v) => (
+        <p className="text-sm text-foreground">
+          {displayValue ? displayValue(v) : v}
+        </p>
+      )}
       renderEditor={(draft, setDraft, commit, cancel) => (
         <DateAutoOpenInput
           value={draft}
@@ -271,7 +312,9 @@ function DateAutoOpenInput({
   useEffect(() => {
     ref.current?.focus();
     try {
-      (ref.current as HTMLInputElement & { showPicker?: () => void })?.showPicker?.();
+      (
+        ref.current as HTMLInputElement & { showPicker?: () => void }
+      )?.showPicker?.();
     } catch {
       // showPicker isn't supported everywhere; focusing is enough of a fallback.
     }
@@ -287,7 +330,9 @@ function DateAutoOpenInput({
   );
 }
 
-export function InlineNumberField(props: InlineFieldBaseProps<number> & { min?: number; max?: number }) {
+export function InlineNumberField(
+  props: InlineFieldBaseProps<number> & { min?: number; max?: number },
+) {
   return (
     <InlineField
       {...props}

@@ -36,7 +36,9 @@ export function EntryPoint() {
                   : "border-border/50 bg-card"
               }`}
             >
-              <p className={`text-lg font-bold ${active ? "text-primary" : "text-foreground"}`}>
+              <p
+                className={`text-lg font-bold ${active ? "text-primary" : "text-foreground"}`}
+              >
                 {value}
               </p>
               <p className="text-[10px] font-medium text-muted-foreground leading-tight mt-0.5">
@@ -50,7 +52,9 @@ export function EntryPoint() {
         <div className="mb-4 flex items-start justify-between">
           <div>
             <h1 className="text-xl font-bold tracking-tight">Fabrics</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">46 in your stash</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              46 in your stash
+            </p>
           </div>
 
           {/* Action buttons — the key change */}
@@ -73,7 +77,9 @@ export function EntryPoint() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <div className="h-9 rounded-lg border border-border/60 bg-card pl-9 flex items-center">
-              <span className="text-xs text-muted-foreground">Search fabrics…</span>
+              <span className="text-xs text-muted-foreground">
+                Search fabrics…
+              </span>
             </div>
           </div>
           <button className="flex h-9 items-center gap-1.5 rounded-lg border border-border/60 bg-card px-3 text-xs text-muted-foreground">
@@ -84,14 +90,21 @@ export function EntryPoint() {
         {/* Fabric grid (2 col) */}
         <div className="grid grid-cols-2 gap-3">
           {fabrics.map((f) => (
-            <div key={f.name} className="rounded-xl border border-border/50 bg-card overflow-hidden">
+            <div
+              key={f.name}
+              className="rounded-xl border border-border/50 bg-card overflow-hidden"
+            >
               <div
                 className="aspect-square"
                 style={{ backgroundColor: f.color + "60" }}
               />
               <div className="p-2.5">
-                <p className="text-[11px] font-semibold text-foreground truncate">{f.name}</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">{f.type}</p>
+                <p className="text-[11px] font-semibold text-foreground truncate">
+                  {f.name}
+                </p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  {f.type}
+                </p>
               </div>
             </div>
           ))}

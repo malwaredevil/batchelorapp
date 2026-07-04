@@ -7,12 +7,17 @@ import { requireAuth } from "../../middleware/auth";
 const router: IRouter = Router();
 router.use(requireAuth);
 
-async function geocodeDestination(destination: string): Promise<{ lat: number; lng: number } | null> {
+async function geocodeDestination(
+  destination: string,
+): Promise<{ lat: number; lng: number } | null> {
   try {
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(destination)}&format=json&limit=1`;
-    const res = await fetch(url, { headers: { "User-Agent": "Batchelor-App/1.0" } });
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Batchelor-App/1.0" },
+    });
     const data = (await res.json()) as Array<{ lat: string; lon: string }>;
-    if (data[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    if (data[0])
+      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
   } catch {}
   return null;
 }
@@ -55,17 +60,28 @@ router.post("/wishlist", async (req, res) => {
 
 router.patch("/wishlist/:id", async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
   const body = UpdateBody.parse(req.body);
 
   const [existing] = await db
     .select()
     .from(travelsWishlist)
     .where(eq(travelsWishlist.id, id));
-  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (!existing) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
 
   let extraCoords: { lat?: number; lng?: number } = {};
-  if (body.destination && body.destination !== existing.destination && body.lat == null && body.lng == null) {
+  if (
+    body.destination &&
+    body.destination !== existing.destination &&
+    body.lat == null &&
+    body.lng == null
+  ) {
     const coords = await geocodeDestination(body.destination);
     if (coords) extraCoords = coords;
   }
@@ -80,12 +96,18 @@ router.patch("/wishlist/:id", async (req, res) => {
 
 router.delete("/wishlist/:id", async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
   const [existing] = await db
     .select({ id: travelsWishlist.id })
     .from(travelsWishlist)
     .where(eq(travelsWishlist.id, id));
-  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (!existing) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
   await db.delete(travelsWishlist).where(eq(travelsWishlist.id, id));
   res.status(204).send();
 });

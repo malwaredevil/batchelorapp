@@ -35,5 +35,6 @@ Watch for **explicit `let row: Omit<PotteryItemRow, "embedding" | "visualEmbeddi
 `pnpm --filter @workspace/api-spec run codegen` fails at the orval step with `SyntaxError: The requested module 'js-yaml' does not provide an export named 'default'` on Node 24. The build-spec step completes correctly (openapi.yaml is written).
 
 **Workaround:** Manually update the generated files in `lib/api-zod/src/generated/`:
+
 1. `types/potteryPotteryItem.ts` — add the TypeScript interface fields
 2. `api.ts` — add the Zod schema fields (use `replace_all: true` for patterns like `"acquiredAt" → "dominantColors"` to update all pottery item schemas at once)

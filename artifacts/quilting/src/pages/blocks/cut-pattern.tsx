@@ -107,7 +107,13 @@ function CellShape({
   if (parsed.kind === "hsplit") {
     return (
       <g>
-        <rect x={x} y={y} width={size} height={size / 2} fill={resolve(parsed.top)} />
+        <rect
+          x={x}
+          y={y}
+          width={size}
+          height={size / 2}
+          fill={resolve(parsed.top)}
+        />
         <rect
           x={x}
           y={y + size / 2}
@@ -121,7 +127,13 @@ function CellShape({
   if (parsed.kind === "vsplit") {
     return (
       <g>
-        <rect x={x} y={y} width={size / 2} height={size} fill={resolve(parsed.left)} />
+        <rect
+          x={x}
+          y={y}
+          width={size / 2}
+          height={size}
+          fill={resolve(parsed.left)}
+        />
         <rect
           x={x + size / 2}
           y={y}
@@ -139,12 +151,26 @@ function CellShape({
         <rect x={x} y={y} width={h} height={h} fill={resolve(parsed.tl)} />
         <rect x={x + h} y={y} width={h} height={h} fill={resolve(parsed.tr)} />
         <rect x={x} y={y + h} width={h} height={h} fill={resolve(parsed.bl)} />
-        <rect x={x + h} y={y + h} width={h} height={h} fill={resolve(parsed.br)} />
+        <rect
+          x={x + h}
+          y={y + h}
+          width={h}
+          height={h}
+          fill={resolve(parsed.br)}
+        />
       </g>
     );
   }
   if (parsed.kind === "solid") {
-    return <rect x={x} y={y} width={size} height={size} fill={resolve(parsed.color)} />;
+    return (
+      <rect
+        x={x}
+        y={y}
+        width={size}
+        height={size}
+        fill={resolve(parsed.color)}
+      />
+    );
   }
   return <rect x={x} y={y} width={size} height={size} fill="white" />;
 }
@@ -931,37 +957,40 @@ export default function CutPatternPage() {
                       ? (fabricNameMap[f.color] ?? f.color)
                       : f.color;
                     return (
-                    <tr key={f.color} className="border-b border-foreground/10">
-                      <td className="py-2 pr-2 font-mono font-semibold">
-                        Fabric {f.letter}
-                      </td>
-                      <td className="py-2 px-2">
-                        {imageUrl ? (
-                          <img
-                            src={imageUrl}
-                            alt={colorLabel}
-                            className="h-8 w-12 rounded-sm border border-foreground/30 object-cover"
-                          />
-                        ) : (
-                          <span
-                            className="inline-block h-5 w-8 rounded-sm border border-foreground/30"
-                            style={{ background: swatchBg }}
-                          />
-                        )}
-                      </td>
-                      <td className="py-2 px-2 text-xs text-muted-foreground">
-                        {colorLabel}
-                      </td>
-                      <td className="py-2 px-2 text-right font-medium">
-                        {f.pieceCount}
-                      </td>
-                      {hasDimensions && (
-                        <td className="py-2 pl-2 text-right font-medium">
-                          {f.yards !== null ? fmtYards(f.yards) : "—"}
+                      <tr
+                        key={f.color}
+                        className="border-b border-foreground/10"
+                      >
+                        <td className="py-2 pr-2 font-mono font-semibold">
+                          Fabric {f.letter}
                         </td>
-                      )}
-                    </tr>
-                  );
+                        <td className="py-2 px-2">
+                          {imageUrl ? (
+                            <img
+                              src={imageUrl}
+                              alt={colorLabel}
+                              className="h-8 w-12 rounded-sm border border-foreground/30 object-cover"
+                            />
+                          ) : (
+                            <span
+                              className="inline-block h-5 w-8 rounded-sm border border-foreground/30"
+                              style={{ background: swatchBg }}
+                            />
+                          )}
+                        </td>
+                        <td className="py-2 px-2 text-xs text-muted-foreground">
+                          {colorLabel}
+                        </td>
+                        <td className="py-2 px-2 text-right font-medium">
+                          {f.pieceCount}
+                        </td>
+                        {hasDimensions && (
+                          <td className="py-2 pl-2 text-right font-medium">
+                            {f.yards !== null ? fmtYards(f.yards) : "—"}
+                          </td>
+                        )}
+                      </tr>
+                    );
                   })}
                 </tbody>
               </table>
@@ -990,63 +1019,61 @@ export default function CutPatternPage() {
                 const isFabC = f.color.startsWith("fab:");
                 const imgUrlC = isFabC ? fabricImageMap[f.color] : null;
                 return (
-                <div key={f.color}>
-                  <div className="mb-1.5 flex items-center gap-2 border-b border-foreground/15 pb-1">
-                    {imgUrlC ? (
-                      <img
-                        src={imgUrlC}
-                        alt={fabricNameMap[f.color] ?? f.color}
-                        className="h-5 w-5 rounded-sm border border-foreground/30 object-cover"
-                      />
-                    ) : (
-                      <span
-                        className="inline-block h-4 w-4 rounded-sm border border-foreground/30"
-                        style={{
-                          background: isFabC
-                            ? (fabricColorMap[f.color] ?? "#d4c5a9")
-                            : f.color,
-                        }}
-                      />
-                    )}
-                    <span className="font-mono text-sm font-semibold">
-                      Fabric {f.letter}
-                    </span>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {isFabC
-                        ? (fabricNameMap[f.color] ?? f.color)
-                        : f.color}
-                    </span>
+                  <div key={f.color}>
+                    <div className="mb-1.5 flex items-center gap-2 border-b border-foreground/15 pb-1">
+                      {imgUrlC ? (
+                        <img
+                          src={imgUrlC}
+                          alt={fabricNameMap[f.color] ?? f.color}
+                          className="h-5 w-5 rounded-sm border border-foreground/30 object-cover"
+                        />
+                      ) : (
+                        <span
+                          className="inline-block h-4 w-4 rounded-sm border border-foreground/30"
+                          style={{
+                            background: isFabC
+                              ? (fabricColorMap[f.color] ?? "#d4c5a9")
+                              : f.color,
+                          }}
+                        />
+                      )}
+                      <span className="font-mono text-sm font-semibold">
+                        Fabric {f.letter}
+                      </span>
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {isFabC ? (fabricNameMap[f.color] ?? f.color) : f.color}
+                      </span>
+                    </div>
+                    <ul className="space-y-2">
+                      {f.pieces.map((piece, i) => (
+                        <li key={i} className="flex items-start gap-3">
+                          <span className="mt-0.5 shrink-0">
+                            <ShapeIcon piece={piece} size={26} />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm leading-snug">
+                              {cutInstruction(piece, hasDimensions)}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {piece.label}
+                              {hasDimensions &&
+                                piece.finishedW !== null &&
+                                piece.finishedH !== null && (
+                                  <>
+                                    {" "}
+                                    · finishes{" "}
+                                    {piece.finishedW === piece.finishedH
+                                      ? fmtInch(piece.finishedW)
+                                      : `${fmtInch(piece.finishedW)} × ${fmtInch(piece.finishedH)}`}
+                                  </>
+                                )}
+                            </p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <ul className="space-y-2">
-                    {f.pieces.map((piece, i) => (
-                      <li key={i} className="flex items-start gap-3">
-                        <span className="mt-0.5 shrink-0">
-                          <ShapeIcon piece={piece} size={26} />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm leading-snug">
-                            {cutInstruction(piece, hasDimensions)}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {piece.label}
-                            {hasDimensions &&
-                              piece.finishedW !== null &&
-                              piece.finishedH !== null && (
-                                <>
-                                  {" "}
-                                  · finishes{" "}
-                                  {piece.finishedW === piece.finishedH
-                                    ? fmtInch(piece.finishedW)
-                                    : `${fmtInch(piece.finishedW)} × ${fmtInch(piece.finishedH)}`}
-                                </>
-                              )}
-                          </p>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              );
+                );
               })}
             </div>
           )}
@@ -1078,8 +1105,8 @@ export default function CutPatternPage() {
                       Quarter-square triangles (QST)
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Cut the listed square, then slice <strong>once</strong>{" "}
-                      on each diagonal (forming an X). Each square yields 4
+                      Cut the listed square, then slice <strong>once</strong> on
+                      each diagonal (forming an X). Each square yields 4
                       triangles. Press seams in a pinwheel to reduce bulk.
                     </p>
                   </div>
@@ -1088,10 +1115,10 @@ export default function CutPatternPage() {
             </div>
             <p className="mt-3 text-xs text-muted-foreground">
               Triangle source squares are cut <strong>oversize</strong>{" "}
-              (HST&nbsp;+{fmtInch(0.875 * (seamAllowance / 0.25))},{" "}
-              QST&nbsp;+{fmtInch(1.25 * (seamAllowance / 0.25))}{" "}
-              at a {fmtInch(seamAllowance)} seam); piece, then trim each
-              finished unit square and true up before assembly.
+              (HST&nbsp;+{fmtInch(0.875 * (seamAllowance / 0.25))}, QST&nbsp;+
+              {fmtInch(1.25 * (seamAllowance / 0.25))} at a{" "}
+              {fmtInch(seamAllowance)} seam); piece, then trim each finished
+              unit square and true up before assembly.
             </p>
           </section>
         )}

@@ -3,13 +3,19 @@ import { Link } from "wouter";
 import { ArrowLeft, ExternalLink, ImageIcon, Link2 } from "lucide-react";
 import { getTripPhotoImageUrl } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { ElaineAvatar, ElaineWordmark } from "@/components/assistant/ElaineAvatar";
+import {
+  ElaineAvatar,
+  ElaineWordmark,
+} from "@/components/assistant/ElaineAvatar";
 import { useAssistantChat } from "@/components/assistant/useAssistantChat";
 import { AssistantChatPanel } from "@/components/assistant/AssistantChatPanel";
 
 const URL_RE = /https?:\/\/[^\s)"'>\]]+/g;
 
-function useSurfacedContent(messages: { role: string; content: string }[], magnetResult: ReturnType<typeof useAssistantChat>["magnetResult"]) {
+function useSurfacedContent(
+  messages: { role: string; content: string }[],
+  magnetResult: ReturnType<typeof useAssistantChat>["magnetResult"],
+) {
   return useMemo(() => {
     const links = new Map<string, string>();
     for (const msg of messages) {
@@ -43,7 +49,10 @@ function useSurfacedContent(messages: { role: string; content: string }[], magne
 
 export default function ElaineChat() {
   const chat = useAssistantChat({ active: true });
-  const { links, images } = useSurfacedContent(chat.messages, chat.magnetResult);
+  const { links, images } = useSurfacedContent(
+    chat.messages,
+    chat.magnetResult,
+  );
   const hasSidePanelContent = links.length > 0 || images.length > 0;
 
   return (
@@ -56,19 +65,28 @@ export default function ElaineChat() {
         </Link>
         <ElaineAvatar size={32} />
         <ElaineWordmark className="text-xl" />
-        <span className="text-sm text-muted-foreground">— focused chat, full tool access</span>
+        <span className="text-sm text-muted-foreground">
+          — focused chat, full tool access
+        </span>
       </div>
 
       <div className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col border-r border-border/50 md:max-w-2xl md:mx-auto md:w-full">
-          <AssistantChatPanel chat={chat} avatarSize={30} bubbleWidthClass="max-w-[75%]" />
+          <AssistantChatPanel
+            chat={chat}
+            avatarSize={30}
+            bubbleWidthClass="max-w-[75%]"
+          />
         </div>
 
         <aside className="hidden w-80 shrink-0 flex-col overflow-y-auto p-4 lg:flex">
-          <h2 className="mb-3 text-sm font-semibold text-foreground">Elaine surfaced</h2>
+          <h2 className="mb-3 text-sm font-semibold text-foreground">
+            Elaine surfaced
+          </h2>
           {!hasSidePanelContent && (
             <p className="text-xs text-muted-foreground">
-              Images, links, and websites Elaine finds during your conversation will show up here.
+              Images, links, and websites Elaine finds during your conversation
+              will show up here.
             </p>
           )}
 
@@ -87,7 +105,9 @@ export default function ElaineChat() {
                         alt={img.tripTitle}
                         className="aspect-square w-full object-cover transition-transform group-hover:scale-105"
                       />
-                      <p className="truncate px-1.5 py-1 text-[11px] text-muted-foreground">{img.tripTitle}</p>
+                      <p className="truncate px-1.5 py-1 text-[11px] text-muted-foreground">
+                        {img.tripTitle}
+                      </p>
                     </div>
                   </Link>
                 ))}

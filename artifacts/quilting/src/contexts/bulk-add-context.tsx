@@ -25,23 +25,20 @@ export function BulkAddProvider({ children }: { children: React.ReactNode }) {
     ]);
   }, []);
 
-  const resolve = useCallback(
-    (clientId: string, status: "done" | "error") => {
-      setPendingItems((prev) =>
-        prev.map((item) =>
-          item.clientId === clientId ? { ...item, status } : item,
-        ),
-      );
-      if (status === "done") {
-        setTimeout(() => {
-          setPendingItems((prev) =>
-            prev.filter((item) => item.clientId !== clientId),
-          );
-        }, 2500);
-      }
-    },
-    [],
-  );
+  const resolve = useCallback((clientId: string, status: "done" | "error") => {
+    setPendingItems((prev) =>
+      prev.map((item) =>
+        item.clientId === clientId ? { ...item, status } : item,
+      ),
+    );
+    if (status === "done") {
+      setTimeout(() => {
+        setPendingItems((prev) =>
+          prev.filter((item) => item.clientId !== clientId),
+        );
+      }, 2500);
+    }
+  }, []);
 
   const clear = useCallback(() => setPendingItems([]), []);
 

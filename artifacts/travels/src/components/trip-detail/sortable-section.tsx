@@ -22,8 +22,19 @@ interface SortableSectionProps {
  * the card's own header, since the whole card body must stay non-draggable
  * (only the grip icon initiates a drag).
  */
-export function SortableSection({ id, children, className }: SortableSectionProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+export function SortableSection({
+  id,
+  children,
+  className,
+}: SortableSectionProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
     id,
   });
 
@@ -40,7 +51,8 @@ export function SortableSection({ id, children, className }: SortableSectionProp
     >
       {children({
         dragHandleListeners: listeners,
-        dragHandleAttributes: attributes as React.HTMLAttributes<HTMLButtonElement>,
+        dragHandleAttributes:
+          attributes as React.HTMLAttributes<HTMLButtonElement>,
         isDragging,
       })}
     </div>

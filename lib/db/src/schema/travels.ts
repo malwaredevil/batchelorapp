@@ -102,8 +102,10 @@ export const travelsTripPhotos = pgTable(
   (table) => [
     index("travels_trip_photos_trip_id_idx").on(table.tripId),
     index("travels_trip_photos_user_id_idx").on(table.userId),
-    index("travels_trip_photos_visual_embedding_idx")
-      .using("hnsw", table.visualEmbedding.op("vector_cosine_ops")),
+    index("travels_trip_photos_visual_embedding_idx").using(
+      "hnsw",
+      table.visualEmbedding.op("vector_cosine_ops"),
+    ),
   ],
 ).enableRLS();
 
@@ -282,10 +284,9 @@ export const travelsConnectedCalendars = pgTable(
   },
   (table) => [
     index("travels_connected_calendars_user_id_idx").on(table.userId),
-    uniqueIndex("travels_connected_calendars_user_id_google_calendar_id_idx").on(
-      table.userId,
-      table.googleCalendarId,
-    ),
+    uniqueIndex(
+      "travels_connected_calendars_user_id_google_calendar_id_idx",
+    ).on(table.userId, table.googleCalendarId),
   ],
 ).enableRLS();
 
@@ -348,11 +349,15 @@ export const travelsCalendarTripSuggestions = pgTable(
     destination: text("destination"),
     startDate: date("start_date"),
     endDate: date("end_date"),
-    relatedEventIds: jsonb("related_event_ids").notNull().default(sql`'[]'::jsonb`),
+    relatedEventIds: jsonb("related_event_ids")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     dedupeKey: text("dedupe_key").notNull(),
     status: text("status").notNull().default("pending"), // 'pending' | 'accepted' | 'dismissed'
     userId: integer("user_id"),
-    isFromSharedCalendar: boolean("is_from_shared_calendar").notNull().default(false),
+    isFromSharedCalendar: boolean("is_from_shared_calendar")
+      .notNull()
+      .default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -414,7 +419,9 @@ export const travelsAssistantConversations = pgTable(
   {
     id: serial("id").primaryKey(),
     userId: integer("user_id").notNull().unique(),
-    messages: jsonb("messages").notNull().default(sql`'[]'::jsonb`),
+    messages: jsonb("messages")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -450,17 +457,14 @@ export type InsertTravelsAssistantSettings =
 // Shared household memory — facts elAIne has learned from any family member
 // that are relevant to everyone, not siloed per-user. Populated by the
 // assistant itself via a save_household_memory tool call, not hand-authored.
-export const travelsHouseholdMemory = pgTable(
-  "travels_household_memory",
-  {
-    id: serial("id").primaryKey(),
-    content: text("content").notNull(),
-    createdByUserId: integer("created_by_user_id").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-).enableRLS();
+export const travelsHouseholdMemory = pgTable("travels_household_memory", {
+  id: serial("id").primaryKey(),
+  content: text("content").notNull(),
+  createdByUserId: integer("created_by_user_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+}).enableRLS();
 
 export type TravelsHouseholdMemoryRow =
   typeof travelsHouseholdMemory.$inferSelect;
@@ -516,35 +520,32 @@ export type InsertTravelsAssistantNudge =
 // consent from Calendar). Mirrors travels_google_calendar_connections'
 // per-user single-row shape. App stays in Google OAuth "Testing" status with
 // household emails added as test users, avoiding a CASA security assessment.
-export const travelsGmailConnections = pgTable(
-  "travels_gmail_connections",
-  {
-    id: serial("id").primaryKey(),
-    userId: integer("user_id").notNull().unique(),
-    googleEmail: text("google_email").notNull(),
-    refreshToken: text("refresh_token").notNull(),
-    accessToken: text("access_token"),
-    accessTokenExpiresAt: timestamp("access_token_expires_at", {
-      withTimezone: true,
-    }),
-    // Gmail history id watermark — lets future incremental scans (not yet
-    // implemented) resume from the last-seen point instead of a full re-scan.
-    lastHistoryId: text("last_history_id"),
-    lastScanAt: timestamp("last_scan_at", { withTimezone: true }),
-    // Cached Gmail label ids for this user's own mailbox (label ids are
-    // per-account, so each connected user gets their own pair). Resolved and
-    // created on first use by gmail-labels.ts; cached here to avoid a
-    // labels.list call on every message link.
-    travelLabelId: text("travel_label_id"),
-    reviewedLabelId: text("reviewed_label_id"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-).enableRLS();
+export const travelsGmailConnections = pgTable("travels_gmail_connections", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().unique(),
+  googleEmail: text("google_email").notNull(),
+  refreshToken: text("refresh_token").notNull(),
+  accessToken: text("access_token"),
+  accessTokenExpiresAt: timestamp("access_token_expires_at", {
+    withTimezone: true,
+  }),
+  // Gmail history id watermark — lets future incremental scans (not yet
+  // implemented) resume from the last-seen point instead of a full re-scan.
+  lastHistoryId: text("last_history_id"),
+  lastScanAt: timestamp("last_scan_at", { withTimezone: true }),
+  // Cached Gmail label ids for this user's own mailbox (label ids are
+  // per-account, so each connected user gets their own pair). Resolved and
+  // created on first use by gmail-labels.ts; cached here to avoid a
+  // labels.list call on every message link.
+  travelLabelId: text("travel_label_id"),
+  reviewedLabelId: text("reviewed_label_id"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+}).enableRLS();
 
 export type TravelsGmailConnectionRow =
   typeof travelsGmailConnections.$inferSelect;
@@ -594,9 +595,10 @@ export const travelsGmailScanDecisions = pgTable(
     index("travels_gmail_scan_decisions_user_id_idx").on(table.userId),
     index("travels_gmail_scan_decisions_status_idx").on(table.status),
     index("travels_gmail_scan_decisions_dedupe_key_idx").on(table.dedupeKey),
-    uniqueIndex(
-      "travels_gmail_scan_decisions_user_id_gmail_message_id_idx",
-    ).on(table.userId, table.gmailMessageId),
+    uniqueIndex("travels_gmail_scan_decisions_user_id_gmail_message_id_idx").on(
+      table.userId,
+      table.gmailMessageId,
+    ),
   ],
 ).enableRLS();
 

@@ -18,14 +18,22 @@ router.post("/trips/:id/documents/:docId/wallet-pass", async (req, res) => {
   const [doc] = await db
     .select()
     .from(travelsTripDocuments)
-    .where(and(eq(travelsTripDocuments.id, docId), eq(travelsTripDocuments.tripId, tripId)));
+    .where(
+      and(
+        eq(travelsTripDocuments.id, docId),
+        eq(travelsTripDocuments.tripId, tripId),
+      ),
+    );
   if (!doc) {
     res.status(404).json({ error: "Not found" });
     return;
   }
 
   const [trip] = await db
-    .select({ title: travelsTrips.title, destination: travelsTrips.destination })
+    .select({
+      title: travelsTrips.title,
+      destination: travelsTrips.destination,
+    })
     .from(travelsTrips)
     .where(eq(travelsTrips.id, tripId));
   if (!trip) {
@@ -40,7 +48,8 @@ router.post("/trips/:id/documents/:docId/wallet-pass", async (req, res) => {
       originalFilename: doc.originalFilename,
       tripTitle: trip.title,
       tripDestination: trip.destination,
-      extractedData: (doc.extractedData as Record<string, unknown> | null) ?? {},
+      extractedData:
+        (doc.extractedData as Record<string, unknown> | null) ?? {},
     });
     res.json({ saveUrl });
   } catch (err) {

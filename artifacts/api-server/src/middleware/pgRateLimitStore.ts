@@ -61,7 +61,9 @@ export class PostgresRateLimitStore implements Store {
     // safe to skip on failure — best-effort housekeeping, not correctness.
     if (Math.random() < 0.01) {
       pool
-        .query(`DELETE FROM rate_limits WHERE reset_at < now() - interval '1 day'`)
+        .query(
+          `DELETE FROM rate_limits WHERE reset_at < now() - interval '1 day'`,
+        )
         .catch((err: unknown) => {
           logger.warn({ err }, "rate_limits: sweep of stale rows failed");
         });
@@ -78,6 +80,8 @@ export class PostgresRateLimitStore implements Store {
   }
 
   async resetKey(key: string): Promise<void> {
-    await pool.query(`DELETE FROM rate_limits WHERE key = $1`, [this.fullKey(key)]);
+    await pool.query(`DELETE FROM rate_limits WHERE key = $1`, [
+      this.fullKey(key),
+    ]);
   }
 }

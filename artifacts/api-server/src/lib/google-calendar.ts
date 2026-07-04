@@ -70,7 +70,8 @@ export interface CreateReminderEventInput {
 }
 
 function reminderOverrides(alertDaysBefore: number[] | undefined) {
-  const days = alertDaysBefore && alertDaysBefore.length > 0 ? alertDaysBefore : [1];
+  const days =
+    alertDaysBefore && alertDaysBefore.length > 0 ? alertDaysBefore : [1];
   return [...new Set(days)]
     .filter((d) => d >= 0)
     .sort((a, b) => b - a)
@@ -144,7 +145,10 @@ export async function getReminderEventAlertDays(
 ): Promise<number[] | null> {
   try {
     const raw = await calendarApiJson<{
-      reminders?: { useDefault?: boolean; overrides?: { method?: string; minutes?: number }[] };
+      reminders?: {
+        useDefault?: boolean;
+        overrides?: { method?: string; minutes?: number }[];
+      };
     }>(
       accessToken,
       `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
@@ -156,7 +160,10 @@ export async function getReminderEventAlertDays(
       .filter((d) => d >= 0);
     return [...new Set(days)].sort((a, b) => b - a);
   } catch (err) {
-    logger.warn({ err, calendarId, eventId }, "google-calendar: failed to read reminder overrides");
+    logger.warn(
+      { err, calendarId, eventId },
+      "google-calendar: failed to read reminder overrides",
+    );
     return null;
   }
 }
@@ -239,9 +246,7 @@ function toGoogleEventBody(input: CalendarEventInput) {
     description: input.description ?? undefined,
     location: input.location ?? undefined,
     colorId: input.colorId ?? undefined,
-    start: input.allDay
-      ? { date: input.start }
-      : { dateTime: input.start },
+    start: input.allDay ? { date: input.start } : { dateTime: input.start },
     end: input.allDay
       ? { date: addDays(input.end, 1) }
       : { dateTime: input.end },

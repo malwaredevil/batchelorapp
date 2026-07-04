@@ -190,13 +190,29 @@
   padding-left: 1.4rem;
   margin: 0.25rem 0;
 }
-.tiptap-wishlist .tiptap ul { list-style-type: disc; }
-.tiptap-wishlist .tiptap ol { list-style-type: decimal; }
-.tiptap-wishlist .tiptap li { margin: 0.15rem 0; }
-.tiptap-wishlist .tiptap strong { font-weight: 700; }
-.tiptap-wishlist .tiptap em { font-style: italic; }
-.tiptap-wishlist .tiptap u { text-decoration: underline; }
-.tiptap-wishlist .tiptap mark { background: #fef08a; border-radius: 2px; padding: 0 2px; }
+.tiptap-wishlist .tiptap ul {
+  list-style-type: disc;
+}
+.tiptap-wishlist .tiptap ol {
+  list-style-type: decimal;
+}
+.tiptap-wishlist .tiptap li {
+  margin: 0.15rem 0;
+}
+.tiptap-wishlist .tiptap strong {
+  font-weight: 700;
+}
+.tiptap-wishlist .tiptap em {
+  font-style: italic;
+}
+.tiptap-wishlist .tiptap u {
+  text-decoration: underline;
+}
+.tiptap-wishlist .tiptap mark {
+  background: #fef08a;
+  border-radius: 2px;
+  padding: 0 2px;
+}
 
 /* Date spans appended to bullets */
 .note-date {
@@ -207,14 +223,40 @@
 }
 
 /* Read-only note display */
-.wishlist-note-display ul { list-style-type: disc; padding-left: 1.4rem; margin: 0; }
-.wishlist-note-display ol { list-style-type: decimal; padding-left: 1.4rem; margin: 0; }
-.wishlist-note-display li { margin: 0.15rem 0; font-size: 0.875rem; line-height: 1.5; }
-.wishlist-note-display strong { font-weight: 700; }
-.wishlist-note-display em { font-style: italic; }
-.wishlist-note-display u { text-decoration: underline; }
-.wishlist-note-display mark { background: #fef08a; border-radius: 2px; padding: 0 2px; }
-.wishlist-note-display p { font-size: 0.875rem; line-height: 1.5; margin: 0.15rem 0; }
+.wishlist-note-display ul {
+  list-style-type: disc;
+  padding-left: 1.4rem;
+  margin: 0;
+}
+.wishlist-note-display ol {
+  list-style-type: decimal;
+  padding-left: 1.4rem;
+  margin: 0;
+}
+.wishlist-note-display li {
+  margin: 0.15rem 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.wishlist-note-display strong {
+  font-weight: 700;
+}
+.wishlist-note-display em {
+  font-style: italic;
+}
+.wishlist-note-display u {
+  text-decoration: underline;
+}
+.wishlist-note-display mark {
+  background: #fef08a;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+.wishlist-note-display p {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin: 0.15rem 0;
+}
 
 /* ── Shared TipTap rich text editor (reminders, etc.) ──────────────── */
 .tiptap-rich .tiptap {
@@ -237,20 +279,62 @@
   padding-left: 1.4rem;
   margin: 0.25rem 0;
 }
-.tiptap-rich .tiptap ul { list-style-type: disc; }
-.tiptap-rich .tiptap ol { list-style-type: decimal; }
-.tiptap-rich .tiptap li { margin: 0.15rem 0; }
-.tiptap-rich .tiptap strong { font-weight: 700; }
-.tiptap-rich .tiptap em { font-style: italic; }
-.tiptap-rich .tiptap u { text-decoration: underline; }
-.tiptap-rich .tiptap mark { background: #fef08a; border-radius: 2px; padding: 0 2px; }
+.tiptap-rich .tiptap ul {
+  list-style-type: disc;
+}
+.tiptap-rich .tiptap ol {
+  list-style-type: decimal;
+}
+.tiptap-rich .tiptap li {
+  margin: 0.15rem 0;
+}
+.tiptap-rich .tiptap strong {
+  font-weight: 700;
+}
+.tiptap-rich .tiptap em {
+  font-style: italic;
+}
+.tiptap-rich .tiptap u {
+  text-decoration: underline;
+}
+.tiptap-rich .tiptap mark {
+  background: #fef08a;
+  border-radius: 2px;
+  padding: 0 2px;
+}
 
 /* Read-only rich text display (reminders, etc.) */
-.rich-text-display ul { list-style-type: disc; padding-left: 1.4rem; margin: 0; }
-.rich-text-display ol { list-style-type: decimal; padding-left: 1.4rem; margin: 0; }
-.rich-text-display li { margin: 0.15rem 0; font-size: 0.875rem; line-height: 1.5; }
-.rich-text-display strong { font-weight: 700; }
-.rich-text-display em { font-style: italic; }
-.rich-text-display u { text-decoration: underline; }
-.rich-text-display mark { background: #fef08a; border-radius: 2px; padding: 0 2px; }
-.rich-text-display p { font-size: 0.875rem; line-height: 1.5; margin: 0.15rem 0; }
+.rich-text-display ul {
+  list-style-type: disc;
+  padding-left: 1.4rem;
+  margin: 0;
+}
+.rich-text-display ol {
+  list-style-type: decimal;
+  padding-left: 1.4rem;
+  margin: 0;
+}
+.rich-text-display li {
+  margin: 0.15rem 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.rich-text-display strong {
+  font-weight: 700;
+}
+.rich-text-display em {
+  font-style: italic;
+}
+.rich-text-display u {
+  text-decoration: underline;
+}
+.rich-text-display mark {
+  background: #fef08a;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+.rich-text-display p {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin: 0.15rem 0;
+}

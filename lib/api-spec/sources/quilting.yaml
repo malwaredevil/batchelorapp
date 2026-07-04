@@ -2534,7 +2534,17 @@ components:
 
     Block:
       type: object
-      required: [id, name, gridSize, cells, seams, dominantColors, categories, createdAt]
+      required:
+        [
+          id,
+          name,
+          gridSize,
+          cells,
+          seams,
+          dominantColors,
+          categories,
+          createdAt,
+        ]
       properties:
         id:
           type: integer

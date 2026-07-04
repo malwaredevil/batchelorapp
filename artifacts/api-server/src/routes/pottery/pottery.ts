@@ -59,7 +59,10 @@ import {
   embedText,
   type AnalysisContext,
 } from "../../lib/pottery/openai";
-import { generateVisualEmbedding, generateZoneEmbedding } from "../../lib/visual-embed";
+import {
+  generateVisualEmbedding,
+  generateZoneEmbedding,
+} from "../../lib/visual-embed";
 import { serializeItem, serializeItems } from "../../lib/pottery/serialize";
 import { logger } from "../../lib/logger";
 
@@ -233,7 +236,9 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
   // Optional backstamp enhancement: if the main analysis found no maker,
   // run a focused identification pass concentrated on marks and stamps.
   if (!analysis.maker) {
-    const backstampResult = await locateBackstampAndEnhanceMaker([dataUrl]).catch(() => null);
+    const backstampResult = await locateBackstampAndEnhanceMaker([
+      dataUrl,
+    ]).catch(() => null);
     if (backstampResult?.maker) {
       analysis.maker = backstampResult.maker;
       analysis.makerInfo = backstampResult.makerInfo ?? analysis.makerInfo;
@@ -374,7 +379,10 @@ router.patch("/items/:id", async (req, res) => {
   if (body.dimensions !== undefined)
     fieldUpdates.dimensions = clampField(body.dimensions, MAX_TEXT);
 
-  let row: Omit<PotteryItemRow, "embedding" | "visualEmbedding" | "zoneEmbedding">;
+  let row: Omit<
+    PotteryItemRow,
+    "embedding" | "visualEmbedding" | "zoneEmbedding"
+  >;
 
   if (Object.keys(fieldUpdates).length > 0) {
     const [updated] = await db
@@ -811,7 +819,9 @@ async function runItemAnalysis(id: number, userId: number): Promise<unknown> {
 
   // Optional backstamp enhancement when no maker was found in the main pass.
   if (!analysis.maker) {
-    const backstampResult = await locateBackstampAndEnhanceMaker(dataUrls).catch(() => null);
+    const backstampResult = await locateBackstampAndEnhanceMaker(
+      dataUrls,
+    ).catch(() => null);
     if (backstampResult?.maker) {
       analysis.maker = backstampResult.maker;
       analysis.makerInfo = backstampResult.makerInfo ?? analysis.makerInfo;

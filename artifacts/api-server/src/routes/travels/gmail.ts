@@ -23,7 +23,11 @@ import {
   parseGmailMessage,
   searchMessagesPage,
 } from "../../lib/gmail-api";
-import { extractFromEmailText, extractFromImage, extractFromPdf } from "../../lib/travel-document-extraction";
+import {
+  extractFromEmailText,
+  extractFromImage,
+  extractFromPdf,
+} from "../../lib/travel-document-extraction";
 import { uploadDocument } from "../../lib/travels-storage";
 import { scanGmailForUser } from "../../lib/gmail-scan";
 import { markMessageAsIngestedTravel } from "../../lib/gmail-labels";
@@ -58,24 +62,31 @@ async function getMessageSummariesLimited(
   accessToken: string,
   messageIds: string[],
 ): Promise<(Awaited<ReturnType<typeof getMessageSummary>> | null)[]> {
-  const results: (Awaited<ReturnType<typeof getMessageSummary>> | null)[] = new Array(
-    messageIds.length,
-  ).fill(null);
+  const results: (Awaited<ReturnType<typeof getMessageSummary>> | null)[] =
+    new Array(messageIds.length).fill(null);
   let nextIndex = 0;
   async function worker(): Promise<void> {
     for (;;) {
       const i = nextIndex++;
       if (i >= messageIds.length) return;
-      results[i] = await getMessageSummary(accessToken, messageIds[i]!).catch(() => null);
+      results[i] = await getMessageSummary(accessToken, messageIds[i]!).catch(
+        () => null,
+      );
     }
   }
   await Promise.all(
-    Array.from({ length: Math.min(GMAIL_SUMMARY_CONCURRENCY, messageIds.length) }, worker),
+    Array.from(
+      { length: Math.min(GMAIL_SUMMARY_CONCURRENCY, messageIds.length) },
+      worker,
+    ),
   );
   return results;
 }
 
-function callbackUrl(req: { protocol: string; get: (h: string) => string | undefined }): string {
+function callbackUrl(req: {
+  protocol: string;
+  get: (h: string) => string | undefined;
+}): string {
   const host = req.get("host");
   return `${req.protocol}://${host}/api/travels/gmail/callback`;
 }
@@ -163,9 +174,12 @@ router.get("/gmail/callback", async (req, res) => {
       googleEmail = ticket.getPayload()?.email?.trim().toLowerCase() ?? null;
     }
     if (!googleEmail) {
-      const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
-        headers: { Authorization: `Bearer ${tokens.access_token}` },
-      });
+      const userInfoRes = await fetch(
+        "https://www.googleapis.com/oauth2/v2/userinfo",
+        {
+          headers: { Authorization: `Bearer ${tokens.access_token}` },
+        },
+      );
       if (userInfoRes.ok) {
         const info = (await userInfoRes.json()) as { email?: string };
         googleEmail = info.email?.trim().toLowerCase() ?? null;
@@ -183,7 +197,9 @@ router.get("/gmail/callback", async (req, res) => {
         googleEmail,
         refreshToken: tokens.refresh_token,
         accessToken: tokens.access_token,
-        accessTokenExpiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+        accessTokenExpiresAt: tokens.expiry_date
+          ? new Date(tokens.expiry_date)
+          : null,
       })
       .onConflictDoUpdate({
         target: travelsGmailConnections.userId,
@@ -191,7 +207,9 @@ router.get("/gmail/callback", async (req, res) => {
           googleEmail,
           refreshToken: tokens.refresh_token,
           accessToken: tokens.access_token,
-          accessTokenExpiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+          accessTokenExpiresAt: tokens.expiry_date
+            ? new Date(tokens.expiry_date)
+            : null,
           updatedAt: new Date(),
         },
       });
@@ -208,7 +226,9 @@ router.get("/gmail/callback", async (req, res) => {
 // reconnecting later doesn't re-surface already-handled emails.
 router.delete("/gmail/disconnect", async (req, res) => {
   const userId = req.session.userId!;
-  await db.delete(travelsGmailConnections).where(eq(travelsGmailConnections.userId, userId));
+  await db
+    .delete(travelsGmailConnections)
+    .where(eq(travelsGmailConnections.userId, userId));
   res.status(204).send();
 });
 
@@ -224,7 +244,9 @@ router.post("/gmail/scan", async (req, res) => {
     res.json(result);
   } catch (err) {
     logger.error({ err, userId }, "gmail: manual scan failed");
-    res.status(502).json({ error: "Could not scan your Gmail inbox right now." });
+    res
+      .status(502)
+      .json({ error: "Could not scan your Gmail inbox right now." });
   }
 });
 
@@ -257,7 +279,12 @@ router.post("/gmail/suggestions/:id/dismiss", async (req, res) => {
   const [updated] = await db
     .update(travelsGmailScanDecisions)
     .set({ status: "dismissed", updatedAt: new Date() })
-    .where(and(eq(travelsGmailScanDecisions.id, id), eq(travelsGmailScanDecisions.userId, userId)))
+    .where(
+      and(
+        eq(travelsGmailScanDecisions.id, id),
+        eq(travelsGmailScanDecisions.userId, userId),
+      ),
+    )
     .returning();
   if (!updated) {
     res.status(404).json({ error: "Not found" });
@@ -277,16 +304,31 @@ router.get("/gmail/inbox", async (req, res) => {
     return;
   }
 
-  const q = typeof req.query.q === "string" && req.query.q.trim() ? req.query.q : DEFAULT_INBOX_QUERY;
-  const pageToken = typeof req.query.pageToken === "string" ? req.query.pageToken : undefined;
-  const rawMaxResults = typeof req.query.maxResults === "string" ? Number(req.query.maxResults) : NaN;
+  const q =
+    typeof req.query.q === "string" && req.query.q.trim()
+      ? req.query.q
+      : DEFAULT_INBOX_QUERY;
+  const pageToken =
+    typeof req.query.pageToken === "string" ? req.query.pageToken : undefined;
+  const rawMaxResults =
+    typeof req.query.maxResults === "string"
+      ? Number(req.query.maxResults)
+      : NaN;
   const maxResults =
     Number.isFinite(rawMaxResults) && rawMaxResults > 0
-      ? Math.min(Math.max(Math.trunc(rawMaxResults), MIN_INBOX_PAGE_SIZE), MAX_INBOX_PAGE_SIZE)
+      ? Math.min(
+          Math.max(Math.trunc(rawMaxResults), MIN_INBOX_PAGE_SIZE),
+          MAX_INBOX_PAGE_SIZE,
+        )
       : DEFAULT_INBOX_PAGE_SIZE;
 
   try {
-    const page = await searchMessagesPage(accessToken, q, pageToken, maxResults);
+    const page = await searchMessagesPage(
+      accessToken,
+      q,
+      pageToken,
+      maxResults,
+    );
     const summaries = await getMessageSummariesLimited(
       accessToken,
       page.messages.map((m) => m.id),
@@ -294,7 +336,10 @@ router.get("/gmail/inbox", async (req, res) => {
     const decided = new Set(
       (
         await db
-          .select({ gmailMessageId: travelsGmailScanDecisions.gmailMessageId, status: travelsGmailScanDecisions.status })
+          .select({
+            gmailMessageId: travelsGmailScanDecisions.gmailMessageId,
+            status: travelsGmailScanDecisions.status,
+          })
           .from(travelsGmailScanDecisions)
           .where(eq(travelsGmailScanDecisions.userId, userId))
       ).map((r) => `${r.gmailMessageId}:${r.status}`),
@@ -304,12 +349,15 @@ router.get("/gmail/inbox", async (req, res) => {
       .map((s) => ({
         ...s,
         alreadyLinked: decided.has(`${s.id}:linked`),
-        alreadyIgnored: decided.has(`${s.id}:ignored`) || decided.has(`${s.id}:dismissed`),
+        alreadyIgnored:
+          decided.has(`${s.id}:ignored`) || decided.has(`${s.id}:dismissed`),
       }));
     res.json({ messages, nextPageToken: page.nextPageToken ?? null });
   } catch (err) {
     logger.error({ err, userId }, "gmail: inbox search failed");
-    res.status(502).json({ error: "Could not search your Gmail inbox right now." });
+    res
+      .status(502)
+      .json({ error: "Could not search your Gmail inbox right now." });
   }
 });
 
@@ -346,15 +394,24 @@ async function linkMessageToTrip(
 ): Promise<LinkedDocumentResult[]> {
   const full = await getMessage(accessToken, messageId);
   const parsed = parseGmailMessage(full);
-  const baseExtractedData = (existingDecision?.extractedData as Record<string, unknown> | null) ?? {};
+  const baseExtractedData =
+    (existingDecision?.extractedData as Record<string, unknown> | null) ?? {};
 
   const results: LinkedDocumentResult[] = [];
 
   if (parsed.attachments.length > 0) {
     for (const attachment of parsed.attachments) {
       let extractedData: Record<string, unknown> = { ...baseExtractedData };
-      const buffer = await getAttachment(accessToken, messageId, attachment.attachmentId);
-      const storagePath = await uploadDocument(buffer, attachment.mimeType, attachment.filename);
+      const buffer = await getAttachment(
+        accessToken,
+        messageId,
+        attachment.attachmentId,
+      );
+      const storagePath = await uploadDocument(
+        buffer,
+        attachment.mimeType,
+        attachment.filename,
+      );
       try {
         const attachmentData =
           attachment.mimeType === "application/pdf"
@@ -364,7 +421,10 @@ async function linkMessageToTrip(
         // is generally more reliable than the surrounding email body).
         extractedData = { ...extractedData, ...attachmentData };
       } catch (err) {
-        logger.warn({ err, messageId }, "gmail: attachment extraction failed, using email-body data");
+        logger.warn(
+          { err, messageId },
+          "gmail: attachment extraction failed, using email-body data",
+        );
       }
       const [doc] = await db
         .insert(travelsTripDocuments)
@@ -372,7 +432,8 @@ async function linkMessageToTrip(
           tripId,
           userId,
           storagePath,
-          documentType: (extractedData.documentType as string | undefined) ?? null,
+          documentType:
+            (extractedData.documentType as string | undefined) ?? null,
           originalFilename: attachment.filename,
           extractedData,
         })
@@ -388,16 +449,24 @@ async function linkMessageToTrip(
         parsed.textBody,
       );
     }
-    const textBuffer = Buffer.from(parsed.textBody || parsed.subject || "(empty email)", "utf-8");
+    const textBuffer = Buffer.from(
+      parsed.textBody || parsed.subject || "(empty email)",
+      "utf-8",
+    );
     const originalFilename = `${(parsed.subject ?? "email").slice(0, 60)}.txt`;
-    const storagePath = await uploadDocument(textBuffer, "text/plain", originalFilename);
+    const storagePath = await uploadDocument(
+      textBuffer,
+      "text/plain",
+      originalFilename,
+    );
     const [doc] = await db
       .insert(travelsTripDocuments)
       .values({
         tripId,
         userId,
         storagePath,
-        documentType: (extractedData.documentType as string | undefined) ?? null,
+        documentType:
+          (extractedData.documentType as string | undefined) ?? null,
         originalFilename,
         extractedData,
       })
@@ -409,7 +478,10 @@ async function linkMessageToTrip(
     try {
       await syncItineraryFromDocument(tripId, doc.id, extractedData);
     } catch (err) {
-      logger.warn({ err }, "gmail: failed to sync itinerary from linked email document");
+      logger.warn(
+        { err },
+        "gmail: failed to sync itinerary from linked email document",
+      );
     }
   }
 
@@ -431,7 +503,10 @@ async function linkMessageToTrip(
       tripDocumentId: lastResult.doc.id,
     })
     .onConflictDoUpdate({
-      target: [travelsGmailScanDecisions.userId, travelsGmailScanDecisions.gmailMessageId],
+      target: [
+        travelsGmailScanDecisions.userId,
+        travelsGmailScanDecisions.gmailMessageId,
+      ],
       set: {
         status: "linked",
         extractedData: lastResult.extractedData,
@@ -488,10 +563,16 @@ router.get("/gmail/messages/:messageId", async (req, res) => {
       from: parsed.from,
       date: parsed.date,
       textBody: parsed.textBody,
-      attachments: parsed.attachments.map((a) => ({ filename: a.filename, mimeType: a.mimeType })),
+      attachments: parsed.attachments.map((a) => ({
+        filename: a.filename,
+        mimeType: a.mimeType,
+      })),
     });
   } catch (err) {
-    logger.error({ err, userId, messageId }, "gmail: failed to fetch message content");
+    logger.error(
+      { err, userId, messageId },
+      "gmail: failed to fetch message content",
+    );
     res.status(502).json({ error: "Could not load this email right now." });
   }
 });
@@ -510,7 +591,10 @@ router.post("/gmail/messages/:messageId/link", async (req, res) => {
     return;
   }
 
-  const [trip] = await db.select({ id: travelsTrips.id }).from(travelsTrips).where(eq(travelsTrips.id, body.tripId));
+  const [trip] = await db
+    .select({ id: travelsTrips.id })
+    .from(travelsTrips)
+    .where(eq(travelsTrips.id, body.tripId));
   if (!trip) {
     res.status(404).json({ error: "Trip not found" });
     return;
@@ -523,10 +607,21 @@ router.post("/gmail/messages/:messageId/link", async (req, res) => {
   }
 
   try {
-    const results = await linkMessageToTrip(userId, accessToken, messageId, body.tripId, existingDecision);
-    res.status(201).json(results.length === 1 ? results[0]!.doc : results.map((r) => r.doc));
+    const results = await linkMessageToTrip(
+      userId,
+      accessToken,
+      messageId,
+      body.tripId,
+      existingDecision,
+    );
+    res
+      .status(201)
+      .json(results.length === 1 ? results[0]!.doc : results.map((r) => r.doc));
   } catch (err) {
-    logger.error({ err, userId, messageId }, "gmail: failed to link message as trip document");
+    logger.error(
+      { err, userId, messageId },
+      "gmail: failed to link message as trip document",
+    );
     res.status(502).json({ error: "Could not import this email right now." });
   }
 });
@@ -548,13 +643,20 @@ router.post("/gmail/messages/bulk-link", async (req, res) => {
     return;
   }
 
-  const [trip] = await db.select({ id: travelsTrips.id }).from(travelsTrips).where(eq(travelsTrips.id, body.tripId));
+  const [trip] = await db
+    .select({ id: travelsTrips.id })
+    .from(travelsTrips)
+    .where(eq(travelsTrips.id, body.tripId));
   if (!trip) {
     res.status(404).json({ error: "Trip not found" });
     return;
   }
 
-  const outcomes: { messageId: string; status: "linked" | "already_linked" | "failed"; error?: string }[] = [];
+  const outcomes: {
+    messageId: string;
+    status: "linked" | "already_linked" | "failed";
+    error?: string;
+  }[] = [];
   for (const messageId of body.messageIds) {
     try {
       const existingDecision = await loadExistingDecision(userId, messageId);
@@ -562,11 +664,24 @@ router.post("/gmail/messages/bulk-link", async (req, res) => {
         outcomes.push({ messageId, status: "already_linked" });
         continue;
       }
-      await linkMessageToTrip(userId, accessToken, messageId, body.tripId, existingDecision);
+      await linkMessageToTrip(
+        userId,
+        accessToken,
+        messageId,
+        body.tripId,
+        existingDecision,
+      );
       outcomes.push({ messageId, status: "linked" });
     } catch (err) {
-      logger.error({ err, userId, messageId }, "gmail: bulk-link failed for message");
-      outcomes.push({ messageId, status: "failed", error: "Could not import this email." });
+      logger.error(
+        { err, userId, messageId },
+        "gmail: bulk-link failed for message",
+      );
+      outcomes.push({
+        messageId,
+        status: "failed",
+        error: "Could not import this email.",
+      });
     }
   }
 
@@ -601,7 +716,10 @@ router.post("/gmail/messages/:messageId/ignore", async (req, res) => {
         status: "ignored",
       })
       .onConflictDoUpdate({
-        target: [travelsGmailScanDecisions.userId, travelsGmailScanDecisions.gmailMessageId],
+        target: [
+          travelsGmailScanDecisions.userId,
+          travelsGmailScanDecisions.gmailMessageId,
+        ],
         set: { status: "ignored", updatedAt: new Date() },
       });
     res.status(204).send();
@@ -627,8 +745,13 @@ router.post("/gmail/messages/:messageId/reconsider", async (req, res) => {
     res.status(404).json({ error: "No decision found for this email." });
     return;
   }
-  if (existingDecision.status !== "ignored" && existingDecision.status !== "dismissed") {
-    res.status(409).json({ error: "Only ignored or dismissed emails can be reconsidered." });
+  if (
+    existingDecision.status !== "ignored" &&
+    existingDecision.status !== "dismissed"
+  ) {
+    res
+      .status(409)
+      .json({ error: "Only ignored or dismissed emails can be reconsidered." });
     return;
   }
 

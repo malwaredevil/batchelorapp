@@ -126,7 +126,9 @@ router.get("/maps/street-view", async (req, res) => {
   await handleMapsError(req, res, async () => {
     const available = await hasStreetView(parsed.data.lat, parsed.data.lng);
     if (!available) {
-      res.status(404).json({ error: "No Street View coverage at this location" });
+      res
+        .status(404)
+        .json({ error: "No Street View coverage at this location" });
       return;
     }
     const { buffer, contentType } = await fetchStreetViewImage(
@@ -154,7 +156,11 @@ router.get("/maps/places/search", async (req, res) => {
     return;
   }
   await handleMapsError(req, res, async () => {
-    const places = await searchPlaces(parsed.data.q, parsed.data.lat, parsed.data.lng);
+    const places = await searchPlaces(
+      parsed.data.q,
+      parsed.data.lat,
+      parsed.data.lng,
+    );
     res.json({ places });
   });
 });
@@ -180,7 +186,9 @@ router.get("/maps/nearby-count", async (req, res) => {
 });
 
 router.get("/maps/aerial-view", async (req, res) => {
-  const parsed = z.object({ address: z.string().min(1).max(300) }).safeParse(req.query);
+  const parsed = z
+    .object({ address: z.string().min(1).max(300) })
+    .safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({ error: "address is required" });
     return;

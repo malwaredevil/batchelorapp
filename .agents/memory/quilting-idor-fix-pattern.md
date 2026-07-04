@@ -14,6 +14,7 @@ userId)` was missing from the `.where(and(inArray(...)))` clause, so any
 authenticated user could link another user's fabrics/patterns into their own quilt.
 
 **How to apply:** When auditing a route file for IDOR/authorization gaps:
+
 1. Grep for every `.where(` and check whether `userId` appears in the same clause.
 2. For polymorphic/join tables with no `userId` column (e.g. `quiltingImages`,
    `entityCategories`, `quiltFabricLinks`), ownership must instead be verified by

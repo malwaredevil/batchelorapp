@@ -47,7 +47,9 @@ export function CategoryEditDialog({
     // that may not have been included in the refetch yet.
     const merged = [
       ...allCategories,
-      ...localNewCats.filter((nc) => !allCategories.some((a) => a.id === nc.id)),
+      ...localNewCats.filter(
+        (nc) => !allCategories.some((a) => a.id === nc.id),
+      ),
     ];
     const names = merged
       .filter((c) => selectedIds.includes(c.id))

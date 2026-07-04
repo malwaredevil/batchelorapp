@@ -22,11 +22,49 @@ const NAV = [
 
 function QuiltIcon({ size = 16 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="1" y="1" width="6" height="6" rx="1" fill="currentColor" fillOpacity="0.9" />
-      <rect x="9" y="1" width="6" height="6" rx="1" fill="currentColor" fillOpacity="0.6" />
-      <rect x="1" y="9" width="6" height="6" rx="1" fill="currentColor" fillOpacity="0.6" />
-      <rect x="9" y="9" width="6" height="6" rx="1" fill="currentColor" fillOpacity="0.9" />
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <rect
+        x="1"
+        y="1"
+        width="6"
+        height="6"
+        rx="1"
+        fill="currentColor"
+        fillOpacity="0.9"
+      />
+      <rect
+        x="9"
+        y="1"
+        width="6"
+        height="6"
+        rx="1"
+        fill="currentColor"
+        fillOpacity="0.6"
+      />
+      <rect
+        x="1"
+        y="9"
+        width="6"
+        height="6"
+        rx="1"
+        fill="currentColor"
+        fillOpacity="0.6"
+      />
+      <rect
+        x="9"
+        y="9"
+        width="6"
+        height="6"
+        rx="1"
+        fill="currentColor"
+        fillOpacity="0.9"
+      />
     </svg>
   );
 }
@@ -63,15 +101,21 @@ function NavRight({ active }: { active: string }) {
       <button className="hidden md:flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted transition-colors">
         <Search className="h-3.5 w-3.5" />
         <span>Search…</span>
-        <kbd className="hidden lg:inline-flex h-4 items-center rounded border border-border bg-muted px-1 font-mono text-[10px] text-muted-foreground">⌘K</kbd>
+        <kbd className="hidden lg:inline-flex h-4 items-center rounded border border-border bg-muted px-1 font-mono text-[10px] text-muted-foreground">
+          ⌘K
+        </kbd>
       </button>
       <div className="pl-2 border-l border-border flex items-center gap-2">
         <div className="text-right leading-tight hidden lg:block">
           <p className="text-xs font-medium leading-none">Ashley B.</p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">Maker account</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">
+            Maker account
+          </p>
         </div>
         <Avatar className="h-8 w-8 border border-border">
-          <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">AB</AvatarFallback>
+          <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
+            AB
+          </AvatarFallback>
         </Avatar>
       </div>
     </div>
@@ -93,14 +137,18 @@ function HeaderA() {
             title="Back to Batchelor"
           >
             <BBadge size={7} />
-            <span className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">Batchelor</span>
+            <span className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
+              Batchelor
+            </span>
           </a>
           <span className="text-border select-none text-lg font-light">›</span>
           <button className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-muted transition-colors">
             <div className="h-7 w-7 rounded-md bg-primary flex items-center justify-center text-primary-foreground shrink-0">
               <QuiltIcon size={14} />
             </div>
-            <span className="text-sm font-bold text-foreground">Ashley's Quilting</span>
+            <span className="text-sm font-bold text-foreground">
+              Ashley's Quilting
+            </span>
           </button>
         </div>
         <div className="flex-1" />
@@ -116,9 +164,19 @@ function HeaderA() {
 
 function PotteryIcon({ size = 14 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
       <path d="M5 3h6l1 3H4L5 3z" fill="currentColor" fillOpacity="0.9" />
-      <path d="M4 6c0 0-1 1.5-1 3.5C3 12 5 14 8 14s5-2 5-4.5C13 7.5 12 6 12 6H4z" fill="currentColor" fillOpacity="0.85" />
+      <path
+        d="M4 6c0 0-1 1.5-1 3.5C3 12 5 14 8 14s5-2 5-4.5C13 7.5 12 6 12 6H4z"
+        fill="currentColor"
+        fillOpacity="0.85"
+      />
     </svg>
   );
 }
@@ -131,9 +189,17 @@ type AppEntry = {
   icon: React.ReactNode;
 };
 
-function AppBadge({ color, children }: { color: string; children: React.ReactNode }) {
+function AppBadge({
+  color,
+  children,
+}: {
+  color: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${color}`}>
+    <div
+      className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${color}`}
+    >
       {children}
     </div>
   );
@@ -189,10 +255,16 @@ function HeaderB({ defaultOpen = false }: { defaultOpen?: boolean }) {
               <QuiltIcon size={14} />
             </div>
             <div className="text-left leading-tight">
-              <p className="text-sm font-bold leading-none">Ashley's Quilting</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Switch app…</p>
+              <p className="text-sm font-bold leading-none">
+                Ashley's Quilting
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                Switch app…
+              </p>
             </div>
-            <ChevronDown className={`h-4 w-4 text-muted-foreground ml-1 transition-transform ${open ? "rotate-180" : ""}`} />
+            <ChevronDown
+              className={`h-4 w-4 text-muted-foreground ml-1 transition-transform ${open ? "rotate-180" : ""}`}
+            />
           </button>
 
           {open && (
@@ -209,10 +281,16 @@ function HeaderB({ defaultOpen = false }: { defaultOpen?: boolean }) {
                   >
                     {app.icon}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate leading-none">{app.label}</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">{app.sub}</p>
+                      <p className="text-sm font-semibold text-foreground truncate leading-none">
+                        {app.label}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {app.sub}
+                      </p>
                     </div>
-                    {app.active && <Check className="h-4 w-4 text-primary shrink-0" />}
+                    {app.active && (
+                      <Check className="h-4 w-4 text-primary shrink-0" />
+                    )}
                   </button>
                 </div>
               ))}
@@ -255,8 +333,12 @@ function HeaderC() {
             )}
           </div>
           <div className="leading-tight">
-            <p className="text-sm font-bold tracking-tight leading-none">Ashley's Quilting</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Studio Collection</p>
+            <p className="text-sm font-bold tracking-tight leading-none">
+              Ashley's Quilting
+            </p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              Studio Collection
+            </p>
           </div>
         </div>
         <div className="flex-1" />
@@ -281,7 +363,9 @@ function HeaderD() {
             title="Back to Batchelor"
           >
             <LayoutGrid className="h-5 w-5" />
-            <span className="text-[9px] font-medium leading-none opacity-70 group-hover:opacity-100">Home</span>
+            <span className="text-[9px] font-medium leading-none opacity-70 group-hover:opacity-100">
+              Home
+            </span>
           </a>
           <div className="h-5 w-px bg-border" />
           <div className="flex items-center gap-2.5">
@@ -289,8 +373,12 @@ function HeaderD() {
               <QuiltIcon size={15} />
             </div>
             <div className="leading-tight">
-              <p className="text-sm font-bold tracking-tight leading-none">Ashley's Quilting</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Studio Collection</p>
+              <p className="text-sm font-bold tracking-tight leading-none">
+                Ashley's Quilting
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                Studio Collection
+              </p>
             </div>
           </div>
         </div>
@@ -307,17 +395,29 @@ export function NavVariants() {
     <div className="min-h-screen bg-background font-sans">
       <div className="mx-auto max-w-6xl py-8 px-6 space-y-6">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold tracking-tight">Home Link Variants</h1>
-          <p className="text-muted-foreground text-sm mt-1">Four approaches to the "go back to launcher" element. Hover / click each to try them live.</p>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Home Link Variants
+          </h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Four approaches to the "go back to launcher" element. Hover / click
+            each to try them live.
+          </p>
         </div>
 
         {/* A */}
         <div className="space-y-2">
           <div className="flex items-center gap-3">
-            <div className="h-6 w-6 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold shrink-0">A</div>
+            <div className="h-6 w-6 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold shrink-0">
+              A
+            </div>
             <div>
-              <p className="text-sm font-semibold">Breadcrumb — Platform › App</p>
-              <p className="text-xs text-muted-foreground">Click "Batchelor" to go home. GitHub, Vercel, Railway all use this.</p>
+              <p className="text-sm font-semibold">
+                Breadcrumb — Platform › App
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Click "Batchelor" to go home. GitHub, Vercel, Railway all use
+                this.
+              </p>
             </div>
           </div>
           <div className="rounded-xl border border-border overflow-hidden shadow-sm">
@@ -328,13 +428,23 @@ export function NavVariants() {
         {/* B */}
         <div className="space-y-2">
           <div className="flex items-center gap-3">
-            <div className="h-6 w-6 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold shrink-0">B</div>
+            <div className="h-6 w-6 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold shrink-0">
+              B
+            </div>
             <div>
-              <p className="text-sm font-semibold">App-switcher pill with dropdown</p>
-              <p className="text-xs text-muted-foreground">Dropdown shown open — click the pill to toggle it. Batchelor Hub = home. Slack, Linear, Vercel team picker pattern.</p>
+              <p className="text-sm font-semibold">
+                App-switcher pill with dropdown
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Dropdown shown open — click the pill to toggle it. Batchelor Hub
+                = home. Slack, Linear, Vercel team picker pattern.
+              </p>
             </div>
           </div>
-          <div className="rounded-xl border border-border overflow-hidden shadow-sm" style={{ minHeight: 240 }}>
+          <div
+            className="rounded-xl border border-border overflow-hidden shadow-sm"
+            style={{ minHeight: 240 }}
+          >
             <HeaderB defaultOpen={true} />
           </div>
         </div>
@@ -342,10 +452,17 @@ export function NavVariants() {
         {/* C */}
         <div className="space-y-2">
           <div className="flex items-center gap-3">
-            <div className="h-6 w-6 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold shrink-0">C</div>
+            <div className="h-6 w-6 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold shrink-0">
+              C
+            </div>
             <div>
-              <p className="text-sm font-semibold">Badge is the home link — no extra text</p>
-              <p className="text-xs text-muted-foreground">Click the quilt badge itself to return to the launcher. Hover it to see the tooltip. Most minimal.</p>
+              <p className="text-sm font-semibold">
+                Badge is the home link — no extra text
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Click the quilt badge itself to return to the launcher. Hover it
+                to see the tooltip. Most minimal.
+              </p>
             </div>
           </div>
           <div className="rounded-xl border border-border overflow-hidden shadow-sm">
@@ -356,10 +473,17 @@ export function NavVariants() {
         {/* D */}
         <div className="space-y-2">
           <div className="flex items-center gap-3">
-            <div className="h-6 w-6 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold shrink-0">D</div>
+            <div className="h-6 w-6 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold shrink-0">
+              D
+            </div>
             <div>
-              <p className="text-sm font-semibold">Larger grid icon + "Home" label</p>
-              <p className="text-xs text-muted-foreground">Same concept as current but properly sized, with a small "Home" label underneath. Separated from the app name.</p>
+              <p className="text-sm font-semibold">
+                Larger grid icon + "Home" label
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Same concept as current but properly sized, with a small "Home"
+                label underneath. Separated from the app name.
+              </p>
             </div>
           </div>
           <div className="rounded-xl border border-border overflow-hidden shadow-sm">

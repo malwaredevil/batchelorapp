@@ -148,9 +148,7 @@ async function getReminderLabelInfo(
   return item ?? null;
 }
 
-async function getDocumentLabelInfo(
-  documentId: number,
-): Promise<{
+async function getDocumentLabelInfo(documentId: number): Promise<{
   documentType: string | null;
   originalFilename: string | null;
 } | null> {
@@ -2426,12 +2424,10 @@ Keep replies concise and easy to read in a chat bubble.`;
         try {
           const parsed = RememberToolPayload.safeParse(JSON.parse(args));
           if (parsed.success) {
-            await db
-              .insert(travelsHouseholdMemory)
-              .values({
-                content: parsed.data.content,
-                createdByUserId: userId,
-              });
+            await db.insert(travelsHouseholdMemory).values({
+              content: parsed.data.content,
+              createdByUserId: userId,
+            });
           }
         } catch {
           // Malformed JSON from the model — drop it, keep the reply text.

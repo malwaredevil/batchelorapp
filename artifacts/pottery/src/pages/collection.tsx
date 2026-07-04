@@ -243,7 +243,10 @@ function PieceCard({
                 </a>
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={(e) => { e.preventDefault(); onQuickEdit(item); }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  onQuickEdit(item);
+                }}
                 data-testid={`button-quick-edit-${item.id}`}
               >
                 <Pencil className="mr-2 h-3.5 w-3.5" />
@@ -407,9 +410,7 @@ function StatBar({
         </p>
       </div>
       <div className="rounded-xl border border-card-border bg-card p-4">
-        <p className="text-2xl font-bold">
-          {filteredItems.length}
-        </p>
+        <p className="text-2xl font-bold">{filteredItems.length}</p>
         <p className="text-sm font-medium mt-0.5">Unique</p>
         <p className="text-xs text-muted-foreground">
           distinct items
@@ -893,7 +894,11 @@ export default function Collection() {
         <EmptyState />
       ) : (
         <>
-          <StatBar filteredItems={filtered} totalCount={data.length} categoriesCount={usedCategories.length} />
+          <StatBar
+            filteredItems={filtered}
+            totalCount={data.length}
+            categoriesCount={usedCategories.length}
+          />
 
           {/* Search + Sort */}
           <div className="mb-3 flex gap-2">

@@ -15,7 +15,13 @@ import {
   getAerialViewInfo,
 } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -79,12 +85,18 @@ function WeatherDemo({ lat, lng }: { lat: number; lng: number }) {
     queryFn: () => getWeatherForecast(lat, lng),
   });
   if (isLoading) return <Spinner className="h-4 w-4" />;
-  if (error) return <p className="text-sm text-muted-foreground">Unavailable right now.</p>;
+  if (error)
+    return (
+      <p className="text-sm text-muted-foreground">Unavailable right now.</p>
+    );
   const days = data?.forecast?.slice(0, 3) ?? [];
   return (
     <div className="flex gap-3 text-sm">
       {days.map((d) => (
-        <div key={d.date} className="rounded-md border border-card-border px-2 py-1">
+        <div
+          key={d.date}
+          className="rounded-md border border-card-border px-2 py-1"
+        >
           <div className="font-medium">{d.date}</div>
           <div className="text-muted-foreground">{d.conditionDescription}</div>
           <div>
@@ -103,12 +115,14 @@ function TimeZoneDemo({ lat, lng }: { lat: number; lng: number }) {
   });
   if (isLoading) return <Spinner className="h-4 w-4" />;
   if (error || !data?.timeZone)
-    return <p className="text-sm text-muted-foreground">Unavailable right now.</p>;
+    return (
+      <p className="text-sm text-muted-foreground">Unavailable right now.</p>
+    );
   const tz = data.timeZone;
   return (
     <p className="text-sm">
-      <span className="font-medium">{tz.timeZoneId}</span> ({tz.timeZoneName}) — UTC offset{" "}
-      {(tz.rawOffsetSeconds + tz.dstOffsetSeconds) / 3600}h
+      <span className="font-medium">{tz.timeZoneId}</span> ({tz.timeZoneName}) —
+      UTC offset {(tz.rawOffsetSeconds + tz.dstOffsetSeconds) / 3600}h
     </p>
   );
 }
@@ -120,12 +134,16 @@ function AirQualityDemo({ lat, lng }: { lat: number; lng: number }) {
   });
   if (isLoading) return <Spinner className="h-4 w-4" />;
   if (error || !data?.airQuality)
-    return <p className="text-sm text-muted-foreground">No coverage for this location.</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        No coverage for this location.
+      </p>
+    );
   const aq = data.airQuality;
   return (
     <p className="text-sm">
-      AQI <span className="font-medium">{aq.aqi}</span> — {aq.category} (dominant:{" "}
-      {aq.dominantPollutant})
+      AQI <span className="font-medium">{aq.aqi}</span> — {aq.category}{" "}
+      (dominant: {aq.dominantPollutant})
     </p>
   );
 }
@@ -137,12 +155,17 @@ function PollenDemo({ lat, lng }: { lat: number; lng: number }) {
   });
   if (isLoading) return <Spinner className="h-4 w-4" />;
   if (error || !data?.pollen)
-    return <p className="text-sm text-muted-foreground">No coverage for this location.</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        No coverage for this location.
+      </p>
+    );
   const p = data.pollen;
   return (
     <div className="text-sm">
       <p>
-        {p.date} — overall <span className="font-medium">{p.overallCategory}</span>
+        {p.date} — overall{" "}
+        <span className="font-medium">{p.overallCategory}</span>
       </p>
       <ul className="list-disc pl-5 text-muted-foreground">
         {p.types.map((t) => (
@@ -161,17 +184,24 @@ function PlacesDemo({ lat, lng }: { lat: number; lng: number }) {
     queryFn: () => searchNearbyPlaces("coffee", lat, lng),
   });
   if (isLoading) return <Spinner className="h-4 w-4" />;
-  if (error) return <p className="text-sm text-muted-foreground">Unavailable right now.</p>;
+  if (error)
+    return (
+      <p className="text-sm text-muted-foreground">Unavailable right now.</p>
+    );
   const places = data?.places?.slice(0, 3) ?? [];
   return (
     <ul className="space-y-1 text-sm">
       {places.map((p) => (
         <li key={p.id}>
           <span className="font-medium">{p.name}</span>
-          {p.rating != null && <span className="text-muted-foreground"> · ★{p.rating}</span>}
+          {p.rating != null && (
+            <span className="text-muted-foreground"> · ★{p.rating}</span>
+          )}
         </li>
       ))}
-      {places.length === 0 && <p className="text-muted-foreground">No results found.</p>}
+      {places.length === 0 && (
+        <p className="text-muted-foreground">No results found.</p>
+      )}
     </ul>
   );
 }
@@ -182,10 +212,14 @@ function AreaInsightsDemo({ lat, lng }: { lat: number; lng: number }) {
     queryFn: () => getNearbyPlaceCountInfo(lat, lng, "restaurant", 1500),
   });
   if (isLoading) return <Spinner className="h-4 w-4" />;
-  if (error) return <p className="text-sm text-muted-foreground">Unavailable right now.</p>;
+  if (error)
+    return (
+      <p className="text-sm text-muted-foreground">Unavailable right now.</p>
+    );
   return (
     <p className="text-sm">
-      <span className="font-medium">{data?.count ?? 0}</span> restaurants within 1.5km
+      <span className="font-medium">{data?.count ?? 0}</span> restaurants within
+      1.5km
     </p>
   );
 }
@@ -203,7 +237,11 @@ function StaticMapDemo({ lat, lng }: { lat: number; lng: number }) {
 function StreetViewDemo({ lat, lng }: { lat: number; lng: number }) {
   const [failed, setFailed] = useState(false);
   if (failed)
-    return <p className="text-sm text-muted-foreground">No Street View coverage here.</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        No Street View coverage here.
+      </p>
+    );
   return (
     <img
       src={getStreetViewImageUrl(lat, lng, 400, 200)}
@@ -225,11 +263,17 @@ function RoutesDemo({ lat, lng }: { lat: number; lng: number }) {
       }),
   });
   if (isLoading) return <Spinner className="h-4 w-4" />;
-  if (error) return <p className="text-sm text-muted-foreground">Unavailable right now.</p>;
+  if (error)
+    return (
+      <p className="text-sm text-muted-foreground">Unavailable right now.</p>
+    );
   return (
     <p className="text-sm">
-      Walking to Arc de Triomphe: <span className="font-medium">{(data!.distanceMeters / 1000).toFixed(1)} km</span>,{" "}
-      {Math.round(data!.durationSeconds / 60)} min
+      Walking to Arc de Triomphe:{" "}
+      <span className="font-medium">
+        {(data!.distanceMeters / 1000).toFixed(1)} km
+      </span>
+      , {Math.round(data!.durationSeconds / 60)} min
     </p>
   );
 }
@@ -240,10 +284,18 @@ function AerialViewDemo({ address }: { address: string }) {
     queryFn: () => getAerialViewInfo(address),
   });
   if (isLoading) return <Spinner className="h-4 w-4" />;
-  if (error) return <p className="text-sm text-muted-foreground">Unavailable right now.</p>;
+  if (error)
+    return (
+      <p className="text-sm text-muted-foreground">Unavailable right now.</p>
+    );
   if (data?.state === "ACTIVE" && data.videoUrl) {
     return (
-      <video src={data.videoUrl} poster={data.thumbnailUrl} controls className="w-full max-w-sm rounded-md" />
+      <video
+        src={data.videoUrl}
+        poster={data.thumbnailUrl}
+        controls
+        className="w-full max-w-sm rounded-md"
+      />
     );
   }
   return (
@@ -275,7 +327,8 @@ export default function GoogleApisDemo() {
       accommodationArea: "Le Marais",
       notes:
         "This trip was created for the Google APIs demo page — safe to delete. It uses fake data pinned at the Eiffel Tower so every Google Maps Platform integration in this app has real coordinates to demonstrate against.",
-      funFact: "The Eiffel Tower was originally intended as a temporary structure for the 1889 World's Fair.",
+      funFact:
+        "The Eiffel Tower was originally intended as a temporary structure for the 1889 World's Fair.",
       travellerCount: 2,
     });
   };
@@ -291,10 +344,11 @@ export default function GoogleApisDemo() {
           <h1 className="text-2xl font-semibold">Google APIs in this app</h1>
         </div>
         <p className="text-sm text-muted-foreground">
-          Every Google API enabled for this project, demonstrated live against a fake demo trip
-          (no real user data). Cards marked "Used in app" link to where you'll see that API in the
-          real product; cards marked "Demo only" show a live call to an API this app has access to
-          but doesn't surface in the main UI yet.
+          Every Google API enabled for this project, demonstrated live against a
+          fake demo trip (no real user data). Cards marked "Used in app" link to
+          where you'll see that API in the real product; cards marked "Demo
+          only" show a live call to an API this app has access to but doesn't
+          surface in the main UI yet.
         </p>
       </div>
 
@@ -305,13 +359,16 @@ export default function GoogleApisDemo() {
           <CardHeader>
             <CardTitle className="text-base">Create the demo trip</CardTitle>
             <CardDescription>
-              Creates a "{DEMO_TRIP_TITLE}" trip ({DEMO_DESTINATION}) with fake dates and details so
-              the widgets below have real coordinates to query against. Safe to delete afterwards
-              from the Trips page.
+              Creates a "{DEMO_TRIP_TITLE}" trip ({DEMO_DESTINATION}) with fake
+              dates and details so the widgets below have real coordinates to
+              query against. Safe to delete afterwards from the Trips page.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={handleCreateDemoTrip} disabled={createTrip.isPending}>
+            <Button
+              onClick={handleCreateDemoTrip}
+              disabled={createTrip.isPending}
+            >
               {createTrip.isPending ? "Creating…" : "Create demo trip"}
             </Button>
           </CardContent>
@@ -322,7 +379,8 @@ export default function GoogleApisDemo() {
           <Link href={`/trips/${demoTrip.id}`} className="underline">
             {demoTrip.title}
           </Link>{" "}
-          ({demoTrip.destination}, {lat.toFixed(4)}, {lng.toFixed(4)}) for the demos below.
+          ({demoTrip.destination}, {lat.toFixed(4)}, {lng.toFixed(4)}) for the
+          demos below.
         </p>
       )}
 
@@ -331,12 +389,20 @@ export default function GoogleApisDemo() {
           name="Weather API"
           description="5-day forecast for a trip's destination."
           status="live"
-          usedIn={demoTrip ? [{ label: "View on trip", href: `/trips/${demoTrip.id}` }] : []}
+          usedIn={
+            demoTrip
+              ? [{ label: "View on trip", href: `/trips/${demoTrip.id}` }]
+              : []
+          }
         >
           <WeatherDemo lat={lat} lng={lng} />
         </ApiCard>
 
-        <ApiCard name="Time Zone API" description="Resolves the local time zone for a trip's coordinates (used server-side for scheduling)." status="not-yet-wired">
+        <ApiCard
+          name="Time Zone API"
+          description="Resolves the local time zone for a trip's coordinates (used server-side for scheduling)."
+          status="not-yet-wired"
+        >
           <TimeZoneDemo lat={lat} lng={lng} />
         </ApiCard>
 
@@ -360,7 +426,16 @@ export default function GoogleApisDemo() {
           name="Places API (New)"
           description="Text search for nearby places (restaurants, cafes, attractions)."
           status="live"
-          usedIn={demoTrip ? [{ label: "Search nearby on trip", href: `/trips/${demoTrip.id}` }] : []}
+          usedIn={
+            demoTrip
+              ? [
+                  {
+                    label: "Search nearby on trip",
+                    href: `/trips/${demoTrip.id}`,
+                  },
+                ]
+              : []
+          }
         >
           <PlacesDemo lat={lat} lng={lng} />
         </ApiCard>
@@ -386,7 +461,11 @@ export default function GoogleApisDemo() {
           name="Street View Static API"
           description="Street-level imagery for a location, shown on the trip map."
           status="live"
-          usedIn={demoTrip ? [{ label: "View on trip", href: `/trips/${demoTrip.id}` }] : []}
+          usedIn={
+            demoTrip
+              ? [{ label: "View on trip", href: `/trips/${demoTrip.id}` }]
+              : []
+          }
         >
           <StreetViewDemo lat={lat} lng={lng} />
         </ApiCard>
@@ -413,7 +492,9 @@ export default function GoogleApisDemo() {
           status="live"
           usedIn={[
             { label: "World Map", href: "/map" },
-            ...(demoTrip ? [{ label: "Trip location map", href: `/trips/${demoTrip.id}` }] : []),
+            ...(demoTrip
+              ? [{ label: "Trip location map", href: `/trips/${demoTrip.id}` }]
+              : []),
           ]}
         />
 
@@ -442,7 +523,11 @@ export default function GoogleApisDemo() {
           name="Google Wallet API"
           description="Generates 'Add to Google Wallet' passes for uploaded trip documents (boarding passes, tickets)."
           status="live"
-          usedIn={demoTrip ? [{ label: "Trip documents", href: `/trips/${demoTrip.id}` }] : []}
+          usedIn={
+            demoTrip
+              ? [{ label: "Trip documents", href: `/trips/${demoTrip.id}` }]
+              : []
+          }
         />
       </div>
     </div>

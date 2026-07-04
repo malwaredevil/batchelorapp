@@ -22,7 +22,9 @@ describe("daysUntilDue", () => {
   });
 
   it("returns a negative value once the due date has passed", () => {
-    expect(daysUntilDue("2026-07-01", new Date("2026-07-04T12:00:00Z"))).toBe(-3);
+    expect(daysUntilDue("2026-07-01", new Date("2026-07-04T12:00:00Z"))).toBe(
+      -3,
+    );
   });
 
   it("matches its configured alertDaysBefore exactly once across every hour of the scheduler day", () => {
@@ -31,7 +33,9 @@ describe("daysUntilDue", () => {
 
     let matchCount = 0;
     for (let hour = 0; hour < 24; hour++) {
-      const now = new Date(`2026-07-07T${String(hour).padStart(2, "0")}:00:00Z`);
+      const now = new Date(
+        `2026-07-07T${String(hour).padStart(2, "0")}:00:00Z`,
+      );
       if (daysUntilDue(dueDate, now) === alertDaysBefore) matchCount++;
     }
 

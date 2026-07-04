@@ -68,10 +68,42 @@ function QuiltingLogo({ className }: { className?: string }) {
       aria-hidden="true"
     >
       <rect width="100" height="100" rx="22" fill="#2D5A27" />
-      <rect x="14" y="14" width="30" height="30" rx="4" fill="#F0E8D8" fillOpacity="0.9" />
-      <rect x="56" y="14" width="30" height="30" rx="4" fill="#F0E8D8" fillOpacity="0.55" />
-      <rect x="14" y="56" width="30" height="30" rx="4" fill="#F0E8D8" fillOpacity="0.55" />
-      <rect x="56" y="56" width="30" height="30" rx="4" fill="#F0E8D8" fillOpacity="0.9" />
+      <rect
+        x="14"
+        y="14"
+        width="30"
+        height="30"
+        rx="4"
+        fill="#F0E8D8"
+        fillOpacity="0.9"
+      />
+      <rect
+        x="56"
+        y="14"
+        width="30"
+        height="30"
+        rx="4"
+        fill="#F0E8D8"
+        fillOpacity="0.55"
+      />
+      <rect
+        x="14"
+        y="56"
+        width="30"
+        height="30"
+        rx="4"
+        fill="#F0E8D8"
+        fillOpacity="0.55"
+      />
+      <rect
+        x="56"
+        y="56"
+        width="30"
+        height="30"
+        rx="4"
+        fill="#F0E8D8"
+        fillOpacity="0.9"
+      />
     </svg>
   );
 }
@@ -142,9 +174,7 @@ export function AppSwitcher() {
         >
           <BLogo className="h-8 w-8 shrink-0 text-lg" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold leading-none">
-              Batchelor Hub
-            </p>
+            <p className="text-sm font-semibold leading-none">Batchelor Hub</p>
             <p className="text-[11px] text-muted-foreground mt-0.5">
               One account, every collection.
             </p>
@@ -166,7 +196,9 @@ export function AppSwitcher() {
               Batchelor Pottery
             </p>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              {potteryCount != null ? `${potteryCount} pieces` : "Pottery Studio"}
+              {potteryCount != null
+                ? `${potteryCount} pieces`
+                : "Pottery Studio"}
             </p>
           </div>
         </DropdownMenuItem>
@@ -183,7 +215,9 @@ export function AppSwitcher() {
               Ashley&apos;s Quilting
             </p>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              {fabricCount != null ? `${fabricCount} fabrics` : "Quilting Studio"}
+              {fabricCount != null
+                ? `${fabricCount} fabrics`
+                : "Quilting Studio"}
             </p>
           </div>
         </DropdownMenuItem>

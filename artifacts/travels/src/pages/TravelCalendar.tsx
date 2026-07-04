@@ -91,7 +91,10 @@ function monthGridRange(cursor: Date): { start: Date; end: Date } {
   return { start: gridStart, end: addDays(lastRowStart, 7) };
 }
 
-function rangeForView(view: ViewMode, cursor: Date): { start: Date; end: Date } {
+function rangeForView(
+  view: ViewMode,
+  cursor: Date,
+): { start: Date; end: Date } {
   if (view === "week") return weekRange(cursor);
   if (view === "month") return monthGridRange(cursor);
   return monthRange(cursor);
@@ -118,7 +121,10 @@ function eventDayKey(event: TravelCalendarEvent): string {
 
 function isoToLocalParts(iso: string): { date: string; time: string } {
   const d = new Date(iso);
-  return { date: dateKey(d), time: `${pad(d.getHours())}:${pad(d.getMinutes())}` };
+  return {
+    date: dateKey(d),
+    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+  };
 }
 
 interface EventFormState {
@@ -189,7 +195,9 @@ function formToInput(form: EventFormState): TravelCalendarEventInput {
       colorId: form.colorId,
     };
   }
-  const start = new Date(`${form.startDate}T${form.startTime || "09:00"}:00`).toISOString();
+  const start = new Date(
+    `${form.startDate}T${form.startTime || "09:00"}:00`,
+  ).toISOString();
   const end = new Date(
     `${form.endDate || form.startDate}T${form.endTime || form.startTime || "10:00"}:00`,
   ).toISOString();
@@ -218,12 +226,21 @@ function OverlayCalendarEvents({
   end: string;
   onEvents: (calendarId: number, events: TravelCalendarEvent[]) => void;
 }) {
-  const { data = [] } = useListConnectedCalendarEvents(calendar.id, start, end, {
-    query: {
-      enabled: Boolean(start && end),
-      queryKey: getListConnectedCalendarEventsQueryKey(calendar.id, start, end),
+  const { data = [] } = useListConnectedCalendarEvents(
+    calendar.id,
+    start,
+    end,
+    {
+      query: {
+        enabled: Boolean(start && end),
+        queryKey: getListConnectedCalendarEventsQueryKey(
+          calendar.id,
+          start,
+          end,
+        ),
+      },
     },
-  });
+  );
   useEffect(() => {
     onEvents(calendar.id, data);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -242,35 +259,43 @@ function tintColor(hex: string, alpha: number): string {
 
 export default function TravelCalendar() {
   const qc = useQueryClient();
-  const { data: status, isLoading: statusLoading } = useGetTravelCalendarStatus();
+  const { data: status, isLoading: statusLoading } =
+    useGetTravelCalendarStatus();
   const [cursor, setCursor] = useState(() => new Date());
   const [view, setView] = useState<ViewMode>("month");
-  const { start, end } = useMemo(() => rangeForView(view, cursor), [view, cursor]);
+  const { start, end } = useMemo(
+    () => rangeForView(view, cursor),
+    [view, cursor],
+  );
   const startISO = start.toISOString();
   const endISO = end.toISOString();
 
-  const { data: events = [], isLoading: eventsLoading } = useListTravelCalendarEvents(
-    startISO,
-    endISO,
-    {
+  const { data: events = [], isLoading: eventsLoading } =
+    useListTravelCalendarEvents(startISO, endISO, {
       query: {
         enabled: Boolean(status?.configured),
         queryKey: getListTravelCalendarEventsQueryKey(startISO, endISO),
       },
-    },
-  );
+    });
 
   const createEvent = useCreateTravelCalendarEvent();
   const updateEvent = useUpdateTravelCalendarEvent();
   const deleteEvent = useDeleteTravelCalendarEvent();
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<TravelCalendarEvent | null>(null);
+  const [editingEvent, setEditingEvent] = useState<TravelCalendarEvent | null>(
+    null,
+  );
   const [form, setForm] = useState<EventFormState>(emptyForm());
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(
+    null,
+  );
 
   const { data: googleColors = [] } = useListGoogleEventColors({
-    query: { enabled: Boolean(status?.configured), queryKey: getListGoogleEventColorsQueryKey() },
+    query: {
+      enabled: Boolean(status?.configured),
+      queryKey: getListGoogleEventColorsQueryKey(),
+    },
   });
   const colorHexById = useMemo(() => {
     const map = new Map<string, GoogleEventColor>();
@@ -285,7 +310,9 @@ export default function TravelCalendar() {
     () => connectedCalendars.filter((c) => !c.isTravelCalendar),
     [connectedCalendars],
   );
-  const [hiddenCalendarIds, setHiddenCalendarIds] = useState<Set<number>>(new Set());
+  const [hiddenCalendarIds, setHiddenCalendarIds] = useState<Set<number>>(
+    new Set(),
+  );
   const [overlayEventsByCalendar, setOverlayEventsByCalendar] = useState<
     Record<number, TravelCalendarEvent[]>
   >({});
@@ -299,12 +326,21 @@ export default function TravelCalendar() {
     });
   }
 
-  function handleOverlayEvents(calendarId: number, calEvents: TravelCalendarEvent[]) {
-    setOverlayEventsByCalendar((prev) => ({ ...prev, [calendarId]: calEvents }));
+  function handleOverlayEvents(
+    calendarId: number,
+    calEvents: TravelCalendarEvent[],
+  ) {
+    setOverlayEventsByCalendar((prev) => ({
+      ...prev,
+      [calendarId]: calEvents,
+    }));
   }
 
   const displayEvents = useMemo<DisplayEvent[]>(() => {
-    const travel: DisplayEvent[] = events.map((event) => ({ event, kind: "travel" }));
+    const travel: DisplayEvent[] = events.map((event) => ({
+      event,
+      kind: "travel",
+    }));
     const overlay: DisplayEvent[] = overlayCalendars
       .filter((cal) => !hiddenCalendarIds.has(cal.id))
       .flatMap((cal) =>
@@ -317,7 +353,10 @@ export default function TravelCalendar() {
     return [...travel, ...overlay];
   }, [events, overlayCalendars, hiddenCalendarIds, overlayEventsByCalendar]);
 
-  function eventStyle(item: DisplayEvent): { className: string; style?: React.CSSProperties } {
+  function eventStyle(item: DisplayEvent): {
+    className: string;
+    style?: React.CSSProperties;
+  } {
     if (item.kind === "travel") {
       return {
         className:
@@ -325,10 +364,16 @@ export default function TravelCalendar() {
       };
     }
     const cal = item.calendar!;
-    const labelColor = item.event.colorId ? colorHexById.get(item.event.colorId) : undefined;
-    const fill = labelColor ? labelColor.hex : tintColor(cal.primaryColor, 0.18);
+    const labelColor = item.event.colorId
+      ? colorHexById.get(item.event.colorId)
+      : undefined;
+    const fill = labelColor
+      ? labelColor.hex
+      : tintColor(cal.primaryColor, 0.18);
     return {
-      className: labelColor ? "text-white hover:brightness-110" : "hover:brightness-95",
+      className: labelColor
+        ? "text-white hover:brightness-110"
+        : "hover:brightness-95",
       style: {
         backgroundColor: fill,
         border: `1.5px solid ${cal.primaryColor}`,
@@ -354,21 +399,28 @@ export default function TravelCalendar() {
   function handleScan() {
     scanSuggestions.mutate(undefined, {
       onSuccess: (result) => {
-        qc.invalidateQueries({ queryKey: getListCalendarTripSuggestionsQueryKey() });
+        qc.invalidateQueries({
+          queryKey: getListCalendarTripSuggestionsQueryKey(),
+        });
         toast.success(
           result.created > 0
             ? `Found ${result.created} new trip suggestion${result.created === 1 ? "" : "s"}`
             : "No new trips found across your connected calendars",
         );
       },
-      onError: () => toast.error("Could not scan your calendars. Please try again."),
+      onError: () =>
+        toast.error("Could not scan your calendars. Please try again."),
     });
   }
 
   function handleDismissSuggestion(id: number) {
     dismissSuggestion.mutate(id, {
-      onSuccess: () => qc.invalidateQueries({ queryKey: getListCalendarTripSuggestionsQueryKey() }),
-      onError: () => toast.error("Could not dismiss suggestion. Please try again."),
+      onSuccess: () =>
+        qc.invalidateQueries({
+          queryKey: getListCalendarTripSuggestionsQueryKey(),
+        }),
+      onError: () =>
+        toast.error("Could not dismiss suggestion. Please try again."),
     });
   }
 
@@ -377,10 +429,13 @@ export default function TravelCalendar() {
       { id: suggestion.id },
       {
         onSuccess: () => {
-          qc.invalidateQueries({ queryKey: getListCalendarTripSuggestionsQueryKey() });
+          qc.invalidateQueries({
+            queryKey: getListCalendarTripSuggestionsQueryKey(),
+          });
           toast.success(`"${suggestion.suggestedTitle}" added as a trip`);
         },
-        onError: () => toast.error("Could not create the trip. Please try again."),
+        onError: () =>
+          toast.error("Could not create the trip. Please try again."),
       },
     );
   }
@@ -392,24 +447,43 @@ export default function TravelCalendar() {
     if (!status?.configured) {
       return "Travel Calendar page: no shared Travel calendar is configured yet. The app owner needs to connect Google Calendar in Settings and assign a calendar as the shared Travel calendar.";
     }
-    const monthLabel = cursor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+    const monthLabel = cursor.toLocaleDateString(undefined, {
+      month: "long",
+      year: "numeric",
+    });
     const summary = displayEvents
       .slice(0, 15)
-      .map((d) => `"${d.event.title}"${d.kind === "overlay" ? ` (${d.calendar?.summary})` : ""}`)
+      .map(
+        (d) =>
+          `"${d.event.title}"${d.kind === "overlay" ? ` (${d.calendar?.summary})` : ""}`,
+      )
       .join("; ");
     const suggestionSummary = pendingSuggestions
       .slice(0, 5)
-      .map((s) => `"${s.suggestedTitle}"${s.destination ? ` to ${s.destination}` : ""}`)
+      .map(
+        (s) =>
+          `"${s.suggestedTitle}"${s.destination ? ` to ${s.destination}` : ""}`,
+      )
       .join("; ");
     return (
       `Travel Calendar page: viewing ${monthLabel} in ${view} view. Shared Travel calendar is "${status.calendarSummary}". ` +
       `${overlayCalendars.length} other connected calendar(s) available as overlays. ` +
-      (summary ? `Events in range: ${summary}.` : "No events found in this range.") +
+      (summary
+        ? `Events in range: ${summary}.`
+        : "No events found in this range.") +
       (pendingSuggestions.length > 0
         ? ` There are ${pendingSuggestions.length} AI-detected trip suggestion(s) awaiting review: ${suggestionSummary}.`
         : "")
     );
-  }, [statusLoading, status, cursor, displayEvents, view, overlayCalendars, pendingSuggestions]);
+  }, [
+    statusLoading,
+    status,
+    cursor,
+    displayEvents,
+    view,
+    overlayCalendars,
+    pendingSuggestions,
+  ]);
   usePageAssistantContext("travel-calendar", context);
 
   const groups = useMemo(() => {
@@ -454,7 +528,9 @@ export default function TravelCalendar() {
 
   function openEdit(item: DisplayEvent) {
     if (item.kind === "overlay") {
-      toast.info(`"${item.event.title}" is on ${item.calendar?.summary} — connect it as the shared Travel calendar to edit it here.`);
+      toast.info(
+        `"${item.event.title}" is on ${item.calendar?.summary} — connect it as the shared Travel calendar to edit it here.`,
+      );
       return;
     }
     setEditingEvent(item.event);
@@ -476,7 +552,8 @@ export default function TravelCalendar() {
             toast.success("Event updated");
             setDialogOpen(false);
           },
-          onError: () => toast.error("Could not update event. Please try again."),
+          onError: () =>
+            toast.error("Could not update event. Please try again."),
         },
       );
     } else {
@@ -508,10 +585,13 @@ export default function TravelCalendar() {
         <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400">
           <CalendarDays className="h-6 w-6" />
         </span>
-        <h1 className="font-serif text-2xl text-foreground">No shared Travel Calendar yet</h1>
+        <h1 className="font-serif text-2xl text-foreground">
+          No shared Travel Calendar yet
+        </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Connect a Google account in Settings and assign one of your calendars as the shared
-          "Travel" calendar so everyone can view, add, edit, and delete events here.
+          Connect a Google account in Settings and assign one of your calendars
+          as the shared "Travel" calendar so everyone can view, add, edit, and
+          delete events here.
         </p>
         <Link href="/settings">
           <Button className="mt-5">Go to Settings</Button>
@@ -534,9 +614,13 @@ export default function TravelCalendar() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-serif text-2xl text-foreground">Travel Calendar</h1>
+          <h1 className="font-serif text-2xl text-foreground">
+            Travel Calendar
+          </h1>
           <p className="text-sm text-muted-foreground">
-            {status?.calendarSummary ? `Shared calendar: "${status.calendarSummary}"` : "Shared Travel calendar"}
+            {status?.calendarSummary
+              ? `Shared calendar: "${status.calendarSummary}"`
+              : "Shared Travel calendar"}
           </p>
         </div>
         <Button onClick={openCreate}>
@@ -547,7 +631,11 @@ export default function TravelCalendar() {
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-card-border bg-card px-4 py-3">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => setCursor((c) => shiftCursor(view, c, -1))}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setCursor((c) => shiftCursor(view, c, -1))}
+          >
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <span className="font-medium text-foreground">
@@ -555,7 +643,10 @@ export default function TravelCalendar() {
               ? (() => {
                   const weekEnd = addDays(start, 6);
                   const sameMonth = start.getMonth() === weekEnd.getMonth();
-                  const startLabel = start.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+                  const startLabel = start.toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                  });
                   const endLabel = weekEnd.toLocaleDateString(
                     undefined,
                     sameMonth
@@ -564,12 +655,23 @@ export default function TravelCalendar() {
                   );
                   return `${startLabel} – ${endLabel}`;
                 })()
-              : cursor.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
+              : cursor.toLocaleDateString(undefined, {
+                  month: "long",
+                  year: "numeric",
+                })}
           </span>
-          <Button variant="outline" size="sm" onClick={() => setCursor(new Date())}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCursor(new Date())}
+          >
             Today
           </Button>
-          <Button variant="ghost" size="icon" onClick={() => setCursor((c) => shiftCursor(view, c, 1))}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setCursor((c) => shiftCursor(view, c, 1))}
+          >
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
@@ -605,11 +707,24 @@ export default function TravelCalendar() {
                 type="button"
                 onClick={() => toggleCalendarVisibility(cal.id)}
                 className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-                  hidden ? "text-muted-foreground border-card-border" : "text-foreground"
+                  hidden
+                    ? "text-muted-foreground border-card-border"
+                    : "text-foreground"
                 }`}
-                style={!hidden ? { borderColor: cal.primaryColor, backgroundColor: tintColor(cal.primaryColor, 0.12) } : undefined}
+                style={
+                  !hidden
+                    ? {
+                        borderColor: cal.primaryColor,
+                        backgroundColor: tintColor(cal.primaryColor, 0.12),
+                      }
+                    : undefined
+                }
               >
-                {hidden ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                {hidden ? (
+                  <EyeOff className="h-3 w-3" />
+                ) : (
+                  <Eye className="h-3 w-3" />
+                )}
                 <span
                   className="inline-block h-2 w-2 rounded-full"
                   style={{ backgroundColor: cal.primaryColor }}
@@ -621,67 +736,74 @@ export default function TravelCalendar() {
         </div>
       )}
 
-      {status?.configured && (pendingSuggestions.length > 0 || scanSuggestions.isPending) && (
-        <div className="space-y-3 rounded-xl border border-card-border bg-card p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-              <h2 className="text-sm font-semibold text-foreground">Trip suggestions</h2>
+      {status?.configured &&
+        (pendingSuggestions.length > 0 || scanSuggestions.isPending) && (
+          <div className="space-y-3 rounded-xl border border-card-border bg-card p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <h2 className="text-sm font-semibold text-foreground">
+                  Trip suggestions
+                </h2>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleScan}
+                disabled={scanSuggestions.isPending}
+              >
+                {scanSuggestions.isPending ? "Scanning…" : "Scan calendars"}
+              </Button>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleScan}
-              disabled={scanSuggestions.isPending}
-            >
-              {scanSuggestions.isPending ? "Scanning…" : "Scan calendars"}
-            </Button>
+            {pendingSuggestions.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Scanning your connected calendars for possible trips…
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {pendingSuggestions.map((suggestion) => (
+                  <li
+                    key={suggestion.id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-card-border/60 p-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium text-foreground">
+                        {suggestion.suggestedTitle}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {[
+                          suggestion.destination,
+                          suggestion.startDate && suggestion.endDate
+                            ? `${suggestion.startDate} – ${suggestion.endDate}`
+                            : suggestion.startDate,
+                        ]
+                          .filter(Boolean)
+                          .join(" • ")}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDismissSuggestion(suggestion.id)}
+                        disabled={dismissSuggestion.isPending}
+                      >
+                        Dismiss
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => handleAcceptSuggestion(suggestion)}
+                        disabled={acceptSuggestion.isPending}
+                      >
+                        Add as trip
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
-          {pendingSuggestions.length === 0 ? (
-            <p className="text-xs text-muted-foreground">Scanning your connected calendars for possible trips…</p>
-          ) : (
-            <ul className="space-y-2">
-              {pendingSuggestions.map((suggestion) => (
-                <li
-                  key={suggestion.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-card-border/60 p-3"
-                >
-                  <div className="min-w-0">
-                    <p className="font-medium text-foreground">{suggestion.suggestedTitle}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {[
-                        suggestion.destination,
-                        suggestion.startDate && suggestion.endDate
-                          ? `${suggestion.startDate} – ${suggestion.endDate}`
-                          : suggestion.startDate,
-                      ]
-                        .filter(Boolean)
-                        .join(" • ")}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDismissSuggestion(suggestion.id)}
-                      disabled={dismissSuggestion.isPending}
-                    >
-                      Dismiss
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => handleAcceptSuggestion(suggestion)}
-                      disabled={acceptSuggestion.isPending}
-                    >
-                      Add as trip
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+        )}
 
       {eventsLoading ? (
         <p className="text-sm text-muted-foreground">Loading events…</p>
@@ -707,7 +829,8 @@ export default function TravelCalendar() {
                   tabIndex={0}
                   onClick={() => openCreateForDay(key)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") openCreateForDay(key);
+                    if (e.key === "Enter" || e.key === " ")
+                      openCreateForDay(key);
                   }}
                   className={`min-h-[92px] cursor-pointer border-b border-r border-card-border/60 p-1.5 text-left align-top last:border-r-0 hover:bg-muted/40 ${
                     inMonth ? "bg-card" : "bg-muted/20"
@@ -738,7 +861,9 @@ export default function TravelCalendar() {
                         style={eventStyle(item).style}
                         title={item.event.title}
                       >
-                        {item.kind === "travel" && <Plane className="h-2.5 w-2.5 shrink-0" />}
+                        {item.kind === "travel" && (
+                          <Plane className="h-2.5 w-2.5 shrink-0" />
+                        )}
                         <span className="truncate">{item.event.title}</span>
                       </div>
                     ))}
@@ -772,7 +897,9 @@ export default function TravelCalendar() {
                     </span>
                     <span
                       className={`mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${
-                        today ? "bg-primary text-primary-foreground font-semibold" : "text-foreground"
+                        today
+                          ? "bg-primary text-primary-foreground font-semibold"
+                          : "text-foreground"
                       }`}
                     >
                       {day.getDate()}
@@ -780,7 +907,9 @@ export default function TravelCalendar() {
                   </div>
                   <div className="space-y-1 p-1.5">
                     {dayEvents.length === 0 ? (
-                      <p className="px-1 text-center text-[11px] text-muted-foreground">—</p>
+                      <p className="px-1 text-center text-[11px] text-muted-foreground">
+                        —
+                      </p>
                     ) : (
                       dayEvents.map((item) => (
                         <button
@@ -791,13 +920,18 @@ export default function TravelCalendar() {
                           style={eventStyle(item).style}
                           title={item.event.title}
                         >
-                          {item.kind === "travel" && <Plane className="h-2.5 w-2.5 shrink-0" />}
+                          {item.kind === "travel" && (
+                            <Plane className="h-2.5 w-2.5 shrink-0" />
+                          )}
                           {!item.event.allDay && (
                             <span className="mr-1 text-muted-foreground">
-                              {new Date(item.event.start).toLocaleTimeString(undefined, {
-                                hour: "numeric",
-                                minute: "2-digit",
-                              })}
+                              {new Date(item.event.start).toLocaleTimeString(
+                                undefined,
+                                {
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                },
+                              )}
                             </span>
                           )}
                           <span className="truncate">{item.event.title}</span>
@@ -817,7 +951,10 @@ export default function TravelCalendar() {
       ) : (
         <div className="space-y-4">
           {groups.map(([key, dayEvents]) => (
-            <div key={key} className="rounded-xl border border-card-border bg-card p-4">
+            <div
+              key={key}
+              className="rounded-xl border border-card-border bg-card p-4"
+            >
               <h2 className="mb-2 text-sm font-semibold text-foreground">
                 {new Date(`${key}T00:00:00`).toLocaleDateString(undefined, {
                   weekday: "long",
@@ -829,98 +966,122 @@ export default function TravelCalendar() {
                 {dayEvents.map((item) => {
                   const style = eventStyle(item);
                   return (
-                  <li
-                    key={`${item.kind}-${item.event.id}`}
-                    className={`flex items-start justify-between gap-3 rounded-lg border p-3 ${
-                      item.kind === "travel"
-                        ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20"
-                        : "border-card-border/60"
-                    }`}
-                    style={item.kind === "overlay" ? { borderLeft: `4px solid ${item.calendar?.primaryColor}` } : undefined}
-                  >
-                    <div className="min-w-0 space-y-1">
-                      <p className="flex items-center gap-1.5 font-medium text-foreground">
-                        {item.kind === "travel" ? (
-                          <Plane className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-                        ) : (
-                          <span
-                            className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
-                            style={{ backgroundColor: style.style?.backgroundColor as string | undefined }}
-                          />
-                        )}
-                        {item.event.title}
-                        {item.kind === "overlay" && (
-                          <span className="text-xs font-normal text-muted-foreground">
-                            · {item.calendar?.summary}
-                          </span>
-                        )}
-                      </p>
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                        {!item.event.allDay && (
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {new Date(item.event.start).toLocaleTimeString(undefined, {
-                              hour: "numeric",
-                              minute: "2-digit",
-                            })}
-                            {" – "}
-                            {new Date(item.event.end).toLocaleTimeString(undefined, {
-                              hour: "numeric",
-                              minute: "2-digit",
-                            })}
-                          </span>
-                        )}
-                        {item.event.allDay && <span>All day</span>}
-                        {item.event.location && (
-                          <span className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3" />
-                            {item.event.location}
-                          </span>
+                    <li
+                      key={`${item.kind}-${item.event.id}`}
+                      className={`flex items-start justify-between gap-3 rounded-lg border p-3 ${
+                        item.kind === "travel"
+                          ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20"
+                          : "border-card-border/60"
+                      }`}
+                      style={
+                        item.kind === "overlay"
+                          ? {
+                              borderLeft: `4px solid ${item.calendar?.primaryColor}`,
+                            }
+                          : undefined
+                      }
+                    >
+                      <div className="min-w-0 space-y-1">
+                        <p className="flex items-center gap-1.5 font-medium text-foreground">
+                          {item.kind === "travel" ? (
+                            <Plane className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                          ) : (
+                            <span
+                              className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                              style={{
+                                backgroundColor: style.style
+                                  ?.backgroundColor as string | undefined,
+                              }}
+                            />
+                          )}
+                          {item.event.title}
+                          {item.kind === "overlay" && (
+                            <span className="text-xs font-normal text-muted-foreground">
+                              · {item.calendar?.summary}
+                            </span>
+                          )}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                          {!item.event.allDay && (
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {new Date(item.event.start).toLocaleTimeString(
+                                undefined,
+                                {
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                },
+                              )}
+                              {" – "}
+                              {new Date(item.event.end).toLocaleTimeString(
+                                undefined,
+                                {
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                },
+                              )}
+                            </span>
+                          )}
+                          {item.event.allDay && <span>All day</span>}
+                          {item.event.location && (
+                            <span className="flex items-center gap-1">
+                              <MapPin className="h-3 w-3" />
+                              {item.event.location}
+                            </span>
+                          )}
+                        </div>
+                        {item.event.description && (
+                          <p className="text-xs text-muted-foreground">
+                            {item.event.description}
+                          </p>
                         )}
                       </div>
-                      {item.event.description && (
-                        <p className="text-xs text-muted-foreground">{item.event.description}</p>
+                      {item.kind === "travel" && (
+                        <div className="flex shrink-0 items-center gap-1">
+                          {confirmingDeleteId === item.event.id ? (
+                            <>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => handleDelete(item.event.id)}
+                                disabled={deleteEvent.isPending}
+                              >
+                                Delete
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setConfirmingDeleteId(null)}
+                                disabled={deleteEvent.isPending}
+                              >
+                                Cancel
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => openEdit(item)}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                onClick={() =>
+                                  setConfirmingDeleteId(item.event.id)
+                                }
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       )}
-                    </div>
-                    {item.kind === "travel" && (
-                      <div className="flex shrink-0 items-center gap-1">
-                        {confirmingDeleteId === item.event.id ? (
-                          <>
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => handleDelete(item.event.id)}
-                              disabled={deleteEvent.isPending}
-                            >
-                              Delete
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setConfirmingDeleteId(null)}
-                              disabled={deleteEvent.isPending}
-                            >
-                              Cancel
-                            </Button>
-                          </>
-                        ) : (
-                          <>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(item)}>
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                              onClick={() => setConfirmingDeleteId(item.event.id)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </li>
+                    </li>
                   );
                 })}
               </ul>
@@ -943,7 +1104,9 @@ export default function TravelCalendar() {
                 id="event-title"
                 required
                 value={form.title}
-                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, title: e.target.value }))
+                }
               />
             </div>
 
@@ -965,7 +1128,9 @@ export default function TravelCalendar() {
                     onClick={() => setForm((f) => ({ ...f, colorId: null }))}
                     title="Default"
                     className={`flex h-8 w-8 items-center justify-center rounded-full border-2 bg-muted text-[10px] text-muted-foreground ${
-                      form.colorId === null ? "border-foreground" : "border-transparent"
+                      form.colorId === null
+                        ? "border-foreground"
+                        : "border-transparent"
                     }`}
                   >
                     —
@@ -974,10 +1139,14 @@ export default function TravelCalendar() {
                     <button
                       key={color.id}
                       type="button"
-                      onClick={() => setForm((f) => ({ ...f, colorId: color.id }))}
+                      onClick={() =>
+                        setForm((f) => ({ ...f, colorId: color.id }))
+                      }
                       title={color.name}
                       className={`flex h-8 w-8 items-center justify-center rounded-full border-2 ${
-                        form.colorId === color.id ? "border-foreground" : "border-transparent"
+                        form.colorId === color.id
+                          ? "border-foreground"
+                          : "border-transparent"
                       }`}
                       style={{ backgroundColor: color.hex }}
                     />
@@ -994,7 +1163,9 @@ export default function TravelCalendar() {
                   type="date"
                   required
                   value={form.startDate}
-                  onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, startDate: e.target.value }))
+                  }
                 />
               </div>
               {!form.allDay && (
@@ -1005,7 +1176,9 @@ export default function TravelCalendar() {
                     type="time"
                     required
                     value={form.startTime}
-                    onChange={(e) => setForm((f) => ({ ...f, startTime: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, startTime: e.target.value }))
+                    }
                   />
                 </div>
               )}
@@ -1018,7 +1191,9 @@ export default function TravelCalendar() {
                   id="event-end-date"
                   type="date"
                   value={form.endDate}
-                  onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, endDate: e.target.value }))
+                  }
                 />
               </div>
               {!form.allDay && (
@@ -1028,7 +1203,9 @@ export default function TravelCalendar() {
                     id="event-end-time"
                     type="time"
                     value={form.endTime}
-                    onChange={(e) => setForm((f) => ({ ...f, endTime: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, endTime: e.target.value }))
+                    }
                   />
                 </div>
               )}
@@ -1039,7 +1216,9 @@ export default function TravelCalendar() {
               <Input
                 id="event-location"
                 value={form.location}
-                onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, location: e.target.value }))
+                }
               />
             </div>
 
@@ -1049,15 +1228,24 @@ export default function TravelCalendar() {
                 id="event-description"
                 rows={3}
                 value={form.description}
-                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, description: e.target.value }))
+                }
               />
             </div>
 
             <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => setDialogOpen(false)}>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setDialogOpen(false)}
+              >
                 Cancel
               </Button>
-              <Button type="submit" disabled={createEvent.isPending || updateEvent.isPending}>
+              <Button
+                type="submit"
+                disabled={createEvent.isPending || updateEvent.isPending}
+              >
                 {editingEvent ? "Save changes" : "Add event"}
               </Button>
             </DialogFooter>

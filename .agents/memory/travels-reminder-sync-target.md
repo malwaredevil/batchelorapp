@@ -17,7 +17,7 @@ rework.
 
 **How to apply:** when writing sync/reconciliation logic against a "shared"
 resource (single owner-assigned calendar, single shared inbox, etc.), resolve
-the *shared* target explicitly (e.g. `getReminderSyncTarget()`) rather than
+the _shared_ target explicitly (e.g. `getReminderSyncTarget()`) rather than
 deriving it per-caller from `req.session.userId` or per-recipient lookups.
 Also don't confuse "is the owner of the currently-assigned resource" with
 "is the app owner" — an `app_users.is_owner` flag should gate reassignment

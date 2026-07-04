@@ -65,24 +65,21 @@ export function PreviewZoomModal({
     return () => window.removeEventListener("keydown", handle);
   }, [open, onClose]);
 
-  const handleWheel = useCallback(
-    (e: WheelEvent) => {
-      e.preventDefault();
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const curX = e.clientX - rect.left - rect.width / 2;
-      const curY = e.clientY - rect.top - rect.height / 2;
-      const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
-      setZoom((prev) => {
-        const next = Math.min(20, Math.max(0.05, prev * factor));
-        const ratio = next / prev;
-        setPanX((px) => curX * (1 - ratio) + px * ratio);
-        setPanY((py) => curY * (1 - ratio) + py * ratio);
-        return next;
-      });
-    },
-    [],
-  );
+  const handleWheel = useCallback((e: WheelEvent) => {
+    e.preventDefault();
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const curX = e.clientX - rect.left - rect.width / 2;
+    const curY = e.clientY - rect.top - rect.height / 2;
+    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    setZoom((prev) => {
+      const next = Math.min(20, Math.max(0.05, prev * factor));
+      const ratio = next / prev;
+      setPanX((px) => curX * (1 - ratio) + px * ratio);
+      setPanY((py) => curY * (1 - ratio) + py * ratio);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -123,10 +120,7 @@ export function PreviewZoomModal({
   if (!open) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex flex-col"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 flex flex-col" onClick={onClose}>
       {/* Toolbar */}
       <div
         className="flex shrink-0 items-center gap-2 border-b bg-background px-3 py-1.5 shadow"

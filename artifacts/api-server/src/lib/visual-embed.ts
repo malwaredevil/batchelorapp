@@ -205,7 +205,7 @@ export async function generateZoneEmbedding(
     if (!iw || !ih) return null;
 
     const cropTop = Math.round(ih * 0.15);
-    const cropHeight = Math.round(ih * 0.70);
+    const cropHeight = Math.round(ih * 0.7);
     if (cropHeight < 20) return null;
 
     const cropped = await sharp(imageBuffer)

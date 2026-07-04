@@ -48,8 +48,12 @@ type ItineraryDay = {
 
 type Itinerary = { days: ItineraryDay[] };
 
-function parseDateTime(raw: string): { dateStr: string; timeStr: string } | null {
-  const isoMatch = raw.match(/^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2})(?::\d{2})?)?/);
+function parseDateTime(
+  raw: string,
+): { dateStr: string; timeStr: string } | null {
+  const isoMatch = raw.match(
+    /^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2})(?::\d{2})?)?/,
+  );
   if (isoMatch) {
     return { dateStr: isoMatch[1]!, timeStr: isoMatch[2] ?? "" };
   }
@@ -79,7 +83,8 @@ type DocumentActivityCandidate = {
 function computeDocumentActivities(
   ed: Record<string, unknown>,
 ): DocumentActivityCandidate[] {
-  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : "");
+  const str = (v: unknown) =>
+    typeof v === "string" && v.trim() ? v.trim() : "";
   const provider = str(ed.providerName);
   const flightNumber = str(ed.flightNumber);
   const from = str(ed.fromLocation);
@@ -90,10 +95,18 @@ function computeDocumentActivities(
 
   const candidates: DocumentActivityCandidate[] = [];
 
-  const dep = str(ed.departureDateTime) ? parseDateTime(str(ed.departureDateTime)) : null;
+  const dep = str(ed.departureDateTime)
+    ? parseDateTime(str(ed.departureDateTime))
+    : null;
   if (dep) {
-    const label = flightNumber ? `Flight ${flightNumber}` : provider ? `Departure — ${provider}` : "Departure";
-    const tipParts = [arrival ? `Arrives ${arrival}` : "", notes].filter(Boolean);
+    const label = flightNumber
+      ? `Flight ${flightNumber}`
+      : provider
+        ? `Departure — ${provider}`
+        : "Departure";
+    const tipParts = [arrival ? `Arrives ${arrival}` : "", notes].filter(
+      Boolean,
+    );
     candidates.push({
       sourceField: "departureDateTime",
       dateStr: dep.dateStr,
@@ -105,7 +118,9 @@ function computeDocumentActivities(
     });
   }
 
-  const checkIn = str(ed.checkInDate) ? parseDateTime(str(ed.checkInDate)) : null;
+  const checkIn = str(ed.checkInDate)
+    ? parseDateTime(str(ed.checkInDate))
+    : null;
   if (checkIn) {
     candidates.push({
       sourceField: "checkInDate",
@@ -118,7 +133,9 @@ function computeDocumentActivities(
     });
   }
 
-  const checkOut = str(ed.checkOutDate) ? parseDateTime(str(ed.checkOutDate)) : null;
+  const checkOut = str(ed.checkOutDate)
+    ? parseDateTime(str(ed.checkOutDate))
+    : null;
   if (checkOut) {
     candidates.push({
       sourceField: "checkOutDate",
@@ -131,7 +148,9 @@ function computeDocumentActivities(
     });
   }
 
-  const pickup = str(ed.pickupDateTime) ? parseDateTime(str(ed.pickupDateTime)) : null;
+  const pickup = str(ed.pickupDateTime)
+    ? parseDateTime(str(ed.pickupDateTime))
+    : null;
   if (pickup) {
     candidates.push({
       sourceField: "pickupDateTime",
@@ -144,7 +163,9 @@ function computeDocumentActivities(
     });
   }
 
-  const dropoff = str(ed.dropoffDateTime) ? parseDateTime(str(ed.dropoffDateTime)) : null;
+  const dropoff = str(ed.dropoffDateTime)
+    ? parseDateTime(str(ed.dropoffDateTime))
+    : null;
   if (dropoff) {
     candidates.push({
       sourceField: "dropoffDateTime",
@@ -171,7 +192,10 @@ function computeDocumentActivities(
       : provider
         ? `Return — ${provider}`
         : "Return flight";
-    const tipParts = [returnArrival ? `Arrives ${returnArrival}` : "", notes].filter(Boolean);
+    const tipParts = [
+      returnArrival ? `Arrives ${returnArrival}` : "",
+      notes,
+    ].filter(Boolean);
     candidates.push({
       sourceField: "returnDepartureDateTime",
       dateStr: returnDep.dateStr,
@@ -271,73 +295,66 @@ router.get("/trips/:id/documents", async (req, res) => {
   res.json(docs);
 });
 
-router.post(
-  "/trips/:id/documents",
-  upload.single("file"),
-  async (req, res) => {
-    const userId = req.session.userId!;
-    const tripId = parseInt(req.params.id as string, 10);
-    if (isNaN(tripId)) {
-      res.status(400).json({ error: "Invalid id" });
-      return;
+router.post("/trips/:id/documents", upload.single("file"), async (req, res) => {
+  const userId = req.session.userId!;
+  const tripId = parseInt(req.params.id as string, 10);
+  if (isNaN(tripId)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  if (!(await tripExists(tripId))) {
+    res.status(404).json({ error: "Trip not found" });
+    return;
+  }
+
+  if (!req.file) {
+    res.status(400).json({ error: "No file uploaded" });
+    return;
+  }
+
+  const { buffer, mimetype, originalname } = req.file;
+  const isPdf = mimetype === "application/pdf";
+  const isImage = mimetype.startsWith("image/");
+
+  if (!isPdf && !isImage) {
+    res.status(400).json({ error: "Only PDF and image files are supported" });
+    return;
+  }
+
+  const storagePath = await uploadDocument(buffer, mimetype, originalname);
+
+  let extractedData: Record<string, unknown> = {};
+  try {
+    if (isPdf) {
+      extractedData = await extractFromPdf(buffer);
+    } else {
+      extractedData = await extractFromImage(buffer, mimetype);
     }
+  } catch (err) {
+    req.log.warn({ err }, "OCR extraction failed — storing without data");
+  }
 
-    if (!(await tripExists(tripId))) {
-      res.status(404).json({ error: "Trip not found" });
-      return;
-    }
+  const [doc] = await db
+    .insert(travelsTripDocuments)
+    .values({
+      tripId,
+      userId,
+      storagePath,
+      documentType: (extractedData.documentType as string | undefined) ?? null,
+      originalFilename: originalname,
+      extractedData,
+    })
+    .returning();
 
-    if (!req.file) {
-      res.status(400).json({ error: "No file uploaded" });
-      return;
-    }
+  try {
+    await syncItineraryFromDocument(tripId, doc!.id, extractedData);
+  } catch (err) {
+    req.log.warn({ err }, "Failed to sync itinerary from document");
+  }
 
-    const { buffer, mimetype, originalname } = req.file;
-    const isPdf = mimetype === "application/pdf";
-    const isImage = mimetype.startsWith("image/");
-
-    if (!isPdf && !isImage) {
-      res
-        .status(400)
-        .json({ error: "Only PDF and image files are supported" });
-      return;
-    }
-
-    const storagePath = await uploadDocument(buffer, mimetype, originalname);
-
-    let extractedData: Record<string, unknown> = {};
-    try {
-      if (isPdf) {
-        extractedData = await extractFromPdf(buffer);
-      } else {
-        extractedData = await extractFromImage(buffer, mimetype);
-      }
-    } catch (err) {
-      req.log.warn({ err }, "OCR extraction failed — storing without data");
-    }
-
-    const [doc] = await db
-      .insert(travelsTripDocuments)
-      .values({
-        tripId,
-        userId,
-        storagePath,
-        documentType:
-          (extractedData.documentType as string | undefined) ?? null,
-        originalFilename: originalname,
-        extractedData,
-      })
-      .returning();
-
-    try {
-      await syncItineraryFromDocument(tripId, doc!.id, extractedData);
-    } catch (err) {
-      req.log.warn({ err }, "Failed to sync itinerary from document");
-    }
-
-    res.status(201).json(doc);
-  },
-);
+  res.status(201).json(doc);
+});
 
 router.patch("/trips/:id/documents/:docId", async (req, res) => {
   const tripId = parseInt(req.params.id, 10);
@@ -355,9 +372,9 @@ router.patch("/trips/:id/documents/:docId", async (req, res) => {
     (!extractedData || typeof extractedData !== "object") &&
     !Array.isArray(lockedFields)
   ) {
-    res
-      .status(400)
-      .json({ error: "extractedData object or lockedFields array is required" });
+    res.status(400).json({
+      error: "extractedData object or lockedFields array is required",
+    });
     return;
   }
 
@@ -381,7 +398,7 @@ router.patch("/trips/:id/documents/:docId", async (req, res) => {
         ...(existing.extractedData as Record<string, unknown> | null),
         ...extractedData,
       }
-    : (existing.extractedData as Record<string, unknown> | null) ?? {};
+    : ((existing.extractedData as Record<string, unknown> | null) ?? {});
 
   const updateValues: {
     extractedData?: Record<string, unknown>;
@@ -405,7 +422,10 @@ router.patch("/trips/:id/documents/:docId", async (req, res) => {
     try {
       await syncItineraryFromDocument(tripId, docId, merged);
     } catch (err) {
-      req.log.warn({ err }, "Failed to re-sync itinerary from corrected document");
+      req.log.warn(
+        { err },
+        "Failed to re-sync itinerary from corrected document",
+      );
     }
   }
 
@@ -450,11 +470,19 @@ export async function rescanTripDocument(
     } else if (isImage) {
       freshData = await extractFromImage(buffer, contentType);
     } else {
-      return { ok: false, status: 400, error: "Unsupported document type for rescan" };
+      return {
+        ok: false,
+        status: 400,
+        error: "Unsupported document type for rescan",
+      };
     }
   } catch (err) {
     log.warn({ err }, "OCR re-extraction failed");
-    return { ok: false, status: 502, error: "AI re-analysis failed, please try again" };
+    return {
+      ok: false,
+      status: 502,
+      error: "AI re-analysis failed, please try again",
+    };
   }
 
   const existingData =
@@ -474,7 +502,8 @@ export async function rescanTripDocument(
       extractedData: merged,
       documentType: locked.has("documentType")
         ? existing.documentType
-        : ((merged.documentType as string | undefined) ?? existing.documentType),
+        : ((merged.documentType as string | undefined) ??
+          existing.documentType),
     })
     .where(
       and(
@@ -551,45 +580,45 @@ router.delete("/trips/:id/documents/:docId", async (req, res) => {
   try {
     await syncItineraryFromDocument(tripId, docId, {});
   } catch (err) {
-    req.log.warn({ err }, "Failed to purge itinerary entries for deleted document");
+    req.log.warn(
+      { err },
+      "Failed to purge itinerary entries for deleted document",
+    );
   }
 
   res.status(204).send();
 });
 
-router.get(
-  "/trips/:id/documents/:docId/download",
-  async (req, res) => {
-    const tripId = parseInt(req.params.id, 10);
-    const docId = parseInt(req.params.docId, 10);
-    if (isNaN(tripId) || isNaN(docId)) {
-      res.status(400).json({ error: "Invalid id" });
-      return;
-    }
+router.get("/trips/:id/documents/:docId/download", async (req, res) => {
+  const tripId = parseInt(req.params.id, 10);
+  const docId = parseInt(req.params.docId, 10);
+  if (isNaN(tripId) || isNaN(docId)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
 
-    const [doc] = await db
-      .select()
-      .from(travelsTripDocuments)
-      .where(
-        and(
-          eq(travelsTripDocuments.id, docId),
-          eq(travelsTripDocuments.tripId, tripId),
-        ),
-      );
-
-    if (!doc) {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-
-    const { buffer, contentType } = await downloadDocument(doc.storagePath);
-    res.setHeader("Content-Type", contentType);
-    res.setHeader(
-      "Content-Disposition",
-      `inline; filename="${doc.originalFilename ?? "document"}"`,
+  const [doc] = await db
+    .select()
+    .from(travelsTripDocuments)
+    .where(
+      and(
+        eq(travelsTripDocuments.id, docId),
+        eq(travelsTripDocuments.tripId, tripId),
+      ),
     );
-    res.send(buffer);
-  },
-);
+
+  if (!doc) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  const { buffer, contentType } = await downloadDocument(doc.storagePath);
+  res.setHeader("Content-Type", contentType);
+  res.setHeader(
+    "Content-Disposition",
+    `inline; filename="${doc.originalFilename ?? "document"}"`,
+  );
+  res.send(buffer);
+});
 
 export default router;

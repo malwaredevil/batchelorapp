@@ -275,7 +275,9 @@ export default function PatternDetail() {
   function handleSaveCategories() {
     const merged = [
       ...(allCategories ?? []),
-      ...localNewCats.filter((nc) => !(allCategories ?? []).some((a) => a.id === nc.id)),
+      ...localNewCats.filter(
+        (nc) => !(allCategories ?? []).some((a) => a.id === nc.id),
+      ),
     ];
     const categoryNames = merged
       .filter((c) => selectedCategoryIds.includes(c.id))
@@ -285,7 +287,9 @@ export default function PatternDetail() {
       {
         onSuccess: (data) => {
           queryClient.setQueryData(getGetPatternQueryKey(patternId), data);
-          queryClient.invalidateQueries({ queryKey: getListPatternsQueryKey() });
+          queryClient.invalidateQueries({
+            queryKey: getListPatternsQueryKey(),
+          });
           toast.success("Categories saved");
           setCatEditing(false);
         },
@@ -390,11 +394,19 @@ export default function PatternDetail() {
                 }}
                 autoFocus
               />
-              <Button size="sm" onClick={handleRename} disabled={updatePattern.isPending}>
+              <Button
+                size="sm"
+                onClick={handleRename}
+                disabled={updatePattern.isPending}
+              >
                 <Check className="mr-1.5 h-3.5 w-3.5" />
                 Save
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setRenamingName(false)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRenamingName(false)}
+              >
                 <XIcon className="mr-1.5 h-3.5 w-3.5" />
                 Cancel
               </Button>
@@ -407,11 +419,19 @@ export default function PatternDetail() {
               <div className="flex shrink-0 flex-wrap gap-1">
                 {isEditing ? (
                   <>
-                    <Button size="sm" onClick={handleSave} disabled={updatePattern.isPending}>
+                    <Button
+                      size="sm"
+                      onClick={handleSave}
+                      disabled={updatePattern.isPending}
+                    >
                       <Check className="mr-1.5 h-3.5 w-3.5" />
                       Save
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => setIsEditing(false)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsEditing(false)}
+                    >
                       <XIcon className="mr-1.5 h-3.5 w-3.5" />
                       Cancel
                     </Button>
@@ -426,7 +446,9 @@ export default function PatternDetail() {
                         disabled={reanalyzePattern.isPending}
                         title="Re-run AI analysis"
                       >
-                        <RefreshCw className={`h-4 w-4 ${reanalyzePattern.isPending ? "animate-spin" : ""}`} />
+                        <RefreshCw
+                          className={`h-4 w-4 ${reanalyzePattern.isPending ? "animate-spin" : ""}`}
+                        />
                       </Button>
                     )}
                     {p.designer && (
@@ -437,7 +459,9 @@ export default function PatternDetail() {
                         disabled={enrichPattern.isPending}
                         title="Enrich designer info"
                       >
-                        <Sparkles className={`h-4 w-4 ${enrichPattern.isPending ? "animate-pulse" : ""}`} />
+                        <Sparkles
+                          className={`h-4 w-4 ${enrichPattern.isPending ? "animate-pulse" : ""}`}
+                        />
                       </Button>
                     )}
                     {p.imageUrl && (
@@ -448,7 +472,9 @@ export default function PatternDetail() {
                         disabled={extractBlocks.isPending}
                         title="Extract block schema from image"
                       >
-                        <Grid3x3 className={`h-4 w-4 ${extractBlocks.isPending ? "animate-pulse" : ""}`} />
+                        <Grid3x3
+                          className={`h-4 w-4 ${extractBlocks.isPending ? "animate-pulse" : ""}`}
+                        />
                       </Button>
                     )}
                     <Button
@@ -456,10 +482,22 @@ export default function PatternDetail() {
                       size="icon"
                       onClick={() => toggleLock("name")}
                       disabled={updatePattern.isPending}
-                      title={lockedFields.includes("name") ? "Name locked — click to unlock." : "Name unlocked — click to lock."}
-                      className={lockedFields.includes("name") ? "border-red-400 text-red-600 hover:border-red-500 hover:text-red-700" : "border-green-400 text-green-600 hover:border-green-500 hover:text-green-700"}
+                      title={
+                        lockedFields.includes("name")
+                          ? "Name locked — click to unlock."
+                          : "Name unlocked — click to lock."
+                      }
+                      className={
+                        lockedFields.includes("name")
+                          ? "border-red-400 text-red-600 hover:border-red-500 hover:text-red-700"
+                          : "border-green-400 text-green-600 hover:border-green-500 hover:text-green-700"
+                      }
                     >
-                      {lockedFields.includes("name") ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
+                      {lockedFields.includes("name") ? (
+                        <Lock className="h-4 w-4" />
+                      ) : (
+                        <LockOpen className="h-4 w-4" />
+                      )}
                     </Button>
                     <Button
                       variant="outline"
@@ -474,7 +512,9 @@ export default function PatternDetail() {
                         variant="outline"
                         size="icon"
                         title="Download photo"
-                        onClick={() => downloadCollectionImage(p.imageUrl!, p.name)}
+                        onClick={() =>
+                          downloadCollectionImage(p.imageUrl!, p.name)
+                        }
                       >
                         <Download className="h-4 w-4" />
                       </Button>
@@ -483,7 +523,12 @@ export default function PatternDetail() {
                       variant="ghost"
                       size="icon"
                       className="text-destructive hover:bg-destructive/10"
-                      onClick={() => { if (confirm("Delete this pattern? This cannot be undone.")) deletePattern.mutate({ id: patternId }); }}
+                      onClick={() => {
+                        if (
+                          confirm("Delete this pattern? This cannot be undone.")
+                        )
+                          deletePattern.mutate({ id: patternId });
+                      }}
                       disabled={deletePattern.isPending}
                     >
                       <Trash2 className="h-4 w-4" />
@@ -739,7 +784,9 @@ export default function PatternDetail() {
                 selectedIds={selectedCategoryIds}
                 onToggle={(id) =>
                   setSelectedCategoryIds((prev) =>
-                    prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+                    prev.includes(id)
+                      ? prev.filter((x) => x !== id)
+                      : [...prev, id],
                   )
                 }
                 onCreated={(cat) =>
@@ -754,7 +801,9 @@ export default function PatternDetail() {
                   selectedIds={selectedCategoryIds}
                   onToggle={(id) =>
                     setSelectedCategoryIds((prev) =>
-                      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+                      prev.includes(id)
+                        ? prev.filter((x) => x !== id)
+                        : [...prev, id],
                     )
                   }
                   onCreated={(cat) => {
@@ -766,11 +815,20 @@ export default function PatternDetail() {
                   disabled={updatePattern.isPending}
                 />
                 <div className="mt-3 flex gap-2">
-                  <Button size="sm" onClick={handleSaveCategories} disabled={updatePattern.isPending}>
+                  <Button
+                    size="sm"
+                    onClick={handleSaveCategories}
+                    disabled={updatePattern.isPending}
+                  >
                     <Check className="mr-1.5 h-3.5 w-3.5" />
                     {updatePattern.isPending ? "Saving…" : "Save"}
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => setCatEditing(false)} disabled={updatePattern.isPending}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setCatEditing(false)}
+                    disabled={updatePattern.isPending}
+                  >
                     <XIcon className="mr-1.5 h-3.5 w-3.5" />
                     Cancel
                   </Button>
@@ -785,9 +843,15 @@ export default function PatternDetail() {
                     className="border-transparent"
                     style={(() => {
                       const palette = cat.bgColor
-                        ? { bgColor: cat.bgColor, textColor: cat.textColor ?? "#fff" }
+                        ? {
+                            bgColor: cat.bgColor,
+                            textColor: cat.textColor ?? "#fff",
+                          }
                         : getCategoryPalette(cat.name);
-                      return { backgroundColor: palette.bgColor, color: palette.textColor };
+                      return {
+                        backgroundColor: palette.bgColor,
+                        color: palette.textColor,
+                      };
                     })()}
                   >
                     {cat.name}
@@ -796,7 +860,8 @@ export default function PatternDetail() {
               </div>
             ) : (
               <p className="text-xs italic text-muted-foreground">
-                No categories — click <Pencil className="inline h-2.5 w-2.5" /> to add
+                No categories — click <Pencil className="inline h-2.5 w-2.5" />{" "}
+                to add
               </p>
             )}
           </section>

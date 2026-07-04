@@ -55,8 +55,12 @@ export function TripLocationMap({ lat, lng, places }: TripLocationMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const infoWindowRef = useRef<google.maps.InfoWindow | null>(null);
-  const destMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
-  const placeMarkersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
+  const destMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(
+    null,
+  );
+  const placeMarkersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>(
+    [],
+  );
   const latestPropsRef = useRef({ lat, lng, places });
   latestPropsRef.current = { lat, lng, places };
   const [loadError, setLoadError] = useState<string | null>(null);

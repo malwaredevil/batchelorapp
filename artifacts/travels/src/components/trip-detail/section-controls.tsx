@@ -14,7 +14,11 @@ interface DragHandleProps {
  * Grip/grabby-hand icon used to reorder a Trip Detail card. Renders in the
  * top-left of a card header. Cursor changes to "grabbing" while dragging.
  */
-export function DragHandle({ listeners, attributes, className }: DragHandleProps) {
+export function DragHandle({
+  listeners,
+  attributes,
+  className,
+}: DragHandleProps) {
   return (
     <button
       type="button"
@@ -43,7 +47,12 @@ interface CollapseToggleProps {
  * top-right of a card header. Rotates to point up when expanded, down when
  * collapsed.
  */
-export function CollapseToggle({ collapsed, onToggle, className, label }: CollapseToggleProps) {
+export function CollapseToggle({
+  collapsed,
+  onToggle,
+  className,
+  label,
+}: CollapseToggleProps) {
   return (
     <button
       type="button"
@@ -52,11 +61,18 @@ export function CollapseToggle({ collapsed, onToggle, className, label }: Collap
         "rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground",
         className,
       )}
-      aria-label={collapsed ? `Expand ${label ?? "section"}` : `Collapse ${label ?? "section"}`}
+      aria-label={
+        collapsed
+          ? `Expand ${label ?? "section"}`
+          : `Collapse ${label ?? "section"}`
+      }
       aria-expanded={!collapsed}
     >
       <ChevronDown
-        className={cn("h-4 w-4 transition-transform", collapsed ? "-rotate-90" : "rotate-0")}
+        className={cn(
+          "h-4 w-4 transition-transform",
+          collapsed ? "-rotate-90" : "rotate-0",
+        )}
       />
     </button>
   );
@@ -94,10 +110,18 @@ export function CardShell({
   return (
     <Card className={cn("border-border/50", className)}>
       <CardContent className="py-4">
-        <div className={cn("flex items-center justify-between", !collapsed && "mb-1")}>
+        <div
+          className={cn(
+            "flex items-center justify-between",
+            !collapsed && "mb-1",
+          )}
+        >
           <div className="flex items-center gap-1.5 min-w-0">
             {dragHandleListeners && (
-              <DragHandle listeners={dragHandleListeners} attributes={dragHandleAttributes} />
+              <DragHandle
+                listeners={dragHandleListeners}
+                attributes={dragHandleAttributes}
+              />
             )}
             {collapsed && (
               <span className="flex items-center gap-2 text-sm font-medium text-foreground truncate">
@@ -106,7 +130,11 @@ export function CardShell({
               </span>
             )}
           </div>
-          <CollapseToggle collapsed={collapsed} onToggle={onToggleCollapse} label={title} />
+          <CollapseToggle
+            collapsed={collapsed}
+            onToggle={onToggleCollapse}
+            label={title}
+          />
         </div>
         {!collapsed && children}
       </CardContent>

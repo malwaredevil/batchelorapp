@@ -8,7 +8,11 @@ interface AuthContextType {
   error: unknown;
 }
 
-const AuthContext = createContext<AuthContextType>({ user: null, isLoading: true, error: null });
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  isLoading: true,
+  error: null,
+});
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { data: user, isLoading, error } = useGetCurrentUser();

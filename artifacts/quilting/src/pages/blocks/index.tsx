@@ -438,169 +438,191 @@ function BlockCard({
   const [zoomOpen, setZoomOpen] = useState(false);
   return (
     <>
-    <div className="group relative overflow-hidden rounded-xl border border-card-border bg-card transition-shadow hover:shadow-md">
-      <Link href={`/blocks/${block.id}`} className="block">
-        <div className="relative flex items-center justify-center overflow-hidden bg-white">
-          <BlockPreviewSvg
-            cells={block.cells}
-            gridSize={block.gridSize}
-            seams={block.seams}
-            size={160}
-            tileCount={1}
-            fabricUrlMap={fabricUrlMap}
-          />
-          <button
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setZoomOpen(true); }}
-            className="absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/70"
-            title="Zoom preview"
-          >
-            <ZoomIn className="h-3.5 w-3.5" />
-          </button>
-        </div>
-        <div className="border-t border-card-border px-3 py-2 pr-8">
-          <p className="truncate text-sm font-semibold text-foreground">
-            {block.name}
-          </p>
-          <div className="mt-1.5 flex flex-wrap gap-1">
+      <div className="group relative overflow-hidden rounded-xl border border-card-border bg-card transition-shadow hover:shadow-md">
+        <Link href={`/blocks/${block.id}`} className="block">
+          <div className="relative flex items-center justify-center overflow-hidden bg-white">
+            <BlockPreviewSvg
+              cells={block.cells}
+              gridSize={block.gridSize}
+              seams={block.seams}
+              size={160}
+              tileCount={1}
+              fabricUrlMap={fabricUrlMap}
+            />
             <button
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                onFilterByGridSize?.(block.gridSize);
+                setZoomOpen(true);
               }}
-              className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-all hover:ring-2 hover:ring-primary/50 cursor-pointer"
+              className="absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/70"
+              title="Zoom preview"
             >
-              {(() => {
-                const gH = Math.max(
-                  1,
-                  Math.ceil(block.cells.length / block.gridSize),
-                );
-                return gH === block.gridSize
-                  ? `${block.gridSize}×${block.gridSize}`
-                  : `${block.gridSize}×${gH}`;
-              })()}{" "}
-              grid
+              <ZoomIn className="h-3.5 w-3.5" />
             </button>
-            {block.blockSizeInches != null && (
-              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                {fmtInch(block.blockSizeInches)}
-              </span>
-            )}
-            {block.categories.map((cat) => (
+          </div>
+          <div className="border-t border-card-border px-3 py-2 pr-8">
+            <p className="truncate text-sm font-semibold text-foreground">
+              {block.name}
+            </p>
+            <div className="mt-1.5 flex flex-wrap gap-1">
               <button
-                key={cat.id}
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  onFilterByCategory?.(cat.id);
+                  onFilterByGridSize?.(block.gridSize);
                 }}
-                className="rounded-full px-2 py-0.5 text-[10px] font-medium leading-tight transition-all hover:ring-2 hover:ring-primary/50 cursor-pointer"
-                style={(() => {
-                  const palette = cat.bgColor
-                    ? { bgColor: cat.bgColor, textColor: cat.textColor ?? "#fff" }
-                    : getCategoryPalette(cat.name);
-                  return { backgroundColor: palette.bgColor, color: palette.textColor };
-                })()}
+                className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-all hover:ring-2 hover:ring-primary/50 cursor-pointer"
               >
-                {cat.name}
+                {(() => {
+                  const gH = Math.max(
+                    1,
+                    Math.ceil(block.cells.length / block.gridSize),
+                  );
+                  return gH === block.gridSize
+                    ? `${block.gridSize}×${block.gridSize}`
+                    : `${block.gridSize}×${gH}`;
+                })()}{" "}
+                grid
               </button>
-            ))}
-          </div>
-          {(block.dominantColors ?? []).length > 0 && (
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {(block.dominantColors ?? []).slice(0, 6).map((color, i) => (
-                <span
-                  key={i}
-                  className="h-3.5 w-3.5 rounded-full border border-border/30 inline-block"
-                  style={{ backgroundColor: color }}
-                  title={color}
-                />
+              {block.blockSizeInches != null && (
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  {fmtInch(block.blockSizeInches)}
+                </span>
+              )}
+              {block.categories.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onFilterByCategory?.(cat.id);
+                  }}
+                  className="rounded-full px-2 py-0.5 text-[10px] font-medium leading-tight transition-all hover:ring-2 hover:ring-primary/50 cursor-pointer"
+                  style={(() => {
+                    const palette = cat.bgColor
+                      ? {
+                          bgColor: cat.bgColor,
+                          textColor: cat.textColor ?? "#fff",
+                        }
+                      : getCategoryPalette(cat.name);
+                    return {
+                      backgroundColor: palette.bgColor,
+                      color: palette.textColor,
+                    };
+                  })()}
+                >
+                  {cat.name}
+                </button>
               ))}
             </div>
-          )}
-        </div>
-      </Link>
+            {(block.dominantColors ?? []).length > 0 && (
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {(block.dominantColors ?? []).slice(0, 6).map((color, i) => (
+                  <span
+                    key={i}
+                    className="h-3.5 w-3.5 rounded-full border border-border/30 inline-block"
+                    style={{ backgroundColor: color }}
+                    title={color}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </Link>
 
-      <div className="absolute right-2 top-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 rounded-full bg-background/80 opacity-100 shadow-sm transition-opacity md:opacity-0 md:group-hover:opacity-100 hover:opacity-100"
-            >
-              <MoreVertical className="h-3.5 w-3.5" />
-              <span className="sr-only">Options</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => navigate(`/blocks/${block.id}`)}>
-              <ExternalLink className="mr-2 h-3.5 w-3.5" />
-              Open
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate(`/blocks/${block.id}/edit`)}>
-              <Pencil className="mr-2 h-3.5 w-3.5" />
-              Edit
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate(`/blocks/${block.id}/cut-pattern`)}>
-              <Scissors className="mr-2 h-3.5 w-3.5" />
-              Cut guide
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onDuplicate(block)}>
-              <Copy className="mr-2 h-3.5 w-3.5" />
-              Duplicate
-            </DropdownMenuItem>
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>
-                <Download className="mr-2 h-3.5 w-3.5" />
-                Export
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuItem onClick={() => void exportBlockAsPng(block)}>
-                  <FileImage className="mr-2 h-3.5 w-3.5" />
-                  PNG
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => void exportBlockAsJpeg(block)}>
-                  <FileImage className="mr-2 h-3.5 w-3.5" />
-                  JPEG
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => exportBlockAsSvg(block)}>
-                  <FileCode2 className="mr-2 h-3.5 w-3.5" />
-                  SVG
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => exportBlockAsJson(block)}>
-                  <FileCode2 className="mr-2 h-3.5 w-3.5" />
-                  JSON (design file)
-                </DropdownMenuItem>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-            <DropdownMenuItem onClick={() => onEditCategories?.()}>
-              <Tag className="mr-2 h-3.5 w-3.5" />
-              Set categories
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              onClick={() => onDelete(block.id)}
-            >
-              <Trash2 className="mr-2 h-3.5 w-3.5" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="absolute right-2 top-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-full bg-background/80 opacity-100 shadow-sm transition-opacity md:opacity-0 md:group-hover:opacity-100 hover:opacity-100"
+              >
+                <MoreVertical className="h-3.5 w-3.5" />
+                <span className="sr-only">Options</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => navigate(`/blocks/${block.id}`)}>
+                <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                Open
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => navigate(`/blocks/${block.id}/edit`)}
+              >
+                <Pencil className="mr-2 h-3.5 w-3.5" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => navigate(`/blocks/${block.id}/cut-pattern`)}
+              >
+                <Scissors className="mr-2 h-3.5 w-3.5" />
+                Cut guide
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onDuplicate(block)}>
+                <Copy className="mr-2 h-3.5 w-3.5" />
+                Duplicate
+              </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <Download className="mr-2 h-3.5 w-3.5" />
+                  Export
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem
+                    onClick={() => void exportBlockAsPng(block)}
+                  >
+                    <FileImage className="mr-2 h-3.5 w-3.5" />
+                    PNG
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => void exportBlockAsJpeg(block)}
+                  >
+                    <FileImage className="mr-2 h-3.5 w-3.5" />
+                    JPEG
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => exportBlockAsSvg(block)}>
+                    <FileCode2 className="mr-2 h-3.5 w-3.5" />
+                    SVG
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => exportBlockAsJson(block)}>
+                    <FileCode2 className="mr-2 h-3.5 w-3.5" />
+                    JSON (design file)
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuItem onClick={() => onEditCategories?.()}>
+                <Tag className="mr-2 h-3.5 w-3.5" />
+                Set categories
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={() => onDelete(block.id)}
+              >
+                <Trash2 className="mr-2 h-3.5 w-3.5" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
-    </div>
-    <PreviewZoomModal open={zoomOpen} onClose={() => setZoomOpen(false)} title={block.name}>
-      <BlockPreviewSvg
-        cells={block.cells}
-        gridSize={block.gridSize}
-        seams={block.seams}
-        size={500}
-        tileCount={1}
-        fabricUrlMap={fabricUrlMap}
-      />
-    </PreviewZoomModal>
+      <PreviewZoomModal
+        open={zoomOpen}
+        onClose={() => setZoomOpen(false)}
+        title={block.name}
+      >
+        <BlockPreviewSvg
+          cells={block.cells}
+          gridSize={block.gridSize}
+          seams={block.seams}
+          size={500}
+          tileCount={1}
+          fabricUrlMap={fabricUrlMap}
+        />
+      </PreviewZoomModal>
     </>
   );
 }
@@ -689,7 +711,9 @@ export default function Blocks() {
     [fabricsList],
   );
 
-  const [categoryEditItem, setCategoryEditItem] = useState<BlockSummary | null>(null);
+  const [categoryEditItem, setCategoryEditItem] = useState<BlockSummary | null>(
+    null,
+  );
 
   const updateBlockCategories = useUpdateBlock({
     mutation: {
@@ -823,7 +847,10 @@ export default function Blocks() {
         !b.categories.some((c) => activeCatIds.has(c.id))
       )
         return false;
-      if (colorFilter.length > 0 && !colorFilter.every((c) => (b.dominantColors ?? []).includes(c)))
+      if (
+        colorFilter.length > 0 &&
+        !colorFilter.every((c) => (b.dominantColors ?? []).includes(c))
+      )
         return false;
       return true;
     })
@@ -884,11 +911,36 @@ export default function Blocks() {
       {stats && (
         <div className="mb-6 hidden sm:grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {[
-            { label: "Fabrics", value: stats.totalFabrics, sub: "in your stash", href: "/fabrics" },
-            { label: "Patterns", value: stats.totalPatterns, sub: "saved", href: "/patterns" },
-            { label: "Quilts", value: stats.totalQuilts, sub: "in collection", href: "/quilts" },
-            { label: "Blocks", value: stats.totalBlocks, sub: "designed", href: "/blocks" },
-            { label: "Layouts", value: stats.totalLayouts, sub: "arranged", href: "/layouts" },
+            {
+              label: "Fabrics",
+              value: stats.totalFabrics,
+              sub: "in your stash",
+              href: "/fabrics",
+            },
+            {
+              label: "Patterns",
+              value: stats.totalPatterns,
+              sub: "saved",
+              href: "/patterns",
+            },
+            {
+              label: "Quilts",
+              value: stats.totalQuilts,
+              sub: "in collection",
+              href: "/quilts",
+            },
+            {
+              label: "Blocks",
+              value: stats.totalBlocks,
+              sub: "designed",
+              href: "/blocks",
+            },
+            {
+              label: "Layouts",
+              value: stats.totalLayouts,
+              sub: "arranged",
+              href: "/layouts",
+            },
           ].map(({ label, value, sub, href }) => (
             <Link
               key={label}
@@ -896,7 +948,9 @@ export default function Blocks() {
               className="rounded-xl border border-card-border bg-card p-4 block hover:shadow-sm hover:border-primary/30 transition-all"
             >
               <p className="text-2xl font-bold text-foreground">{value}</p>
-              <p className="text-sm font-medium text-foreground mt-0.5">{label}</p>
+              <p className="text-sm font-medium text-foreground mt-0.5">
+                {label}
+              </p>
               <p className="text-xs text-muted-foreground">{sub}</p>
             </Link>
           ))}
@@ -974,7 +1028,9 @@ export default function Blocks() {
                   ) : (
                     <SortAsc className="h-3.5 w-3.5" />
                   )}
-                  <span className="hidden sm:inline">{SORT_LABELS[sortBy]}</span>
+                  <span className="hidden sm:inline">
+                    {SORT_LABELS[sortBy]}
+                  </span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -999,7 +1055,9 @@ export default function Blocks() {
                   key={color}
                   onClick={() =>
                     setColorFilter((prev) =>
-                      prev.includes(color) ? prev.filter((c) => c !== color) : [...prev, color]
+                      prev.includes(color)
+                        ? prev.filter((c) => c !== color)
+                        : [...prev, color],
                     )
                   }
                   title={color}
@@ -1162,7 +1220,9 @@ export default function Blocks() {
         open={categoryEditItem !== null}
         onClose={() => setCategoryEditItem(null)}
         title={categoryEditItem?.name ?? ""}
-        currentCategories={(categoryEditItem?.categories ?? []) as unknown as QuiltingCategory[]}
+        currentCategories={
+          (categoryEditItem?.categories ?? []) as unknown as QuiltingCategory[]
+        }
         allCategories={allCategories ?? []}
         onSave={(names) => {
           if (categoryEditItem) {

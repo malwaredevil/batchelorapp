@@ -34,9 +34,10 @@ function ToolBtn({
       title={title}
       onClick={onClick}
       className={`flex items-center justify-center w-7 h-7 rounded text-sm transition-colors
-        ${active
-          ? "bg-primary text-primary-foreground"
-          : "text-muted-foreground hover:text-foreground hover:bg-muted"
+        ${
+          active
+            ? "bg-primary text-primary-foreground"
+            : "text-muted-foreground hover:text-foreground hover:bg-muted"
         }`}
     >
       {children}
@@ -67,7 +68,12 @@ export function RichTextEditor({
 }) {
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ heading: false, codeBlock: false, code: false, blockquote: false }),
+      StarterKit.configure({
+        heading: false,
+        codeBlock: false,
+        code: false,
+        blockquote: false,
+      }),
       UnderlineExt,
       Highlight.configure({ multicolor: false }),
       TextAlign.configure({ types: ["paragraph", "listItem"] }),
@@ -99,37 +105,73 @@ export function RichTextEditor({
   return (
     <div className="tiptap-rich rounded-lg border border-input bg-background shadow-sm overflow-hidden">
       <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-border/50 bg-muted/30 flex-wrap">
-        <ToolBtn title="Bold" active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}>
+        <ToolBtn
+          title="Bold"
+          active={editor.isActive("bold")}
+          onClick={() => editor.chain().focus().toggleBold().run()}
+        >
           <Bold className="w-3.5 h-3.5" strokeWidth={2.5} />
         </ToolBtn>
-        <ToolBtn title="Italic" active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()}>
+        <ToolBtn
+          title="Italic"
+          active={editor.isActive("italic")}
+          onClick={() => editor.chain().focus().toggleItalic().run()}
+        >
           <Italic className="w-3.5 h-3.5" />
         </ToolBtn>
-        <ToolBtn title="Underline" active={editor.isActive("underline")} onClick={() => editor.chain().focus().toggleUnderline().run()}>
+        <ToolBtn
+          title="Underline"
+          active={editor.isActive("underline")}
+          onClick={() => editor.chain().focus().toggleUnderline().run()}
+        >
           <Underline className="w-3.5 h-3.5" />
         </ToolBtn>
-        <ToolBtn title="Highlight" active={editor.isActive("highlight")} onClick={() => editor.chain().focus().toggleHighlight().run()}>
+        <ToolBtn
+          title="Highlight"
+          active={editor.isActive("highlight")}
+          onClick={() => editor.chain().focus().toggleHighlight().run()}
+        >
           <Highlighter className="w-3.5 h-3.5" />
         </ToolBtn>
 
         <Divider />
 
-        <ToolBtn title="Bullet list" active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()}>
+        <ToolBtn
+          title="Bullet list"
+          active={editor.isActive("bulletList")}
+          onClick={() => editor.chain().focus().toggleBulletList().run()}
+        >
           <List className="w-3.5 h-3.5" />
         </ToolBtn>
-        <ToolBtn title="Numbered list" active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()}>
+        <ToolBtn
+          title="Numbered list"
+          active={editor.isActive("orderedList")}
+          onClick={() => editor.chain().focus().toggleOrderedList().run()}
+        >
           <ListOrdered className="w-3.5 h-3.5" />
         </ToolBtn>
 
         <Divider />
 
-        <ToolBtn title="Align left" active={editor.isActive({ textAlign: "left" })} onClick={() => editor.chain().focus().setTextAlign("left").run()}>
+        <ToolBtn
+          title="Align left"
+          active={editor.isActive({ textAlign: "left" })}
+          onClick={() => editor.chain().focus().setTextAlign("left").run()}
+        >
           <AlignLeft className="w-3.5 h-3.5" />
         </ToolBtn>
-        <ToolBtn title="Align centre" active={editor.isActive({ textAlign: "center" })} onClick={() => editor.chain().focus().setTextAlign("center").run()}>
+        <ToolBtn
+          title="Align centre"
+          active={editor.isActive({ textAlign: "center" })}
+          onClick={() => editor.chain().focus().setTextAlign("center").run()}
+        >
           <AlignCenter className="w-3.5 h-3.5" />
         </ToolBtn>
-        <ToolBtn title="Align right" active={editor.isActive({ textAlign: "right" })} onClick={() => editor.chain().focus().setTextAlign("right").run()}>
+        <ToolBtn
+          title="Align right"
+          active={editor.isActive({ textAlign: "right" })}
+          onClick={() => editor.chain().focus().setTextAlign("right").run()}
+        >
           <AlignRight className="w-3.5 h-3.5" />
         </ToolBtn>
       </div>

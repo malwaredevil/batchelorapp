@@ -42,7 +42,10 @@ interface GeoResult {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const base = import.meta.env.BASE_URL as string;
-const WEATHER_CONFIG_URL = `${base}api/hub/weather-config`.replace(/\/\//g, "/");
+const WEATHER_CONFIG_URL = `${base}api/hub/weather-config`.replace(
+  /\/\//g,
+  "/",
+);
 const WEATHER_LS_KEY = "batchelor-weather-config";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -73,7 +76,9 @@ function readLocalConfig(): WeatherConfig | null {
 function writeLocalConfig(cfg: WeatherConfig) {
   try {
     window.localStorage.setItem(WEATHER_LS_KEY, JSON.stringify(cfg));
-  } catch { /* quota */ }
+  } catch {
+    /* quota */
+  }
 }
 
 async function fetchServerConfig(): Promise<WeatherConfig | null> {
@@ -95,7 +100,9 @@ async function saveServerConfig(cfg: WeatherConfig): Promise<void> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(cfg),
     });
-  } catch { /* silent */ }
+  } catch {
+    /* silent */
+  }
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -108,7 +115,9 @@ export function StudioWeather() {
   const [query, setQuery] = useState("");
   const [geoResults, setGeoResults] = useState<GeoResult[]>([]);
   const [geoLoading, setGeoLoading] = useState(false);
-  const [pendingUnit, setPendingUnit] = useState<"celsius" | "fahrenheit">("celsius");
+  const [pendingUnit, setPendingUnit] = useState<"celsius" | "fahrenheit">(
+    "celsius",
+  );
 
   const weatherAbort = useRef<AbortController | undefined>(undefined);
   const geoAbort = useRef<AbortController | undefined>(undefined);
@@ -157,7 +166,9 @@ export function StudioWeather() {
     fetch(url, { signal: ctrl.signal })
       .then((r) => r.json())
       .then((data) => {
-        const d = data as { current: { temperature_2m: number; weather_code: number } };
+        const d = data as {
+          current: { temperature_2m: number; weather_code: number };
+        };
         const temp = Math.round(d.current.temperature_2m);
         const { desc, Icon } = interpretCode(d.current.weather_code);
         setWeather({ status: "ok", temp, desc, Icon });
@@ -273,7 +284,9 @@ export function StudioWeather() {
                     <MapPin className="w-3.5 h-3.5 text-primary flex-shrink-0" />
                     <span className="font-medium truncate">{g.name}</span>
                     {g.admin1 && (
-                      <span className="text-muted-foreground text-xs truncate">{g.admin1}</span>
+                      <span className="text-muted-foreground text-xs truncate">
+                        {g.admin1}
+                      </span>
                     )}
                     <span className="ml-auto text-xs text-muted-foreground flex-shrink-0">
                       {g.country}
@@ -315,7 +328,10 @@ export function StudioWeather() {
 
           {config && (
             <button
-              onClick={() => { setConfigOpen(false); setGeoResults([]); }}
+              onClick={() => {
+                setConfigOpen(false);
+                setGeoResults([]);
+              }}
               className="w-full py-1.5 rounded-lg bg-muted text-muted-foreground text-xs font-semibold hover:bg-muted/80 transition-colors"
             >
               Cancel
@@ -353,7 +369,8 @@ export function StudioWeather() {
             <div className="flex items-end justify-between">
               <div>
                 <div className="text-3xl font-bold text-foreground">
-                  {weather.temp}{unitLabel}
+                  {weather.temp}
+                  {unitLabel}
                 </div>
                 <div className="text-sm text-muted-foreground">
                   {weather.desc}
@@ -377,9 +394,13 @@ export function StudioWeather() {
           }`}
         >
           {configOpen ? (
-            <><Check className="w-3 h-3" /> Searching…</>
+            <>
+              <Check className="w-3 h-3" /> Searching…
+            </>
           ) : (
-            <><Settings className="w-3 h-3" /> Change location</>
+            <>
+              <Settings className="w-3 h-3" /> Change location
+            </>
           )}
         </button>
         {!configOpen && config && weather.status !== "loading" && (
@@ -387,7 +408,7 @@ export function StudioWeather() {
             onClick={() => {
               // Re-trigger weather fetch by briefly nulling then restoring
               setWeather({ status: "loading" });
-              setConfig((c) => c ? { ...c } : c);
+              setConfig((c) => (c ? { ...c } : c));
             }}
             className="text-muted-foreground hover:text-foreground transition-colors"
             title="Refresh"

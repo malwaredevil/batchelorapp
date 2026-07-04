@@ -300,7 +300,12 @@ export async function analyzePatternImage(
     (c, model, tools) =>
       c.chat.completions.create({
         model,
-        ...(tools ? { tools: tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[] } : {}),
+        ...(tools
+          ? {
+              tools:
+                tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[],
+            }
+          : {}),
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: PATTERN_ANALYSIS_PROMPT },
@@ -710,21 +715,18 @@ export async function enrichPatternMetadata(
     ? `Quilt pattern designer: "${designerName}". Pattern: "${patternName}". Find their biography, website, and this pattern's publication details.`
     : `Quilt pattern: "${patternName}". Find the designer biography, website, and publication details.`;
 
-  const raw = await callModel(
-    MODELS.RESEARCH,
-    async (client, model) => {
-      const completion = await client.chat.completions.create({
-        model,
-        messages: [
-          { role: "system", content: ENRICHMENT_PROMPT },
-          { role: "user", content: query },
-        ],
-        response_format: { type: "json_object" },
-        max_tokens: 512,
-      });
-      return parseJson(completion.choices[0]?.message?.content ?? null);
-    },
-  );
+  const raw = await callModel(MODELS.RESEARCH, async (client, model) => {
+    const completion = await client.chat.completions.create({
+      model,
+      messages: [
+        { role: "system", content: ENRICHMENT_PROMPT },
+        { role: "user", content: query },
+      ],
+      response_format: { type: "json_object" },
+      max_tokens: 512,
+    });
+    return parseJson(completion.choices[0]?.message?.content ?? null);
+  });
 
   return {
     designerBio: asString(raw.designerBio),

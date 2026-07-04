@@ -16,8 +16,16 @@
 import crypto from "node:crypto";
 import { and, eq, ne } from "drizzle-orm";
 import { db, travelsGmailScanDecisions, travelsTrips } from "@workspace/db";
-import { getAllGmailConnections, getValidGmailAccessToken } from "./gmail-tokens";
-import { searchMessages, getMessage, parseGmailMessage, type GmailMessageListItem } from "./gmail-api";
+import {
+  getAllGmailConnections,
+  getValidGmailAccessToken,
+} from "./gmail-tokens";
+import {
+  searchMessages,
+  getMessage,
+  parseGmailMessage,
+  type GmailMessageListItem,
+} from "./gmail-api";
 import { extractFromEmailText } from "./travel-document-extraction";
 import { TRAVEL_LABEL_NAME } from "./gmail-labels";
 import { logger } from "./logger";
@@ -50,12 +58,15 @@ function dedupeKeyFor(extracted: Record<string, unknown>): string | null {
   const provider = normalize(extracted.providerName as string | undefined);
   const reference = normalize(extracted.referenceNumber as string | undefined);
   if (provider && reference) {
-    return crypto.createHash("sha1").update(`${provider}|${reference}`).digest("hex");
+    return crypto
+      .createHash("sha1")
+      .update(`${provider}|${reference}`)
+      .digest("hex");
   }
   const firstDate = normalize(
-    (extracted.departureDateTime ?? extracted.checkInDate ?? extracted.pickupDateTime) as
-      | string
-      | undefined,
+    (extracted.departureDateTime ??
+      extracted.checkInDate ??
+      extracted.pickupDateTime) as string | undefined,
   );
   const from = normalize(extracted.fromLocation as string | undefined);
   const to = normalize(extracted.toLocation as string | undefined);
@@ -80,7 +91,9 @@ function toDateOnly(iso: string | undefined | null): string | null {
  * that trip's date range. Returns null rather than guessing when no trip
  * lines up — the review UI lets the user pick manually in that case.
  */
-async function suggestTripId(extracted: Record<string, unknown>): Promise<number | null> {
+async function suggestTripId(
+  extracted: Record<string, unknown>,
+): Promise<number | null> {
   const travelDate = toDateOnly(
     (extracted.departureDateTime ??
       extracted.checkInDate ??
@@ -89,7 +102,11 @@ async function suggestTripId(extracted: Record<string, unknown>): Promise<number
   if (!travelDate) return null;
 
   const trips = await db
-    .select({ id: travelsTrips.id, startDate: travelsTrips.startDate, endDate: travelsTrips.endDate })
+    .select({
+      id: travelsTrips.id,
+      startDate: travelsTrips.startDate,
+      endDate: travelsTrips.endDate,
+    })
     .from(travelsTrips);
 
   const target = new Date(travelDate).getTime();
@@ -97,7 +114,9 @@ async function suggestTripId(extracted: Record<string, unknown>): Promise<number
   for (const trip of trips) {
     if (!trip.startDate) continue;
     const start = new Date(trip.startDate).getTime() - DAY_MS;
-    const end = trip.endDate ? new Date(trip.endDate).getTime() + DAY_MS : start + DAY_MS;
+    const end = trip.endDate
+      ? new Date(trip.endDate).getTime() + DAY_MS
+      : start + DAY_MS;
     if (target >= start && target <= end) return trip.id;
   }
   return null;
@@ -110,7 +129,9 @@ export interface GmailScanResult {
   autoIgnoredDuplicates: number;
 }
 
-async function scanConnectionForTravelDocuments(userId: number): Promise<GmailScanResult> {
+async function scanConnectionForTravelDocuments(
+  userId: number,
+): Promise<GmailScanResult> {
   const accessToken = await getValidGmailAccessToken(userId);
   if (!accessToken) {
     return { userId, scanned: 0, created: 0, autoIgnoredDuplicates: 0 };
@@ -118,12 +139,17 @@ async function scanConnectionForTravelDocuments(userId: number): Promise<GmailSc
 
   const [keywordMessages, labeledMessages] = await Promise.all([
     searchMessages(accessToken, GMAIL_SEARCH_QUERY, MAX_MESSAGES_PER_SCAN),
-    searchMessages(accessToken, GMAIL_LABEL_SEARCH_QUERY, MAX_LABELED_MESSAGES_PER_SCAN).catch(
-      (err: unknown) => {
-        logger.warn({ err, userId }, "gmail-scan: label-based search failed, continuing with keyword results only");
-        return [] as GmailMessageListItem[];
-      },
-    ),
+    searchMessages(
+      accessToken,
+      GMAIL_LABEL_SEARCH_QUERY,
+      MAX_LABELED_MESSAGES_PER_SCAN,
+    ).catch((err: unknown) => {
+      logger.warn(
+        { err, userId },
+        "gmail-scan: label-based search failed, continuing with keyword results only",
+      );
+      return [] as GmailMessageListItem[];
+    }),
   ]);
   const seenIds = new Set<string>();
   const messages = [...keywordMessages, ...labeledMessages].filter((m) => {
@@ -253,14 +279,24 @@ export async function scanAllGmailConnections(): Promise<GmailScanResult[]> {
     try {
       results.push(await scanConnectionForTravelDocuments(conn.userId));
     } catch (err) {
-      logger.warn({ err, userId: conn.userId }, "gmail-scan: connection scan failed");
-      results.push({ userId: conn.userId, scanned: 0, created: 0, autoIgnoredDuplicates: 0 });
+      logger.warn(
+        { err, userId: conn.userId },
+        "gmail-scan: connection scan failed",
+      );
+      results.push({
+        userId: conn.userId,
+        scanned: 0,
+        created: 0,
+        autoIgnoredDuplicates: 0,
+      });
     }
   }
   return results;
 }
 
-export async function scanGmailForUser(userId: number): Promise<GmailScanResult> {
+export async function scanGmailForUser(
+  userId: number,
+): Promise<GmailScanResult> {
   return scanConnectionForTravelDocuments(userId);
 }
 

@@ -1,6 +1,14 @@
 import { useState } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Pencil, Trash2, ZoomIn, Tag, Check, X as XIcon } from "lucide-react";
+import {
+  ArrowLeft,
+  Pencil,
+  Trash2,
+  ZoomIn,
+  Tag,
+  Check,
+  X as XIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -46,7 +54,6 @@ type LayoutData = {
   }>;
 };
 
-
 export default function LayoutDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
@@ -66,7 +73,9 @@ export default function LayoutDetail() {
   const { data: allBlocks = [] } = useListBlocks();
   const { data: fabrics = [] } = useListFabrics();
   const { data: allCategories } = useListQuiltingCategories();
-  const numMap = buildFabricUrlMap(fabrics as Parameters<typeof buildFabricUrlMap>[0]);
+  const numMap = buildFabricUrlMap(
+    fabrics as Parameters<typeof buildFabricUrlMap>[0],
+  );
 
   const deleteLayout = useDeleteLayout({
     mutation: {
@@ -101,7 +110,9 @@ export default function LayoutDetail() {
   function handleSaveCategories() {
     const merged = [
       ...(allCategories ?? []),
-      ...localNewCats.filter((nc) => !(allCategories ?? []).some((a) => a.id === nc.id)),
+      ...localNewCats.filter(
+        (nc) => !(allCategories ?? []).some((a) => a.id === nc.id),
+      ),
     ];
     const categoryNames = merged
       .filter((c) => selectedCatIds.includes(c.id))
@@ -158,7 +169,14 @@ export default function LayoutDetail() {
         >
           <LayoutPreviewSvg
             layout={l}
-            blocks={allBlocks as unknown as { id: number; gridSize: number; cells: string[]; rotation?: number }[]}
+            blocks={
+              allBlocks as unknown as {
+                id: number;
+                gridSize: number;
+                cells: string[];
+                rotation?: number;
+              }[]
+            }
             fabricUrlMap={numMap}
             size={280}
           />
@@ -280,7 +298,9 @@ export default function LayoutDetail() {
                   selectedIds={selectedCatIds}
                   onToggle={(id) =>
                     setSelectedCatIds((prev) =>
-                      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+                      prev.includes(id)
+                        ? prev.filter((x) => x !== id)
+                        : [...prev, id],
                     )
                   }
                   onCreated={(cat) => {
@@ -315,14 +335,20 @@ export default function LayoutDetail() {
               <div className="flex flex-wrap gap-1.5">
                 {l.categories.map((cat) => {
                   const palette = cat.bgColor
-                    ? { bgColor: cat.bgColor, textColor: cat.textColor ?? "#fff" }
+                    ? {
+                        bgColor: cat.bgColor,
+                        textColor: cat.textColor ?? "#fff",
+                      }
                     : getCategoryPalette(cat.name);
                   return (
                     <Badge
                       key={cat.id}
                       variant="outline"
                       className="border-transparent"
-                      style={{ backgroundColor: palette.bgColor, color: palette.textColor }}
+                      style={{
+                        backgroundColor: palette.bgColor,
+                        color: palette.textColor,
+                      }}
                     >
                       {cat.name}
                     </Badge>
@@ -331,16 +357,28 @@ export default function LayoutDetail() {
               </div>
             ) : (
               <p className="text-xs italic text-muted-foreground">
-                No categories — click <Pencil className="inline h-2.5 w-2.5" /> to add
+                No categories — click <Pencil className="inline h-2.5 w-2.5" />{" "}
+                to add
               </p>
             )}
           </section>
         </div>
       </div>
-      <PreviewZoomModal open={zoomOpen} onClose={() => setZoomOpen(false)} title={l.name}>
+      <PreviewZoomModal
+        open={zoomOpen}
+        onClose={() => setZoomOpen(false)}
+        title={l.name}
+      >
         <LayoutPreviewSvg
           layout={l}
-          blocks={allBlocks as unknown as { id: number; gridSize: number; cells: string[]; rotation?: number }[]}
+          blocks={
+            allBlocks as unknown as {
+              id: number;
+              gridSize: number;
+              cells: string[];
+              rotation?: number;
+            }[]
+          }
           fabricUrlMap={numMap}
           size={500}
         />

@@ -1,7 +1,11 @@
 import crypto from "node:crypto";
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, travelsGoogleCalendarConnections, travelsConnectedCalendars } from "@workspace/db";
+import {
+  db,
+  travelsGoogleCalendarConnections,
+  travelsConnectedCalendars,
+} from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import {
   createGoogleCalendarClient,
@@ -18,7 +22,10 @@ const TEN_MINUTES_MS = 1000 * 60 * 10;
 const OAUTH_STATE_COOKIE = "travels.gcal_oauth_state";
 const OAUTH_COOKIE_PATH = "/api/travels/google-calendar";
 
-function callbackUrl(req: { protocol: string; get: (h: string) => string | undefined }): string {
+function callbackUrl(req: {
+  protocol: string;
+  get: (h: string) => string | undefined;
+}): string {
   const host = req.get("host");
   return `${req.protocol}://${host}/api/travels/google-calendar/callback`;
 }

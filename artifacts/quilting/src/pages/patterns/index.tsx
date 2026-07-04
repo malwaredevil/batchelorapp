@@ -104,195 +104,206 @@ function PatternCard({
   const [zoomOpen, setZoomOpen] = useState(false);
   return (
     <>
-    <div
-      className="group relative overflow-hidden rounded-xl border border-card-border bg-card transition-shadow hover:shadow-md"
-      onClick={() => {
-        if (isBulkMode) onToggleSelect(pattern.id);
-      }}
-    >
-      {isBulkMode && (
-        <div
-          className={`absolute left-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full shadow-sm transition-colors ${isSelected ? "bg-primary text-primary-foreground" : "bg-background/90 text-muted-foreground"}`}
-        >
-          {isSelected ? (
-            <CheckSquare className="h-4 w-4" />
-          ) : (
-            <Square className="h-4 w-4" />
-          )}
-        </div>
-      )}
-      <Link
-        href={`/patterns/${pattern.id}`}
-        className={`block ${isBulkMode ? "pointer-events-none" : ""}`}
+      <div
+        className="group relative overflow-hidden rounded-xl border border-card-border bg-card transition-shadow hover:shadow-md"
+        onClick={() => {
+          if (isBulkMode) onToggleSelect(pattern.id);
+        }}
       >
-        <div className="relative aspect-square overflow-hidden bg-muted">
-          {pattern.imageUrl ? (
-            <img
-              src={pattern.imageUrl}
-              alt={pattern.name}
-              className="h-full w-full object-cover transition-transform group-hover:scale-105"
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center">
-              <BookOpen className="h-12 w-12 text-muted-foreground/25" />
-            </div>
-          )}
-          {pattern.imageUrl && (
-            <button
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setZoomOpen(true); }}
-              className="absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/70"
-              title="Zoom preview"
-            >
-              <ZoomIn className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-        <div className="p-3 pr-8">
-          <p className="truncate text-sm font-semibold text-foreground">
-            {pattern.name}
-          </p>
-          {pattern.designer && (
-            <p className="truncate text-xs text-muted-foreground">
-              by {pattern.designer}
-            </p>
-          )}
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {pattern.difficulty && (
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onFilterByDifficulty?.(pattern.difficulty!);
-                }}
-                className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground capitalize transition-all hover:ring-2 hover:ring-primary/50 cursor-pointer"
-              >
-                {pattern.difficulty}
-              </button>
+        {isBulkMode && (
+          <div
+            className={`absolute left-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full shadow-sm transition-colors ${isSelected ? "bg-primary text-primary-foreground" : "bg-background/90 text-muted-foreground"}`}
+          >
+            {isSelected ? (
+              <CheckSquare className="h-4 w-4" />
+            ) : (
+              <Square className="h-4 w-4" />
             )}
-            {pattern.sourceType && (
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onFilterBySourceType?.(pattern.sourceType!);
-                }}
-                className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground capitalize transition-all hover:ring-2 hover:ring-primary/50 cursor-pointer"
-              >
-                {pattern.sourceType}
-              </button>
-            )}
-            {pattern.blockSize && (
-              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                {pattern.blockSize}
-              </span>
-            )}
-            {(pattern.categories ?? []).map((cat) => (
-              <button
-                key={cat.id}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onFilterByCategory?.(cat.id);
-                }}
-                className="rounded-full px-2 py-0.5 text-[10px] font-medium leading-tight transition-all hover:opacity-80 cursor-pointer"
-                style={(() => {
-                  const p = cat.bgColor
-                    ? { bgColor: cat.bgColor, textColor: cat.textColor ?? "#fff" }
-                    : getCategoryPalette(cat.name);
-                  return { backgroundColor: p.bgColor, color: p.textColor };
-                })()}
-              >
-                {cat.name}
-              </button>
-            ))}
           </div>
-          {(pattern.dominantColors ?? []).length > 0 && (
+        )}
+        <Link
+          href={`/patterns/${pattern.id}`}
+          className={`block ${isBulkMode ? "pointer-events-none" : ""}`}
+        >
+          <div className="relative aspect-square overflow-hidden bg-muted">
+            {pattern.imageUrl ? (
+              <img
+                src={pattern.imageUrl}
+                alt={pattern.name}
+                className="h-full w-full object-cover transition-transform group-hover:scale-105"
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center">
+                <BookOpen className="h-12 w-12 text-muted-foreground/25" />
+              </div>
+            )}
+            {pattern.imageUrl && (
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setZoomOpen(true);
+                }}
+                className="absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/70"
+                title="Zoom preview"
+              >
+                <ZoomIn className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <div className="p-3 pr-8">
+            <p className="truncate text-sm font-semibold text-foreground">
+              {pattern.name}
+            </p>
+            {pattern.designer && (
+              <p className="truncate text-xs text-muted-foreground">
+                by {pattern.designer}
+              </p>
+            )}
             <div className="mt-1.5 flex flex-wrap gap-1">
-              {(pattern.dominantColors ?? []).map((hex) => (
+              {pattern.difficulty && (
                 <button
-                  key={hex}
-                  title={hex}
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    onFilterByColor?.(hex);
+                    onFilterByDifficulty?.(pattern.difficulty!);
                   }}
-                  className="h-4 w-4 rounded-full border border-black/10 transition-transform hover:scale-110"
-                  style={{ backgroundColor: hex }}
-                />
+                  className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground capitalize transition-all hover:ring-2 hover:ring-primary/50 cursor-pointer"
+                >
+                  {pattern.difficulty}
+                </button>
+              )}
+              {pattern.sourceType && (
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onFilterBySourceType?.(pattern.sourceType!);
+                  }}
+                  className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground capitalize transition-all hover:ring-2 hover:ring-primary/50 cursor-pointer"
+                >
+                  {pattern.sourceType}
+                </button>
+              )}
+              {pattern.blockSize && (
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  {pattern.blockSize}
+                </span>
+              )}
+              {(pattern.categories ?? []).map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onFilterByCategory?.(cat.id);
+                  }}
+                  className="rounded-full px-2 py-0.5 text-[10px] font-medium leading-tight transition-all hover:opacity-80 cursor-pointer"
+                  style={(() => {
+                    const p = cat.bgColor
+                      ? {
+                          bgColor: cat.bgColor,
+                          textColor: cat.textColor ?? "#fff",
+                        }
+                      : getCategoryPalette(cat.name);
+                    return { backgroundColor: p.bgColor, color: p.textColor };
+                  })()}
+                >
+                  {cat.name}
+                </button>
               ))}
             </div>
-          )}
-        </div>
-      </Link>
+            {(pattern.dominantColors ?? []).length > 0 && (
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {(pattern.dominantColors ?? []).map((hex) => (
+                  <button
+                    key={hex}
+                    title={hex}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onFilterByColor?.(hex);
+                    }}
+                    className="h-4 w-4 rounded-full border border-black/10 transition-transform hover:scale-110"
+                    style={{ backgroundColor: hex }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </Link>
 
-      {!isBulkMode && (
-        <div className="absolute right-2 top-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 rounded-full opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 hover:opacity-100"
-              >
-                <MoreVertical className="h-3.5 w-3.5" />
-                <span className="sr-only">Options</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => navigate(`/patterns/${pattern.id}`)}
-              >
-                <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                Open
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => navigate(`/patterns/${pattern.id}?edit=1`)}
-              >
-                <Pencil className="mr-2 h-3.5 w-3.5" />
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onReanalyze(pattern.id)}>
-                <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                Refresh AI
-              </DropdownMenuItem>
-              {pattern.imageUrl && (
-                <DropdownMenuItem
-                  onClick={() =>
-                    downloadCollectionImage(pattern.imageUrl!, pattern.name)
-                  }
+        {!isBulkMode && (
+          <div className="absolute right-2 top-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-full opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 hover:opacity-100"
                 >
-                  <Download className="mr-2 h-3.5 w-3.5" />
-                  Download photo
+                  <MoreVertical className="h-3.5 w-3.5" />
+                  <span className="sr-only">Options</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => navigate(`/patterns/${pattern.id}`)}
+                >
+                  <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                  Open
                 </DropdownMenuItem>
-              )}
-              <DropdownMenuItem onClick={() => onEditCategories?.()}>
-                <Tag className="mr-2 h-3.5 w-3.5" />
-                Set categories
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={() => onDelete(pattern.id)}
-              >
-                <Trash2 className="mr-2 h-3.5 w-3.5" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+                <DropdownMenuItem
+                  onClick={() => navigate(`/patterns/${pattern.id}?edit=1`)}
+                >
+                  <Pencil className="mr-2 h-3.5 w-3.5" />
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onReanalyze(pattern.id)}>
+                  <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                  Refresh AI
+                </DropdownMenuItem>
+                {pattern.imageUrl && (
+                  <DropdownMenuItem
+                    onClick={() =>
+                      downloadCollectionImage(pattern.imageUrl!, pattern.name)
+                    }
+                  >
+                    <Download className="mr-2 h-3.5 w-3.5" />
+                    Download photo
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onClick={() => onEditCategories?.()}>
+                  <Tag className="mr-2 h-3.5 w-3.5" />
+                  Set categories
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={() => onDelete(pattern.id)}
+                >
+                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
+      </div>
+      {pattern.imageUrl && (
+        <PreviewZoomModal
+          open={zoomOpen}
+          onClose={() => setZoomOpen(false)}
+          title={pattern.name}
+        >
+          <img
+            src={pattern.imageUrl}
+            alt={pattern.name}
+            className="max-h-[85vh] max-w-[85vw] rounded object-contain"
+            draggable={false}
+          />
+        </PreviewZoomModal>
       )}
-    </div>
-    {pattern.imageUrl && (
-      <PreviewZoomModal open={zoomOpen} onClose={() => setZoomOpen(false)} title={pattern.name}>
-        <img
-          src={pattern.imageUrl}
-          alt={pattern.name}
-          className="max-h-[85vh] max-w-[85vw] rounded object-contain"
-          draggable={false}
-        />
-      </PreviewZoomModal>
-    )}
     </>
   );
 }
@@ -308,7 +319,8 @@ export default function Patterns() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const queryClient = useQueryClient();
   const { data: patterns, isLoading, isError } = useListPatterns();
-  const [categoryEditItem, setCategoryEditItem] = useState<PatternSummary | null>(null);
+  const [categoryEditItem, setCategoryEditItem] =
+    useState<PatternSummary | null>(null);
   const { data: categoryApiList } = useListQuiltingCategories();
 
   const updatePatternCategories = useUpdatePattern({
@@ -424,7 +436,10 @@ export default function Patterns() {
     const result: string[] = [];
     for (const p of (patterns ?? []) as PatternSummary[]) {
       for (const c of p.dominantColors ?? []) {
-        if (!seen.has(c)) { seen.add(c); result.push(c); }
+        if (!seen.has(c)) {
+          seen.add(c);
+          result.push(c);
+        }
       }
     }
     return result;
@@ -445,9 +460,14 @@ export default function Patterns() {
           categoryFilter === null ||
           (p.categories ?? []).some((c) => c.id === categoryFilter);
         const matchesColor =
-          colorFilter.length === 0 || colorFilter.every((c) => (p.dominantColors ?? []).includes(c));
+          colorFilter.length === 0 ||
+          colorFilter.every((c) => (p.dominantColors ?? []).includes(c));
         return (
-          matchesSearch && matchesDifficulty && matchesSourceType && matchesCat && matchesColor
+          matchesSearch &&
+          matchesDifficulty &&
+          matchesSourceType &&
+          matchesCat &&
+          matchesColor
         );
       })
     : null;
@@ -476,11 +496,36 @@ export default function Patterns() {
       {stats && (
         <div className="mb-6 hidden sm:grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {[
-            { label: "Fabrics", value: stats.totalFabrics, sub: "in your stash", href: "/fabrics" },
-            { label: "Patterns", value: stats.totalPatterns, sub: "saved", href: "/patterns" },
-            { label: "Quilts", value: stats.totalQuilts, sub: "in collection", href: "/quilts" },
-            { label: "Blocks", value: stats.totalBlocks, sub: "designed", href: "/blocks" },
-            { label: "Layouts", value: stats.totalLayouts, sub: "arranged", href: "/layouts" },
+            {
+              label: "Fabrics",
+              value: stats.totalFabrics,
+              sub: "in your stash",
+              href: "/fabrics",
+            },
+            {
+              label: "Patterns",
+              value: stats.totalPatterns,
+              sub: "saved",
+              href: "/patterns",
+            },
+            {
+              label: "Quilts",
+              value: stats.totalQuilts,
+              sub: "in collection",
+              href: "/quilts",
+            },
+            {
+              label: "Blocks",
+              value: stats.totalBlocks,
+              sub: "designed",
+              href: "/blocks",
+            },
+            {
+              label: "Layouts",
+              value: stats.totalLayouts,
+              sub: "arranged",
+              href: "/layouts",
+            },
           ].map(({ label, value, sub, href }) => (
             <Link
               key={label}
@@ -488,7 +533,9 @@ export default function Patterns() {
               className="rounded-xl border border-card-border bg-card p-4 block hover:shadow-sm hover:border-primary/30 transition-all"
             >
               <p className="text-2xl font-bold text-foreground">{value}</p>
-              <p className="text-sm font-medium text-foreground mt-0.5">{label}</p>
+              <p className="text-sm font-medium text-foreground mt-0.5">
+                {label}
+              </p>
               <p className="text-xs text-muted-foreground">{sub}</p>
             </Link>
           ))}
@@ -621,7 +668,9 @@ export default function Patterns() {
                   title={hex}
                   onClick={() =>
                     setColorFilter((prev) =>
-                      prev.includes(hex) ? prev.filter((c) => c !== hex) : [...prev, hex]
+                      prev.includes(hex)
+                        ? prev.filter((c) => c !== hex)
+                        : [...prev, hex],
                     )
                   }
                   className={cn(
@@ -681,7 +730,10 @@ export default function Patterns() {
                   className="rounded-full border px-3 py-1 text-xs font-medium transition"
                   style={(() => {
                     const palette = cat.bgColor
-                      ? { bgColor: cat.bgColor, textColor: cat.textColor ?? "#fff" }
+                      ? {
+                          bgColor: cat.bgColor,
+                          textColor: cat.textColor ?? "#fff",
+                        }
                       : getCategoryPalette(cat.name);
                     const active = categoryFilter === cat.id;
                     return {
@@ -785,7 +837,9 @@ export default function Patterns() {
               }
               onFilterByColor={(hex) =>
                 setColorFilter((prev) =>
-                  prev.includes(hex) ? prev.filter((c) => c !== hex) : [...prev, hex]
+                  prev.includes(hex)
+                    ? prev.filter((c) => c !== hex)
+                    : [...prev, hex],
                 )
               }
               onEditCategories={() => setCategoryEditItem(pattern)}
@@ -797,7 +851,9 @@ export default function Patterns() {
         open={categoryEditItem !== null}
         onClose={() => setCategoryEditItem(null)}
         title={categoryEditItem?.name ?? ""}
-        currentCategories={(categoryEditItem?.categories ?? []) as unknown as QuiltingCategory[]}
+        currentCategories={
+          (categoryEditItem?.categories ?? []) as unknown as QuiltingCategory[]
+        }
         allCategories={categoryApiList ?? []}
         onSave={(names) => {
           if (categoryEditItem) {

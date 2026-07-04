@@ -49,7 +49,10 @@ const DATE_RULES = `IMPORTANT date-extraction rules:
 
 function parseAiExtractionJson(result: string): Record<string, unknown> {
   try {
-    const stripped = result.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+    const stripped = result
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/, "")
+      .trim();
     return JSON.parse(stripped);
   } catch {
     return { notes: result };
@@ -69,7 +72,12 @@ export async function extractFromImage(
     async (client, model, tools) => {
       const resp = await client.chat.completions.create({
         model,
-        ...(tools ? { tools: tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[] } : {}),
+        ...(tools
+          ? {
+              tools:
+                tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[],
+            }
+          : {}),
         messages: [
           {
             role: "user",
@@ -120,7 +128,12 @@ export async function extractFromPdf(
     async (client, model, tools) => {
       const resp = await client.chat.completions.create({
         model,
-        ...(tools ? { tools: tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[] } : {}),
+        ...(tools
+          ? {
+              tools:
+                tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[],
+            }
+          : {}),
         messages: [
           {
             role: "user",
@@ -167,7 +180,12 @@ export async function extractFromEmailText(
     async (client, model, tools) => {
       const resp = await client.chat.completions.create({
         model,
-        ...(tools ? { tools: tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[] } : {}),
+        ...(tools
+          ? {
+              tools:
+                tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[],
+            }
+          : {}),
         messages: [
           {
             role: "user",

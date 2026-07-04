@@ -44,7 +44,10 @@ async function listLabels(accessToken: string): Promise<GmailLabel[]> {
   return body.labels ?? [];
 }
 
-async function createLabel(accessToken: string, name: string): Promise<GmailLabel> {
+async function createLabel(
+  accessToken: string,
+  name: string,
+): Promise<GmailLabel> {
   const res = await fetch(`${GMAIL_API_BASE}/users/me/labels`, {
     method: "POST",
     headers: {
@@ -60,17 +63,24 @@ async function createLabel(accessToken: string, name: string): Promise<GmailLabe
   if (res.status === 409) {
     // Race: label already exists (e.g. created concurrently, or our cached
     // list was stale) — look it up instead of failing.
-    const existing = (await listLabels(accessToken)).find((l) => l.name === name);
+    const existing = (await listLabels(accessToken)).find(
+      (l) => l.name === name,
+    );
     if (existing) return existing;
   }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`Gmail labels.create failed (${res.status}): ${body.slice(0, 300)}`);
+    throw new Error(
+      `Gmail labels.create failed (${res.status}): ${body.slice(0, 300)}`,
+    );
   }
   return (await res.json()) as GmailLabel;
 }
 
-async function getOrCreateLabel(accessToken: string, name: string): Promise<string> {
+async function getOrCreateLabel(
+  accessToken: string,
+  name: string,
+): Promise<string> {
   const existing = (await listLabels(accessToken)).find((l) => l.name === name);
   if (existing) return existing.id;
   const created = await createLabel(accessToken, name);
@@ -98,11 +108,16 @@ export async function getOrCreateUserLabels(
     .limit(1);
 
   const travelLabelId =
-    connection?.travelLabelId ?? (await getOrCreateLabel(accessToken, TRAVEL_LABEL_NAME));
+    connection?.travelLabelId ??
+    (await getOrCreateLabel(accessToken, TRAVEL_LABEL_NAME));
   const reviewedLabelId =
-    connection?.reviewedLabelId ?? (await getOrCreateLabel(accessToken, REVIEWED_LABEL_NAME));
+    connection?.reviewedLabelId ??
+    (await getOrCreateLabel(accessToken, REVIEWED_LABEL_NAME));
 
-  if (travelLabelId !== connection?.travelLabelId || reviewedLabelId !== connection?.reviewedLabelId) {
+  if (
+    travelLabelId !== connection?.travelLabelId ||
+    reviewedLabelId !== connection?.reviewedLabelId
+  ) {
     await db
       .update(travelsGmailConnections)
       .set({ travelLabelId, reviewedLabelId, updatedAt: new Date() })
@@ -117,17 +132,22 @@ export async function applyLabelsToMessage(
   messageId: string,
   labelIds: string[],
 ): Promise<void> {
-  const res = await fetch(`${GMAIL_API_BASE}/users/me/messages/${messageId}/modify`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
+  const res = await fetch(
+    `${GMAIL_API_BASE}/users/me/messages/${messageId}/modify`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ addLabelIds: labelIds }),
     },
-    body: JSON.stringify({ addLabelIds: labelIds }),
-  });
+  );
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`Gmail messages.modify failed (${res.status}): ${body.slice(0, 300)}`);
+    throw new Error(
+      `Gmail messages.modify failed (${res.status}): ${body.slice(0, 300)}`,
+    );
   }
 }
 
@@ -143,9 +163,18 @@ export async function markMessageAsIngestedTravel(
   messageId: string,
 ): Promise<void> {
   try {
-    const { travelLabelId, reviewedLabelId } = await getOrCreateUserLabels(userId, accessToken);
-    await applyLabelsToMessage(accessToken, messageId, [travelLabelId, reviewedLabelId]);
+    const { travelLabelId, reviewedLabelId } = await getOrCreateUserLabels(
+      userId,
+      accessToken,
+    );
+    await applyLabelsToMessage(accessToken, messageId, [
+      travelLabelId,
+      reviewedLabelId,
+    ]);
   } catch (err) {
-    logger.warn({ err, userId, messageId }, "gmail-labels: failed to apply Travel/Batchelor App labels");
+    logger.warn(
+      { err, userId, messageId },
+      "gmail-labels: failed to apply Travel/Batchelor App labels",
+    );
   }
 }

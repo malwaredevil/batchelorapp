@@ -57,15 +57,17 @@ a merge commit; never force-push to "fix" it.
   (free) or GHAS is purchased. A committed `codeql.yml` would just fail to upload
   results on a private repo, so don't add one as a workaround.
 
-## CI now has a Lint gate, and it's red on ~219 pre-existing files
+## CI has a Lint gate — verify current state, don't assume it's still red
 
-- A `Lint` job (`pnpm run lint` → `prettier --check .`) was added to CI at some
-  point after the "lint gate absent" note above was written — don't trust that
-  note, verify current `.github/workflows/*.yml` and `package.json` scripts.
-- As of 2026-07-04 the Lint job fails on ~219 pre-existing files repo-wide
-  (unrelated to any single feature session) — verified by checking CI runs
-  before a session's own commits landed. Don't attempt to silently fix this by
-  reformatting the whole repo inside an unrelated feature task; it's a big,
-  separate diff. Only format the files you actually touched
-  (`npx prettier --write <your files>`) and flag the repo-wide debt to the user
-  (tracked as a GitHub issue) instead of doing a mass reformat unprompted.
+- A `Lint` job (`pnpm run lint` → `prettier --check .`) exists in CI —
+  verify current `.github/workflows/*.yml` and `package.json` scripts rather
+  than trusting any prior note about its pass/fail state.
+- A repo-wide ~219-file Prettier debt (tracked as a GitHub issue) was cleared
+  on 2026-07-04 in one isolated formatting-only commit, landed via the Git
+  Data API in a single call (208 blobs batched into one tree/commit — the
+  API handles that scale fine, no need to chunk). Don't repeat a mass
+  reformat sweep unless `pnpm run lint` shows the debt has reappeared.
+- General rule for feature work: don't fix unrelated repo-wide lint debt
+  inside a feature task — it's a big, separate diff. Only format the files
+  you actually touched (`npx prettier --write <your files>`) and flag
+  repo-wide debt as its own GitHub issue/task instead.

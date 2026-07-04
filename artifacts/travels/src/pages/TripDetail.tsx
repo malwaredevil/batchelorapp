@@ -444,6 +444,17 @@ function DocumentRow({
   );
 }
 
+const NEARBY_SEARCH_CATEGORIES = [
+  "restaurants",
+  "coffee",
+  "bars",
+  "museums",
+  "pharmacy",
+  "atm",
+  "grocery store",
+  "attractions",
+];
+
 function TripWeatherAndPlaces({
   tripId,
   lat,
@@ -537,6 +548,25 @@ function TripWeatherAndPlaces({
             >
               Search
             </Button>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {NEARBY_SEARCH_CATEGORIES.map((category) => (
+              <button
+                key={category}
+                type="button"
+                onClick={() => {
+                  setPlaceQuery(category);
+                  setSearchTerm(category);
+                }}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors capitalize ${
+                  searchTerm === category
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-card text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
+                }`}
+              >
+                {category}
+              </button>
+            ))}
           </div>
           {placesQuery.isLoading && (
             <p className="text-sm text-muted-foreground">Searching…</p>

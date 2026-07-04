@@ -26,6 +26,7 @@ import {
 import { extractFromEmailText, extractFromImage, extractFromPdf } from "../../lib/travel-document-extraction";
 import { uploadDocument } from "../../lib/travels-storage";
 import { scanGmailForUser } from "../../lib/gmail-scan";
+import { markMessageAsIngestedTravel } from "../../lib/gmail-labels";
 import { syncItineraryFromDocument } from "./documents";
 import { logger } from "../../lib/logger";
 
@@ -428,6 +429,15 @@ router.post("/gmail/messages/:messageId/link", async (req, res) => {
           updatedAt: new Date(),
         },
       });
+
+    // Only mark the email in Gmail (Travel + Batchelor App labels) when this
+    // link confirms an AI-generated suggestion the user is accepting — a
+    // fresh manual pick from the inbox browser was never labeled "Travel" by
+    // the app in the first place, and per product decision manual picks stay
+    // ledger-only (no Gmail write), so they're excluded here.
+    if (existingDecision?.status === "pending") {
+      await markMessageAsIngestedTravel(userId, accessToken, messageId);
+    }
 
     res.status(201).json(doc);
   } catch (err) {

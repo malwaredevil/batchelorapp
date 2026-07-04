@@ -763,6 +763,11 @@ export const STATEMENTS: string[] = [
     updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
   `ALTER TABLE travels_gmail_connections ENABLE ROW LEVEL SECURITY`,
+  // Cached Gmail label ids ("Travel" / "Batchelor App") for this user's own
+  // mailbox — added after initial launch, so additive ALTER rather than in
+  // the CREATE TABLE above.
+  `ALTER TABLE travels_gmail_connections ADD COLUMN IF NOT EXISTS travel_label_id TEXT`,
+  `ALTER TABLE travels_gmail_connections ADD COLUMN IF NOT EXISTS reviewed_label_id TEXT`,
 
   `CREATE TABLE IF NOT EXISTS travels_gmail_scan_decisions (
     id                  SERIAL PRIMARY KEY,

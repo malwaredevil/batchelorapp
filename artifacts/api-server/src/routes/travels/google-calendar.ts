@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, travelsGoogleCalendarConnections } from "@workspace/db";
+import { db, travelsGoogleCalendarConnections, travelsConnectedCalendars } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import {
   createGoogleCalendarClient,
@@ -166,13 +166,16 @@ router.get("/google-calendar/calendars", requireAuth, async (req, res) => {
   }
 });
 
-// DELETE /google-calendar/disconnect — remove the stored connection (and,
-// by extension, every connected calendar row that depended on this token —
-// handled by the connected-calendars route via ON DELETE semantics is not
-// enforced at the DB level, so callers should remove connected calendars
-// first if they want a clean teardown; this just revokes the token).
+// DELETE /google-calendar/disconnect — revoke the stored OAuth connection
+// and clean up every connected-calendar row that depended on it (there's no
+// DB-level cascade, so we do it explicitly here) — otherwise a disconnected
+// user would still see stale calendar entries in Settings/overlay that
+// silently reappear, pre-selected, on reconnect.
 router.delete("/google-calendar/disconnect", requireAuth, async (req, res) => {
   const userId = req.session.userId!;
+  await db
+    .delete(travelsConnectedCalendars)
+    .where(eq(travelsConnectedCalendars.userId, userId));
   await db
     .delete(travelsGoogleCalendarConnections)
     .where(eq(travelsGoogleCalendarConnections.userId, userId));

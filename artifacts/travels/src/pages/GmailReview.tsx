@@ -31,6 +31,16 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
+import {
   useGetGmailStatus,
   useScanGmail,
   useGetGmailSuggestions,
@@ -395,6 +405,9 @@ function InboxBrowserTab({
   const [selectedTrip, setSelectedTrip] = useState<Record<string, string>>({});
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [bulkTripId, setBulkTripId] = useState("");
+  const [unlinkTarget, setUnlinkTarget] = useState<GmailInboxMessage | null>(
+    null,
+  );
 
   const inboxQueryKey = getGetGmailInboxQueryKey({
     q: committedQuery || undefined,
@@ -472,16 +485,21 @@ function InboxBrowserTab({
     });
   }
 
-  function handleUnlink(m: GmailInboxMessage) {
+  function handleConfirmUnlink() {
+    const m = unlinkTarget;
+    if (!m) return;
     unlink.mutate(m.id, {
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: inboxQueryKey });
         toast.success("Unlinked — this email can be added again");
+        setUnlinkTarget(null);
       },
-      onError: (err) =>
+      onError: (err) => {
         toast.error(
           err instanceof Error ? err.message : "Could not unlink this email",
-        ),
+        );
+        setUnlinkTarget(null);
+      },
     });
   }
 
@@ -736,7 +754,7 @@ function InboxBrowserTab({
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => handleUnlink(m)}
+                    onClick={() => setUnlinkTarget(m)}
                     disabled={unlink.isPending}
                   >
                     <Link2Off className="h-3.5 w-3.5 mr-1.5" />
@@ -775,6 +793,71 @@ function InboxBrowserTab({
           </Button>
         </div>
       )}
+
+      <AlertDialog
+        open={unlinkTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setUnlinkTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unlink this email?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  This frees{" "}
+                  <span className="font-medium text-foreground">
+                    {unlinkTarget?.subject || "(no subject)"}
+                  </span>{" "}
+                  so you can add it to a trip again.
+                </p>
+                <div className="rounded-lg border border-card-border bg-muted/40 p-3 text-sm">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Will be deleted
+                  </p>
+                  <p className="mt-1 text-foreground">
+                    {unlinkTarget?.linkedDocumentName ||
+                      "The trip document created from this email"}
+                    {unlinkTarget?.linkedTripTitle ? (
+                      <>
+                        {" "}
+                        <span className="text-muted-foreground">
+                          from {unlinkTarget.linkedTripTitle}
+                        </span>
+                      </>
+                    ) : null}
+                  </p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Any itinerary entries created from this document are removed
+                    too. This can't be undone, but you can re-add the email
+                    afterwards.
+                  </p>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={unlink.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleConfirmUnlink();
+              }}
+              disabled={unlink.isPending}
+            >
+              {unlink.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <Link2Off className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              Unlink &amp; delete document
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

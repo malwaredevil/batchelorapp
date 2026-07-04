@@ -11,6 +11,20 @@ function alertTypeForDays(days: number): ReminderAlertType {
   return `${days}_day` as ReminderAlertType;
 }
 
+// Pure calendar-day difference between a `YYYY-MM-DD` due date and "now".
+// Both sides are normalized to UTC midnight before diffing, so the result
+// only depends on the calendar date — not on what time of day the hourly
+// scheduler happens to run or the server's local timezone. Using a raw
+// millisecond diff with Math.round (the previous approach) rounded
+// inconsistently depending on time-of-day, which could make a reminder due
+// "in exactly N days" match its configured alertDaysBefore on the wrong
+// run — skipping the alert entirely or firing it a day early/late.
+export function daysUntilDue(dueDate: string, now: Date = new Date()): number {
+  const dueMidnightUtc = new Date(`${dueDate}T00:00:00Z`).getTime();
+  const nowMidnightUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return Math.round((dueMidnightUtc - nowMidnightUtc) / 86_400_000);
+}
+
 export async function runReminderAlerts(): Promise<void> {
   if (!resendConfigured()) {
     logger.debug("reminder-scheduler: Resend not configured, skipping");
@@ -59,12 +73,10 @@ export async function runReminderAlerts(): Promise<void> {
         candidate.alert_days_before,
       );
 
-      const daysUntilDue = Math.round(
-        (new Date(`${candidate.due_date}T00:00:00Z`).getTime() - Date.now()) / 86_400_000,
-      );
+      const dueInDays = daysUntilDue(candidate.due_date);
 
       for (const days of alertDaysBefore) {
-        if (daysUntilDue !== days) continue;
+        if (dueInDays !== days) continue;
         const type = alertTypeForDays(days) ?? (`${days}_day` as ReminderAlertType);
 
         const { rows: alreadySent } = await client.query<{ id: number }>(

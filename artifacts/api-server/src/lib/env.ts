@@ -23,4 +23,10 @@ export const env = {
   googleWalletServiceAccountJson: optional("GOOGLE_WALLET_SERVICE_ACCOUNT_JSON"),
   googleWalletIssuerId: optional("GOOGLE_WALLET_ISSUER_ID"),
   isProduction: process.env.NODE_ENV === "production",
+  // Dev-only automation: lets the automated screenshot tool log in as a fixed
+  // account (AGENT_LOGIN_EMAIL) without a browser-driven form submission, so
+  // it can capture authenticated screenshots. Never usable in production even
+  // if both are somehow set there (see routes/dev-screenshot-login.ts).
+  screenshotAuthToken: optional("SCREENSHOT_AUTH_TOKEN"),
+  agentLoginEmail: optional("AGENT_LOGIN_EMAIL"),
 };

@@ -545,6 +545,7 @@ async function linkMessageToTrip(
           (extractedData.documentType as string | undefined) ?? null,
         originalFilename: attachment.filename,
         extractedData,
+        gmailMessageId: messageId,
       })
       .returning();
     results.push({ doc: doc!, extractedData });
@@ -580,6 +581,7 @@ async function linkMessageToTrip(
           (extractedData.documentType as string | undefined) ?? null,
         originalFilename,
         extractedData,
+        gmailMessageId: messageId,
       })
       .returning();
     results.push({ doc: doc!, extractedData });

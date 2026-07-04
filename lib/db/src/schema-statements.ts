@@ -404,6 +404,7 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS travels_trip_documents_trip_id_idx ON travels_trip_documents (trip_id)`,
   `CREATE INDEX IF NOT EXISTS travels_trip_documents_user_id_idx ON travels_trip_documents (user_id)`,
   `ALTER TABLE travels_trip_documents ADD COLUMN IF NOT EXISTS locked_fields TEXT[] NOT NULL DEFAULT '{}'`,
+  `ALTER TABLE travels_trip_documents ADD COLUMN IF NOT EXISTS gmail_message_id TEXT`,
 
   // ── Travels enhancements ────────────────────────────────────────────────────
   // chat_history: per-trip AI conversation (array of {role, content} objects)

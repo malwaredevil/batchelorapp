@@ -68,6 +68,7 @@ export const travelsTripDocuments = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
+    gmailMessageId: text("gmail_message_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

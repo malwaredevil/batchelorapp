@@ -306,16 +306,190 @@ router.get("/gmail/inbox", async (req, res) => {
 
 const LinkBody = z.object({
   tripId: z.number().int().positive(),
-  attachmentIndex: z.number().int().min(0).optional(),
+});
+
+const MAX_BULK_LINK_MESSAGES = 25;
+const BulkLinkBody = z.object({
+  messageIds: z.array(z.string().min(1)).min(1).max(MAX_BULK_LINK_MESSAGES),
+  tripId: z.number().int().positive(),
+});
+
+interface LinkedDocumentResult {
+  doc: typeof travelsTripDocuments.$inferSelect;
+  extractedData: Record<string, unknown>;
+}
+
+// Shared by the single-message and bulk-link routes. When the message has
+// one or more attachments, EACH attachment becomes its own trip document
+// (per product decision — a booking PDF plus a receipt on the same email
+// should both show up as separate documents, not just the first one).
+// Messages with no attachments keep the original single text-body document
+// behavior. Idempotent per (userId, messageId) via the decision ledger —
+// re-linking replaces the prior extractedData/status but does not create
+// duplicate documents for an already-"linked" message (callers must check
+// existingDecision.status before calling this).
+async function linkMessageToTrip(
+  userId: number,
+  accessToken: string,
+  messageId: string,
+  tripId: number,
+  existingDecision: typeof travelsGmailScanDecisions.$inferSelect | undefined,
+): Promise<LinkedDocumentResult[]> {
+  const full = await getMessage(accessToken, messageId);
+  const parsed = parseGmailMessage(full);
+  const baseExtractedData = (existingDecision?.extractedData as Record<string, unknown> | null) ?? {};
+
+  const results: LinkedDocumentResult[] = [];
+
+  if (parsed.attachments.length > 0) {
+    for (const attachment of parsed.attachments) {
+      let extractedData: Record<string, unknown> = { ...baseExtractedData };
+      const buffer = await getAttachment(accessToken, messageId, attachment.attachmentId);
+      const storagePath = await uploadDocument(buffer, attachment.mimeType, attachment.filename);
+      try {
+        const attachmentData =
+          attachment.mimeType === "application/pdf"
+            ? await extractFromPdf(buffer)
+            : await extractFromImage(buffer, attachment.mimeType);
+        // Attachment-derived fields win where present (the source document
+        // is generally more reliable than the surrounding email body).
+        extractedData = { ...extractedData, ...attachmentData };
+      } catch (err) {
+        logger.warn({ err, messageId }, "gmail: attachment extraction failed, using email-body data");
+      }
+      const [doc] = await db
+        .insert(travelsTripDocuments)
+        .values({
+          tripId,
+          userId,
+          storagePath,
+          documentType: (extractedData.documentType as string | undefined) ?? null,
+          originalFilename: attachment.filename,
+          extractedData,
+        })
+        .returning();
+      results.push({ doc: doc!, extractedData });
+    }
+  } else {
+    let extractedData = baseExtractedData;
+    if (Object.keys(extractedData).length === 0) {
+      extractedData = await extractFromEmailText(
+        parsed.subject ?? "(no subject)",
+        parsed.from ?? "",
+        parsed.textBody,
+      );
+    }
+    const textBuffer = Buffer.from(parsed.textBody || parsed.subject || "(empty email)", "utf-8");
+    const originalFilename = `${(parsed.subject ?? "email").slice(0, 60)}.txt`;
+    const storagePath = await uploadDocument(textBuffer, "text/plain", originalFilename);
+    const [doc] = await db
+      .insert(travelsTripDocuments)
+      .values({
+        tripId,
+        userId,
+        storagePath,
+        documentType: (extractedData.documentType as string | undefined) ?? null,
+        originalFilename,
+        extractedData,
+      })
+      .returning();
+    results.push({ doc: doc!, extractedData });
+  }
+
+  for (const { doc, extractedData } of results) {
+    try {
+      await syncItineraryFromDocument(tripId, doc.id, extractedData);
+    } catch (err) {
+      logger.warn({ err }, "gmail: failed to sync itinerary from linked email document");
+    }
+  }
+
+  const lastResult = results[results.length - 1]!;
+  const dedupeKey = existingDecision?.dedupeKey ?? null;
+  await db
+    .insert(travelsGmailScanDecisions)
+    .values({
+      userId,
+      gmailMessageId: messageId,
+      threadId: full.threadId,
+      subject: parsed.subject,
+      fromAddress: parsed.from,
+      receivedAt: parsed.date,
+      status: "linked",
+      extractedData: lastResult.extractedData,
+      dedupeKey,
+      tripId,
+      tripDocumentId: lastResult.doc.id,
+    })
+    .onConflictDoUpdate({
+      target: [travelsGmailScanDecisions.userId, travelsGmailScanDecisions.gmailMessageId],
+      set: {
+        status: "linked",
+        extractedData: lastResult.extractedData,
+        tripId,
+        tripDocumentId: lastResult.doc.id,
+        updatedAt: new Date(),
+      },
+    });
+
+  // Only mark the email in Gmail (Travel + Batchelor App labels) when this
+  // link confirms an AI-generated suggestion the user is accepting — a
+  // fresh manual pick from the inbox browser was never labeled "Travel" by
+  // the app in the first place, and per product decision manual picks stay
+  // ledger-only (no Gmail write), so they're excluded here.
+  if (existingDecision?.status === "pending") {
+    await markMessageAsIngestedTravel(userId, accessToken, messageId);
+  }
+
+  return results;
+}
+
+async function loadExistingDecision(userId: number, messageId: string) {
+  const [existingDecision] = await db
+    .select()
+    .from(travelsGmailScanDecisions)
+    .where(
+      and(
+        eq(travelsGmailScanDecisions.userId, userId),
+        eq(travelsGmailScanDecisions.gmailMessageId, messageId),
+      ),
+    );
+  return existingDecision;
+}
+
+// GET /gmail/messages/:messageId — full content view (subject/from/date/body
+// + attachment metadata only, no raw attachment bytes) so the user can read
+// an email before deciding whether/how to attach it to a trip.
+router.get("/gmail/messages/:messageId", async (req, res) => {
+  const userId = req.session.userId!;
+  const messageId = req.params.messageId as string;
+
+  const accessToken = await getValidGmailAccessToken(userId);
+  if (!accessToken) {
+    res.status(409).json({ error: "Gmail is not connected." });
+    return;
+  }
+
+  try {
+    const full = await getMessage(accessToken, messageId);
+    const parsed = parseGmailMessage(full);
+    res.json({
+      id: messageId,
+      subject: parsed.subject,
+      from: parsed.from,
+      date: parsed.date,
+      textBody: parsed.textBody,
+      attachments: parsed.attachments.map((a) => ({ filename: a.filename, mimeType: a.mimeType })),
+    });
+  } catch (err) {
+    logger.error({ err, userId, messageId }, "gmail: failed to fetch message content");
+    res.status(502).json({ error: "Could not load this email right now." });
+  }
 });
 
 // POST /gmail/messages/:messageId/link — associate a Gmail message (whether
-// AI-suggested or manually picked) with a trip as a trip document. If the
-// message has a PDF/image attachment, it's downloaded into the same
-// document-storage pipeline used for manual uploads and re-extracted from
-// the attachment (generally more reliable than the email body text);
-// otherwise the email body itself is stored and used as the extraction
-// source. Idempotent per (userId, messageId) via the decision ledger.
+// AI-suggested or manually picked) with a trip. See linkMessageToTrip for
+// the attach-all-attachments behavior.
 router.post("/gmail/messages/:messageId/link", async (req, res) => {
   const userId = req.session.userId!;
   const messageId = req.params.messageId as string;
@@ -333,117 +507,61 @@ router.post("/gmail/messages/:messageId/link", async (req, res) => {
     return;
   }
 
-  const [existingDecision] = await db
-    .select()
-    .from(travelsGmailScanDecisions)
-    .where(
-      and(
-        eq(travelsGmailScanDecisions.userId, userId),
-        eq(travelsGmailScanDecisions.gmailMessageId, messageId),
-      ),
-    );
+  const existingDecision = await loadExistingDecision(userId, messageId);
   if (existingDecision?.status === "linked") {
     res.status(409).json({ error: "This email is already linked to a trip." });
     return;
   }
 
   try {
-    const full = await getMessage(accessToken, messageId);
-    const parsed = parseGmailMessage(full);
-
-    let extractedData: Record<string, unknown> =
-      (existingDecision?.extractedData as Record<string, unknown> | null) ?? {};
-    let storagePath: string;
-    let originalFilename: string;
-
-    const attachment = parsed.attachments[body.attachmentIndex ?? 0];
-    if (attachment) {
-      const buffer = await getAttachment(accessToken, messageId, attachment.attachmentId);
-      storagePath = await uploadDocument(buffer, attachment.mimeType, attachment.filename);
-      originalFilename = attachment.filename;
-      try {
-        const attachmentData =
-          attachment.mimeType === "application/pdf"
-            ? await extractFromPdf(buffer)
-            : await extractFromImage(buffer, attachment.mimeType);
-        // Attachment-derived fields win where present (the source document
-        // is generally more reliable than the surrounding email body).
-        extractedData = { ...extractedData, ...attachmentData };
-      } catch (err) {
-        logger.warn({ err, messageId }, "gmail: attachment extraction failed, using email-body data");
-      }
-    } else {
-      if (Object.keys(extractedData).length === 0) {
-        extractedData = await extractFromEmailText(
-          parsed.subject ?? "(no subject)",
-          parsed.from ?? "",
-          parsed.textBody,
-        );
-      }
-      const textBuffer = Buffer.from(parsed.textBody || parsed.subject || "(empty email)", "utf-8");
-      originalFilename = `${(parsed.subject ?? "email").slice(0, 60)}.txt`;
-      storagePath = await uploadDocument(textBuffer, "text/plain", originalFilename);
-    }
-
-    const [doc] = await db
-      .insert(travelsTripDocuments)
-      .values({
-        tripId: body.tripId,
-        userId,
-        storagePath,
-        documentType: (extractedData.documentType as string | undefined) ?? null,
-        originalFilename,
-        extractedData,
-      })
-      .returning();
-
-    try {
-      await syncItineraryFromDocument(body.tripId, doc!.id, extractedData);
-    } catch (err) {
-      logger.warn({ err }, "gmail: failed to sync itinerary from linked email document");
-    }
-
-    const dedupeKey = existingDecision?.dedupeKey ?? null;
-    await db
-      .insert(travelsGmailScanDecisions)
-      .values({
-        userId,
-        gmailMessageId: messageId,
-        threadId: full.threadId,
-        subject: parsed.subject,
-        fromAddress: parsed.from,
-        receivedAt: parsed.date,
-        status: "linked",
-        extractedData,
-        dedupeKey,
-        tripId: body.tripId,
-        tripDocumentId: doc!.id,
-      })
-      .onConflictDoUpdate({
-        target: [travelsGmailScanDecisions.userId, travelsGmailScanDecisions.gmailMessageId],
-        set: {
-          status: "linked",
-          extractedData,
-          tripId: body.tripId,
-          tripDocumentId: doc!.id,
-          updatedAt: new Date(),
-        },
-      });
-
-    // Only mark the email in Gmail (Travel + Batchelor App labels) when this
-    // link confirms an AI-generated suggestion the user is accepting — a
-    // fresh manual pick from the inbox browser was never labeled "Travel" by
-    // the app in the first place, and per product decision manual picks stay
-    // ledger-only (no Gmail write), so they're excluded here.
-    if (existingDecision?.status === "pending") {
-      await markMessageAsIngestedTravel(userId, accessToken, messageId);
-    }
-
-    res.status(201).json(doc);
+    const results = await linkMessageToTrip(userId, accessToken, messageId, body.tripId, existingDecision);
+    res.status(201).json(results.length === 1 ? results[0]!.doc : results.map((r) => r.doc));
   } catch (err) {
     logger.error({ err, userId, messageId }, "gmail: failed to link message as trip document");
     res.status(502).json({ error: "Could not import this email right now." });
   }
+});
+
+// POST /gmail/messages/bulk-link — attach several selected emails to the
+// same trip in one action. Each message is processed independently and a
+// failure on one does not abort the rest; the response reports per-message
+// outcomes. Bounded by MAX_BULK_LINK_MESSAGES to keep a single request from
+// driving unbounded Gmail API / AI extraction usage. ("bulk-link" is a
+// distinct literal path segment, not nested under "/messages/:messageId",
+// so there's no Express route-ordering ambiguity here.)
+router.post("/gmail/messages/bulk-link", async (req, res) => {
+  const userId = req.session.userId!;
+  const body = BulkLinkBody.parse(req.body ?? {});
+
+  const accessToken = await getValidGmailAccessToken(userId);
+  if (!accessToken) {
+    res.status(409).json({ error: "Gmail is not connected." });
+    return;
+  }
+
+  const [trip] = await db.select({ id: travelsTrips.id }).from(travelsTrips).where(eq(travelsTrips.id, body.tripId));
+  if (!trip) {
+    res.status(404).json({ error: "Trip not found" });
+    return;
+  }
+
+  const outcomes: { messageId: string; status: "linked" | "already_linked" | "failed"; error?: string }[] = [];
+  for (const messageId of body.messageIds) {
+    try {
+      const existingDecision = await loadExistingDecision(userId, messageId);
+      if (existingDecision?.status === "linked") {
+        outcomes.push({ messageId, status: "already_linked" });
+        continue;
+      }
+      await linkMessageToTrip(userId, accessToken, messageId, body.tripId, existingDecision);
+      outcomes.push({ messageId, status: "linked" });
+    } catch (err) {
+      logger.error({ err, userId, messageId }, "gmail: bulk-link failed for message");
+      outcomes.push({ messageId, status: "failed", error: "Could not import this email." });
+    }
+  }
+
+  res.json({ results: outcomes });
 });
 
 // POST /gmail/messages/:messageId/ignore — manual-mode equivalent of
@@ -482,6 +600,38 @@ router.post("/gmail/messages/:messageId/ignore", async (req, res) => {
     logger.error({ err, userId, messageId }, "gmail: failed to ignore message");
     res.status(502).json({ error: "Could not update this email right now." });
   }
+});
+
+// POST /gmail/messages/:messageId/reconsider — undo an "ignored"/"dismissed"
+// decision so the email can be re-selected in the browse/suggestions views.
+// Deletes the decision row entirely (rather than flipping status) so the
+// message goes back through the exact same "unhandled" code path used for
+// never-seen emails. Only the connecting user's own decision can be
+// reconsidered, and only from ignored/dismissed — an already-linked message
+// must be unlinked through trip document management instead.
+router.post("/gmail/messages/:messageId/reconsider", async (req, res) => {
+  const userId = req.session.userId!;
+  const messageId = req.params.messageId as string;
+
+  const existingDecision = await loadExistingDecision(userId, messageId);
+  if (!existingDecision) {
+    res.status(404).json({ error: "No decision found for this email." });
+    return;
+  }
+  if (existingDecision.status !== "ignored" && existingDecision.status !== "dismissed") {
+    res.status(409).json({ error: "Only ignored or dismissed emails can be reconsidered." });
+    return;
+  }
+
+  await db
+    .delete(travelsGmailScanDecisions)
+    .where(
+      and(
+        eq(travelsGmailScanDecisions.userId, userId),
+        eq(travelsGmailScanDecisions.gmailMessageId, messageId),
+      ),
+    );
+  res.status(204).send();
 });
 
 export default router;

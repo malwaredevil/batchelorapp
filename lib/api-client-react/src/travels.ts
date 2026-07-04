@@ -1299,10 +1299,7 @@ export function useGetGmailInbox<TData = GmailInboxPage, TError = unknown>(
   return { ...query, queryKey: queryOpts.queryKey };
 }
 
-const linkGmailMessageFn = (
-  messageId: string,
-  body: { tripId: number; attachmentIndex?: number },
-): Promise<unknown> =>
+const linkGmailMessageFn = (messageId: string, body: { tripId: number }): Promise<unknown> =>
   customFetch(`/api/travels/gmail/messages/${messageId}/link`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1311,18 +1308,13 @@ const linkGmailMessageFn = (
 
 export function useLinkGmailMessage(
   options?: {
-    mutation?: UseMutationOptions<
-      unknown,
-      unknown,
-      { messageId: string; tripId: number; attachmentIndex?: number }
-    >;
+    mutation?: UseMutationOptions<unknown, unknown, { messageId: string; tripId: number }>;
   },
 ) {
-  const mutationFn: MutationFunction<
-    unknown,
-    { messageId: string; tripId: number; attachmentIndex?: number }
-  > = ({ messageId, tripId, attachmentIndex }) =>
-    linkGmailMessageFn(messageId, { tripId, attachmentIndex });
+  const mutationFn: MutationFunction<unknown, { messageId: string; tripId: number }> = ({
+    messageId,
+    tripId,
+  }) => linkGmailMessageFn(messageId, { tripId });
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
@@ -1333,6 +1325,82 @@ export function useIgnoreGmailMessage(
   options?: { mutation?: UseMutationOptions<void, unknown, string> },
 ) {
   const mutationFn: MutationFunction<void, string> = (messageId) => ignoreGmailMessageFn(messageId);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const reconsiderGmailMessageFn = (messageId: string): Promise<void> =>
+  customFetch<void>(`/api/travels/gmail/messages/${messageId}/reconsider`, { method: "POST" });
+
+export function useReconsiderGmailMessage(
+  options?: { mutation?: UseMutationOptions<void, unknown, string> },
+) {
+  const mutationFn: MutationFunction<void, string> = (messageId) => reconsiderGmailMessageFn(messageId);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+export interface GmailMessageContent {
+  id: string;
+  subject: string | null;
+  from: string | null;
+  date: string | null;
+  textBody: string;
+  attachments: { filename: string; mimeType: string }[];
+}
+
+const getGmailMessage = (messageId: string, options?: RequestInit): Promise<GmailMessageContent> =>
+  customFetch<GmailMessageContent>(`/api/travels/gmail/messages/${messageId}`, {
+    ...options,
+    method: "GET",
+  });
+
+export const getGetGmailMessageQueryKey = (messageId: string) =>
+  [`/api/travels/gmail/messages/${messageId}`] as const;
+
+export function useGetGmailMessage<TData = GmailMessageContent, TError = unknown>(
+  messageId: string,
+  options?: { query?: UseQueryOptions<GmailMessageContent, TError, TData> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetGmailMessageQueryKey(messageId);
+  const queryFn: QueryFunction<GmailMessageContent> = ({ signal }) =>
+    getGmailMessage(messageId, { signal });
+  const queryOpts = {
+    queryKey,
+    queryFn,
+    enabled: !!messageId,
+    ...queryOptions,
+  } as UseQueryOptions<GmailMessageContent, TError, TData> & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+export interface GmailBulkLinkResult {
+  results: { messageId: string; status: "linked" | "already_linked" | "failed"; error?: string }[];
+}
+
+const bulkLinkGmailMessagesFn = (body: {
+  messageIds: string[];
+  tripId: number;
+}): Promise<GmailBulkLinkResult> =>
+  customFetch<GmailBulkLinkResult>(`/api/travels/gmail/messages/bulk-link`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export function useBulkLinkGmailMessages(
+  options?: {
+    mutation?: UseMutationOptions<
+      GmailBulkLinkResult,
+      unknown,
+      { messageIds: string[]; tripId: number }
+    >;
+  },
+) {
+  const mutationFn: MutationFunction<
+    GmailBulkLinkResult,
+    { messageIds: string[]; tripId: number }
+  > = (body) => bulkLinkGmailMessagesFn(body);
   return useMutation({ mutationFn, ...options?.mutation });
 }
 

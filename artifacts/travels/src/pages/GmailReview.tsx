@@ -1,11 +1,29 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Mail, Search, Loader2, CheckCircle2, XCircle, Paperclip, RefreshCw } from "lucide-react";
+import {
+  Mail,
+  Search,
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  Paperclip,
+  RefreshCw,
+  Eye,
+  Undo2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import {
   useGetGmailStatus,
   useScanGmail,
@@ -14,9 +32,13 @@ import {
   useGetGmailInbox,
   useLinkGmailMessage,
   useIgnoreGmailMessage,
+  useReconsiderGmailMessage,
+  useGetGmailMessage,
+  useBulkLinkGmailMessages,
   useListTrips,
   getGetGmailSuggestionsQueryKey,
   getGetGmailInboxQueryKey,
+  getGetGmailMessageQueryKey,
   type GmailScanDecision,
   type GmailInboxMessage,
   type Trip,
@@ -57,7 +79,62 @@ function TripPicker({
   );
 }
 
-function SuggestionsTab({ trips }: { trips: Trip[] }) {
+function ViewMessageDialog({
+  messageId,
+  onOpenChange,
+}: {
+  messageId: string | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { data, isLoading, isError } = useGetGmailMessage(messageId ?? "", {
+    query: { enabled: !!messageId, queryKey: getGetGmailMessageQueryKey(messageId ?? "") },
+  });
+
+  return (
+    <Dialog open={!!messageId} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{data?.subject || "(no subject)"}</DialogTitle>
+          <DialogDescription>
+            {data ? `${data.from} · ${formatDate(data.date)}` : "Loading…"}
+          </DialogDescription>
+        </DialogHeader>
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">Loading email…</p>
+        ) : isError ? (
+          <p className="text-sm text-destructive py-6 text-center">Could not load this email.</p>
+        ) : (
+          <div className="space-y-3">
+            {data!.attachments.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {data!.attachments.map((a, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
+                  >
+                    <Paperclip className="h-3 w-3" />
+                    {a.filename}
+                  </span>
+                ))}
+              </div>
+            )}
+            <p className="text-sm text-foreground whitespace-pre-wrap">
+              {data!.textBody || "(no body content)"}
+            </p>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SuggestionsTab({
+  trips,
+  onView,
+}: {
+  trips: Trip[];
+  onView: (messageId: string) => void;
+}) {
   const qc = useQueryClient();
   const { data: suggestions = [], isLoading } = useGetGmailSuggestions();
   const dismiss = useDismissGmailSuggestion();
@@ -85,7 +162,7 @@ function SuggestionsTab({ trips }: { trips: Trip[] }) {
       {
         onSuccess: () => {
           qc.invalidateQueries({ queryKey: getGetGmailSuggestionsQueryKey() });
-          toast.success("Added as a trip document");
+          toast.success("Added as trip document(s)");
         },
         onError: (err) =>
           toast.error(err instanceof Error ? err.message : "Could not link this email"),
@@ -153,6 +230,10 @@ function SuggestionsTab({ trips }: { trips: Trip[] }) {
                   <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
                   Add to trip
                 </Button>
+                <Button size="sm" variant="ghost" onClick={() => onView(s.gmailMessageId)}>
+                  <Eye className="h-3.5 w-3.5 mr-1.5" />
+                  View
+                </Button>
                 <Button
                   size="sm"
                   variant="outline"
@@ -171,19 +252,33 @@ function SuggestionsTab({ trips }: { trips: Trip[] }) {
   );
 }
 
-function InboxBrowserTab({ trips }: { trips: Trip[] }) {
+function InboxBrowserTab({
+  trips,
+  onView,
+}: {
+  trips: Trip[];
+  onView: (messageId: string) => void;
+}) {
   const qc = useQueryClient();
   const [query, setQuery] = useState("");
   const [committedQuery, setCommittedQuery] = useState("");
   const [pageToken, setPageToken] = useState<string | undefined>(undefined);
+  const [showIgnored, setShowIgnored] = useState(false);
   const { data, isLoading, isFetching } = useGetGmailInbox({ q: committedQuery || undefined, pageToken });
   const link = useLinkGmailMessage();
   const ignore = useIgnoreGmailMessage();
+  const reconsider = useReconsiderGmailMessage();
+  const bulkLink = useBulkLinkGmailMessages();
   const [selectedTrip, setSelectedTrip] = useState<Record<string, string>>({});
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [bulkTripId, setBulkTripId] = useState("");
+
+  const inboxQueryKey = getGetGmailInboxQueryKey({ q: committedQuery || undefined, pageToken });
 
   function handleSearch() {
     setPageToken(undefined);
     setCommittedQuery(query.trim());
+    setChecked({});
   }
 
   function handleLink(m: GmailInboxMessage) {
@@ -196,8 +291,8 @@ function InboxBrowserTab({ trips }: { trips: Trip[] }) {
       { messageId: m.id, tripId },
       {
         onSuccess: () => {
-          qc.invalidateQueries({ queryKey: getGetGmailInboxQueryKey({ q: committedQuery || undefined, pageToken }) });
-          toast.success("Added as a trip document");
+          qc.invalidateQueries({ queryKey: inboxQueryKey });
+          toast.success("Added as trip document(s)");
         },
         onError: (err) => toast.error(err instanceof Error ? err.message : "Could not link this email"),
       },
@@ -207,12 +302,57 @@ function InboxBrowserTab({ trips }: { trips: Trip[] }) {
   function handleIgnore(m: GmailInboxMessage) {
     ignore.mutate(m.id, {
       onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getGetGmailInboxQueryKey({ q: committedQuery || undefined, pageToken }) });
+        qc.invalidateQueries({ queryKey: inboxQueryKey });
         toast.success("Marked as not travel-related");
       },
       onError: () => toast.error("Could not update this email"),
     });
   }
+
+  function handleReconsider(m: GmailInboxMessage) {
+    reconsider.mutate(m.id, {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: inboxQueryKey });
+        toast.success("Moved back to unhandled");
+      },
+      onError: () => toast.error("Could not update this email"),
+    });
+  }
+
+  const selectableMessages = (data?.messages ?? []).filter((m) => !m.alreadyLinked);
+  const selectedIds = Object.keys(checked).filter((id) => checked[id]);
+
+  function toggleChecked(id: string) {
+    setChecked((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
+
+  function handleBulkLink() {
+    const tripId = Number(bulkTripId);
+    if (!tripId) {
+      toast.error("Pick a trip first");
+      return;
+    }
+    if (selectedIds.length === 0) return;
+    bulkLink.mutate(
+      { messageIds: selectedIds, tripId },
+      {
+        onSuccess: (result) => {
+          qc.invalidateQueries({ queryKey: inboxQueryKey });
+          setChecked({});
+          const failed = result.results.filter((r) => r.status === "failed").length;
+          const linked = result.results.filter((r) => r.status === "linked").length;
+          if (failed > 0) {
+            toast.error(`Added ${linked} email(s); ${failed} could not be imported.`);
+          } else {
+            toast.success(`Added ${linked} email(s) as trip document(s)`);
+          }
+        },
+        onError: (err) => toast.error(err instanceof Error ? err.message : "Bulk import failed"),
+      },
+    );
+  }
+
+  const visibleMessages = (data?.messages ?? []).filter((m) => showIgnored || !m.alreadyIgnored);
 
   return (
     <div className="space-y-4">
@@ -232,34 +372,78 @@ function InboxBrowserTab({ trips }: { trips: Trip[] }) {
         </Button>
       </div>
 
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id="show-ignored"
+          checked={showIgnored}
+          onCheckedChange={(v) => setShowIgnored(v === true)}
+        />
+        <label htmlFor="show-ignored" className="text-xs text-muted-foreground cursor-pointer select-none">
+          Show ignored emails
+        </label>
+      </div>
+
+      {selectedIds.length > 0 && (
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-center rounded-xl border border-card-border bg-muted/50 p-3">
+          <p className="text-sm font-medium text-foreground">{selectedIds.length} selected</p>
+          <TripPicker trips={trips} value={bulkTripId} onChange={setBulkTripId} disabled={bulkLink.isPending} />
+          <Button size="sm" onClick={handleBulkLink} disabled={bulkLink.isPending || !bulkTripId}>
+            {bulkLink.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+            ) : (
+              <Paperclip className="h-3.5 w-3.5 mr-1.5" />
+            )}
+            Add {selectedIds.length} to trip
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setChecked({})} disabled={bulkLink.isPending}>
+            Clear
+          </Button>
+        </div>
+      )}
+
       {isLoading ? (
         <p className="text-sm text-muted-foreground py-8 text-center">Searching your inbox…</p>
-      ) : (data?.messages.length ?? 0) === 0 ? (
+      ) : visibleMessages.length === 0 ? (
         <div className="rounded-xl border border-dashed border-card-border p-8 text-center">
           <p className="text-sm text-muted-foreground">No matching emails found.</p>
         </div>
       ) : (
         <ul className="space-y-3">
-          {data!.messages.map((m) => (
+          {visibleMessages.map((m) => (
             <li key={m.id} className="rounded-xl border border-card-border bg-card p-4 space-y-3">
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{m.subject || "(no subject)"}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {m.from} · {formatDate(m.date)}
-                  </p>
-                  <p className="text-xs text-muted-foreground truncate mt-1">{m.snippet}</p>
+                <div className="flex items-start gap-3 min-w-0">
+                  {selectableMessages.some((s) => s.id === m.id) && (
+                    <Checkbox
+                      className="mt-1"
+                      checked={!!checked[m.id]}
+                      onCheckedChange={() => toggleChecked(m.id)}
+                      aria-label="Select email"
+                    />
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{m.subject || "(no subject)"}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {m.from} · {formatDate(m.date)}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate mt-1">{m.snippet}</p>
+                  </div>
                 </div>
-                {m.alreadyLinked && (
-                  <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-                    Linked
-                  </span>
-                )}
-                {m.alreadyIgnored && !m.alreadyLinked && (
-                  <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-                    Ignored
-                  </span>
-                )}
+                <div className="flex shrink-0 items-center gap-2">
+                  {m.alreadyLinked && (
+                    <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                      Linked
+                    </span>
+                  )}
+                  {m.alreadyIgnored && !m.alreadyLinked && (
+                    <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+                      Ignored
+                    </span>
+                  )}
+                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => onView(m.id)}>
+                    <Eye className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               </div>
 
               {!m.alreadyLinked && !m.alreadyIgnored && (
@@ -280,6 +464,18 @@ function InboxBrowserTab({ trips }: { trips: Trip[] }) {
                     </Button>
                   </div>
                 </div>
+              )}
+
+              {m.alreadyIgnored && !m.alreadyLinked && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleReconsider(m)}
+                  disabled={reconsider.isPending}
+                >
+                  <Undo2 className="h-3.5 w-3.5 mr-1.5" />
+                  Reconsider
+                </Button>
               )}
             </li>
           ))}
@@ -302,13 +498,14 @@ export default function GmailReview() {
   const scan = useScanGmail();
   const qc = useQueryClient();
   const { data: trips = [] } = useListTrips();
+  const [viewingMessageId, setViewingMessageId] = useState<string | null>(null);
 
   const context = useMemo(() => {
     if (statusLoading) return undefined;
     if (!status?.connected) {
       return "Gmail page: Gmail is not connected for this user. Connecting requires an OAuth redirect elAIne cannot trigger — direct them to Settings to connect.";
     }
-    return `Gmail page: connected as ${status.googleEmail}. Users can review AI-found travel email suggestions or manually browse their inbox to attach any email to a trip as a document.`;
+    return `Gmail page: connected as ${status.googleEmail}. Users can review AI-found travel email suggestions, manually browse their inbox to attach any email (or multiple selected emails at once) to a trip as document(s), view full email content, and reconsider previously ignored emails.`;
   }, [statusLoading, status]);
   usePageAssistantContext("gmail", context);
 
@@ -372,12 +569,17 @@ export default function GmailReview() {
           <TabsTrigger value="browse">Browse inbox</TabsTrigger>
         </TabsList>
         <TabsContent value="suggestions" className="pt-4">
-          <SuggestionsTab trips={trips} />
+          <SuggestionsTab trips={trips} onView={setViewingMessageId} />
         </TabsContent>
         <TabsContent value="browse" className="pt-4">
-          <InboxBrowserTab trips={trips} />
+          <InboxBrowserTab trips={trips} onView={setViewingMessageId} />
         </TabsContent>
       </Tabs>
+
+      <ViewMessageDialog
+        messageId={viewingMessageId}
+        onOpenChange={(open) => !open && setViewingMessageId(null)}
+      />
     </div>
   );
 }

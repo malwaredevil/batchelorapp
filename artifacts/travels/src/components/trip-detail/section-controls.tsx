@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { GripVertical, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
+import { Card, CardContent } from "@/components/ui/card";
 
 interface DragHandleProps {
   listeners?: DraggableSyntheticListeners;
@@ -91,22 +92,24 @@ export function CardShell({
   className,
 }: CardShellProps) {
   return (
-    <div className={cn("relative", className)}>
-      <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-1.5 min-w-0">
-          {dragHandleListeners && (
-            <DragHandle listeners={dragHandleListeners} attributes={dragHandleAttributes} />
-          )}
-          {collapsed && (
-            <span className="flex items-center gap-2 text-sm font-medium text-foreground truncate">
-              {icon}
-              {title}
-            </span>
-          )}
+    <Card className={cn("border-border/50", className)}>
+      <CardContent className="py-4">
+        <div className={cn("flex items-center justify-between", !collapsed && "mb-1")}>
+          <div className="flex items-center gap-1.5 min-w-0">
+            {dragHandleListeners && (
+              <DragHandle listeners={dragHandleListeners} attributes={dragHandleAttributes} />
+            )}
+            {collapsed && (
+              <span className="flex items-center gap-2 text-sm font-medium text-foreground truncate">
+                {icon}
+                {title}
+              </span>
+            )}
+          </div>
+          <CollapseToggle collapsed={collapsed} onToggle={onToggleCollapse} label={title} />
         </div>
-        <CollapseToggle collapsed={collapsed} onToggle={onToggleCollapse} label={title} />
-      </div>
-      {!collapsed && children}
-    </div>
+        {!collapsed && children}
+      </CardContent>
+    </Card>
   );
 }

@@ -469,13 +469,12 @@ function TripWeatherAndPlaces({
   });
 
   return (
-    <Card className="border-border/50">
-      <CardContent className="py-4 space-y-4">
-        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <Cloud className="w-4 h-4" />
-          Weather &amp; nearby
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+    <div className="space-y-4">
+      <h2 className="font-serif text-xl text-foreground flex items-center gap-2">
+        <Cloud className="w-5 h-5" />
+        Weather &amp; nearby
+      </h2>
+      <div className="grid gap-4 sm:grid-cols-2">
           <TripLocationMap
             lat={lat}
             lng={lng}
@@ -615,8 +614,7 @@ function TripWeatherAndPlaces({
             ))}
           </ul>
         </div>
-      </CardContent>
-    </Card>
+    </div>
   );
 }
 

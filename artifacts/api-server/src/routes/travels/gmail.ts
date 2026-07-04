@@ -449,6 +449,12 @@ router.get("/gmail/inbox", async (req, res) => {
 
 const LinkBody = z.object({
   tripId: z.number().int().positive(),
+  // When provided, only process the listed attachment IDs (filtered from the
+  // email's attachments). Pass an empty array with includeEmailBody:true to
+  // attach only the email body text. Omit entirely for the legacy "process
+  // everything" behaviour used by undo-relink and bulk-link.
+  attachmentIds: z.array(z.string().min(1)).optional(),
+  includeEmailBody: z.boolean().optional(),
 });
 
 const MAX_BULK_LINK_MESSAGES = 25;
@@ -477,56 +483,75 @@ async function linkMessageToTrip(
   messageId: string,
   tripId: number,
   existingDecision: typeof travelsGmailScanDecisions.$inferSelect | undefined,
+  // Optional filter: when present, only process the specified attachment IDs
+  // and/or the email body. When absent, falls back to the legacy behaviour:
+  // process all attachments if any exist, otherwise the email body.
+  attachmentFilter?: { attachmentIds: string[]; includeEmailBody: boolean },
 ): Promise<LinkedDocumentResult[]> {
   const full = await getMessage(accessToken, messageId);
   const parsed = parseGmailMessage(full);
   const baseExtractedData =
     (existingDecision?.extractedData as Record<string, unknown> | null) ?? {};
 
+  // Determine which attachments and whether to include the body.
+  let attachmentsToProcess = parsed.attachments;
+  let processBody = false;
+  if (attachmentFilter) {
+    const allowed = new Set(attachmentFilter.attachmentIds);
+    attachmentsToProcess = parsed.attachments.filter((a) =>
+      allowed.has(a.attachmentId),
+    );
+    processBody = attachmentFilter.includeEmailBody;
+  } else {
+    // Legacy: attachments take precedence; body only when there are none.
+    processBody = parsed.attachments.length === 0;
+  }
+
   const results: LinkedDocumentResult[] = [];
 
-  if (parsed.attachments.length > 0) {
-    for (const attachment of parsed.attachments) {
-      let extractedData: Record<string, unknown> = { ...baseExtractedData };
-      const buffer = await getAttachment(
-        accessToken,
-        messageId,
-        attachment.attachmentId,
+  // Process selected (or all) attachments.
+  for (const attachment of attachmentsToProcess) {
+    let extractedData: Record<string, unknown> = { ...baseExtractedData };
+    const buffer = await getAttachment(
+      accessToken,
+      messageId,
+      attachment.attachmentId,
+    );
+    const storagePath = await uploadDocument(
+      buffer,
+      attachment.mimeType,
+      attachment.filename,
+    );
+    try {
+      const attachmentData =
+        attachment.mimeType === "application/pdf"
+          ? await extractFromPdf(buffer)
+          : await extractFromImage(buffer, attachment.mimeType);
+      // Attachment-derived fields win where present.
+      extractedData = { ...extractedData, ...attachmentData };
+    } catch (err) {
+      logger.warn(
+        { err, messageId },
+        "gmail: attachment extraction failed, using email-body data",
       );
-      const storagePath = await uploadDocument(
-        buffer,
-        attachment.mimeType,
-        attachment.filename,
-      );
-      try {
-        const attachmentData =
-          attachment.mimeType === "application/pdf"
-            ? await extractFromPdf(buffer)
-            : await extractFromImage(buffer, attachment.mimeType);
-        // Attachment-derived fields win where present (the source document
-        // is generally more reliable than the surrounding email body).
-        extractedData = { ...extractedData, ...attachmentData };
-      } catch (err) {
-        logger.warn(
-          { err, messageId },
-          "gmail: attachment extraction failed, using email-body data",
-        );
-      }
-      const [doc] = await db
-        .insert(travelsTripDocuments)
-        .values({
-          tripId,
-          userId,
-          storagePath,
-          documentType:
-            (extractedData.documentType as string | undefined) ?? null,
-          originalFilename: attachment.filename,
-          extractedData,
-        })
-        .returning();
-      results.push({ doc: doc!, extractedData });
     }
-  } else {
+    const [doc] = await db
+      .insert(travelsTripDocuments)
+      .values({
+        tripId,
+        userId,
+        storagePath,
+        documentType:
+          (extractedData.documentType as string | undefined) ?? null,
+        originalFilename: attachment.filename,
+        extractedData,
+      })
+      .returning();
+    results.push({ doc: doc!, extractedData });
+  }
+
+  // Process email body text when requested (or when no attachments exist).
+  if (processBody) {
     let extractedData = baseExtractedData;
     if (Object.keys(extractedData).length === 0) {
       extractedData = await extractFromEmailText(
@@ -652,6 +677,8 @@ router.get("/gmail/messages/:messageId", async (req, res) => {
       attachments: parsed.attachments.map((a) => ({
         filename: a.filename,
         mimeType: a.mimeType,
+        attachmentId: a.attachmentId,
+        size: a.size,
       })),
     });
   } catch (err) {
@@ -692,6 +719,16 @@ router.post("/gmail/messages/:messageId/link", async (req, res) => {
     return;
   }
 
+  // Build the optional attachment filter (only when the client sent a
+  // selection — legacy undo-relink and bulk-link callers omit it).
+  const attachmentFilter =
+    body.attachmentIds !== undefined
+      ? {
+          attachmentIds: body.attachmentIds,
+          includeEmailBody: body.includeEmailBody ?? false,
+        }
+      : undefined;
+
   try {
     const results = await linkMessageToTrip(
       userId,
@@ -699,6 +736,7 @@ router.post("/gmail/messages/:messageId/link", async (req, res) => {
       messageId,
       body.tripId,
       existingDecision,
+      attachmentFilter,
     );
     res
       .status(201)

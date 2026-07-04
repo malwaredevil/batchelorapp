@@ -1579,7 +1579,15 @@ export function useGetGmailInbox<TData = GmailInboxPage, TError = unknown>(
   return { ...query, queryKey: queryOpts.queryKey };
 }
 
-const linkGmailMessageFn = (messageId: string, body: { tripId: number }): Promise<unknown> =>
+export interface LinkGmailMessageBody {
+  tripId: number;
+  /** When provided, only these attachment IDs are processed. */
+  attachmentIds?: string[];
+  /** When true, the email body text is also saved as a document. */
+  includeEmailBody?: boolean;
+}
+
+const linkGmailMessageFn = (messageId: string, body: LinkGmailMessageBody): Promise<unknown> =>
   customFetch(`/api/travels/gmail/messages/${messageId}/link`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1588,13 +1596,13 @@ const linkGmailMessageFn = (messageId: string, body: { tripId: number }): Promis
 
 export function useLinkGmailMessage(
   options?: {
-    mutation?: UseMutationOptions<unknown, unknown, { messageId: string; tripId: number }>;
+    mutation?: UseMutationOptions<unknown, unknown, { messageId: string } & LinkGmailMessageBody>;
   },
 ) {
-  const mutationFn: MutationFunction<unknown, { messageId: string; tripId: number }> = ({
+  const mutationFn: MutationFunction<unknown, { messageId: string } & LinkGmailMessageBody> = ({
     messageId,
-    tripId,
-  }) => linkGmailMessageFn(messageId, { tripId });
+    ...body
+  }) => linkGmailMessageFn(messageId, body);
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
@@ -1628,13 +1636,20 @@ export function useUnlinkGmailMessage(
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
+export interface GmailMessageAttachment {
+  filename: string;
+  mimeType: string;
+  attachmentId: string;
+  size?: number;
+}
+
 export interface GmailMessageContent {
   id: string;
   subject: string | null;
   from: string | null;
   date: string | null;
   textBody: string;
-  attachments: { filename: string; mimeType: string }[];
+  attachments: GmailMessageAttachment[];
 }
 
 const getGmailMessage = (messageId: string, options?: RequestInit): Promise<GmailMessageContent> =>

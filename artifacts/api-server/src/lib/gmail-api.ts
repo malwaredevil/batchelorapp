@@ -177,6 +177,7 @@ export interface GmailAttachmentRef {
   filename: string;
   mimeType: string;
   attachmentId: string;
+  size?: number;
 }
 
 export interface ParsedGmailMessage {
@@ -225,6 +226,7 @@ export function parseGmailMessage(message: GmailMessage): ParsedGmailMessage {
         filename: part.filename,
         mimeType,
         attachmentId: part.body.attachmentId,
+        size: part.body.size,
       });
     } else if (mimeType === "text/plain" && part.body?.data) {
       textBody += decodeBody(part.body.data);

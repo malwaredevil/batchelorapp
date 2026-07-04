@@ -518,7 +518,7 @@ function TripWeatherAndPlaces({
         <Cloud className="w-5 h-5" />
         Weather &amp; nearby
       </h2>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2 items-stretch">
           <TripLocationMap
             lat={lat}
             lng={lng}

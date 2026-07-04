@@ -71,3 +71,9 @@ a merge commit; never force-push to "fix" it.
   inside a feature task — it's a big, separate diff. Only format the files
   you actually touched (`npx prettier --write <your files>`) and flag
   repo-wide debt as its own GitHub issue/task instead.
+- **Format before pushing, not after CI fails.** Any file you write or
+  regenerate (including generated files like `mockup-components.ts`) must
+  be run through `npx prettier --write <file>` as part of writing it, before
+  it's committed/pushed — not fixed reactively once GitHub Actions' Lint job
+  fails. Recurred once already (2026-07-04, regenerated mockup-components.ts
+  pushed unformatted, caught by CI, needed a follow-up fix-up commit).

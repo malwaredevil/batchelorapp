@@ -13,6 +13,26 @@ const UpdateSettingsBody = z.object({
   reminderEmail: z.email().nullable(),
 });
 
+function isValidTimezone(tz: string): boolean {
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const UpdateTimezoneBody = z.object({
+  timezone: z
+    .string()
+    .min(1)
+    .max(100)
+    .nullable()
+    .refine((tz) => tz === null || isValidTimezone(tz), {
+      message: "Invalid IANA timezone name",
+    }),
+});
+
 // GET /api/travels/users — app_users' emails, for picking reminder recipients
 router.get("/users", async (_req, res) => {
   const rows = await db
@@ -31,11 +51,31 @@ router.get("/users", async (_req, res) => {
 router.get("/settings", async (req, res) => {
   const userId = req.session.userId!;
   const [user] = await db
-    .select({ travelsReminderEmail: appUsers.travelsReminderEmail })
+    .select({
+      travelsReminderEmail: appUsers.travelsReminderEmail,
+      timezone: appUsers.timezone,
+    })
     .from(appUsers)
     .where(eq(appUsers.id, userId));
 
-  res.json({ reminderEmail: user?.travelsReminderEmail ?? null });
+  res.json({
+    reminderEmail: user?.travelsReminderEmail ?? null,
+    timezone: user?.timezone ?? null,
+  });
+});
+
+// PUT /api/travels/settings/timezone — sets the user's IANA timezone, used
+// to render dates/times consistently (e.g. Gmail-derived flight/train times).
+router.put("/settings/timezone", async (req, res) => {
+  const userId = req.session.userId!;
+  const body = UpdateTimezoneBody.parse(req.body);
+
+  await db
+    .update(appUsers)
+    .set({ timezone: body.timezone })
+    .where(eq(appUsers.id, userId));
+
+  res.json({ timezone: body.timezone });
 });
 
 // PUT /api/travels/settings

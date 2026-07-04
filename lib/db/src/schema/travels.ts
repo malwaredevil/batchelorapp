@@ -507,3 +507,94 @@ export type TravelsAssistantNudgeRow =
   typeof travelsAssistantNudges.$inferSelect;
 export type InsertTravelsAssistantNudge =
   typeof travelsAssistantNudges.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Gmail travel-document scanning
+// ---------------------------------------------------------------------------
+
+// Per-user Gmail OAuth connection (restricted gmail.readonly scope, separate
+// consent from Calendar). Mirrors travels_google_calendar_connections'
+// per-user single-row shape. App stays in Google OAuth "Testing" status with
+// household emails added as test users, avoiding a CASA security assessment.
+export const travelsGmailConnections = pgTable(
+  "travels_gmail_connections",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull().unique(),
+    googleEmail: text("google_email").notNull(),
+    refreshToken: text("refresh_token").notNull(),
+    accessToken: text("access_token"),
+    accessTokenExpiresAt: timestamp("access_token_expires_at", {
+      withTimezone: true,
+    }),
+    // Gmail history id watermark — lets future incremental scans (not yet
+    // implemented) resume from the last-seen point instead of a full re-scan.
+    lastHistoryId: text("last_history_id"),
+    lastScanAt: timestamp("last_scan_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+).enableRLS();
+
+export type TravelsGmailConnectionRow =
+  typeof travelsGmailConnections.$inferSelect;
+export type InsertTravelsGmailConnection =
+  typeof travelsGmailConnections.$inferInsert;
+
+// One row per (owning user, Gmail message) ever surfaced by a scan — the
+// permanent "decided" ledger that guarantees a dismissed or already-linked
+// email is never re-suggested, even across repeated scans or different
+// household members scanning their own inbox. status:
+//   'pending'   — surfaced, awaiting the user's decision (suggestion review UI)
+//   'linked'    — accepted and attached to a trip as a document
+//   'dismissed' — explicitly rejected by the user
+//   'ignored'   — auto-skipped by the scanner (not travel-related enough)
+// dedupeKey is a hash of (household-wide) normalized reference number +
+// provider + date, so the exact same booking forwarded to two household
+// members' inboxes is only ever linked once.
+export const travelsGmailScanDecisions = pgTable(
+  "travels_gmail_scan_decisions",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull(),
+    gmailMessageId: text("gmail_message_id").notNull(),
+    threadId: text("thread_id"),
+    subject: text("subject"),
+    fromAddress: text("from_address"),
+    receivedAt: timestamp("received_at", { withTimezone: true }),
+    status: text("status").notNull().default("pending"),
+    // AI-extracted structured fields, same shape as document extraction
+    // (documentType, providerName, referenceNumber, dates, etc) — see
+    // extractFromEmail() in gmail-scan.ts.
+    extractedData: jsonb("extracted_data"),
+    // Household-wide dedup key (hash of normalized provider+reference+date).
+    // Null when extraction couldn't produce enough fields to dedupe on.
+    dedupeKey: text("dedupe_key"),
+    suggestedTripId: integer("suggested_trip_id"),
+    tripId: integer("trip_id"),
+    tripDocumentId: integer("trip_document_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("travels_gmail_scan_decisions_user_id_idx").on(table.userId),
+    index("travels_gmail_scan_decisions_status_idx").on(table.status),
+    index("travels_gmail_scan_decisions_dedupe_key_idx").on(table.dedupeKey),
+    uniqueIndex(
+      "travels_gmail_scan_decisions_user_id_gmail_message_id_idx",
+    ).on(table.userId, table.gmailMessageId),
+  ],
+).enableRLS();
+
+export type TravelsGmailScanDecisionRow =
+  typeof travelsGmailScanDecisions.$inferSelect;
+export type InsertTravelsGmailScanDecision =
+  typeof travelsGmailScanDecisions.$inferInsert;

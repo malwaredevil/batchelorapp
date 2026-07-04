@@ -352,7 +352,7 @@ async function main() {
 
   // ── Travels ───────────────────────────────────────────────────────────────
   await dest.query(
-    "TRUNCATE travels_household_memory, travels_assistant_settings, travels_assistant_conversations, travels_reminder_calendar_events, travels_connected_calendars, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_trip_photos, travels_trip_documents CASCADE",
+    "TRUNCATE travels_gmail_scan_decisions, travels_gmail_connections, travels_household_memory, travels_assistant_settings, travels_assistant_conversations, travels_reminder_calendar_events, travels_connected_calendars, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_trip_photos, travels_trip_documents CASCADE",
   );
   await dest.query("TRUNCATE travels_trips CASCADE");
 
@@ -530,6 +530,47 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "travels_household_memory", "id");
+
+  await copyTable(source, dest, {
+    table: "travels_gmail_connections",
+    columns: [
+      "id",
+      "user_id",
+      "google_email",
+      "refresh_token",
+      "access_token",
+      "access_token_expires_at",
+      "last_history_id",
+      "last_scan_at",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_gmail_connections", "id");
+
+  await copyTable(source, dest, {
+    table: "travels_gmail_scan_decisions",
+    columns: [
+      "id",
+      "user_id",
+      "gmail_message_id",
+      "thread_id",
+      "subject",
+      "from_address",
+      "received_at",
+      "status",
+      "extracted_data",
+      "dedupe_key",
+      "suggested_trip_id",
+      "trip_id",
+      "trip_document_id",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_gmail_scan_decisions", "id");
 
   await dest.query("SET session_replication_role = DEFAULT");
 

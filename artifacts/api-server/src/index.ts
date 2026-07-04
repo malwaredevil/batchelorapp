@@ -4,6 +4,7 @@ import { runStartupMigration } from "./lib/startup-migrate";
 import { startReminderScheduler } from "./lib/reminder-scheduler";
 import { startNudgeScheduler } from "./lib/travels-nudges";
 import { startCalendarTripScanScheduler } from "./lib/travels-calendar-scan";
+import { startGmailScanScheduler } from "./lib/gmail-scan";
 
 const rawPort = process.env["PORT"];
 
@@ -31,6 +32,7 @@ runStartupMigration()
       startReminderScheduler();
       startNudgeScheduler();
       startCalendarTripScanScheduler();
+      startGmailScanScheduler();
     });
   })
   .catch((err) => {
@@ -47,5 +49,6 @@ runStartupMigration()
       startReminderScheduler();
       startNudgeScheduler();
       startCalendarTripScanScheduler();
+      startGmailScanScheduler();
     });
   });

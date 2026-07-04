@@ -1115,6 +1115,7 @@ export function useListTravelsAppUsers<TData = TravelsAppUser[], TError = unknow
 
 export interface TravelsSettings {
   reminderEmail: string | null;
+  timezone: string | null;
 }
 
 const getTravelsSettings = (options?: RequestInit): Promise<TravelsSettings> =>
@@ -1144,6 +1145,194 @@ export function useUpdateTravelsSettings(
   options?: { mutation?: UseMutationOptions<TravelsSettings, unknown, { reminderEmail: string | null }> },
 ) {
   const mutationFn = (body: { reminderEmail: string | null }) => putTravelsSettingsFn(body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const putTravelsTimezoneFn = (body: { timezone: string | null }): Promise<{ timezone: string | null }> =>
+  customFetch<{ timezone: string | null }>("/api/travels/settings/timezone", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export function useUpdateTravelsTimezone(
+  options?: { mutation?: UseMutationOptions<{ timezone: string | null }, unknown, { timezone: string | null }> },
+) {
+  const mutationFn = (body: { timezone: string | null }) => putTravelsTimezoneFn(body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+// ---------------------------------------------------------------------------
+// Gmail auto-scan + manual mode
+// ---------------------------------------------------------------------------
+
+export interface GmailStatus {
+  connected: boolean;
+  googleEmail: string | null;
+  lastScanAt: string | null;
+}
+
+const getGmailStatus = (options?: RequestInit): Promise<GmailStatus> =>
+  customFetch<GmailStatus>("/api/travels/gmail/status", { ...options, method: "GET" });
+
+export const getGetGmailStatusQueryKey = () => [`/api/travels/gmail/status`] as const;
+
+export function useGetGmailStatus<TData = GmailStatus, TError = unknown>(
+  options?: { query?: UseQueryOptions<GmailStatus, TError, TData> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetGmailStatusQueryKey();
+  const queryFn: QueryFunction<GmailStatus> = ({ signal }) => getGmailStatus({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<GmailStatus, TError, TData> & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const disconnectGmailFn = (): Promise<void> =>
+  customFetch<void>("/api/travels/gmail/disconnect", { method: "DELETE" });
+
+export function useDisconnectGmail(options?: { mutation?: UseMutationOptions<void, unknown, void> }) {
+  const mutationFn: MutationFunction<void, void> = () => disconnectGmailFn();
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+export interface GmailScanResult {
+  scanned: number;
+  suggested: number;
+  ignored: number;
+}
+
+const postGmailScanFn = (): Promise<GmailScanResult> =>
+  customFetch<GmailScanResult>("/api/travels/gmail/scan", { method: "POST" });
+
+export function useScanGmail(options?: { mutation?: UseMutationOptions<GmailScanResult, unknown, void> }) {
+  const mutationFn: MutationFunction<GmailScanResult, void> = () => postGmailScanFn();
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+export interface GmailScanDecision {
+  id: number;
+  userId: number;
+  gmailMessageId: string;
+  threadId: string | null;
+  subject: string | null;
+  fromAddress: string | null;
+  receivedAt: string | null;
+  status: "pending" | "linked" | "dismissed" | "ignored";
+  extractedData: Record<string, unknown> | null;
+  dedupeKey: string | null;
+  suggestedTripId: number | null;
+  tripId: number | null;
+  tripDocumentId: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const getGmailSuggestions = (options?: RequestInit): Promise<GmailScanDecision[]> =>
+  customFetch<GmailScanDecision[]>("/api/travels/gmail/suggestions", { ...options, method: "GET" });
+
+export const getGetGmailSuggestionsQueryKey = () => [`/api/travels/gmail/suggestions`] as const;
+
+export function useGetGmailSuggestions<TData = GmailScanDecision[], TError = unknown>(
+  options?: { query?: UseQueryOptions<GmailScanDecision[], TError, TData> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetGmailSuggestionsQueryKey();
+  const queryFn: QueryFunction<GmailScanDecision[]> = ({ signal }) => getGmailSuggestions({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<GmailScanDecision[], TError, TData> & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const dismissGmailSuggestionFn = (id: number): Promise<GmailScanDecision> =>
+  customFetch<GmailScanDecision>(`/api/travels/gmail/suggestions/${id}/dismiss`, { method: "POST" });
+
+export function useDismissGmailSuggestion(
+  options?: { mutation?: UseMutationOptions<GmailScanDecision, unknown, number> },
+) {
+  const mutationFn: MutationFunction<GmailScanDecision, number> = (id) => dismissGmailSuggestionFn(id);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+export interface GmailInboxMessage {
+  id: string;
+  threadId: string;
+  subject: string | null;
+  from: string | null;
+  date: string | null;
+  snippet: string;
+  alreadyLinked: boolean;
+  alreadyIgnored: boolean;
+}
+
+export interface GmailInboxPage {
+  messages: GmailInboxMessage[];
+  nextPageToken: string | null;
+}
+
+const getGmailInbox = (
+  params: { q?: string; pageToken?: string },
+  options?: RequestInit,
+): Promise<GmailInboxPage> => {
+  const search = new URLSearchParams();
+  if (params.q) search.set("q", params.q);
+  if (params.pageToken) search.set("pageToken", params.pageToken);
+  const qs = search.toString();
+  return customFetch<GmailInboxPage>(`/api/travels/gmail/inbox${qs ? `?${qs}` : ""}`, {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetGmailInboxQueryKey = (params: { q?: string; pageToken?: string }) =>
+  [`/api/travels/gmail/inbox`, params] as const;
+
+export function useGetGmailInbox<TData = GmailInboxPage, TError = unknown>(
+  params: { q?: string; pageToken?: string },
+  options?: { query?: UseQueryOptions<GmailInboxPage, TError, TData> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetGmailInboxQueryKey(params);
+  const queryFn: QueryFunction<GmailInboxPage> = ({ signal }) => getGmailInbox(params, { signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<GmailInboxPage, TError, TData> & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const linkGmailMessageFn = (
+  messageId: string,
+  body: { tripId: number; attachmentIndex?: number },
+): Promise<unknown> =>
+  customFetch(`/api/travels/gmail/messages/${messageId}/link`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export function useLinkGmailMessage(
+  options?: {
+    mutation?: UseMutationOptions<
+      unknown,
+      unknown,
+      { messageId: string; tripId: number; attachmentIndex?: number }
+    >;
+  },
+) {
+  const mutationFn: MutationFunction<
+    unknown,
+    { messageId: string; tripId: number; attachmentIndex?: number }
+  > = ({ messageId, tripId, attachmentIndex }) =>
+    linkGmailMessageFn(messageId, { tripId, attachmentIndex });
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const ignoreGmailMessageFn = (messageId: string): Promise<void> =>
+  customFetch<void>(`/api/travels/gmail/messages/${messageId}/ignore`, { method: "POST" });
+
+export function useIgnoreGmailMessage(
+  options?: { mutation?: UseMutationOptions<void, unknown, string> },
+) {
+  const mutationFn: MutationFunction<void, string> = (messageId) => ignoreGmailMessageFn(messageId);
   return useMutation({ mutationFn, ...options?.mutation });
 }
 

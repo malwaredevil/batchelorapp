@@ -340,7 +340,7 @@ function GmailSyncCard() {
   const gmailContext = useMemo(() => {
     if (isLoading) return undefined;
     if (!status?.connected) {
-      return "Settings page: Gmail scanning is NOT connected for this user. Connecting requires clicking the Connect button (an OAuth redirect elAIne cannot trigger herself) — offer to take them to Settings if they're elsewhere.";
+      return "Settings page: Gmail scanning is NOT connected for this user. Connecting requires clicking the Connect button (an OAuth redirect Elaine cannot trigger herself) — offer to take them to Settings if they're elsewhere.";
     }
     return `Settings page: Gmail is connected as ${status.googleEmail}. Travel email suggestions can be reviewed on the Gmail page.`;
   }, [isLoading, status]);
@@ -659,7 +659,7 @@ function CalendarSyncCard() {
   const calendarContext = useMemo(() => {
     if (statusLoading) return undefined;
     if (!status?.connected) {
-      return "Settings page: Google Calendar is NOT connected for this user. Connecting requires clicking the Connect button (an OAuth redirect elAIne cannot trigger herself) — offer to take them to Settings if they're elsewhere.";
+      return "Settings page: Google Calendar is NOT connected for this user. Connecting requires clicking the Connect button (an OAuth redirect Elaine cannot trigger herself) — offer to take them to Settings if they're elsewhere.";
     }
     const connectedList = connectedCalendars
       .map((c) => `"${c.summary}"${c.isTravelCalendar ? " (Travel calendar)" : ""}`)

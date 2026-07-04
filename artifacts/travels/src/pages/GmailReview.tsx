@@ -643,7 +643,7 @@ export default function GmailReview() {
   const context = useMemo(() => {
     if (statusLoading) return undefined;
     if (!status?.connected) {
-      return "Gmail page: Gmail is not connected for this user. Connecting requires an OAuth redirect elAIne cannot trigger — direct them to Settings to connect.";
+      return "Gmail page: Gmail is not connected for this user. Connecting requires an OAuth redirect Elaine cannot trigger — direct them to Settings to connect.";
     }
     return `Gmail page: connected as ${status.googleEmail}. Users can review AI-found travel email suggestions, manually browse their inbox to attach any email (or multiple selected emails at once) to a trip as document(s), view full email content, and reconsider previously ignored emails.`;
   }, [statusLoading, status]);

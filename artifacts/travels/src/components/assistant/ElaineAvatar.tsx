@@ -15,9 +15,9 @@ export function ElaineAvatar({ className, size = 40 }: { className?: string; siz
 }
 
 // Shared styling for the "AI" portion of the Elaine name/wordmark: bold
-// italic red, standing out against the surrounding "El"/"ne" text so the
+// red, standing out against the surrounding "El"/"ne" text so the
 // name reads clearly instead of the harder-to-parse lowercase "elAIne".
-const AI_HIGHLIGHT_CLASS = "italic font-extrabold text-red-600 dark:text-red-500";
+const AI_HIGHLIGHT_CLASS = "font-extrabold text-red-600 dark:text-red-500";
 
 export function ElaineWordmark({ className }: { className?: string }) {
   return (

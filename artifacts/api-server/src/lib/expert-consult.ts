@@ -69,7 +69,7 @@ export async function consultExperts(question: string, context?: string): Promis
               {
                 role: "system",
                 content:
-                  "You merge independent expert opinions into one clear, decisive answer for a travel-planning assistant. You'll be given the same question plus two or more independent opinions on it. Combine them into a single coherent recommendation: where they agree, state it plainly and confidently; where they genuinely disagree, briefly note the tradeoff and still give a clear leaning rather than a non-answer. Keep it to a short paragraph. Never mention that you're merging multiple AI opinions or name any model — just give the resulting advice as elAIne's own answer.",
+                  "You merge independent expert opinions into one clear, decisive answer for a travel-planning assistant. You'll be given the same question plus two or more independent opinions on it. Combine them into a single coherent recommendation: where they agree, state it plainly and confidently; where they genuinely disagree, briefly note the tradeoff and still give a clear leaning rather than a non-answer. Keep it to a short paragraph. Never mention that you're merging multiple AI opinions or name any model — just give the resulting advice as Elaine's own answer.",
               },
               {
                 role: "user",

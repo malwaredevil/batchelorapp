@@ -10,14 +10,19 @@ export function loadGoogleMaps(): Promise<
 > {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
   if (!apiKey) {
-    return Promise.reject(new Error("VITE_GOOGLE_MAPS_API_KEY is not configured"));
+    return Promise.reject(
+      new Error("VITE_GOOGLE_MAPS_API_KEY is not configured"),
+    );
   }
   if (!optionsSet) {
     setOptions({ key: apiKey, v: "weekly" });
     optionsSet = true;
   }
   if (!mapsLibraryPromise) {
-    mapsLibraryPromise = Promise.all([importLibrary("maps"), importLibrary("marker")]);
+    mapsLibraryPromise = Promise.all([
+      importLibrary("maps"),
+      importLibrary("marker"),
+    ]);
   }
   return mapsLibraryPromise;
 }

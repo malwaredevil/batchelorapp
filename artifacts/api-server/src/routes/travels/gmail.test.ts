@@ -329,6 +329,31 @@ describe("GET /api/travels/gmail/inbox", () => {
     expect(res.body.messages[0].alreadyLinked).toBe(true);
     expect(res.body.messages[1].alreadyLinked).toBe(false);
   });
+
+  it("defaults to a plain in:inbox query with no travel-keyword filter", async () => {
+    getValidGmailAccessToken.mockResolvedValue("mock-access-token");
+    searchMessagesPage.mockResolvedValue({ messages: [], nextPageToken: null });
+    selectQueue.push([]);
+    const app = await buildApp();
+
+    await request(app).get("/api/travels/gmail/inbox");
+
+    expect(searchMessagesPage).toHaveBeenCalledWith("mock-access-token", "in:inbox", undefined, 20);
+  });
+
+  it("clamps maxResults to the allowed range", async () => {
+    getValidGmailAccessToken.mockResolvedValue("mock-access-token");
+    searchMessagesPage.mockResolvedValue({ messages: [], nextPageToken: null });
+    selectQueue.push([]);
+    selectQueue.push([]);
+    const app = await buildApp();
+
+    await request(app).get("/api/travels/gmail/inbox?maxResults=5");
+    await request(app).get("/api/travels/gmail/inbox?maxResults=500");
+
+    expect(searchMessagesPage).toHaveBeenNthCalledWith(1, "mock-access-token", "in:inbox", undefined, 10);
+    expect(searchMessagesPage).toHaveBeenNthCalledWith(2, "mock-access-token", "in:inbox", undefined, 50);
+  });
 });
 
 describe("POST /api/travels/gmail/messages/:messageId/link", () => {

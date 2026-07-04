@@ -1271,12 +1271,13 @@ export interface GmailInboxPage {
 }
 
 const getGmailInbox = (
-  params: { q?: string; pageToken?: string },
+  params: { q?: string; pageToken?: string; maxResults?: number },
   options?: RequestInit,
 ): Promise<GmailInboxPage> => {
   const search = new URLSearchParams();
   if (params.q) search.set("q", params.q);
   if (params.pageToken) search.set("pageToken", params.pageToken);
+  if (params.maxResults) search.set("maxResults", String(params.maxResults));
   const qs = search.toString();
   return customFetch<GmailInboxPage>(`/api/travels/gmail/inbox${qs ? `?${qs}` : ""}`, {
     ...options,
@@ -1284,11 +1285,11 @@ const getGmailInbox = (
   });
 };
 
-export const getGetGmailInboxQueryKey = (params: { q?: string; pageToken?: string }) =>
+export const getGetGmailInboxQueryKey = (params: { q?: string; pageToken?: string; maxResults?: number }) =>
   [`/api/travels/gmail/inbox`, params] as const;
 
 export function useGetGmailInbox<TData = GmailInboxPage, TError = unknown>(
-  params: { q?: string; pageToken?: string },
+  params: { q?: string; pageToken?: string; maxResults?: number },
   options?: { query?: UseQueryOptions<GmailInboxPage, TError, TData> },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const { query: queryOptions } = options ?? {};

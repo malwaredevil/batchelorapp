@@ -37,11 +37,15 @@ const TEN_MINUTES_MS = 1000 * 60 * 10;
 const OAUTH_STATE_COOKIE = "travels.gmail_oauth_state";
 const OAUTH_COOKIE_PATH = "/api/travels/gmail";
 
-// Same coarse pre-filter as the background scanner, reused so the manual
-// inbox browser's default search matches what auto-scan would have found —
-// the user can still type their own query in the search box.
-const DEFAULT_INBOX_QUERY =
-  '(subject:(flight OR itinerary OR "boarding pass" OR "e-ticket" OR eticket OR reservation OR booking OR confirmation OR "check-in" OR hotel OR train OR "car rental" OR "rental car")) -category:promotions -category:social';
+// Manual "browse inbox" mode is a plain chronological view of the inbox —
+// it intentionally does NOT apply the background scanner's travel-keyword
+// pre-filter, so the default (no user-typed search) just lists the latest
+// messages. Users can still narrow results with their own Gmail search.
+const DEFAULT_INBOX_QUERY = "in:inbox";
+
+const DEFAULT_INBOX_PAGE_SIZE = 20;
+const MIN_INBOX_PAGE_SIZE = 10;
+const MAX_INBOX_PAGE_SIZE = 50;
 
 // Gmail enforces a per-user *concurrent* request cap (distinct from its
 // per-second quota) — an unbounded Promise.all over ~25 message-summary
@@ -275,9 +279,14 @@ router.get("/gmail/inbox", async (req, res) => {
 
   const q = typeof req.query.q === "string" && req.query.q.trim() ? req.query.q : DEFAULT_INBOX_QUERY;
   const pageToken = typeof req.query.pageToken === "string" ? req.query.pageToken : undefined;
+  const rawMaxResults = typeof req.query.maxResults === "string" ? Number(req.query.maxResults) : NaN;
+  const maxResults =
+    Number.isFinite(rawMaxResults) && rawMaxResults > 0
+      ? Math.min(Math.max(Math.trunc(rawMaxResults), MIN_INBOX_PAGE_SIZE), MAX_INBOX_PAGE_SIZE)
+      : DEFAULT_INBOX_PAGE_SIZE;
 
   try {
-    const page = await searchMessagesPage(accessToken, q, pageToken, 25);
+    const page = await searchMessagesPage(accessToken, q, pageToken, maxResults);
     const summaries = await getMessageSummariesLimited(
       accessToken,
       page.messages.map((m) => m.id),

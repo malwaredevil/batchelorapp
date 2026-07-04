@@ -1,7 +1,12 @@
 import { Router, type IRouter } from "express";
 import { and, eq, asc } from "drizzle-orm";
 import multer from "multer";
-import { db, travelsTrips, travelsTripDocuments } from "@workspace/db";
+import {
+  db,
+  travelsTrips,
+  travelsTripDocuments,
+  travelsGmailScanDecisions,
+} from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import {
   uploadDocument,
@@ -583,6 +588,28 @@ router.delete("/trips/:id/documents/:docId", async (req, res) => {
     req.log.warn(
       { err },
       "Failed to purge itinerary entries for deleted document",
+    );
+  }
+
+  // If this document was created by linking a Gmail email, that email's
+  // scan-decision row still points at this now-deleted document and keeps
+  // status "linked", which makes the email un-re-addable in the inbox
+  // browser. Clear the orphaned decision so the email can be linked again.
+  // Scoped to the document owner (who is the Gmail decision owner, since
+  // Gmail access is always single-owner) plus the exact document id.
+  try {
+    await db
+      .delete(travelsGmailScanDecisions)
+      .where(
+        and(
+          eq(travelsGmailScanDecisions.userId, doc.userId),
+          eq(travelsGmailScanDecisions.tripDocumentId, docId),
+        ),
+      );
+  } catch (err) {
+    req.log.warn(
+      { err },
+      "Failed to clear Gmail scan decision for deleted document",
     );
   }
 

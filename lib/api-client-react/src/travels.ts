@@ -348,6 +348,8 @@ export interface MapPlaceResult {
   userRatingCount: number | null;
   lat: number | null;
   lng: number | null;
+  googleMapsUri: string | null;
+  websiteUri: string | null;
 }
 
 export const searchNearbyPlaces = (

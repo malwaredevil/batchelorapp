@@ -33,4 +33,5 @@
 - [elAIne web_search tool](travels-itinerary-assistant-actions.md) — needs a bounded multi-round completion loop (unlike fire-and-forget soft tools) to feed results back before the model's final answer; scope sentActionIndices per round.
 - [Travels reminder-to-calendar sync target](travels-reminder-sync-target.md) — sync shared resources to an explicitly-resolved shared owner (e.g. Travel calendar owner), never per-recipient or per-request-user.
 - [Gmail label management](gmail-label-management.md) — labels apply only on confirming an AI suggestion, never on manual picks or AI classification alone; gmail.labels is additive to readonly, not a replacement.
+- [Fragment-in-flex gap spacing bug](fragment-in-flex-gap-spacing-bug.md) — a component returning a bare Fragment breaks apart into huge gaps when placed in a flex+gap container; wrap in a single span.
 - [React hook called after an early return](react-hooks-after-early-return.md) — "Rendered more hooks" crash that survives reload means a hook call is textually after a loading/null guard, not an HMR artifact; audit call-site position, not just the value passed in.

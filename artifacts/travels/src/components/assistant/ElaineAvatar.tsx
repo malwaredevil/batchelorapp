@@ -31,10 +31,16 @@ export function ElaineWordmark({ className }: { className?: string }) {
 // buttons, or toast messages without imposing the wordmark's own font family —
 // it inherits the surrounding text's size/weight/font and only styles the
 // "AI" portion so it stands out everywhere the name appears.
+//
+// Rendered as a single <span> (not a bare Fragment) so the whole name is one
+// DOM node. Fragments here would leave "El", the "AI" span, and "ne" as
+// separate sibling nodes — inside a flex container (e.g. a dropdown menu
+// item with `gap-*`) that turns each fragment into its own anonymous flex
+// item, spacing the name apart into "El  AI  ne".
 export function ElaineName() {
   return (
-    <>
+    <span>
       El<span className={AI_HIGHLIGHT_CLASS}>AI</span>ne
-    </>
+    </span>
   );
 }

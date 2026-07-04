@@ -28,7 +28,7 @@ import {
   extractFromImage,
   extractFromPdf,
 } from "../../lib/travel-document-extraction";
-import { uploadDocument } from "../../lib/travels-storage";
+import { uploadDocument, deleteDocument } from "../../lib/travels-storage";
 import { scanGmailForUser } from "../../lib/gmail-scan";
 import { markMessageAsIngestedTravel } from "../../lib/gmail-labels";
 import { syncItineraryFromDocument } from "./documents";
@@ -753,6 +753,84 @@ router.post("/gmail/messages/:messageId/reconsider", async (req, res) => {
       .status(409)
       .json({ error: "Only ignored or dismissed emails can be reconsidered." });
     return;
+  }
+
+  await db
+    .delete(travelsGmailScanDecisions)
+    .where(
+      and(
+        eq(travelsGmailScanDecisions.userId, userId),
+        eq(travelsGmailScanDecisions.gmailMessageId, messageId),
+      ),
+    );
+  res.status(204).send();
+});
+
+// POST /gmail/messages/:messageId/unlink — reverse a "linked" decision so the
+// email becomes re-addable from the inbox browser without the user having to
+// hunt down and delete the trip document by hand. Mirrors the delete-document
+// lifecycle: it removes the document created from this email (storage object +
+// row) and purges any itinerary entries derived from it, then deletes the
+// decision row. Only the connecting user's own decision can be unlinked, and
+// only from the "linked" state — ignored/dismissed emails use reconsider
+// instead. Gmail access is single-owner, so everything is scoped strictly by
+// the session userId, never by trip/household membership.
+//
+// Note: the decision row records only the last document created for this email
+// (tripDocumentId). For a multi-attachment email that produced several docs,
+// unlink removes that referenced doc and frees the email; any sibling docs
+// remain in the trip (same limitation as the delete-document path).
+router.post("/gmail/messages/:messageId/unlink", async (req, res) => {
+  const userId = req.session.userId!;
+  const messageId = req.params.messageId as string;
+
+  const existingDecision = await loadExistingDecision(userId, messageId);
+  if (!existingDecision) {
+    res.status(404).json({ error: "No decision found for this email." });
+    return;
+  }
+  if (existingDecision.status !== "linked") {
+    res.status(409).json({ error: "Only linked emails can be unlinked." });
+    return;
+  }
+
+  const { tripId, tripDocumentId } = existingDecision;
+
+  // Best-effort teardown of the linked document and its derived itinerary
+  // entries. Failures are logged, never surfaced — the primary goal is to free
+  // the email to be re-added, and a lingering doc/itinerary row must not block
+  // that. Scoped by userId so a session can only touch its own document.
+  if (tripId != null && tripDocumentId != null) {
+    const [doc] = await db
+      .select()
+      .from(travelsTripDocuments)
+      .where(
+        and(
+          eq(travelsTripDocuments.id, tripDocumentId),
+          eq(travelsTripDocuments.userId, userId),
+        ),
+      );
+    if (doc) {
+      try {
+        await deleteDocument(doc.storagePath);
+      } catch (err) {
+        logger.warn(
+          { err, userId, messageId, docId: tripDocumentId },
+          "gmail unlink: storage delete failed — removing DB record anyway",
+        );
+      }
+      await db
+        .delete(travelsTripDocuments)
+        .where(eq(travelsTripDocuments.id, tripDocumentId));
+      try {
+        await syncItineraryFromDocument(tripId, tripDocumentId, {});
+      } catch (err) {
+        logger.warn(
+          { err, userId, messageId, docId: tripDocumentId },
+          "gmail unlink: failed to purge itinerary entries",
+        );
+      }
+    }
   }
 
   await db

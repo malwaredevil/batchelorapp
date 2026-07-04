@@ -10,6 +10,7 @@ import {
   Paperclip,
   RefreshCw,
   Undo2,
+  Link2Off,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +39,7 @@ import {
   useLinkGmailMessage,
   useIgnoreGmailMessage,
   useReconsiderGmailMessage,
+  useUnlinkGmailMessage,
   useGetGmailMessage,
   useBulkLinkGmailMessages,
   useListTrips,
@@ -388,6 +390,7 @@ function InboxBrowserTab({
   const link = useLinkGmailMessage();
   const ignore = useIgnoreGmailMessage();
   const reconsider = useReconsiderGmailMessage();
+  const unlink = useUnlinkGmailMessage();
   const bulkLink = useBulkLinkGmailMessages();
   const [selectedTrip, setSelectedTrip] = useState<Record<string, string>>({});
   const [checked, setChecked] = useState<Record<string, boolean>>({});
@@ -466,6 +469,19 @@ function InboxBrowserTab({
         toast.success("Moved back to unhandled");
       },
       onError: () => toast.error("Could not update this email"),
+    });
+  }
+
+  function handleUnlink(m: GmailInboxMessage) {
+    unlink.mutate(m.id, {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: inboxQueryKey });
+        toast.success("Unlinked — this email can be added again");
+      },
+      onError: (err) =>
+        toast.error(
+          err instanceof Error ? err.message : "Could not unlink this email",
+        ),
     });
   }
 
@@ -711,6 +727,20 @@ function InboxBrowserTab({
                   >
                     <Undo2 className="h-3.5 w-3.5 mr-1.5" />
                     Reconsider
+                  </Button>
+                </div>
+              )}
+
+              {m.alreadyLinked && (
+                <div className="pl-12" onClick={(e) => e.stopPropagation()}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleUnlink(m)}
+                    disabled={unlink.isPending}
+                  >
+                    <Link2Off className="h-3.5 w-3.5 mr-1.5" />
+                    Unlink
                   </Button>
                 </div>
               )}

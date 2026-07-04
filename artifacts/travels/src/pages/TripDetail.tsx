@@ -444,6 +444,27 @@ function DocumentRow({
   );
 }
 
+function StarRating({ rating }: { rating: number }) {
+  return (
+    <span className="inline-flex items-center gap-px align-middle">
+      {Array.from({ length: 5 }).map((_, i) => {
+        const fillPct = Math.round(Math.max(0, Math.min(1, rating - i)) * 100);
+        return (
+          <span key={i} className="relative inline-block w-3 h-3 shrink-0">
+            <Star className="absolute inset-0 w-3 h-3 text-muted-foreground/30" />
+            <span
+              className="absolute inset-0 overflow-hidden"
+              style={{ width: `${fillPct}%` }}
+            >
+              <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+            </span>
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
 const NEARBY_SEARCH_CATEGORIES = [
   "restaurants",
   "coffee",
@@ -600,7 +621,8 @@ function TripWeatherAndPlaces({
                     {place.address}
                     {place.rating != null && (
                       <>
-                        {" · "}⭐ {place.rating}
+                        {" · "}
+                        <StarRating rating={place.rating} /> {place.rating}
                         {place.userRatingCount != null ? ` (${place.userRatingCount})` : ""}
                       </>
                     )}

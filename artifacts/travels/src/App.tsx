@@ -19,6 +19,7 @@ import Destinations from "@/pages/Destinations";
 import Settings from "@/pages/Settings";
 import TravelCalendar from "@/pages/TravelCalendar";
 import GmailReview from "@/pages/GmailReview";
+import GoogleApisDemo from "@/pages/GoogleApisDemo";
 import ElaineChat from "@/pages/ElaineChat";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import NotFound from "@/pages/not-found";
@@ -114,6 +115,14 @@ function Router() {
         <ProtectedRoute>
           <Layout>
             <ElaineChat />
+          </Layout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/google-apis">
+        <ProtectedRoute>
+          <Layout>
+            <GoogleApisDemo />
           </Layout>
         </ProtectedRoute>
       </Route>

@@ -1,30 +1,11 @@
-import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 import { useEffect, useRef, useState } from "react";
 import type { MapPlaceResult } from "@workspace/api-client-react";
+import { loadGoogleMaps } from "@/lib/google-maps-loader";
 
 const DESTINATION_COLOR = "#2563eb";
 const PLACE_COLOR = "#f97316";
 
 const MAP_ID = "travels-trip-location-map";
-
-let optionsSet = false;
-let mapsLibraryPromise: Promise<[google.maps.MapsLibrary, google.maps.MarkerLibrary]> | null =
-  null;
-
-function loadGoogleMaps(): Promise<[google.maps.MapsLibrary, google.maps.MarkerLibrary]> {
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
-  if (!apiKey) {
-    return Promise.reject(new Error("VITE_GOOGLE_MAPS_API_KEY is not configured"));
-  }
-  if (!optionsSet) {
-    setOptions({ key: apiKey, v: "weekly" });
-    optionsSet = true;
-  }
-  if (!mapsLibraryPromise) {
-    mapsLibraryPromise = Promise.all([importLibrary("maps"), importLibrary("marker")]);
-  }
-  return mapsLibraryPromise;
-}
 
 function makePinElement(color: string, scale = 1) {
   const { PinElement } = google.maps.marker;

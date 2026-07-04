@@ -138,6 +138,11 @@ vi.mock("../../lib/gmail-scan", () => ({
   scanGmailForUser: (...args: unknown[]) => scanGmailForUser(...args),
 }));
 
+const markMessageAsIngestedTravel = vi.fn().mockResolvedValue(undefined);
+vi.mock("../../lib/gmail-labels", () => ({
+  markMessageAsIngestedTravel: (...args: unknown[]) => markMessageAsIngestedTravel(...args),
+}));
+
 const syncItineraryFromDocument = vi.fn().mockResolvedValue(undefined);
 vi.mock("./documents", () => ({
   syncItineraryFromDocument: (...args: unknown[]) => syncItineraryFromDocument(...args),
@@ -386,6 +391,34 @@ describe("POST /api/travels/gmail/messages/:messageId/link", () => {
     expect(res.status).toBe(201);
     expect(extractFromEmailText).toHaveBeenCalled();
     expect(uploadDocument).toHaveBeenCalled();
+    expect(markMessageAsIngestedTravel).not.toHaveBeenCalled();
+  });
+
+  it("applies Gmail labels when accepting a pending AI suggestion", async () => {
+    getValidGmailAccessToken.mockResolvedValue("mock-access-token");
+    selectQueue.push([{ id: 7 }]); // trip lookup
+    selectQueue.push([{ status: "pending", dedupeKey: null }]); // existing pending suggestion
+    getMessage.mockResolvedValue({ threadId: "t1" });
+    parseGmailMessage.mockReturnValue({
+      subject: "Flight confirmation",
+      from: "a@delta.com",
+      date: null,
+      textBody: "Your flight is confirmed.",
+      attachments: [],
+    });
+    lastReturning = [{ id: 56, tripId: 7 }];
+    const app = await buildApp();
+
+    const res = await request(app)
+      .post("/api/travels/gmail/messages/msg-1/link")
+      .send({ tripId: 7 });
+
+    expect(res.status).toBe(201);
+    expect(markMessageAsIngestedTravel).toHaveBeenCalledWith(
+      TEST_USER_ID,
+      "mock-access-token",
+      "msg-1",
+    );
   });
 
   it("rejects an invalid body", async () => {

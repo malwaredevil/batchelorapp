@@ -17,8 +17,9 @@ import crypto from "node:crypto";
 import { and, eq, ne } from "drizzle-orm";
 import { db, travelsGmailScanDecisions, travelsTrips } from "@workspace/db";
 import { getAllGmailConnections, getValidGmailAccessToken } from "./gmail-tokens";
-import { searchMessages, getMessage, parseGmailMessage } from "./gmail-api";
+import { searchMessages, getMessage, parseGmailMessage, type GmailMessageListItem } from "./gmail-api";
 import { extractFromEmailText } from "./travel-document-extraction";
+import { TRAVEL_LABEL_NAME } from "./gmail-labels";
 import { logger } from "./logger";
 
 // Scoped to booking/confirmation-style subjects to keep both the Gmail
@@ -27,7 +28,13 @@ import { logger } from "./logger";
 const GMAIL_SEARCH_QUERY =
   '(subject:(flight OR itinerary OR "boarding pass" OR "e-ticket" OR eticket OR reservation OR booking OR confirmation OR "check-in" OR hotel OR train OR "car rental" OR "rental car")) -category:promotions -category:social newer_than:180d';
 
+// Emails the user has already hand-labeled "Travel" in Gmail are trusted
+// candidates too — they skip the coarse subject pre-filter above but still
+// go through the same AI classification/extraction below.
+const GMAIL_LABEL_SEARCH_QUERY = `label:"${TRAVEL_LABEL_NAME}" newer_than:180d`;
+
 const MAX_MESSAGES_PER_SCAN = 150;
+const MAX_LABELED_MESSAGES_PER_SCAN = 100;
 
 function normalize(value: string | null | undefined): string {
   return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
@@ -109,7 +116,21 @@ async function scanConnectionForTravelDocuments(userId: number): Promise<GmailSc
     return { userId, scanned: 0, created: 0, autoIgnoredDuplicates: 0 };
   }
 
-  const messages = await searchMessages(accessToken, GMAIL_SEARCH_QUERY, MAX_MESSAGES_PER_SCAN);
+  const [keywordMessages, labeledMessages] = await Promise.all([
+    searchMessages(accessToken, GMAIL_SEARCH_QUERY, MAX_MESSAGES_PER_SCAN),
+    searchMessages(accessToken, GMAIL_LABEL_SEARCH_QUERY, MAX_LABELED_MESSAGES_PER_SCAN).catch(
+      (err: unknown) => {
+        logger.warn({ err, userId }, "gmail-scan: label-based search failed, continuing with keyword results only");
+        return [] as GmailMessageListItem[];
+      },
+    ),
+  ]);
+  const seenIds = new Set<string>();
+  const messages = [...keywordMessages, ...labeledMessages].filter((m) => {
+    if (seenIds.has(m.id)) return false;
+    seenIds.add(m.id);
+    return true;
+  });
 
   // Never re-fetch/re-classify a message we've already made a decision on —
   // this is the "never revisit decided emails" guarantee.

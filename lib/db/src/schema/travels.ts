@@ -531,6 +531,12 @@ export const travelsGmailConnections = pgTable(
     // implemented) resume from the last-seen point instead of a full re-scan.
     lastHistoryId: text("last_history_id"),
     lastScanAt: timestamp("last_scan_at", { withTimezone: true }),
+    // Cached Gmail label ids for this user's own mailbox (label ids are
+    // per-account, so each connected user gets their own pair). Resolved and
+    // created on first use by gmail-labels.ts; cached here to avoid a
+    // labels.list call on every message link.
+    travelLabelId: text("travel_label_id"),
+    reviewedLabelId: text("reviewed_label_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

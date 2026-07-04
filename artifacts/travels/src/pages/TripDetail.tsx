@@ -348,6 +348,308 @@ function TransportIcon({ transport }: { transport?: TransportTo | null }) {
   return <Car className="w-4 h-4" />;
 }
 
+// ─── Document-type field lookup ───────────────────────────────────────────────
+// Each known document type maps to an ordered list of (key, label) pairs shown
+// in DocumentRow. To support a new document type, add an entry here — no other
+// code change is needed.  Unknown types fall through to a smart generic fallback
+// that auto-displays every non-empty extractedData field with a formatted label.
+
+type FieldSpec = { key: string; label: string };
+
+/** Keys that are never shown as editable inline fields. */
+const SYSTEM_ED_KEYS = new Set(["documentType", "isTravelRelated"]);
+
+/** camelCase / snake_case → "Sentence case with spaces" for the generic fallback. */
+function edKeyToLabel(key: string): string {
+  return key
+    .replace(/_/g, " ")
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^\w/, (c) => c.toUpperCase())
+    .trim();
+}
+
+/**
+ * Generic fallback — one editable row per non-null extractedData field that
+ * isn't a system key.  Arrays (e.g. seatNumbers, passengerNames) are joined
+ * so they render as readable comma-separated text.
+ */
+function genericFields(ed: Record<string, unknown> | null | undefined): FieldSpec[] {
+  if (!ed) return [];
+  return Object.entries(ed)
+    .filter(([k, v]) => !SYSTEM_ED_KEYS.has(k) && v != null && v !== "")
+    .map(([k]) => ({ key: k, label: edKeyToLabel(k) }));
+}
+
+const FLIGHT_FIELDS: FieldSpec[] = [
+  { key: "providerName", label: "Airline" },
+  { key: "referenceNumber", label: "Ref" },
+  { key: "flightNumber", label: "Flight" },
+  { key: "fromLocation", label: "From" },
+  { key: "toLocation", label: "To" },
+  { key: "departureDateTime", label: "Departure" },
+  { key: "arrivalDateTime", label: "Arrival" },
+  { key: "seatNumbers", label: "Seat(s)" },
+  { key: "returnFlightNumber", label: "Return flight" },
+  { key: "returnDepartureDateTime", label: "Return departure" },
+];
+
+const HOTEL_FIELDS: FieldSpec[] = [
+  { key: "providerName", label: "Hotel / property" },
+  { key: "referenceNumber", label: "Confirmation" },
+  { key: "fromLocation", label: "Location" },
+  { key: "checkInDate", label: "Check-in" },
+  { key: "checkOutDate", label: "Check-out" },
+];
+
+const CAR_RENTAL_FIELDS: FieldSpec[] = [
+  { key: "providerName", label: "Car company" },
+  { key: "referenceNumber", label: "Ref" },
+  { key: "vehicleClass", label: "Vehicle" },
+  { key: "pickupDateTime", label: "Pickup" },
+  { key: "pickupLocation", label: "Pickup location" },
+  { key: "dropoffDateTime", label: "Drop-off" },
+  { key: "dropoffLocation", label: "Drop-off location" },
+];
+
+const TRAIN_FIELDS: FieldSpec[] = [
+  { key: "providerName", label: "Operator" },
+  { key: "referenceNumber", label: "Ref" },
+  { key: "trainNumber", label: "Train" },
+  { key: "departureStation", label: "From station" },
+  { key: "arrivalStation", label: "To station" },
+  { key: "departureDateTime", label: "Departure" },
+  { key: "arrivalDateTime", label: "Arrival" },
+  { key: "coachNumber", label: "Coach" },
+  { key: "seatNumbers", label: "Seat(s)" },
+];
+
+const BUS_FIELDS: FieldSpec[] = [
+  { key: "providerName", label: "Operator" },
+  { key: "referenceNumber", label: "Ref" },
+  { key: "busNumber", label: "Service" },
+  { key: "departureStation", label: "Departure point" },
+  { key: "arrivalStation", label: "Arrival point" },
+  { key: "departureDateTime", label: "Departure" },
+  { key: "arrivalDateTime", label: "Arrival" },
+  { key: "seatNumbers", label: "Seat(s)" },
+];
+
+const FERRY_FIELDS: FieldSpec[] = [
+  { key: "providerName", label: "Ferry operator" },
+  { key: "referenceNumber", label: "Ref" },
+  { key: "ferryName", label: "Vessel" },
+  { key: "departurePort", label: "Departure port" },
+  { key: "arrivalPort", label: "Arrival port" },
+  { key: "departureDateTime", label: "Departure" },
+  { key: "arrivalDateTime", label: "Arrival" },
+  { key: "cabinNumber", label: "Cabin" },
+];
+
+const CRUISE_FIELDS: FieldSpec[] = [
+  { key: "providerName", label: "Cruise line" },
+  { key: "referenceNumber", label: "Booking ref" },
+  { key: "shipName", label: "Ship" },
+  { key: "departurePort", label: "Home port" },
+  { key: "departureDateTime", label: "Embarkation" },
+  { key: "disembarkationDate", label: "Disembarkation" },
+  { key: "cabinNumber", label: "Cabin" },
+];
+
+const INSURANCE_FIELDS: FieldSpec[] = [
+  { key: "providerName", label: "Insurer" },
+  { key: "policyNumber", label: "Policy number" },
+  { key: "coverageType", label: "Coverage" },
+  { key: "coverageStartDate", label: "Starts" },
+  { key: "coverageEndDate", label: "Ends" },
+  { key: "emergencyPhone", label: "Emergency line" },
+];
+
+const VISA_FIELDS: FieldSpec[] = [
+  { key: "issuedBy", label: "Issuing country" },
+  { key: "visaType", label: "Visa type" },
+  { key: "entryType", label: "Entry type" },
+  { key: "validFrom", label: "Valid from" },
+  { key: "validTo", label: "Valid to" },
+  { key: "referenceNumber", label: "Ref / visa number" },
+];
+
+const TOUR_FIELDS: FieldSpec[] = [
+  { key: "providerName", label: "Provider" },
+  { key: "referenceNumber", label: "Ref" },
+  { key: "activityName", label: "Activity" },
+  { key: "departureDateTime", label: "Date / time" },
+  { key: "fromLocation", label: "Meeting point" },
+  { key: "duration", label: "Duration" },
+];
+
+const EVENT_FIELDS: FieldSpec[] = [
+  { key: "eventName", label: "Event" },
+  { key: "providerName", label: "Venue / organiser" },
+  { key: "referenceNumber", label: "Ticket ref" },
+  { key: "departureDateTime", label: "Date / time" },
+  { key: "venue", label: "Venue" },
+  { key: "seatNumbers", label: "Seat(s)" },
+];
+
+const RESTAURANT_FIELDS: FieldSpec[] = [
+  { key: "providerName", label: "Restaurant" },
+  { key: "referenceNumber", label: "Reservation ref" },
+  { key: "departureDateTime", label: "Reservation time" },
+  { key: "partySize", label: "Party size" },
+  { key: "fromLocation", label: "Address" },
+];
+
+const TRANSFER_FIELDS: FieldSpec[] = [
+  { key: "providerName", label: "Provider" },
+  { key: "referenceNumber", label: "Ref" },
+  { key: "pickupLocation", label: "Pickup" },
+  { key: "pickupDateTime", label: "Pickup time" },
+  { key: "toLocation", label: "Drop-off" },
+  { key: "vehicleClass", label: "Vehicle type" },
+  { key: "transferType", label: "Transfer type" },
+];
+
+/**
+ * Ordered lookup pairs: [predicate, field-array].
+ * First match wins — put more specific patterns before more general ones.
+ */
+const DOC_TYPE_LOOKUP: Array<[(t: string) => boolean, FieldSpec[]]> = [
+  // Ground transport — check before flight (avoids "air" in "airport transfer")
+  [
+    (t) =>
+      t.includes("transfer") ||
+      t.includes("taxi") ||
+      t.includes("shuttle") ||
+      t.includes("chauffeur") ||
+      t.includes("airport_transfer"),
+    TRANSFER_FIELDS,
+  ],
+  [
+    (t) =>
+      t.includes("car_rental") ||
+      t.includes("car rental") ||
+      t.includes("car hire"),
+    CAR_RENTAL_FIELDS,
+  ],
+  // Water
+  [
+    (t) =>
+      t.includes("cruise") ||
+      t.includes("cruise ship"),
+    CRUISE_FIELDS,
+  ],
+  [
+    (t) =>
+      t.includes("ferry") ||
+      t.includes("catamaran") ||
+      t.includes("hydrofoil") ||
+      t.includes("water taxi"),
+    FERRY_FIELDS,
+  ],
+  // Land — rail & road
+  [
+    (t) =>
+      t.includes("train") ||
+      t.includes("rail") ||
+      t.includes("eurostar") ||
+      t.includes("tgv") ||
+      t.includes("intercity"),
+    TRAIN_FIELDS,
+  ],
+  [
+    (t) =>
+      t.includes("bus") ||
+      t.includes("coach") ||
+      t.includes("flixbus") ||
+      t.includes("megabus"),
+    BUS_FIELDS,
+  ],
+  // Documents
+  [
+    (t) => t.includes("insurance"),
+    INSURANCE_FIELDS,
+  ],
+  [
+    (t) =>
+      t.includes("visa") ||
+      t.includes("entry permit") ||
+      t.includes(" eta") ||
+      t.startsWith("eta") ||
+      t.includes("esta"),
+    VISA_FIELDS,
+  ],
+  // Accommodation
+  [
+    (t) =>
+      t.includes("hotel") ||
+      t.includes("hostel") ||
+      t.includes("airbnb") ||
+      t.includes("accommodation") ||
+      t.includes("apartment") ||
+      t.includes("villa") ||
+      t.includes("guesthouse") ||
+      t.includes("bnb"),
+    HOTEL_FIELDS,
+  ],
+  // Experiences
+  [
+    (t) =>
+      t.includes("tour") ||
+      t.includes("excursion") ||
+      t.includes("activity") ||
+      t.includes("experience") ||
+      t.includes("safari"),
+    TOUR_FIELDS,
+  ],
+  [
+    (t) =>
+      t.includes("concert") ||
+      t.includes("show") ||
+      t.includes("theatre") ||
+      t.includes("theater") ||
+      t.includes("museum") ||
+      t.includes("event") ||
+      t.includes("attraction") ||
+      t.includes("exhibition") ||
+      t.includes("opera") ||
+      t.includes("ballet") ||
+      t.includes("festival"),
+    EVENT_FIELDS,
+  ],
+  [
+    (t) =>
+      t.includes("restaurant") ||
+      t.includes("dining") ||
+      t.includes("reservation") ||
+      t.includes("bistro"),
+    RESTAURANT_FIELDS,
+  ],
+  // Air — catch-all after ground alternatives
+  [
+    (t) =>
+      t.includes("flight") ||
+      t.includes("air") ||
+      t.includes("airline") ||
+      t.includes("boarding"),
+    FLIGHT_FIELDS,
+  ],
+];
+
+/** Keys whose values should render with an ISO date-time placeholder in the edit input. */
+const DATE_LIKE_KEYS = new Set(["validFrom", "validTo"]);
+
+function getFieldsForDocType(
+  docType: string,
+  ed: Record<string, unknown> | null | undefined,
+): FieldSpec[] {
+  const t = docType.toLowerCase();
+  for (const [matches, fields] of DOC_TYPE_LOOKUP) {
+    if (matches(t)) return fields;
+  }
+  return genericFields(ed);
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 function DocumentRow({
   doc,
   tripId,
@@ -407,42 +709,10 @@ function DocumentRow({
     );
   };
 
-  // AI extraction stores the airline/hotel name under `providerName` and the
-  // booking/confirmation number under `referenceNumber` (see
-  // travel-document-extraction.ts). Older `airline`/`hotelName`/
-  // `confirmationNumber` keys are never populated, so map the display fields to
-  // the canonical keys and show the group relevant to the document type.
-  const docType = (doc.documentType ?? "").toLowerCase();
-  const isHotel = docType.includes("hotel");
-  const isCarRental =
-    docType.includes("car_rental") || docType.includes("car rental");
-  const keyFields: Array<{ key: string; label: string }> = isCarRental
-    ? [
-        { key: "providerName", label: "Car company" },
-        { key: "referenceNumber", label: "Ref" },
-        { key: "vehicleClass", label: "Vehicle" },
-        { key: "pickupDateTime", label: "Pickup" },
-        { key: "pickupLocation", label: "Pickup location" },
-        { key: "dropoffDateTime", label: "Drop-off" },
-        { key: "dropoffLocation", label: "Drop-off location" },
-      ]
-    : isHotel
-      ? [
-          // Hotel-related fields grouped together
-          { key: "providerName", label: "Hotel" },
-          { key: "referenceNumber", label: "Confirmation" },
-          { key: "checkInDate", label: "Check-in" },
-          { key: "checkOutDate", label: "Check-out" },
-        ]
-      : [
-          // Flight/train/other fields
-          { key: "referenceNumber", label: "Ref" },
-          { key: "providerName", label: "Airline" },
-          { key: "departureDateTime", label: "Departure" },
-          { key: "flightNumber", label: "Flight" },
-          { key: "returnDepartureDateTime", label: "Return" },
-          { key: "returnFlightNumber", label: "Return flight" },
-        ];
+  // Derive the field list from the document's AI-classified type using the
+  // data-driven lookup table defined above DocumentRow.  Unknown / future types
+  // fall through to a generic fallback that auto-displays every extracted field.
+  const keyFields = getFieldsForDocType(doc.documentType ?? "", ed);
 
   const saveExtractedField = (key: string, rawValue: string) => {
     const value = rawValue.trim();
@@ -490,7 +760,9 @@ function DocumentRow({
         <div className="mt-1.5 space-y-1">
           {keyFields.map(({ key, label }) => {
             const isLocked = lockedFields.includes(key);
-            const isDateField = key.toLowerCase().includes("date");
+            const isDateField =
+              key.toLowerCase().includes("date") ||
+              DATE_LIKE_KEYS.has(key);
             const rawValue = ed?.[key] != null ? String(ed[key]) : "";
             return (
               <div key={key} className="flex items-start gap-1">
@@ -501,7 +773,7 @@ function DocumentRow({
                     onSave={(v) => saveExtractedField(key, v)}
                     saving={updateTripDocument.isPending}
                     placeholder={
-                      isDateField ? "e.g. 2026-08-14T10:30:00" : undefined
+                      isDateField ? "e.g. 2026-08-14" : undefined
                     }
                     displayValue={(v) => formatExtractedValue(v)}
                   />

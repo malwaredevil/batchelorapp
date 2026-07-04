@@ -52,3 +52,4 @@ externalPort = 3003
 SUPABASE_POOLER_HOST = "aws-0-eu-west-1.pooler.supabase.com"
 RESEND_FROM_EMAIL = "Batchelor <noreply@app.batchelor.app>"
 RESEND_REMINDER_FROM_EMAIL = "Batchelor Travels <travel.alert@app.batchelor.app>"
+GOOGLE_WALLET_ISSUER_ID = "3388000000023170019"

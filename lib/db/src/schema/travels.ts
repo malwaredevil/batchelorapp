@@ -61,6 +61,7 @@ export const travelsTripDocuments = pgTable(
     tripId: integer("trip_id").notNull(),
     userId: integer("user_id").notNull(),
     storagePath: text("storage_path").notNull(),
+    title: text("title"),
     documentType: text("document_type"),
     originalFilename: text("original_filename"),
     extractedData: jsonb("extracted_data"),

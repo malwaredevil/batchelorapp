@@ -340,12 +340,18 @@ router.post("/trips/:id/documents", upload.single("file"), async (req, res) => {
     req.log.warn({ err }, "OCR extraction failed — storing without data");
   }
 
+  const userTitle = typeof req.body?.title === "string" && req.body.title.trim()
+    ? req.body.title.trim()
+    : null;
+  const aiTitle = (extractedData.title as string | undefined) ?? null;
+
   const [doc] = await db
     .insert(travelsTripDocuments)
     .values({
       tripId,
       userId,
       storagePath,
+      title: userTitle ?? aiTitle,
       documentType: (extractedData.documentType as string | undefined) ?? null,
       originalFilename: originalname,
       extractedData,
@@ -369,16 +375,19 @@ router.patch("/trips/:id/documents/:docId", async (req, res) => {
     return;
   }
 
-  const { extractedData, lockedFields } = req.body as {
+  const { extractedData, lockedFields, title } = req.body as {
     extractedData?: Record<string, unknown>;
     lockedFields?: string[];
+    title?: string | null;
   };
+  const hasTitle = title !== undefined;
   if (
     (!extractedData || typeof extractedData !== "object") &&
-    !Array.isArray(lockedFields)
+    !Array.isArray(lockedFields) &&
+    !hasTitle
   ) {
     res.status(400).json({
-      error: "extractedData object or lockedFields array is required",
+      error: "extractedData object, lockedFields array, or title is required",
     });
     return;
   }
@@ -408,9 +417,11 @@ router.patch("/trips/:id/documents/:docId", async (req, res) => {
   const updateValues: {
     extractedData?: Record<string, unknown>;
     lockedFields?: string[];
+    title?: string | null;
   } = {};
   if (extractedData) updateValues.extractedData = merged;
   if (Array.isArray(lockedFields)) updateValues.lockedFields = lockedFields;
+  if (hasTitle) updateValues.title = title ?? null;
 
   const [updated] = await db
     .update(travelsTripDocuments)
@@ -501,6 +512,7 @@ export async function rescanTripDocument(
     merged[key] = value;
   }
 
+  const freshTitle = (freshData.title as string | undefined) ?? null;
   const [updated] = await db
     .update(travelsTripDocuments)
     .set({
@@ -509,6 +521,9 @@ export async function rescanTripDocument(
         ? existing.documentType
         : ((merged.documentType as string | undefined) ??
           existing.documentType),
+      title: locked.has("title")
+        ? existing.title
+        : (freshTitle ?? existing.title),
     })
     .where(
       and(

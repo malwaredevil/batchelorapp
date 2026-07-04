@@ -1615,6 +1615,16 @@ export function useReconsiderGmailMessage(
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
+const unlinkGmailMessageFn = (messageId: string): Promise<void> =>
+  customFetch<void>(`/api/travels/gmail/messages/${messageId}/unlink`, { method: "POST" });
+
+export function useUnlinkGmailMessage(
+  options?: { mutation?: UseMutationOptions<void, unknown, string> },
+) {
+  const mutationFn: MutationFunction<void, string> = (messageId) => unlinkGmailMessageFn(messageId);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
 export interface GmailMessageContent {
   id: string;
   subject: string | null;

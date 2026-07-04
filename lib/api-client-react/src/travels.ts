@@ -1334,8 +1334,8 @@ const listConnectedCalendarEvents = (
   start: string,
   end: string,
   options?: RequestInit,
-): Promise<FamilyCalendarEvent[]> =>
-  customFetch<FamilyCalendarEvent[]>(
+): Promise<TravelCalendarEvent[]> =>
+  customFetch<TravelCalendarEvent[]>(
     `/api/travels/connected-calendars/${id}/events?${new URLSearchParams({ start, end }).toString()}`,
     { ...options, method: "GET" },
   );
@@ -1343,22 +1343,22 @@ const listConnectedCalendarEvents = (
 export const getListConnectedCalendarEventsQueryKey = (id: number, start: string, end: string) =>
   [`/api/travels/connected-calendars`, id, `events`, start, end] as const;
 
-export function useListConnectedCalendarEvents<TData = FamilyCalendarEvent[], TError = unknown>(
+export function useListConnectedCalendarEvents<TData = TravelCalendarEvent[], TError = unknown>(
   id: number,
   start: string,
   end: string,
-  options?: { query?: UseQueryOptions<FamilyCalendarEvent[], TError, TData> },
+  options?: { query?: UseQueryOptions<TravelCalendarEvent[], TError, TData> },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const { query: queryOptions } = options ?? {};
   const queryKey = queryOptions?.queryKey ?? getListConnectedCalendarEventsQueryKey(id, start, end);
-  const queryFn: QueryFunction<FamilyCalendarEvent[]> = ({ signal }) =>
+  const queryFn: QueryFunction<TravelCalendarEvent[]> = ({ signal }) =>
     listConnectedCalendarEvents(id, start, end, { signal });
   const queryOpts = {
     queryKey,
     queryFn,
     enabled: Boolean(id && start && end),
     ...queryOptions,
-  } as UseQueryOptions<FamilyCalendarEvent[], TError, TData> & { queryKey: QueryKey };
+  } as UseQueryOptions<TravelCalendarEvent[], TError, TData> & { queryKey: QueryKey };
   const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
   return { ...query, queryKey: queryOpts.queryKey };
 }
@@ -1368,7 +1368,7 @@ export function useListConnectedCalendarEvents<TData = FamilyCalendarEvent[], TE
 // events; every app_user may act on it, not just the owner)
 // ---------------------------------------------------------------------------
 
-export interface FamilyCalendarStatus {
+export interface TravelCalendarStatus {
   configured: boolean;
   calendarSummary: string | null;
   ownerGoogleEmail: string | null;
@@ -1376,7 +1376,7 @@ export interface FamilyCalendarStatus {
   primaryColor: string | null;
 }
 
-export interface FamilyCalendarEvent {
+export interface TravelCalendarEvent {
   id: string;
   title: string;
   description: string | null;
@@ -1388,7 +1388,7 @@ export interface FamilyCalendarEvent {
   colorId?: string | null;
 }
 
-export interface FamilyCalendarEventInput {
+export interface TravelCalendarEventInput {
   title: string;
   description?: string | null;
   location?: string | null;
@@ -1398,73 +1398,73 @@ export interface FamilyCalendarEventInput {
   colorId?: string | null;
 }
 
-const getFamilyCalendarStatus = (options?: RequestInit): Promise<FamilyCalendarStatus> =>
-  customFetch<FamilyCalendarStatus>("/api/travels/travel-calendar/status", { ...options, method: "GET" });
+const getTravelCalendarStatus = (options?: RequestInit): Promise<TravelCalendarStatus> =>
+  customFetch<TravelCalendarStatus>("/api/travels/travel-calendar/status", { ...options, method: "GET" });
 
-export const getGetFamilyCalendarStatusQueryKey = () => [`/api/travels/travel-calendar/status`] as const;
+export const getGetTravelCalendarStatusQueryKey = () => [`/api/travels/travel-calendar/status`] as const;
 
-export function useGetFamilyCalendarStatus<TData = FamilyCalendarStatus, TError = unknown>(
-  options?: { query?: UseQueryOptions<FamilyCalendarStatus, TError, TData> },
+export function useGetTravelCalendarStatus<TData = TravelCalendarStatus, TError = unknown>(
+  options?: { query?: UseQueryOptions<TravelCalendarStatus, TError, TData> },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const { query: queryOptions } = options ?? {};
-  const queryKey = queryOptions?.queryKey ?? getGetFamilyCalendarStatusQueryKey();
-  const queryFn: QueryFunction<FamilyCalendarStatus> = ({ signal }) => getFamilyCalendarStatus({ signal });
-  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<FamilyCalendarStatus, TError, TData> & { queryKey: QueryKey };
+  const queryKey = queryOptions?.queryKey ?? getGetTravelCalendarStatusQueryKey();
+  const queryFn: QueryFunction<TravelCalendarStatus> = ({ signal }) => getTravelCalendarStatus({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<TravelCalendarStatus, TError, TData> & { queryKey: QueryKey };
   const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
   return { ...query, queryKey: queryOpts.queryKey };
 }
 
-const listFamilyCalendarEvents = (
+const listTravelCalendarEvents = (
   start: string,
   end: string,
   options?: RequestInit,
-): Promise<FamilyCalendarEvent[]> =>
-  customFetch<FamilyCalendarEvent[]>(
+): Promise<TravelCalendarEvent[]> =>
+  customFetch<TravelCalendarEvent[]>(
     `/api/travels/travel-calendar/events?${new URLSearchParams({ start, end }).toString()}`,
     { ...options, method: "GET" },
   );
 
-export const getListFamilyCalendarEventsQueryKey = (start: string, end: string) =>
+export const getListTravelCalendarEventsQueryKey = (start: string, end: string) =>
   [`/api/travels/travel-calendar/events`, start, end] as const;
 
-export function useListFamilyCalendarEvents<TData = FamilyCalendarEvent[], TError = unknown>(
+export function useListTravelCalendarEvents<TData = TravelCalendarEvent[], TError = unknown>(
   start: string,
   end: string,
-  options?: { query?: UseQueryOptions<FamilyCalendarEvent[], TError, TData> },
+  options?: { query?: UseQueryOptions<TravelCalendarEvent[], TError, TData> },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const { query: queryOptions } = options ?? {};
-  const queryKey = queryOptions?.queryKey ?? getListFamilyCalendarEventsQueryKey(start, end);
-  const queryFn: QueryFunction<FamilyCalendarEvent[]> = ({ signal }) =>
-    listFamilyCalendarEvents(start, end, { signal });
+  const queryKey = queryOptions?.queryKey ?? getListTravelCalendarEventsQueryKey(start, end);
+  const queryFn: QueryFunction<TravelCalendarEvent[]> = ({ signal }) =>
+    listTravelCalendarEvents(start, end, { signal });
   const queryOpts = {
     queryKey,
     queryFn,
     enabled: Boolean(start && end),
     ...queryOptions,
-  } as UseQueryOptions<FamilyCalendarEvent[], TError, TData> & { queryKey: QueryKey };
+  } as UseQueryOptions<TravelCalendarEvent[], TError, TData> & { queryKey: QueryKey };
   const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
   return { ...query, queryKey: queryOpts.queryKey };
 }
 
-const postFamilyCalendarEventFn = (body: FamilyCalendarEventInput): Promise<FamilyCalendarEvent> =>
-  customFetch<FamilyCalendarEvent>("/api/travels/travel-calendar/events", {
+const postTravelCalendarEventFn = (body: TravelCalendarEventInput): Promise<TravelCalendarEvent> =>
+  customFetch<TravelCalendarEvent>("/api/travels/travel-calendar/events", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
 
-export function useCreateFamilyCalendarEvent(
-  options?: { mutation?: UseMutationOptions<FamilyCalendarEvent, unknown, FamilyCalendarEventInput> },
+export function useCreateTravelCalendarEvent(
+  options?: { mutation?: UseMutationOptions<TravelCalendarEvent, unknown, TravelCalendarEventInput> },
 ) {
-  const mutationFn = (body: FamilyCalendarEventInput) => postFamilyCalendarEventFn(body);
+  const mutationFn = (body: TravelCalendarEventInput) => postTravelCalendarEventFn(body);
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
-const patchFamilyCalendarEventFn = (
+const patchTravelCalendarEventFn = (
   eventId: string,
-  body: FamilyCalendarEventInput,
-): Promise<FamilyCalendarEvent> =>
-  customFetch<FamilyCalendarEvent>(
+  body: TravelCalendarEventInput,
+): Promise<TravelCalendarEvent> =>
+  customFetch<TravelCalendarEvent>(
     `/api/travels/travel-calendar/events/${encodeURIComponent(eventId)}`,
     {
       method: "PATCH",
@@ -1473,29 +1473,29 @@ const patchFamilyCalendarEventFn = (
     },
   );
 
-export function useUpdateFamilyCalendarEvent(
+export function useUpdateTravelCalendarEvent(
   options?: {
     mutation?: UseMutationOptions<
-      FamilyCalendarEvent,
+      TravelCalendarEvent,
       unknown,
-      { eventId: string; body: FamilyCalendarEventInput }
+      { eventId: string; body: TravelCalendarEventInput }
     >;
   },
 ) {
-  const mutationFn = ({ eventId, body }: { eventId: string; body: FamilyCalendarEventInput }) =>
-    patchFamilyCalendarEventFn(eventId, body);
+  const mutationFn = ({ eventId, body }: { eventId: string; body: TravelCalendarEventInput }) =>
+    patchTravelCalendarEventFn(eventId, body);
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
-const deleteFamilyCalendarEventFn = (eventId: string): Promise<void> =>
+const deleteTravelCalendarEventFn = (eventId: string): Promise<void> =>
   customFetch<void>(`/api/travels/travel-calendar/events/${encodeURIComponent(eventId)}`, {
     method: "DELETE",
   });
 
-export function useDeleteFamilyCalendarEvent(
+export function useDeleteTravelCalendarEvent(
   options?: { mutation?: UseMutationOptions<void, unknown, string> },
 ) {
-  const mutationFn = (eventId: string) => deleteFamilyCalendarEventFn(eventId);
+  const mutationFn = (eventId: string) => deleteTravelCalendarEventFn(eventId);
   return useMutation({ mutationFn, ...options?.mutation });
 }
 

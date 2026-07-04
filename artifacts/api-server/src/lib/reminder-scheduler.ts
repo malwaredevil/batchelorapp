@@ -56,7 +56,6 @@ export async function runReminderAlerts(): Promise<void> {
       // Calendar app sees that reflected in future alert-day gating here.
       const alertDaysBefore = await pullReminderAlertDaysFromCalendar(
         candidate.reminder_id,
-        candidate.user_id,
         candidate.alert_days_before,
       );
 

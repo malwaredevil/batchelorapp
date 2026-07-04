@@ -352,7 +352,7 @@ async function main() {
 
   // ── Travels ───────────────────────────────────────────────────────────────
   await dest.query(
-    "TRUNCATE travels_gmail_scan_decisions, travels_gmail_connections, travels_household_memory, travels_assistant_settings, travels_assistant_conversations, travels_reminder_calendar_events, travels_connected_calendars, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_trip_photos, travels_trip_documents CASCADE",
+    "TRUNCATE travels_trip_card_collapse_state, travels_card_layout_preferences, travels_gmail_scan_decisions, travels_gmail_connections, travels_household_memory, travels_assistant_settings, travels_assistant_conversations, travels_reminder_calendar_events, travels_connected_calendars, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_trip_photos, travels_trip_documents CASCADE",
   );
   await dest.query("TRUNCATE travels_trips CASCADE");
 
@@ -571,6 +571,19 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "travels_gmail_scan_decisions", "id");
+
+  await copyTable(source, dest, {
+    table: "travels_card_layout_preferences",
+    columns: ["user_id", "card_order", "updated_at"],
+    orderBy: "user_id",
+  });
+
+  await copyTable(source, dest, {
+    table: "travels_trip_card_collapse_state",
+    columns: ["id", "user_id", "trip_id", "collapsed_cards", "updated_at"],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_trip_card_collapse_state", "id");
 
   await dest.query("SET session_replication_role = DEFAULT");
 

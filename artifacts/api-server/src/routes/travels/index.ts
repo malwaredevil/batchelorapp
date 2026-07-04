@@ -16,10 +16,12 @@ import assistantRouter from "./assistant";
 import gmailRouter from "./gmail";
 import mapsRouter from "./maps";
 import walletRouter from "./wallet";
+import cardLayoutRouter from "./card-layout";
 
 const router: IRouter = Router();
 
 router.use(tripsRouter);
+router.use(cardLayoutRouter);
 router.use(documentsRouter);
 router.use(aiRouter);
 router.use(wishlistRouter);

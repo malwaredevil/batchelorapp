@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Mail, Bell, Save, X, Send, CalendarDays, CheckCircle2, XCircle, LogIn, LogOut, Trash2, Plane, Pencil, Plus } from "lucide-react";
+import { Link } from "wouter";
+import { Mail, Bell, Save, X, Send, CalendarDays, CheckCircle2, XCircle, LogIn, LogOut, Trash2, Plane, Pencil, Plus, Clock, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   useGetTravelsSettings,
   useUpdateTravelsSettings,
+  useUpdateTravelsTimezone,
   useSendTestReminderEmail,
   useGetCalendarStatus,
   useListCalendars,
@@ -23,6 +25,8 @@ import {
   useUpdateAssistantSettings,
   useListHouseholdMemory,
   useDeleteHouseholdMemory,
+  useGetGmailStatus,
+  useDisconnectGmail,
   getGetTravelsSettingsQueryKey,
   getGetCalendarStatusQueryKey,
   getListCalendarsQueryKey,
@@ -30,6 +34,7 @@ import {
   getGetTravelCalendarStatusQueryKey,
   getGetAssistantSettingsQueryKey,
   getListHouseholdMemoryQueryKey,
+  getGetGmailStatusQueryKey,
   type CalendarListItem,
   type ConnectedCalendar,
   type ActionConfirmationMode,
@@ -214,8 +219,213 @@ export default function Settings() {
         </div>
       </div>
 
+      <TimezoneCard />
+      <GmailSyncCard />
       <CalendarSyncCard />
       <ElaineSettingsCard />
+    </div>
+  );
+}
+
+const COMMON_TIMEZONES = [
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "America/Anchorage",
+  "Pacific/Honolulu",
+  "America/Toronto",
+  "America/Vancouver",
+  "Europe/London",
+  "Europe/Paris",
+  "Europe/Berlin",
+  "Europe/Madrid",
+  "Europe/Rome",
+  "Asia/Tokyo",
+  "Asia/Shanghai",
+  "Asia/Kolkata",
+  "Asia/Dubai",
+  "Australia/Sydney",
+  "Pacific/Auckland",
+  "UTC",
+];
+
+function TimezoneCard() {
+  const qc = useQueryClient();
+  const { data, isLoading } = useGetTravelsSettings();
+  const updateTimezone = useUpdateTravelsTimezone();
+  const browserTz = useMemo(() => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const timezoneOptions = useMemo(() => {
+    const set = new Set(COMMON_TIMEZONES);
+    if (browserTz) set.add(browserTz);
+    if (data?.timezone) set.add(data.timezone);
+    return Array.from(set).sort();
+  }, [browserTz, data?.timezone]);
+
+  function handleChange(tz: string) {
+    updateTimezone.mutate(
+      { timezone: tz },
+      {
+        onSuccess: () => {
+          qc.setQueryData(getGetTravelsSettingsQueryKey(), (prev: any) =>
+            prev ? { ...prev, timezone: tz } : prev,
+          );
+          toast.success("Timezone updated");
+        },
+        onError: () => toast.error("Could not update timezone. Please try again."),
+      },
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-card-border bg-card p-6 space-y-4">
+      <div className="flex items-center gap-3">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400">
+          <Clock className="h-4 w-4" />
+        </span>
+        <div>
+          <h2 className="font-semibold text-foreground">Your timezone</h2>
+          <p className="text-sm text-muted-foreground">
+            Used to show flight, train, and hotel times consistently across your trips.
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="timezone-select">Timezone</Label>
+        <Select
+          value={data?.timezone ?? undefined}
+          onValueChange={handleChange}
+          disabled={isLoading || updateTimezone.isPending}
+        >
+          <SelectTrigger id="timezone-select" className="w-full sm:w-72">
+            <SelectValue placeholder={browserTz ? `Not set (detected: ${browserTz})` : "Not set"} />
+          </SelectTrigger>
+          <SelectContent>
+            {timezoneOptions.map((tz) => (
+              <SelectItem key={tz} value={tz}>
+                {tz}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {!data?.timezone && browserTz && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleChange(browserTz)}
+            disabled={updateTimezone.isPending}
+          >
+            Use detected timezone ({browserTz})
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function GmailSyncCard() {
+  const qc = useQueryClient();
+  const { data: status, isLoading } = useGetGmailStatus();
+  const disconnect = useDisconnectGmail();
+  const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
+
+  const gmailContext = useMemo(() => {
+    if (isLoading) return undefined;
+    if (!status?.connected) {
+      return "Settings page: Gmail scanning is NOT connected for this user. Connecting requires clicking the Connect button (an OAuth redirect elAIne cannot trigger herself) — offer to take them to Settings if they're elsewhere.";
+    }
+    return `Settings page: Gmail is connected as ${status.googleEmail}. Travel email suggestions can be reviewed on the Gmail page.`;
+  }, [isLoading, status]);
+  usePageAssistantContext("settings-gmail", gmailContext);
+
+  function handleConnect() {
+    window.location.href = "/api/travels/gmail/connect";
+  }
+
+  function handleDisconnect() {
+    disconnect.mutate(undefined, {
+      onSuccess: () => {
+        setConfirmingDisconnect(false);
+        qc.invalidateQueries({ queryKey: getGetGmailStatusQueryKey() });
+        toast.success("Gmail disconnected");
+      },
+      onError: () => toast.error("Could not disconnect. Please try again."),
+    });
+  }
+
+  return (
+    <div className="rounded-xl border border-card-border bg-card p-6 space-y-4">
+      <div className="flex items-center gap-3">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400">
+          <RefreshCw className="h-4 w-4" />
+        </span>
+        <div>
+          <h2 className="font-semibold text-foreground">Gmail scanning</h2>
+          <p className="text-sm text-muted-foreground">
+            Automatically find flight, train, and hotel confirmations in your inbox and suggest
+            them as trip documents. Read-only access — see our{" "}
+            <Link href="/privacy" className="underline hover:text-foreground">
+              Privacy Policy
+            </Link>{" "}
+            for details.
+          </p>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Checking connection…</p>
+      ) : status?.connected ? (
+        <div className="flex items-center justify-between gap-3">
+          <p className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            Connected{status.googleEmail ? ` as ${status.googleEmail}` : ""}
+          </p>
+          {confirmingDisconnect ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Disconnect?</span>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleDisconnect}
+                disabled={disconnect.isPending}
+              >
+                Yes, disconnect
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setConfirmingDisconnect(false)}
+                disabled={disconnect.isPending}
+              >
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/gmail">Review suggestions</Link>
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setConfirmingDisconnect(true)}>
+                <LogOut className="h-3.5 w-3.5 mr-1.5" />
+                Disconnect
+              </Button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <Button onClick={handleConnect}>
+          <LogIn className="h-3.5 w-3.5 mr-1.5" />
+          Connect Gmail
+        </Button>
+      )}
     </div>
   );
 }

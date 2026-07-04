@@ -744,4 +744,50 @@ export const STATEMENTS: string[] = [
      FROM travels_connected_calendars cc
     WHERE rce.calendar_id = ''
       AND cc.user_id = rce.user_id`,
+
+  // --- Gmail travel-document scanning -------------------------------------
+  // Per-user IANA timezone, used to render dates/times extracted from
+  // scanned Gmail travel documents (and elsewhere in Travels).
+  `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS timezone TEXT`,
+
+  `CREATE TABLE IF NOT EXISTS travels_gmail_connections (
+    id                       SERIAL PRIMARY KEY,
+    user_id                  INTEGER NOT NULL UNIQUE,
+    google_email             TEXT NOT NULL,
+    refresh_token            TEXT NOT NULL,
+    access_token             TEXT,
+    access_token_expires_at  TIMESTAMPTZ,
+    last_history_id          TEXT,
+    last_scan_at             TIMESTAMPTZ,
+    created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_gmail_connections ENABLE ROW LEVEL SECURITY`,
+
+  `CREATE TABLE IF NOT EXISTS travels_gmail_scan_decisions (
+    id                  SERIAL PRIMARY KEY,
+    user_id             INTEGER NOT NULL,
+    gmail_message_id    TEXT NOT NULL,
+    thread_id           TEXT,
+    subject             TEXT,
+    from_address        TEXT,
+    received_at         TIMESTAMPTZ,
+    status              TEXT NOT NULL DEFAULT 'pending',
+    extracted_data      JSONB,
+    dedupe_key          TEXT,
+    suggested_trip_id   INTEGER,
+    trip_id             INTEGER,
+    trip_document_id    INTEGER,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_gmail_scan_decisions ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travels_gmail_scan_decisions_user_id_idx
+     ON travels_gmail_scan_decisions (user_id)`,
+  `CREATE INDEX IF NOT EXISTS travels_gmail_scan_decisions_status_idx
+     ON travels_gmail_scan_decisions (status)`,
+  `CREATE INDEX IF NOT EXISTS travels_gmail_scan_decisions_dedupe_key_idx
+     ON travels_gmail_scan_decisions (dedupe_key)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS travels_gmail_scan_decisions_user_id_gmail_message_id_idx
+     ON travels_gmail_scan_decisions (user_id, gmail_message_id)`,
 ];

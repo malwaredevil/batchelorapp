@@ -20,7 +20,8 @@
  *             travels_calendar_settings, travels_google_calendar_connections,
  *             travels_connected_calendars, travels_reminder_calendar_events,
  *             travels_assistant_conversations, travels_assistant_settings,
- *             travels_household_memory
+ *             travels_household_memory, travels_gmail_connections,
+ *             travels_gmail_scan_decisions
  *
  * What is intentionally skipped:
  *   - embedding / visual_embedding columns (require pgvector, unavailable on Replit DB)
@@ -383,6 +384,38 @@ CREATE TABLE IF NOT EXISTS travels_household_memory (
   content             TEXT NOT NULL,
   created_by_user_id  INTEGER NOT NULL,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Gmail travel-document scanning
+CREATE TABLE IF NOT EXISTS travels_gmail_connections (
+  id                        SERIAL PRIMARY KEY,
+  user_id                   INTEGER NOT NULL UNIQUE,
+  google_email              TEXT NOT NULL,
+  refresh_token             TEXT NOT NULL,
+  access_token              TEXT,
+  access_token_expires_at   TIMESTAMPTZ,
+  last_history_id           TEXT,
+  last_scan_at              TIMESTAMPTZ,
+  created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS travels_gmail_scan_decisions (
+  id                 SERIAL PRIMARY KEY,
+  user_id            INTEGER NOT NULL,
+  gmail_message_id   TEXT NOT NULL,
+  thread_id          TEXT,
+  subject            TEXT,
+  from_address       TEXT,
+  received_at        TIMESTAMPTZ,
+  status             TEXT NOT NULL DEFAULT 'pending',
+  extracted_data     JSONB,
+  dedupe_key         TEXT,
+  suggested_trip_id  INTEGER,
+  trip_id            INTEGER,
+  trip_document_id   INTEGER,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 `;
 
@@ -893,6 +926,49 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "travels_household_memory", "id");
+
+  // ── Gmail travel-document scanning ───────────────────────────────────────
+  summary["travels_gmail_connections"] = await copyTable(source, dest, {
+    table: "travels_gmail_connections",
+    columns: [
+      "id",
+      "user_id",
+      "google_email",
+      "refresh_token",
+      "access_token",
+      "access_token_expires_at",
+      "last_history_id",
+      "last_scan_at",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_gmail_connections", "id");
+
+  summary["travels_gmail_scan_decisions"] = await copyTable(source, dest, {
+    table: "travels_gmail_scan_decisions",
+    columns: [
+      "id",
+      "user_id",
+      "gmail_message_id",
+      "thread_id",
+      "subject",
+      "from_address",
+      "received_at",
+      "status",
+      "extracted_data",
+      "dedupe_key",
+      "suggested_trip_id",
+      "trip_id",
+      "trip_document_id",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["extracted_data"],
+  });
+  await resetSequence(dest, "travels_gmail_scan_decisions", "id");
 
   // ── Record backup history ─────────────────────────────────────────────────
   const note = Object.entries(summary)

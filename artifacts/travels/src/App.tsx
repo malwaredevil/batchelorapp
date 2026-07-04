@@ -20,12 +20,15 @@ import Import from "@/pages/Import";
 import Destinations from "@/pages/Destinations";
 import Settings from "@/pages/Settings";
 import TravelCalendar from "@/pages/TravelCalendar";
+import GmailReview from "@/pages/GmailReview";
+import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import NotFound from "@/pages/not-found";
 
 function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
+      <Route path="/privacy" component={PrivacyPolicy} />
 
       <Route path="/">
         <ProtectedRoute>
@@ -105,6 +108,14 @@ function Router() {
         <ProtectedRoute>
           <Layout>
             <TravelCalendar />
+          </Layout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/gmail">
+        <ProtectedRoute>
+          <Layout>
+            <GmailReview />
           </Layout>
         </ProtectedRoute>
       </Route>

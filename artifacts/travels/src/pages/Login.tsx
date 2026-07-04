@@ -86,6 +86,14 @@ export default function Login() {
             </CardFooter>
           </form>
         </Card>
+
+        <p className="text-center text-xs text-muted-foreground">
+          By signing in you agree to our{" "}
+          <a href="/privacy" className="underline hover:text-foreground">
+            Privacy Policy
+          </a>
+          .
+        </p>
       </div>
     </div>
   );

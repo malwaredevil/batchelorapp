@@ -21,6 +21,10 @@ export const appUsers = pgTable("app_users", {
   hubWeatherConfig: text("hub_weather_config"),
   // Email address for travels trip-reminder alerts (14-day, 7-day, 3-day).
   travelsReminderEmail: text("travels_reminder_email"),
+  // IANA timezone name (e.g. "America/Denver"), used to render dates/times
+  // extracted from scanned Gmail travel documents and elsewhere in Travels.
+  // Nullable — falls back to UTC display until the user sets it.
+  timezone: text("timezone"),
   // True for the single app owner (batchelorjc@gmail.com) — the only account
   // allowed to assign/reassign which connected calendar is the shared
   // "Travel" calendar in the Travels app.

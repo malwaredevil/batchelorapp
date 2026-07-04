@@ -125,6 +125,12 @@ export interface ExploreDestinationResult {
   lng: number;
   distanceKm?: number | null;
   mapsUrl?: string;
+  timezone?: {
+    timeZoneId: string;
+    timeZoneName: string;
+    rawOffsetSeconds: number;
+    dstOffsetSeconds: number;
+  } | null;
   overview: {
     description?: string;
     highlights?: Array<{
@@ -136,7 +142,6 @@ export interface ExploreDestinationResult {
     practicalInfo?: {
       currency?: string;
       language?: string;
-      timezone?: string;
       tipping?: string;
       transit?: string;
     };

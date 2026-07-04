@@ -36,6 +36,8 @@ import {
   getListTripPhotosQueryKey,
   getListRemindersQueryKey,
   getWeatherForecast,
+  getAirQualityInfo,
+  getPollenInfo,
   searchNearbyPlaces,
   type UpdateTripBody,
   type TripStatus,
@@ -59,18 +61,37 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
 import { SortableSection } from "@/components/trip-detail/sortable-section";
-import { CardShell, DragHandle } from "@/components/trip-detail/section-controls";
+import {
+  CardShell,
+  DragHandle,
+} from "@/components/trip-detail/section-controls";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -117,11 +138,26 @@ import {
   Search,
   Globe,
   UtensilsCrossed,
+  Wind,
+  Flower2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { InlineField, InlineTextField, InlineTextareaField, InlineDateField } from "@/components/InlineField";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { WeatherIcon, formatTempRangeC, formatTempRangeF } from "@/lib/weather-icons";
+import {
+  InlineField,
+  InlineTextField,
+  InlineTextareaField,
+  InlineDateField,
+} from "@/components/InlineField";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
+import {
+  WeatherIcon,
+  formatTempRangeC,
+  formatTempRangeF,
+} from "@/lib/weather-icons";
 import { TripLocationMap } from "@/components/TripLocationMap";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -148,7 +184,13 @@ type Itinerary = { days: ItineraryDay[] };
 type PackingItem = { item: string; packed: boolean };
 type TodoItem = { item: string; done: boolean };
 
-const ALL_STATUSES: TripStatus[] = ["wishlist", "planning", "booked", "active", "completed"];
+const ALL_STATUSES: TripStatus[] = [
+  "wishlist",
+  "planning",
+  "booked",
+  "active",
+  "completed",
+];
 // Ids of the movable Trip Detail cards, in default display order. The top
 // trip-info card is fixed and never included here. "packing-todo" is a
 // single sortable unit even though it renders two independently-collapsible
@@ -166,7 +208,9 @@ const DEFAULT_CARD_ORDER = [
 function mergeCardOrder(saved: string[] | undefined): string[] {
   const known = new Set<string>(DEFAULT_CARD_ORDER);
   const cleaned = (saved ?? []).filter((cardId) => known.has(cardId));
-  const missing = DEFAULT_CARD_ORDER.filter((cardId) => !cleaned.includes(cardId));
+  const missing = DEFAULT_CARD_ORDER.filter(
+    (cardId) => !cleaned.includes(cardId),
+  );
   return [...cleaned, ...missing];
 }
 
@@ -178,16 +222,24 @@ const STATUS_LABELS: Record<TripStatus, string> = {
   completed: "Completed",
 };
 const STATUS_COLORS: Record<TripStatus, string> = {
-  wishlist:  "bg-yellow-50 text-yellow-700 border-yellow-200",
-  planning:  "bg-orange-50 text-orange-700 border-orange-200",
-  booked:    "bg-green-50  text-green-700  border-green-200",
-  active:    "bg-orange-50 text-orange-700 border-orange-200",
+  wishlist: "bg-yellow-50 text-yellow-700 border-yellow-200",
+  planning: "bg-orange-50 text-orange-700 border-orange-200",
+  booked: "bg-green-50  text-green-700  border-green-200",
+  active: "bg-orange-50 text-orange-700 border-orange-200",
   completed: "bg-red-50    text-red-700    border-red-200",
 };
 
 const INTERESTS_OPTIONS = [
-  "food", "history", "nature", "art", "adventure",
-  "shopping", "culture", "beaches", "nightlife", "architecture",
+  "food",
+  "history",
+  "nature",
+  "art",
+  "adventure",
+  "shopping",
+  "culture",
+  "beaches",
+  "nightlife",
+  "architecture",
 ];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -206,7 +258,9 @@ function formatDate(d: string | null | undefined) {
 // into a readable form (e.g. "14 August 2026, 10:30 am") instead of the raw
 // ISO string with the date and time smashed together.
 function formatExtractedValue(raw: string): string {
-  const isoMatch = raw.match(/^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2})(?::\d{2})?)?/);
+  const isoMatch = raw.match(
+    /^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2})(?::\d{2})?)?/,
+  );
   if (!isoMatch) return raw;
   const [, datePart, timePart] = isoMatch;
   const parsed = new Date(`${datePart}T${timePart ?? "12:00"}:00`);
@@ -241,7 +295,9 @@ function formatTipText(tip: string): string {
 function formatTimeOfDay(time: string): string {
   const match = time.match(/^(\d{1,2}):(\d{2})/);
   if (!match) return time;
-  const parsed = new Date(`2000-01-01T${match[1]!.padStart(2, "0")}:${match[2]}:00`);
+  const parsed = new Date(
+    `2000-01-01T${match[1]!.padStart(2, "0")}:${match[2]}:00`,
+  );
   if (isNaN(parsed.getTime())) return time;
   return parsed.toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -267,7 +323,11 @@ function buildCalendarUrl(
   );
 }
 
-function buildReminderCalendarUrl(title: string, dueDate: string, details?: string) {
+function buildReminderCalendarUrl(
+  title: string,
+  dueDate: string,
+  details?: string,
+) {
   const fmt = (d: string) => d.replace(/-/g, "");
   const next = new Date(`${dueDate}T00:00:00Z`);
   next.setUTCDate(next.getUTCDate() + 1);
@@ -341,7 +401,8 @@ function DocumentRow({
         onSuccess: ({ saveUrl }) => {
           window.open(saveUrl, "_blank", "noopener,noreferrer");
         },
-        onError: () => toast.error("Couldn't create a Google Wallet pass for this document"),
+        onError: () =>
+          toast.error("Couldn't create a Google Wallet pass for this document"),
       },
     );
   };
@@ -361,7 +422,10 @@ function DocumentRow({
 
   const saveExtractedField = (key: string, rawValue: string) => {
     const value = rawValue.trim();
-    const extractedData: Record<string, unknown> = { ...(ed ?? {}), [key]: value ? value : null };
+    const extractedData: Record<string, unknown> = {
+      ...(ed ?? {}),
+      [key]: value ? value : null,
+    };
     updateTripDocument.mutate(
       { tripId, docId: doc.id, body: { extractedData } },
       {
@@ -384,7 +448,9 @@ function DocumentRow({
           {doc.originalFilename ?? "Document"}
         </p>
         {doc.documentType && (
-          <p className="text-xs text-muted-foreground capitalize">{doc.documentType}</p>
+          <p className="text-xs text-muted-foreground capitalize">
+            {doc.documentType}
+          </p>
         )}
         <div className="mt-1.5 space-y-1">
           {keyFields.map(({ key, label }) => {
@@ -399,7 +465,9 @@ function DocumentRow({
                     value={rawValue}
                     onSave={(v) => saveExtractedField(key, v)}
                     saving={updateTripDocument.isPending}
-                    placeholder={isDateField ? "e.g. 2026-08-14T10:30:00" : undefined}
+                    placeholder={
+                      isDateField ? "e.g. 2026-08-14T10:30:00" : undefined
+                    }
                     displayValue={(v) => formatExtractedValue(v)}
                   />
                 </div>
@@ -411,9 +479,17 @@ function DocumentRow({
                       ? "text-amber-500 hover:text-amber-600"
                       : "text-muted-foreground/50 hover:text-foreground"
                   }`}
-                  title={isLocked ? "Locked — AI rescan won't overwrite" : "Unlocked — AI rescan may update"}
+                  title={
+                    isLocked
+                      ? "Locked — AI rescan won't overwrite"
+                      : "Unlocked — AI rescan may update"
+                  }
                 >
-                  {isLocked ? <Lock className="w-3.5 h-3.5" /> : <LockOpen className="w-3.5 h-3.5" />}
+                  {isLocked ? (
+                    <Lock className="w-3.5 h-3.5" />
+                  ) : (
+                    <LockOpen className="w-3.5 h-3.5" />
+                  )}
                 </button>
               </div>
             );
@@ -427,7 +503,9 @@ function DocumentRow({
           className="p-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
           title="Re-scan document with AI (locked fields are preserved)"
         >
-          <ScanSearch className={`w-4 h-4 ${rescanTripDocument.isPending ? "animate-pulse" : ""}`} />
+          <ScanSearch
+            className={`w-4 h-4 ${rescanTripDocument.isPending ? "animate-pulse" : ""}`}
+          />
         </button>
         <button
           onClick={handleAddToWallet}
@@ -435,7 +513,9 @@ function DocumentRow({
           className="p-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
           title="Add to Google Wallet"
         >
-          <Wallet className={`w-4 h-4 ${walletPass.isPending ? "animate-pulse" : ""}`} />
+          <Wallet
+            className={`w-4 h-4 ${walletPass.isPending ? "animate-pulse" : ""}`}
+          />
         </button>
         <a
           href={getTripDocumentDownloadUrl(tripId, doc.id)}
@@ -512,6 +592,21 @@ function TripWeatherAndPlaces({
     staleTime: 1000 * 60 * 10,
   });
 
+  const airQualityQuery = useQuery({
+    queryKey: ["travels-air-quality", tripId],
+    queryFn: () => getAirQualityInfo(lat, lng),
+    staleTime: 1000 * 60 * 30,
+  });
+
+  const pollenQuery = useQuery({
+    queryKey: ["travels-pollen", tripId],
+    queryFn: () => getPollenInfo(lat, lng),
+    staleTime: 1000 * 60 * 60,
+  });
+
+  const airQuality = airQualityQuery.data?.airQuality;
+  const pollen = pollenQuery.data?.pollen;
+
   return (
     <div className="space-y-4">
       <h2 className="font-serif text-xl text-foreground flex items-center gap-2">
@@ -519,165 +614,203 @@ function TripWeatherAndPlaces({
         Weather &amp; nearby
       </h2>
       <div className="grid gap-4 sm:grid-cols-2 items-stretch">
-          <TripLocationMap
-            lat={lat}
-            lng={lng}
-            places={placesQuery.data?.places ?? []}
-          />
-          <div className="space-y-1.5">
-            {weatherQuery.isLoading && (
-              <p className="text-sm text-muted-foreground">Loading forecast…</p>
-            )}
-            {weatherQuery.isError && (
-              <p className="text-sm text-muted-foreground">Weather forecast unavailable</p>
-            )}
-            {weatherQuery.data?.forecast?.length === 0 && !weatherQuery.isLoading && (
-              <p className="text-sm text-muted-foreground">No forecast available (too far out)</p>
-            )}
-            <ul className="space-y-1.5">
-              {weatherQuery.data?.forecast?.slice(0, 5).map((day) => (
-                <li
-                  key={day.date}
-                  className="flex items-center gap-3 rounded-lg border-2 border-sky-100 bg-gradient-to-br from-sky-50/70 to-transparent p-2 dark:border-sky-900/40 dark:from-sky-950/20"
-                >
-                  <WeatherIcon condition={day.conditionDescription} size={34} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-foreground">{formatDate(day.date)}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {day.conditionDescription ?? "Unknown"}
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-right leading-tight">
-                    <p className="text-sm font-semibold tabular-nums text-foreground">
-                      {formatTempRangeC(day.maxTempC, day.minTempC)}
-                    </p>
-                    <p className="text-[11px] tabular-nums text-muted-foreground">
-                      {formatTempRangeF(day.maxTempC, day.minTempC)}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-
-        <div className="pt-2 border-t border-border/50 space-y-2">
-          <div className="flex items-center gap-2">
-            <Search className="w-4 h-4 text-muted-foreground shrink-0" />
-            <Input
-              value={placeQuery}
-              onChange={(e) => setPlaceQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && placeQuery.trim()) setSearchTerm(placeQuery.trim());
-              }}
-              placeholder="Search nearby (restaurants, museums, coffee...)"
-              className="h-8"
-            />
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={!placeQuery.trim()}
-              onClick={() => setSearchTerm(placeQuery.trim())}
-            >
-              Search
-            </Button>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {NEARBY_SEARCH_CATEGORIES.map((category) => (
-              <button
-                key={category}
-                type="button"
-                onClick={() => {
-                  setPlaceQuery(category);
-                  setSearchTerm(category);
-                }}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors capitalize ${
-                  searchTerm === category
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-card text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
-                }`}
-              >
-                {category}
-              </button>
-            ))}
-          </div>
-          {placesQuery.isLoading && (
-            <p className="text-sm text-muted-foreground">Searching…</p>
+        <TripLocationMap
+          lat={lat}
+          lng={lng}
+          places={placesQuery.data?.places ?? []}
+        />
+        <div className="space-y-1.5">
+          {weatherQuery.isLoading && (
+            <p className="text-sm text-muted-foreground">Loading forecast…</p>
           )}
-          {placesQuery.isError && (
-            <p className="text-sm text-muted-foreground">Couldn't search nearby places</p>
+          {weatherQuery.isError && (
+            <p className="text-sm text-muted-foreground">
+              Weather forecast unavailable
+            </p>
           )}
-          {placesQuery.data?.places?.length === 0 && !placesQuery.isLoading && (
-            <p className="text-sm text-muted-foreground">No results found</p>
-          )}
-          <ul className="space-y-2">
-            {placesQuery.data?.places?.slice(0, 6).map((place) => (
+          {weatherQuery.data?.forecast?.length === 0 &&
+            !weatherQuery.isLoading && (
+              <p className="text-sm text-muted-foreground">
+                No forecast available (too far out)
+              </p>
+            )}
+          <ul className="space-y-1.5">
+            {weatherQuery.data?.forecast?.slice(0, 5).map((day) => (
               <li
-                key={place.id}
-                className="flex items-start justify-between gap-2 rounded-md border border-border/40 p-2 text-sm transition-colors hover:border-border"
+                key={day.date}
+                className="flex items-center gap-3 rounded-lg border-2 border-sky-100 bg-gradient-to-br from-sky-50/70 to-transparent p-2 dark:border-sky-900/40 dark:from-sky-950/20"
               >
-                <div className="min-w-0">
-                  {place.googleMapsUri ? (
-                    <a
-                      href={place.googleMapsUri}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block truncate font-medium text-foreground hover:text-primary hover:underline"
-                    >
-                      {place.name}
-                    </a>
-                  ) : (
-                    <p className="truncate font-medium text-foreground">{place.name}</p>
-                  )}
-                  <p className="text-muted-foreground text-xs">
-                    {place.address}
-                    {place.rating != null && (
-                      <>
-                        {" · "}
-                        <StarRating rating={place.rating} /> {place.rating}
-                        {place.userRatingCount != null ? ` (${place.userRatingCount})` : ""}
-                      </>
-                    )}
+                <WeatherIcon condition={day.conditionDescription} size={34} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-foreground">
+                    {formatDate(day.date)}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {day.conditionDescription ?? "Unknown"}
                   </p>
                 </div>
-                <div className="flex shrink-0 items-center gap-0.5">
-                  {place.websiteUri && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <a
-                          href={place.websiteUri}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label={`${place.name} website`}
-                          className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-primary"
-                        >
-                          <Globe className="h-4 w-4" />
-                        </a>
-                      </TooltipTrigger>
-                      <TooltipContent>Visit website</TooltipContent>
-                    </Tooltip>
-                  )}
-                  {place.googleMapsUri && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <a
-                          href={place.googleMapsUri}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label={`${place.name} menu on Google Maps`}
-                          className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-primary"
-                        >
-                          <UtensilsCrossed className="h-4 w-4" />
-                        </a>
-                      </TooltipTrigger>
-                      <TooltipContent>View menu on Google Maps</TooltipContent>
-                    </Tooltip>
-                  )}
+                <div className="shrink-0 text-right leading-tight">
+                  <p className="text-sm font-semibold tabular-nums text-foreground">
+                    {formatTempRangeC(day.maxTempC, day.minTempC)}
+                  </p>
+                  <p className="text-[11px] tabular-nums text-muted-foreground">
+                    {formatTempRangeF(day.maxTempC, day.minTempC)}
+                  </p>
                 </div>
               </li>
             ))}
           </ul>
+          {(airQuality || pollen) && (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {airQuality && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border/50 bg-card px-2.5 py-1 text-xs">
+                  <Wind className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="font-medium text-foreground">
+                    AQI {airQuality.aqi}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {airQuality.category}
+                  </span>
+                </span>
+              )}
+              {pollen && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border/50 bg-card px-2.5 py-1 text-xs">
+                  <Flower2 className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="font-medium text-foreground">Pollen</span>
+                  <span className="text-muted-foreground">
+                    {pollen.overallCategory}
+                  </span>
+                </span>
+              )}
+            </div>
+          )}
         </div>
+      </div>
+
+      <div className="pt-2 border-t border-border/50 space-y-2">
+        <div className="flex items-center gap-2">
+          <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+          <Input
+            value={placeQuery}
+            onChange={(e) => setPlaceQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && placeQuery.trim())
+                setSearchTerm(placeQuery.trim());
+            }}
+            placeholder="Search nearby (restaurants, museums, coffee...)"
+            className="h-8"
+          />
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={!placeQuery.trim()}
+            onClick={() => setSearchTerm(placeQuery.trim())}
+          >
+            Search
+          </Button>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {NEARBY_SEARCH_CATEGORIES.map((category) => (
+            <button
+              key={category}
+              type="button"
+              onClick={() => {
+                setPlaceQuery(category);
+                setSearchTerm(category);
+              }}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors capitalize ${
+                searchTerm === category
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-card text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
+              }`}
+            >
+              {category}
+            </button>
+          ))}
+        </div>
+        {placesQuery.isLoading && (
+          <p className="text-sm text-muted-foreground">Searching…</p>
+        )}
+        {placesQuery.isError && (
+          <p className="text-sm text-muted-foreground">
+            Couldn't search nearby places
+          </p>
+        )}
+        {placesQuery.data?.places?.length === 0 && !placesQuery.isLoading && (
+          <p className="text-sm text-muted-foreground">No results found</p>
+        )}
+        <ul className="space-y-2">
+          {placesQuery.data?.places?.slice(0, 6).map((place) => (
+            <li
+              key={place.id}
+              className="flex items-start justify-between gap-2 rounded-md border border-border/40 p-2 text-sm transition-colors hover:border-border"
+            >
+              <div className="min-w-0">
+                {place.googleMapsUri ? (
+                  <a
+                    href={place.googleMapsUri}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block truncate font-medium text-foreground hover:text-primary hover:underline"
+                  >
+                    {place.name}
+                  </a>
+                ) : (
+                  <p className="truncate font-medium text-foreground">
+                    {place.name}
+                  </p>
+                )}
+                <p className="text-muted-foreground text-xs">
+                  {place.address}
+                  {place.rating != null && (
+                    <>
+                      {" · "}
+                      <StarRating rating={place.rating} /> {place.rating}
+                      {place.userRatingCount != null
+                        ? ` (${place.userRatingCount})`
+                        : ""}
+                    </>
+                  )}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-0.5">
+                {place.websiteUri && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <a
+                        href={place.websiteUri}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`${place.name} website`}
+                        className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-primary"
+                      >
+                        <Globe className="h-4 w-4" />
+                      </a>
+                    </TooltipTrigger>
+                    <TooltipContent>Visit website</TooltipContent>
+                  </Tooltip>
+                )}
+                {place.googleMapsUri && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <a
+                        href={place.googleMapsUri}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`${place.name} menu on Google Maps`}
+                        className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-primary"
+                      >
+                        <UtensilsCrossed className="h-4 w-4" />
+                      </a>
+                    </TooltipTrigger>
+                    <TooltipContent>View menu on Google Maps</TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
@@ -705,11 +838,23 @@ function DayCard({
 }) {
   const [open, setOpen] = useState(index === 0);
   const [addingActivity, setAddingActivity] = useState(false);
-  const [actForm, setActForm] = useState({ time: "", name: "", description: "", proximity: "", tip: "" });
+  const [actForm, setActForm] = useState({
+    time: "",
+    name: "",
+    description: "",
+    proximity: "",
+    tip: "",
+  });
 
   const submitActivity = () => {
     if (!actForm.name.trim()) return;
-    onAddActivity?.({ ...actForm, name: actForm.name.trim(), description: actForm.description.trim(), tip: actForm.tip.trim(), proximity: actForm.proximity.trim() });
+    onAddActivity?.({
+      ...actForm,
+      name: actForm.name.trim(),
+      description: actForm.description.trim(),
+      tip: actForm.tip.trim(),
+      proximity: actForm.proximity.trim(),
+    });
     setActForm({ time: "", name: "", description: "", proximity: "", tip: "" });
     setAddingActivity(false);
   };
@@ -721,7 +866,10 @@ function DayCard({
         tabIndex={0}
         onClick={() => setOpen((v) => !v)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen((v) => !v); }
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setOpen((v) => !v);
+          }
         }}
         className="w-full flex items-center justify-between px-4 py-3 bg-card hover:bg-muted/50 transition-colors text-left cursor-pointer"
       >
@@ -730,13 +878,17 @@ function DayCard({
             Day {dayNumber} — {day.title}
           </p>
           <p className="text-xs text-muted-foreground">
-            {formatDate(day.date)} · {day.activities.length} {day.activities.length === 1 ? "activity" : "activities"}
+            {formatDate(day.date)} · {day.activities.length}{" "}
+            {day.activities.length === 1 ? "activity" : "activities"}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0 ml-4">
           {onDeleteDay && (
             <button
-              onClick={(e) => { e.stopPropagation(); onDeleteDay(); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteDay();
+              }}
               className="p-1 text-muted-foreground hover:text-destructive transition-colors"
               title="Delete this day"
             >
@@ -744,12 +896,17 @@ function DayCard({
             </button>
           )}
           <button
-            onClick={(e) => { e.stopPropagation(); onRefresh(index); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRefresh(index);
+            }}
             disabled={refreshing}
             className="p-1 text-muted-foreground hover:text-primary transition-colors"
             title="Regenerate this day with AI"
           >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
+            />
           </button>
           {open ? (
             <ChevronUp className="w-4 h-4 text-muted-foreground" />
@@ -767,17 +924,25 @@ function DayCard({
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-medium text-foreground">{a.name}</p>
+                      <p className="text-sm font-medium text-foreground">
+                        {a.name}
+                      </p>
                       {a.status === "tentative" && (
                         <span className="text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-yellow-50 text-yellow-700 border border-yellow-200">
                           Tentative
                         </span>
                       )}
                     </div>
-                    {a.time && <p className="text-xs text-muted-foreground">{formatTimeOfDay(a.time)}</p>}
+                    {a.time && (
+                      <p className="text-xs text-muted-foreground">
+                        {formatTimeOfDay(a.time)}
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {a.proximity && <span className="text-sm">{a.proximity}</span>}
+                    {a.proximity && (
+                      <span className="text-sm">{a.proximity}</span>
+                    )}
                     {a.status === "tentative" && onConfirmActivity && (
                       <button
                         onClick={() => onConfirmActivity(ai)}
@@ -798,9 +963,15 @@ function DayCard({
                     )}
                   </div>
                 </div>
-                {a.description && <p className="text-sm text-muted-foreground">{a.description}</p>}
+                {a.description && (
+                  <p className="text-sm text-muted-foreground">
+                    {a.description}
+                  </p>
+                )}
                 {a.tip && (
-                  <p className="text-xs italic text-muted-foreground border-l-2 border-primary/30 pl-2">{formatTipText(a.tip)}</p>
+                  <p className="text-xs italic text-muted-foreground border-l-2 border-primary/30 pl-2">
+                    {formatTipText(a.tip)}
+                  </p>
                 )}
               </div>
             ))}
@@ -815,38 +986,65 @@ function DayCard({
                     <Input
                       placeholder="Activity name *"
                       value={actForm.name}
-                      onChange={(e) => setActForm((f) => ({ ...f, name: e.target.value }))}
+                      onChange={(e) =>
+                        setActForm((f) => ({ ...f, name: e.target.value }))
+                      }
                       onKeyDown={(e) => e.key === "Enter" && submitActivity()}
                     />
                     <Input
                       placeholder="Time (e.g. 9:00 AM)"
                       value={actForm.time}
-                      onChange={(e) => setActForm((f) => ({ ...f, time: e.target.value }))}
+                      onChange={(e) =>
+                        setActForm((f) => ({ ...f, time: e.target.value }))
+                      }
                     />
                   </div>
                   <Input
                     placeholder="Description"
                     value={actForm.description}
-                    onChange={(e) => setActForm((f) => ({ ...f, description: e.target.value }))}
+                    onChange={(e) =>
+                      setActForm((f) => ({ ...f, description: e.target.value }))
+                    }
                   />
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <Input
                       placeholder="Tip (optional)"
                       value={actForm.tip}
-                      onChange={(e) => setActForm((f) => ({ ...f, tip: e.target.value }))}
+                      onChange={(e) =>
+                        setActForm((f) => ({ ...f, tip: e.target.value }))
+                      }
                     />
                     <Input
                       placeholder="Proximity (optional)"
                       value={actForm.proximity}
-                      onChange={(e) => setActForm((f) => ({ ...f, proximity: e.target.value }))}
+                      onChange={(e) =>
+                        setActForm((f) => ({ ...f, proximity: e.target.value }))
+                      }
                     />
                   </div>
                   <div className="flex gap-2">
-                    <Button size="sm" onClick={submitActivity} disabled={!actForm.name.trim()}>
+                    <Button
+                      size="sm"
+                      onClick={submitActivity}
+                      disabled={!actForm.name.trim()}
+                    >
                       <Plus className="w-3.5 h-3.5 mr-1" />
                       Add
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => { setAddingActivity(false); setActForm({ time: "", name: "", description: "", proximity: "", tip: "" }); }}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setAddingActivity(false);
+                        setActForm({
+                          time: "",
+                          name: "",
+                          description: "",
+                          proximity: "",
+                          tip: "",
+                        });
+                      }}
+                    >
                       Cancel
                     </Button>
                   </div>
@@ -882,7 +1080,9 @@ function PackingList({
   const [dirty, setDirty] = useState(false);
 
   const toggle = (i: number) => {
-    setList((l) => l.map((it, idx) => (idx === i ? { ...it, packed: !it.packed } : it)));
+    setList((l) =>
+      l.map((it, idx) => (idx === i ? { ...it, packed: !it.packed } : it)),
+    );
     setDirty(true);
   };
   const add = () => {
@@ -975,7 +1175,9 @@ function TodoList({
   const [dirty, setDirty] = useState(false);
 
   const toggle = (i: number) => {
-    setList((l) => l.map((it, idx) => (idx === i ? { ...it, done: !it.done } : it)));
+    setList((l) =>
+      l.map((it, idx) => (idx === i ? { ...it, done: !it.done } : it)),
+    );
     setDirty(true);
   };
   const add = () => {
@@ -1082,8 +1284,12 @@ function PhotoGridSection({
   const uploadPhoto = useUploadTripPhoto({
     mutation: {
       onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getListTripPhotosQueryKey(tripId, photoType) });
-        toast.success(`${photoType === "magnet" ? "Magnet" : "Photo"} uploaded`);
+        qc.invalidateQueries({
+          queryKey: getListTripPhotosQueryKey(tripId, photoType),
+        });
+        toast.success(
+          `${photoType === "magnet" ? "Magnet" : "Photo"} uploaded`,
+        );
       },
       onError: () => toast.error("Upload failed"),
     },
@@ -1091,7 +1297,9 @@ function PhotoGridSection({
   const deletePhoto = useDeleteTripPhoto({
     mutation: {
       onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getListTripPhotosQueryKey(tripId, photoType) });
+        qc.invalidateQueries({
+          queryKey: getListTripPhotosQueryKey(tripId, photoType),
+        });
         qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
         toast.success("Deleted");
       },
@@ -1100,7 +1308,10 @@ function PhotoGridSection({
   });
   const fileRef = useRef<HTMLInputElement>(null);
   const [lightbox, setLightbox] = useState<TripPhoto | null>(null);
-  const [bulkUploading, setBulkUploading] = useState<{ done: number; total: number } | null>(null);
+  const [bulkUploading, setBulkUploading] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -1126,13 +1337,17 @@ function PhotoGridSection({
       } catch {
         failures++;
       }
-      setBulkUploading((prev) => (prev ? { ...prev, done: prev.done + 1 } : prev));
+      setBulkUploading((prev) =>
+        prev ? { ...prev, done: prev.done + 1 } : prev,
+      );
     }
     setBulkUploading(null);
     if (failures > 0) {
       toast.error(`${failures} of ${files.length} uploads failed`);
     } else {
-      toast.success(`${files.length} ${photoType === "magnet" ? "magnets" : "photos"} uploaded`);
+      toast.success(
+        `${files.length} ${photoType === "magnet" ? "magnets" : "photos"} uploaded`,
+      );
     }
   };
 
@@ -1143,7 +1358,9 @@ function PhotoGridSection({
           {icon}
           {title}
           {photos.length > 0 && (
-            <span className="text-sm font-sans font-normal text-muted-foreground">({photos.length})</span>
+            <span className="text-sm font-sans font-normal text-muted-foreground">
+              ({photos.length})
+            </span>
           )}
         </h2>
         <div className="flex items-center gap-2">
@@ -1175,7 +1392,10 @@ function PhotoGridSection({
       {isLoading ? (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="aspect-square rounded-lg bg-muted animate-pulse" />
+            <div
+              key={i}
+              className="aspect-square rounded-lg bg-muted animate-pulse"
+            />
           ))}
         </div>
       ) : photos.length === 0 ? (
@@ -1199,7 +1419,10 @@ function PhotoGridSection({
                 />
                 <button
                   className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={(e) => { e.stopPropagation(); deletePhoto.mutate({ tripId, photoId: photo.id }); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deletePhoto.mutate({ tripId, photoId: photo.id });
+                  }}
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -1211,10 +1434,17 @@ function PhotoGridSection({
                         : "bg-black/60 text-white opacity-0 group-hover:opacity-100"
                     }`}
                     disabled={settingIcon}
-                    title={isIcon ? "Current cover photo" : "Set as cover photo"}
-                    onClick={(e) => { e.stopPropagation(); onSetIcon(photo.id); }}
+                    title={
+                      isIcon ? "Current cover photo" : "Set as cover photo"
+                    }
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSetIcon(photo.id);
+                    }}
                   >
-                    <Star className={`w-3 h-3 ${isIcon ? "fill-current" : ""}`} />
+                    <Star
+                      className={`w-3 h-3 ${isIcon ? "fill-current" : ""}`}
+                    />
                   </button>
                 )}
                 {photo.caption && (
@@ -1229,7 +1459,12 @@ function PhotoGridSection({
       )}
 
       {/* Lightbox */}
-      <Dialog open={!!lightbox} onOpenChange={(open) => { if (!open) setLightbox(null); }}>
+      <Dialog
+        open={!!lightbox}
+        onOpenChange={(open) => {
+          if (!open) setLightbox(null);
+        }}
+      >
         <DialogContent className="max-w-3xl">
           {lightbox && (
             <>
@@ -1239,17 +1474,25 @@ function PhotoGridSection({
                 className="w-full rounded-lg max-h-[70vh] object-contain"
               />
               {lightbox.caption && (
-                <p className="text-sm text-muted-foreground text-center">{lightbox.caption}</p>
+                <p className="text-sm text-muted-foreground text-center">
+                  {lightbox.caption}
+                </p>
               )}
               {onSetIcon && (
                 <Button
                   size="sm"
-                  variant={iconPhotoId === lightbox.id ? "secondary" : "outline"}
+                  variant={
+                    iconPhotoId === lightbox.id ? "secondary" : "outline"
+                  }
                   disabled={settingIcon || iconPhotoId === lightbox.id}
                   onClick={() => onSetIcon(lightbox.id)}
                 >
-                  <Star className={`w-3.5 h-3.5 mr-1.5 ${iconPhotoId === lightbox.id ? "fill-current" : ""}`} />
-                  {iconPhotoId === lightbox.id ? "Current cover photo" : "Set as cover photo"}
+                  <Star
+                    className={`w-3.5 h-3.5 mr-1.5 ${iconPhotoId === lightbox.id ? "fill-current" : ""}`}
+                  />
+                  {iconPhotoId === lightbox.id
+                    ? "Current cover photo"
+                    : "Set as cover photo"}
                 </Button>
               )}
             </>
@@ -1282,7 +1525,8 @@ function RemindersSection({ tripId }: { tripId: number }) {
   });
   const updateReminder = useUpdateReminder({
     mutation: {
-      onSuccess: () => qc.invalidateQueries({ queryKey: getListRemindersQueryKey(tripId) }),
+      onSuccess: () =>
+        qc.invalidateQueries({ queryKey: getListRemindersQueryKey(tripId) }),
       onError: () => toast.error("Failed to update"),
     },
   });
@@ -1310,7 +1554,9 @@ function RemindersSection({ tripId }: { tripId: number }) {
 
   function toggleNewAlertDay(day: number) {
     setNewAlertDays((prev) => {
-      const next = prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day];
+      const next = prev.includes(day)
+        ? prev.filter((d) => d !== day)
+        : [...prev, day];
       return next.length > 0 ? next : [0];
     });
   }
@@ -1327,7 +1573,8 @@ function RemindersSection({ tripId }: { tripId: number }) {
       toast.error("Enter a valid email address");
       return;
     }
-    if (!newRecipients.includes(email)) setNewRecipients((prev) => [...prev, email]);
+    if (!newRecipients.includes(email))
+      setNewRecipients((prev) => [...prev, email]);
     setCustomEmail("");
   }
 
@@ -1346,7 +1593,11 @@ function RemindersSection({ tripId }: { tripId: number }) {
             </span>
           )}
         </h2>
-        <Button size="sm" variant="outline" onClick={() => setAdding((v) => !v)}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setAdding((v) => !v)}
+        >
           <Plus className="w-3.5 h-3.5 mr-1.5" />
           Add
         </Button>
@@ -1369,11 +1620,16 @@ function RemindersSection({ tripId }: { tripId: number }) {
             />
 
             <div className="space-y-1.5 pt-1">
-              <Label className="text-xs text-muted-foreground">Send alerts to</Label>
+              <Label className="text-xs text-muted-foreground">
+                Send alerts to
+              </Label>
               {appUsers.length > 0 && (
                 <div className="flex flex-wrap gap-x-4 gap-y-1.5">
                   {appUsers.map((u: TravelsAppUser) => (
-                    <label key={u.id} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                    <label
+                      key={u.id}
+                      className="flex items-center gap-1.5 text-sm cursor-pointer"
+                    >
                       <Checkbox
                         checked={newRecipients.includes(u.email)}
                         onCheckedChange={() => toggleRecipient(u.email)}
@@ -1381,7 +1637,9 @@ function RemindersSection({ tripId }: { tripId: number }) {
                       {u.displayName ? (
                         <span>
                           {u.displayName}{" "}
-                          <span className="text-muted-foreground">({u.email})</span>
+                          <span className="text-muted-foreground">
+                            ({u.email})
+                          </span>
                         </span>
                       ) : (
                         u.email
@@ -1398,23 +1656,40 @@ function RemindersSection({ tripId }: { tripId: number }) {
                   value={customEmail}
                   onChange={(e) => setCustomEmail(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") { e.preventDefault(); addCustomEmail(); }
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addCustomEmail();
+                    }
                   }}
                   className="flex-1"
                 />
-                <Button size="sm" variant="outline" type="button" onClick={addCustomEmail}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  type="button"
+                  onClick={addCustomEmail}
+                >
                   Add
                 </Button>
               </div>
 
-              {newRecipients.filter((e) => !appUsers.some((u: TravelsAppUser) => u.email === e)).length > 0 && (
+              {newRecipients.filter(
+                (e) => !appUsers.some((u: TravelsAppUser) => u.email === e),
+              ).length > 0 && (
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {newRecipients
-                    .filter((e) => !appUsers.some((u: TravelsAppUser) => u.email === e))
+                    .filter(
+                      (e) =>
+                        !appUsers.some((u: TravelsAppUser) => u.email === e),
+                    )
                     .map((email) => (
                       <Badge key={email} variant="secondary" className="gap-1">
                         {email}
-                        <button type="button" onClick={() => toggleRecipient(email)} aria-label={`Remove ${email}`}>
+                        <button
+                          type="button"
+                          onClick={() => toggleRecipient(email)}
+                          aria-label={`Remove ${email}`}
+                        >
                           <X className="w-3 h-3" />
                         </button>
                       </Badge>
@@ -1426,7 +1701,10 @@ function RemindersSection({ tripId }: { tripId: number }) {
             {travelCalendarConnected && (
               <div className="space-y-1.5 pt-1">
                 <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
-                  <Checkbox checked={newSync} onCheckedChange={(v) => setNewSync(!!v)} />
+                  <Checkbox
+                    checked={newSync}
+                    onCheckedChange={(v) => setNewSync(!!v)}
+                  />
                   Add to the Travel Calendar
                 </label>
                 {newSync && (
@@ -1442,7 +1720,9 @@ function RemindersSection({ tripId }: { tripId: number }) {
                             : "bg-background text-muted-foreground border-card-border hover:border-primary/50"
                         }`}
                       >
-                        {day === 0 ? "On the day" : `${day} day${day > 1 ? "s" : ""} before`}
+                        {day === 0
+                          ? "On the day"
+                          : `${day} day${day > 1 ? "s" : ""} before`}
                       </button>
                     ))}
                   </div>
@@ -1471,7 +1751,11 @@ function RemindersSection({ tripId }: { tripId: number }) {
                 <Save className="w-3.5 h-3.5 mr-1.5" />
                 Save
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setAdding(false)}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setAdding(false)}
+              >
                 <X className="w-3.5 h-3.5" />
               </Button>
             </div>
@@ -1481,7 +1765,9 @@ function RemindersSection({ tripId }: { tripId: number }) {
 
       {isLoading ? (
         <div className="space-y-2">
-          {[1, 2].map((i) => <div key={i} className="h-10 rounded-lg bg-muted animate-pulse" />)}
+          {[1, 2].map((i) => (
+            <div key={i} className="h-10 rounded-lg bg-muted animate-pulse" />
+          ))}
         </div>
       ) : reminders.length === 0 && !adding ? (
         <p className="text-sm text-muted-foreground">No reminders yet.</p>
@@ -1492,9 +1778,17 @@ function RemindersSection({ tripId }: { tripId: number }) {
               key={r.id}
               reminder={r}
               tripId={tripId}
-              onToggle={() => updateReminder.mutate({ tripId, reminderId: r.id, body: { done: true } })}
+              onToggle={() =>
+                updateReminder.mutate({
+                  tripId,
+                  reminderId: r.id,
+                  body: { done: true },
+                })
+              }
               onEdit={() => setEditingReminder(r)}
-              onDelete={() => deleteReminder.mutate({ tripId, reminderId: r.id })}
+              onDelete={() =>
+                deleteReminder.mutate({ tripId, reminderId: r.id })
+              }
             />
           ))}
           {done.length > 0 && (
@@ -1508,9 +1802,17 @@ function RemindersSection({ tripId }: { tripId: number }) {
                     key={r.id}
                     reminder={r}
                     tripId={tripId}
-                    onToggle={() => updateReminder.mutate({ tripId, reminderId: r.id, body: { done: false } })}
+                    onToggle={() =>
+                      updateReminder.mutate({
+                        tripId,
+                        reminderId: r.id,
+                        body: { done: false },
+                      })
+                    }
                     onEdit={() => setEditingReminder(r)}
-                    onDelete={() => deleteReminder.mutate({ tripId, reminderId: r.id })}
+                    onDelete={() =>
+                      deleteReminder.mutate({ tripId, reminderId: r.id })
+                    }
                   />
                 ))}
               </div>
@@ -1521,7 +1823,9 @@ function RemindersSection({ tripId }: { tripId: number }) {
       <ReminderEditDialog
         reminder={editingReminder}
         open={!!editingReminder}
-        onOpenChange={(open) => { if (!open) setEditingReminder(null); }}
+        onOpenChange={(open) => {
+          if (!open) setEditingReminder(null);
+        }}
       />
     </div>
   );
@@ -1540,10 +1844,19 @@ function ReminderRow({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const overdue = !reminder.done && reminder.dueDate && new Date(reminder.dueDate) < new Date();
+  const overdue =
+    !reminder.done &&
+    reminder.dueDate &&
+    new Date(reminder.dueDate) < new Date();
   return (
-    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${reminder.done ? "bg-muted/30 border-border/30" : "bg-card border-border/50"}`}>
-      <button onClick={onToggle} className="shrink-0" title={reminder.done ? "Mark as not done" : "Mark as done"}>
+    <div
+      className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${reminder.done ? "bg-muted/30 border-border/30" : "bg-card border-border/50"}`}
+    >
+      <button
+        onClick={onToggle}
+        className="shrink-0"
+        title={reminder.done ? "Mark as not done" : "Mark as done"}
+      >
         {reminder.done ? (
           <CheckSquare className="w-4 h-4 text-muted-foreground" />
         ) : (
@@ -1575,14 +1888,24 @@ function ReminderRow({
         </span>
       )}
       {reminder.dueDate && (
-        <span className={`text-xs shrink-0 ${overdue ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
+        <span
+          className={`text-xs shrink-0 ${overdue ? "text-red-600 font-semibold" : "text-muted-foreground"}`}
+        >
           {overdue ? "Overdue · " : ""}
-          {new Date(reminder.dueDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+          {new Date(reminder.dueDate).toLocaleDateString("en-GB", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+          })}
         </span>
       )}
       {reminder.dueDate && (
         <a
-          href={buildReminderCalendarUrl(reminder.title, reminder.dueDate, "Trip reminder")}
+          href={buildReminderCalendarUrl(
+            reminder.title,
+            reminder.dueDate,
+            "Trip reminder",
+          )}
           target="_blank"
           rel="noopener noreferrer"
           className="shrink-0 text-muted-foreground/70 hover:text-foreground"
@@ -1699,8 +2022,14 @@ export default function TripDetail({ id }: { id: number }) {
 
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [itinStyle, setItinStyle] = useState<"relaxed" | "balanced" | "packed">("balanced");
-  const [itinInterests, setItinInterests] = useState<string[]>(["food", "history", "culture"]);
+  const [itinStyle, setItinStyle] = useState<"relaxed" | "balanced" | "packed">(
+    "balanced",
+  );
+  const [itinInterests, setItinInterests] = useState<string[]>([
+    "food",
+    "history",
+    "culture",
+  ]);
   const [refreshingDay, setRefreshingDay] = useState<number | null>(null);
   const [localItinerary, setLocalItinerary] = useState<Itinerary | null>(null);
   const [itineraryDirty, setItineraryDirty] = useState(false);
@@ -1713,7 +2042,10 @@ export default function TripDetail({ id }: { id: number }) {
     qc.invalidateQueries({ queryKey: getGetTravelsStatsQueryKey() });
   };
 
-  const saveField = (body: Partial<UpdateTripBody>, successMsg = "Trip updated") => {
+  const saveField = (
+    body: Partial<UpdateTripBody>,
+    successMsg = "Trip updated",
+  ) => {
     updateTrip.mutate(
       { id, body },
       {
@@ -1788,7 +2120,14 @@ export default function TripDetail({ id }: { id: number }) {
   const handleRefreshDay = (dayIndex: number) => {
     setRefreshingDay(dayIndex);
     generateItinerary.mutate(
-      { id, body: { style: itinStyle, interests: itinInterests, regenerateDay: dayIndex } },
+      {
+        id,
+        body: {
+          style: itinStyle,
+          interests: itinInterests,
+          regenerateDay: dayIndex,
+        },
+      },
       {
         onSuccess: () => {
           invalidate();
@@ -1839,7 +2178,11 @@ export default function TripDetail({ id }: { id: number }) {
     updateTrip.mutate(
       { id, body: { itinerary: localItinerary } },
       {
-        onSuccess: () => { invalidate(); toast.success("Itinerary saved"); setItineraryDirty(false); },
+        onSuccess: () => {
+          invalidate();
+          toast.success("Itinerary saved");
+          setItineraryDirty(false);
+        },
         onError: () => toast.error("Failed to save itinerary"),
       },
     );
@@ -1847,7 +2190,11 @@ export default function TripDetail({ id }: { id: number }) {
 
   const handleAddDay = () => {
     if (!dayForm.title.trim()) return;
-    const newDay: ItineraryDay = { date: dayForm.date, title: dayForm.title.trim(), activities: [] };
+    const newDay: ItineraryDay = {
+      date: dayForm.date,
+      title: dayForm.title.trim(),
+      activities: [],
+    };
     setLocalItinerary((prev) => ({ days: [...(prev?.days ?? []), newDay] }));
     setDayForm({ date: "", title: "" });
     setAddingDay(false);
@@ -1855,7 +2202,9 @@ export default function TripDetail({ id }: { id: number }) {
   };
 
   const handleDeleteDay = (dayIndex: number) => {
-    setLocalItinerary((prev) => prev ? { days: prev.days.filter((_, i) => i !== dayIndex) } : prev);
+    setLocalItinerary((prev) =>
+      prev ? { days: prev.days.filter((_, i) => i !== dayIndex) } : prev,
+    );
     setItineraryDirty(true);
   };
 
@@ -1874,7 +2223,12 @@ export default function TripDetail({ id }: { id: number }) {
     setLocalItinerary((prev) => {
       if (!prev) return prev;
       const days = prev.days.map((d, i) =>
-        i === dayIndex ? { ...d, activities: d.activities.filter((_, ai) => ai !== activityIndex) } : d,
+        i === dayIndex
+          ? {
+              ...d,
+              activities: d.activities.filter((_, ai) => ai !== activityIndex),
+            }
+          : d,
       );
       return { days };
     });
@@ -1899,7 +2253,10 @@ export default function TripDetail({ id }: { id: number }) {
     updateTrip.mutate(
       { id, body: { itinerary: updated } },
       {
-        onSuccess: () => { invalidate(); toast.success("Marked as firm"); },
+        onSuccess: () => {
+          invalidate();
+          toast.success("Marked as firm");
+        },
         onError: () => toast.error("Failed to update activity"),
       },
     );
@@ -1907,7 +2264,9 @@ export default function TripDetail({ id }: { id: number }) {
 
   const toggleInterest = (interest: string) => {
     setItinInterests((prev) =>
-      prev.includes(interest) ? prev.filter((i) => i !== interest) : [...prev, interest],
+      prev.includes(interest)
+        ? prev.filter((i) => i !== interest)
+        : [...prev, interest],
     );
   };
 
@@ -1940,10 +2299,14 @@ export default function TripDetail({ id }: { id: number }) {
       const fields = DOCUMENT_FIELD_LABELS.map(([key, label]) => {
         const value = ed?.[key];
         if (value === null || value === undefined || value === "") return null;
-        const rendered = Array.isArray(value) ? value.join(", ") : String(value);
+        const rendered = Array.isArray(value)
+          ? value.join(", ")
+          : String(value);
         return `${label}: ${rendered}`;
       }).filter((entry): entry is string => entry !== null);
-      const type = doc.documentType ? doc.documentType.replace(/_/g, " ") : "document";
+      const type = doc.documentType
+        ? doc.documentType.replace(/_/g, " ")
+        : "document";
       const name = doc.originalFilename ? ` ("${doc.originalFilename}")` : "";
       return `- ${type}${name} [docId: ${doc.id}]${fields.length > 0 ? `: ${fields.join("; ")}` : " (no extracted data yet)"}`;
     })
@@ -1954,57 +2317,64 @@ export default function TripDetail({ id }: { id: number }) {
     !trip
       ? undefined
       : `Viewing trip "${trip.title}" to ${trip.destination} (tripId: ${trip.id}, status: ${trip.status}${
-      trip.startDate ? `, starts ${trip.startDate}` : ""
-    }${trip.endDate ? `, ends ${trip.endDate}` : ""}). ` +
-      `Packing list has ${packingList.length} item(s), ${packingList.filter((p) => p.packed).length} packed${
-        packingList.length > 0
-          ? `: ${packingList
-              .slice(0, 20)
-              .map((p) => `"${p.item}"${p.packed ? " (packed)" : ""}`)
-              .join(", ")}`
-          : ""
-      }. ` +
-      `To-do list has ${todoList.length} item(s). ` +
-      (documents.length > 0
-        ? `Documents attached to this trip (use these already-parsed fields to answer questions like confirmation numbers, hotel names, or flight/check-in times — never ask the user to re-upload or open the file):\n${documentsSummary}`
-        : "No documents attached to this trip yet.") +
-      "\n" +
-      (reminders.length > 0
-        ? `Reminders: ${reminders
-            .slice(0, 20)
-            .map(
-              (r) =>
-                `"${r.title}" (reminderId: ${r.id}${r.dueDate ? `, due ${r.dueDate}` : ", no due date"}, ${
-                  r.done ? "done" : "not done"
-                }, ${r.syncToCalendar ? "synced to calendar" : "NOT synced to calendar"}, recipients: ${
-                  r.recipientEmails && r.recipientEmails.length > 0
-                    ? r.recipientEmails.join(", ")
-                    : "none"
-                })`,
-            )
-            .join("; ")}.`
-        : "No reminders yet for this trip.") +
-      "\n" +
-      (localItinerary?.days && localItinerary.days.length > 0
-        ? `Itinerary has ${localItinerary.days.length} day(s) (use these 1-based day/activity numbers exactly for confirm_itinerary_activity / remove_itinerary_activity — never guess them):\n${localItinerary.days
-            .slice(0, 20)
-            .map((d, i) => {
-              const activitiesSummary =
-                d.activities.length > 0
-                  ? d.activities
-                      .slice(0, 20)
-                      .map((a, ai) => {
-                        const status = a.status === "confirmed" ? "confirmed" : "tentative";
-                        const sourced = a.sourceDocumentId ? ", from document" : "";
-                        return `activity ${ai + 1}: "${a.name}"${a.time ? ` at ${a.time}` : ""} (${status}${sourced})`;
-                      })
-                      .join("; ")
-                  : "no activities yet";
-              return `Day ${i + 1}${d.date ? ` (${d.date})` : ""}: "${d.title}" — ${activitiesSummary}`;
-            })
-            .join("\n")}`
-        : "No itinerary generated yet for this trip.") +
-      (addingDay ? ` User is currently adding a new itinerary day with title "${dayForm.title}" on ${dayForm.date}.` : ""),
+          trip.startDate ? `, starts ${trip.startDate}` : ""
+        }${trip.endDate ? `, ends ${trip.endDate}` : ""}). ` +
+          `Packing list has ${packingList.length} item(s), ${packingList.filter((p) => p.packed).length} packed${
+            packingList.length > 0
+              ? `: ${packingList
+                  .slice(0, 20)
+                  .map((p) => `"${p.item}"${p.packed ? " (packed)" : ""}`)
+                  .join(", ")}`
+              : ""
+          }. ` +
+          `To-do list has ${todoList.length} item(s). ` +
+          (documents.length > 0
+            ? `Documents attached to this trip (use these already-parsed fields to answer questions like confirmation numbers, hotel names, or flight/check-in times — never ask the user to re-upload or open the file):\n${documentsSummary}`
+            : "No documents attached to this trip yet.") +
+          "\n" +
+          (reminders.length > 0
+            ? `Reminders: ${reminders
+                .slice(0, 20)
+                .map(
+                  (r) =>
+                    `"${r.title}" (reminderId: ${r.id}${r.dueDate ? `, due ${r.dueDate}` : ", no due date"}, ${
+                      r.done ? "done" : "not done"
+                    }, ${r.syncToCalendar ? "synced to calendar" : "NOT synced to calendar"}, recipients: ${
+                      r.recipientEmails && r.recipientEmails.length > 0
+                        ? r.recipientEmails.join(", ")
+                        : "none"
+                    })`,
+                )
+                .join("; ")}.`
+            : "No reminders yet for this trip.") +
+          "\n" +
+          (localItinerary?.days && localItinerary.days.length > 0
+            ? `Itinerary has ${localItinerary.days.length} day(s) (use these 1-based day/activity numbers exactly for confirm_itinerary_activity / remove_itinerary_activity — never guess them):\n${localItinerary.days
+                .slice(0, 20)
+                .map((d, i) => {
+                  const activitiesSummary =
+                    d.activities.length > 0
+                      ? d.activities
+                          .slice(0, 20)
+                          .map((a, ai) => {
+                            const status =
+                              a.status === "confirmed"
+                                ? "confirmed"
+                                : "tentative";
+                            const sourced = a.sourceDocumentId
+                              ? ", from document"
+                              : "";
+                            return `activity ${ai + 1}: "${a.name}"${a.time ? ` at ${a.time}` : ""} (${status}${sourced})`;
+                          })
+                          .join("; ")
+                      : "no activities yet";
+                  return `Day ${i + 1}${d.date ? ` (${d.date})` : ""}: "${d.title}" — ${activitiesSummary}`;
+                })
+                .join("\n")}`
+            : "No itinerary generated yet for this trip.") +
+          (addingDay
+            ? ` User is currently adding a new itinerary day with title "${dayForm.title}" on ${dayForm.date}.`
+            : ""),
   );
 
   if (isLoading) {
@@ -2021,7 +2391,11 @@ export default function TripDetail({ id }: { id: number }) {
     return (
       <div className="text-center py-12">
         <p className="text-muted-foreground">Trip not found.</p>
-        <Button variant="ghost" className="mt-4" onClick={() => setLocation("/trips")}>
+        <Button
+          variant="ghost"
+          className="mt-4"
+          onClick={() => setLocation("/trips")}
+        >
           Back to trips
         </Button>
       </div>
@@ -2029,8 +2403,7 @@ export default function TripDetail({ id }: { id: number }) {
   }
 
   const canCalendar =
-    (trip.status === "booked" || trip.status === "active") &&
-    trip.startDate;
+    (trip.status === "booked" || trip.status === "active") && trip.startDate;
 
   return (
     <div className="space-y-6">
@@ -2061,7 +2434,9 @@ export default function TripDetail({ id }: { id: number }) {
                 if (v.trim()) saveField({ title: v.trim() });
               }}
               className="min-w-[10rem]"
-              renderDisplay={(v) => <h1 className="font-serif text-2xl text-foreground">{v}</h1>}
+              renderDisplay={(v) => (
+                <h1 className="font-serif text-2xl text-foreground">{v}</h1>
+              )}
               renderEditor={(draft, setDraft, commit, cancel) => (
                 <Input
                   autoFocus
@@ -2088,13 +2463,18 @@ export default function TripDetail({ id }: { id: number }) {
                 </span>
               )}
               renderEditor={(draft, setDraft) => (
-                <Select value={draft} onValueChange={(v) => setDraft(v as TripStatus)}>
+                <Select
+                  value={draft}
+                  onValueChange={(v) => setDraft(v as TripStatus)}
+                >
                   <SelectTrigger className="h-8 w-36">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     {ALL_STATUSES.map((s) => (
-                      <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>
+                      <SelectItem key={s} value={s}>
+                        {STATUS_LABELS[s]}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -2147,14 +2527,18 @@ export default function TripDetail({ id }: { id: number }) {
                 )}
                 {connectedCalendars.length > 0 && (
                   <>
-                    {travelCalendarStatus?.configured && <DropdownMenuSeparator />}
+                    {travelCalendarStatus?.configured && (
+                      <DropdownMenuSeparator />
+                    )}
                     <DropdownMenuLabel className="text-xs text-muted-foreground">
                       My calendars
                     </DropdownMenuLabel>
                     {connectedCalendars.map((cal) => (
                       <DropdownMenuItem
                         key={cal.id}
-                        onClick={() => addTripToConnectedCalendar(cal.id, cal.summary)}
+                        onClick={() =>
+                          addTripToConnectedCalendar(cal.id, cal.summary)
+                        }
                       >
                         <span
                           className="w-2.5 h-2.5 rounded-full mr-2 shrink-0"
@@ -2226,24 +2610,31 @@ export default function TripDetail({ id }: { id: number }) {
             )}
             renderEditor={(draft, setDraft) => (
               <div className="flex flex-wrap gap-3">
-                {(["John", "Ashley", "Karis", "Angela"] as const).map((name) => {
-                  const checked = draft.includes(name);
-                  return (
-                    <label key={name} className="flex items-center gap-2 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        className="w-4 h-4 rounded border-border accent-primary"
-                        onChange={(e) =>
-                          setDraft(
-                            e.target.checked ? [...draft, name] : draft.filter((n) => n !== name),
-                          )
-                        }
-                      />
-                      <span className="text-sm">{name}</span>
-                    </label>
-                  );
-                })}
+                {(["John", "Ashley", "Karis", "Angela"] as const).map(
+                  (name) => {
+                    const checked = draft.includes(name);
+                    return (
+                      <label
+                        key={name}
+                        className="flex items-center gap-2 cursor-pointer select-none"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          className="w-4 h-4 rounded border-border accent-primary"
+                          onChange={(e) =>
+                            setDraft(
+                              e.target.checked
+                                ? [...draft, name]
+                                : draft.filter((n) => n !== name),
+                            )
+                          }
+                        />
+                        <span className="text-sm">{name}</span>
+                      </label>
+                    );
+                  },
+                )}
               </div>
             )}
           />
@@ -2253,7 +2644,9 @@ export default function TripDetail({ id }: { id: number }) {
             value={trip.transportTo ?? "none"}
             iconType="custom"
             onSave={(v: TransportTo | "none") =>
-              saveField({ transportTo: v === "none" ? undefined : (v as TransportTo) })
+              saveField({
+                transportTo: v === "none" ? undefined : (v as TransportTo),
+              })
             }
             isEmpty={(v: TransportTo | "none") => v === "none"}
             renderDisplay={(v) => (
@@ -2262,13 +2655,20 @@ export default function TripDetail({ id }: { id: number }) {
                   <TransportIcon transport={v as TransportTo} />
                 </span>
                 <p className="text-sm text-foreground capitalize">
-                  {v === "flew" ? "Flying" : v === "train" ? "Train" : "Driving"}
+                  {v === "flew"
+                    ? "Flying"
+                    : v === "train"
+                      ? "Train"
+                      : "Driving"}
                   {trip.hasRentalCar ? " + rental car" : ""}
                 </p>
               </div>
             )}
             renderEditor={(draft, setDraft) => (
-              <Select value={draft} onValueChange={(v) => setDraft(v as TransportTo | "none")}>
+              <Select
+                value={draft}
+                onValueChange={(v) => setDraft(v as TransportTo | "none")}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Not set" />
                 </SelectTrigger>
@@ -2284,9 +2684,17 @@ export default function TripDetail({ id }: { id: number }) {
 
           {trip.transportTo && trip.transportTo !== "drove" && (
             <InlineTextField
-              label={trip.transportTo === "flew" ? "Airline & flight number" : "Train line & train number"}
+              label={
+                trip.transportTo === "flew"
+                  ? "Airline & flight number"
+                  : "Train line & train number"
+              }
               value={trip.transportDetails ?? ""}
-              placeholder={trip.transportTo === "flew" ? "e.g. Delta DL 405" : "e.g. Eurostar 9025"}
+              placeholder={
+                trip.transportTo === "flew"
+                  ? "e.g. Delta DL 405"
+                  : "e.g. Eurostar 9025"
+              }
               onSave={(v) => saveField({ transportDetails: v || undefined })}
             />
           )}
@@ -2297,9 +2705,14 @@ export default function TripDetail({ id }: { id: number }) {
             iconType="custom"
             onSave={(v) => saveField({ hasRentalCar: v })}
             isEmpty={() => false}
-            renderDisplay={(v) => <p className="text-sm text-foreground">{v ? "Yes" : "No"}</p>}
+            renderDisplay={(v) => (
+              <p className="text-sm text-foreground">{v ? "Yes" : "No"}</p>
+            )}
             renderEditor={(draft, setDraft) => (
-              <Select value={draft ? "yes" : "no"} onValueChange={(v) => setDraft(v === "yes")}>
+              <Select
+                value={draft ? "yes" : "no"}
+                onValueChange={(v) => setDraft(v === "yes")}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -2377,7 +2790,10 @@ export default function TripDetail({ id }: { id: number }) {
         collisionDetection={closestCenter}
         onDragEnd={handleCardDragEnd}
       >
-        <SortableContext items={cardOrder} strategy={verticalListSortingStrategy}>
+        <SortableContext
+          items={cardOrder}
+          strategy={verticalListSortingStrategy}
+        >
           <div className="space-y-6">
             {cardOrder.map((cardId) => (
               <SortableSection key={cardId} id={cardId}>
@@ -2389,11 +2805,17 @@ export default function TripDetail({ id }: { id: number }) {
                           title="Weather & nearby"
                           icon={<Cloud className="w-5 h-5" />}
                           collapsed={collapsedCards.has("weather-nearby")}
-                          onToggleCollapse={() => toggleCardCollapse("weather-nearby")}
+                          onToggleCollapse={() =>
+                            toggleCardCollapse("weather-nearby")
+                          }
                           dragHandleListeners={dragHandleListeners}
                           dragHandleAttributes={dragHandleAttributes}
                         >
-                          <TripWeatherAndPlaces tripId={trip.id} lat={trip.lat} lng={trip.lng} />
+                          <TripWeatherAndPlaces
+                            tripId={trip.id}
+                            lat={trip.lat}
+                            lng={trip.lng}
+                          />
                         </CardShell>
                       ) : null;
 
@@ -2421,10 +2843,15 @@ export default function TripDetail({ id }: { id: number }) {
                                 { tripId: trip.id, photoId },
                                 {
                                   onSuccess: () => {
-                                    qc.invalidateQueries({ queryKey: getGetTripQueryKey(trip.id) });
+                                    qc.invalidateQueries({
+                                      queryKey: getGetTripQueryKey(trip.id),
+                                    });
                                     toast.success("Trip cover photo updated");
                                   },
-                                  onError: () => toast.error("Failed to set trip cover photo"),
+                                  onError: () =>
+                                    toast.error(
+                                      "Failed to set trip cover photo",
+                                    ),
                                 },
                               )
                             }
@@ -2456,10 +2883,15 @@ export default function TripDetail({ id }: { id: number }) {
                                 { tripId: trip.id, photoId },
                                 {
                                   onSuccess: () => {
-                                    qc.invalidateQueries({ queryKey: getGetTripQueryKey(trip.id) });
+                                    qc.invalidateQueries({
+                                      queryKey: getGetTripQueryKey(trip.id),
+                                    });
                                     toast.success("Trip cover photo updated");
                                   },
-                                  onError: () => toast.error("Failed to set trip cover photo"),
+                                  onError: () =>
+                                    toast.error(
+                                      "Failed to set trip cover photo",
+                                    ),
                                 },
                               )
                             }
@@ -2473,7 +2905,9 @@ export default function TripDetail({ id }: { id: number }) {
                           title="Reminders"
                           icon={<Bell className="w-5 h-5" />}
                           collapsed={collapsedCards.has("reminders")}
-                          onToggleCollapse={() => toggleCardCollapse("reminders")}
+                          onToggleCollapse={() =>
+                            toggleCardCollapse("reminders")
+                          }
                           dragHandleListeners={dragHandleListeners}
                           dragHandleAttributes={dragHandleAttributes}
                         >
@@ -2486,13 +2920,17 @@ export default function TripDetail({ id }: { id: number }) {
                         <CardShell
                           title="Itinerary"
                           collapsed={collapsedCards.has("itinerary")}
-                          onToggleCollapse={() => toggleCardCollapse("itinerary")}
+                          onToggleCollapse={() =>
+                            toggleCardCollapse("itinerary")
+                          }
                           dragHandleListeners={dragHandleListeners}
                           dragHandleAttributes={dragHandleAttributes}
                         >
                           <div className="space-y-4">
                             <div className="flex items-center justify-between gap-2 flex-wrap">
-                              <h2 className="font-serif text-xl text-foreground">Itinerary</h2>
+                              <h2 className="font-serif text-xl text-foreground">
+                                Itinerary
+                              </h2>
                               <div className="flex items-center gap-2 flex-wrap">
                                 {itineraryDirty && (
                                   <Button
@@ -2519,7 +2957,9 @@ export default function TripDetail({ id }: { id: number }) {
                                     onClick={handleGenerateItinerary}
                                     disabled={generateItinerary.isPending}
                                   >
-                                    <RefreshCw className={`w-4 h-4 mr-1.5 ${generateItinerary.isPending ? "animate-spin" : ""}`} />
+                                    <RefreshCw
+                                      className={`w-4 h-4 mr-1.5 ${generateItinerary.isPending ? "animate-spin" : ""}`}
+                                    />
                                     AI regenerate
                                   </Button>
                                 )}
@@ -2527,54 +2967,75 @@ export default function TripDetail({ id }: { id: number }) {
                             </div>
 
                             {/* Days list */}
-                            {localItinerary?.days && localItinerary.days.length > 0 && (
-                              <div className="space-y-2">
-                                {(() => {
-                                  const validDates = localItinerary.days
-                                    .map((d) => d.date)
-                                    .filter((d): d is string => !!d)
-                                    .sort();
-                                  const earliestDate = validDates[0];
-                                  return localItinerary.days.map((day, i) => {
-                                    const dayNumber = day.date && earliestDate
-                                      ? Math.round(
-                                          (new Date(`${day.date}T12:00:00`).getTime() -
-                                            new Date(`${earliestDate}T12:00:00`).getTime()) /
-                                            86400000,
-                                        ) + 1
-                                      : i + 1;
-                                    return (
-                                      <DayCard
-                                        key={i}
-                                        day={day}
-                                        index={i}
-                                        dayNumber={dayNumber}
-                                        onRefresh={handleRefreshDay}
-                                        refreshing={refreshingDay === i}
-                                        onAddActivity={(act) => handleAddActivity(i, act)}
-                                        onDeleteActivity={(ai) => handleDeleteActivity(i, ai)}
-                                        onDeleteDay={() => handleDeleteDay(i)}
-                                        onConfirmActivity={(ai) => handleConfirmActivity(i, ai)}
-                                      />
-                                    );
-                                  });
-                                })()}
-                              </div>
-                            )}
+                            {localItinerary?.days &&
+                              localItinerary.days.length > 0 && (
+                                <div className="space-y-2">
+                                  {(() => {
+                                    const validDates = localItinerary.days
+                                      .map((d) => d.date)
+                                      .filter((d): d is string => !!d)
+                                      .sort();
+                                    const earliestDate = validDates[0];
+                                    return localItinerary.days.map((day, i) => {
+                                      const dayNumber =
+                                        day.date && earliestDate
+                                          ? Math.round(
+                                              (new Date(
+                                                `${day.date}T12:00:00`,
+                                              ).getTime() -
+                                                new Date(
+                                                  `${earliestDate}T12:00:00`,
+                                                ).getTime()) /
+                                                86400000,
+                                            ) + 1
+                                          : i + 1;
+                                      return (
+                                        <DayCard
+                                          key={i}
+                                          day={day}
+                                          index={i}
+                                          dayNumber={dayNumber}
+                                          onRefresh={handleRefreshDay}
+                                          refreshing={refreshingDay === i}
+                                          onAddActivity={(act) =>
+                                            handleAddActivity(i, act)
+                                          }
+                                          onDeleteActivity={(ai) =>
+                                            handleDeleteActivity(i, ai)
+                                          }
+                                          onDeleteDay={() => handleDeleteDay(i)}
+                                          onConfirmActivity={(ai) =>
+                                            handleConfirmActivity(i, ai)
+                                          }
+                                        />
+                                      );
+                                    });
+                                  })()}
+                                </div>
+                              )}
 
                             {/* Add day inline form */}
                             {addingDay && (
                               <Card className="border-border/50">
                                 <CardContent className="py-4 space-y-3">
-                                  <p className="text-sm font-medium text-foreground">New day</p>
+                                  <p className="text-sm font-medium text-foreground">
+                                    New day
+                                  </p>
                                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                     <div className="space-y-1.5">
                                       <Label>Title *</Label>
                                       <Input
                                         placeholder="e.g. Arrival & Old Town"
                                         value={dayForm.title}
-                                        onChange={(e) => setDayForm((f) => ({ ...f, title: e.target.value }))}
-                                        onKeyDown={(e) => e.key === "Enter" && handleAddDay()}
+                                        onChange={(e) =>
+                                          setDayForm((f) => ({
+                                            ...f,
+                                            title: e.target.value,
+                                          }))
+                                        }
+                                        onKeyDown={(e) =>
+                                          e.key === "Enter" && handleAddDay()
+                                        }
                                         autoFocus
                                       />
                                     </div>
@@ -2583,16 +3044,32 @@ export default function TripDetail({ id }: { id: number }) {
                                       <Input
                                         type="date"
                                         value={dayForm.date}
-                                        onChange={(e) => setDayForm((f) => ({ ...f, date: e.target.value }))}
+                                        onChange={(e) =>
+                                          setDayForm((f) => ({
+                                            ...f,
+                                            date: e.target.value,
+                                          }))
+                                        }
                                       />
                                     </div>
                                   </div>
                                   <div className="flex gap-2">
-                                    <Button size="sm" onClick={handleAddDay} disabled={!dayForm.title.trim()}>
+                                    <Button
+                                      size="sm"
+                                      onClick={handleAddDay}
+                                      disabled={!dayForm.title.trim()}
+                                    >
                                       <Plus className="w-3.5 h-3.5 mr-1" />
                                       Add day
                                     </Button>
-                                    <Button size="sm" variant="ghost" onClick={() => { setAddingDay(false); setDayForm({ date: "", title: "" }); }}>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => {
+                                        setAddingDay(false);
+                                        setDayForm({ date: "", title: "" });
+                                      }}
+                                    >
                                       Cancel
                                     </Button>
                                   </div>
@@ -2605,22 +3082,31 @@ export default function TripDetail({ id }: { id: number }) {
                               <Card className="border-border/50">
                                 <CardContent className="py-4 space-y-4">
                                   <p className="text-sm text-muted-foreground">
-                                    Generate a day-by-day itinerary with AI, or add days manually with the button above.
+                                    Generate a day-by-day itinerary with AI, or
+                                    add days manually with the button above.
                                   </p>
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-2">
                                       <Label>Trip style</Label>
                                       <Select
                                         value={itinStyle}
-                                        onValueChange={(v) => setItinStyle(v as typeof itinStyle)}
+                                        onValueChange={(v) =>
+                                          setItinStyle(v as typeof itinStyle)
+                                        }
                                       >
                                         <SelectTrigger>
                                           <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                          <SelectItem value="relaxed">Relaxed — slow, few activities</SelectItem>
-                                          <SelectItem value="balanced">Balanced — good mix</SelectItem>
-                                          <SelectItem value="packed">Packed — see everything</SelectItem>
+                                          <SelectItem value="relaxed">
+                                            Relaxed — slow, few activities
+                                          </SelectItem>
+                                          <SelectItem value="balanced">
+                                            Balanced — good mix
+                                          </SelectItem>
+                                          <SelectItem value="packed">
+                                            Packed — see everything
+                                          </SelectItem>
                                         </SelectContent>
                                       </Select>
                                     </div>
@@ -2630,7 +3116,9 @@ export default function TripDetail({ id }: { id: number }) {
                                         {INTERESTS_OPTIONS.map((interest) => (
                                           <button
                                             key={interest}
-                                            onClick={() => toggleInterest(interest)}
+                                            onClick={() =>
+                                              toggleInterest(interest)
+                                            }
                                             className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors capitalize ${
                                               itinInterests.includes(interest)
                                                 ? "bg-primary text-primary-foreground border-primary"
@@ -2648,20 +3136,26 @@ export default function TripDetail({ id }: { id: number }) {
                                     disabled={generateItinerary.isPending}
                                     className="w-full sm:w-auto"
                                   >
-                                    <Sparkles className={`w-4 h-4 mr-2 ${generateItinerary.isPending ? "animate-pulse" : ""}`} />
-                                    {generateItinerary.isPending ? "Building your itinerary..." : "Generate itinerary"}
+                                    <Sparkles
+                                      className={`w-4 h-4 mr-2 ${generateItinerary.isPending ? "animate-pulse" : ""}`}
+                                    />
+                                    {generateItinerary.isPending
+                                      ? "Building your itinerary..."
+                                      : "Generate itinerary"}
                                   </Button>
                                 </CardContent>
                               </Card>
                             )}
 
                             {/* Style/interests controls when AI-generated itinerary exists but user wants to regenerate */}
-                            {localItinerary && !addingDay && generateItinerary.isPending && (
-                              <div className="text-sm text-muted-foreground flex items-center gap-2">
-                                <RefreshCw className="w-4 h-4 animate-spin" />
-                                Building your itinerary…
-                              </div>
-                            )}
+                            {localItinerary &&
+                              !addingDay &&
+                              generateItinerary.isPending && (
+                                <div className="text-sm text-muted-foreground flex items-center gap-2">
+                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                  Building your itinerary…
+                                </div>
+                              )}
                           </div>
                         </CardShell>
                       );
@@ -2671,13 +3165,17 @@ export default function TripDetail({ id }: { id: number }) {
                         <CardShell
                           title="Documents"
                           collapsed={collapsedCards.has("documents")}
-                          onToggleCollapse={() => toggleCardCollapse("documents")}
+                          onToggleCollapse={() =>
+                            toggleCardCollapse("documents")
+                          }
                           dragHandleListeners={dragHandleListeners}
                           dragHandleAttributes={dragHandleAttributes}
                         >
                           <div className="space-y-4">
                             <div className="flex items-center justify-between">
-                              <h2 className="font-serif text-xl text-foreground">Documents</h2>
+                              <h2 className="font-serif text-xl text-foreground">
+                                Documents
+                              </h2>
                               <label className="cursor-pointer">
                                 <input
                                   type="file"
@@ -2705,7 +3203,8 @@ export default function TripDetail({ id }: { id: number }) {
                                   <div className="flex flex-col items-center gap-2 py-8 text-center">
                                     <FileText className="w-8 h-8 text-muted-foreground/40" />
                                     <p className="text-sm text-muted-foreground">
-                                      No documents yet. Upload bookings, boarding passes, or confirmations.
+                                      No documents yet. Upload bookings,
+                                      boarding passes, or confirmations.
                                     </p>
                                   </div>
                                 ) : (
@@ -2736,10 +3235,14 @@ export default function TripDetail({ id }: { id: number }) {
                             <CardShell
                               title="Packing List"
                               collapsed={collapsedCards.has("packing")}
-                              onToggleCollapse={() => toggleCardCollapse("packing")}
+                              onToggleCollapse={() =>
+                                toggleCardCollapse("packing")
+                              }
                             >
                               <div className="space-y-4">
-                                <h2 className="font-serif text-xl text-foreground">Packing List</h2>
+                                <h2 className="font-serif text-xl text-foreground">
+                                  Packing List
+                                </h2>
                                 <Card className="border-border/50">
                                   <CardContent className="py-4">
                                     <PackingList
@@ -2755,10 +3258,14 @@ export default function TripDetail({ id }: { id: number }) {
                             <CardShell
                               title="To-Do List"
                               collapsed={collapsedCards.has("todo")}
-                              onToggleCollapse={() => toggleCardCollapse("todo")}
+                              onToggleCollapse={() =>
+                                toggleCardCollapse("todo")
+                              }
                             >
                               <div className="space-y-4">
-                                <h2 className="font-serif text-xl text-foreground">To-Do List</h2>
+                                <h2 className="font-serif text-xl text-foreground">
+                                  To-Do List
+                                </h2>
                                 <Card className="border-border/50">
                                   <CardContent className="py-4">
                                     <TodoList
@@ -2790,7 +3297,8 @@ export default function TripDetail({ id }: { id: number }) {
             <DialogTitle>Delete trip?</DialogTitle>
           </DialogHeader>
           <p className="text-muted-foreground text-sm">
-            This will permanently delete "{trip.title}" and all its documents, photos, and reminders. This cannot be undone.
+            This will permanently delete "{trip.title}" and all its documents,
+            photos, and reminders. This cannot be undone.
           </p>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setShowDeleteConfirm(false)}>

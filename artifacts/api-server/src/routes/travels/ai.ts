@@ -5,6 +5,7 @@ import { db, travelsTrips } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import type OpenAI from "openai";
 import { callModel, callModelWithSubagent, MODELS } from "../../lib/ai-client";
+import { getTimeZone } from "../../lib/travels/google-maps";
 
 // Guidance for the openrouter:subagent server tool: the chat assistant can
 // delegate self-contained lookups (e.g. "list typical costs for X",
@@ -18,7 +19,10 @@ const router: IRouter = Router();
 router.use(requireAuth);
 
 function parseAiJson(raw: string): unknown {
-  const stripped = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  const stripped = raw
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
   return JSON.parse(stripped);
 }
 
@@ -37,13 +41,20 @@ const SuggestBody = z.object({ destination: z.string().min(1) });
 const HOME_LAT = 48.7178;
 const HOME_LNG = 9.4853;
 
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+function haversineKm(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
+): number {
   const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLng = ((lng2 - lng1) * Math.PI) / 180;
   const a =
     Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
@@ -54,9 +65,11 @@ function transportSummary(trip: {
   const parts: string[] = [];
   if (trip.transportTo === "flew") parts.push("arrived by flight");
   else if (trip.transportTo === "train") parts.push("arrived by train");
-  else if (trip.transportTo === "drove") parts.push("drove there (own car available)");
+  else if (trip.transportTo === "drove")
+    parts.push("drove there (own car available)");
   if (trip.hasRentalCar) parts.push("has a rental car");
-  else if (trip.transportTo !== "drove") parts.push("no car — relies on walking/transit/taxi");
+  else if (trip.transportTo !== "drove")
+    parts.push("no car — relies on walking/transit/taxi");
   return parts.join(", ") || "transport mode unknown";
 }
 
@@ -107,9 +120,10 @@ export async function generateItineraryForTrip(
       ? `${trip.startDate} to ${trip.endDate}`
       : "dates not specified";
 
-  const area = [trip.accommodationArea, trip.accommodationName]
-    .filter(Boolean)
-    .join(" — ") || trip.destination;
+  const area =
+    [trip.accommodationArea, trip.accommodationName]
+      .filter(Boolean)
+      .join(" — ") || trip.destination;
 
   const styleDesc = {
     relaxed: "relaxed pace (1–2 major activities per day, leisurely)",
@@ -235,7 +249,12 @@ router.post("/trips/:id/itinerary", async (req, res) => {
   const { style, interests, regenerateDay } = body;
 
   try {
-    const itinerary = await generateItineraryForTrip(id, style, interests, regenerateDay);
+    const itinerary = await generateItineraryForTrip(
+      id,
+      style,
+      interests,
+      regenerateDay,
+    );
     res.json({ itinerary });
   } catch (err) {
     if (err instanceof ItineraryActionError) {
@@ -293,7 +312,6 @@ Return a JSON object:
   "practicalInfo": {
     "currency": "local currency",
     "language": "primary language",
-    "timezone": "timezone name",
     "tipping": "brief tipping custom note",
     "transit": "brief note on getting around"
   }
@@ -319,7 +337,16 @@ Include 6-8 highlights. Return ONLY valid JSON, no extra text.`,
     lat && lng ? Math.round(haversineKm(HOME_LAT, HOME_LNG, lat, lng)) : null;
   const mapsUrl = `https://www.google.com/maps/dir/Reichenbach+an+der+Fils,+Germany/${encodeURIComponent(destination)}`;
 
-  res.json({ destination, lat, lng, overview, distanceKm, mapsUrl });
+  let timezone = null;
+  if (lat && lng) {
+    try {
+      timezone = await getTimeZone(lat, lng);
+    } catch (err) {
+      req.log.warn({ err }, "Time Zone lookup failed for explore destination");
+    }
+  }
+
+  res.json({ destination, lat, lng, overview, distanceKm, mapsUrl, timezone });
 });
 
 router.post("/highlights/suggest", async (req, res) => {
@@ -370,12 +397,13 @@ router.get("/stats", async (_req, res) => {
   ).size;
 
   const today = new Date().toISOString().slice(0, 10);
-  const nextTrip = rows
-    .filter(
-      (r) =>
-        r.status === "booked" && r.startDate != null && r.startDate >= today,
-    )
-    .sort((a, b) => (a.startDate! > b.startDate! ? 1 : -1))[0] ?? null;
+  const nextTrip =
+    rows
+      .filter(
+        (r) =>
+          r.status === "booked" && r.startDate != null && r.startDate >= today,
+      )
+      .sort((a, b) => (a.startDate! > b.startDate! ? 1 : -1))[0] ?? null;
 
   res.json({
     totalTrips,
@@ -444,7 +472,12 @@ Answer questions about ${trip.destination}: things to do, local food, customs, t
     async (client, model, tools) => {
       const response = await client.chat.completions.create({
         model,
-        ...(tools ? { tools: tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[] } : {}),
+        ...(tools
+          ? {
+              tools:
+                tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[],
+            }
+          : {}),
         messages,
         max_tokens: 600,
       });

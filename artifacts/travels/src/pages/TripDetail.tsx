@@ -414,23 +414,35 @@ function DocumentRow({
   // the canonical keys and show the group relevant to the document type.
   const docType = (doc.documentType ?? "").toLowerCase();
   const isHotel = docType.includes("hotel");
-  const keyFields: Array<{ key: string; label: string }> = isHotel
+  const isCarRental =
+    docType.includes("car_rental") || docType.includes("car rental");
+  const keyFields: Array<{ key: string; label: string }> = isCarRental
     ? [
-        // Hotel-related fields grouped together
-        { key: "providerName", label: "Hotel" },
-        { key: "referenceNumber", label: "Confirmation" },
-        { key: "checkInDate", label: "Check-in" },
-        { key: "checkOutDate", label: "Check-out" },
-      ]
-    : [
-        // Flight-related fields grouped together
+        { key: "providerName", label: "Car company" },
         { key: "referenceNumber", label: "Ref" },
-        { key: "providerName", label: "Airline" },
-        { key: "departureDateTime", label: "Departure" },
-        { key: "flightNumber", label: "Flight" },
-        { key: "returnDepartureDateTime", label: "Return" },
-        { key: "returnFlightNumber", label: "Return flight" },
-      ];
+        { key: "vehicleClass", label: "Vehicle" },
+        { key: "pickupDateTime", label: "Pickup" },
+        { key: "pickupLocation", label: "Pickup location" },
+        { key: "dropoffDateTime", label: "Drop-off" },
+        { key: "dropoffLocation", label: "Drop-off location" },
+      ]
+    : isHotel
+      ? [
+          // Hotel-related fields grouped together
+          { key: "providerName", label: "Hotel" },
+          { key: "referenceNumber", label: "Confirmation" },
+          { key: "checkInDate", label: "Check-in" },
+          { key: "checkOutDate", label: "Check-out" },
+        ]
+      : [
+          // Flight/train/other fields
+          { key: "referenceNumber", label: "Ref" },
+          { key: "providerName", label: "Airline" },
+          { key: "departureDateTime", label: "Departure" },
+          { key: "flightNumber", label: "Flight" },
+          { key: "returnDepartureDateTime", label: "Return" },
+          { key: "returnFlightNumber", label: "Return flight" },
+        ];
 
   const saveExtractedField = (key: string, rawValue: string) => {
     const value = rawValue.trim();
@@ -459,11 +471,22 @@ function DocumentRow({
         <p className="text-sm font-medium text-foreground truncate">
           {doc.originalFilename ?? "Document"}
         </p>
-        {doc.documentType && (
-          <p className="text-xs text-muted-foreground capitalize">
-            {doc.documentType}
-          </p>
-        )}
+        <div className="flex items-center gap-1.5">
+          {doc.documentType && (
+            <p className="text-xs text-muted-foreground capitalize">
+              {doc.documentType.replace(/_/g, " ")}
+            </p>
+          )}
+          {(!ed || Object.keys(ed).length === 0) && (
+            <span
+              title="AI hasn't extracted details yet — click the scan icon to retry"
+              className="inline-flex items-center gap-1 text-xs text-amber-500"
+            >
+              <Sparkles className="w-3 h-3 animate-pulse" />
+              <span className="text-[11px]">Processing…</span>
+            </span>
+          )}
+        </div>
         <div className="mt-1.5 space-y-1">
           {keyFields.map(({ key, label }) => {
             const isLocked = lockedFields.includes(key);

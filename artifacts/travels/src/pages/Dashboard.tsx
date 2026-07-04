@@ -245,7 +245,7 @@ export default function Dashboard() {
 
       {/* Next trip countdown */}
       {stats?.nextTrip && nextTripCountdown !== null && (
-        <Link href={`/trips/${stats.nextTrip.id}`}>
+        <Link href={`/trips/${stats.nextTrip.id}`} className="block mb-6">
           <Card className="border-primary/20 bg-primary/5 cursor-pointer hover:bg-primary/10 transition-colors">
             <CardContent className="flex items-center gap-4 py-5">
               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">

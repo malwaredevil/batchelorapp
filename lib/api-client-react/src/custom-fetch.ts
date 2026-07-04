@@ -18,6 +18,21 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
 
+// Dev-only automation support: when the app is loaded with a
+// `?screenshotToken=...` query param (used by the automated screenshot tool,
+// which cannot rely on session cookies — see api-server's
+// `middleware/auth.ts`), remember it for the lifetime of the page and attach
+// it to every request. The server independently validates this token and
+// rejects it outright in production, so this is inert in real usage — a
+// normal user's URL never carries this param.
+let _screenshotToken: string | null = null;
+if (typeof window !== "undefined" && typeof window.location !== "undefined") {
+  const fromUrl = new URLSearchParams(window.location.search).get(
+    "screenshotToken",
+  );
+  if (fromUrl) _screenshotToken = fromUrl;
+}
+
 /**
  * Set a base URL that is prepended to every relative request URL
  * (i.e. paths that start with `/`).
@@ -356,6 +371,11 @@ export async function customFetch<T = unknown>(
     if (token) {
       headers.set("authorization", `Bearer ${token}`);
     }
+  }
+
+  // Dev-only automation support (see module-level comment above).
+  if (_screenshotToken && !headers.has("x-screenshot-token")) {
+    headers.set("x-screenshot-token", _screenshotToken);
   }
 
   const requestInfo = { method, url: resolveUrl(input) };

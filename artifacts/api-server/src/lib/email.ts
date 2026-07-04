@@ -105,11 +105,11 @@ export async function sendReminderAlertEmail(
   }
 }
 
-// Dedicated sender for elAIne assistant-composed emails (e.g. "email me that
+// Dedicated sender for Elaine assistant-composed emails (e.g. "email me that
 // list of things to do"). Defaults to the verified app.batchelor.app domain;
 // can be overridden via ELAINE_FROM_EMAIL.
 const ELAINE_FROM_EMAIL =
-  process.env.ELAINE_FROM_EMAIL || "elAIne <elAIne@app.batchelor.app>";
+  process.env.ELAINE_FROM_EMAIL || "Elaine <elAIne@app.batchelor.app>";
 
 function escapeHtml(input: string): string {
   return input
@@ -120,7 +120,7 @@ function escapeHtml(input: string): string {
     .replace(/'/g, "&#39;");
 }
 
-// Sends a plain-text body composed by elAIne to the recipient. The body is
+// Sends a plain-text body composed by Elaine to the recipient. The body is
 // always the currently-authenticated user's own account email — never a
 // model-supplied address — to prevent the assistant from being used to spam
 // or phish arbitrary addresses. `body` is escaped and rendered as simple
@@ -155,7 +155,7 @@ export async function sendAssistantEmail(
             <tr>
               <td>
                 <p style="margin: 0 0 4px; font-size: 12px; color: #0ea5e9; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
-                  From elAIne
+                  From Elaine
                 </p>
                 <h2 style="margin: 0 0 20px; font-size: 20px; color: #111;">
                   ${escapeHtml(subject)}
@@ -163,7 +163,7 @@ export async function sendAssistantEmail(
                 ${paragraphsHtml}
                 <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
                 <p style="margin: 0; font-size: 11px; color: #bbb;">
-                  Sent by elAIne, your Batchelor Travels assistant, at your request.
+                  Sent by Elaine, your Batchelor Travels assistant, at your request.
                 </p>
               </td>
             </tr>
@@ -173,7 +173,7 @@ export async function sendAssistantEmail(
     </table>
   </body>
 </html>`,
-    text: `${subject}\n\n${body}\n\n— elAIne, your Batchelor Travels assistant`,
+    text: `${subject}\n\n${body}\n\n— Elaine, your Batchelor Travels assistant`,
   });
 
   if (error) {

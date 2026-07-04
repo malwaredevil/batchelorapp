@@ -99,15 +99,15 @@ function ViewMessageDialog({
             {data ? `${data.from} · ${formatDate(data.date)}` : "Loading…"}
           </DialogDescription>
         </DialogHeader>
-        {isLoading ? (
+        {isLoading || !data ? (
           <p className="text-sm text-muted-foreground py-6 text-center">Loading email…</p>
         ) : isError ? (
           <p className="text-sm text-destructive py-6 text-center">Could not load this email.</p>
         ) : (
           <div className="space-y-3">
-            {data!.attachments.length > 0 && (
+            {data.attachments.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                {data!.attachments.map((a, i) => (
+                {data.attachments.map((a, i) => (
                   <span
                     key={i}
                     className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
@@ -119,7 +119,7 @@ function ViewMessageDialog({
               </div>
             )}
             <p className="text-sm text-foreground whitespace-pre-wrap">
-              {data!.textBody || "(no body content)"}
+              {data.textBody || "(no body content)"}
             </p>
           </div>
         )}

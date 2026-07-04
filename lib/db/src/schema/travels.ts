@@ -604,3 +604,57 @@ export type TravelsGmailScanDecisionRow =
   typeof travelsGmailScanDecisions.$inferSelect;
 export type InsertTravelsGmailScanDecision =
   typeof travelsGmailScanDecisions.$inferInsert;
+
+// Card layout preferences — lets each household member choose their own
+// display order for the movable Trip Detail page cards (top trip-info card
+// is always first and not reorderable). One row per user; `cardOrder` is the
+// list of card ids in display order, whitelisted server-side before saving.
+export const travelsCardLayoutPreferences = pgTable(
+  "travels_card_layout_preferences",
+  {
+    userId: integer("user_id").primaryKey(),
+    cardOrder: text("card_order")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+).enableRLS();
+
+export type TravelsCardLayoutPreferencesRow =
+  typeof travelsCardLayoutPreferences.$inferSelect;
+export type InsertTravelsCardLayoutPreferences =
+  typeof travelsCardLayoutPreferences.$inferInsert;
+
+// Per-trip, per-user collapse state for Trip Detail page cards — lets each
+// household member collapse cards they aren't using on a given trip (e.g.
+// hide "Packing List" once packing is done) without affecting what other
+// household members see, since trips themselves are shared.
+export const travelsTripCardCollapseState = pgTable(
+  "travels_trip_card_collapse_state",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull(),
+    tripId: integer("trip_id").notNull(),
+    collapsedCards: text("collapsed_cards")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("travels_trip_card_collapse_state_user_id_trip_id_idx").on(
+      table.userId,
+      table.tripId,
+    ),
+  ],
+).enableRLS();
+
+export type TravelsTripCardCollapseStateRow =
+  typeof travelsTripCardCollapseState.$inferSelect;
+export type InsertTravelsTripCardCollapseState =
+  typeof travelsTripCardCollapseState.$inferInsert;

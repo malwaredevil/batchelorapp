@@ -1143,6 +1143,82 @@ export function useDeleteReminder<TError = unknown, TContext = unknown>(
 }
 
 // ---------------------------------------------------------------------------
+// Trip Detail card layout (per-user reorder + collapse)
+// ---------------------------------------------------------------------------
+
+export interface CardLayoutPreference {
+  cardOrder: string[];
+}
+
+const getCardLayout = (options?: RequestInit): Promise<CardLayoutPreference> =>
+  customFetch<CardLayoutPreference>(`/api/travels/card-layout`, { ...options, method: "GET" });
+
+export const getGetCardLayoutQueryKey = () => [`/api/travels/card-layout`] as const;
+
+export function useGetCardLayout<TData = CardLayoutPreference, TError = unknown>(
+  options?: { query?: UseQueryOptions<CardLayoutPreference, TError, TData> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetCardLayoutQueryKey();
+  const queryFn: QueryFunction<CardLayoutPreference> = ({ signal }) => getCardLayout({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<CardLayoutPreference, TError, TData> & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const updateCardLayoutFn = (cardOrder: string[], options?: RequestInit): Promise<CardLayoutPreference> =>
+  customFetch<CardLayoutPreference>(`/api/travels/card-layout`, {
+    ...options, method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cardOrder }),
+  });
+
+export function useUpdateCardLayout<TError = unknown, TContext = unknown>(
+  options?: { mutation?: UseMutationOptions<CardLayoutPreference, TError, { cardOrder: string[] }, TContext> },
+): UseMutationResult<CardLayoutPreference, TError, { cardOrder: string[] }, TContext> {
+  const mutationFn: MutationFunction<CardLayoutPreference, { cardOrder: string[] }> = ({ cardOrder }) =>
+    updateCardLayoutFn(cardOrder);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+export interface TripCardCollapseState {
+  collapsedCards: string[];
+}
+
+const getTripCardCollapse = (tripId: number, options?: RequestInit): Promise<TripCardCollapseState> =>
+  customFetch<TripCardCollapseState>(`/api/travels/trips/${tripId}/card-collapse`, { ...options, method: "GET" });
+
+export const getGetTripCardCollapseQueryKey = (tripId: number) =>
+  [`/api/travels/trips/${tripId}/card-collapse`] as const;
+
+export function useGetTripCardCollapse<TData = TripCardCollapseState, TError = unknown>(
+  tripId: number,
+  options?: { query?: UseQueryOptions<TripCardCollapseState, TError, TData> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetTripCardCollapseQueryKey(tripId);
+  const queryFn: QueryFunction<TripCardCollapseState> = ({ signal }) => getTripCardCollapse(tripId, { signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<TripCardCollapseState, TError, TData> & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const updateTripCardCollapseFn = (tripId: number, collapsedCards: string[], options?: RequestInit): Promise<TripCardCollapseState> =>
+  customFetch<TripCardCollapseState>(`/api/travels/trips/${tripId}/card-collapse`, {
+    ...options, method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ collapsedCards }),
+  });
+
+export function useUpdateTripCardCollapse<TError = unknown, TContext = unknown>(
+  options?: { mutation?: UseMutationOptions<TripCardCollapseState, TError, { tripId: number; collapsedCards: string[] }, TContext> },
+): UseMutationResult<TripCardCollapseState, TError, { tripId: number; collapsedCards: string[] }, TContext> {
+  const mutationFn: MutationFunction<TripCardCollapseState, { tripId: number; collapsedCards: string[] }> = ({ tripId, collapsedCards }) =>
+    updateTripCardCollapseFn(tripId, collapsedCards);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+// ---------------------------------------------------------------------------
 // Destinations (grouped timeline)
 // ---------------------------------------------------------------------------
 

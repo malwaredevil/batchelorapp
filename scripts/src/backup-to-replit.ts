@@ -417,6 +417,21 @@ CREATE TABLE IF NOT EXISTS travels_gmail_scan_decisions (
   created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Per-user Trip Detail card layout / collapse preferences
+CREATE TABLE IF NOT EXISTS travels_card_layout_preferences (
+  user_id     INTEGER PRIMARY KEY,
+  card_order  TEXT[] NOT NULL DEFAULT '{}'::text[],
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS travels_trip_card_collapse_state (
+  id                SERIAL PRIMARY KEY,
+  user_id           INTEGER NOT NULL,
+  trip_id           INTEGER NOT NULL,
+  collapsed_cards   TEXT[] NOT NULL DEFAULT '{}'::text[],
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 `;
 
 async function copyTable(
@@ -969,6 +984,20 @@ async function main() {
     jsonbColumns: ["extracted_data"],
   });
   await resetSequence(dest, "travels_gmail_scan_decisions", "id");
+
+  // ── Per-user Trip Detail card layout / collapse preferences ───────────────
+  summary["travels_card_layout_preferences"] = await copyTable(source, dest, {
+    table: "travels_card_layout_preferences",
+    columns: ["user_id", "card_order", "updated_at"],
+    orderBy: "user_id",
+  });
+
+  summary["travels_trip_card_collapse_state"] = await copyTable(source, dest, {
+    table: "travels_trip_card_collapse_state",
+    columns: ["id", "user_id", "trip_id", "collapsed_cards", "updated_at"],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_trip_card_collapse_state", "id");
 
   // ── Record backup history ─────────────────────────────────────────────────
   const note = Object.entries(summary)

@@ -20,6 +20,10 @@ import {
   useDeleteReminder,
   useListTravelsAppUsers,
   useGetCalendarStatus,
+  useGetCardLayout,
+  useUpdateCardLayout,
+  useGetTripCardCollapse,
+  useUpdateTripCardCollapse,
   getTripDocumentDownloadUrl,
   getTripPhotoImageUrl,
   getListTripsQueryKey,
@@ -43,6 +47,17 @@ import { MagnetCheckDialog } from "@/components/MagnetCheckDialog";
 import { ReminderEditDialog } from "@/components/ReminderEditDialog";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import { SortableSection } from "@/components/trip-detail/sortable-section";
+import { CardShell, DragHandle } from "@/components/trip-detail/section-controls";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -122,6 +137,27 @@ type PackingItem = { item: string; packed: boolean };
 type TodoItem = { item: string; done: boolean };
 
 const ALL_STATUSES: TripStatus[] = ["wishlist", "planning", "booked", "active", "completed"];
+// Ids of the movable Trip Detail cards, in default display order. The top
+// trip-info card is fixed and never included here. "packing-todo" is a
+// single sortable unit even though it renders two independently-collapsible
+// columns (see COLLAPSE_CARD_IDS below).
+const DEFAULT_CARD_ORDER = [
+  "reminders",
+  "itinerary",
+  "documents",
+  "packing-todo",
+  "photos",
+  "magnets",
+  "weather-nearby",
+] as const;
+
+function mergeCardOrder(saved: string[] | undefined): string[] {
+  const known = new Set<string>(DEFAULT_CARD_ORDER);
+  const cleaned = (saved ?? []).filter((cardId) => known.has(cardId));
+  const missing = DEFAULT_CARD_ORDER.filter((cardId) => !cleaned.includes(cardId));
+  return [...cleaned, ...missing];
+}
+
 const STATUS_LABELS: Record<TripStatus, string> = {
   wishlist: "Wishlist",
   planning: "Planning",
@@ -1520,6 +1556,46 @@ export default function TripDetail({ id }: { id: number }) {
   const { data: trip, isLoading } = useGetTrip(id);
   const { data: reminders = [] } = useListReminders(id);
   const updateTrip = useUpdateTrip();
+  const { data: cardLayout } = useGetCardLayout();
+  const updateCardLayout = useUpdateCardLayout();
+  const { data: tripCardCollapse } = useGetTripCardCollapse(id);
+  const updateTripCardCollapse = useUpdateTripCardCollapse();
+  const [cardOrder, setCardOrder] = useState<string[]>([...DEFAULT_CARD_ORDER]);
+  const [collapsedCards, setCollapsedCards] = useState<Set<string>>(new Set());
+  const dragSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
+
+  useEffect(() => {
+    setCardOrder(mergeCardOrder(cardLayout?.cardOrder));
+  }, [cardLayout]);
+
+  useEffect(() => {
+    setCollapsedCards(new Set(tripCardCollapse?.collapsedCards ?? []));
+  }, [tripCardCollapse]);
+
+  const handleCardDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setCardOrder((prev) => {
+      const oldIndex = prev.indexOf(String(active.id));
+      const newIndex = prev.indexOf(String(over.id));
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      const next = arrayMove(prev, oldIndex, newIndex);
+      updateCardLayout.mutate({ cardOrder: next });
+      return next;
+    });
+  };
+
+  const toggleCardCollapse = (cardId: string) => {
+    setCollapsedCards((prev) => {
+      const next = new Set(prev);
+      if (next.has(cardId)) next.delete(cardId);
+      else next.add(cardId);
+      updateTripCardCollapse.mutate({ tripId: id, collapsedCards: [...next] });
+      return next;
+    });
+  };
   const setTripIcon = useSetTripIcon();
   const deleteTrip = useDeleteTrip();
   const generateItinerary = useGenerateItinerary();
@@ -2144,67 +2220,7 @@ export default function TripDetail({ id }: { id: number }) {
         </CardContent>
       </Card>
 
-      {/* Maps: weather, static map & nearby places */}
-      {trip.lat != null && trip.lng != null && (
-        <TripWeatherAndPlaces tripId={trip.id} lat={trip.lat} lng={trip.lng} />
-      )}
-
-      {/* Photos */}
-      {trip && (
-        <PhotoGridSection
-          tripId={trip.id}
-          photoType="photo"
-          title="Photos"
-          icon={<Camera className="w-5 h-5" />}
-          emptyText="No photos yet — add some memories"
-          addLabel="Add photo"
-          iconPhotoId={trip.iconPhotoId}
-          settingIcon={setTripIcon.isPending}
-          onSetIcon={(photoId) =>
-            setTripIcon.mutate(
-              { tripId: trip.id, photoId },
-              {
-                onSuccess: () => {
-                  qc.invalidateQueries({ queryKey: getGetTripQueryKey(trip.id) });
-                  toast.success("Trip cover photo updated");
-                },
-                onError: () => toast.error("Failed to set trip cover photo"),
-              },
-            )
-          }
-        />
-      )}
-
-      {/* Magnets */}
-      {trip && (
-        <PhotoGridSection
-          tripId={trip.id}
-          photoType="magnet"
-          title="Magnets"
-          icon={<Magnet className="w-5 h-5" />}
-          emptyText="No magnets yet — add a photo to use as the trip icon"
-          addLabel="Add magnet"
-          iconPhotoId={trip.iconPhotoId}
-          settingIcon={setTripIcon.isPending}
-          onSetIcon={(photoId) =>
-            setTripIcon.mutate(
-              { tripId: trip.id, photoId },
-              {
-                onSuccess: () => {
-                  qc.invalidateQueries({ queryKey: getGetTripQueryKey(trip.id) });
-                  toast.success("Trip cover photo updated");
-                },
-                onError: () => toast.error("Failed to set trip cover photo"),
-              },
-            )
-          }
-        />
-      )}
-
-      {/* Reminders */}
-      {trip && <RemindersSection tripId={trip.id} />}
-
-      {/* Google Calendar link */}
+      {/* Google Calendar link — always visible, not part of the reorderable cards */}
       {canCalendar && (
         <a
           href={buildCalendarUrl(
@@ -2223,256 +2239,417 @@ export default function TripDetail({ id }: { id: number }) {
         </a>
       )}
 
-      {/* Itinerary Builder */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <h2 className="font-serif text-xl text-foreground">Itinerary</h2>
-          <div className="flex items-center gap-2 flex-wrap">
-            {itineraryDirty && (
-              <Button
-                size="sm"
-                onClick={handleSaveItinerary}
-                disabled={updateTrip.isPending}
-              >
-                Save itinerary
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setAddingDay(true)}
-              disabled={addingDay}
-            >
-              <Plus className="w-4 h-4 mr-1" />
-              Add day
-            </Button>
-            {localItinerary && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleGenerateItinerary}
-                disabled={generateItinerary.isPending}
-              >
-                <RefreshCw className={`w-4 h-4 mr-1.5 ${generateItinerary.isPending ? "animate-spin" : ""}`} />
-                AI regenerate
-              </Button>
-            )}
+      {/* Reorderable / collapsible cards — order and collapse state are per-user */}
+      <DndContext
+        sensors={dragSensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleCardDragEnd}
+      >
+        <SortableContext items={cardOrder} strategy={verticalListSortingStrategy}>
+          <div className="space-y-6">
+            {cardOrder.map((cardId) => (
+              <SortableSection key={cardId} id={cardId}>
+                {({ dragHandleListeners, dragHandleAttributes }) => {
+                  switch (cardId) {
+                    case "weather-nearby":
+                      return trip.lat != null && trip.lng != null ? (
+                        <CardShell
+                          title="Weather & nearby"
+                          icon={<Cloud className="w-5 h-5" />}
+                          collapsed={collapsedCards.has("weather-nearby")}
+                          onToggleCollapse={() => toggleCardCollapse("weather-nearby")}
+                          dragHandleListeners={dragHandleListeners}
+                          dragHandleAttributes={dragHandleAttributes}
+                        >
+                          <TripWeatherAndPlaces tripId={trip.id} lat={trip.lat} lng={trip.lng} />
+                        </CardShell>
+                      ) : null;
+
+                    case "photos":
+                      return (
+                        <CardShell
+                          title="Photos"
+                          icon={<Camera className="w-5 h-5" />}
+                          collapsed={collapsedCards.has("photos")}
+                          onToggleCollapse={() => toggleCardCollapse("photos")}
+                          dragHandleListeners={dragHandleListeners}
+                          dragHandleAttributes={dragHandleAttributes}
+                        >
+                          <PhotoGridSection
+                            tripId={trip.id}
+                            photoType="photo"
+                            title="Photos"
+                            icon={<Camera className="w-5 h-5" />}
+                            emptyText="No photos yet — add some memories"
+                            addLabel="Add photo"
+                            iconPhotoId={trip.iconPhotoId}
+                            settingIcon={setTripIcon.isPending}
+                            onSetIcon={(photoId) =>
+                              setTripIcon.mutate(
+                                { tripId: trip.id, photoId },
+                                {
+                                  onSuccess: () => {
+                                    qc.invalidateQueries({ queryKey: getGetTripQueryKey(trip.id) });
+                                    toast.success("Trip cover photo updated");
+                                  },
+                                  onError: () => toast.error("Failed to set trip cover photo"),
+                                },
+                              )
+                            }
+                          />
+                        </CardShell>
+                      );
+
+                    case "magnets":
+                      return (
+                        <CardShell
+                          title="Magnets"
+                          icon={<Magnet className="w-5 h-5" />}
+                          collapsed={collapsedCards.has("magnets")}
+                          onToggleCollapse={() => toggleCardCollapse("magnets")}
+                          dragHandleListeners={dragHandleListeners}
+                          dragHandleAttributes={dragHandleAttributes}
+                        >
+                          <PhotoGridSection
+                            tripId={trip.id}
+                            photoType="magnet"
+                            title="Magnets"
+                            icon={<Magnet className="w-5 h-5" />}
+                            emptyText="No magnets yet — add a photo to use as the trip icon"
+                            addLabel="Add magnet"
+                            iconPhotoId={trip.iconPhotoId}
+                            settingIcon={setTripIcon.isPending}
+                            onSetIcon={(photoId) =>
+                              setTripIcon.mutate(
+                                { tripId: trip.id, photoId },
+                                {
+                                  onSuccess: () => {
+                                    qc.invalidateQueries({ queryKey: getGetTripQueryKey(trip.id) });
+                                    toast.success("Trip cover photo updated");
+                                  },
+                                  onError: () => toast.error("Failed to set trip cover photo"),
+                                },
+                              )
+                            }
+                          />
+                        </CardShell>
+                      );
+
+                    case "reminders":
+                      return (
+                        <CardShell
+                          title="Reminders"
+                          icon={<Bell className="w-5 h-5" />}
+                          collapsed={collapsedCards.has("reminders")}
+                          onToggleCollapse={() => toggleCardCollapse("reminders")}
+                          dragHandleListeners={dragHandleListeners}
+                          dragHandleAttributes={dragHandleAttributes}
+                        >
+                          <RemindersSection tripId={trip.id} />
+                        </CardShell>
+                      );
+
+                    case "itinerary":
+                      return (
+                        <CardShell
+                          title="Itinerary"
+                          collapsed={collapsedCards.has("itinerary")}
+                          onToggleCollapse={() => toggleCardCollapse("itinerary")}
+                          dragHandleListeners={dragHandleListeners}
+                          dragHandleAttributes={dragHandleAttributes}
+                        >
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <h2 className="font-serif text-xl text-foreground">Itinerary</h2>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {itineraryDirty && (
+                                  <Button
+                                    size="sm"
+                                    onClick={handleSaveItinerary}
+                                    disabled={updateTrip.isPending}
+                                  >
+                                    Save itinerary
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setAddingDay(true)}
+                                  disabled={addingDay}
+                                >
+                                  <Plus className="w-4 h-4 mr-1" />
+                                  Add day
+                                </Button>
+                                {localItinerary && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={handleGenerateItinerary}
+                                    disabled={generateItinerary.isPending}
+                                  >
+                                    <RefreshCw className={`w-4 h-4 mr-1.5 ${generateItinerary.isPending ? "animate-spin" : ""}`} />
+                                    AI regenerate
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Days list */}
+                            {localItinerary?.days && localItinerary.days.length > 0 && (
+                              <div className="space-y-2">
+                                {(() => {
+                                  const validDates = localItinerary.days
+                                    .map((d) => d.date)
+                                    .filter((d): d is string => !!d)
+                                    .sort();
+                                  const earliestDate = validDates[0];
+                                  return localItinerary.days.map((day, i) => {
+                                    const dayNumber = day.date && earliestDate
+                                      ? Math.round(
+                                          (new Date(`${day.date}T12:00:00`).getTime() -
+                                            new Date(`${earliestDate}T12:00:00`).getTime()) /
+                                            86400000,
+                                        ) + 1
+                                      : i + 1;
+                                    return (
+                                      <DayCard
+                                        key={i}
+                                        day={day}
+                                        index={i}
+                                        dayNumber={dayNumber}
+                                        onRefresh={handleRefreshDay}
+                                        refreshing={refreshingDay === i}
+                                        onAddActivity={(act) => handleAddActivity(i, act)}
+                                        onDeleteActivity={(ai) => handleDeleteActivity(i, ai)}
+                                        onDeleteDay={() => handleDeleteDay(i)}
+                                        onConfirmActivity={(ai) => handleConfirmActivity(i, ai)}
+                                      />
+                                    );
+                                  });
+                                })()}
+                              </div>
+                            )}
+
+                            {/* Add day inline form */}
+                            {addingDay && (
+                              <Card className="border-border/50">
+                                <CardContent className="py-4 space-y-3">
+                                  <p className="text-sm font-medium text-foreground">New day</p>
+                                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                    <div className="space-y-1.5">
+                                      <Label>Title *</Label>
+                                      <Input
+                                        placeholder="e.g. Arrival & Old Town"
+                                        value={dayForm.title}
+                                        onChange={(e) => setDayForm((f) => ({ ...f, title: e.target.value }))}
+                                        onKeyDown={(e) => e.key === "Enter" && handleAddDay()}
+                                        autoFocus
+                                      />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                      <Label>Date (optional)</Label>
+                                      <Input
+                                        type="date"
+                                        value={dayForm.date}
+                                        onChange={(e) => setDayForm((f) => ({ ...f, date: e.target.value }))}
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <Button size="sm" onClick={handleAddDay} disabled={!dayForm.title.trim()}>
+                                      <Plus className="w-3.5 h-3.5 mr-1" />
+                                      Add day
+                                    </Button>
+                                    <Button size="sm" variant="ghost" onClick={() => { setAddingDay(false); setDayForm({ date: "", title: "" }); }}>
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            )}
+
+                            {/* AI generator — shown when no itinerary yet */}
+                            {!localItinerary && !addingDay && (
+                              <Card className="border-border/50">
+                                <CardContent className="py-4 space-y-4">
+                                  <p className="text-sm text-muted-foreground">
+                                    Generate a day-by-day itinerary with AI, or add days manually with the button above.
+                                  </p>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                      <Label>Trip style</Label>
+                                      <Select
+                                        value={itinStyle}
+                                        onValueChange={(v) => setItinStyle(v as typeof itinStyle)}
+                                      >
+                                        <SelectTrigger>
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="relaxed">Relaxed — slow, few activities</SelectItem>
+                                          <SelectItem value="balanced">Balanced — good mix</SelectItem>
+                                          <SelectItem value="packed">Packed — see everything</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label>Interests</Label>
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {INTERESTS_OPTIONS.map((interest) => (
+                                          <button
+                                            key={interest}
+                                            onClick={() => toggleInterest(interest)}
+                                            className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors capitalize ${
+                                              itinInterests.includes(interest)
+                                                ? "bg-primary text-primary-foreground border-primary"
+                                                : "bg-card text-muted-foreground border-border hover:border-primary/50"
+                                            }`}
+                                          >
+                                            {interest}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <Button
+                                    onClick={handleGenerateItinerary}
+                                    disabled={generateItinerary.isPending}
+                                    className="w-full sm:w-auto"
+                                  >
+                                    <Sparkles className={`w-4 h-4 mr-2 ${generateItinerary.isPending ? "animate-pulse" : ""}`} />
+                                    {generateItinerary.isPending ? "Building your itinerary..." : "Generate itinerary"}
+                                  </Button>
+                                </CardContent>
+                              </Card>
+                            )}
+
+                            {/* Style/interests controls when AI-generated itinerary exists but user wants to regenerate */}
+                            {localItinerary && !addingDay && generateItinerary.isPending && (
+                              <div className="text-sm text-muted-foreground flex items-center gap-2">
+                                <RefreshCw className="w-4 h-4 animate-spin" />
+                                Building your itinerary…
+                              </div>
+                            )}
+                          </div>
+                        </CardShell>
+                      );
+
+                    case "documents":
+                      return (
+                        <CardShell
+                          title="Documents"
+                          collapsed={collapsedCards.has("documents")}
+                          onToggleCollapse={() => toggleCardCollapse("documents")}
+                          dragHandleListeners={dragHandleListeners}
+                          dragHandleAttributes={dragHandleAttributes}
+                        >
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                              <h2 className="font-serif text-xl text-foreground">Documents</h2>
+                              <label className="cursor-pointer">
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  accept=".pdf,.jpg,.jpeg,.png,.webp"
+                                  onChange={handleFileUpload}
+                                  disabled={uploadingDoc}
+                                />
+                                <span
+                                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-sm font-medium transition-colors ${
+                                    uploadingDoc
+                                      ? "opacity-50 cursor-not-allowed bg-card text-muted-foreground"
+                                      : "bg-card text-foreground hover:bg-muted cursor-pointer"
+                                  }`}
+                                >
+                                  <Upload className="w-4 h-4" />
+                                  {uploadingDoc ? "Uploading..." : "Upload"}
+                                </span>
+                              </label>
+                            </div>
+
+                            <Card className="border-border/50">
+                              <CardContent className="py-2">
+                                {documents.length === 0 ? (
+                                  <div className="flex flex-col items-center gap-2 py-8 text-center">
+                                    <FileText className="w-8 h-8 text-muted-foreground/40" />
+                                    <p className="text-sm text-muted-foreground">
+                                      No documents yet. Upload bookings, boarding passes, or confirmations.
+                                    </p>
+                                  </div>
+                                ) : (
+                                  documents.map((doc) => (
+                                    <DocumentRow
+                                      key={doc.id}
+                                      doc={doc}
+                                      tripId={id}
+                                      onDelete={handleDeleteDocument}
+                                    />
+                                  ))
+                                )}
+                              </CardContent>
+                            </Card>
+                          </div>
+                        </CardShell>
+                      );
+
+                    case "packing-todo":
+                      return (
+                        <div className="relative">
+                          <DragHandle
+                            listeners={dragHandleListeners}
+                            attributes={dragHandleAttributes}
+                            className="absolute -top-2 -left-2 z-10 bg-card border border-border/50 rounded-full shadow-sm"
+                          />
+                          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 pt-2">
+                            <CardShell
+                              title="Packing List"
+                              collapsed={collapsedCards.has("packing")}
+                              onToggleCollapse={() => toggleCardCollapse("packing")}
+                            >
+                              <div className="space-y-4">
+                                <h2 className="font-serif text-xl text-foreground">Packing List</h2>
+                                <Card className="border-border/50">
+                                  <CardContent className="py-4">
+                                    <PackingList
+                                      items={packingList}
+                                      tripId={id}
+                                      onSave={handleSavePackingList}
+                                    />
+                                  </CardContent>
+                                </Card>
+                              </div>
+                            </CardShell>
+
+                            <CardShell
+                              title="To-Do List"
+                              collapsed={collapsedCards.has("todo")}
+                              onToggleCollapse={() => toggleCardCollapse("todo")}
+                            >
+                              <div className="space-y-4">
+                                <h2 className="font-serif text-xl text-foreground">To-Do List</h2>
+                                <Card className="border-border/50">
+                                  <CardContent className="py-4">
+                                    <TodoList
+                                      items={todoList}
+                                      onSave={handleSaveTodoList}
+                                    />
+                                  </CardContent>
+                                </Card>
+                              </div>
+                            </CardShell>
+                          </div>
+                        </div>
+                      );
+
+                    default:
+                      return null;
+                  }
+                }}
+              </SortableSection>
+            ))}
           </div>
-        </div>
-
-        {/* Days list */}
-        {localItinerary?.days && localItinerary.days.length > 0 && (
-          <div className="space-y-2">
-            {(() => {
-              const validDates = localItinerary.days
-                .map((d) => d.date)
-                .filter((d): d is string => !!d)
-                .sort();
-              const earliestDate = validDates[0];
-              return localItinerary.days.map((day, i) => {
-                const dayNumber = day.date && earliestDate
-                  ? Math.round(
-                      (new Date(`${day.date}T12:00:00`).getTime() -
-                        new Date(`${earliestDate}T12:00:00`).getTime()) /
-                        86400000,
-                    ) + 1
-                  : i + 1;
-                return (
-                  <DayCard
-                    key={i}
-                    day={day}
-                    index={i}
-                    dayNumber={dayNumber}
-                    onRefresh={handleRefreshDay}
-                    refreshing={refreshingDay === i}
-                    onAddActivity={(act) => handleAddActivity(i, act)}
-                    onDeleteActivity={(ai) => handleDeleteActivity(i, ai)}
-                    onDeleteDay={() => handleDeleteDay(i)}
-                    onConfirmActivity={(ai) => handleConfirmActivity(i, ai)}
-                  />
-                );
-              });
-            })()}
-          </div>
-        )}
-
-        {/* Add day inline form */}
-        {addingDay && (
-          <Card className="border-border/50">
-            <CardContent className="py-4 space-y-3">
-              <p className="text-sm font-medium text-foreground">New day</p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label>Title *</Label>
-                  <Input
-                    placeholder="e.g. Arrival & Old Town"
-                    value={dayForm.title}
-                    onChange={(e) => setDayForm((f) => ({ ...f, title: e.target.value }))}
-                    onKeyDown={(e) => e.key === "Enter" && handleAddDay()}
-                    autoFocus
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Date (optional)</Label>
-                  <Input
-                    type="date"
-                    value={dayForm.date}
-                    onChange={(e) => setDayForm((f) => ({ ...f, date: e.target.value }))}
-                  />
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" onClick={handleAddDay} disabled={!dayForm.title.trim()}>
-                  <Plus className="w-3.5 h-3.5 mr-1" />
-                  Add day
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => { setAddingDay(false); setDayForm({ date: "", title: "" }); }}>
-                  Cancel
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* AI generator — shown when no itinerary yet */}
-        {!localItinerary && !addingDay && (
-          <Card className="border-border/50">
-            <CardContent className="py-4 space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Generate a day-by-day itinerary with AI, or add days manually with the button above.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Trip style</Label>
-                  <Select
-                    value={itinStyle}
-                    onValueChange={(v) => setItinStyle(v as typeof itinStyle)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="relaxed">Relaxed — slow, few activities</SelectItem>
-                      <SelectItem value="balanced">Balanced — good mix</SelectItem>
-                      <SelectItem value="packed">Packed — see everything</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Interests</Label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {INTERESTS_OPTIONS.map((interest) => (
-                      <button
-                        key={interest}
-                        onClick={() => toggleInterest(interest)}
-                        className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors capitalize ${
-                          itinInterests.includes(interest)
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "bg-card text-muted-foreground border-border hover:border-primary/50"
-                        }`}
-                      >
-                        {interest}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <Button
-                onClick={handleGenerateItinerary}
-                disabled={generateItinerary.isPending}
-                className="w-full sm:w-auto"
-              >
-                <Sparkles className={`w-4 h-4 mr-2 ${generateItinerary.isPending ? "animate-pulse" : ""}`} />
-                {generateItinerary.isPending ? "Building your itinerary..." : "Generate itinerary"}
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Style/interests controls when AI-generated itinerary exists but user wants to regenerate */}
-        {localItinerary && !addingDay && generateItinerary.isPending && (
-          <div className="text-sm text-muted-foreground flex items-center gap-2">
-            <RefreshCw className="w-4 h-4 animate-spin" />
-            Building your itinerary…
-          </div>
-        )}
-      </div>
-
-      {/* Documents */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-serif text-xl text-foreground">Documents</h2>
-          <label className="cursor-pointer">
-            <input
-              type="file"
-              className="hidden"
-              accept=".pdf,.jpg,.jpeg,.png,.webp"
-              onChange={handleFileUpload}
-              disabled={uploadingDoc}
-            />
-            <span
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-sm font-medium transition-colors ${
-                uploadingDoc
-                  ? "opacity-50 cursor-not-allowed bg-card text-muted-foreground"
-                  : "bg-card text-foreground hover:bg-muted cursor-pointer"
-              }`}
-            >
-              <Upload className="w-4 h-4" />
-              {uploadingDoc ? "Uploading..." : "Upload"}
-            </span>
-          </label>
-        </div>
-
-        <Card className="border-border/50">
-          <CardContent className="py-2">
-            {documents.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-8 text-center">
-                <FileText className="w-8 h-8 text-muted-foreground/40" />
-                <p className="text-sm text-muted-foreground">
-                  No documents yet. Upload bookings, boarding passes, or confirmations.
-                </p>
-              </div>
-            ) : (
-              documents.map((doc) => (
-                <DocumentRow
-                  key={doc.id}
-                  doc={doc}
-                  tripId={id}
-                  onDelete={handleDeleteDocument}
-                />
-              ))
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Packing List + To-Do List side by side */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-        <div className="space-y-4">
-          <h2 className="font-serif text-xl text-foreground">Packing List</h2>
-          <Card className="border-border/50">
-            <CardContent className="py-4">
-              <PackingList
-                items={packingList}
-                tripId={id}
-                onSave={handleSavePackingList}
-              />
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="space-y-4">
-          <h2 className="font-serif text-xl text-foreground">To-Do List</h2>
-          <Card className="border-border/50">
-            <CardContent className="py-4">
-              <TodoList
-                items={todoList}
-                onSave={handleSaveTodoList}
-              />
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+        </SortableContext>
+      </DndContext>
 
       {/* Delete confirm dialog */}
       <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>

@@ -795,4 +795,31 @@ export const STATEMENTS: string[] = [
      ON travels_gmail_scan_decisions (dedupe_key)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS travels_gmail_scan_decisions_user_id_gmail_message_id_idx
      ON travels_gmail_scan_decisions (user_id, gmail_message_id)`,
+
+  // ── Trip Detail card layout (per-user reorder + collapse) ──────────────────
+  // Lets each household member choose their own display order for the
+  // movable Trip Detail page cards (top trip-info card is always first and
+  // is not reorderable). One row per user; card_order is validated/
+  // whitelisted server-side before being persisted.
+  `CREATE TABLE IF NOT EXISTS travels_card_layout_preferences (
+    user_id     INTEGER PRIMARY KEY,
+    card_order  TEXT[] NOT NULL DEFAULT '{}'::text[],
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_card_layout_preferences ENABLE ROW LEVEL SECURITY`,
+
+  // Per-trip, per-user collapse state for Trip Detail page cards — lets each
+  // household member collapse cards they aren't using on a given trip (e.g.
+  // hide "Packing List" once packing is done) without affecting what other
+  // household members see, since trips themselves are shared.
+  `CREATE TABLE IF NOT EXISTS travels_trip_card_collapse_state (
+    id                SERIAL PRIMARY KEY,
+    user_id           INTEGER NOT NULL,
+    trip_id           INTEGER NOT NULL,
+    collapsed_cards   TEXT[] NOT NULL DEFAULT '{}'::text[],
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_trip_card_collapse_state ENABLE ROW LEVEL SECURITY`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS travels_trip_card_collapse_state_user_id_trip_id_idx
+     ON travels_trip_card_collapse_state (user_id, trip_id)`,
 ];

@@ -83,7 +83,6 @@
     "zod": "catalog:"
   },
   "dependencies": {
-    "@e965/xlsx": "^0.20.3",
     "dompurify": "^3.4.11",
     "leaflet": "^1.9.4"
   }

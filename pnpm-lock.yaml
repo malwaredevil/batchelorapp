@@ -874,9 +874,6 @@ importers:
 
   artifacts/travels:
     dependencies:
-      '@e965/xlsx':
-        specifier: ^0.20.3
-        version: 0.20.3
       dompurify:
         specifier: ^3.4.11
         version: 3.4.11
@@ -1482,11 +1479,6 @@ packages:
 
   '@drizzle-team/brocli@0.10.2':
     resolution: {integrity: sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w==}
-
-  '@e965/xlsx@0.20.3':
-    resolution: {integrity: sha512-703RN/3OdsRD5mtse2HBX7Um7xwaP9tlswEG6svOtjqokXoX7rJdQj7DyabD2I+xk22RgaIIU+R6BHgkpZGB/w==}
-    engines: {node: '>=0.8'}
-    hasBin: true
 
   '@emnapi/runtime@1.11.1':
     resolution: {integrity: sha512-vgj7R3y3Wgx24IQaGPA/R6YFXLHVMOZ0uVEyIQPaWs+rd1AzfEMXlAC22FYwO1XkKR6NPsq7mUandH8oIRdZFw==}
@@ -5066,8 +5058,6 @@ snapshots:
   '@date-fns/tz@1.4.1': {}
 
   '@drizzle-team/brocli@0.10.2': {}
-
-  '@e965/xlsx@0.20.3': {}
 
   '@emnapi/runtime@1.11.1':
     dependencies:

@@ -6,7 +6,6 @@ import {
   Plane,
   Compass,
   Star,
-  Upload,
   LogOut,
   ChevronDown,
   MapPin,
@@ -55,7 +54,6 @@ const DISCOVER_NAV_ITEMS: NavItem[] = [
 
 const PLAN_NAV_ITEMS: NavItem[] = [
   { href: "/travel-calendar", label: "Travel Calendar", icon: CalendarDays },
-  { href: "/import", label: "Import", icon: Upload },
   { href: "/gmail", label: "Gmail", icon: Mail },
 ];
 

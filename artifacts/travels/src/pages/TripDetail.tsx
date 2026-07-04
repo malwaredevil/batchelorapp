@@ -143,6 +143,12 @@ import {
   Wind,
   Flower2,
   Paperclip,
+  BedDouble,
+  Anchor,
+  Shield,
+  Compass,
+  Ticket,
+  Bus,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -653,6 +659,79 @@ function getFieldsForDocType(
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
+const IMAGE_EXTS = new Set(["jpg", "jpeg", "png", "gif", "webp"]);
+
+type DocVisualStyle = {
+  Icon: React.ElementType;
+  bg: string;
+  fg: string;
+};
+
+function getDocVisualStyle(
+  documentType: string | null | undefined,
+  ext: string | undefined,
+): DocVisualStyle {
+  const t = (documentType ?? "").toLowerCase();
+  if (t.includes("flight") || t.includes("boarding"))
+    return { Icon: Plane, bg: "bg-blue-100 dark:bg-blue-950", fg: "text-blue-600 dark:text-blue-400" };
+  if (t.includes("hotel") || t === "accommodation")
+    return { Icon: BedDouble, bg: "bg-green-100 dark:bg-green-950", fg: "text-green-600 dark:text-green-400" };
+  if (t === "car_rental")
+    return { Icon: Car, bg: "bg-orange-100 dark:bg-orange-950", fg: "text-orange-600 dark:text-orange-400" };
+  if (t.includes("train"))
+    return { Icon: Train, bg: "bg-violet-100 dark:bg-violet-950", fg: "text-violet-600 dark:text-violet-400" };
+  if (t.includes("bus") || t.includes("coach"))
+    return { Icon: Bus, bg: "bg-teal-100 dark:bg-teal-950", fg: "text-teal-600 dark:text-teal-400" };
+  if (t.includes("ferry") || t.includes("cruise"))
+    return { Icon: Anchor, bg: "bg-sky-100 dark:bg-sky-950", fg: "text-sky-600 dark:text-sky-400" };
+  if (t.includes("insurance"))
+    return { Icon: Shield, bg: "bg-amber-100 dark:bg-amber-950", fg: "text-amber-600 dark:text-amber-400" };
+  if (t.includes("visa") || t.includes("esta") || t.includes("eta") || t.includes("entry"))
+    return { Icon: Globe, bg: "bg-indigo-100 dark:bg-indigo-950", fg: "text-indigo-600 dark:text-indigo-400" };
+  if (t.includes("tour") || t.includes("activity") || t.includes("excursion"))
+    return { Icon: Compass, bg: "bg-emerald-100 dark:bg-emerald-950", fg: "text-emerald-600 dark:text-emerald-400" };
+  if (t.includes("event") || t.includes("concert") || t.includes("show"))
+    return { Icon: Ticket, bg: "bg-rose-100 dark:bg-rose-950", fg: "text-rose-600 dark:text-rose-400" };
+  if (t.includes("restaurant") || t.includes("dining"))
+    return { Icon: UtensilsCrossed, bg: "bg-red-100 dark:bg-red-950", fg: "text-red-600 dark:text-red-400" };
+  if (t.includes("transfer") || t.includes("taxi") || t.includes("shuttle"))
+    return { Icon: Car, bg: "bg-slate-100 dark:bg-slate-800", fg: "text-slate-500 dark:text-slate-400" };
+  // File-type fallbacks
+  if (ext === "pdf")
+    return { Icon: FileText, bg: "bg-red-50 dark:bg-red-950/60", fg: "text-red-500 dark:text-red-400" };
+  return { Icon: FileText, bg: "bg-secondary", fg: "text-muted-foreground" };
+}
+
+function DocTypeVisual({
+  doc,
+  tripId,
+}: {
+  doc: TripDocument;
+  tripId: number;
+}) {
+  const [imgError, setImgError] = useState(false);
+  const ext = doc.originalFilename?.split(".").pop()?.toLowerCase();
+  const isImage = IMAGE_EXTS.has(ext ?? "") && !imgError;
+
+  if (isImage) {
+    return (
+      <img
+        src={getTripDocumentDownloadUrl(tripId, doc.id)}
+        alt=""
+        className="w-9 h-9 rounded-lg object-cover shrink-0 ring-1 ring-border/40"
+        onError={() => setImgError(true)}
+      />
+    );
+  }
+
+  const { Icon, bg, fg } = getDocVisualStyle(doc.documentType, ext);
+  return (
+    <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${bg}`}>
+      <Icon className={`w-4 h-4 ${fg}`} />
+    </div>
+  );
+}
+
 function DocumentRow({
   doc,
   tripId,
@@ -668,7 +747,6 @@ function DocumentRow({
   const walletPass = useGetTripDocumentWalletPass();
   const linkGmail = useLinkGmailMessage();
   const [addMoreOpen, setAddMoreOpen] = useState(false);
-  const ext = doc.originalFilename?.split(".").pop()?.toLowerCase();
   const ed = doc.extractedData as Record<string, unknown> | null;
   const lockedFields = doc.lockedFields ?? [];
 
@@ -740,9 +818,7 @@ function DocumentRow({
   return (
     <>
     <div className="flex items-start gap-3 py-3 border-b border-border/50 last:border-0">
-      <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center shrink-0 text-muted-foreground text-xs font-mono uppercase">
-        {ext ?? "doc"}
-      </div>
+      <DocTypeVisual doc={doc} tripId={tripId} />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-foreground truncate">
           {doc.originalFilename ?? "Document"}

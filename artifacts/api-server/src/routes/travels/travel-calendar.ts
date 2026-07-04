@@ -4,7 +4,9 @@
 // isTravelCalendar, using that connection owner's Google token, regardless
 // of who is asking.
 import { Router, type IRouter } from "express";
+import { eq } from "drizzle-orm";
 import { z } from "zod/v4";
+import { db, appUsers } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import {
   getTravelCalendarConnection,
@@ -21,14 +23,23 @@ import { logger } from "../../lib/logger";
 
 const router: IRouter = Router();
 
-// GET /travel-calendar/status — is the shared Travel calendar configured
+// GET /travel-calendar/status — is the shared Travel calendar configured.
+// isOwner reflects app_users.is_owner (the app owner who may assign/reassign
+// the Travel calendar), NOT whether the caller happens to own the
+// currently-assigned connection — otherwise the true owner could get locked
+// out of reassignment once someone else's calendar is marked as Travel.
 router.get("/travel-calendar/status", requireAuth, async (req, res) => {
   const connection = await getTravelCalendarConnection();
+  const [me] = await db
+    .select({ isOwner: appUsers.isOwner })
+    .from(appUsers)
+    .where(eq(appUsers.id, req.session.userId!))
+    .limit(1);
   res.json({
     configured: Boolean(connection),
     calendarSummary: connection?.summary ?? null,
     ownerGoogleEmail: connection?.googleEmail ?? null,
-    isOwner: connection?.userId === req.session.userId,
+    isOwner: me?.isOwner ?? false,
     primaryColor: connection?.primaryColor ?? null,
   });
 });

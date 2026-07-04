@@ -18,7 +18,7 @@ import {
   useUpdateConnectedCalendar,
   useDeleteConnectedCalendar,
   useSetTravelCalendar,
-  useGetFamilyCalendarStatus,
+  useGetTravelCalendarStatus,
   useGetAssistantSettings,
   useUpdateAssistantSettings,
   useListHouseholdMemory,
@@ -27,7 +27,7 @@ import {
   getGetCalendarStatusQueryKey,
   getListCalendarsQueryKey,
   getListConnectedCalendarsQueryKey,
-  getGetFamilyCalendarStatusQueryKey,
+  getGetTravelCalendarStatusQueryKey,
   getGetAssistantSettingsQueryKey,
   getListHouseholdMemoryQueryKey,
   type CalendarListItem,
@@ -391,7 +391,7 @@ function CalendarSyncCard() {
   const { data: connectedCalendars = [] } = useListConnectedCalendars({
     query: { enabled: !!status?.connected, queryKey: getListConnectedCalendarsQueryKey() },
   });
-  const { data: travelStatus } = useGetFamilyCalendarStatus();
+  const { data: travelStatus } = useGetTravelCalendarStatus();
   const disconnectCalendar = useDisconnectCalendar();
   const addCalendar = useAddConnectedCalendar();
   const updateCalendar = useUpdateConnectedCalendar();
@@ -446,7 +446,7 @@ function CalendarSyncCard() {
         setConfirmingDisconnect(false);
         qc.invalidateQueries({ queryKey: getGetCalendarStatusQueryKey() });
         qc.invalidateQueries({ queryKey: getListConnectedCalendarsQueryKey() });
-        qc.invalidateQueries({ queryKey: getGetFamilyCalendarStatusQueryKey() });
+        qc.invalidateQueries({ queryKey: getGetTravelCalendarStatusQueryKey() });
         toast.success("Google Calendar disconnected");
       },
       onError: () => toast.error("Could not disconnect. Please try again."),
@@ -507,7 +507,7 @@ function CalendarSyncCard() {
     deleteCalendar.mutate(id, {
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: getListConnectedCalendarsQueryKey() });
-        qc.invalidateQueries({ queryKey: getGetFamilyCalendarStatusQueryKey() });
+        qc.invalidateQueries({ queryKey: getGetTravelCalendarStatusQueryKey() });
         setConfirmingDeleteId(null);
         toast.success("Calendar removed");
       },
@@ -519,7 +519,7 @@ function CalendarSyncCard() {
     setTravelCalendar.mutate(cal.id, {
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: getListConnectedCalendarsQueryKey() });
-        qc.invalidateQueries({ queryKey: getGetFamilyCalendarStatusQueryKey() });
+        qc.invalidateQueries({ queryKey: getGetTravelCalendarStatusQueryKey() });
         toast.success(`"${cal.summary}" is now the shared Travel calendar for everyone`);
       },
       onError: () => toast.error("Could not set the Travel calendar. Please try again."),

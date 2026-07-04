@@ -31,3 +31,4 @@
 - [elAIne magnet duplicate-photo check lives in the chat widget](travels-magnet-assistant-widget.md) — image-upload features bypass the text-only chat/tool loop entirely; wire the UI straight to the existing vision endpoint/hook instead.
 - [elAIne send_email action](travels-itinerary-assistant-actions.md) — no user-supplied recipient, always resolves the caller's own account email server-side; watch for backticks breaking the systemPrompt template literal.
 - [elAIne web_search tool](travels-itinerary-assistant-actions.md) — needs a bounded multi-round completion loop (unlike fire-and-forget soft tools) to feed results back before the model's final answer; scope sentActionIndices per round.
+- [Travels reminder-to-calendar sync target](travels-reminder-sync-target.md) — sync shared resources to an explicitly-resolved shared owner (e.g. Travel calendar owner), never per-recipient or per-request-user.

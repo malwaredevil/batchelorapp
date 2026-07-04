@@ -40,11 +40,11 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  useGetFamilyCalendarStatus,
-  useListFamilyCalendarEvents,
-  useCreateFamilyCalendarEvent,
-  useUpdateFamilyCalendarEvent,
-  useDeleteFamilyCalendarEvent,
+  useGetTravelCalendarStatus,
+  useListTravelCalendarEvents,
+  useCreateTravelCalendarEvent,
+  useUpdateTravelCalendarEvent,
+  useDeleteTravelCalendarEvent,
   useListCalendarTripSuggestions,
   useScanCalendarTripSuggestions,
   useDismissCalendarTripSuggestion,
@@ -53,11 +53,11 @@ import {
   useListConnectedCalendars,
   useListConnectedCalendarEvents,
   getListConnectedCalendarEventsQueryKey,
-  getListFamilyCalendarEventsQueryKey,
+  getListTravelCalendarEventsQueryKey,
   getListCalendarTripSuggestionsQueryKey,
   getListGoogleEventColorsQueryKey,
-  type FamilyCalendarEvent,
-  type FamilyCalendarEventInput,
+  type TravelCalendarEvent,
+  type TravelCalendarEventInput,
   type CalendarTripSuggestion,
   type GoogleEventColor,
   type ConnectedCalendar,
@@ -105,12 +105,12 @@ function shiftCursor(view: ViewMode, cursor: Date, direction: 1 | -1): Date {
 // A displayed event tagged with which calendar it came from — either the
 // shared, editable Travel calendar, or a read-only overlay calendar.
 interface DisplayEvent {
-  event: FamilyCalendarEvent;
+  event: TravelCalendarEvent;
   kind: "travel" | "overlay";
   calendar?: ConnectedCalendar;
 }
 
-function eventDayKey(event: FamilyCalendarEvent): string {
+function eventDayKey(event: TravelCalendarEvent): string {
   if (event.allDay) return event.start;
   const d = new Date(event.start);
   return dateKey(d);
@@ -148,7 +148,7 @@ function emptyForm(defaultDate?: string): EventFormState {
   };
 }
 
-function eventToForm(event: FamilyCalendarEvent): EventFormState {
+function eventToForm(event: TravelCalendarEvent): EventFormState {
   if (event.allDay) {
     return {
       title: event.title,
@@ -177,7 +177,7 @@ function eventToForm(event: FamilyCalendarEvent): EventFormState {
   };
 }
 
-function formToInput(form: EventFormState): FamilyCalendarEventInput {
+function formToInput(form: EventFormState): TravelCalendarEventInput {
   if (form.allDay) {
     return {
       title: form.title,
@@ -216,7 +216,7 @@ function OverlayCalendarEvents({
   calendar: ConnectedCalendar;
   start: string;
   end: string;
-  onEvents: (calendarId: number, events: FamilyCalendarEvent[]) => void;
+  onEvents: (calendarId: number, events: TravelCalendarEvent[]) => void;
 }) {
   const { data = [] } = useListConnectedCalendarEvents(calendar.id, start, end, {
     query: {
@@ -242,30 +242,30 @@ function tintColor(hex: string, alpha: number): string {
 
 export default function TravelCalendar() {
   const qc = useQueryClient();
-  const { data: status, isLoading: statusLoading } = useGetFamilyCalendarStatus();
+  const { data: status, isLoading: statusLoading } = useGetTravelCalendarStatus();
   const [cursor, setCursor] = useState(() => new Date());
   const [view, setView] = useState<ViewMode>("month");
   const { start, end } = useMemo(() => rangeForView(view, cursor), [view, cursor]);
   const startISO = start.toISOString();
   const endISO = end.toISOString();
 
-  const { data: events = [], isLoading: eventsLoading } = useListFamilyCalendarEvents(
+  const { data: events = [], isLoading: eventsLoading } = useListTravelCalendarEvents(
     startISO,
     endISO,
     {
       query: {
         enabled: Boolean(status?.configured),
-        queryKey: getListFamilyCalendarEventsQueryKey(startISO, endISO),
+        queryKey: getListTravelCalendarEventsQueryKey(startISO, endISO),
       },
     },
   );
 
-  const createEvent = useCreateFamilyCalendarEvent();
-  const updateEvent = useUpdateFamilyCalendarEvent();
-  const deleteEvent = useDeleteFamilyCalendarEvent();
+  const createEvent = useCreateTravelCalendarEvent();
+  const updateEvent = useUpdateTravelCalendarEvent();
+  const deleteEvent = useDeleteTravelCalendarEvent();
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<FamilyCalendarEvent | null>(null);
+  const [editingEvent, setEditingEvent] = useState<TravelCalendarEvent | null>(null);
   const [form, setForm] = useState<EventFormState>(emptyForm());
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 
@@ -287,7 +287,7 @@ export default function TravelCalendar() {
   );
   const [hiddenCalendarIds, setHiddenCalendarIds] = useState<Set<number>>(new Set());
   const [overlayEventsByCalendar, setOverlayEventsByCalendar] = useState<
-    Record<number, FamilyCalendarEvent[]>
+    Record<number, TravelCalendarEvent[]>
   >({});
 
   function toggleCalendarVisibility(id: number) {
@@ -299,7 +299,7 @@ export default function TravelCalendar() {
     });
   }
 
-  function handleOverlayEvents(calendarId: number, calEvents: FamilyCalendarEvent[]) {
+  function handleOverlayEvents(calendarId: number, calEvents: TravelCalendarEvent[]) {
     setOverlayEventsByCalendar((prev) => ({ ...prev, [calendarId]: calEvents }));
   }
 
@@ -385,7 +385,7 @@ export default function TravelCalendar() {
     );
   }
 
-  const eventsQueryKey = getListFamilyCalendarEventsQueryKey(startISO, endISO);
+  const eventsQueryKey = getListTravelCalendarEventsQueryKey(startISO, endISO);
 
   const context = useMemo(() => {
     if (statusLoading) return undefined;

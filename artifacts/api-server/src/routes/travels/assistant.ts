@@ -25,7 +25,7 @@ import { deleteDocument } from "../../lib/travels-storage";
 import { getValidAccessToken } from "../../lib/google-calendar-tokens";
 import { rescanTripDocument } from "./documents";
 import {
-  getConnectedTargetUserIds,
+  getReminderSyncTarget,
   syncReminderCalendarEvents,
   deleteAllReminderCalendarEvents,
 } from "./reminders";
@@ -707,13 +707,13 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
       .returning();
 
     if (syncToCalendar && row.dueDate) {
-      const targetUserIds = await getConnectedTargetUserIds(userId, row.recipientEmails);
+      const target = await getReminderSyncTarget();
       await syncReminderCalendarEvents(
         row.id,
         trip.title,
         row.title,
         row.dueDate,
-        targetUserIds,
+        target,
         row.alertDaysBefore,
       );
     }
@@ -748,15 +748,13 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
       .select({ title: travelsTrips.title })
       .from(travelsTrips)
       .where(eq(travelsTrips.id, row.tripId));
-    const targetUserIds = syncToCalendar
-      ? await getConnectedTargetUserIds(row.userId, row.recipientEmails)
-      : [];
+    const target = syncToCalendar ? await getReminderSyncTarget() : null;
     await syncReminderCalendarEvents(
       row.id,
       trip?.title ?? "Trip",
       row.title,
       row.dueDate,
-      targetUserIds,
+      target,
       row.alertDaysBefore,
     );
 
@@ -796,13 +794,13 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
       .where(eq(travelsTrips.id, row.tripId));
 
     if (row.syncToCalendar && row.dueDate) {
-      const targetUserIds = await getConnectedTargetUserIds(row.userId, row.recipientEmails);
+      const target = await getReminderSyncTarget();
       await syncReminderCalendarEvents(
         row.id,
         trip?.title ?? "Trip",
         row.title,
         row.dueDate,
-        targetUserIds,
+        target,
         row.alertDaysBefore,
       );
     } else {

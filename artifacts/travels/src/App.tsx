@@ -9,7 +9,6 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/hooks/use-theme";
 import { AssistantContextProvider } from "@/lib/assistant-context";
 
-import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import Trips from "@/pages/Trips";
 import TripDetail from "@/pages/TripDetail";
@@ -27,7 +26,6 @@ import NotFound from "@/pages/not-found";
 function Router() {
   return (
     <Switch>
-      <Route path="/login" component={Login} />
       <Route path="/privacy" component={PrivacyPolicy} />
 
       <Route path="/">

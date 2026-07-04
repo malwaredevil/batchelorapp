@@ -20,7 +20,9 @@ export default function ResetPassword() {
     mutation: {
       onSuccess: () => {
         setDone(true);
-        setTimeout(() => navigate("/login"), 2500);
+        setTimeout(() => {
+          window.location.href = "/login";
+        }, 2500);
       },
       onError: (err: unknown) => {
         const message =

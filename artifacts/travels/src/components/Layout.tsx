@@ -145,7 +145,7 @@ export function Layout({ children }: { children: ReactNode }) {
       },
       onSuccess: () => {
         queryClient.setQueryData(getGetCurrentUserQueryKey(), null);
-        navigate("/login");
+        window.location.href = "/login";
       },
       onError: () => toast.error("Could not sign out. Please try again."),
     },

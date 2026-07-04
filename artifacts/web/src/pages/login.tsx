@@ -36,6 +36,15 @@ function GoogleIcon({ className }: { className?: string }) {
   );
 }
 
+// Only ever accept a same-origin relative path for post-login redirect —
+// never an absolute URL or protocol-relative "//host" path — to prevent this
+// being used as an open redirect.
+function sanitizeReturnTo(value: string | null): string | null {
+  if (!value) return null;
+  if (!value.startsWith("/") || value.startsWith("//")) return null;
+  return value;
+}
+
 export default function Login() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
@@ -43,6 +52,9 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const { data: providers } = useGetAuthProviders();
+  const returnTo = sanitizeReturnTo(
+    new URLSearchParams(window.location.search).get("returnTo"),
+  );
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -64,7 +76,15 @@ export default function Login() {
         await queryClient.invalidateQueries({
           queryKey: getGetCurrentUserQueryKey(),
         });
-        navigate("/");
+        if (returnTo) {
+          // returnTo may point into a different sub-app (pottery/quilting/
+          // travels), which is a separate SPA bundle from this login page —
+          // a client-side wouter navigation can't cross that boundary, so
+          // always do a full page load here.
+          window.location.href = returnTo;
+        } else {
+          navigate("/");
+        }
       },
       onError: () => {
         toast.error("Incorrect email or password.");
@@ -185,7 +205,9 @@ export default function Login() {
                 variant="outline"
                 className="h-11 w-full gap-2 font-semibold"
                 onClick={() => {
-                  window.location.href = "/api/auth/google";
+                  window.location.href = returnTo
+                    ? `/api/auth/google?returnTo=${encodeURIComponent(returnTo)}`
+                    : "/api/auth/google";
                 }}
                 data-testid="button-google"
               >

@@ -53,14 +53,19 @@ export const AVAILABLE_COLORS = [
   "cyan",
 ] as const;
 
+// Custom document types are household-shared metadata (like a taxonomy),
+// not per-user data — every household member sees and can define the same
+// set of types. Dedupe by typeKey, keeping the most recently created row if
+// legacy per-user duplicates exist.
 router.get("/document-types", async (req, res) => {
   try {
-    const userId = req.session.userId!;
-    const types = await db
+    const rows = await db
       .select()
       .from(travelsCustomDocumentTypes)
-      .where(eq(travelsCustomDocumentTypes.userId, userId));
-    res.json(types);
+      .orderBy(travelsCustomDocumentTypes.createdAt);
+    const byKey = new Map<string, (typeof rows)[number]>();
+    for (const row of rows) byKey.set(row.typeKey, row);
+    res.json([...byKey.values()]);
   } catch (err) {
     req.log.error(err, "list custom document types");
     res.status(500).json({ error: "Failed to list document types" });
@@ -143,31 +148,32 @@ router.post("/document-types", async (req, res) => {
       return;
     }
 
-    const [row] = await db
-      .insert(travelsCustomDocumentTypes)
-      .values({
-        userId,
-        typeKey: typeKey.trim(),
-        typeName: typeName.trim(),
-        description: description ?? null,
-        iconName: iconName ?? null,
-        colorKey: colorKey ?? null,
-        fields: fields ?? [],
-      })
-      .onConflictDoUpdate({
-        target: [
-          travelsCustomDocumentTypes.userId,
-          travelsCustomDocumentTypes.typeKey,
-        ],
-        set: {
-          typeName: typeName.trim(),
-          description: description ?? null,
-          iconName: iconName ?? null,
-          colorKey: colorKey ?? null,
-          fields: fields ?? [],
-        },
-      })
-      .returning();
+    // Household-shared: upsert by typeKey alone (not scoped to the creating
+    // user), so any member editing/re-suggesting a type updates the one
+    // shared definition instead of creating a per-user copy.
+    const [existing] = await db
+      .select()
+      .from(travelsCustomDocumentTypes)
+      .where(eq(travelsCustomDocumentTypes.typeKey, typeKey.trim()));
+
+    const values = {
+      typeName: typeName.trim(),
+      description: description ?? null,
+      iconName: iconName ?? null,
+      colorKey: colorKey ?? null,
+      fields: fields ?? [],
+    };
+
+    const [row] = existing
+      ? await db
+          .update(travelsCustomDocumentTypes)
+          .set(values)
+          .where(eq(travelsCustomDocumentTypes.id, existing.id))
+          .returning()
+      : await db
+          .insert(travelsCustomDocumentTypes)
+          .values({ userId, typeKey: typeKey.trim(), ...values })
+          .returning();
 
     res.json(row);
   } catch (err) {

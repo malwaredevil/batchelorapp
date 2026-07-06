@@ -22,3 +22,13 @@ similarity, full-text search, stats, etc.) must query across all users unless
 there's an explicit reason to scope to just the requester. Don't assume
 `req.session.userId` scoping is safe by default in this app — check whether the
 existing list/read routes for that resource filter by user first.
+
+**Follow-up (2026-07-06):** Two surfaces had slipped through this rule and were
+fixed: `travels_custom_document_types` (was scoped `WHERE user_id = ...` on
+list + upsert-conflict-target — converted to a household-wide upsert keyed by
+`typeKey` alone, deduped by key on read) and `travels_calendar_trip_suggestions`
+(had a `visibleToUser` filter excluding another member's personal-calendar-
+sourced suggestions — removed; suggestions are trip data, not the calendar
+connection itself, so they're now fully shared like trips). OAuth
+connections/tokens (Calendar, Gmail) and personal UI prefs (card layout,
+account settings) correctly remain single-owner — don't convert those.

@@ -338,12 +338,13 @@ export type InsertTravelsTripCalendarEvent =
 // trip. dedupeKey makes repeated scans (daily scheduler + manual button)
 // idempotent via ON CONFLICT DO NOTHING.
 //
-// userId is the owner of the personal connected calendar that produced the
-// suggestion (nullable — legacy rows predating this column have no owner on
-// record). isFromSharedCalendar is true when the suggestion came from the
-// household-wide Travel calendar. Visibility rule enforced at the route
-// layer: a user sees their own personal-calendar suggestions plus every
-// shared-calendar suggestion, never another user's personal-calendar ones.
+// userId records which household member's personal connected calendar
+// produced the suggestion (nullable — legacy rows predating this column have
+// no owner on record; insert attribution only, not an access filter).
+// isFromSharedCalendar is true when the suggestion came from the
+// household-wide Travel calendar. Suggestions are household-shared trip
+// data — every authenticated household member can view/dismiss/accept any
+// suggestion regardless of which calendar produced it.
 export const travelsCalendarTripSuggestions = pgTable(
   "travels_calendar_trip_suggestions",
   {

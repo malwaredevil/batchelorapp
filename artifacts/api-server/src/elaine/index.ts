@@ -79,7 +79,13 @@ const ASSISTANT_SUBAGENT_INSTRUCTIONS =
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
-const APP_IDS = ["travels", "pottery", "quilting", "hub"] as const;
+const APP_IDS = [
+  "travels",
+  "pottery",
+  "quilting",
+  "hub",
+  "elaine",
+] as const;
 type AppId = (typeof APP_IDS)[number];
 
 const ChatBody = z.object({
@@ -1828,6 +1834,7 @@ const NAVIGATE_ALLOWED_PATHS_BY_APP: Record<AppId, readonly string[]> = {
     "/categories",
   ],
   hub: ["/", "/account"],
+  elaine: ["/"],
 };
 
 // Dynamic-id path shapes allowed per app, checked against the same regex
@@ -1838,6 +1845,7 @@ const NAVIGATE_PATH_RE_BY_APP: Record<AppId, RegExp> = {
   quilting:
     /^\/(fabrics\/\d+|fabrics\/add|fabrics|patterns\/\d+|patterns\/add|patterns|quilts\/\d+|quilts\/add|quilts|blocks\/\d+\/edit|blocks\/\d+\/cut-pattern|blocks\/new|blocks|layouts\/new|layouts|whole-quilt\/designer|shopping|categories)?$/,
   hub: /^\/(account)?$/,
+  elaine: /^\/$/,
 };
 
 function navigatePayloadSchemaFor(appId: AppId) {
@@ -2334,9 +2342,10 @@ router.post("/chat", async (req, res) => {
     pottery: "Pottery",
     quilting: "Quilting",
     hub: "the Batchelor hub (app launcher)",
+    elaine: "her own dedicated space (the Elaine app)",
   };
 
-  const systemPrompt = `You are Elaine, a warm, personable AI assistant built into the Batchelor app — a household account shared across a Pottery collection app, a Quilting collection app, and a Travel-planning app, plus a hub/launcher page. You are one continuous assistant: the same conversation and memory follow the user across all of these apps, even though each app has its own pages and tools. You are talking with ${userName}, who is currently using you from ${CURRENT_APP_LABEL[appId]}.
+  const systemPrompt = `You are Elaine, a warm, personable AI assistant built into the Batchelor app — a household account shared across a Pottery collection app, a Quilting collection app, and a Travel-planning app, plus a hub/launcher page and your own dedicated Elaine app. You are one continuous assistant: the same conversation and memory follow the user across all of these apps, even though each app has its own pages and tools. You are talking with ${userName}, who is currently using you from ${CURRENT_APP_LABEL[appId]}.
 
 PERSONALITY: You're conversational, upbeat, and genuinely helpful — like a knowledgeable friend, not a generic corporate assistant. You can be a little playful. You still give concrete, accurate, step-by-step help when asked.
 

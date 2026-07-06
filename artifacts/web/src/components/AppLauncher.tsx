@@ -21,6 +21,9 @@ import {
   FlaskConical,
   Shirt,
   Rss,
+  Sparkles,
+  MessageCircle,
+  SlidersHorizontal,
 } from "lucide-react";
 import { AppSwitcher } from "@/components/app-switcher";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -92,6 +95,12 @@ const TRAVELS_QUICK_LINKS = [
   { label: "Home", icon: Activity, href: `${base}travels/` },
   { label: "Trips", icon: Layers, href: `${base}travels/trips` },
   { label: "Explore", icon: Rss, href: `${base}travels/explore` },
+];
+
+const ELAINE_QUICK_LINKS = [
+  { label: "Chat", icon: MessageCircle, href: `${base}elaine/` },
+  { label: "Settings", icon: SlidersHorizontal, href: `${base}elaine/settings` },
+  { label: "Account", icon: Settings, href: `${base}account` },
 ];
 
 const CATEGORY_LABELS: { id: "all" | WidgetCategory; label: string }[] = [
@@ -441,6 +450,7 @@ export function AppLauncher() {
   const [potteryExpanded, setPotteryExpanded] = useState(false);
   const [quiltingExpanded, setQuiltingExpanded] = useState(false);
   const [travelsExpanded, setTravelsExpanded] = useState(false);
+  const [elaineExpanded, setElaineExpanded] = useState(false);
 
   // Live stats
   const { data: potteryStatsData } = useGetCollectionStats();
@@ -806,6 +816,16 @@ export function AppLauncher() {
               accentIconColor="text-sky-600 dark:text-sky-400"
               expanded={travelsExpanded}
               onToggle={() => setTravelsExpanded((e) => !e)}
+            />
+            <AppHeroCard
+              app={APPS.find((a) => a.id === "elaine")!}
+              stats={liveStats("elaine")}
+              quickLinks={ELAINE_QUICK_LINKS}
+              accentBorderColor="border-indigo-200/60 dark:border-indigo-800/40"
+              accentSectionBg="bg-indigo-50/60 dark:bg-indigo-900/10"
+              accentIconColor="text-indigo-600 dark:text-indigo-400"
+              expanded={elaineExpanded}
+              onToggle={() => setElaineExpanded((e) => !e)}
             />
           </div>
         </section>

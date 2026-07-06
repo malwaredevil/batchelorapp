@@ -1087,107 +1087,163 @@ function DocumentRow({
           <DocTypeVisual doc={doc} tripId={tripId} customTypes={customTypes} />
         </button>
         <div className="flex-1 min-w-0">
-          <div className="flex items-start gap-0.5 -ml-0.5">
-            {editingTitle ? (
-              <input
-                autoFocus
-                className="flex-1 text-sm font-medium bg-transparent border-b border-primary/60 outline-none pb-0.5 min-w-0"
-                value={titleDraft}
-                onChange={(e) => setTitleDraft(e.target.value)}
-                onBlur={() => saveTitle()}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") saveTitle();
-                  if (e.key === "Escape") setEditingTitle(false);
-                }}
-                placeholder={doc.originalFilename ?? "Add a title…"}
-              />
-            ) : (
+          {/* Header row: title/doctype on the left, action icons on the right.
+              Keeping action buttons here (not in the outer flex) means the
+              fields section below gets the full content-column width and is
+              never squeezed on narrow mobile screens. */}
+          <div className="flex items-start gap-1">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start gap-0.5 -ml-0.5">
+                {editingTitle ? (
+                  <input
+                    autoFocus
+                    className="flex-1 text-sm font-medium bg-transparent border-b border-primary/60 outline-none pb-0.5 min-w-0"
+                    value={titleDraft}
+                    onChange={(e) => setTitleDraft(e.target.value)}
+                    onBlur={() => saveTitle()}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") saveTitle();
+                      if (e.key === "Escape") setEditingTitle(false);
+                    }}
+                    placeholder={doc.originalFilename ?? "Add a title…"}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTitleDraft(doc.title ?? "");
+                      setEditingTitle(true);
+                    }}
+                    className="flex-1 text-left text-sm font-medium text-foreground truncate hover:text-primary transition-colors pl-0.5"
+                    title="Click to edit title"
+                  >
+                    {doc.title || doc.originalFilename || "Untitled"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => toggleFieldLock("title")}
+                  className={`shrink-0 p-0.5 mt-0.5 transition-colors ${
+                    titleLocked
+                      ? "text-amber-500 hover:text-amber-600"
+                      : "text-muted-foreground/25 hover:text-muted-foreground"
+                  }`}
+                  title={
+                    titleLocked
+                      ? "Title locked — AI won't overwrite on rescan"
+                      : "Click to lock title"
+                  }
+                >
+                  {titleLocked ? (
+                    <Lock className="w-3 h-3" />
+                  ) : (
+                    <LockOpen className="w-3 h-3" />
+                  )}
+                </button>
+              </div>
+              {doc.title &&
+                doc.originalFilename &&
+                doc.title !== doc.originalFilename && (
+                  <p className="text-[11px] text-muted-foreground/50 truncate leading-tight pl-0.5">
+                    {doc.originalFilename}
+                  </p>
+                )}
+              <div className="flex items-center gap-1">
+                <Select
+                  value={doc.documentType ?? "other"}
+                  onValueChange={saveDocumentType}
+                  disabled={docTypeLocked}
+                >
+                  <SelectTrigger className="h-5 text-xs border-0 bg-transparent px-0.5 py-0 gap-0.5 text-muted-foreground hover:text-foreground focus:ring-0 w-auto max-w-[190px] [&>svg]:w-3 [&>svg]:h-3 [&>svg]:opacity-50">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allDocTypeOptions(customTypes).map((opt) => (
+                      <SelectItem key={opt.key} value={opt.key} className="text-xs">
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <button
+                  type="button"
+                  onClick={() => toggleFieldLock("documentType")}
+                  className={`shrink-0 p-0.5 transition-colors ${
+                    docTypeLocked
+                      ? "text-amber-500 hover:text-amber-600"
+                      : "text-muted-foreground/25 hover:text-muted-foreground"
+                  }`}
+                  title={
+                    docTypeLocked
+                      ? "Document type locked"
+                      : "Click to lock document type"
+                  }
+                >
+                  {docTypeLocked ? (
+                    <Lock className="w-3 h-3" />
+                  ) : (
+                    <LockOpen className="w-3 h-3" />
+                  )}
+                </button>
+                {(!ed || Object.keys(ed).length === 0) && (
+                  <span
+                    title="AI hasn't extracted details yet — click the scan icon to retry"
+                    className="inline-flex items-center gap-1 text-xs text-amber-500"
+                  >
+                    <Sparkles className="w-3 h-3 animate-pulse" />
+                    <span className="text-[11px]">Processing…</span>
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-0.5 shrink-0 -mt-0.5">
               <button
-                type="button"
-                onClick={() => {
-                  setTitleDraft(doc.title ?? "");
-                  setEditingTitle(true);
-                }}
-                className="flex-1 text-left text-sm font-medium text-foreground truncate hover:text-primary transition-colors pl-0.5"
-                title="Click to edit title"
+                onClick={handleRescan}
+                disabled={rescanTripDocument.isPending}
+                className="p-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                title="Re-scan document with AI (locked fields are preserved)"
               >
-                {doc.title || doc.originalFilename || "Untitled"}
+                <ScanSearch
+                  className={`w-4 h-4 ${rescanTripDocument.isPending ? "animate-pulse" : ""}`}
+                />
               </button>
-            )}
-            <button
-              type="button"
-              onClick={() => toggleFieldLock("title")}
-              className={`shrink-0 p-0.5 mt-0.5 transition-colors ${
-                titleLocked
-                  ? "text-amber-500 hover:text-amber-600"
-                  : "text-muted-foreground/25 hover:text-muted-foreground"
-              }`}
-              title={
-                titleLocked
-                  ? "Title locked — AI won't overwrite on rescan"
-                  : "Click to lock title"
-              }
-            >
-              {titleLocked ? (
-                <Lock className="w-3 h-3" />
-              ) : (
-                <LockOpen className="w-3 h-3" />
-              )}
-            </button>
-          </div>
-          {doc.title &&
-            doc.originalFilename &&
-            doc.title !== doc.originalFilename && (
-              <p className="text-[11px] text-muted-foreground/50 truncate leading-tight pl-0.5">
-                {doc.originalFilename}
-              </p>
-            )}
-          <div className="flex items-center gap-1">
-            <Select
-              value={doc.documentType ?? "other"}
-              onValueChange={saveDocumentType}
-              disabled={docTypeLocked}
-            >
-              <SelectTrigger className="h-5 text-xs border-0 bg-transparent px-0.5 py-0 gap-0.5 text-muted-foreground hover:text-foreground focus:ring-0 w-auto max-w-[190px] [&>svg]:w-3 [&>svg]:h-3 [&>svg]:opacity-50">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {allDocTypeOptions(customTypes).map((opt) => (
-                  <SelectItem key={opt.key} value={opt.key} className="text-xs">
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <button
-              type="button"
-              onClick={() => toggleFieldLock("documentType")}
-              className={`shrink-0 p-0.5 transition-colors ${
-                docTypeLocked
-                  ? "text-amber-500 hover:text-amber-600"
-                  : "text-muted-foreground/25 hover:text-muted-foreground"
-              }`}
-              title={
-                docTypeLocked
-                  ? "Document type locked"
-                  : "Click to lock document type"
-              }
-            >
-              {docTypeLocked ? (
-                <Lock className="w-3 h-3" />
-              ) : (
-                <LockOpen className="w-3 h-3" />
-              )}
-            </button>
-            {(!ed || Object.keys(ed).length === 0) && (
-              <span
-                title="AI hasn't extracted details yet — click the scan icon to retry"
-                className="inline-flex items-center gap-1 text-xs text-amber-500"
+              <button
+                onClick={handleAddToWallet}
+                disabled={walletPass.isPending}
+                className="p-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                title="Add to Google Wallet"
               >
-                <Sparkles className="w-3 h-3 animate-pulse" />
-                <span className="text-[11px]">Processing…</span>
-              </span>
-            )}
+                <Wallet
+                  className={`w-4 h-4 ${walletPass.isPending ? "animate-pulse" : ""}`}
+                />
+              </button>
+              <a
+                href={getTripDocumentDownloadUrl(tripId, doc.id)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                title="Download"
+              >
+                <ExternalLink className="w-4 h-4" />
+              </a>
+              {doc.gmailMessageId && (
+                <button
+                  type="button"
+                  onClick={() => setAddMoreOpen(true)}
+                  className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                  title="Add more from this email"
+                >
+                  <Paperclip className="w-4 h-4" />
+                </button>
+              )}
+              <button
+                onClick={() => onDelete(doc.id)}
+                className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+                title="Remove document"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
           </div>
           <div className="mt-1.5 space-y-1">
             {keyFields.map(({ key, label }) => {
@@ -1231,54 +1287,6 @@ function DocumentRow({
               );
             })}
           </div>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            onClick={handleRescan}
-            disabled={rescanTripDocument.isPending}
-            className="p-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-            title="Re-scan document with AI (locked fields are preserved)"
-          >
-            <ScanSearch
-              className={`w-4 h-4 ${rescanTripDocument.isPending ? "animate-pulse" : ""}`}
-            />
-          </button>
-          <button
-            onClick={handleAddToWallet}
-            disabled={walletPass.isPending}
-            className="p-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-            title="Add to Google Wallet"
-          >
-            <Wallet
-              className={`w-4 h-4 ${walletPass.isPending ? "animate-pulse" : ""}`}
-            />
-          </button>
-          <a
-            href={getTripDocumentDownloadUrl(tripId, doc.id)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-            title="Download"
-          >
-            <ExternalLink className="w-4 h-4" />
-          </a>
-          {doc.gmailMessageId && (
-            <button
-              type="button"
-              onClick={() => setAddMoreOpen(true)}
-              className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-              title="Add more from this email"
-            >
-              <Paperclip className="w-4 h-4" />
-            </button>
-          )}
-          <button
-            onClick={() => onDelete(doc.id)}
-            className="p-1 text-muted-foreground hover:text-destructive transition-colors"
-            title="Remove document"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
         </div>
       </div>
 

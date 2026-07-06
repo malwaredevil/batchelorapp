@@ -1,4 +1,4 @@
-import { callModel, MODELS } from "./ai-client";
+import { callModel, getModels } from "./ai-client";
 
 /**
  * Multi-model advice panel for elAIne. When a question calls for expertise,
@@ -16,7 +16,6 @@ export interface ExpertConsultResult {
 }
 
 const CONSULT_TIMEOUT_MS = 15_000;
-const EXPERT_PANEL = [MODELS.ADVISOR, MODELS.EXPERT_PANEL_ALT] as const;
 
 const EXPERT_SYSTEM_PROMPT =
   "You are a knowledgeable, opinionated advisor for a travel-planning assistant app. Give direct, practical, well-reasoned advice or a recommendation in a few sentences to a short paragraph. State an actual opinion or recommendation rather than a wishy-washy non-answer, and briefly say why.";
@@ -53,8 +52,10 @@ export async function consultExperts(
   if (!trimmedQuestion) return { answer: "" };
   const trimmedContext = context?.trim().slice(0, 1000) || undefined;
 
+  const models = await getModels();
+  const expertPanel = [models.advisor, models.expertPanelAlt];
   const settled = await Promise.allSettled(
-    EXPERT_PANEL.map((model) =>
+    expertPanel.map((model) =>
       askExpert(model, trimmedQuestion, trimmedContext),
     ),
   );
@@ -73,7 +74,7 @@ export async function consultExperts(
   // synthesizing already-written opinions into a summary is exactly the kind
   // of routine reformatting task that model is used for elsewhere.
   try {
-    const merged = await callModel(MODELS.SUBAGENT_WORKER, (client, m) =>
+    const merged = await callModel(models.subagentWorker, (client, m) =>
       client.chat.completions.create(
         {
           model: m,

@@ -352,7 +352,7 @@ async function main() {
 
   // ── Travels ───────────────────────────────────────────────────────────────
   await dest.query(
-    "TRUNCATE travels_custom_document_types, travels_trip_card_collapse_state, travels_card_layout_preferences, travels_gmail_scan_decisions, travels_gmail_connections, elaine_nudges, elaine_memory, elaine_settings, elaine_conversations, travels_reminder_calendar_events, travels_connected_calendars, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_trip_photos, travels_trip_documents CASCADE",
+    "TRUNCATE travels_custom_document_types, travels_trip_card_collapse_state, travels_card_layout_preferences, travels_gmail_scan_decisions, travels_gmail_connections, elaine_global_config, elaine_nudges, elaine_memory, elaine_settings, elaine_conversations, travels_reminder_calendar_events, travels_connected_calendars, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_trip_photos, travels_trip_documents CASCADE",
   );
   await dest.query("TRUNCATE travels_trips CASCADE");
 
@@ -549,6 +549,20 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "elaine_nudges", "id");
+
+  await copyTable(source, dest, {
+    table: "elaine_global_config",
+    columns: [
+      "id",
+      "chat_model",
+      "subagent_model",
+      "request_timeout_ms",
+      "max_response_tokens",
+      "updated_at",
+      "updated_by_user_id",
+    ],
+    orderBy: "id",
+  });
 
   await copyTable(source, dest, {
     table: "travels_gmail_connections",

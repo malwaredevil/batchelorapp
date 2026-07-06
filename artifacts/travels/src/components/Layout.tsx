@@ -13,10 +13,9 @@ import {
   CalendarDays,
   Mail,
   Menu,
-  MessageCircle,
   Sparkles,
 } from "lucide-react";
-import { AppSwitcher } from "@/components/AppSwitcher";
+import { AppSwitcher } from "@workspace/elaine-ui";
 import {
   useLogout,
   getGetCurrentUserQueryKey,
@@ -60,7 +59,6 @@ const DISCOVER_NAV_ITEMS: NavItem[] = [
 const PLAN_NAV_ITEMS: NavItem[] = [
   { href: "/travel-calendar", label: "Travel Calendar", icon: CalendarDays },
   { href: "/gmail", label: "Gmail", icon: Mail },
-  { href: "/elaine", label: "Elaine", icon: MessageCircle },
 ];
 
 const ACCOUNT_NAV_ITEMS: NavItem[] = [
@@ -177,7 +175,7 @@ export function Layout({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-40 border-b border-card-border bg-background/85 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-          <AppSwitcher />
+          <AppSwitcher currentAppId="travels" />
 
           <div className="flex items-center gap-1">
             <nav className="mr-1 hidden items-center gap-1 md:flex">

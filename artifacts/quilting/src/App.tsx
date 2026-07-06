@@ -9,6 +9,7 @@ import { NavGuardProvider } from "@/lib/nav-guard";
 import { ThemeProvider } from "@/hooks/use-theme";
 import { AppShell } from "@/components/app-shell";
 import { BulkAddProvider } from "@/contexts/bulk-add-context";
+import { ElainePageContextProvider, ElaineWidget } from "@workspace/elaine-ui";
 
 // Register all features before the shell renders
 import "@/features/index";
@@ -121,6 +122,7 @@ function Routes() {
         </Route>
         <Route component={NotFound} />
       </Switch>
+      <ElaineWidget appId="quilting" />
     </AppShell>
   );
 }
@@ -134,7 +136,9 @@ function App() {
             <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
               <NavGuardProvider>
                 <AuthProvider>
-                  <Routes />
+                  <ElainePageContextProvider>
+                    <Routes />
+                  </ElainePageContextProvider>
                 </AuthProvider>
               </NavGuardProvider>
             </WouterRouter>

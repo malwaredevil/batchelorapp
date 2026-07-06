@@ -66,6 +66,9 @@ catalogs:
     vite:
       specifier: ^7.3.5
       version: 7.3.5
+    wouter:
+      specifier: ^3.3.5
+      version: 3.10.0
     zod:
       specifier: ^3.25.76
       version: 3.25.76
@@ -598,6 +601,9 @@ importers:
       '@workspace/api-client-react':
         specifier: workspace:*
         version: link:../../lib/api-client-react
+      '@workspace/elaine-ui':
+        specifier: workspace:*
+        version: link:../../lib/elaine-ui
       '@workspace/web-core':
         specifier: workspace:*
         version: link:../../lib/web-core
@@ -793,6 +799,9 @@ importers:
       '@workspace/api-client-react':
         specifier: workspace:*
         version: link:../../lib/api-client-react
+      '@workspace/elaine-ui':
+        specifier: workspace:*
+        version: link:../../lib/elaine-ui
       '@workspace/web-core':
         specifier: workspace:*
         version: link:../../lib/web-core
@@ -1031,6 +1040,9 @@ importers:
       '@workspace/api-client-react':
         specifier: workspace:*
         version: link:../../lib/api-client-react
+      '@workspace/elaine-ui':
+        specifier: workspace:*
+        version: link:../../lib/elaine-ui
       class-variance-authority:
         specifier: 'catalog:'
         version: 0.7.1
@@ -1223,6 +1235,9 @@ importers:
       '@workspace/api-client-react':
         specifier: workspace:*
         version: link:../../lib/api-client-react
+      '@workspace/elaine-ui':
+        specifier: workspace:*
+        version: link:../../lib/elaine-ui
       class-variance-authority:
         specifier: 'catalog:'
         version: 0.7.1
@@ -1347,6 +1362,49 @@ importers:
       tsx:
         specifier: 'catalog:'
         version: 4.21.0
+
+  lib/elaine-ui:
+    dependencies:
+      '@radix-ui/react-dropdown-menu':
+        specifier: ^2.1.7
+        version: 2.1.16(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      '@radix-ui/react-slot':
+        specifier: ^1.2.0
+        version: 1.2.4(@types/react@19.2.14)(react@19.1.0)
+      '@workspace/api-client-react':
+        specifier: workspace:*
+        version: link:../api-client-react
+      '@workspace/web-core':
+        specifier: workspace:*
+        version: link:../web-core
+      class-variance-authority:
+        specifier: 'catalog:'
+        version: 0.7.1
+      clsx:
+        specifier: 'catalog:'
+        version: 2.1.1
+      lucide-react:
+        specifier: 'catalog:'
+        version: 0.545.0(react@19.1.0)
+      tailwind-merge:
+        specifier: 'catalog:'
+        version: 3.5.0
+    devDependencies:
+      '@tanstack/react-query':
+        specifier: 'catalog:'
+        version: 5.100.9(react@19.1.0)
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.2.3(@types/react@19.2.14)
+      sonner:
+        specifier: ^2.0.7
+        version: 2.0.7(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      wouter:
+        specifier: 'catalog:'
+        version: 3.10.0(react@19.1.0)
 
   lib/web-core:
     dependencies:

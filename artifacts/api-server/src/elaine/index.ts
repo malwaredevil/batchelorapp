@@ -85,13 +85,7 @@ const ASSISTANT_SUBAGENT_INSTRUCTIONS =
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
-const APP_IDS = [
-  "travels",
-  "pottery",
-  "quilting",
-  "hub",
-  "elaine",
-] as const;
+const APP_IDS = ["travels", "pottery", "quilting", "hub", "elaine"] as const;
 type AppId = (typeof APP_IDS)[number];
 
 const ChatBody = z.object({
@@ -2952,7 +2946,12 @@ router.put("/settings", async (req, res) => {
     .values({ userId, enabled, actionConfirmationMode, chatWindowSize })
     .onConflictDoUpdate({
       target: elaineSettings.userId,
-      set: { enabled, actionConfirmationMode, chatWindowSize, updatedAt: new Date() },
+      set: {
+        enabled,
+        actionConfirmationMode,
+        chatWindowSize,
+        updatedAt: new Date(),
+      },
     });
   res.json({ enabled, actionConfirmationMode, chatWindowSize });
 });
@@ -2996,7 +2995,11 @@ const AdminConfigBody = z.object({
       embedding: z.string().min(1).max(200).optional(),
       rerank: z.string().min(1).max(200).optional(),
       visualEmbed: z.string().min(1).max(200).optional(),
-      fusionModels: z.array(z.string().min(1).max(200)).min(1).max(6).optional(),
+      fusionModels: z
+        .array(z.string().min(1).max(200))
+        .min(1)
+        .max(6)
+        .optional(),
       fusionJudge: z.string().min(1).max(200).optional(),
     })
     .partial()
@@ -3027,9 +3030,19 @@ const AdminConfigBody = z.object({
       visualEmbedCropTop: z.number().min(0).max(1).optional(),
       visualEmbedCropHeight: z.number().min(0).max(1).optional(),
       aiJpegQuality: z.number().int().min(1).max(100).optional(),
-      potteryZoneAnalysisMaxTokens: z.number().int().min(50).max(4000).optional(),
+      potteryZoneAnalysisMaxTokens: z
+        .number()
+        .int()
+        .min(50)
+        .max(4000)
+        .optional(),
       potteryBackstampMaxTokens: z.number().int().min(50).max(4000).optional(),
-      travelDocExtractionMaxTokens: z.number().int().min(50).max(4000).optional(),
+      travelDocExtractionMaxTokens: z
+        .number()
+        .int()
+        .min(50)
+        .max(4000)
+        .optional(),
     })
     .partial()
     .optional(),

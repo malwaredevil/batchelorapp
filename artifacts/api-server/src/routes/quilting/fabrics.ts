@@ -406,7 +406,11 @@ router.get("/fabrics/:id/image", async (req, res) => {
 
 router.post("/fabrics/:id/reanalyze", aiLimiter, async (req, res) => {
   const { id } = ReanalyzeFabricParams.parse(req.params);
-  const [row] = await db.select().from(fabrics).where(eq(fabrics.id, id)).limit(1);
+  const [row] = await db
+    .select()
+    .from(fabrics)
+    .where(eq(fabrics.id, id))
+    .limit(1);
   if (!row) {
     res.status(404).json({ error: "Fabric not found." });
     return;

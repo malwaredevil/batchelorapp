@@ -204,14 +204,16 @@ function useApps(): AppEntry[] {
     {
       id: "pottery",
       name: "Batchelor Pottery",
-      subtitle: potteryCount != null ? `${potteryCount} pieces` : "Pottery Studio",
+      subtitle:
+        potteryCount != null ? `${potteryCount} pieces` : "Pottery Studio",
       href: "/pottery/",
       Logo: PotteryLogo,
     },
     {
       id: "quilting",
       name: "Ashley's Quilting",
-      subtitle: fabricCount != null ? `${fabricCount} fabrics` : "Quilting Studio",
+      subtitle:
+        fabricCount != null ? `${fabricCount} fabrics` : "Quilting Studio",
       href: "/quilting/",
       Logo: QuiltingLogo,
     },
@@ -291,16 +293,12 @@ export function AppSwitcher({
             >
               <app.Logo className="h-8 w-8 shrink-0" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold leading-none">
-                  {app.name}
-                </p>
+                <p className="text-sm font-semibold leading-none">{app.name}</p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
                   {app.subtitle}
                 </p>
               </div>
-              {isCurrent && (
-                <Check className="h-4 w-4 text-primary shrink-0" />
-              )}
+              {isCurrent && <Check className="h-4 w-4 text-primary shrink-0" />}
             </DropdownMenuItem>
           );
         })}

@@ -292,7 +292,9 @@ export async function callFusion(
 
   const opinions = settled
     .filter(
-      (r): r is PromiseFulfilledResult<OpenAI.Chat.Completions.ChatCompletion> =>
+      (
+        r,
+      ): r is PromiseFulfilledResult<OpenAI.Chat.Completions.ChatCompletion> =>
         r.status === "fulfilled",
     )
     .map((r) => r.value.choices[0]?.message?.content?.trim() ?? "")

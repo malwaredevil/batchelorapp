@@ -146,7 +146,12 @@ function Section({
 
 export function GlobalConfigCard() {
   const qc = useQueryClient();
-  const { data: config, isLoading, isError, error } = useGetElaineAdminConfig({
+  const {
+    data: config,
+    isLoading,
+    isError,
+    error,
+  } = useGetElaineAdminConfig({
     query: { queryKey: getGetElaineAdminConfigQueryKey(), retry: false },
   });
   const { data: openRouterModels = [], isLoading: modelsLoading } =
@@ -227,8 +232,8 @@ export function GlobalConfigCard() {
         </h2>
         <p className="text-xs text-muted-foreground">
           Models, timeouts, feature toggles, and thresholds across{" "}
-          <ElaineName />, Pottery, Quilting, and Travels. Applies to every
-          user and every app. Only you can see or change this.
+          <ElaineName />, Pottery, Quilting, and Travels. Applies to every user
+          and every app. Only you can see or change this.
         </p>
       </div>
 
@@ -236,8 +241,8 @@ export function GlobalConfigCard() {
         title="Chat models"
         description={
           <>
-            The models that drive <ElaineName />'s replies and delegated
-            sub-tasks.
+            The models that drive <ElaineName />
+            's replies and delegated sub-tasks.
           </>
         }
       >
@@ -494,9 +499,7 @@ export function GlobalConfigCard() {
             min={1}
             max={100}
             value={thresholds.aiJpegQuality}
-            onChange={(v) =>
-              setThresholds({ ...thresholds, aiJpegQuality: v })
-            }
+            onChange={(v) => setThresholds({ ...thresholds, aiJpegQuality: v })}
           />
           <NumberField
             label="Pottery zone analysis max tokens"

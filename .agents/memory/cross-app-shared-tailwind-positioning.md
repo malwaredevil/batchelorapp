@@ -11,6 +11,7 @@ Two independent real bugs were found, confirmed via live `getComputedStyle`/`get
 2. **Per-app Tailwind content-scan gaps**: because each artifact is a separate Vite build with its own Tailwind content-scan, a utility class used only inside a shared `lib/*` component is not guaranteed to be picked up identically by every consuming app. Confirmed directly: `.bottom-4` was completely absent from the generated CSS in some apps while `.right-4` was present in the same file; `justify-end` also failed to generate in another app when tried as an intermediate fix.
 
 **Fix**: replace positioning-critical classes with inline styles, which bypass Tailwind's content-scan entirely and can't drift the same way:
+
 - Wrap the floating element in an outer `position: fixed; inset: 0` full-viewport container (inline style) with `pointerEvents: "none"`.
 - Anchor the actual widget inside with `position: absolute; bottom/right: <value>; pointerEvents: "auto"` (inline style), so it's positioned relative to the fixed full-viewport container rather than relying on `fixed` + `bottom` directly.
 - Keep only generic, well-exercised utility classes (e.g. `flex flex-col items-end gap-3`) that are used broadly enough across the app to reliably survive content-scanning — avoid relying on utilities that are exclusive to one shared/rarely-used component.

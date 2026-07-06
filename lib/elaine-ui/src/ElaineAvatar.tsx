@@ -206,11 +206,7 @@ export function ElaineAvatar({
         alt="Elaine"
         width={size}
         height={size}
-        className={cn(
-          "rounded-full object-cover",
-          imgAnimClass,
-          className,
-        )}
+        className={cn("rounded-full object-cover", imgAnimClass, className)}
         style={{ width: size, height: size }}
       />
       {active?.quirk === "wave" && (

@@ -122,7 +122,7 @@ function Routes() {
         </Route>
         <Route component={NotFound} />
       </Switch>
-      <ElaineWidget appId="quilting" />
+      <ElaineWidget appId="quilting" fullScreenPath="/elaine/" />
     </AppShell>
   );
 }

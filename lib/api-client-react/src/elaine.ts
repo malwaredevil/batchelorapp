@@ -13,12 +13,18 @@ import { customFetch } from "./custom-fetch";
 
 // ---------------------------------------------------------------------------
 // Elaine — shared AI assistant, used identically across travels, pottery,
-// quilting, and the hub. One continuous conversation/memory spans all apps;
-// `appId` tells the server which app's on-screen context/tools/nav-paths are
-// relevant for the current turn, it does not scope the conversation itself.
+// quilting, the hub, and her own standalone Elaine app. One continuous
+// conversation/memory spans all apps; `appId` tells the server which app's
+// on-screen context/tools/nav-paths are relevant for the current turn, it
+// does not scope the conversation itself.
 // ---------------------------------------------------------------------------
 
-export type ElaineAppId = "travels" | "pottery" | "quilting" | "hub";
+export type ElaineAppId =
+  | "travels"
+  | "pottery"
+  | "quilting"
+  | "hub"
+  | "elaine";
 
 export interface AssistantMessage {
   role: "user" | "assistant";

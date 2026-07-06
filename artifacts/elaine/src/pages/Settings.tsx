@@ -1,4 +1,4 @@
-import { ElaineSettingsCard } from "@workspace/elaine-ui";
+import { ElaineSettingsCard, ElaineAdminConfigCard } from "@workspace/elaine-ui";
 
 /**
  * Elaine's dedicated account/config page — the "viewable/editable/savable
@@ -15,7 +15,10 @@ export default function Settings() {
       <p className="mb-6 text-sm text-muted-foreground">
         Manage how Elaine behaves across every app in the household.
       </p>
-      <ElaineSettingsCard subtitle="Your household's AI assistant — works everywhere" />
+      <div className="space-y-6">
+        <ElaineSettingsCard subtitle="Your household's AI assistant — works everywhere" />
+        <ElaineAdminConfigCard />
+      </div>
     </div>
   );
 }

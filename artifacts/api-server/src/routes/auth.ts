@@ -150,6 +150,7 @@ router.get("/auth/me", requireAuth, async (req, res) => {
       email: user.email,
       displayName: user.displayName ?? null,
       themePreference: user.themePreference ?? null,
+      isOwner: user.isOwner ?? false,
     }),
   );
 });
@@ -203,6 +204,7 @@ router.patch("/auth/me", requireAuth, async (req, res) => {
       email: user.email,
       displayName: user.displayName ?? null,
       themePreference: user.themePreference ?? null,
+      isOwner: user.isOwner ?? false,
     }),
   );
 });

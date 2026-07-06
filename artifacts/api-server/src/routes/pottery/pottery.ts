@@ -116,12 +116,12 @@ router.use(requireAuth);
 // Collection
 // ---------------------------------------------------------------------------
 
-router.get("/items", async (req, res) => {
-  const userId = req.session.userId!;
+router.get("/items", async (_req, res) => {
+  // Pottery is a shared household collection — every authenticated user sees
+  // every piece, regardless of who originally added it.
   const rows = await db
     .select(itemColumns)
     .from(potteryItems)
-    .where(eq(potteryItems.userId, userId))
     .orderBy(desc(potteryItems.createdAt));
   const items = await serializeItems(rows);
   res.json(ListPotteryResponse.parse(items));
@@ -131,8 +131,7 @@ router.get("/items", async (req, res) => {
 // embedding (so they're invisible to the "Do I own this?" compare) or with no
 // descriptive attributes extracted at all. Registered BEFORE `/pottery/:id` so
 // the literal `stragglers` segment isn't captured as an `:id` param.
-router.get("/items/stragglers", async (req, res) => {
-  const userId = req.session.userId!;
+router.get("/items/stragglers", async (_req, res) => {
   const rows = await db
     .select({
       id: potteryItems.id,
@@ -141,15 +140,12 @@ router.get("/items/stragglers", async (req, res) => {
     })
     .from(potteryItems)
     .where(
-      and(
-        eq(potteryItems.userId, userId),
-        or(
-          isNull(potteryItems.embedding),
-          and(
-            isNull(potteryItems.patternDescription),
-            isNull(potteryItems.style),
-            isNull(potteryItems.shape),
-          ),
+      or(
+        isNull(potteryItems.embedding),
+        and(
+          isNull(potteryItems.patternDescription),
+          isNull(potteryItems.style),
+          isNull(potteryItems.shape),
         ),
       ),
     )
@@ -167,11 +163,10 @@ router.get("/items/stragglers", async (req, res) => {
 
 router.get("/items/:id", async (req, res) => {
   const { id } = GetPotteryParams.parse(req.params);
-  const userId = req.session.userId!;
   const [row] = await db
     .select(itemColumns)
     .from(potteryItems)
-    .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)))
+    .where(eq(potteryItems.id, id))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Pottery piece not found." });
@@ -287,10 +282,10 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
 
     // Auto-match categories based on AI analysis, merged with user's manual picks.
     // Manual picks always win (union — nothing is ever removed).
+    // Categories are a shared household set, not scoped to the creator.
     const allCats = await db
       .select({ id: categories.id, name: categories.name })
-      .from(categories)
-      .where(eq(categories.userId, userId));
+      .from(categories);
 
     // Normalise inch-mark variants so AI output (which may use ″ double-prime)
     // and user-typed category names (which use plain ") match each other.
@@ -326,11 +321,10 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
       .filter((cat) => categoryMatchesText(cat.name))
       .map((cat) => cat.id);
 
-    // Restrict manual category picks to this user's own categories.
-    // allCats is already scoped to userId above.
-    const userCatIds = new Set(allCats.map((c) => c.id));
+    // Categories are shared, so only guard against IDs that don't exist at all.
+    const allCatIds = new Set(allCats.map((c) => c.id));
     const safeManualCategoryIds = manualCategoryIds.filter((id) =>
-      userCatIds.has(id),
+      allCatIds.has(id),
     );
 
     const allCategoryIds = [
@@ -346,7 +340,7 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
     }
 
     // Auto-assign (or remove) the "Duplicate" category based on quantity.
-    await syncDuplicateCategory(row.id, row.quantity, userId);
+    await syncDuplicateCategory(row.id, row.quantity);
 
     res.status(201).json(GetPotteryResponse.parse(await serializeItem(row)));
   } catch (err) {
@@ -388,7 +382,7 @@ router.patch("/items/:id", async (req, res) => {
     const [updated] = await db
       .update(potteryItems)
       .set(fieldUpdates)
-      .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)))
+      .where(eq(potteryItems.id, id))
       .returning(itemColumns);
     if (!updated) {
       res.status(404).json({ error: "Pottery piece not found." });
@@ -399,7 +393,7 @@ router.patch("/items/:id", async (req, res) => {
     const [existing] = await db
       .select(itemColumns)
       .from(potteryItems)
-      .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)))
+      .where(eq(potteryItems.id, id))
       .limit(1);
     if (!existing) {
       res.status(404).json({ error: "Pottery piece not found." });
@@ -409,15 +403,13 @@ router.patch("/items/:id", async (req, res) => {
   }
 
   // Replace categories for this item if provided.
-  // Only allow category IDs that belong to this user.
+  // Categories are a shared household set — only guard against IDs that
+  // don't exist at all.
   if (body.categoryIds !== undefined) {
-    const userCats = await db
-      .select({ id: categories.id })
-      .from(categories)
-      .where(eq(categories.userId, userId));
-    const userCatIds = new Set(userCats.map((c) => c.id));
+    const allCats = await db.select({ id: categories.id }).from(categories);
+    const allCatIds = new Set(allCats.map((c) => c.id));
     const safeCategoryIds = body.categoryIds.filter((catId) =>
-      userCatIds.has(catId),
+      allCatIds.has(catId),
     );
 
     await db.transaction(async (tx) => {
@@ -436,14 +428,13 @@ router.patch("/items/:id", async (req, res) => {
   // Re-sync the "Duplicate" category based on the item's current quantity.
   // Runs after any category replacement so it always wins, even if the user
   // didn't include "Duplicate" in their categoryIds list.
-  await syncDuplicateCategory(id, row.quantity, userId);
+  await syncDuplicateCategory(id, row.quantity);
 
   res.json(UpdatePotteryResponse.parse(await serializeItem(row)));
 });
 
 router.delete("/items/:id", async (req, res) => {
   const { id } = DeletePotteryParams.parse(req.params);
-  const userId = req.session.userId!;
 
   // Collect all storage paths BEFORE deleting the DB row: the cascade on
   // pottery_images.item_id removes child rows the instant the parent is
@@ -455,7 +446,7 @@ router.delete("/items/:id", async (req, res) => {
       patternCropPath: potteryItems.patternCropPath,
     })
     .from(potteryItems)
-    .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)))
+    .where(eq(potteryItems.id, id))
     .limit(1);
   if (!item) {
     res.status(404).json({ error: "Pottery piece not found." });
@@ -466,9 +457,7 @@ router.delete("/items/:id", async (req, res) => {
     .from(potteryImages)
     .where(eq(potteryImages.itemId, id));
 
-  await db
-    .delete(potteryItems)
-    .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)));
+  await db.delete(potteryItems).where(eq(potteryItems.id, id));
 
   await Promise.all([
     deleteImage(item.imagePath),
@@ -486,11 +475,10 @@ router.delete("/items/:id", async (req, res) => {
 
 router.get("/items/:id/image", async (req, res) => {
   const { id } = GetPotteryParams.parse(req.params);
-  const userId = req.session.userId!;
   const [row] = await db
     .select({ imagePath: potteryItems.imagePath })
     .from(potteryItems)
-    .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)))
+    .where(eq(potteryItems.id, id))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Pottery piece not found." });
@@ -505,17 +493,16 @@ router.get("/items/:id/image", async (req, res) => {
 // Supplemental image delivery
 router.get("/items/:id/images/:imageId", async (req, res) => {
   const { id } = GetPotteryParams.parse(req.params);
-  const userId = req.session.userId!;
   const imageId = Number(req.params.imageId);
   if (!Number.isFinite(imageId)) {
     res.status(400).json({ error: "Invalid image ID." });
     return;
   }
-  // Verify item ownership before serving the image
+  // Verify item exists before serving the image
   const [item] = await db
     .select({ id: potteryItems.id })
     .from(potteryItems)
-    .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)))
+    .where(eq(potteryItems.id, id))
     .limit(1);
   if (!item) {
     res.status(404).json({ error: "Pottery piece not found." });
@@ -549,13 +536,12 @@ router.post(
   upload.single("image"),
   async (req, res) => {
     const { id } = AddPotteryImageParams.parse(req.params);
-    const userId = req.session.userId!;
 
-    // Verify item exists and belongs to this user
+    // Verify item exists
     const [item] = await db
       .select({ id: potteryItems.id })
       .from(potteryItems)
-      .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)))
+      .where(eq(potteryItems.id, id))
       .limit(1);
     if (!item) {
       res.status(404).json({ error: "Pottery piece not found." });
@@ -613,7 +599,6 @@ router.post(
 
 router.patch("/items/:id/images/:imageId", async (req, res) => {
   const { id } = UpdatePotteryImageParams.parse(req.params);
-  const userId = req.session.userId!;
   const imageId = Number(req.params.imageId);
   if (!Number.isFinite(imageId)) {
     res.status(400).json({ error: "Invalid image ID." });
@@ -621,11 +606,11 @@ router.patch("/items/:id/images/:imageId", async (req, res) => {
   }
   const body = UpdatePotteryImageBody.parse(req.body);
 
-  // Verify item ownership before modifying supplemental image
+  // Verify item exists before modifying supplemental image
   const [item] = await db
     .select({ id: potteryItems.id })
     .from(potteryItems)
-    .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)))
+    .where(eq(potteryItems.id, id))
     .limit(1);
   if (!item) {
     res.status(404).json({ error: "Pottery piece not found." });
@@ -666,20 +651,19 @@ router.patch("/items/:id/images/:imageId", async (req, res) => {
 
 router.delete("/items/:id/images/:imageId", async (req, res) => {
   const { id } = DeletePotteryImageParams.parse(req.params);
-  const userId = req.session.userId!;
   const imageId = Number(req.params.imageId);
   if (!Number.isFinite(imageId)) {
     res.status(400).json({ error: "Invalid image ID." });
     return;
   }
 
-  // Verify item ownership BEFORE touching any data.
+  // Verify item exists BEFORE touching any data.
   // Previous code deleted first and checked afterwards, which allowed
   // removing images from items that didn't match the requested :id.
   const [item] = await db
     .select({ id: potteryItems.id })
     .from(potteryItems)
-    .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)))
+    .where(eq(potteryItems.id, id))
     .limit(1);
   if (!item) {
     res.status(404).json({ error: "Pottery piece not found." });
@@ -720,17 +704,11 @@ router.delete("/items/:id/images/:imageId", async (req, res) => {
 async function syncDuplicateCategory(
   itemId: number,
   quantity: number,
-  userId: number,
 ): Promise<void> {
   const [dupCat] = await db
     .select({ id: categories.id })
     .from(categories)
-    .where(
-      and(
-        sql`lower(${categories.name}) = 'duplicate'`,
-        eq(categories.userId, userId),
-      ),
-    )
+    .where(sql`lower(${categories.name}) = 'duplicate'`)
     .limit(1);
   if (!dupCat) return;
 
@@ -755,11 +733,11 @@ async function syncDuplicateCategory(
 // Shared AI analysis pipeline — used by both reanalyze and set-primary-image
 // ---------------------------------------------------------------------------
 
-async function runItemAnalysis(id: number, userId: number): Promise<unknown> {
+async function runItemAnalysis(id: number): Promise<unknown> {
   const [item] = await db
     .select(itemColumns)
     .from(potteryItems)
-    .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)))
+    .where(eq(potteryItems.id, id))
     .limit(1);
   if (!item)
     throw Object.assign(new Error("Pottery piece not found."), { status: 404 });
@@ -871,7 +849,7 @@ async function runItemAnalysis(id: number, userId: number): Promise<unknown> {
   const [updated] = await db
     .update(potteryItems)
     .set(merged)
-    .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)))
+    .where(eq(potteryItems.id, id))
     .returning(itemColumns);
 
   // Re-run category auto-matching (union-only — never removes existing assignments).
@@ -892,8 +870,7 @@ async function runItemAnalysis(id: number, userId: number): Promise<unknown> {
 
   const allCats = await db
     .select({ id: categories.id, name: categories.name })
-    .from(categories)
-    .where(eq(categories.userId, userId));
+    .from(categories);
   const existingCatRows = await db
     .select({ categoryId: itemCategories.categoryId })
     .from(itemCategories)
@@ -919,7 +896,7 @@ async function runItemAnalysis(id: number, userId: number): Promise<unknown> {
 
   // Sync the "Duplicate" category based on quantity (unchanged by reanalysis,
   // but the category may have been manually removed — re-assert it here).
-  await syncDuplicateCategory(id, item.quantity, userId);
+  await syncDuplicateCategory(id, item.quantity);
 
   return GetPotteryResponse.parse(await serializeItem(updated));
 }
@@ -930,9 +907,8 @@ async function runItemAnalysis(id: number, userId: number): Promise<unknown> {
 
 router.post("/items/:id/reanalyze", aiLimiter, async (req, res) => {
   const { id } = GetPotteryParams.parse(req.params);
-  const userId = req.session.userId!;
   try {
-    res.json(await runItemAnalysis(id, userId));
+    res.json(await runItemAnalysis(id));
   } catch (err: unknown) {
     const status = (err as { status?: number }).status ?? 500;
     const message = err instanceof Error ? err.message : "Unknown error.";
@@ -948,7 +924,6 @@ const MAX_BULK_REANALYZE = 20;
 
 router.post("/items/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
   const { ids } = BulkReanalyzePotteryBody.parse(req.body);
-  const userId = req.session.userId!;
   const capped = [...new Set(ids)].slice(0, MAX_BULK_REANALYZE);
   const succeeded: number[] = [];
   const failed: number[] = [];
@@ -956,7 +931,7 @@ router.post("/items/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
   for (let i = 0; i < capped.length; i++) {
     const id = capped[i]!;
     try {
-      await runItemAnalysis(id, userId);
+      await runItemAnalysis(id);
       succeeded.push(id);
     } catch (err) {
       logger.error({ itemId: id, err }, "bulk-reanalyze: item failed");
@@ -978,7 +953,6 @@ router.post("/items/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
 
 router.post("/items/:id/set-primary-image", aiLimiter, async (req, res) => {
   const { id } = GetPotteryParams.parse(req.params);
-  const userId = req.session.userId!;
 
   const imageId = Number(req.body?.imageId);
   if (!Number.isInteger(imageId) || imageId <= 0) {
@@ -986,11 +960,11 @@ router.post("/items/:id/set-primary-image", aiLimiter, async (req, res) => {
     return;
   }
 
-  // Fetch item to get the current primary path — enforce ownership
+  // Fetch item to get the current primary path
   const [item] = await db
     .select(itemColumns)
     .from(potteryItems)
-    .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)))
+    .where(eq(potteryItems.id, id))
     .limit(1);
   if (!item) {
     res.status(404).json({ error: "Pottery piece not found." });
@@ -1020,11 +994,11 @@ router.post("/items/:id/set-primary-image", aiLimiter, async (req, res) => {
   await db
     .update(potteryItems)
     .set({ imagePath: newPrimaryPath })
-    .where(and(eq(potteryItems.id, id), eq(potteryItems.userId, userId)));
+    .where(eq(potteryItems.id, id));
 
   // Re-analyse with the new primary image in place
   try {
-    res.json(await runItemAnalysis(id, userId));
+    res.json(await runItemAnalysis(id));
   } catch (err: unknown) {
     const status = (err as { status?: number }).status ?? 500;
     const message = err instanceof Error ? err.message : "Unknown error.";

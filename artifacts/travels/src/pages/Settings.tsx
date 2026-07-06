@@ -56,7 +56,7 @@ import {
   type ConnectedCalendar,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ElaineSettingsCard } from "@workspace/elaine-ui";
+import { ElaineAvatar, ElaineName } from "@workspace/elaine-ui";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 
 export default function Settings() {
@@ -249,7 +249,29 @@ export default function Settings() {
       <TimezoneCard />
       <GmailSyncCard />
       <CalendarSyncCard />
-      <ElaineSettingsCard subtitle="Your household's travel assistant" />
+
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-card-border p-4">
+        <div className="flex items-center gap-3">
+          <ElaineAvatar size={32} />
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              <ElaineName /> settings
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Manage <ElaineName /> once, shared across every app.
+            </p>
+          </div>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            window.location.href = "/elaine/settings";
+          }}
+        >
+          Open settings
+        </Button>
+      </div>
     </div>
   );
 }

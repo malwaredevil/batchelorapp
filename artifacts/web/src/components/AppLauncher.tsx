@@ -301,6 +301,7 @@ function AppHeroCard({
     image: string;
     updated: string;
     description: string;
+    cta?: string;
   };
   stats: { value: string; label: string }[];
   quickLinks: {
@@ -409,7 +410,7 @@ function AppHeroCard({
         {!expanded && (
           <CardFooter className="p-6 pt-0 border-t border-border mt-auto bg-muted/20">
             <div className="w-full flex items-center justify-between text-primary font-medium pt-4 group-hover:text-primary/80 transition-colors">
-              <span>Open collection</span>
+              <span>{app.cta ?? "Open collection"}</span>
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </div>
           </CardFooter>

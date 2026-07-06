@@ -106,7 +106,7 @@ export function ElaineWidget({
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-3 sm:bottom-6 sm:right-6">
+    <div className="fixed bottom-4 right-4 z-[999999] flex flex-col items-end gap-3 sm:bottom-6 sm:right-6">
       {open && (
         <div
           className={`flex max-w-[calc(100vw-2rem)] max-h-[calc(100vh-6rem)] flex-col overflow-hidden rounded-2xl border border-card-border bg-card shadow-2xl ${

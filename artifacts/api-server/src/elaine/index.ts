@@ -5,10 +5,10 @@ import type OpenAI from "openai";
 import {
   db,
   appUsers,
-  travelsAssistantConversations,
-  travelsAssistantNudges,
-  travelsAssistantSettings,
-  travelsHouseholdMemory,
+  elaineConversations,
+  elaineNudges,
+  elaineSettings,
+  elaineMemory,
   travelsTrips,
   travelsTripDocuments,
   travelsTripPhotos,
@@ -17,22 +17,25 @@ import {
   travelsGoogleCalendarConnections,
   travelsConnectedCalendars,
 } from "@workspace/db";
-import { requireAuth } from "../../middleware/auth";
-import { logger } from "../../lib/logger";
-import { callModelWithSubagent, MODELS } from "../../lib/ai-client";
-import { deleteTripPhoto } from "../../lib/travels/storage";
-import { deleteDocument } from "../../lib/travels-storage";
-import { getValidAccessToken } from "../../lib/google-calendar-tokens";
-import { rescanTripDocument } from "./documents";
+import { requireAuth } from "../middleware/auth";
+import { logger } from "../lib/logger";
+import { callModelWithSubagent, MODELS } from "../lib/ai-client";
+import { deleteTripPhoto } from "../lib/travels/storage";
+import { deleteDocument } from "../lib/travels-storage";
+import { getValidAccessToken } from "../lib/google-calendar-tokens";
+import { rescanTripDocument } from "../routes/travels/documents";
 import {
   getReminderSyncTarget,
   syncReminderCalendarEvents,
   deleteAllReminderCalendarEvents,
-} from "./reminders";
-import { generateItineraryForTrip, ItineraryActionError } from "./ai";
-import { sendAssistantEmail, resendConfigured } from "../../lib/email";
-import { webSearch } from "../../lib/web-search";
-import { consultExperts } from "../../lib/expert-consult";
+} from "../routes/travels/reminders";
+import {
+  generateItineraryForTrip,
+  ItineraryActionError,
+} from "../routes/travels/ai";
+import { sendAssistantEmail, resendConfigured } from "../lib/email";
+import { webSearch } from "../lib/web-search";
+import { consultExperts } from "../lib/expert-consult";
 import {
   getWeatherForecast,
   getAirQuality,
@@ -40,7 +43,21 @@ import {
   searchPlaces,
   computeRoute,
   type TravelMode,
-} from "../../lib/travels/google-maps";
+} from "../lib/travels/google-maps";
+import {
+  potteryActionSchemas,
+  potteryActionExecutors,
+  buildPotteryActionLabel,
+  potteryActionTools,
+  type PotteryActionType,
+} from "./pottery-actions";
+import {
+  quiltingActionSchemas,
+  quiltingActionExecutors,
+  buildQuiltingActionLabel,
+  quiltingActionTools,
+  type QuiltingActionType,
+} from "./quilting-actions";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -62,12 +79,19 @@ const ASSISTANT_SUBAGENT_INSTRUCTIONS =
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
+const APP_IDS = ["travels", "pottery", "quilting", "hub"] as const;
+type AppId = (typeof APP_IDS)[number];
+
 const ChatBody = z.object({
   message: z.string().min(1).max(4000),
   // Freeform description of what's currently on the user's screen — page
   // name plus any live/unsaved field values a page has chosen to publish via
   // usePageAssistantContext(). Never persisted; only used for this one call.
   pageContext: z.string().max(6000).optional(),
+  // Which app surface the user is currently chatting from, so navigation
+  // suggestions stay scoped to real paths in that app. Defaults to "hub"
+  // since Elaine is one continuous conversation shown everywhere.
+  appId: z.enum(APP_IDS).default("hub"),
 });
 
 // How elAIne confirms a turn that proposes more than one write-action:
@@ -408,10 +432,30 @@ const ActionBody = z.discriminatedUnion("type", [
     payload: RemoveItineraryActivityActionPayload,
   }),
   z.object({ type: z.literal("send_email"), payload: SendEmailActionPayload }),
+  ...potteryActionSchemas,
+  ...quiltingActionSchemas,
 ]);
 
 type PendingAction = z.infer<typeof ActionBody>;
 type ActionType = PendingAction["type"];
+
+const POTTERY_ACTION_TYPES = new Set<string>([
+  "update_pottery_item",
+  "delete_pottery_item",
+  "create_pottery_category",
+  "delete_pottery_category",
+]);
+const QUILTING_ACTION_TYPES = new Set<string>([
+  "update_fabric",
+  "delete_fabric",
+  "update_pattern",
+  "delete_pattern",
+  "create_shopping_item",
+  "update_shopping_item",
+  "delete_shopping_item",
+  "create_quilting_category",
+  "delete_quilting_category",
+]);
 
 async function buildActionLabel(action: PendingAction): Promise<string> {
   switch (action.type) {
@@ -552,6 +596,18 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
     }
     case "send_email":
       return `Email you "${action.payload.subject}"`;
+    default:
+      if (POTTERY_ACTION_TYPES.has(action.type as PotteryActionType)) {
+        return buildPotteryActionLabel(
+          action as { type: PotteryActionType; payload: unknown },
+        );
+      }
+      if (QUILTING_ACTION_TYPES.has(action.type as QuiltingActionType)) {
+        return buildQuiltingActionLabel(
+          action as { type: QuiltingActionType; payload: unknown },
+        );
+      }
+      return "Perform this action";
   }
 }
 
@@ -564,7 +620,12 @@ type ActionExecutor = (
   userId: number,
 ) => Promise<{ status: number; body: unknown }>;
 
-const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
+type TravelActionType = Exclude<
+  ActionType,
+  PotteryActionType | QuiltingActionType
+>;
+
+const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
   create_trip: (async (
     payload: z.infer<typeof CreateTripActionPayload>,
     userId: number,
@@ -1296,6 +1357,12 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
   }) as ActionExecutor,
 };
 
+const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
+  ...TRAVEL_ACTION_EXECUTORS,
+  ...potteryActionExecutors,
+  ...quiltingActionExecutors,
+};
+
 // ---------------------------------------------------------------------------
 // Function-tool definitions handed to the model via real tool-calling
 // (`tools` on the chat completion request). One per confirmable write-action,
@@ -1717,29 +1784,74 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  ...potteryActionTools,
+  ...quiltingActionTools,
 ];
 
 const NAVIGATE_TOOL_NAME = "suggest_navigation";
 const REMEMBER_TOOL_NAME = "remember_household_fact";
 
-const NAVIGATE_ALLOWED_PATHS = [
-  "/",
-  "/trips",
-  "/map",
-  "/explore",
-  "/wishlist",
-  "/destinations",
-  "/settings",
-] as const;
-// "/trips/:id" is also allowed with a concrete numeric id, e.g. "/trips/42".
-const NAVIGATE_PATH_RE =
-  /^\/(trips\/\d+|trips|map|explore|wishlist|destinations|settings)?$/;
+// Per-app allowlists for navigation suggestions. Elaine is one continuous
+// conversation across apps, but "suggest_navigation" must only ever point at
+// a real path in the app the user is currently viewing (see ChatBody.appId).
+const NAVIGATE_ALLOWED_PATHS_BY_APP: Record<AppId, readonly string[]> = {
+  travels: [
+    "/",
+    "/trips",
+    "/map",
+    "/explore",
+    "/wishlist",
+    "/destinations",
+    "/settings",
+  ],
+  pottery: [
+    "/",
+    "/add",
+    "/compare",
+    "/categories",
+    "/maintenance",
+    "/settings",
+  ],
+  quilting: [
+    "/fabrics",
+    "/fabrics/add",
+    "/patterns",
+    "/patterns/add",
+    "/quilts",
+    "/quilts/add",
+    "/blocks",
+    "/blocks/new",
+    "/layouts",
+    "/layouts/new",
+    "/whole-quilt/designer",
+    "/shopping",
+    "/categories",
+  ],
+  hub: ["/", "/account"],
+};
+
+// Dynamic-id path shapes allowed per app, checked against the same regex
+// pattern for every app since only the "kind" segment differs.
+const NAVIGATE_PATH_RE_BY_APP: Record<AppId, RegExp> = {
+  travels: /^\/(trips\/\d+|trips|map|explore|wishlist|destinations|settings)?$/,
+  pottery: /^\/(piece\/\d+|add|compare|categories|maintenance|settings)?$/,
+  quilting:
+    /^\/(fabrics\/\d+|fabrics\/add|fabrics|patterns\/\d+|patterns\/add|patterns|quilts\/\d+|quilts\/add|quilts|blocks\/\d+\/edit|blocks\/\d+\/cut-pattern|blocks\/new|blocks|layouts\/new|layouts|whole-quilt\/designer|shopping|categories)?$/,
+  hub: /^\/(account)?$/,
+};
+
+function navigatePayloadSchemaFor(appId: AppId) {
+  return z.object({
+    path: z
+      .string()
+      .max(60)
+      .regex(NAVIGATE_PATH_RE_BY_APP[appId], "not an allowed in-app path"),
+    reason: z.string().min(1).max(300),
+  });
+}
 
 const NavigateToolPayload = z.object({
-  path: z
-    .string()
-    .max(50)
-    .regex(NAVIGATE_PATH_RE, "not an allowed in-app path"),
+  path: z.string().max(60),
   reason: z.string().min(1).max(300),
 });
 
@@ -1820,15 +1932,14 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: NAVIGATE_TOOL_NAME,
       description:
-        'Suggest moving the user to another screen. You are never allowed to navigate them yourself — the UI only offers a button, the user must click it. First ASK in plain language in your visible reply (e.g. "Want me to open your Wishlist so you can add that?"). Only call this if you actually just asked permission in your visible text, and never for the page the user is already on.',
+        'Suggest moving the user to another screen IN THE APP THEY ARE CURRENTLY VIEWING. You are never allowed to navigate them yourself — the UI only offers a button, the user must click it. First ASK in plain language in your visible reply (e.g. "Want me to open your Wishlist so you can add that?"). Only call this if you actually just asked permission in your visible text, and never for the page the user is already on.',
       parameters: {
         type: "object",
         properties: {
           path: {
             type: "string",
-            enum: [...NAVIGATE_ALLOWED_PATHS, "/trips/{id}"],
             description:
-              'One of the listed static paths, or "/trips/{id}" with a real numeric id substituted in, e.g. "/trips/42".',
+              'A real in-app path for the app the user is currently on, e.g. "/trips/42", "/piece/7", or "/fabrics/add". Never invent a path outside that app.',
           },
           reason: {
             type: "string",
@@ -2057,12 +2168,12 @@ const ACTION_TOOL_NAMES = new Set<string>(
 async function getOrCreateConversation(userId: number) {
   const [existing] = await db
     .select()
-    .from(travelsAssistantConversations)
-    .where(eq(travelsAssistantConversations.userId, userId));
+    .from(elaineConversations)
+    .where(eq(elaineConversations.userId, userId));
   if (existing) return existing;
 
   const [created] = await db
-    .insert(travelsAssistantConversations)
+    .insert(elaineConversations)
     .values({ userId, messages: [] })
     .onConflictDoNothing()
     .returning();
@@ -2071,8 +2182,8 @@ async function getOrCreateConversation(userId: number) {
   // Lost a race with another request — read the row that won.
   const [row] = await db
     .select()
-    .from(travelsAssistantConversations)
-    .where(eq(travelsAssistantConversations.userId, userId));
+    .from(elaineConversations)
+    .where(eq(elaineConversations.userId, userId));
   return row;
 }
 
@@ -2119,17 +2230,12 @@ async function applyUnseenNudges(userId: number): Promise<ChatMessage[]> {
 
   const unseen = await db
     .select({
-      id: travelsAssistantNudges.id,
-      message: travelsAssistantNudges.message,
+      id: elaineNudges.id,
+      message: elaineNudges.message,
     })
-    .from(travelsAssistantNudges)
-    .where(
-      and(
-        eq(travelsAssistantNudges.userId, userId),
-        isNull(travelsAssistantNudges.seenAt),
-      ),
-    )
-    .orderBy(travelsAssistantNudges.createdAt);
+    .from(elaineNudges)
+    .where(and(eq(elaineNudges.userId, userId), isNull(elaineNudges.seenAt)))
+    .orderBy(elaineNudges.createdAt);
 
   if (unseen.length === 0) return history;
 
@@ -2139,24 +2245,19 @@ async function applyUnseenNudges(userId: number): Promise<ChatMessage[]> {
   ];
 
   await db
-    .update(travelsAssistantConversations)
+    .update(elaineConversations)
     .set({ messages: updatedHistory, updatedAt: new Date() })
-    .where(eq(travelsAssistantConversations.userId, userId));
+    .where(eq(elaineConversations.userId, userId));
 
   await db
-    .update(travelsAssistantNudges)
+    .update(elaineNudges)
     .set({ seenAt: new Date() })
-    .where(
-      and(
-        eq(travelsAssistantNudges.userId, userId),
-        isNull(travelsAssistantNudges.seenAt),
-      ),
-    );
+    .where(and(eq(elaineNudges.userId, userId), isNull(elaineNudges.seenAt)));
 
   return updatedHistory;
 }
 
-router.get("/assistant/conversation", async (req, res) => {
+router.get("/conversation", async (req, res) => {
   const userId = req.session.userId!;
   const messages = await applyUnseenNudges(userId);
   res.json({ messages });
@@ -2165,33 +2266,28 @@ router.get("/assistant/conversation", async (req, res) => {
 // Lightweight polling endpoint for the floating-button badge — deliberately
 // separate from GET /assistant/conversation (which also marks nudges seen)
 // so simply showing a badge never consumes the nudge.
-router.get("/assistant/nudges/unseen-count", async (req, res) => {
+router.get("/nudges/unseen-count", async (req, res) => {
   const userId = req.session.userId!;
   const rows = await db
-    .select({ id: travelsAssistantNudges.id })
-    .from(travelsAssistantNudges)
-    .where(
-      and(
-        eq(travelsAssistantNudges.userId, userId),
-        isNull(travelsAssistantNudges.seenAt),
-      ),
-    );
+    .select({ id: elaineNudges.id })
+    .from(elaineNudges)
+    .where(and(eq(elaineNudges.userId, userId), isNull(elaineNudges.seenAt)));
   res.json({ count: rows.length });
 });
 
-router.delete("/assistant/conversation", async (req, res) => {
+router.delete("/conversation", async (req, res) => {
   const userId = req.session.userId!;
   await getOrCreateConversation(userId);
   await db
-    .update(travelsAssistantConversations)
+    .update(elaineConversations)
     .set({ messages: [], updatedAt: new Date() })
-    .where(eq(travelsAssistantConversations.userId, userId));
+    .where(eq(elaineConversations.userId, userId));
   res.json({ messages: [] });
 });
 
-router.post("/assistant/chat", async (req, res) => {
+router.post("/chat", async (req, res) => {
   const userId = req.session.userId!;
-  const { message, pageContext } = ChatBody.parse(req.body);
+  const { message, pageContext, appId } = ChatBody.parse(req.body);
 
   const [user] = await db
     .select({ displayName: appUsers.displayName, email: appUsers.email })
@@ -2203,9 +2299,9 @@ router.post("/assistant/chat", async (req, res) => {
   const history = (conversation?.messages as ChatMessage[] | null) ?? [];
 
   const memoryRows = await db
-    .select({ content: travelsHouseholdMemory.content })
-    .from(travelsHouseholdMemory)
-    .orderBy(desc(travelsHouseholdMemory.createdAt))
+    .select({ content: elaineMemory.content })
+    .from(elaineMemory)
+    .orderBy(desc(elaineMemory.createdAt))
     .limit(50);
   const memoryBlock =
     memoryRows.length > 0
@@ -2214,10 +2310,10 @@ router.post("/assistant/chat", async (req, res) => {
 
   const [settingsRow] = await db
     .select({
-      actionConfirmationMode: travelsAssistantSettings.actionConfirmationMode,
+      actionConfirmationMode: elaineSettings.actionConfirmationMode,
     })
-    .from(travelsAssistantSettings)
-    .where(eq(travelsAssistantSettings.userId, userId));
+    .from(elaineSettings)
+    .where(eq(elaineSettings.userId, userId));
   const actionConfirmationMode: ActionConfirmationMode =
     (settingsRow?.actionConfirmationMode as
       | ActionConfirmationMode
@@ -2233,11 +2329,20 @@ router.post("/assistant/chat", async (req, res) => {
         "auto_run — proposed actions run immediately with no confirmation step; you should report what you did (or if something failed) after the fact.",
     };
 
-  const systemPrompt = `You are Elaine, a warm, personable AI assistant built into a family travel-planning app. You are talking with ${userName}.
+  const CURRENT_APP_LABEL: Record<AppId, string> = {
+    travels: "Travels",
+    pottery: "Pottery",
+    quilting: "Quilting",
+    hub: "the Batchelor hub (app launcher)",
+  };
 
-PERSONALITY: You're conversational, upbeat, and genuinely helpful — like a well-traveled friend, not a generic corporate assistant. You can be a little playful. You still give concrete, accurate, step-by-step help when asked.
+  const systemPrompt = `You are Elaine, a warm, personable AI assistant built into the Batchelor app — a household account shared across a Pottery collection app, a Quilting collection app, and a Travel-planning app, plus a hub/launcher page. You are one continuous assistant: the same conversation and memory follow the user across all of these apps, even though each app has its own pages and tools. You are talking with ${userName}, who is currently using you from ${CURRENT_APP_LABEL[appId]}.
 
-APP MAP (every page in this app, so you can always explain what a page is for or point the user to the right one, even if they're not currently on it):
+PERSONALITY: You're conversational, upbeat, and genuinely helpful — like a knowledgeable friend, not a generic corporate assistant. You can be a little playful. You still give concrete, accurate, step-by-step help when asked.
+
+APP MAP (every page in every app, so you can always explain what a page is for or point the user to the right one, even if they're not currently on it or in a different app):
+
+Travels app:
 - Dashboard ("/"): the home screen — trip stats, a countdown to the next upcoming trip, pending reminders, and a status-grouped list of every trip (wishlist/planning/booked/active/completed).
 - Trips ("/trips"): the full trip list with a "New Trip" button/dialog to create one.
 - Trip detail ("/trips/:id"): everything about one specific trip — overview/status, packing list, day-by-day itinerary (AI-generatable), reminders, and uploaded documents (tickets, confirmations, etc.).
@@ -2248,9 +2353,36 @@ APP MAP (every page in this app, so you can always explain what a page is for or
 - Travel Calendar ("/travel-calendar"): a shared household calendar view (month/week/list) overlaying each connected member's Google Calendar plus AI-detected trip-date suggestions.
 - Gmail ("/gmail"): review AI-found travel emails (flights, hotels, etc.), manually browse/search the connected inbox, and link emails as trip documents.
 - Settings ("/settings"): manage account/profile, connect Gmail and Google Calendar, and configure how you (Elaine) behave — enabled/disabled, action confirmation mode, and what you remember about the household.
-If the user asks "what is this page for", "what can I do here", or similar without more specific on-screen detail below, answer using this map (and the live on-screen state if present) rather than saying you don't know.
 
-WHAT YOU CAN SEE RIGHT NOW (live, possibly unsaved, on-screen state):
+Pottery app:
+- Collection ("/"): the full pottery collection grid/list, with search and filtering.
+- Add Piece ("/add"): upload photo(s) of a new pottery piece and let AI analyze/fill in its details.
+- Piece detail ("/piece/:id"): everything about one piece — photos, name, maker, style, shape, condition, origin, era, notes, glaze/surface AI analysis.
+- Compare ("/compare"): pick two or more pieces and compare their AI-derived attributes side by side.
+- Categories ("/categories"): manage the categories used to organize the collection.
+- Maintenance ("/maintenance"): bulk AI re-analysis and other collection upkeep tools.
+- Settings ("/settings"): account/profile settings.
+
+Quilting app:
+- Home ("/"): overview/dashboard for the quilting collection.
+- Fabrics ("/fabrics", "/fabrics/add", "/fabrics/bulk-add", "/fabrics/:id"): the fabric stash — browse, add one or many fabrics (with AI photo analysis), and view/edit a fabric's details.
+- Patterns ("/patterns", "/patterns/add", "/patterns/:id"): quilt patterns — browse, add, and view/edit pattern details.
+- Quilts ("/quilts", "/quilts/add", "/quilts/:id"): finished/in-progress quilts — browse, add, and view/edit details.
+- Compare ("/compare"): compare fabrics or patterns side by side.
+- Blocks ("/blocks", "/blocks/new", "/blocks/:id", "/blocks/:id/edit", "/blocks/:id/cut-pattern"): a quilt-block designer with generated cutting patterns.
+- Layouts ("/layouts", "/layouts/new", "/layouts/:id", "/layouts/:id/edit"): plan how blocks/fabrics come together into a quilt layout.
+- Whole Quilt ("/whole-quilt", "/whole-quilt/designer"): design/browse whole-quilt layouts.
+- Shopping ("/shopping"): the fabric/supplies shopping list.
+- Categories ("/categories"): manage categories used to organize fabrics/patterns.
+- Maintenance ("/maintenance"): bulk AI re-analysis and other collection upkeep tools.
+
+Hub (app launcher):
+- Launcher ("/"): lets the household pick which app to open (Pottery, Quilting, Travels).
+- Account ("/account"): shared account/profile settings.
+
+If the user asks "what is this page for", "what can I do here", or similar without more specific on-screen detail below, answer using this map (and the live on-screen state if present) rather than saying you don't know. If they ask about a different app than the one they're currently in, you can still answer from this map — you don't need to tell them to switch apps first, though you can suggest navigating there if it's the same app they're already in.
+
+WHAT YOU CAN SEE RIGHT NOW (live, possibly unsaved, on-screen state in ${CURRENT_APP_LABEL[appId]}):
 ${pageContext ? pageContext : "(no page context was shared for this screen)"}
 
 SHARED FAMILY MEMORY (facts you've picked up from any family member — treat as true for the whole household, not just the person asking):
@@ -2266,9 +2398,15 @@ ITINERARY: Use add_itinerary_day for requests like "add a day trip to Kyoto on t
 
 CALENDAR: Each household member connects their own Google Calendar independently from the Settings page; you can never trigger that OAuth connection yourself — it requires the user to click a real "Connect" button that redirects their browser to Google. If the user asks to connect and you can see from on-screen context that it's not connected yet, ask if they'd like you to take them to Settings and use suggest_navigation for "/settings" — never claim you connected it. Once connected, use add_connected_calendar to add one of their own calendars to their Travel Calendar overlay, but only if you're on the Settings page and can see the connection is active plus the exact googleCalendarId in the on-screen calendar list — never guess one or pick one that isn't listed. Use disconnect_calendar to remove their Google Calendar connection entirely — only when it's shown as connected on screen, and make sure your visible reply asks permission first since this stops all future reminder syncing and removes every calendar they'd connected. Disconnecting or reconnecting only ever affects the current user, never anyone else in the household. Only the app owner can assign which calendar is the shared "Travel" calendar, and you can never do that on their behalf — direct them to the Settings page for that.
 
-MAGNET CHECK: If the user asks whether they already own a souvenir magnet, or wants to check a photo against their collection before buying a duplicate, you have no tool for this and can't see or analyze photos yourself in this text chat — tell them to tap the small camera icon next to the message box, which lets them snap or upload a photo and checks it against their whole collection right there in the chat (no need to navigate anywhere first). Never guess or fabricate a match result.
+${
+  appId === "travels"
+    ? `MAGNET CHECK: If the user asks whether they already own a souvenir magnet, or wants to check a photo against their collection before buying a duplicate, you have no tool for this and can't see or analyze photos yourself in this text chat — tell them to tap the small camera icon next to the message box, which lets them snap or upload a photo and checks it against their whole collection right there in the chat (no need to navigate anywhere first). Never guess or fabricate a match result. This camera-based check is a Travels-only feature — it is not available in Pottery, Quilting, or the hub.\n\n`
+    : ""
+}DOCUMENTS: You can already see each uploaded document's parsed fields (confirmation numbers, dates, etc.) in the on-screen state above — answer questions about them directly instead of asking the user to open or re-read the file. If the user says a document's details look wrong, are missing, or asks you to "re-read"/"re-scan" a document, use rescan_document to re-run AI extraction on the original uploaded file; this only works for a document whose docId you can see on screen (look for "docId: <number>") and never touches fields the user has locked (shown with a lock icon in the app). This does not let you upload a new file — if there's no matching document on screen, tell the user to upload it from the trip's Documents section first. This applies to Travels trip documents only — Pottery and Quilting don't have an equivalent document-upload feature.
 
-DOCUMENTS: You can already see each uploaded document's parsed fields (confirmation numbers, dates, etc.) in the on-screen state above — answer questions about them directly instead of asking the user to open or re-read the file. If the user says a document's details look wrong, are missing, or asks you to "re-read"/"re-scan" a document, use rescan_document to re-run AI extraction on the original uploaded file; this only works for a document whose docId you can see on screen (look for "docId: <number>") and never touches fields the user has locked (shown with a lock icon in the app). This does not let you upload a new file — if there's no matching document on screen, tell the user to upload it from the trip's Documents section first.
+POTTERY ITEMS: Use update_pottery_item to edit an existing piece (name, notes, quantity, style, shape, maker, condition, origin, era) — only include fields that actually change, and only if the piece's numeric id is visible on screen (look for "itemId: <number>"); never guess one. Use delete_pottery_item to permanently remove a piece and its photos — say clearly in your visible reply that this deletes the item, since it's destructive. Use create_pottery_category / delete_pottery_category to manage the categories used to organize the collection; never guess a category id for deletion.
+
+QUILTING ITEMS: Use update_fabric / delete_fabric, update_pattern / delete_pattern for editing or removing an existing fabric or pattern — only if its numeric id is visible on screen, never guessed, and be clear in your visible reply that a delete is permanent. Use create_shopping_item / update_shopping_item / delete_shopping_item to manage the fabric/supplies shopping list. Use create_quilting_category / delete_quilting_category to manage categories; never guess a category id for deletion.
 
 EMAIL: Whenever you've just given the user something substantial worth keeping — a list of recommendations, an itinerary summary, packing tips, etc. — offer to email it to them, e.g. "Want me to email you this list?" Only call send_email once they say yes; never call it unprompted or assume they want it. It always goes to their own registered account email, so never ask for an address and never offer to send it to anyone else. Write a short subject and a plain-text body (no markdown/HTML, blank line between paragraphs) — it gets formatted into a nice email automatically. You have no way to export a PDF or Word document, so don't offer that; email is the only export option available.
 
@@ -2427,7 +2565,7 @@ Keep replies concise and easy to read in a chat bubble.`;
         try {
           const parsed = RememberToolPayload.safeParse(JSON.parse(args));
           if (parsed.success) {
-            await db.insert(travelsHouseholdMemory).values({
+            await db.insert(elaineMemory).values({
               content: parsed.data.content,
               createdByUserId: userId,
             });
@@ -2444,10 +2582,10 @@ Keep replies concise and easy to read in a chat bubble.`;
           if (parsed.success) {
             updatedActionConfirmationMode = parsed.data.mode;
             await db
-              .insert(travelsAssistantSettings)
+              .insert(elaineSettings)
               .values({ userId, actionConfirmationMode: parsed.data.mode })
               .onConflictDoUpdate({
-                target: travelsAssistantSettings.userId,
+                target: elaineSettings.userId,
                 set: {
                   actionConfirmationMode: parsed.data.mode,
                   updatedAt: new Date(),
@@ -2463,7 +2601,9 @@ Keep replies concise and easy to read in a chat bubble.`;
       if (name === NAVIGATE_TOOL_NAME) {
         if (navigate) continue; // only surface the first navigate suggestion
         try {
-          const parsed = NavigateToolPayload.safeParse(JSON.parse(args));
+          const parsed = navigatePayloadSchemaFor(appId).safeParse(
+            JSON.parse(args),
+          );
           if (parsed.success) navigate = parsed.data;
         } catch {
           // Malformed JSON from the model — drop it.
@@ -2714,9 +2854,9 @@ Keep replies concise and easy to read in a chat bubble.`;
   ];
 
   await db
-    .update(travelsAssistantConversations)
+    .update(elaineConversations)
     .set({ messages: updatedHistory, updatedAt: new Date() })
-    .where(eq(travelsAssistantConversations.userId, userId));
+    .where(eq(elaineConversations.userId, userId));
 
   sendEvent("done", {
     role: "assistant",
@@ -2734,7 +2874,7 @@ Keep replies concise and easy to read in a chat bubble.`;
 // Executes a write-action elAIne proposed in chat, only once the user has
 // explicitly confirmed it in the UI. Every write here is scoped to the
 // calling user the same way the equivalent hand-written routes are.
-router.post("/assistant/action", async (req, res) => {
+router.post("/action", async (req, res) => {
   const userId = req.session.userId!;
   const action = ActionBody.parse(req.body);
   const executor = ACTION_EXECUTORS[action.type];
@@ -2742,12 +2882,12 @@ router.post("/assistant/action", async (req, res) => {
   res.status(status).json(body);
 });
 
-router.get("/assistant/settings", async (req, res) => {
+router.get("/settings", async (req, res) => {
   const userId = req.session.userId!;
   const [row] = await db
     .select()
-    .from(travelsAssistantSettings)
-    .where(eq(travelsAssistantSettings.userId, userId));
+    .from(elaineSettings)
+    .where(eq(elaineSettings.userId, userId));
   res.json({
     enabled: row?.enabled ?? true,
     actionConfirmationMode:
@@ -2756,58 +2896,56 @@ router.get("/assistant/settings", async (req, res) => {
   });
 });
 
-router.put("/assistant/settings", async (req, res) => {
+router.put("/settings", async (req, res) => {
   const userId = req.session.userId!;
   const patch = SettingsBody.parse(req.body);
   const [existing] = await db
     .select()
-    .from(travelsAssistantSettings)
-    .where(eq(travelsAssistantSettings.userId, userId));
+    .from(elaineSettings)
+    .where(eq(elaineSettings.userId, userId));
   const enabled = patch.enabled ?? existing?.enabled ?? true;
   const actionConfirmationMode =
     patch.actionConfirmationMode ??
     (existing?.actionConfirmationMode as ActionConfirmationMode | undefined) ??
     "one_by_one";
   await db
-    .insert(travelsAssistantSettings)
+    .insert(elaineSettings)
     .values({ userId, enabled, actionConfirmationMode })
     .onConflictDoUpdate({
-      target: travelsAssistantSettings.userId,
+      target: elaineSettings.userId,
       set: { enabled, actionConfirmationMode, updatedAt: new Date() },
     });
   res.json({ enabled, actionConfirmationMode });
 });
 
-router.get("/assistant/memory", async (_req, res) => {
+router.get("/memory", async (_req, res) => {
   const rows = await db
     .select({
-      id: travelsHouseholdMemory.id,
-      content: travelsHouseholdMemory.content,
-      createdAt: travelsHouseholdMemory.createdAt,
-      createdByUserId: travelsHouseholdMemory.createdByUserId,
+      id: elaineMemory.id,
+      content: elaineMemory.content,
+      createdAt: elaineMemory.createdAt,
+      createdByUserId: elaineMemory.createdByUserId,
     })
-    .from(travelsHouseholdMemory)
-    .orderBy(desc(travelsHouseholdMemory.createdAt));
+    .from(elaineMemory)
+    .orderBy(desc(elaineMemory.createdAt));
   res.json(rows);
 });
 
-router.delete("/assistant/memory/:id", async (req, res) => {
+router.delete("/memory/:id", async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
   }
   const [existing] = await db
-    .select({ id: travelsHouseholdMemory.id })
-    .from(travelsHouseholdMemory)
-    .where(eq(travelsHouseholdMemory.id, id));
+    .select({ id: elaineMemory.id })
+    .from(elaineMemory)
+    .where(eq(elaineMemory.id, id));
   if (!existing) {
     res.status(404).json({ error: "Not found" });
     return;
   }
-  await db
-    .delete(travelsHouseholdMemory)
-    .where(eq(travelsHouseholdMemory.id, id));
+  await db.delete(elaineMemory).where(eq(elaineMemory.id, id));
   res.status(204).end();
 });
 

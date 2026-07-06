@@ -412,108 +412,13 @@ export type TravelsReminderCalendarEventRow =
 export type InsertTravelsReminderCalendarEvent =
   typeof travelsReminderCalendarEvents.$inferInsert;
 
-// ── elAIne assistant ─────────────────────────────────────────────────────────
-
-// One ongoing conversation per user that follows them across every page.
-// "New conversation" just clears messages back to []. Not to be confused with
-// the (now-retired) per-trip chatHistory column on travelsTrips.
-export const travelsAssistantConversations = pgTable(
-  "travels_assistant_conversations",
-  {
-    id: serial("id").primaryKey(),
-    userId: integer("user_id").notNull().unique(),
-    messages: jsonb("messages")
-      .notNull()
-      .default(sql`'[]'::jsonb`),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-).enableRLS();
-
-export type TravelsAssistantConversationRow =
-  typeof travelsAssistantConversations.$inferSelect;
-export type InsertTravelsAssistantConversation =
-  typeof travelsAssistantConversations.$inferInsert;
-
-// Per-user on/off preference for elAIne (default on). "Hide for this visit"
-// is session-only (client-side), so it does not need a row here.
-// `actionConfirmationMode` controls how she confirms multi-action turns:
-// "one_by_one" (default, safest), "all_at_once", or "auto_run" (no
-// confirmation — she just does them and reports back).
-export const travelsAssistantSettings = pgTable("travels_assistant_settings", {
-  userId: integer("user_id").primaryKey(),
-  enabled: boolean("enabled").notNull().default(true),
-  actionConfirmationMode: text("action_confirmation_mode")
-    .notNull()
-    .default("one_by_one"),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-}).enableRLS();
-
-export type TravelsAssistantSettingsRow =
-  typeof travelsAssistantSettings.$inferSelect;
-export type InsertTravelsAssistantSettings =
-  typeof travelsAssistantSettings.$inferInsert;
-
-// Shared household memory — facts elAIne has learned from any family member
-// that are relevant to everyone, not siloed per-user. Populated by the
-// assistant itself via a save_household_memory tool call, not hand-authored.
-export const travelsHouseholdMemory = pgTable("travels_household_memory", {
-  id: serial("id").primaryKey(),
-  content: text("content").notNull(),
-  createdByUserId: integer("created_by_user_id").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-}).enableRLS();
-
-export type TravelsHouseholdMemoryRow =
-  typeof travelsHouseholdMemory.$inferSelect;
-export type InsertTravelsHouseholdMemory =
-  typeof travelsHouseholdMemory.$inferInsert;
-
-// Proactive nudges — messages elAIne generates unprompted (e.g. "your trip
-// starts in 2 days and the packing list is empty"), produced by a scheduled
-// job (lib/travels-nudges.ts) rather than in response to a chat turn.
-// `nudgeKey` is a stable dedup key per condition instance (e.g.
-// "packing_empty:<tripId>") so the job never nags about the same thing
-// twice; the unique constraint on (user_id, nudge_key) makes inserts
-// idempotent via ON CONFLICT DO NOTHING. Once picked up by
-// GET /assistant/conversation, a nudge's message is appended to the user's
-// conversation history as a normal assistant chat bubble and `seenAt` is
-// stamped so it never appears twice and drops off the unseen-count badge.
-export const travelsAssistantNudges = pgTable(
-  "travels_assistant_nudges",
-  {
-    id: serial("id").primaryKey(),
-    userId: integer("user_id").notNull(),
-    tripId: integer("trip_id"),
-    nudgeKey: text("nudge_key").notNull(),
-    message: text("message").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    seenAt: timestamp("seen_at", { withTimezone: true }),
-  },
-  (table) => [
-    index("travels_assistant_nudges_user_id_idx").on(table.userId),
-    index("travels_assistant_nudges_user_id_seen_at_idx").on(
-      table.userId,
-      table.seenAt,
-    ),
-    uniqueIndex("travels_assistant_nudges_user_id_nudge_key_idx").on(
-      table.userId,
-      table.nudgeKey,
-    ),
-  ],
-).enableRLS();
-
-export type TravelsAssistantNudgeRow =
-  typeof travelsAssistantNudges.$inferSelect;
-export type InsertTravelsAssistantNudge =
-  typeof travelsAssistantNudges.$inferInsert;
+// ── Elaine assistant ─────────────────────────────────────────────────────────
+// Elaine's conversation/settings/memory/nudge tables now live in
+// lib/db/src/schema/elaine.ts (elaine_conversations, elaine_settings,
+// elaine_memory, elaine_nudges) as a shared, non-namespaced schema used
+// identically across Pottery, Quilting, Travels, and the hub. The former
+// travels_assistant_* / travels_household_memory tables were migrated into
+// those tables and dropped — see scripts/src/migrate-to-elaine.ts.
 
 // ---------------------------------------------------------------------------
 // Gmail travel-document scanning

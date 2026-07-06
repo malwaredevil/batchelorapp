@@ -6,6 +6,7 @@ import quiltingRouter from "./quilting";
 import travelsRouter from "./travels";
 import hubRouter from "./hub";
 import devScreenshotLoginRouter from "./dev-screenshot-login";
+import elaineRouter from "../elaine";
 
 const router: IRouter = Router();
 
@@ -15,6 +16,7 @@ router.use(devScreenshotLoginRouter);
 router.use("/pottery", potteryRouter);
 router.use("/quilting", quiltingRouter);
 router.use("/travels", travelsRouter);
+router.use("/elaine", elaineRouter);
 router.use(hubRouter);
 
 export default router;

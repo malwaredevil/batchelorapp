@@ -630,57 +630,12 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS travels_calendar_trip_suggestions_user_id_idx
      ON travels_calendar_trip_suggestions (user_id)`,
 
-  // ── elAIne assistant ───────────────────────────────────────────────────────
-  // One ongoing conversation per user that follows them across every page.
-  `CREATE TABLE IF NOT EXISTS travels_assistant_conversations (
-    id          SERIAL PRIMARY KEY,
-    user_id     INTEGER NOT NULL UNIQUE,
-    messages    JSONB NOT NULL DEFAULT '[]'::jsonb,
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`,
-  `ALTER TABLE travels_assistant_conversations ENABLE ROW LEVEL SECURITY`,
-
-  // Per-user on/off preference for elAIne (default on), plus how she should
-  // handle confirming multi-action turns (default: one at a time).
-  `CREATE TABLE IF NOT EXISTS travels_assistant_settings (
-    user_id     INTEGER PRIMARY KEY,
-    enabled     BOOLEAN NOT NULL DEFAULT TRUE,
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`,
-  `ALTER TABLE travels_assistant_settings ENABLE ROW LEVEL SECURITY`,
-  `ALTER TABLE travels_assistant_settings
-     ADD COLUMN IF NOT EXISTS action_confirmation_mode TEXT NOT NULL DEFAULT 'one_by_one'`,
-
-  // Shared household memory — facts elAIne learned from any family member,
-  // visible to everyone (not siloed per-user).
-  `CREATE TABLE IF NOT EXISTS travels_household_memory (
-    id                  SERIAL PRIMARY KEY,
-    content             TEXT NOT NULL,
-    created_by_user_id  INTEGER NOT NULL,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`,
-  `ALTER TABLE travels_household_memory ENABLE ROW LEVEL SECURITY`,
-
-  // Proactive nudges — messages elAIne generates unprompted (e.g. "your
-  // trip starts in 2 days and packing is empty"), produced by a scheduled
-  // job rather than a chat turn. Unique on (user_id, nudge_key) so the job
-  // can safely re-run without ever duplicating the same nudge.
-  `CREATE TABLE IF NOT EXISTS travels_assistant_nudges (
-    id          SERIAL PRIMARY KEY,
-    user_id     INTEGER NOT NULL,
-    trip_id     INTEGER,
-    nudge_key   TEXT NOT NULL,
-    message     TEXT NOT NULL,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    seen_at     TIMESTAMPTZ
-  )`,
-  `ALTER TABLE travels_assistant_nudges ENABLE ROW LEVEL SECURITY`,
-  `CREATE INDEX IF NOT EXISTS travels_assistant_nudges_user_id_idx
-     ON travels_assistant_nudges (user_id)`,
-  `CREATE INDEX IF NOT EXISTS travels_assistant_nudges_user_id_seen_at_idx
-     ON travels_assistant_nudges (user_id, seen_at)`,
-  `CREATE UNIQUE INDEX IF NOT EXISTS travels_assistant_nudges_user_id_nudge_key_idx
-     ON travels_assistant_nudges (user_id, nudge_key)`,
+  // ── Elaine assistant ───────────────────────────────────────────────────────
+  // Elaine's tables (elaine_conversations, elaine_settings, elaine_memory,
+  // elaine_nudges) are defined further below as a shared, non-namespaced
+  // schema. The former travels_assistant_* / travels_household_memory tables
+  // were migrated into those tables and explicitly dropped — see
+  // scripts/src/migrate-to-elaine.ts. Do not recreate them here.
 
   // --- Multi-Calendar Travel Rework ---------------------------------------
   // is_owner: the single app owner (batchelorjc@gmail.com) is the only
@@ -845,4 +800,51 @@ export const STATEMENTS: string[] = [
      ON travels_custom_document_types (user_id, type_key)`,
   `CREATE INDEX IF NOT EXISTS travels_custom_document_types_user_id_idx
      ON travels_custom_document_types (user_id)`,
+
+  // ── Elaine — shared AI assistant (Pottery + Quilting + Travels + hub) ─────
+  // Replaces the old travels-only travels_assistant_* tables (dropped via a
+  // one-time, explicit named migration script after a verified data copy —
+  // see scripts/src/migrate-elaine.ts). Not namespaced per-app: Elaine keeps
+  // one continuous conversation/memory per user across every surface.
+  `CREATE TABLE IF NOT EXISTS elaine_conversations (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER NOT NULL UNIQUE,
+    messages    JSONB NOT NULL DEFAULT '[]'::jsonb,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE elaine_conversations ENABLE ROW LEVEL SECURITY`,
+
+  `CREATE TABLE IF NOT EXISTS elaine_settings (
+    user_id                   INTEGER PRIMARY KEY,
+    enabled                   BOOLEAN NOT NULL DEFAULT TRUE,
+    action_confirmation_mode  TEXT NOT NULL DEFAULT 'one_by_one',
+    updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE elaine_settings ENABLE ROW LEVEL SECURITY`,
+
+  `CREATE TABLE IF NOT EXISTS elaine_memory (
+    id                  SERIAL PRIMARY KEY,
+    content             TEXT NOT NULL,
+    created_by_user_id  INTEGER NOT NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE elaine_memory ENABLE ROW LEVEL SECURITY`,
+
+  `CREATE TABLE IF NOT EXISTS elaine_nudges (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER NOT NULL,
+    source_app  TEXT,
+    source_id   INTEGER,
+    nudge_key   TEXT NOT NULL,
+    message     TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    seen_at     TIMESTAMPTZ
+  )`,
+  `ALTER TABLE elaine_nudges ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS elaine_nudges_user_id_idx
+     ON elaine_nudges (user_id)`,
+  `CREATE INDEX IF NOT EXISTS elaine_nudges_user_id_seen_at_idx
+     ON elaine_nudges (user_id, seen_at)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS elaine_nudges_user_id_nudge_key_idx
+     ON elaine_nudges (user_id, nudge_key)`,
 ];

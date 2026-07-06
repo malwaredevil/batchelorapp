@@ -352,7 +352,7 @@ async function main() {
 
   // ── Travels ───────────────────────────────────────────────────────────────
   await dest.query(
-    "TRUNCATE travels_custom_document_types, travels_trip_card_collapse_state, travels_card_layout_preferences, travels_gmail_scan_decisions, travels_gmail_connections, travels_household_memory, travels_assistant_settings, travels_assistant_conversations, travels_reminder_calendar_events, travels_connected_calendars, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_trip_photos, travels_trip_documents CASCADE",
+    "TRUNCATE travels_custom_document_types, travels_trip_card_collapse_state, travels_card_layout_preferences, travels_gmail_scan_decisions, travels_gmail_connections, elaine_nudges, elaine_memory, elaine_settings, elaine_conversations, travels_reminder_calendar_events, travels_connected_calendars, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_trip_photos, travels_trip_documents CASCADE",
   );
   await dest.query("TRUNCATE travels_trips CASCADE");
 
@@ -515,24 +515,40 @@ async function main() {
   await resetSequence(dest, "travels_reminder_calendar_events", "id");
 
   await copyTable(source, dest, {
-    table: "travels_assistant_conversations",
+    table: "elaine_conversations",
     columns: ["id", "user_id", "messages", "updated_at"],
     orderBy: "id",
   });
-  await resetSequence(dest, "travels_assistant_conversations", "id");
+  await resetSequence(dest, "elaine_conversations", "id");
 
   await copyTable(source, dest, {
-    table: "travels_assistant_settings",
-    columns: ["user_id", "enabled", "updated_at"],
+    table: "elaine_settings",
+    columns: ["user_id", "enabled", "action_confirmation_mode", "updated_at"],
     orderBy: "user_id",
   });
 
   await copyTable(source, dest, {
-    table: "travels_household_memory",
+    table: "elaine_memory",
     columns: ["id", "content", "created_by_user_id", "created_at"],
     orderBy: "id",
   });
-  await resetSequence(dest, "travels_household_memory", "id");
+  await resetSequence(dest, "elaine_memory", "id");
+
+  await copyTable(source, dest, {
+    table: "elaine_nudges",
+    columns: [
+      "id",
+      "user_id",
+      "source_app",
+      "source_id",
+      "nudge_key",
+      "message",
+      "created_at",
+      "seen_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "elaine_nudges", "id");
 
   await copyTable(source, dest, {
     table: "travels_gmail_connections",

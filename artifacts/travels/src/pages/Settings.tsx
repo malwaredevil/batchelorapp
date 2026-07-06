@@ -44,10 +44,10 @@ import {
   useDeleteConnectedCalendar,
   useSetTravelCalendar,
   useGetTravelCalendarStatus,
-  useGetAssistantSettings,
-  useUpdateAssistantSettings,
-  useListHouseholdMemory,
-  useDeleteHouseholdMemory,
+  useGetElaineSettings,
+  useUpdateElaineSettings,
+  useListElaineMemory,
+  useDeleteElaineMemoryItem,
   useGetGmailStatus,
   useDisconnectGmail,
   getGetTravelsSettingsQueryKey,
@@ -55,8 +55,8 @@ import {
   getListCalendarsQueryKey,
   getListConnectedCalendarsQueryKey,
   getGetTravelCalendarStatusQueryKey,
-  getGetAssistantSettingsQueryKey,
-  getListHouseholdMemoryQueryKey,
+  getGetElaineSettingsQueryKey,
+  getListElaineMemoryQueryKey,
   getGetGmailStatusQueryKey,
   type CalendarListItem,
   type ConnectedCalendar,
@@ -481,18 +481,18 @@ function GmailSyncCard() {
 function ElaineSettingsCard() {
   const qc = useQueryClient();
   const { data: assistantSettings, isLoading: settingsLoading } =
-    useGetAssistantSettings();
-  const updateAssistantSettings = useUpdateAssistantSettings();
+    useGetElaineSettings();
+  const updateAssistantSettings = useUpdateElaineSettings();
   const { data: memory = [], isLoading: memoryLoading } =
-    useListHouseholdMemory();
-  const deleteMemory = useDeleteHouseholdMemory();
+    useListElaineMemory();
+  const deleteMemory = useDeleteElaineMemoryItem();
 
   function handleToggle(enabled: boolean) {
     updateAssistantSettings.mutate(
       { enabled },
       {
         onSuccess: (result) => {
-          qc.setQueryData(getGetAssistantSettingsQueryKey(), result);
+          qc.setQueryData(getGetElaineSettingsQueryKey(), result);
           toast.success(
             enabled ? (
               <>
@@ -520,7 +520,7 @@ function ElaineSettingsCard() {
       { actionConfirmationMode },
       {
         onSuccess: (result) => {
-          qc.setQueryData(getGetAssistantSettingsQueryKey(), result);
+          qc.setQueryData(getGetElaineSettingsQueryKey(), result);
           toast.success(
             <>
               Updated how <ElaineName /> confirms actions
@@ -540,7 +540,7 @@ function ElaineSettingsCard() {
   function handleDeleteMemory(id: number) {
     deleteMemory.mutate(id, {
       onSuccess: () =>
-        qc.invalidateQueries({ queryKey: getListHouseholdMemoryQueryKey() }),
+        qc.invalidateQueries({ queryKey: getListElaineMemoryQueryKey() }),
       onError: () => toast.error("Failed to remove memory"),
     });
   }

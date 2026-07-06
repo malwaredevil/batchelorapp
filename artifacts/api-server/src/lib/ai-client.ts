@@ -151,12 +151,13 @@ export async function callModelWithSubagent<T>(
     model: string,
     tools: OpenRouterServerTool[],
   ) => Promise<T>,
+  options?: { subagentModel?: string },
 ): Promise<T> {
   const tools: OpenRouterServerTool[] = [
     {
       type: "openrouter:subagent",
       parameters: {
-        model: MODELS.SUBAGENT_WORKER,
+        model: options?.subagentModel ?? MODELS.SUBAGENT_WORKER,
         instructions: subagentInstructions,
       },
     },

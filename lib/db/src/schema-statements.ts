@@ -847,4 +847,21 @@ export const STATEMENTS: string[] = [
      ON elaine_nudges (user_id, seen_at)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS elaine_nudges_user_id_nudge_key_idx
      ON elaine_nudges (user_id, nudge_key)`,
+
+  // Single-row (id=1) global config for Elaine, admin-editable (app owner
+  // only) from her own settings page. Applies across every user/app, unlike
+  // elaine_settings above which is per-user (enabled/confirmation mode).
+  `CREATE TABLE IF NOT EXISTS elaine_global_config (
+    id                  INTEGER PRIMARY KEY DEFAULT 1,
+    chat_model          TEXT NOT NULL DEFAULT 'google/gemini-2.5-flash',
+    subagent_model      TEXT NOT NULL DEFAULT 'z-ai/glm-5.2',
+    request_timeout_ms  INTEGER NOT NULL DEFAULT 12000,
+    max_response_tokens INTEGER NOT NULL DEFAULT 700,
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_by_user_id  INTEGER,
+    CONSTRAINT elaine_global_config_singleton CHECK (id = 1)
+  )`,
+  `ALTER TABLE elaine_global_config ENABLE ROW LEVEL SECURITY`,
+  `INSERT INTO elaine_global_config (id) VALUES (1)
+     ON CONFLICT (id) DO NOTHING`,
 ];

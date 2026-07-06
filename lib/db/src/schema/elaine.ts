@@ -109,16 +109,44 @@ export const elaineNudges = pgTable(
 export type ElaineNudgeRow = typeof elaineNudges.$inferSelect;
 export type InsertElaineNudge = typeof elaineNudges.$inferInsert;
 
-// Single-row (id fixed at 1) global config for Elaine's AI behaviour, editable
-// only by the app owner from her settings page. Applies across every user and
-// every app surface — distinct from `elaineSettings` above, which is a
-// per-user on/off + confirmation-mode preference.
+// Single-row (id fixed at 1) global config, editable only by the app owner.
+// Originally Elaine-only (chatModel/subagentModel/requestTimeoutMs/
+// maxResponseTokens); now doubles as the whole Batchelor app's global AI
+// configuration (models, timeouts, feature toggles, thresholds) used by
+// Pottery, Quilting, and Travels as well — table name kept as-is since
+// renaming it would not be an additive-only migration. The four grouped
+// JSONB columns are intentionally loosely-typed at the DB layer: the app-side
+// resolver (`lib/global-config.ts`) deep-merges whatever is stored here over
+// a full set of hardcoded defaults, so adding a new configurable key never
+// requires a migration or breaks on a partially-populated row.
 export const elaineGlobalConfig = pgTable("elaine_global_config", {
   id: integer("id").primaryKey().default(1),
   chatModel: text("chat_model").notNull().default("google/gemini-2.5-flash"),
   subagentModel: text("subagent_model").notNull().default("z-ai/glm-5.2"),
   requestTimeoutMs: integer("request_timeout_ms").notNull().default(12000),
   maxResponseTokens: integer("max_response_tokens").notNull().default(700),
+  // Every other OpenRouter/Voyage/Jina model slot used anywhere in the app
+  // (fast/smart vision, advisor, research, expert-panel-alt, embedding,
+  // reranker, visual classifier, Fusion panel + judge).
+  extraModels: jsonb("extra_models")
+    .notNull()
+    .default(sql`'{}'::jsonb`),
+  // Per-feature request timeouts other than the main chat one above (expert
+  // consult, reranker, geocoding).
+  timeouts: jsonb("timeouts")
+    .notNull()
+    .default(sql`'{}'::jsonb`),
+  // Boolean toggles: enable Advisor escalation, enable Subagent delegation,
+  // enable Fusion for the pottery-expert and travel-doc-extraction fallback
+  // tiers.
+  features: jsonb("features")
+    .notNull()
+    .default(sql`'{}'::jsonb`),
+  // Numeric thresholds and per-feature max_tokens caps: pottery similarity
+  // bands, image crop ratios, JPEG quality, etc.
+  thresholds: jsonb("thresholds")
+    .notNull()
+    .default(sql`'{}'::jsonb`),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

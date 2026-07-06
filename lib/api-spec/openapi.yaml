@@ -2075,12 +2075,14 @@ paths:
           application/json:
             schema:
               type: object
-              required:
-                - extractedData
               properties:
                 extractedData:
                   type: object
                   additionalProperties: true
+                lockedFields:
+                  type: array
+                  items:
+                    type: string
       responses:
         "200":
           description: Updated document
@@ -2119,6 +2121,40 @@ paths:
                 $ref: "#/components/schemas/Error"
         "404":
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /travels/trips/{id}/documents/{docId}/rescan:
+    post:
+      operationId: rescanTripDocument
+      tags:
+        - travels
+      summary: Re-run AI extraction on a previously uploaded document, respecting locked fields
+      parameters:
+        - $ref: "#/components/parameters/TripId"
+        - $ref: "#/components/parameters/DocId"
+      responses:
+        "200":
+          description: Document re-scanned and updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TravelsTripDocument"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: AI re-analysis failed
           content:
             application/json:
               schema:
@@ -4188,6 +4224,10 @@ components:
           nullable: true
         extractedData:
           nullable: true
+        lockedFields:
+          type: array
+          items:
+            type: string
         createdAt:
           type: string
           format: date-time

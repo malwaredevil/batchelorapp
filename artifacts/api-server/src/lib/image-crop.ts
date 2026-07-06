@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { getThresholds } from "./ai-client";
 
 /**
  * Crop a region from an image buffer using a normalised bounding box
@@ -23,9 +24,10 @@ export async function cropPatternRegion(
 
     if (width < 20 || height < 20) return null;
 
+    const thresholds = await getThresholds();
     return await sharp(imageBuffer)
       .extract({ left, top, width, height })
-      .jpeg({ quality: 88 })
+      .jpeg({ quality: thresholds.aiJpegQuality })
       .toBuffer();
   } catch {
     return null;

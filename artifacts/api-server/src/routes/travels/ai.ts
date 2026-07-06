@@ -4,7 +4,11 @@ import { z } from "zod/v4";
 import { db, travelsTrips } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import type OpenAI from "openai";
-import { callModel, callModelWithSubagent, MODELS } from "../../lib/ai-client";
+import {
+  callModel,
+  callModelWithSubagent,
+  getModels,
+} from "../../lib/ai-client";
 import { getTimeZone } from "../../lib/travels/google-maps";
 
 // Guidance for the openrouter:subagent server tool: the chat assistant can
@@ -205,7 +209,8 @@ Return a JSON object:
 If dates are unspecified, create 5 days labelled Day 1, Day 2, etc. Return ONLY valid JSON, no extra text.`;
   }
 
-  const raw = await callModel(MODELS.SMART_VISION, async (client, model) => {
+  const models = await getModels();
+  const raw = await callModel(models.smartVision, async (client, model) => {
     const resp = await client.chat.completions.create({
       model,
       messages: [{ role: "user", content: prompt }],
@@ -288,8 +293,9 @@ router.post("/explore", async (req, res) => {
     req.log.warn({ err }, "Nominatim geocoding failed");
   }
 
+  const exploreModels = await getModels();
   const overviewRaw = await callModel(
-    MODELS.SMART_VISION,
+    exploreModels.smartVision,
     async (client, model) => {
       const resp = await client.chat.completions.create({
         model,
@@ -351,7 +357,8 @@ Include 6-8 highlights. Return ONLY valid JSON, no extra text.`,
 
 router.post("/highlights/suggest", async (req, res) => {
   const { destination } = SuggestBody.parse(req.body);
-  const raw = await callModel(MODELS.FAST_VISION, async (client, model) => {
+  const suggestModels = await getModels();
+  const raw = await callModel(suggestModels.fastVision, async (client, model) => {
     const resp = await client.chat.completions.create({
       model,
       messages: [
@@ -466,8 +473,9 @@ Answer questions about ${trip.destination}: things to do, local food, customs, t
     { role: "user" as const, content: message },
   ];
 
+  const chatModels = await getModels();
   const aiContent = await callModelWithSubagent(
-    MODELS.FAST_VISION,
+    chatModels.fastVision,
     CHAT_SUBAGENT_INSTRUCTIONS,
     async (client, model, tools) => {
       const response = await client.chat.completions.create({

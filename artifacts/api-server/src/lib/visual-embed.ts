@@ -1,5 +1,6 @@
 import sharp from "sharp";
 import { env } from "./env";
+import { getThresholds } from "./ai-client";
 
 export const VISUAL_EMBEDDING_DIMENSIONS = 1024;
 
@@ -204,13 +205,14 @@ export async function generateZoneEmbedding(
     const ih = metadata.height ?? 0;
     if (!iw || !ih) return null;
 
-    const cropTop = Math.round(ih * 0.15);
-    const cropHeight = Math.round(ih * 0.7);
+    const thresholds = await getThresholds();
+    const cropTop = Math.round(ih * thresholds.visualEmbedCropTop);
+    const cropHeight = Math.round(ih * thresholds.visualEmbedCropHeight);
     if (cropHeight < 20) return null;
 
     const cropped = await sharp(imageBuffer)
       .extract({ left: 0, top: cropTop, width: iw, height: cropHeight })
-      .jpeg({ quality: 88 })
+      .jpeg({ quality: thresholds.aiJpegQuality })
       .toBuffer();
 
     return generateVisualEmbedding(cropped);

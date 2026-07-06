@@ -382,6 +382,7 @@ CREATE TABLE IF NOT EXISTS elaine_settings (
   user_id                   INTEGER PRIMARY KEY,
   enabled                   BOOLEAN NOT NULL DEFAULT TRUE,
   action_confirmation_mode  TEXT NOT NULL DEFAULT 'one_by_one',
+  chat_window_size          TEXT NOT NULL DEFAULT 'compact',
   updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -973,7 +974,13 @@ async function main() {
 
   summary["elaine_settings"] = await copyTable(source, dest, {
     table: "elaine_settings",
-    columns: ["user_id", "enabled", "action_confirmation_mode", "updated_at"],
+    columns: [
+      "user_id",
+      "enabled",
+      "action_confirmation_mode",
+      "chat_window_size",
+      "updated_at",
+    ],
     orderBy: "user_id",
   });
 

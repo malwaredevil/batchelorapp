@@ -818,9 +818,11 @@ export const STATEMENTS: string[] = [
     user_id                   INTEGER PRIMARY KEY,
     enabled                   BOOLEAN NOT NULL DEFAULT TRUE,
     action_confirmation_mode  TEXT NOT NULL DEFAULT 'one_by_one',
+    chat_window_size          TEXT NOT NULL DEFAULT 'compact',
     updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
   `ALTER TABLE elaine_settings ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE elaine_settings ADD COLUMN IF NOT EXISTS chat_window_size TEXT NOT NULL DEFAULT 'compact'`,
 
   `CREATE TABLE IF NOT EXISTS elaine_memory (
     id                  SERIAL PRIMARY KEY,

@@ -118,13 +118,23 @@ const ACTION_CONFIRMATION_MODES = [
 ] as const;
 type ActionConfirmationMode = (typeof ACTION_CONFIRMATION_MODES)[number];
 
+// Desktop dimensions for the floating chat widget popup — "compact" is the
+// default (a normal-sized popup, not screen-filling); mobile always fills
+// the available width regardless of this setting (see ElaineWidget).
+const CHAT_WINDOW_SIZES = ["compact", "comfortable", "large"] as const;
+type ChatWindowSize = (typeof CHAT_WINDOW_SIZES)[number];
+
 const SettingsBody = z
   .object({
     enabled: z.boolean().optional(),
     actionConfirmationMode: z.enum(ACTION_CONFIRMATION_MODES).optional(),
+    chatWindowSize: z.enum(CHAT_WINDOW_SIZES).optional(),
   })
   .refine(
-    (v) => v.enabled !== undefined || v.actionConfirmationMode !== undefined,
+    (v) =>
+      v.enabled !== undefined ||
+      v.actionConfirmationMode !== undefined ||
+      v.chatWindowSize !== undefined,
     {
       message: "At least one setting must be provided",
     },
@@ -2914,6 +2924,8 @@ router.get("/settings", async (req, res) => {
     actionConfirmationMode:
       (row?.actionConfirmationMode as ActionConfirmationMode | undefined) ??
       "one_by_one",
+    chatWindowSize:
+      (row?.chatWindowSize as ChatWindowSize | undefined) ?? "compact",
   });
 });
 
@@ -2929,14 +2941,18 @@ router.put("/settings", async (req, res) => {
     patch.actionConfirmationMode ??
     (existing?.actionConfirmationMode as ActionConfirmationMode | undefined) ??
     "one_by_one";
+  const chatWindowSize =
+    patch.chatWindowSize ??
+    (existing?.chatWindowSize as ChatWindowSize | undefined) ??
+    "compact";
   await db
     .insert(elaineSettings)
-    .values({ userId, enabled, actionConfirmationMode })
+    .values({ userId, enabled, actionConfirmationMode, chatWindowSize })
     .onConflictDoUpdate({
       target: elaineSettings.userId,
-      set: { enabled, actionConfirmationMode, updatedAt: new Date() },
+      set: { enabled, actionConfirmationMode, chatWindowSize, updatedAt: new Date() },
     });
-  res.json({ enabled, actionConfirmationMode });
+  res.json({ enabled, actionConfirmationMode, chatWindowSize });
 });
 
 // ── Admin (app-owner-only) global config for Elaine's AI behaviour ────────

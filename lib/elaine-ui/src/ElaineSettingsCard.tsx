@@ -9,6 +9,7 @@ import {
   getListElaineMemoryQueryKey,
   useDeleteElaineMemoryItem,
   type ActionConfirmationMode,
+  type ChatWindowSize,
 } from "@workspace/api-client-react";
 import { Button } from "./ui/button";
 import { Switch } from "./ui/switch";
@@ -90,6 +91,28 @@ export function ElaineSettingsCard({
     );
   }
 
+  function handleWindowSizeChange(chatWindowSize: ChatWindowSize) {
+    updateAssistantSettings.mutate(
+      { chatWindowSize },
+      {
+        onSuccess: (result) => {
+          qc.setQueryData(getGetElaineSettingsQueryKey(), result);
+          toast.success(
+            <>
+              Updated <ElaineName />'s chat window size
+            </>,
+          );
+        },
+        onError: () =>
+          toast.error(
+            <>
+              Failed to update <ElaineName /> settings
+            </>,
+          ),
+      },
+    );
+  }
+
   function handleDeleteMemory(id: number) {
     deleteMemory.mutate(id, {
       onSuccess: () =>
@@ -153,6 +176,32 @@ export function ElaineSettingsCard({
             <SelectItem value="auto_run">
               Run automatically, no confirmation
             </SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2 rounded-lg border border-card-border p-4">
+        <p className="text-sm font-medium text-foreground">
+          Chat window size
+        </p>
+        <p className="text-xs text-muted-foreground pb-1">
+          How big the floating chat popup is on desktop. On phones it always
+          fills the screen width.
+        </p>
+        <Select
+          value={assistantSettings?.chatWindowSize ?? "compact"}
+          onValueChange={(value) =>
+            handleWindowSizeChange(value as ChatWindowSize)
+          }
+          disabled={settingsLoading || updateAssistantSettings.isPending}
+        >
+          <SelectTrigger className="w-full sm:w-72">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="compact">Compact (default)</SelectItem>
+            <SelectItem value="comfortable">Comfortable</SelectItem>
+            <SelectItem value="large">Large</SelectItem>
           </SelectContent>
         </Select>
       </div>

@@ -523,7 +523,13 @@ async function main() {
 
   await copyTable(source, dest, {
     table: "elaine_settings",
-    columns: ["user_id", "enabled", "action_confirmation_mode", "updated_at"],
+    columns: [
+      "user_id",
+      "enabled",
+      "action_confirmation_mode",
+      "chat_window_size",
+      "updated_at",
+    ],
     orderBy: "user_id",
   });
 

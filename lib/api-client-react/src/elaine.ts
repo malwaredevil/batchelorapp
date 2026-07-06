@@ -90,6 +90,10 @@ export interface AssistantActionResult {
 
 export type ActionConfirmationMode = "one_by_one" | "all_at_once" | "auto_run";
 
+// Desktop dimensions for the floating chat widget popup. Mobile always fills
+// the available width regardless of this setting — see ElaineWidget.
+export type ChatWindowSize = "compact" | "comfortable" | "large";
+
 export interface ExecutedAssistantAction extends AssistantAction {
   status: number;
   result: unknown;
@@ -108,6 +112,7 @@ export interface AssistantChatResponse {
 export interface AssistantSettings {
   enabled: boolean;
   actionConfirmationMode: ActionConfirmationMode;
+  chatWindowSize: ChatWindowSize;
 }
 
 export interface HouseholdMemoryItem {

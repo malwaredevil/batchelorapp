@@ -21,7 +21,8 @@
  *             travels_connected_calendars, travels_reminder_calendar_events,
  *             travels_gmail_connections,
  *             travels_gmail_scan_decisions, travels_card_layout_preferences,
- *             travels_trip_card_collapse_state, travels_custom_document_types
+ *             travels_trip_card_collapse_state, travels_custom_document_types,
+ *             travels_calendar_trip_suggestions
  *   Elaine:   elaine_conversations, elaine_settings, elaine_memory, elaine_nudges,
  *             elaine_global_config (shared assistant, not namespaced per-app)
  *
@@ -475,6 +476,21 @@ CREATE TABLE IF NOT EXISTS travels_custom_document_types (
   color_key   TEXT,
   fields      JSONB NOT NULL DEFAULT '[]',
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS travels_calendar_trip_suggestions (
+  id                       SERIAL PRIMARY KEY,
+  suggested_title          TEXT NOT NULL,
+  destination              TEXT,
+  start_date               DATE,
+  end_date                 DATE,
+  related_event_ids        JSONB NOT NULL DEFAULT '[]'::jsonb,
+  dedupe_key               TEXT NOT NULL,
+  status                   TEXT NOT NULL DEFAULT 'pending',
+  user_id                  INTEGER,
+  is_from_shared_calendar  BOOLEAN NOT NULL DEFAULT false,
+  created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 ALTER TABLE travels_trip_documents ADD COLUMN IF NOT EXISTS title TEXT;
@@ -1108,6 +1124,27 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "travels_custom_document_types", "id");
+
+  summary["travels_calendar_trip_suggestions"] = await copyTable(source, dest, {
+    table: "travels_calendar_trip_suggestions",
+    columns: [
+      "id",
+      "suggested_title",
+      "destination",
+      "start_date",
+      "end_date",
+      "related_event_ids",
+      "dedupe_key",
+      "status",
+      "user_id",
+      "is_from_shared_calendar",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["related_event_ids"],
+  });
+  await resetSequence(dest, "travels_calendar_trip_suggestions", "id");
 
   // ── Record backup history ─────────────────────────────────────────────────
   const note = Object.entries(summary)

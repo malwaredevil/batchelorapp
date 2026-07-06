@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, desc, eq, or, isNull } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { z } from "zod/v4";
 import {
   db,
@@ -14,32 +14,18 @@ import { logger } from "../../lib/logger";
 const router: IRouter = Router();
 router.use(requireAuth);
 
-// A user may see: suggestions sourced from the shared Travel calendar (any
-// household member), suggestions they personally own, and legacy rows from
-// before ownership tracking existed (userId is null). Never another user's
-// personal-calendar suggestions.
-function visibleToUser(userId: number) {
-  return or(
-    eq(travelsCalendarTripSuggestions.isFromSharedCalendar, true),
-    eq(travelsCalendarTripSuggestions.userId, userId),
-    isNull(travelsCalendarTripSuggestions.userId),
-  );
-}
+// Trip suggestions are travel data derived from calendar scans, not a
+// calendar/OAuth connection — like trips themselves, they're fully
+// household-shared. Any authenticated household member can see, dismiss, or
+// accept any pending suggestion, regardless of which member's connected
+// calendar it was sourced from.
 
-// GET /calendar-trip-suggestions — pending AI-detected trip suggestions
-// visible to the current user (their own personal-calendar suggestions plus
-// every shared Travel-calendar suggestion).
-router.get("/calendar-trip-suggestions", async (req, res) => {
-  const userId = req.session.userId!;
+// GET /calendar-trip-suggestions — all pending AI-detected trip suggestions
+router.get("/calendar-trip-suggestions", async (_req, res) => {
   const rows = await db
     .select()
     .from(travelsCalendarTripSuggestions)
-    .where(
-      and(
-        eq(travelsCalendarTripSuggestions.status, "pending"),
-        visibleToUser(userId),
-      ),
-    )
+    .where(eq(travelsCalendarTripSuggestions.status, "pending"))
     .orderBy(desc(travelsCalendarTripSuggestions.createdAt));
   res.json(rows);
 });
@@ -67,13 +53,10 @@ router.post("/calendar-trip-suggestions/:id/dismiss", async (req, res) => {
     res.status(400).json({ error: "Invalid id" });
     return;
   }
-  const userId = req.session.userId!;
   const [updated] = await db
     .update(travelsCalendarTripSuggestions)
     .set({ status: "dismissed", updatedAt: new Date() })
-    .where(
-      and(eq(travelsCalendarTripSuggestions.id, id), visibleToUser(userId)),
-    )
+    .where(eq(travelsCalendarTripSuggestions.id, id))
     .returning();
   if (!updated) {
     res.status(404).json({ error: "Not found" });
@@ -102,9 +85,7 @@ router.post("/calendar-trip-suggestions/:id/accept", async (req, res) => {
   const [suggestion] = await db
     .select()
     .from(travelsCalendarTripSuggestions)
-    .where(
-      and(eq(travelsCalendarTripSuggestions.id, id), visibleToUser(userId)),
-    );
+    .where(eq(travelsCalendarTripSuggestions.id, id));
 
   if (!suggestion || suggestion.status !== "pending") {
     res.status(404).json({ error: "Not found" });

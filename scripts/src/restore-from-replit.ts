@@ -352,7 +352,7 @@ async function main() {
 
   // ── Travels ───────────────────────────────────────────────────────────────
   await dest.query(
-    "TRUNCATE travels_custom_document_types, travels_trip_card_collapse_state, travels_card_layout_preferences, travels_gmail_scan_decisions, travels_gmail_connections, elaine_global_config, elaine_nudges, elaine_memory, elaine_settings, elaine_conversations, travels_reminder_calendar_events, travels_connected_calendars, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_trip_photos, travels_trip_documents CASCADE",
+    "TRUNCATE travels_calendar_trip_suggestions, travels_custom_document_types, travels_trip_card_collapse_state, travels_card_layout_preferences, travels_gmail_scan_decisions, travels_gmail_connections, elaine_global_config, elaine_nudges, elaine_memory, elaine_settings, elaine_conversations, travels_reminder_calendar_events, travels_connected_calendars, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_trip_photos, travels_trip_documents CASCADE",
   );
   await dest.query("TRUNCATE travels_trips CASCADE");
 
@@ -644,6 +644,26 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "travels_custom_document_types", "id");
+
+  await copyTable(source, dest, {
+    table: "travels_calendar_trip_suggestions",
+    columns: [
+      "id",
+      "suggested_title",
+      "destination",
+      "start_date",
+      "end_date",
+      "related_event_ids",
+      "dedupe_key",
+      "status",
+      "user_id",
+      "is_from_shared_calendar",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_calendar_trip_suggestions", "id");
 
   await dest.query("SET session_replication_role = DEFAULT");
 

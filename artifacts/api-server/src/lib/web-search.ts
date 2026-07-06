@@ -1,4 +1,4 @@
-import { callModel, MODELS } from "./ai-client";
+import { callModel, getModels } from "./ai-client";
 
 /**
  * Live web search / current-events lookups for elAIne, backed by Perplexity
@@ -26,7 +26,8 @@ export async function webSearch(query: string): Promise<WebSearchResult> {
   const trimmed = query.trim().slice(0, 500);
   if (!trimmed) return { answer: "", citations: [] };
 
-  const raw = await callModel(MODELS.RESEARCH, async (client, model) => {
+  const models = await getModels();
+  const raw = await callModel(models.research, async (client, model) => {
     return client.chat.completions.create(
       {
         model,

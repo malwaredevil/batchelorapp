@@ -40,7 +40,8 @@ export const GetCurrentUserResponse = zod.object({
   "id": zod.number(),
   "email": zod.string(),
   "displayName": zod.string().nullish(),
-  "themePreference": zod.enum(['light', 'dark']).nullish()
+  "themePreference": zod.enum(['light', 'dark']).nullish(),
+  "isOwner": zod.boolean().optional()
 })
 
 

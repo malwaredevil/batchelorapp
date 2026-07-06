@@ -434,11 +434,54 @@ export function useDeleteElaineMemoryItem(options?: {
 // rather than a hard error.
 // ---------------------------------------------------------------------------
 
+export interface ElaineExtraModelsConfig {
+  fastVision: string;
+  smartVision: string;
+  advisor: string;
+  research: string;
+  expertPanelAlt: string;
+  embedding: string;
+  rerank: string;
+  visualEmbed: string;
+  fusionModels: string[];
+  fusionJudge: string;
+}
+
+export interface ElaineTimeoutsConfig {
+  expertConsultMs: number;
+  rerankerMs: number;
+  geocodingMs: number;
+  fusionMs: number;
+}
+
+export interface ElaineFeaturesConfig {
+  enableAdvisor: boolean;
+  enableSubagent: boolean;
+  enableFusionPotteryExpert: boolean;
+  enableFusionTravelDocFallback: boolean;
+}
+
+export interface ElaineThresholdsConfig {
+  potterySimilarityYes: number;
+  potterySimilarityMaybe: number;
+  potterySimilarityNo: number;
+  visualEmbedCropTop: number;
+  visualEmbedCropHeight: number;
+  aiJpegQuality: number;
+  potteryZoneAnalysisMaxTokens: number;
+  potteryBackstampMaxTokens: number;
+  travelDocExtractionMaxTokens: number;
+}
+
 export interface ElaineGlobalConfig {
   chatModel: string;
   subagentModel: string;
   requestTimeoutMs: number;
   maxResponseTokens: number;
+  models: ElaineExtraModelsConfig;
+  timeouts: ElaineTimeoutsConfig;
+  features: ElaineFeaturesConfig;
+  thresholds: ElaineThresholdsConfig;
   updatedAt: string | null;
 }
 
@@ -479,7 +522,12 @@ export type UpdateElaineAdminConfigBody = Partial<
     ElaineGlobalConfig,
     "chatModel" | "subagentModel" | "requestTimeoutMs" | "maxResponseTokens"
   >
->;
+> & {
+  models?: Partial<ElaineExtraModelsConfig>;
+  timeouts?: Partial<ElaineTimeoutsConfig>;
+  features?: Partial<ElaineFeaturesConfig>;
+  thresholds?: Partial<ElaineThresholdsConfig>;
+};
 
 const putElaineAdminConfigFn = (
   body: UpdateElaineAdminConfigBody,

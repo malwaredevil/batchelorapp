@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import type OpenAI from "openai";
 import { db, travelsCustomDocumentTypes } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
-import { callModelWithAdvisor, MODELS } from "../../lib/ai-client";
+import { callModelWithAdvisor, getModels } from "../../lib/ai-client";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -97,8 +97,9 @@ Return ONLY valid JSON in exactly this shape (no markdown fences, no commentary)
 }`;
 
   try {
+    const models = await getModels();
     const raw = await callModelWithAdvisor(
-      MODELS.FAST_VISION,
+      models.fastVision,
       "Answer precisely and return only valid JSON.",
       async (client, model) => {
         const resp = await (

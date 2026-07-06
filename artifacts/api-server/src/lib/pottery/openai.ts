@@ -2,8 +2,11 @@ import OpenAI from "openai";
 import {
   callModel,
   callModelWithAdvisor,
+  callFusion,
   getOpenRouterClient,
-  MODELS,
+  getModels,
+  getFeatures,
+  getThresholds,
 } from "../ai-client";
 import { classifyGlazeType } from "../visual-embed";
 import {
@@ -210,19 +213,22 @@ export async function analyzeImage(
   const glazeIsLocked = context?.lockedFields.includes("glazeType") ?? false;
 
   const [completion, clipGlazeType] = await Promise.all([
-    callModel(MODELS.FAST_VISION, (c, model) =>
-      c.chat.completions.create({
-        model,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: ANALYSIS_PROMPT },
-          {
-            role: "user",
-            content: [{ type: "text", text: userText }, ...imageContent],
-          },
-        ],
-      }),
-    ),
+    (async () => {
+      const models = await getModels();
+      return callModel(models.fastVision, (c, model) =>
+        c.chat.completions.create({
+          model,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: ANALYSIS_PROMPT },
+            {
+              role: "user",
+              content: [{ type: "text", text: userText }, ...imageContent],
+            },
+          ],
+        }),
+      );
+    })(),
     glazeIsLocked
       ? Promise.resolve(null)
       : classifyGlazeType(dataUrls[0] ?? "").catch(() => null),
@@ -260,8 +266,9 @@ export function buildEmbeddingText(analysis: VisionAnalysis): string {
 }
 
 export async function embedText(text: string): Promise<number[]> {
+  const models = await getModels();
   const response = await getOpenRouterClient().embeddings.create({
-    model: MODELS.EMBEDDING,
+    model: models.embedding,
     input: text,
   });
   return response.data[0].embedding;
@@ -310,11 +317,13 @@ export async function analyzePotteryZones(
   }));
 
   try {
-    const completion = await callModel(MODELS.SMART_VISION, (c, model) =>
+    const models = await getModels();
+    const thresholds = await getThresholds();
+    const completion = await callModel(models.smartVision, (c, model) =>
       c.chat.completions.create({
         model,
         response_format: { type: "json_object" },
-        max_tokens: 1024,
+        max_tokens: thresholds.potteryZoneAnalysisMaxTokens,
         messages: [
           { role: "system", content: ZONE_ANALYSIS_PROMPT },
           {
@@ -408,9 +417,19 @@ export async function locateBackstampAndEnhanceMaker(
     image_url: { url },
   }));
 
+  const backstampUserContent = [
+    {
+      type: "text" as const,
+      text: "Focus on any maker's mark or backstamp visible on this piece. If the mark is partially worn, unclear, or ambiguous, consult the advisor tool before finalizing your answer. Respond with JSON only.",
+    },
+    ...imageContent,
+  ];
+
   try {
+    const models = await getModels();
+    const thresholds = await getThresholds();
     const completion = await callModelWithAdvisor(
-      MODELS.SMART_VISION,
+      models.smartVision,
       "You are a ceramics/pottery maker's-mark expert. You will be asked to double-check an ambiguous or partially-legible backstamp/maker's mark from an image description or partial reading. Give your best identification of the maker and a one-line reason, or say clearly if it's genuinely unidentifiable.",
       (c, model, tools) =>
         c.chat.completions.create({
@@ -422,24 +441,37 @@ export async function locateBackstampAndEnhanceMaker(
               }
             : {}),
           response_format: { type: "json_object" },
-          max_tokens: 512,
+          max_tokens: thresholds.potteryBackstampMaxTokens,
           messages: [
             { role: "system", content: BACKSTAMP_PROMPT },
-            {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text: "Focus on any maker's mark or backstamp visible on this piece. If the mark is partially worn, unclear, or ambiguous, consult the advisor tool before finalizing your answer. Respond with JSON only.",
-                },
-                ...imageContent,
-              ],
-            },
+            { role: "user", content: backstampUserContent },
           ],
         }),
     );
 
-    const raw = parseJson(completion.choices[0]?.message?.content ?? null);
+    let raw = parseJson(completion.choices[0]?.message?.content ?? null);
+
+    // Fusion escalation: when the primary pass (already backed by the
+    // advisor tool) still can't identify a maker, and the feature is
+    // enabled, run an independent multi-model panel + judge synthesis
+    // before giving up. Reserved for this one pottery-expert-attribution
+    // case since it costs several model calls.
+    const features = await getFeatures();
+    if (
+      (!raw || raw.backstampFound !== true) &&
+      features.enableFusionPotteryExpert
+    ) {
+      const fused = await callFusion(
+        () => [
+          { role: "system", content: BACKSTAMP_PROMPT },
+          { role: "user", content: backstampUserContent },
+        ],
+        { maxTokens: thresholds.potteryBackstampMaxTokens, responseFormatJson: true },
+      );
+      const fusedRaw = parseJson(fused || null);
+      if (fusedRaw) raw = fusedRaw;
+    }
+
     if (!raw || raw.backstampFound !== true) return null;
 
     const maker = asString(raw.maker);
@@ -554,7 +586,8 @@ export async function compareWithMatches(params: {
     }
   }
 
-  const completion = await callModel(MODELS.SMART_VISION, (c, model) =>
+  const models = await getModels();
+  const completion = await callModel(models.smartVision, (c, model) =>
     c.chat.completions.create({
       model,
       response_format: { type: "json_object" },

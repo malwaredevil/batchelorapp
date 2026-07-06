@@ -850,8 +850,10 @@ export const STATEMENTS: string[] = [
   `CREATE UNIQUE INDEX IF NOT EXISTS elaine_nudges_user_id_nudge_key_idx
      ON elaine_nudges (user_id, nudge_key)`,
 
-  // Single-row (id=1) global config for Elaine, admin-editable (app owner
-  // only) from her own settings page. Applies across every user/app, unlike
+  // Single-row (id=1) global config, admin-editable (app owner only). Started
+  // as Elaine-only config; now also the whole app's global AI configuration
+  // (models/timeouts/features/thresholds for Pottery, Quilting, Travels) —
+  // see lib/global-config.ts. Applies across every user/app, unlike
   // elaine_settings above which is per-user (enabled/confirmation mode).
   `CREATE TABLE IF NOT EXISTS elaine_global_config (
     id                  INTEGER PRIMARY KEY DEFAULT 1,
@@ -859,11 +861,19 @@ export const STATEMENTS: string[] = [
     subagent_model      TEXT NOT NULL DEFAULT 'z-ai/glm-5.2',
     request_timeout_ms  INTEGER NOT NULL DEFAULT 12000,
     max_response_tokens INTEGER NOT NULL DEFAULT 700,
+    extra_models        JSONB NOT NULL DEFAULT '{}'::jsonb,
+    timeouts            JSONB NOT NULL DEFAULT '{}'::jsonb,
+    features            JSONB NOT NULL DEFAULT '{}'::jsonb,
+    thresholds          JSONB NOT NULL DEFAULT '{}'::jsonb,
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_by_user_id  INTEGER,
     CONSTRAINT elaine_global_config_singleton CHECK (id = 1)
   )`,
   `ALTER TABLE elaine_global_config ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS extra_models JSONB NOT NULL DEFAULT '{}'::jsonb`,
+  `ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS timeouts JSONB NOT NULL DEFAULT '{}'::jsonb`,
+  `ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS features JSONB NOT NULL DEFAULT '{}'::jsonb`,
+  `ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS thresholds JSONB NOT NULL DEFAULT '{}'::jsonb`,
   `INSERT INTO elaine_global_config (id) VALUES (1)
      ON CONFLICT (id) DO NOTHING`,
 ];

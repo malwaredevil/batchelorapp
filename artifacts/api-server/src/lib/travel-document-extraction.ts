@@ -3,7 +3,13 @@
 // (lib/gmail-scan.ts) so both paths extract identical structured fields from
 // a photo/PDF/attachment.
 import type OpenAI from "openai";
-import { callModelWithAdvisor, MODELS } from "./ai-client";
+import {
+  callModelWithAdvisor,
+  callFusion,
+  getModels,
+  getFeatures,
+  getThresholds,
+} from "./ai-client";
 
 // Escalation guidance for the openrouter:advisor server tool: extraction
 // mistakes here (wrong date, missed return leg) directly corrupt a trip's
@@ -130,15 +136,41 @@ function parseAiExtractionJson(result: string): Record<string, unknown> {
   }
 }
 
+// The single-model extraction pass is considered "thin" (and worth escalating
+// to the Fusion panel+judge tier) when it found almost nothing useful — e.g. a
+// blurry photo or a document type the fast/smart vision model misread. Only
+// count substantive fields, not "notes" (which is often just a raw-text dump
+// on failure) or "documentType" (near-always guessable even from a bad read).
+function isThinExtraction(fields: Record<string, unknown>): boolean {
+  const substantive = Object.keys(fields).filter(
+    (k) => k !== "notes" && k !== "documentType" && fields[k] != null && fields[k] !== "",
+  );
+  return substantive.length < 2;
+}
+
 export async function extractFromImage(
   buffer: Buffer,
   mimeType: string,
 ): Promise<Record<string, unknown>> {
   const b64 = buffer.toString("base64");
   const dataUrl = `data:${mimeType};base64,${b64}`;
+  const [models, thresholds] = await Promise.all([getModels(), getThresholds()]);
+
+  const promptText = `You are extracting structured information from a travel document (ticket, confirmation, rental agreement, boarding pass, hotel voucher, etc).
+
+If any date, time, or field is genuinely ambiguous or hard to read, consult the advisor tool before finalizing your answer rather than guessing.
+
+Today's date is ${new Date().toISOString().slice(0, 10)}. Use this only to sanity-check plausibility (travel dates are usually in the near future) — always trust the exact year, month, and day printed on the document itself over any assumption.
+
+${DATE_RULES}
+
+Return a JSON object with these fields (include only the ones that are present in the document):
+${RESPONSE_SCHEMA_BLOCK}
+
+Return ONLY valid JSON, no extra text.`;
 
   const result = await callModelWithAdvisor(
-    MODELS.SMART_VISION,
+    models.smartVision,
     DOCUMENT_ADVISOR_INSTRUCTIONS,
     async (client, model, tools) => {
       const resp = await client.chat.completions.create({
@@ -153,32 +185,41 @@ export async function extractFromImage(
           {
             role: "user",
             content: [
-              {
-                type: "text",
-                text: `You are extracting structured information from a travel document (ticket, confirmation, rental agreement, boarding pass, hotel voucher, etc).
-
-If any date, time, or field is genuinely ambiguous or hard to read, consult the advisor tool before finalizing your answer rather than guessing.
-
-Today's date is ${new Date().toISOString().slice(0, 10)}. Use this only to sanity-check plausibility (travel dates are usually in the near future) — always trust the exact year, month, and day printed on the document itself over any assumption.
-
-${DATE_RULES}
-
-Return a JSON object with these fields (include only the ones that are present in the document):
-${RESPONSE_SCHEMA_BLOCK}
-
-Return ONLY valid JSON, no extra text.`,
-              },
+              { type: "text", text: promptText },
               { type: "image_url", image_url: { url: dataUrl } },
             ],
           },
         ],
-        max_tokens: 1000,
+        max_tokens: thresholds.travelDocExtractionMaxTokens,
       });
       return resp.choices[0]?.message?.content ?? "{}";
     },
   );
 
-  return parseAiExtractionJson(result);
+  const parsed = parseAiExtractionJson(result);
+  const features = await getFeatures();
+  if (!features.enableFusionTravelDocFallback || !isThinExtraction(parsed)) {
+    return parsed;
+  }
+
+  try {
+    const fused = await callFusion(
+      () => [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: promptText },
+            { type: "image_url", image_url: { url: dataUrl } },
+          ],
+        },
+      ],
+      { maxTokens: thresholds.travelDocExtractionMaxTokens },
+    );
+    const fusedParsed = parseAiExtractionJson(fused);
+    return isThinExtraction(fusedParsed) ? parsed : fusedParsed;
+  } catch {
+    return parsed;
+  }
 }
 
 export async function extractFromPdf(
@@ -193,22 +234,8 @@ export async function extractFromPdf(
     return { notes: "Could not parse PDF text" };
   }
 
-  const result = await callModelWithAdvisor(
-    MODELS.SMART_VISION,
-    DOCUMENT_ADVISOR_INSTRUCTIONS,
-    async (client, model, tools) => {
-      const resp = await client.chat.completions.create({
-        model,
-        ...(tools
-          ? {
-              tools:
-                tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[],
-            }
-          : {}),
-        messages: [
-          {
-            role: "user",
-            content: `You are extracting structured information from travel document text.
+  const [models, thresholds] = await Promise.all([getModels(), getThresholds()]);
+  const promptText = `You are extracting structured information from travel document text.
 
 If any date, time, or field is genuinely ambiguous or hard to read, consult the advisor tool before finalizing your answer rather than guessing.
 
@@ -222,16 +249,42 @@ ${DATE_RULES}
 Return a JSON object with these fields (include only the ones that are present):
 ${RESPONSE_SCHEMA_BLOCK}
 
-Return ONLY valid JSON, no extra text.`,
-          },
-        ],
-        max_tokens: 1000,
+Return ONLY valid JSON, no extra text.`;
+
+  const result = await callModelWithAdvisor(
+    models.smartVision,
+    DOCUMENT_ADVISOR_INSTRUCTIONS,
+    async (client, model, tools) => {
+      const resp = await client.chat.completions.create({
+        model,
+        ...(tools
+          ? {
+              tools:
+                tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[],
+            }
+          : {}),
+        messages: [{ role: "user", content: promptText }],
+        max_tokens: thresholds.travelDocExtractionMaxTokens,
       });
       return resp.choices[0]?.message?.content ?? "{}";
     },
   );
 
-  return parseAiExtractionJson(result);
+  const parsed = parseAiExtractionJson(result);
+  const features = await getFeatures();
+  if (!features.enableFusionTravelDocFallback || !isThinExtraction(parsed)) {
+    return parsed;
+  }
+
+  try {
+    const fused = await callFusion(() => [{ role: "user", content: promptText }], {
+      maxTokens: thresholds.travelDocExtractionMaxTokens,
+    });
+    const fusedParsed = parseAiExtractionJson(fused);
+    return isThinExtraction(fusedParsed) ? parsed : fusedParsed;
+  } catch {
+    return parsed;
+  }
 }
 
 /**
@@ -245,8 +298,9 @@ export async function extractFromEmailText(
   from: string,
   bodyText: string,
 ): Promise<Record<string, unknown> & { isTravelRelated: boolean }> {
+  const models = await getModels();
   const result = await callModelWithAdvisor(
-    MODELS.FAST_VISION,
+    models.fastVision,
     DOCUMENT_ADVISOR_INSTRUCTIONS,
     async (client, model, tools) => {
       const resp = await client.chat.completions.create({

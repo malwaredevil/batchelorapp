@@ -1,4 +1,5 @@
 export * from "./ElaineAvatar";
+export * from "./AppSwitcher";
 export * from "./ElainePageContext";
 export * from "./useElaineChat";
 export * from "./ElaineChatPanel";

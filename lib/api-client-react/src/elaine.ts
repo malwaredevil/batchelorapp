@@ -421,3 +421,119 @@ export function useDeleteElaineMemoryItem(options?: {
     deleteElaineMemoryItemFn(id);
   return useMutation({ mutationFn, ...options?.mutation });
 }
+
+// ---------------------------------------------------------------------------
+// Admin (app-owner-only) global config — applies to every user/app, unlike
+// AssistantSettings above which is per-user. Every endpoint here 403s for
+// non-owner accounts; callers should treat a 403 as "hide the admin UI"
+// rather than a hard error.
+// ---------------------------------------------------------------------------
+
+export interface ElaineGlobalConfig {
+  chatModel: string;
+  subagentModel: string;
+  requestTimeoutMs: number;
+  maxResponseTokens: number;
+  updatedAt: string | null;
+}
+
+export const getGetElaineAdminConfigQueryKey = () =>
+  [`/api/elaine/admin/config`] as const;
+
+const getElaineAdminConfigFn = (
+  options?: RequestInit,
+): Promise<ElaineGlobalConfig> =>
+  customFetch<ElaineGlobalConfig>("/api/elaine/admin/config", {
+    ...options,
+    method: "GET",
+  });
+
+export function useGetElaineAdminConfig<
+  TData = ElaineGlobalConfig,
+  TError = unknown,
+>(options?: {
+  query?: UseQueryOptions<ElaineGlobalConfig, TError, TData>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetElaineAdminConfigQueryKey();
+  const queryFn: QueryFunction<ElaineGlobalConfig> = ({ signal }) =>
+    getElaineAdminConfigFn({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    ElaineGlobalConfig,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+export type UpdateElaineAdminConfigBody = Partial<
+  Pick<
+    ElaineGlobalConfig,
+    "chatModel" | "subagentModel" | "requestTimeoutMs" | "maxResponseTokens"
+  >
+>;
+
+const putElaineAdminConfigFn = (
+  body: UpdateElaineAdminConfigBody,
+): Promise<ElaineGlobalConfig> =>
+  customFetch<ElaineGlobalConfig>("/api/elaine/admin/config", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export function useUpdateElaineAdminConfig(options?: {
+  mutation?: UseMutationOptions<
+    ElaineGlobalConfig,
+    unknown,
+    UpdateElaineAdminConfigBody
+  >;
+}) {
+  const mutationFn = (body: UpdateElaineAdminConfigBody) =>
+    putElaineAdminConfigFn(body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+export interface OpenRouterModelSummary {
+  id: string;
+  name: string;
+  contextLength: number | null;
+  promptPricePerMTok: number | null;
+  completionPricePerMTok: number | null;
+}
+
+export const getListElaineAdminModelsQueryKey = () =>
+  [`/api/elaine/admin/models`] as const;
+
+const listElaineAdminModelsFn = (
+  options?: RequestInit,
+): Promise<OpenRouterModelSummary[]> =>
+  customFetch<OpenRouterModelSummary[]>("/api/elaine/admin/models", {
+    ...options,
+    method: "GET",
+  });
+
+export function useListElaineAdminModels<
+  TData = OpenRouterModelSummary[],
+  TError = unknown,
+>(options?: {
+  query?: UseQueryOptions<OpenRouterModelSummary[], TError, TData>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey =
+    queryOptions?.queryKey ?? getListElaineAdminModelsQueryKey();
+  const queryFn: QueryFunction<OpenRouterModelSummary[]> = ({ signal }) =>
+    listElaineAdminModelsFn({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    OpenRouterModelSummary[],
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOpts.queryKey };
+}

@@ -21,7 +21,7 @@ import { Label } from "@/components/ui/label";
 import { AppLogo } from "@/components/app-logo";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/hooks/use-theme";
-import { ElaineSettingsCard } from "@workspace/elaine-ui";
+import { ElaineSettingsCard, GlobalConfigCard } from "@workspace/elaine-ui";
 
 const base = import.meta.env.BASE_URL;
 
@@ -276,7 +276,7 @@ export default function Account() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-xl space-y-6 p-6 md:p-8">
+      <main className="mx-auto max-w-3xl space-y-6 p-6 md:p-8">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Account</h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -284,10 +284,13 @@ export default function Account() {
             your collections.
           </p>
         </div>
-        <ProfileCard />
-        <AppearanceCard />
-        <PasswordCard />
-        <ElaineSettingsCard subtitle="Your household's AI assistant across every app" />
+        <div className="mx-auto w-full max-w-xl space-y-6">
+          <ProfileCard />
+          <AppearanceCard />
+          <PasswordCard />
+          <ElaineSettingsCard subtitle="Your household's AI assistant across every app" />
+        </div>
+        <GlobalConfigCard />
         <p className="pt-2 text-center text-xs text-muted-foreground">
           Signed in to {base.replace(/\/$/, "") || "/"} · one account, every
           collection

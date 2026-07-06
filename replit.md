@@ -70,7 +70,7 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
   - Stage 1 — review:
     1. UI browsing / screenshots: always use the SCREENSHOT_AUTH_TOKEN cookie-free bypass via `/api/dev/screenshot-login?token=$SCREENSHOT_AUTH_TOKEN&next=<path>` — always allowed, no need to ask permission first. This works around the Secure+SameSite=None cookie drop on the internal HTTP preview. Fallback: `runTest()` interactive login or curl with `AGENT_LOGIN_EMAIL`/`AGENT_LOGIN_PASSWORD` against `https://$REPLIT_DEV_DOMAIN`.
     2. Deep end-to-end code review of everything added/changed (verify it works as intended, not just that it typechecks). Diff Replit vs GitHub if unsure what changed.
-    3. Full E2E UI/UX testing of new/changed features using the screenshot-login path above.
+    3. Full E2E UI/UX testing of new/changed features using the screenshot-login path above. If unsure of scope, diff Replit vs GitHub to see exactly what changed.
   - Stage 2 — DB safety (only after stage 1 passes): 4. Confirm the change cannot harm the shared production Supabase DB (pottery + quilting also live there) — no `drizzle-kit push --force`, additive-only migrations only.
   - Stage 3 — backup + sync (only after stage 2 passes): 5. Run the Supabase → Replit built-in DB backup (`pnpm --filter @workspace/scripts run backup-to-replit`). 6. Sync GitHub repo + Issues (close completed ones), and address any workflow validation findings (e.g. CodeQL) both in Replit and in the GitHub repo. Repeat stages 1-3 until Replit and GitHub are in sync with all checks passing on the latest state.
   - Only once all stages pass: (re)publish.

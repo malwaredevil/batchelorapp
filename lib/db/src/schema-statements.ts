@@ -620,11 +620,11 @@ export const STATEMENTS: string[] = [
      ON travels_calendar_trip_suggestions (status)`,
 
   // travels_calendar_trip_suggestions.user_id / is_from_shared_calendar:
-  // scope suggestions so a personal (non-Travel) calendar's suggestions are
-  // only visible to that calendar's owner — the shared Travel calendar's
-  // suggestions remain visible to everyone. Prevents leaking one user's
-  // personal-calendar events to the rest of the household via suggestion
-  // cards.
+  // user_id records which household member's personal calendar connection
+  // produced the suggestion (insert attribution only). Suggestions are
+  // household-shared trip data like everything else in travels — every
+  // authenticated household member can view/dismiss/accept any suggestion
+  // regardless of which calendar it came from.
   `ALTER TABLE travels_calendar_trip_suggestions ADD COLUMN IF NOT EXISTS user_id INTEGER`,
   `ALTER TABLE travels_calendar_trip_suggestions ADD COLUMN IF NOT EXISTS is_from_shared_calendar BOOLEAN NOT NULL DEFAULT false`,
   `CREATE INDEX IF NOT EXISTS travels_calendar_trip_suggestions_user_id_idx

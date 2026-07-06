@@ -118,13 +118,23 @@ const ACTION_CONFIRMATION_MODES = [
 ] as const;
 type ActionConfirmationMode = (typeof ACTION_CONFIRMATION_MODES)[number];
 
+// Desktop dimensions for the floating chat widget popup — "compact" is the
+// default (a normal-sized popup, not screen-filling); mobile always fills
+// the available width regardless of this setting (see ElaineWidget).
+const CHAT_WINDOW_SIZES = ["compact", "comfortable", "large"] as const;
+type ChatWindowSize = (typeof CHAT_WINDOW_SIZES)[number];
+
 const SettingsBody = z
   .object({
     enabled: z.boolean().optional(),
     actionConfirmationMode: z.enum(ACTION_CONFIRMATION_MODES).optional(),
+    chatWindowSize: z.enum(CHAT_WINDOW_SIZES).optional(),
   })
   .refine(
-    (v) => v.enabled !== undefined || v.actionConfirmationMode !== undefined,
+    (v) =>
+      v.enabled !== undefined ||
+      v.actionConfirmationMode !== undefined ||
+      v.chatWindowSize !== undefined,
     {
       message: "At least one setting must be provided",
     },
@@ -2914,6 +2924,8 @@ router.get("/settings", async (req, res) => {
     actionConfirmationMode:
       (row?.actionConfirmationMode as ActionConfirmationMode | undefined) ??
       "one_by_one",
+    chatWindowSize:
+      (row?.chatWindowSize as ChatWindowSize | undefined) ?? "compact",
   });
 });
 
@@ -2929,14 +2941,18 @@ router.put("/settings", async (req, res) => {
     patch.actionConfirmationMode ??
     (existing?.actionConfirmationMode as ActionConfirmationMode | undefined) ??
     "one_by_one";
+  const chatWindowSize =
+    patch.chatWindowSize ??
+    (existing?.chatWindowSize as ChatWindowSize | undefined) ??
+    "compact";
   await db
     .insert(elaineSettings)
-    .values({ userId, enabled, actionConfirmationMode })
+    .values({ userId, enabled, actionConfirmationMode, chatWindowSize })
     .onConflictDoUpdate({
       target: elaineSettings.userId,
-      set: { enabled, actionConfirmationMode, updatedAt: new Date() },
+      set: { enabled, actionConfirmationMode, chatWindowSize, updatedAt: new Date() },
     });
-  res.json({ enabled, actionConfirmationMode });
+  res.json({ enabled, actionConfirmationMode, chatWindowSize });
 });
 
 // ── Admin (app-owner-only) global config for Elaine's AI behaviour ────────
@@ -2959,14 +2975,8 @@ async function requireOwner(req: Request, res: Response): Promise<boolean> {
 
 router.get("/admin/config", async (req, res) => {
   if (!(await requireOwner(req, res))) return;
-  const [row] = await db.select().from(elaineGlobalConfig).limit(1);
-  res.json({
-    chatModel: row?.chatModel ?? "google/gemini-2.5-flash",
-    subagentModel: row?.subagentModel ?? "z-ai/glm-5.2",
-    requestTimeoutMs: row?.requestTimeoutMs ?? 12000,
-    maxResponseTokens: row?.maxResponseTokens ?? 700,
-    updatedAt: row?.updatedAt ?? null,
-  });
+  const config = await getElaineGlobalConfig();
+  res.json(config);
 });
 
 const AdminConfigBody = z.object({
@@ -2974,31 +2984,97 @@ const AdminConfigBody = z.object({
   subagentModel: z.string().min(1).max(200).optional(),
   requestTimeoutMs: z.number().int().min(2000).max(30000).optional(),
   maxResponseTokens: z.number().int().min(50).max(4000).optional(),
+  models: z
+    .object({
+      fastVision: z.string().min(1).max(200).optional(),
+      smartVision: z.string().min(1).max(200).optional(),
+      advisor: z.string().min(1).max(200).optional(),
+      research: z.string().min(1).max(200).optional(),
+      expertPanelAlt: z.string().min(1).max(200).optional(),
+      embedding: z.string().min(1).max(200).optional(),
+      rerank: z.string().min(1).max(200).optional(),
+      visualEmbed: z.string().min(1).max(200).optional(),
+      fusionModels: z.array(z.string().min(1).max(200)).min(1).max(6).optional(),
+      fusionJudge: z.string().min(1).max(200).optional(),
+    })
+    .partial()
+    .optional(),
+  timeouts: z
+    .object({
+      expertConsultMs: z.number().int().min(1000).max(60000).optional(),
+      rerankerMs: z.number().int().min(1000).max(60000).optional(),
+      geocodingMs: z.number().int().min(1000).max(30000).optional(),
+      fusionMs: z.number().int().min(1000).max(120000).optional(),
+    })
+    .partial()
+    .optional(),
+  features: z
+    .object({
+      enableAdvisor: z.boolean().optional(),
+      enableSubagent: z.boolean().optional(),
+      enableFusionPotteryExpert: z.boolean().optional(),
+      enableFusionTravelDocFallback: z.boolean().optional(),
+    })
+    .partial()
+    .optional(),
+  thresholds: z
+    .object({
+      potterySimilarityYes: z.number().min(0).max(1).optional(),
+      potterySimilarityMaybe: z.number().min(0).max(1).optional(),
+      potterySimilarityNo: z.number().min(0).max(1).optional(),
+      visualEmbedCropTop: z.number().min(0).max(1).optional(),
+      visualEmbedCropHeight: z.number().min(0).max(1).optional(),
+      aiJpegQuality: z.number().int().min(1).max(100).optional(),
+      potteryZoneAnalysisMaxTokens: z.number().int().min(50).max(4000).optional(),
+      potteryBackstampMaxTokens: z.number().int().min(50).max(4000).optional(),
+      travelDocExtractionMaxTokens: z.number().int().min(50).max(4000).optional(),
+    })
+    .partial()
+    .optional(),
 });
 
 router.put("/admin/config", async (req, res) => {
   if (!(await requireOwner(req, res))) return;
   const userId = req.session.userId!;
   const patch = AdminConfigBody.parse(req.body);
-  const [existing] = await db.select().from(elaineGlobalConfig).limit(1);
-  const next = {
-    chatModel: patch.chatModel ?? existing?.chatModel ?? "google/gemini-2.5-flash",
-    subagentModel:
-      patch.subagentModel ?? existing?.subagentModel ?? "z-ai/glm-5.2",
-    requestTimeoutMs:
-      patch.requestTimeoutMs ?? existing?.requestTimeoutMs ?? 12000,
-    maxResponseTokens:
-      patch.maxResponseTokens ?? existing?.maxResponseTokens ?? 700,
+  const current = await getElaineGlobalConfig();
+  const nextTop = {
+    chatModel: patch.chatModel ?? current.chatModel,
+    subagentModel: patch.subagentModel ?? current.subagentModel,
+    requestTimeoutMs: patch.requestTimeoutMs ?? current.requestTimeoutMs,
+    maxResponseTokens: patch.maxResponseTokens ?? current.maxResponseTokens,
   };
+  const nextModels = { ...current.models, ...patch.models };
+  const nextTimeouts = { ...current.timeouts, ...patch.timeouts };
+  const nextFeatures = { ...current.features, ...patch.features };
+  const nextThresholds = { ...current.thresholds, ...patch.thresholds };
   await db
     .insert(elaineGlobalConfig)
-    .values({ id: 1, ...next, updatedByUserId: userId, updatedAt: new Date() })
+    .values({
+      id: 1,
+      ...nextTop,
+      extraModels: nextModels,
+      timeouts: nextTimeouts,
+      features: nextFeatures,
+      thresholds: nextThresholds,
+      updatedByUserId: userId,
+      updatedAt: new Date(),
+    })
     .onConflictDoUpdate({
       target: elaineGlobalConfig.id,
-      set: { ...next, updatedByUserId: userId, updatedAt: new Date() },
+      set: {
+        ...nextTop,
+        extraModels: nextModels,
+        timeouts: nextTimeouts,
+        features: nextFeatures,
+        thresholds: nextThresholds,
+        updatedByUserId: userId,
+        updatedAt: new Date(),
+      },
     });
   invalidateElaineGlobalConfigCache();
-  res.json(next);
+  const updated = await getElaineGlobalConfig();
+  res.json(updated);
 });
 
 router.get("/admin/models", async (req, res) => {

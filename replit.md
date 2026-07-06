@@ -49,6 +49,7 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
 - **Backup before publish.** `post-merge.sh` snapshots Supabase → built-in Replit DB after every merge. Embedding columns are excluded (not in Replit DB's pgvector). Regenerate via each app's Bulk Re-analyse.
 - **Single Google OAuth client** shared by both apps. Redirect URI: `{host}/api/auth/google/callback`.
 - **DATABASE_URL → Supabase; PG\* → Replit built-in DB.** Never swap these.
+- **Elaine global config is admin-only, one row, cached.** `elaine_global_config` (singleton, id=1) holds chatModel/subagentModel/requestTimeoutMs/maxResponseTokens, editable only by `app_users.isOwner` accounts via `/api/elaine/admin/config` (GET/PUT) and `/api/elaine/admin/models` (OpenRouter model list, public REST API, 1hr cache). Reuses the existing isOwner-gating pattern from travel-calendar routes. Server-side config cache has a 30s TTL with safe hardcoded defaults as fallback.
 
 ## Product
 

@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { AppLogo } from "@/components/app-logo";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/hooks/use-theme";
+import { ElaineSettingsCard } from "@workspace/elaine-ui";
 
 const base = import.meta.env.BASE_URL;
 
@@ -286,6 +287,7 @@ export default function Account() {
         <ProfileCard />
         <AppearanceCard />
         <PasswordCard />
+        <ElaineSettingsCard subtitle="Your household's AI assistant across every app" />
         <p className="pt-2 text-center text-xs text-muted-foreground">
           Signed in to {base.replace(/\/$/, "") || "/"} · one account, every
           collection

@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Link } from "wouter";
 import {
   MessageCircle,
   X,
@@ -106,16 +105,22 @@ export function ElaineWidget({
             </div>
             <div className="flex items-center gap-1">
               {fullScreenPath && (
-                <Link href={fullScreenPath}>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    title="Open full-screen chat"
-                  >
-                    <Maximize2 className="h-4 w-4" />
-                  </Button>
-                </Link>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  title="Open full-screen chat"
+                  onClick={() => {
+                    // fullScreenPath may point at a different deployed
+                    // artifact (e.g. "/elaine/" from pottery/quilting/hub),
+                    // which is a separate SPA bundle entirely. A client-side
+                    // router Link can't cross that boundary, so this must
+                    // always be a hard navigation.
+                    window.location.href = fullScreenPath;
+                  }}
+                >
+                  <Maximize2 className="h-4 w-4" />
+                </Button>
               )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

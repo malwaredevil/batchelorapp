@@ -122,6 +122,16 @@ export const APPS: AppEntry[] = [
     description:
       "Plan trips, build AI itineraries, explore destinations, and keep a travel journal.",
   },
+  {
+    id: "elaine",
+    name: "Elaine",
+    href: `${base}elaine/`,
+    image: `${base}images/elaine-collection.svg`,
+    updated: "Your AI assistant",
+    stats: [],
+    description:
+      "Chat with your household's AI assistant — full context on pottery, quilting, and travels, with viewable, editable settings.",
+  },
 ];
 
 /* ── Widget catalogue ──────────────────────────────────────────────────────── *

@@ -72,7 +72,7 @@ function Routes() {
         </Route>
         <Route component={NotFound} />
       </Switch>
-      <ElaineWidget appId="hub" />
+      <ElaineWidget appId="hub" fullScreenPath="/elaine/" />
     </>
   );
 }

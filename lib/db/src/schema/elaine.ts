@@ -104,3 +104,22 @@ export const elaineNudges = pgTable(
 
 export type ElaineNudgeRow = typeof elaineNudges.$inferSelect;
 export type InsertElaineNudge = typeof elaineNudges.$inferInsert;
+
+// Single-row (id fixed at 1) global config for Elaine's AI behaviour, editable
+// only by the app owner from her settings page. Applies across every user and
+// every app surface — distinct from `elaineSettings` above, which is a
+// per-user on/off + confirmation-mode preference.
+export const elaineGlobalConfig = pgTable("elaine_global_config", {
+  id: integer("id").primaryKey().default(1),
+  chatModel: text("chat_model").notNull().default("google/gemini-2.5-flash"),
+  subagentModel: text("subagent_model").notNull().default("z-ai/glm-5.2"),
+  requestTimeoutMs: integer("request_timeout_ms").notNull().default(12000),
+  maxResponseTokens: integer("max_response_tokens").notNull().default(700),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedByUserId: integer("updated_by_user_id"),
+}).enableRLS();
+
+export type ElaineGlobalConfigRow = typeof elaineGlobalConfig.$inferSelect;
+export type InsertElaineGlobalConfig = typeof elaineGlobalConfig.$inferInsert;

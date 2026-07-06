@@ -28,6 +28,7 @@ export interface AuthUser {
   email: string;
   displayName?: string | null;
   themePreference?: AuthUserThemePreference;
+  isOwner?: boolean;
 }
 
 export interface Error {

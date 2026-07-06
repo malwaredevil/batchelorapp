@@ -1,5 +1,7 @@
 import OpenAI from "openai";
 import { env } from "./env";
+import { getElaineGlobalConfig } from "./elaine-config";
+import { logger } from "./logger";
 
 /**
  * Every AI call in this app goes through OpenRouter, using OpenRouter's model
@@ -124,13 +126,20 @@ export async function callModelWithAdvisor<T>(
   fn: (
     client: OpenAI,
     model: string,
-    tools: OpenRouterServerTool[],
+    tools: OpenRouterServerTool[] | undefined,
   ) => Promise<T>,
 ): Promise<T> {
+  const config = await getElaineGlobalConfig();
+  if (!config.features.enableAdvisor) {
+    return fn(getOpenRouterClient(), model, undefined);
+  }
   const tools: OpenRouterServerTool[] = [
     {
       type: "openrouter:advisor",
-      parameters: { model: MODELS.ADVISOR, instructions: advisorInstructions },
+      parameters: {
+        model: config.models.advisor,
+        instructions: advisorInstructions,
+      },
     },
   ];
   return fn(getOpenRouterClient(), model, tools);
@@ -153,14 +162,180 @@ export async function callModelWithSubagent<T>(
   ) => Promise<T>,
   options?: { subagentModel?: string },
 ): Promise<T> {
-  const tools: OpenRouterServerTool[] = [
-    {
-      type: "openrouter:subagent",
-      parameters: {
-        model: options?.subagentModel ?? MODELS.SUBAGENT_WORKER,
-        instructions: subagentInstructions,
-      },
-    },
-  ];
+  const config = await getElaineGlobalConfig();
+  const tools: OpenRouterServerTool[] = config.features.enableSubagent
+    ? [
+        {
+          type: "openrouter:subagent",
+          parameters: {
+            model: options?.subagentModel ?? config.subagentModel,
+            instructions: subagentInstructions,
+          },
+        },
+      ]
+    : [];
   return fn(getOpenRouterClient(), model, tools);
 }
+
+/**
+ * Resolved model slots for the current request, pulled from the admin-
+ * editable global config (see lib/elaine-config.ts) with hardcoded fallbacks
+ * if the config can't be loaded. Prefer this over the static `MODELS`
+ * constant in any new call site so an admin can retune models without a
+ * deploy.
+ */
+export interface ResolvedModels {
+  fastVision: string;
+  smartVision: string;
+  advisor: string;
+  subagentWorker: string;
+  research: string;
+  expertPanelAlt: string;
+  embedding: string;
+  rerank: string;
+  visualEmbed: string;
+  fusionModels: string[];
+  fusionJudge: string;
+}
+
+export async function getModels(): Promise<ResolvedModels> {
+  try {
+    const config = await getElaineGlobalConfig();
+    return {
+      fastVision: config.models.fastVision,
+      smartVision: config.models.smartVision,
+      advisor: config.models.advisor,
+      subagentWorker: config.subagentModel,
+      research: config.models.research,
+      expertPanelAlt: config.models.expertPanelAlt,
+      embedding: config.models.embedding,
+      rerank: config.models.rerank,
+      visualEmbed: config.models.visualEmbed,
+      fusionModels: config.models.fusionModels,
+      fusionJudge: config.models.fusionJudge,
+    };
+  } catch (err) {
+    logger.error(
+      { err },
+      "Failed to resolve global model config, using hardcoded defaults",
+    );
+    return {
+      fastVision: MODELS.FAST_VISION,
+      smartVision: MODELS.SMART_VISION,
+      advisor: MODELS.ADVISOR,
+      subagentWorker: MODELS.SUBAGENT_WORKER,
+      research: MODELS.RESEARCH,
+      expertPanelAlt: MODELS.EXPERT_PANEL_ALT,
+      embedding: MODELS.EMBEDDING,
+      rerank: "rerank-2.5",
+      visualEmbed: "jina-clip-v2",
+      fusionModels: ["anthropic/claude-opus-4.8", "openai/gpt-5.1"],
+      fusionJudge: "z-ai/glm-5.2",
+    };
+  }
+}
+
+export async function getTimeouts() {
+  return (await getElaineGlobalConfig()).timeouts;
+}
+
+export async function getFeatures() {
+  return (await getElaineGlobalConfig()).features;
+}
+
+export async function getThresholds() {
+  return (await getElaineGlobalConfig()).thresholds;
+}
+
+/**
+ * "Fusion" escalation tier: an independent multi-model panel + cheap-judge
+ * synthesis, reserved for the two highest-value/most-ambiguous call sites in
+ * the app (pottery expert/maker attribution, travel document extraction
+ * fallback) since it costs several model calls per invocation. Mirrors the
+ * pattern in lib/expert-consult.ts (parallel independent opinions + merge)
+ * but is generic over a caller-supplied prompt/parser rather than baked into
+ * the elAIne advice-panel flow.
+ *
+ * Gated by `features.enableFusionPotteryExpert` /
+ * `features.enableFusionTravelDocFallback` — callers should check the
+ * relevant flag before invoking this, since it's meant to be an occasional
+ * fallback, not the default path.
+ */
+export async function callFusion(
+  buildMessages: (
+    model: string,
+  ) => OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+  options?: { maxTokens?: number; responseFormatJson?: boolean },
+): Promise<string> {
+  const config = await getElaineGlobalConfig();
+  const panel =
+    config.models.fusionModels.length > 0
+      ? config.models.fusionModels
+      : DEFAULT_MODELS_FALLBACK.fusionModels;
+  const client = getOpenRouterClient();
+
+  const settled = await Promise.allSettled(
+    panel.map((model) =>
+      client.chat.completions.create(
+        {
+          model,
+          messages: buildMessages(model),
+          max_tokens: options?.maxTokens ?? 800,
+          ...(options?.responseFormatJson
+            ? { response_format: { type: "json_object" as const } }
+            : {}),
+        },
+        { timeout: config.timeouts.fusionMs },
+      ),
+    ),
+  );
+
+  const opinions = settled
+    .filter(
+      (r): r is PromiseFulfilledResult<OpenAI.Chat.Completions.ChatCompletion> =>
+        r.status === "fulfilled",
+    )
+    .map((r) => r.value.choices[0]?.message?.content?.trim() ?? "")
+    .filter((text) => text.length > 0);
+
+  if (opinions.length === 0) {
+    logger.error("Fusion panel: every model call failed");
+    return "";
+  }
+  if (opinions.length === 1) return opinions[0];
+
+  try {
+    const judged = await client.chat.completions.create(
+      {
+        model: config.models.fusionJudge,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are given the same task description followed by two or more independent model outputs for it. Pick the single best answer, or synthesize the strongest parts of each into one final answer. Return ONLY the final answer in the exact same format the individual outputs used (e.g. if they are JSON, return JSON only) — no commentary about the merge process.",
+          },
+          {
+            role: "user",
+            content: opinions
+              .map((text, i) => `Output ${i + 1}:\n${text}`)
+              .join("\n\n"),
+          },
+        ],
+        max_tokens: options?.maxTokens ?? 800,
+        ...(options?.responseFormatJson
+          ? { response_format: { type: "json_object" as const } }
+          : {}),
+      },
+      { timeout: config.timeouts.fusionMs },
+    );
+    const answer = judged.choices[0]?.message?.content?.trim();
+    if (answer) return answer;
+  } catch (err) {
+    logger.error({ err }, "Fusion judge step failed, using first opinion");
+  }
+  return opinions[0];
+}
+
+const DEFAULT_MODELS_FALLBACK = {
+  fusionModels: ["anthropic/claude-opus-4.8", "openai/gpt-5.1"],
+};

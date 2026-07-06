@@ -24,6 +24,7 @@ import {
 import { rerankCandidates } from "../../lib/reranker";
 import { downloadAndShrinkImageForAi } from "../../lib/pottery/storage";
 import { serializeItems } from "../../lib/pottery/serialize";
+import { getThresholds } from "../../lib/ai-client";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -360,8 +361,9 @@ router.post(
     // patterns match regardless of what the vision model concludes from photos
     // alone (different angles, lighting, etc. can fool it).
     // Floor the per-match verdict up when the embedding strongly disagrees.
-    const FLOOR_TO_MAYBE = 0.78; // similarity >= this: "no" → "maybe"
-    const FLOOR_TO_YES = 0.9; // similarity >= this: "no"/"maybe" → "yes"
+    const thresholds = await getThresholds();
+    const FLOOR_TO_MAYBE = thresholds.potterySimilarityMaybe; // similarity >= this: "no" → "maybe"
+    const FLOOR_TO_YES = thresholds.potterySimilarityYes; // similarity >= this: "no"/"maybe" → "yes"
 
     const matches = serialized.map((item, index) => {
       const sim = similarityById.get(item.id) ?? 0;

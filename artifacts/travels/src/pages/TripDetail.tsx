@@ -163,6 +163,7 @@ import {
   Stamp,
   Leaf,
   AlertCircle,
+  Rows2,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -951,10 +952,12 @@ function DocumentRow({
   doc,
   tripId,
   onDelete,
+  compact = false,
 }: {
   doc: TripDocument;
   tripId: number;
   onDelete: (docId: number) => void;
+  compact?: boolean;
 }) {
   const qc = useQueryClient();
   const updateTripDocument = useUpdateTripDocument();
@@ -970,6 +973,11 @@ function DocumentRow({
   const docTypeLocked = lockedFields.includes("documentType");
   const [showTrainDialog, setShowTrainDialog] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
+  const [localExpanded, setLocalExpanded] = useState(!compact);
+  useEffect(() => {
+    setLocalExpanded(!compact);
+  }, [compact]);
+  const showFields = !compact || localExpanded;
   const { data: customTypes = [] } = useListCustomDocumentTypes();
 
   const saveDocumentType = (value: string) => {
@@ -1197,6 +1205,20 @@ function DocumentRow({
               </div>
             </div>
             <div className="flex items-center gap-0.5 shrink-0 -mt-0.5">
+              {compact && (
+                <button
+                  type="button"
+                  onClick={() => setLocalExpanded((v) => !v)}
+                  className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                  title={localExpanded ? "Collapse details" : "Expand details"}
+                >
+                  {localExpanded ? (
+                    <ChevronUp className="w-4 h-4" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4" />
+                  )}
+                </button>
+              )}
               <button
                 onClick={handleRescan}
                 disabled={rescanTripDocument.isPending}
@@ -1245,48 +1267,50 @@ function DocumentRow({
               </button>
             </div>
           </div>
-          <div className="mt-1.5 space-y-1">
-            {keyFields.map(({ key, label }) => {
-              const isLocked = lockedFields.includes(key);
-              const isDateField =
-                key.toLowerCase().includes("date") || DATE_LIKE_KEYS.has(key);
-              const rawValue = ed?.[key] != null ? String(ed[key]) : "";
-              return (
-                <div key={key} className="flex items-start gap-1">
-                  <div className="flex-1 min-w-0">
-                    <InlineTextField
-                      label={label}
-                      value={rawValue}
-                      onSave={(v) => saveExtractedField(key, v)}
-                      saving={updateTripDocument.isPending}
-                      placeholder={isDateField ? "e.g. 2026-08-14" : undefined}
-                      displayValue={(v) => formatExtractedValue(v)}
-                    />
+          {showFields && keyFields.length > 0 && (
+            <div className="mt-1.5 space-y-1">
+              {keyFields.map(({ key, label }) => {
+                const isLocked = lockedFields.includes(key);
+                const isDateField =
+                  key.toLowerCase().includes("date") || DATE_LIKE_KEYS.has(key);
+                const rawValue = ed?.[key] != null ? String(ed[key]) : "";
+                return (
+                  <div key={key} className="flex items-start gap-1">
+                    <div className="flex-1 min-w-0">
+                      <InlineTextField
+                        label={label}
+                        value={rawValue}
+                        onSave={(v) => saveExtractedField(key, v)}
+                        saving={updateTripDocument.isPending}
+                        placeholder={isDateField ? "e.g. 2026-08-14" : undefined}
+                        displayValue={(v) => formatExtractedValue(v)}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => toggleFieldLock(key)}
+                      className={`p-1 shrink-0 transition-colors mt-4 ${
+                        isLocked
+                          ? "text-amber-500 hover:text-amber-600"
+                          : "text-muted-foreground/50 hover:text-foreground"
+                      }`}
+                      title={
+                        isLocked
+                          ? "Locked — AI rescan won't overwrite"
+                          : "Unlocked — AI rescan may update"
+                      }
+                    >
+                      {isLocked ? (
+                        <Lock className="w-3.5 h-3.5" />
+                      ) : (
+                        <LockOpen className="w-3.5 h-3.5" />
+                      )}
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => toggleFieldLock(key)}
-                    className={`p-1 shrink-0 transition-colors mt-4 ${
-                      isLocked
-                        ? "text-amber-500 hover:text-amber-600"
-                        : "text-muted-foreground/50 hover:text-foreground"
-                    }`}
-                    title={
-                      isLocked
-                        ? "Locked — AI rescan won't overwrite"
-                        : "Unlocked — AI rescan may update"
-                    }
-                  >
-                    {isLocked ? (
-                      <Lock className="w-3.5 h-3.5" />
-                    ) : (
-                      <LockOpen className="w-3.5 h-3.5" />
-                    )}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
@@ -2862,6 +2886,23 @@ export default function TripDetail({ id }: { id: number }) {
     );
   }
 
+  const [compactDocs, setCompactDocs] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("travels-compact-docs") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleCompactDocs = () => {
+    setCompactDocs((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem("travels-compact-docs", next ? "1" : "0");
+      } catch {}
+      return next;
+    });
+  };
+
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [pendingTitle, setPendingTitle] = useState("");
@@ -4036,7 +4077,24 @@ export default function TripDetail({ id }: { id: number }) {
                                 <FileText className="w-5 h-5" />
                                 Documents
                               </h2>
-                              <label className="cursor-pointer">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={toggleCompactDocs}
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                                    compactDocs
+                                      ? "border-primary/40 bg-primary/5 text-primary"
+                                      : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+                                  }`}
+                                  title={
+                                    compactDocs
+                                      ? "Compact mode on — click to show all details"
+                                      : "Click to compact (hide field details)"
+                                  }
+                                >
+                                  <Rows2 className="w-4 h-4" />
+                                </button>
+                                <label className="cursor-pointer">
                                 <input
                                   type="file"
                                   className="hidden"
@@ -4055,6 +4113,7 @@ export default function TripDetail({ id }: { id: number }) {
                                   {uploadingDoc ? "Uploading..." : "Upload"}
                                 </span>
                               </label>
+                              </div>
 
                               {pendingFile && (
                                 <Dialog
@@ -4133,6 +4192,7 @@ export default function TripDetail({ id }: { id: number }) {
                                       doc={doc}
                                       tripId={id}
                                       onDelete={handleDeleteDocument}
+                                      compact={compactDocs}
                                     />
                                   ))
                                 )}

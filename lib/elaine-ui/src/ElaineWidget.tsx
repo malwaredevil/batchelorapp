@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   MessageCircle,
   X,
@@ -54,6 +55,23 @@ export function ElaineWidget({
   const [hiddenForVisit, setHiddenForVisit] = useState(
     () => sessionStorage.getItem(HIDE_FOR_VISIT_KEY) === "1",
   );
+  // Positioning offset is applied via inline styles (not Tailwind bottom-4/
+  // right-4 utilities) — see git history for why: those utilities were
+  // observed to silently fail to generate in some app bundles' Tailwind
+  // content scan, and separately position:fixed + a non-zero `bottom` value
+  // could drift to the full document height in some pages. An
+  // inset-0/absolute wrapper anchored with inline styles is immune to both.
+  const [isDesktop, setIsDesktop] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(min-width: 640px)").matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 640px)");
+    const onChange = () => setIsDesktop(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
 
   const chat = useElaineChat({ appId, active: open });
   const { settings, updateSettings, messages, isStreaming, streamingContent } =
@@ -105,117 +123,136 @@ export function ElaineWidget({
     );
   }
 
-  return (
-    <div className="fixed bottom-4 right-4 z-[999999] flex flex-col items-end gap-3 sm:bottom-6 sm:right-6">
-      {open && (
-        <div
-          className={`flex max-w-[calc(100vw-2rem)] max-h-[calc(100vh-6rem)] flex-col overflow-hidden rounded-2xl border border-card-border bg-card shadow-2xl ${
-            CHAT_WINDOW_SIZE_CLASSES[settings?.chatWindowSize ?? "compact"]
-          }`}
-        >
-          <div className="flex items-center justify-between gap-2 border-b border-border/50 bg-muted/40 px-4 py-3">
-            <div className="flex items-center gap-2.5">
-              <ElaineAvatar size={34} />
-              <ElaineWordmark className="text-lg" />
-            </div>
-            <div className="flex items-center gap-1">
-              {fullScreenPath && (
+  return createPortal(
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 999999,
+        isolation: "isolate",
+        pointerEvents: "none",
+      }}
+    >
+      <div
+        className="flex flex-col items-end gap-3"
+        style={{
+          position: "absolute",
+          bottom: isDesktop ? "1.5rem" : "1rem",
+          right: isDesktop ? "1.5rem" : "1rem",
+          pointerEvents: "auto",
+        }}
+      >
+        {open && (
+          <div
+            className={`flex max-w-[calc(100vw-2rem)] max-h-[calc(100vh-6rem)] flex-col overflow-hidden rounded-2xl border border-card-border bg-card shadow-2xl ${
+              CHAT_WINDOW_SIZE_CLASSES[settings?.chatWindowSize ?? "compact"]
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2 border-b border-border/50 bg-muted/40 px-4 py-3">
+              <div className="flex items-center gap-2.5">
+                <ElaineAvatar size={34} />
+                <ElaineWordmark className="text-lg" />
+              </div>
+              <div className="flex items-center gap-1">
+                {fullScreenPath && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    title="Open full-screen chat"
+                    onClick={() => {
+                      // fullScreenPath may point at a different deployed
+                      // artifact (e.g. "/elaine/" from pottery/quilting/hub),
+                      // which is a separate SPA bundle entirely. A client-side
+                      // router Link can't cross that boundary, so this must
+                      // always be a hard navigation.
+                      window.location.href = fullScreenPath;
+                    }}
+                  >
+                    <Maximize2 className="h-4 w-4" />
+                  </Button>
+                )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuItem
+                      onSelect={chat.handleNewConversation}
+                      className="cursor-pointer"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5 mr-2" />
+                      New conversation
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        // Elaine's config always lives in the standalone
+                        // Elaine app, regardless of which sub-app the widget
+                        // is mounted in — same cross-bundle caveat as
+                        // fullScreenPath above.
+                        window.location.href = "/elaine/settings";
+                      }}
+                      className="cursor-pointer"
+                    >
+                      <SettingsIcon className="h-3.5 w-3.5 mr-2" />
+                      <ElaineName /> settings
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onSelect={handleHideForVisit}
+                      className="cursor-pointer"
+                    >
+                      Hide for this visit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={handleTurnOff}
+                      className="cursor-pointer text-destructive focus:text-destructive"
+                    >
+                      Turn off <ElaineName />
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8"
-                  title="Open full-screen chat"
-                  onClick={() => {
-                    // fullScreenPath may point at a different deployed
-                    // artifact (e.g. "/elaine/" from pottery/quilting/hub),
-                    // which is a separate SPA bundle entirely. A client-side
-                    // router Link can't cross that boundary, so this must
-                    // always be a hard navigation.
-                    window.location.href = fullScreenPath;
-                  }}
+                  onClick={() => setOpen(false)}
                 >
-                  <Maximize2 className="h-4 w-4" />
+                  <X className="h-4 w-4" />
                 </Button>
-              )}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuItem
-                    onSelect={chat.handleNewConversation}
-                    className="cursor-pointer"
-                  >
-                    <RotateCcw className="h-3.5 w-3.5 mr-2" />
-                    New conversation
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onSelect={() => {
-                      // Elaine's config always lives in the standalone
-                      // Elaine app, regardless of which sub-app the widget
-                      // is mounted in — same cross-bundle caveat as
-                      // fullScreenPath above.
-                      window.location.href = "/elaine/settings";
-                    }}
-                    className="cursor-pointer"
-                  >
-                    <SettingsIcon className="h-3.5 w-3.5 mr-2" />
-                    <ElaineName /> settings
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onSelect={handleHideForVisit}
-                    className="cursor-pointer"
-                  >
-                    Hide for this visit
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onSelect={handleTurnOff}
-                    className="cursor-pointer text-destructive focus:text-destructive"
-                  >
-                    Turn off <ElaineName />
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setOpen(false)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
+              </div>
             </div>
+
+            <ElaineChatPanel chat={chat} onNavigated={() => setOpen(false)} />
           </div>
+        )}
 
-          <ElaineChatPanel chat={chat} onNavigated={() => setOpen(false)} />
-        </div>
-      )}
-
-      {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          className="relative flex items-center gap-2 rounded-full border border-card-border bg-card py-2 pl-2 pr-4 shadow-lg transition-transform hover:scale-105"
-          aria-label={
-            unseenNudges && unseenNudges.count > 0
-              ? `Open Elaine assistant (${unseenNudges.count} new)`
-              : "Open Elaine assistant"
-          }
-        >
-          {unseenNudges && unseenNudges.count > 0 && (
-            <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[11px] font-semibold leading-none text-destructive-foreground">
-              {unseenNudges.count > 9 ? "9+" : unseenNudges.count}
+        {!open && (
+          <button
+            onClick={() => setOpen(true)}
+            className="relative flex items-center gap-2 rounded-full border border-card-border bg-card py-2 pl-2 pr-4 shadow-lg transition-transform hover:scale-105"
+            aria-label={
+              unseenNudges && unseenNudges.count > 0
+                ? `Open Elaine assistant (${unseenNudges.count} new)`
+                : "Open Elaine assistant"
+            }
+          >
+            {unseenNudges && unseenNudges.count > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[11px] font-semibold leading-none text-destructive-foreground">
+                {unseenNudges.count > 9 ? "9+" : unseenNudges.count}
+              </span>
+            )}
+            <ElaineAvatar size={36} />
+            <span className="flex items-center gap-1 text-sm font-medium">
+              <ElaineWordmark />
             </span>
-          )}
-          <ElaineAvatar size={36} />
-          <span className="flex items-center gap-1 text-sm font-medium">
-            <ElaineWordmark />
-          </span>
-          <MessageCircle className="h-3.5 w-3.5 text-muted-foreground" />
-        </button>
-      )}
-    </div>
+            <MessageCircle className="h-3.5 w-3.5 text-muted-foreground" />
+          </button>
+        )}
+      </div>
+    </div>,
+    document.body,
   );
 }

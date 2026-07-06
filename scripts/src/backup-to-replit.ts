@@ -382,6 +382,7 @@ CREATE TABLE IF NOT EXISTS elaine_settings (
   user_id                   INTEGER PRIMARY KEY,
   enabled                   BOOLEAN NOT NULL DEFAULT TRUE,
   action_confirmation_mode  TEXT NOT NULL DEFAULT 'one_by_one',
+  chat_window_size          TEXT NOT NULL DEFAULT 'compact',
   updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -398,6 +399,10 @@ CREATE TABLE IF NOT EXISTS elaine_global_config (
   subagent_model        TEXT NOT NULL DEFAULT 'z-ai/glm-5.2',
   request_timeout_ms    INTEGER NOT NULL DEFAULT 12000,
   max_response_tokens   INTEGER NOT NULL DEFAULT 700,
+  extra_models          JSONB NOT NULL DEFAULT '{}'::jsonb,
+  timeouts              JSONB NOT NULL DEFAULT '{}'::jsonb,
+  features              JSONB NOT NULL DEFAULT '{}'::jsonb,
+  thresholds            JSONB NOT NULL DEFAULT '{}'::jsonb,
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_by_user_id    INTEGER
 );
@@ -475,6 +480,12 @@ CREATE TABLE IF NOT EXISTS travels_custom_document_types (
 ALTER TABLE travels_trip_documents ADD COLUMN IF NOT EXISTS title TEXT;
 ALTER TABLE travels_trip_documents ADD COLUMN IF NOT EXISTS gmail_message_id TEXT;
 ALTER TABLE travels_trip_documents ADD COLUMN IF NOT EXISTS icon_override TEXT;
+
+ALTER TABLE elaine_settings ADD COLUMN IF NOT EXISTS chat_window_size TEXT NOT NULL DEFAULT 'compact';
+ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS extra_models JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS timeouts JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS features JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS thresholds JSONB NOT NULL DEFAULT '{}'::jsonb;
 `;
 
 async function copyTable(
@@ -973,7 +984,13 @@ async function main() {
 
   summary["elaine_settings"] = await copyTable(source, dest, {
     table: "elaine_settings",
-    columns: ["user_id", "enabled", "action_confirmation_mode", "updated_at"],
+    columns: [
+      "user_id",
+      "enabled",
+      "action_confirmation_mode",
+      "chat_window_size",
+      "updated_at",
+    ],
     orderBy: "user_id",
   });
 
@@ -1008,6 +1025,10 @@ async function main() {
       "subagent_model",
       "request_timeout_ms",
       "max_response_tokens",
+      "extra_models",
+      "timeouts",
+      "features",
+      "thresholds",
       "updated_at",
       "updated_by_user_id",
     ],

@@ -3,7 +3,7 @@ import {
   callModel,
   callModelWithAdvisor,
   getOpenRouterClient,
-  MODELS,
+  getModels,
 } from "./ai-client";
 import { classifyPrintType } from "./visual-embed";
 import {
@@ -166,8 +166,9 @@ export async function analyzeImage(
   // Run GPT analysis and CLIP zero-shot print-type classification in parallel.
   // CLIP result wins when available; GPT extraction is the fallback.
   const clipIsLocked = context?.lockedFields.includes("printType") ?? false;
+  const models = await getModels();
   const [completion, clipPrintType] = await Promise.all([
-    callModel(MODELS.FAST_VISION, (c, model) =>
+    callModel(models.fastVision, (c, model) =>
       c.chat.completions.create({
         model,
         response_format: { type: "json_object" },
@@ -222,8 +223,9 @@ export function buildEmbeddingText(analysis: VisionAnalysis): string {
 }
 
 export async function embedText(text: string): Promise<number[]> {
+  const models = await getModels();
   const response = await getOpenRouterClient().embeddings.create({
-    model: MODELS.EMBEDDING,
+    model: models.embedding,
     input: text,
   });
   return response.data[0].embedding;
@@ -294,8 +296,9 @@ export async function analyzePatternImage(
       ? `Existing record — use as context:\n${contextLines.join("\n")}\n\n`
       : "";
 
+  const patternModels = await getModels();
   const completion = await callModelWithAdvisor(
-    MODELS.FAST_VISION,
+    patternModels.fastVision,
     "You are a quilting-pattern expert. You will be asked to double-check an ambiguous or partially-legible pattern name, designer credit, or block size printed on a quilt pattern. Give your best identification and a one-line reason, or say clearly if it's genuinely unidentifiable.",
     (c, model, tools) =>
       c.chat.completions.create({
@@ -384,7 +387,8 @@ export async function analyzeQuiltImage(
       ? `Existing record:\n${contextLines.join("\n")}\n\n`
       : "";
 
-  const completion = await callModel(MODELS.FAST_VISION, (c, model) =>
+  const quiltModels = await getModels();
+  const completion = await callModel(quiltModels.fastVision, (c, model) =>
     c.chat.completions.create({
       model,
       response_format: { type: "json_object" },
@@ -520,7 +524,8 @@ export async function compareWithMatches(params: {
     }
   }
 
-  const completion = await callModel(MODELS.SMART_VISION, (c, model) =>
+  const compareModels = await getModels();
+  const completion = await callModel(compareModels.smartVision, (c, model) =>
     c.chat.completions.create({
       model,
       response_format: { type: "json_object" },
@@ -588,7 +593,8 @@ export async function detectBlockSeams(
   gridW: number,
   gridH: number,
 ): Promise<DetectSeamsResult> {
-  const response = await callModel(MODELS.FAST_VISION, (c, model) =>
+  const seamModels = await getModels();
+  const response = await callModel(seamModels.fastVision, (c, model) =>
     c.chat.completions.create({
       model,
       max_tokens: 1024,
@@ -715,7 +721,8 @@ export async function enrichPatternMetadata(
     ? `Quilt pattern designer: "${designerName}". Pattern: "${patternName}". Find their biography, website, and this pattern's publication details.`
     : `Quilt pattern: "${patternName}". Find the designer biography, website, and publication details.`;
 
-  const raw = await callModel(MODELS.RESEARCH, async (client, model) => {
+  const enrichModels = await getModels();
+  const raw = await callModel(enrichModels.research, async (client, model) => {
     const completion = await client.chat.completions.create({
       model,
       messages: [
@@ -772,7 +779,8 @@ Respond with STRICT JSON only:
 export async function extractBlockFromImage(
   imageDataUrl: string,
 ): Promise<ExtractedBlockDef> {
-  const completion = await callModel(MODELS.FAST_VISION, (c, model) =>
+  const blockModels = await getModels();
+  const completion = await callModel(blockModels.fastVision, (c, model) =>
     c.chat.completions.create({
       model,
       response_format: { type: "json_object" },

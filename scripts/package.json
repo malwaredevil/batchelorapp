@@ -9,6 +9,7 @@
     "restore-from-replit": "tsx ./src/restore-from-replit.ts",
     "seed-travels": "tsx ./src/seed-travels-data.ts",
     "add-users": "tsx ./src/add-users.ts",
+    "migrate-to-elaine": "tsx ./src/migrate-to-elaine.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

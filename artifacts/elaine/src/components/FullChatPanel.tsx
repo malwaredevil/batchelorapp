@@ -5,7 +5,7 @@ import type { MagnetCheckResult } from "@workspace/api-client-react";
 import { getTripPhotoImageUrl } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { ElaineChatPanel, ElaineAvatar, ElaineName } from "@workspace/elaine-ui";
-import type { AssistantChat } from "./useAssistantChat";
+import type { FullChat } from "@/lib/useFullChat";
 
 const MAGNET_VERDICT_COPY: Record<
   MagnetCheckResult["verdict"],
@@ -28,8 +28,8 @@ const MAGNET_VERDICT_COPY: Record<
   },
 };
 
-interface AssistantChatPanelProps {
-  chat: AssistantChat;
+interface FullChatPanelProps {
+  chat: FullChat;
   onNavigated?: () => void;
   avatarSize?: number;
   bubbleWidthClass?: string;
@@ -37,18 +37,21 @@ interface AssistantChatPanelProps {
 }
 
 /**
- * Travels-specific chat panel: the shared `ElaineChatPanel` handles the
- * conversation log, pending-action cards, and composer; this wrapper only
- * adds the magnet-check camera button and result card via the panel's
- * pluggable slots, since magnet check is a travels-only feature.
+ * Elaine's full-screen chat panel: the shared `ElaineChatPanel` handles the
+ * conversation log, pending-action cards, and composer; this wrapper adds
+ * the travels magnet-check camera button and result card via the panel's
+ * pluggable slots. Magnet check is a travels-domain feature, but it lives
+ * here (not in the shared widget) since it's only useful in the full,
+ * "SUPER AI Agent" chat surface — it naturally stays inactive/empty when
+ * the user isn't working with travel/magnet data.
  */
-export function AssistantChatPanel({
+export function FullChatPanel({
   chat,
   onNavigated,
   avatarSize,
   bubbleWidthClass,
   emptyState,
-}: AssistantChatPanelProps) {
+}: FullChatPanelProps) {
   const {
     magnetPreview,
     magnetResult,
@@ -70,8 +73,8 @@ export function AssistantChatPanel({
           <div className="flex flex-col items-center gap-2 py-8 text-center">
             <ElaineAvatar size={48} />
             <p className="text-sm text-muted-foreground">
-              Hi, I'm <ElaineName />! Ask me anything about your trips, or
-              whatever's on your screen.
+              Hi, I'm <ElaineName />! Ask me anything about your pottery,
+              quilting, or trips.
             </p>
           </div>
         )
@@ -140,9 +143,9 @@ export function AssistantChatPanel({
                   Closest matches
                 </p>
                 {magnetResult.matches.map((match) => (
-                  <Link
+                  <a
                     key={match.photoId}
-                    href={`/trips/${match.tripId}`}
+                    href={`/travels/trips/${match.tripId}`}
                     onClick={onNavigated}
                   >
                     <div className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-border/50 p-1.5 transition-colors hover:border-primary/30">
@@ -160,7 +163,7 @@ export function AssistantChatPanel({
                         </p>
                       </div>
                     </div>
-                  </Link>
+                  </a>
                 ))}
               </div>
             )}

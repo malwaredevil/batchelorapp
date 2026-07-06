@@ -25,6 +25,18 @@ function parseMessageCitations(content: string): {
   return { text: content.slice(0, nullIdx), citations };
 }
 
+/** Strips stray markdown syntax the model may slip into a visible reply
+ *  despite being told not to (the chat bubble has no markdown renderer, so
+ *  **bold**, * bullets, and # headers would otherwise show up as literal
+ *  asterisks/hashes). Belt-and-suspenders on top of the system prompt
+ *  instruction — also cleans up any already-stored history. */
+function stripStrayMarkdown(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^([ \t]*)[*-]\s+/gm, "$1");
+}
+
 /** Renders message text with [N] citation markers turned into clickable links. */
 function MessageText({
   text,
@@ -33,8 +45,9 @@ function MessageText({
   text: string;
   citations: string[];
 }) {
-  if (citations.length === 0) return <>{text}</>;
-  const parts = text.split(/(\[\d+\])/g);
+  const cleaned = stripStrayMarkdown(text);
+  if (citations.length === 0) return <>{cleaned}</>;
+  const parts = cleaned.split(/(\[\d+\])/g);
   return (
     <>
       {parts.map((part, i) => {
@@ -146,7 +159,7 @@ export function ElaineChatPanel({
           const { text, citations } = parseMessageCitations(msg.content);
           return (
             <div key={i} className="flex gap-2.5 justify-start">
-              <ElaineAvatar size={avatarSize} className="mt-0.5" />
+              <ElaineAvatar size={avatarSize} className="mt-0.5" animated={false} />
               <div className={`${bubbleWidthClass} flex flex-col gap-1.5`}>
                 <div className="whitespace-pre-wrap rounded-2xl rounded-tl-sm bg-muted px-3.5 py-2.5 text-sm leading-relaxed text-foreground">
                   <MessageText text={text} citations={citations} />
@@ -184,12 +197,12 @@ export function ElaineChatPanel({
 
         {isStreaming && (
           <div className="flex gap-2.5 justify-start">
-            <ElaineAvatar size={avatarSize} className="mt-0.5" />
+            <ElaineAvatar size={avatarSize} className="mt-0.5" animated={false} />
             {streamingContent ? (
               <div
                 className={`${bubbleWidthClass} whitespace-pre-wrap rounded-2xl rounded-tl-sm bg-muted px-3.5 py-2.5 text-sm leading-relaxed text-foreground`}
               >
-                {streamingContent}
+                {stripStrayMarkdown(streamingContent)}
               </div>
             ) : statusMessage ? (
               <div

@@ -7,14 +7,14 @@ import {
 } from "@workspace/api-client-react";
 
 /**
- * Travels-specific wrapper around the shared Elaine chat hook, adding the
- * magnet-check feature — deliberately kept out of the shared
- * `@workspace/elaine-ui` package since it's travels-only. Both the floating
- * widget and the full-screen chat page use this so they get identical tool
- * access (actions, magnet check, streaming, confirmations).
+ * Wraps the shared Elaine chat hook with the travels magnet-check feature.
+ * This lives in the standalone Elaine app (not the shared `elaine-ui`
+ * package) since magnet check is a travels-domain feature that only makes
+ * sense in the full "SUPER AI Agent" chat surface, not the lightweight
+ * floating widget used across every app.
  */
-export function useAssistantChat({ active }: { active: boolean }) {
-  const chat = useElaineChat({ appId: "travels", active });
+export function useFullChat({ active }: { active: boolean }) {
+  const chat = useElaineChat({ appId: "elaine", active });
 
   const [magnetPreview, setMagnetPreview] = useState<string | null>(null);
   const [magnetResult, setMagnetResult] = useState<MagnetCheckResult | null>(
@@ -72,4 +72,4 @@ export function useAssistantChat({ active }: { active: boolean }) {
   };
 }
 
-export type AssistantChat = ReturnType<typeof useAssistantChat>;
+export type FullChat = ReturnType<typeof useFullChat>;

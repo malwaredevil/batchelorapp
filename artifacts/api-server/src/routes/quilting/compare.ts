@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
-import { and, eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import { getTableColumns, inArray, sql } from "drizzle-orm";
 import { db, fabrics, quiltingImages } from "@workspace/db";
 import { CompareFabricResponse } from "@workspace/api-zod";
 import { requireAuth } from "../../middleware/auth";
@@ -86,7 +86,6 @@ router.post(
   compareLimiter,
   upload.single("image"),
   async (req, res) => {
-    const userId = req.session.userId!;
     const file = req.file;
     if (!file) {
       res.status(400).json({ error: "An image file is required." });
@@ -112,14 +111,14 @@ router.post(
 
     const vectorLiteral = `[${embedding.join(",")}]`;
 
-    // Text vector search + visual vector search, scoped to this user's fabrics only.
+    // Text vector search + visual vector search across the shared household collection.
     const [textRanked, visualRanked] = await Promise.all([
       db
         .execute<{ id: number; similarity: number }>(
           sql`
           select id, 1 - (embedding <=> ${vectorLiteral}::vector) as similarity
           from ${fabrics}
-          where embedding is not null and user_id = ${userId}
+          where embedding is not null
           order by embedding <=> ${vectorLiteral}::vector
           limit ${TEXT_SEARCH_POOL}
         `,
@@ -136,7 +135,7 @@ router.post(
               sql`
               select id, 1 - (visual_embedding <=> ${`[${visualEmb.join(",")}]`}::vector) as similarity
               from ${fabrics}
-              where visual_embedding is not null and user_id = ${userId}
+              where visual_embedding is not null
               order by visual_embedding <=> ${`[${visualEmb.join(",")}]`}::vector
               limit ${VISUAL_SEARCH_POOL}
             `,
@@ -171,12 +170,9 @@ router.post(
       .select(fabricColumns)
       .from(fabrics)
       .where(
-        and(
-          inArray(
-            fabrics.id,
-            mergedRanking.map((r) => r.id),
-          ),
-          eq(fabrics.userId, userId),
+        inArray(
+          fabrics.id,
+          mergedRanking.map((r) => r.id),
         ),
       );
 

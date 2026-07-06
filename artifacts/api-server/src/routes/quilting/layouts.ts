@@ -86,10 +86,7 @@ function isUniqueConstraintViolation(err: unknown): boolean {
   );
 }
 
-async function resolveOrCreateCategories(
-  names: string[],
-  userId: number,
-): Promise<number[]> {
+async function resolveOrCreateCategories(names: string[]): Promise<number[]> {
   const unique = [...new Set(names.map((n) => n.trim()).filter(Boolean))].slice(
     0,
     MAX_CATEGORY_NAMES,
@@ -99,7 +96,7 @@ async function resolveOrCreateCategories(
     const [existing] = await db
       .select({ id: categories.id })
       .from(categories)
-      .where(and(eq(categories.name, name), eq(categories.userId, userId)))
+      .where(eq(categories.name, name))
       .limit(1);
     if (existing) {
       ids.push(existing.id);
@@ -107,12 +104,18 @@ async function resolveOrCreateCategories(
       try {
         const [created] = await db
           .insert(categories)
-          .values({ name, userId })
+          .values({ name })
           .returning({ id: categories.id });
         if (created) ids.push(created.id);
       } catch (err) {
         if (!isUniqueConstraintViolation(err)) throw err;
-        // Name taken globally — skip
+        // Created concurrently by another request — look it up.
+        const [race] = await db
+          .select({ id: categories.id })
+          .from(categories)
+          .where(eq(categories.name, name))
+          .limit(1);
+        if (race) ids.push(race.id);
       }
     }
   }
@@ -178,13 +181,12 @@ const HEX_RE = /#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?/g;
 
 async function fetchBlockCellsMap(
   blockIds: number[],
-  userId: number,
 ): Promise<Map<number, string[]>> {
   if (blockIds.length === 0) return new Map();
   const rows = await db
     .select({ id: blocks.id, cells: blocks.cells })
     .from(blocks)
-    .where(and(inArray(blocks.id, blockIds), eq(blocks.userId, userId)));
+    .where(inArray(blocks.id, blockIds));
 
   const FAB_RE = /\bfab:(\d+)/g;
   const allFabricIds = new Set<number>();
@@ -199,9 +201,7 @@ async function fetchBlockCellsMap(
     const fabRows = await db
       .select({ id: fabrics.id, dominantColors: fabrics.dominantColors })
       .from(fabrics)
-      .where(
-        and(inArray(fabrics.id, [...allFabricIds]), eq(fabrics.userId, userId)),
-      );
+      .where(inArray(fabrics.id, [...allFabricIds]));
     for (const fr of fabRows)
       fabricColorMap.set(fr.id, fr.dominantColors ?? []);
   }
@@ -285,12 +285,10 @@ function serialize(
   };
 }
 
-router.get("/layouts", async (req, res) => {
-  const userId = req.session.userId!;
+router.get("/layouts", async (_req, res) => {
   const rows = await db
     .select()
     .from(layouts)
-    .where(eq(layouts.userId, userId))
     .orderBy(desc(layouts.createdAt));
   const catMap = await fetchLayoutCategories(rows.map((r) => r.id));
 
@@ -300,7 +298,7 @@ router.get("/layouts", async (req, res) => {
       if (cell.blockId !== null) allBlockIds.add(cell.blockId);
     }
   }
-  const blockCellsMap = await fetchBlockCellsMap([...allBlockIds], userId);
+  const blockCellsMap = await fetchBlockCellsMap([...allBlockIds]);
 
   res.json(
     rows.map((r) =>
@@ -335,7 +333,7 @@ router.post("/layouts", async (req, res) => {
 
   let cats: CategoryResult[] = [];
   if (data.categoryNames && data.categoryNames.length > 0) {
-    const catIds = await resolveOrCreateCategories(data.categoryNames, userId);
+    const catIds = await resolveOrCreateCategories(data.categoryNames);
     if (catIds.length > 0) {
       await db.insert(entityCategories).values(
         catIds.map((cid) => ({
@@ -354,15 +352,11 @@ router.post("/layouts", async (req, res) => {
 
 router.get("/layouts/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const userId = req.session.userId!;
   if (!Number.isInteger(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
   }
-  const [row] = await db
-    .select()
-    .from(layouts)
-    .where(and(eq(layouts.id, id), eq(layouts.userId, userId)));
+  const [row] = await db.select().from(layouts).where(eq(layouts.id, id));
   if (!row) {
     res.status(404).json({ error: "Layout not found" });
     return;
@@ -375,7 +369,7 @@ router.get("/layouts/:id", async (req, res) => {
         .filter((bid): bid is number => bid !== null),
     ),
   ];
-  const blockCellsMap = await fetchBlockCellsMap(blockIds, userId);
+  const blockCellsMap = await fetchBlockCellsMap(blockIds);
   res.json(
     serialize(
       row,
@@ -387,7 +381,6 @@ router.get("/layouts/:id", async (req, res) => {
 
 router.patch("/layouts/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const userId = req.session.userId!;
   if (!Number.isInteger(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
@@ -401,7 +394,7 @@ router.patch("/layouts/:id", async (req, res) => {
     const [existing] = await db
       .select({ rows: layouts.rows, cols: layouts.cols })
       .from(layouts)
-      .where(and(eq(layouts.id, id), eq(layouts.userId, userId)));
+      .where(eq(layouts.id, id));
     const rows = data.rows ?? existing?.rows ?? 5;
     const cols = data.cols ?? existing?.cols ?? 5;
     update.cells = normalizeCells(data.cells, rows, cols);
@@ -419,14 +412,14 @@ router.patch("/layouts/:id", async (req, res) => {
     const [updated] = await db
       .update(layouts)
       .set(update)
-      .where(and(eq(layouts.id, id), eq(layouts.userId, userId)))
+      .where(eq(layouts.id, id))
       .returning();
     row = updated;
   } else {
     const [existing] = await db
       .select()
       .from(layouts)
-      .where(and(eq(layouts.id, id), eq(layouts.userId, userId)));
+      .where(eq(layouts.id, id));
     row = existing;
   }
   if (!row) {
@@ -444,10 +437,7 @@ router.patch("/layouts/:id", async (req, res) => {
         ),
       );
     if (data.categoryNames.length > 0) {
-      const catIds = await resolveOrCreateCategories(
-        data.categoryNames,
-        userId,
-      );
+      const catIds = await resolveOrCreateCategories(data.categoryNames);
       if (catIds.length > 0) {
         await db.insert(entityCategories).values(
           catIds.map((cid) => ({
@@ -466,17 +456,15 @@ router.patch("/layouts/:id", async (req, res) => {
 
 router.delete("/layouts/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const userId = req.session.userId!;
   if (!Number.isInteger(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
   }
 
-  // Verify ownership before deleting
   const [existing] = await db
     .select({ id: layouts.id })
     .from(layouts)
-    .where(and(eq(layouts.id, id), eq(layouts.userId, userId)));
+    .where(eq(layouts.id, id));
   if (!existing) {
     res.status(404).json({ error: "Layout not found" });
     return;
@@ -490,9 +478,7 @@ router.delete("/layouts/:id", async (req, res) => {
         eq(entityCategories.entityId, id),
       ),
     );
-  await db
-    .delete(layouts)
-    .where(and(eq(layouts.id, id), eq(layouts.userId, userId)));
+  await db.delete(layouts).where(eq(layouts.id, id));
   res.status(204).send();
 });
 

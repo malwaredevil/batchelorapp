@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
-import { and, asc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import { asc, getTableColumns, inArray, sql } from "drizzle-orm";
 import { db, potteryItems, potteryImages } from "@workspace/db";
 import { ComparePotteryResponse } from "@workspace/api-zod";
 import { requireAuth } from "../../middleware/auth";
@@ -138,7 +138,6 @@ router.post(
   compareLimiter,
   upload.single("image"),
   async (req, res) => {
-    const userId = req.session.userId!;
     const file = req.file;
     if (!file) {
       res.status(400).json({ error: "An image file is required." });
@@ -181,14 +180,15 @@ router.post(
     const zoneVectorLiteral = zoneEmb ? `[${zoneEmb.join(",")}]` : null;
 
     // Three-way vector search: text + whole-piece visual + body-zone visual.
-    // All searches are explicitly scoped to this user's own items.
+    // Searches span the whole shared household collection, not just the
+    // requesting user's own items.
     const [textRanked, visualRanked, zoneRanked] = await Promise.all([
       db
         .execute<{ id: number; similarity: number }>(
           sql`
         select id, 1 - (embedding <=> ${vectorLiteral}::vector) as similarity
         from pottery_items
-        where embedding is not null and user_id = ${userId}
+        where embedding is not null
         order by embedding <=> ${vectorLiteral}::vector
         limit ${TEXT_SEARCH_POOL}
       `,
@@ -205,7 +205,7 @@ router.post(
               sql`
             select id, 1 - (visual_embedding <=> ${`[${visualEmb.join(",")}]`}::vector) as similarity
             from pottery_items
-            where visual_embedding is not null and user_id = ${userId}
+            where visual_embedding is not null
             order by visual_embedding <=> ${`[${visualEmb.join(",")}]`}::vector
             limit ${VISUAL_SEARCH_POOL}
           `,
@@ -223,7 +223,7 @@ router.post(
               sql`
             select id, 1 - (zone_embedding <=> ${zoneVectorLiteral}::vector) as similarity
             from pottery_items
-            where zone_embedding is not null and user_id = ${userId}
+            where zone_embedding is not null
             order by zone_embedding <=> ${zoneVectorLiteral}::vector
             limit ${ZONE_SEARCH_POOL}
           `,
@@ -263,12 +263,9 @@ router.post(
       .select(itemColumns)
       .from(potteryItems)
       .where(
-        and(
-          eq(potteryItems.userId, userId),
-          inArray(
-            potteryItems.id,
-            mergedRanking.map((r) => r.id),
-          ),
+        inArray(
+          potteryItems.id,
+          mergedRanking.map((r) => r.id),
         ),
       );
     const rowById = new Map(rows.map((row) => [row.id, row]));

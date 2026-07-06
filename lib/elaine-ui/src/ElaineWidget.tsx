@@ -5,6 +5,7 @@ import {
   MoreVertical,
   RotateCcw,
   Maximize2,
+  Settings as SettingsIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -135,6 +136,19 @@ export function ElaineWidget({
                   >
                     <RotateCcw className="h-3.5 w-3.5 mr-2" />
                     New conversation
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      // Elaine's config always lives in the standalone
+                      // Elaine app, regardless of which sub-app the widget
+                      // is mounted in — same cross-bundle caveat as
+                      // fullScreenPath above.
+                      window.location.href = "/elaine/settings";
+                    }}
+                    className="cursor-pointer"
+                  >
+                    <SettingsIcon className="h-3.5 w-3.5 mr-2" />
+                    <ElaineName /> settings
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem

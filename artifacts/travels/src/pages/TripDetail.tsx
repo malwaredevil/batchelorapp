@@ -1167,7 +1167,11 @@ function DocumentRow({
                   </SelectTrigger>
                   <SelectContent>
                     {allDocTypeOptions(customTypes).map((opt) => (
-                      <SelectItem key={opt.key} value={opt.key} className="text-xs">
+                      <SelectItem
+                        key={opt.key}
+                        value={opt.key}
+                        className="text-xs"
+                      >
                         {opt.label}
                       </SelectItem>
                     ))}
@@ -1282,7 +1286,9 @@ function DocumentRow({
                         value={rawValue}
                         onSave={(v) => saveExtractedField(key, v)}
                         saving={updateTripDocument.isPending}
-                        placeholder={isDateField ? "e.g. 2026-08-14" : undefined}
+                        placeholder={
+                          isDateField ? "e.g. 2026-08-14" : undefined
+                        }
                         displayValue={(v) => formatExtractedValue(v)}
                       />
                     </div>
@@ -4100,24 +4106,24 @@ export default function TripDetail({ id }: { id: number }) {
                                   <Rows2 className="w-4 h-4" />
                                 </button>
                                 <label className="cursor-pointer">
-                                <input
-                                  type="file"
-                                  className="hidden"
-                                  accept=".pdf,.jpg,.jpeg,.png,.webp"
-                                  onChange={handleFilePicked}
-                                  disabled={uploadingDoc}
-                                />
-                                <span
-                                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-sm font-medium transition-colors ${
-                                    uploadingDoc
-                                      ? "opacity-50 cursor-not-allowed bg-card text-muted-foreground"
-                                      : "bg-card text-foreground hover:bg-muted cursor-pointer"
-                                  }`}
-                                >
-                                  <Upload className="w-4 h-4" />
-                                  {uploadingDoc ? "Uploading..." : "Upload"}
-                                </span>
-                              </label>
+                                  <input
+                                    type="file"
+                                    className="hidden"
+                                    accept=".pdf,.jpg,.jpeg,.png,.webp"
+                                    onChange={handleFilePicked}
+                                    disabled={uploadingDoc}
+                                  />
+                                  <span
+                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-sm font-medium transition-colors ${
+                                      uploadingDoc
+                                        ? "opacity-50 cursor-not-allowed bg-card text-muted-foreground"
+                                        : "bg-card text-foreground hover:bg-muted cursor-pointer"
+                                    }`}
+                                  >
+                                    <Upload className="w-4 h-4" />
+                                    {uploadingDoc ? "Uploading..." : "Upload"}
+                                  </span>
+                                </label>
                               </div>
 
                               {pendingFile && (

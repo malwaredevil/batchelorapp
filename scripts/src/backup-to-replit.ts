@@ -22,8 +22,8 @@
  *             travels_gmail_connections,
  *             travels_gmail_scan_decisions, travels_card_layout_preferences,
  *             travels_trip_card_collapse_state, travels_custom_document_types
- *   Elaine:   elaine_conversations, elaine_settings, elaine_memory, elaine_nudges
- *             (shared assistant, not namespaced per-app)
+ *   Elaine:   elaine_conversations, elaine_settings, elaine_memory, elaine_nudges,
+ *             elaine_global_config (shared assistant, not namespaced per-app)
  *
  * What is intentionally skipped:
  *   - embedding / visual_embedding columns (require pgvector, unavailable on Replit DB)
@@ -390,6 +390,16 @@ CREATE TABLE IF NOT EXISTS elaine_memory (
   content             TEXT NOT NULL,
   created_by_user_id  INTEGER NOT NULL,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS elaine_global_config (
+  id                    INTEGER PRIMARY KEY DEFAULT 1,
+  chat_model            TEXT NOT NULL DEFAULT 'google/gemini-2.5-flash',
+  subagent_model        TEXT NOT NULL DEFAULT 'z-ai/glm-5.2',
+  request_timeout_ms    INTEGER NOT NULL DEFAULT 12000,
+  max_response_tokens   INTEGER NOT NULL DEFAULT 700,
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by_user_id    INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS elaine_nudges (
@@ -989,6 +999,20 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "elaine_nudges", "id");
+
+  summary["elaine_global_config"] = await copyTable(source, dest, {
+    table: "elaine_global_config",
+    columns: [
+      "id",
+      "chat_model",
+      "subagent_model",
+      "request_timeout_ms",
+      "max_response_tokens",
+      "updated_at",
+      "updated_by_user_id",
+    ],
+    orderBy: "id",
+  });
 
   // ── Gmail travel-document scanning ───────────────────────────────────────
   summary["travels_gmail_connections"] = await copyTable(source, dest, {

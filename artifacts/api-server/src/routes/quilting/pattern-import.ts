@@ -8,7 +8,7 @@ import { isIP } from "net";
 import { requireAuth } from "../../middleware/auth";
 import { aiLimiter } from "../../middleware/rateLimit";
 import { logger } from "../../lib/logger";
-import { callModel, MODELS } from "../../lib/ai-client";
+import { callModel, getModels } from "../../lib/ai-client";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -294,7 +294,8 @@ router.post("/patterns/import-url", aiLimiter, async (req, res) => {
     return;
   }
 
-  const completion = await callModel(MODELS.FAST_VISION, (client, model) =>
+  const models = await getModels();
+  const completion = await callModel(models.fastVision, (client, model) =>
     client.chat.completions.create({
       model,
       messages: [

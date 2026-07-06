@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod/v4";
 import { and, eq, desc, isNull } from "drizzle-orm";
 import type OpenAI from "openai";
@@ -9,6 +9,7 @@ import {
   elaineNudges,
   elaineSettings,
   elaineMemory,
+  elaineGlobalConfig,
   travelsTrips,
   travelsTripDocuments,
   travelsTripPhotos,
@@ -19,7 +20,12 @@ import {
 } from "@workspace/db";
 import { requireAuth } from "../middleware/auth";
 import { logger } from "../lib/logger";
-import { callModelWithSubagent, MODELS } from "../lib/ai-client";
+import { callModelWithSubagent } from "../lib/ai-client";
+import {
+  getElaineGlobalConfig,
+  invalidateElaineGlobalConfigCache,
+} from "../lib/elaine-config";
+import { listOpenRouterModels } from "../lib/openrouter-models";
 import { deleteTripPhoto } from "../lib/travels/storage";
 import { deleteDocument } from "../lib/travels-storage";
 import { getValidAccessToken } from "../lib/google-calendar-tokens";
@@ -2327,6 +2333,8 @@ router.post("/chat", async (req, res) => {
       | ActionConfirmationMode
       | undefined) ?? "one_by_one";
 
+  const elaineConfig = await getElaineGlobalConfig();
+
   const CONFIRMATION_MODE_EXPLANATION: Record<ActionConfirmationMode, string> =
     {
       one_by_one:
@@ -2489,20 +2497,23 @@ Keep replies concise and easy to read in a chat bubble.`;
 
     try {
       await callModelWithSubagent(
-        MODELS.FAST_VISION,
+        elaineConfig.chatModel,
         ASSISTANT_SUBAGENT_INSTRUCTIONS,
         async (client, model, serverTools) => {
-          const stream = await client.chat.completions.create({
-            model,
-            tools: [
-              ...(serverTools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[]),
-              ...ACTION_TOOLS,
-              ...SOFT_TOOLS,
-            ],
-            messages,
-            max_tokens: 700,
-            stream: true,
-          });
+          const stream = await client.chat.completions.create(
+            {
+              model,
+              tools: [
+                ...(serverTools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[]),
+                ...ACTION_TOOLS,
+                ...SOFT_TOOLS,
+              ],
+              messages,
+              max_tokens: elaineConfig.maxResponseTokens,
+              stream: true,
+            },
+            { timeout: elaineConfig.requestTimeoutMs },
+          );
 
           for await (const chunk of stream) {
             const delta = chunk.choices[0]?.delta;
@@ -2542,6 +2553,7 @@ Keep replies concise and easy to read in a chat bubble.`;
             }
           }
         },
+        { subagentModel: elaineConfig.subagentModel },
       );
     } catch (err) {
       req.log.error({ err }, "elAIne assistant stream failed");
@@ -2925,6 +2937,79 @@ router.put("/settings", async (req, res) => {
       set: { enabled, actionConfirmationMode, updatedAt: new Date() },
     });
   res.json({ enabled, actionConfirmationMode });
+});
+
+// ── Admin (app-owner-only) global config for Elaine's AI behaviour ────────
+// Distinct from /settings above (per-user, self-service). These routes are
+// gated on app_users.is_owner, the same "single app owner" flag used to
+// gate Travel-calendar reassignment — see travel-calendar.ts.
+async function requireOwner(req: Request, res: Response): Promise<boolean> {
+  const userId = req.session.userId!;
+  const [me] = await db
+    .select({ isOwner: appUsers.isOwner })
+    .from(appUsers)
+    .where(eq(appUsers.id, userId))
+    .limit(1);
+  if (!me?.isOwner) {
+    res.status(403).json({ error: "Admin access required" });
+    return false;
+  }
+  return true;
+}
+
+router.get("/admin/config", async (req, res) => {
+  if (!(await requireOwner(req, res))) return;
+  const [row] = await db.select().from(elaineGlobalConfig).limit(1);
+  res.json({
+    chatModel: row?.chatModel ?? "google/gemini-2.5-flash",
+    subagentModel: row?.subagentModel ?? "z-ai/glm-5.2",
+    requestTimeoutMs: row?.requestTimeoutMs ?? 12000,
+    maxResponseTokens: row?.maxResponseTokens ?? 700,
+    updatedAt: row?.updatedAt ?? null,
+  });
+});
+
+const AdminConfigBody = z.object({
+  chatModel: z.string().min(1).max(200).optional(),
+  subagentModel: z.string().min(1).max(200).optional(),
+  requestTimeoutMs: z.number().int().min(2000).max(30000).optional(),
+  maxResponseTokens: z.number().int().min(50).max(4000).optional(),
+});
+
+router.put("/admin/config", async (req, res) => {
+  if (!(await requireOwner(req, res))) return;
+  const userId = req.session.userId!;
+  const patch = AdminConfigBody.parse(req.body);
+  const [existing] = await db.select().from(elaineGlobalConfig).limit(1);
+  const next = {
+    chatModel: patch.chatModel ?? existing?.chatModel ?? "google/gemini-2.5-flash",
+    subagentModel:
+      patch.subagentModel ?? existing?.subagentModel ?? "z-ai/glm-5.2",
+    requestTimeoutMs:
+      patch.requestTimeoutMs ?? existing?.requestTimeoutMs ?? 12000,
+    maxResponseTokens:
+      patch.maxResponseTokens ?? existing?.maxResponseTokens ?? 700,
+  };
+  await db
+    .insert(elaineGlobalConfig)
+    .values({ id: 1, ...next, updatedByUserId: userId, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: elaineGlobalConfig.id,
+      set: { ...next, updatedByUserId: userId, updatedAt: new Date() },
+    });
+  invalidateElaineGlobalConfigCache();
+  res.json(next);
+});
+
+router.get("/admin/models", async (req, res) => {
+  if (!(await requireOwner(req, res))) return;
+  try {
+    const models = await listOpenRouterModels();
+    res.json(models);
+  } catch (err) {
+    logger.error({ err }, "Failed to list OpenRouter models for admin UI");
+    res.status(502).json({ error: "Failed to fetch model list" });
+  }
 });
 
 router.get("/memory", async (_req, res) => {

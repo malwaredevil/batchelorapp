@@ -41,12 +41,16 @@ export type InsertElaineConversation = typeof elaineConversations.$inferInsert;
 // Per-user on/off preference for Elaine (default on), plus how she should
 // confirm multi-action turns: "one_by_one" (default, safest), "all_at_once",
 // or "auto_run" (no confirmation — she just does them and reports back).
+// `chatWindowSize` controls the floating widget popup's desktop dimensions
+// ("compact" default, "comfortable", "large") — mobile always fills the
+// available width regardless of this setting.
 export const elaineSettings = pgTable("elaine_settings", {
   userId: integer("user_id").primaryKey(),
   enabled: boolean("enabled").notNull().default(true),
   actionConfirmationMode: text("action_confirmation_mode")
     .notNull()
     .default("one_by_one"),
+  chatWindowSize: text("chat_window_size").notNull().default("compact"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

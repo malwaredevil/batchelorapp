@@ -27,6 +27,16 @@ import { ElaineChatPanel } from "./ElaineChatPanel";
 
 const HIDE_FOR_VISIT_KEY = "elaine_hidden_for_visit";
 
+// Desktop popup dimensions per size preference. All are capped by
+// max-w-[calc(100vw-2rem)]/max-h so small viewports (mobile) never overflow
+// regardless of which size is picked — mobile effectively always gets the
+// screen-width behavior the user expects there.
+const CHAT_WINDOW_SIZE_CLASSES: Record<string, string> = {
+  compact: "h-[28rem] w-[20rem]",
+  comfortable: "h-[32rem] w-[24rem]",
+  large: "h-[38rem] w-[28rem]",
+};
+
 export function ElaineWidget({
   appId,
   fullScreenPath,
@@ -98,7 +108,11 @@ export function ElaineWidget({
   return (
     <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-3 sm:bottom-6 sm:right-6">
       {open && (
-        <div className="flex h-[32rem] w-[22rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-card-border bg-card shadow-2xl">
+        <div
+          className={`flex max-w-[calc(100vw-2rem)] max-h-[calc(100vh-6rem)] flex-col overflow-hidden rounded-2xl border border-card-border bg-card shadow-2xl ${
+            CHAT_WINDOW_SIZE_CLASSES[settings?.chatWindowSize ?? "compact"]
+          }`}
+        >
           <div className="flex items-center justify-between gap-2 border-b border-border/50 bg-muted/40 px-4 py-3">
             <div className="flex items-center gap-2.5">
               <ElaineAvatar size={34} />

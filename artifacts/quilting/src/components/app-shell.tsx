@@ -10,7 +10,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
-import { AppSwitcher } from "@/components/app-switcher";
+import { AppSwitcher } from "@workspace/elaine-ui";
 import {
   useLogout,
   getGetCurrentUserQueryKey,
@@ -125,7 +125,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-40 border-b border-card-border bg-background/85 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
           {/* App switcher */}
-          <AppSwitcher />
+          <AppSwitcher currentAppId="quilting" />
 
           {/* Desktop nav */}
           <div className="flex items-center gap-1">

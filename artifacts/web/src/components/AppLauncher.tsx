@@ -25,7 +25,7 @@ import {
   MessageCircle,
   SlidersHorizontal,
 } from "lucide-react";
-import { AppSwitcher } from "@/components/app-switcher";
+import { AppSwitcher } from "@workspace/elaine-ui";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -569,7 +569,7 @@ export function AppLauncher() {
       {/* Header — max-w-6xl matches pottery/quilting shells */}
       <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-          <AppSwitcher />
+          <AppSwitcher currentAppId="hub" />
 
           <div className="flex items-center gap-3">
             <Button

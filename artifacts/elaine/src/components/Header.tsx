@@ -1,9 +1,9 @@
 import { Link, useLocation } from "wouter";
-import { LogOut, MessageSquare, Settings as SettingsIcon, Home } from "lucide-react";
+import { LogOut, MessageSquare, Settings as SettingsIcon } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useLogout, getGetCurrentUserQueryKey } from "@workspace/api-client-react";
-import { ElaineAvatar, ElaineWordmark } from "@workspace/elaine-ui";
+import { AppSwitcher, ElaineAvatar, ElaineWordmark } from "@workspace/elaine-ui";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -36,21 +36,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-card-border bg-background/85 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-        <button
-          className="flex items-center gap-2.5 rounded-xl border border-card-border px-3 py-2 hover:bg-muted transition-colors outline-none"
-          onClick={() => {
-            window.location.href = "/";
-          }}
-          data-testid="button-back-to-hub"
-        >
-          <Home className="h-4 w-4 text-muted-foreground shrink-0" />
-          <div className="text-left leading-tight">
-            <p className="text-sm font-bold leading-none">Batchelor Hub</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              Back home
-            </p>
-          </div>
-        </button>
+        <AppSwitcher currentAppId="elaine" />
 
         <div className="flex items-center gap-3">
           <div className="hidden items-center gap-2 sm:flex">

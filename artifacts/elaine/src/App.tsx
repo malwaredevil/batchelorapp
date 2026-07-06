@@ -5,7 +5,11 @@ import { Loader2 } from "lucide-react";
 import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth, redirectToMainLogin } from "@/lib/auth";
-import { ElainePageContextProvider } from "@workspace/elaine-ui";
+import {
+  ElainePageContextProvider,
+  ThemeProvider,
+  useTheme,
+} from "@workspace/elaine-ui";
 import { Header } from "@/components/Header";
 import Chat from "@/pages/Chat";
 import Settings from "@/pages/Settings";
@@ -28,6 +32,19 @@ function Splash() {
   );
 }
 
+// Applies the user's saved theme preference once they're loaded, so the
+// choice follows the account across every sub-app (light remains default).
+// Mirrors the Hub's ThemeSync so Elaine never feels like a separate product.
+function ThemeSync() {
+  const { user } = useAuth();
+  const { setTheme } = useTheme();
+  useEffect(() => {
+    const pref = user?.themePreference;
+    if (pref === "light" || pref === "dark") setTheme(pref);
+  }, [user?.themePreference, setTheme]);
+  return null;
+}
+
 function Routes() {
   const { user, isLoading } = useAuth();
 
@@ -39,6 +56,7 @@ function Routes() {
 
   return (
     <div className="min-h-screen bg-background">
+      <ThemeSync />
       <Header />
       <main>
         <Switch>
@@ -54,16 +72,18 @@ function Routes() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <AuthProvider>
-            <ElainePageContextProvider>
-              <Routes />
-            </ElainePageContextProvider>
-          </AuthProvider>
-        </WouterRouter>
-        <Toaster richColors position="top-right" />
-      </TooltipProvider>
+      <ThemeProvider>
+        <TooltipProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <AuthProvider>
+              <ElainePageContextProvider>
+                <Routes />
+              </ElainePageContextProvider>
+            </AuthProvider>
+          </WouterRouter>
+          <Toaster richColors position="top-right" />
+        </TooltipProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

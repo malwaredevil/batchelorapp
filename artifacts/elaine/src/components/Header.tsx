@@ -1,9 +1,20 @@
 import { Link, useLocation } from "wouter";
-import { LogOut, MessageSquare, Settings as SettingsIcon } from "lucide-react";
+import {
+  LogOut,
+  MessageSquare,
+  Settings as SettingsIcon,
+  Sun,
+  Moon,
+} from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useLogout, getGetCurrentUserQueryKey } from "@workspace/api-client-react";
-import { AppSwitcher, ElaineAvatar, ElaineWordmark } from "@workspace/elaine-ui";
+import {
+  AppSwitcher,
+  ElaineAvatar,
+  ElaineWordmark,
+  useTheme,
+} from "@workspace/elaine-ui";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +31,7 @@ function isActive(current: string, href: string) {
 export function Header() {
   const [location] = useLocation();
   const queryClient = useQueryClient();
+  const { isDark, toggleTheme } = useTheme();
   const logout = useLogout({
     mutation: {
       onMutate: async () => {
@@ -72,6 +84,21 @@ export function Header() {
               <span className="hidden md:inline">Settings</span>
             </Link>
           </nav>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleTheme}
+            aria-label="Toggle dark mode"
+            className="text-muted-foreground hover:text-foreground"
+            data-testid="button-toggle-theme"
+          >
+            {isDark ? (
+              <Sun className="h-4 w-4" />
+            ) : (
+              <Moon className="h-4 w-4" />
+            )}
+          </Button>
 
           <Button
             variant="ghost"

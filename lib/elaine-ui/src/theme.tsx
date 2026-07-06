@@ -1,6 +1,5 @@
 import {
   createContext,
-  createElement,
   useCallback,
   useContext,
   useEffect,
@@ -37,6 +36,14 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
+/**
+ * Single source of truth for light/dark mode, shared across every sub-app
+ * (Hub, Pottery, Quilting, Travels, Elaine) via @workspace/elaine-ui so the
+ * choice never desyncs between them. Persists to localStorage under one key
+ * shared across the whole domain, and listens for cross-tab/cross-app
+ * `storage` events so switching apps in the same browser session carries the
+ * choice over instantly, even before the account-level preference syncs.
+ */
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(getInitialTheme);
 
@@ -67,10 +74,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setTheme(theme === "dark" ? "light" : "dark");
   }, [theme, setTheme]);
 
-  return createElement(
-    ThemeContext.Provider,
-    { value: { theme, setTheme, toggleTheme, isDark: theme === "dark" } },
-    children,
+  return (
+    <ThemeContext.Provider
+      value={{ theme, setTheme, toggleTheme, isDark: theme === "dark" }}
+    >
+      {children}
+    </ThemeContext.Provider>
   );
 }
 

@@ -1,14 +1,10 @@
-import { useLocation } from "wouter";
 import { ElaineWidget } from "@workspace/elaine-ui";
 
 /**
- * Travels-specific mount point for the shared floating widget. Travels has
- * a full-screen chat page (`/elaine`) that the widget hides itself while
- * on, unlike apps without that surface.
+ * Travels' mount point for the shared floating widget. The full-screen
+ * chat experience (including travels-specific magnet check and surfaced
+ * content) now lives entirely in the standalone Elaine app.
  */
 export function AssistantWidget() {
-  const [location] = useLocation();
-  return (
-    <ElaineWidget appId="travels" fullScreenPath="/elaine" currentPath={location} />
-  );
+  return <ElaineWidget appId="travels" fullScreenPath="/elaine/" />;
 }

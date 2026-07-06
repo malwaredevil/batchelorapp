@@ -6,7 +6,7 @@ import { AuthProvider, ProtectedRoute } from "@/lib/auth";
 import { Layout } from "@/components/Layout";
 import { queryClient } from "@/lib/query-client";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { ThemeProvider } from "@/hooks/use-theme";
+import { ThemeProvider } from "@workspace/elaine-ui";
 import { AssistantContextProvider } from "@/lib/assistant-context";
 
 import Dashboard from "@/pages/Dashboard";
@@ -20,7 +20,6 @@ import Settings from "@/pages/Settings";
 import TravelCalendar from "@/pages/TravelCalendar";
 import GmailReview from "@/pages/GmailReview";
 import GoogleApisDemo from "@/pages/GoogleApisDemo";
-import ElaineChat from "@/pages/ElaineChat";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import NotFound from "@/pages/not-found";
 
@@ -107,14 +106,6 @@ function Router() {
         <ProtectedRoute>
           <Layout>
             <GmailReview />
-          </Layout>
-        </ProtectedRoute>
-      </Route>
-
-      <Route path="/elaine">
-        <ProtectedRoute>
-          <Layout>
-            <ElaineChat />
           </Layout>
         </ProtectedRoute>
       </Route>

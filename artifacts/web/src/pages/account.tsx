@@ -20,8 +20,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AppLogo } from "@/components/app-logo";
 import { useAuth } from "@/lib/auth";
-import { useTheme } from "@/hooks/use-theme";
-import { ElaineSettingsCard, GlobalConfigCard } from "@workspace/elaine-ui";
+import {
+  useTheme,
+  ElaineSettingsCard,
+  GlobalConfigCard,
+} from "@workspace/elaine-ui";
 
 const base = import.meta.env.BASE_URL;
 

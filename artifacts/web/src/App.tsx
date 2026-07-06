@@ -5,9 +5,13 @@ import { Loader2 } from "lucide-react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
-import { ThemeProvider, useTheme } from "@/hooks/use-theme";
 import { AppLauncher } from "@/components/AppLauncher";
-import { ElainePageContextProvider, ElaineWidget } from "@workspace/elaine-ui";
+import {
+  ThemeProvider,
+  useTheme,
+  ElainePageContextProvider,
+  ElaineWidget,
+} from "@workspace/elaine-ui";
 import Login from "@/pages/login";
 import ForgotPassword from "@/pages/forgot-password";
 import ResetPassword from "@/pages/reset-password";

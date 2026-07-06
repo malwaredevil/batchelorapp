@@ -63,6 +63,8 @@ export type AppEntry = {
   updated: string;
   stats: AppStat[];
   description: string;
+  /** Footer CTA label. Defaults to "Open collection" if omitted. */
+  cta?: string;
 };
 
 export type WidgetCategory = "collections" | "tools" | "media" | "inspiration";
@@ -121,6 +123,7 @@ export const APPS: AppEntry[] = [
     stats: [],
     description:
       "Plan trips, build AI itineraries, explore destinations, and keep a travel journal.",
+    cta: "Open Travels",
   },
   {
     id: "elaine",
@@ -131,6 +134,7 @@ export const APPS: AppEntry[] = [
     stats: [],
     description:
       "Chat with your household's AI assistant — full context on pottery, quilting, and travels, with viewable, editable settings.",
+    cta: "Chat with Elaine",
   },
 ];
 

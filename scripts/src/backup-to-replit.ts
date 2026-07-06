@@ -19,10 +19,11 @@
  *             travels_wishlist, travels_reminders, travels_reminder_alert_log,
  *             travels_calendar_settings, travels_google_calendar_connections,
  *             travels_connected_calendars, travels_reminder_calendar_events,
- *             travels_assistant_conversations, travels_assistant_settings,
- *             travels_household_memory, travels_gmail_connections,
+ *             travels_gmail_connections,
  *             travels_gmail_scan_decisions, travels_card_layout_preferences,
  *             travels_trip_card_collapse_state, travels_custom_document_types
+ *   Elaine:   elaine_conversations, elaine_settings, elaine_memory, elaine_nudges
+ *             (shared assistant, not namespaced per-app)
  *
  * What is intentionally skipped:
  *   - embedding / visual_embedding columns (require pgvector, unavailable on Replit DB)
@@ -369,25 +370,37 @@ CREATE TABLE IF NOT EXISTS travels_reminder_calendar_events (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- elAIne assistant
-CREATE TABLE IF NOT EXISTS travels_assistant_conversations (
+-- Elaine (shared assistant, not namespaced per-app)
+CREATE TABLE IF NOT EXISTS elaine_conversations (
   id          SERIAL PRIMARY KEY,
   user_id     INTEGER NOT NULL UNIQUE,
   messages    JSONB NOT NULL DEFAULT '[]'::jsonb,
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS travels_assistant_settings (
-  user_id     INTEGER PRIMARY KEY,
-  enabled     BOOLEAN NOT NULL DEFAULT TRUE,
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS elaine_settings (
+  user_id                   INTEGER PRIMARY KEY,
+  enabled                   BOOLEAN NOT NULL DEFAULT TRUE,
+  action_confirmation_mode  TEXT NOT NULL DEFAULT 'one_by_one',
+  updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS travels_household_memory (
+CREATE TABLE IF NOT EXISTS elaine_memory (
   id                  SERIAL PRIMARY KEY,
   content             TEXT NOT NULL,
   created_by_user_id  INTEGER NOT NULL,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS elaine_nudges (
+  id          SERIAL PRIMARY KEY,
+  user_id     INTEGER NOT NULL,
+  source_app  TEXT,
+  source_id   INTEGER,
+  nudge_key   TEXT NOT NULL,
+  message     TEXT NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  seen_at     TIMESTAMPTZ
 );
 
 -- Gmail travel-document scanning
@@ -939,27 +952,43 @@ async function main() {
   });
   await resetSequence(dest, "travels_reminder_calendar_events", "id");
 
-  // ── elAIne assistant ──────────────────────────────────────────────────────
-  summary["travels_assistant_conversations"] = await copyTable(source, dest, {
-    table: "travels_assistant_conversations",
+  // ── Elaine (shared assistant, not namespaced per-app) ────────────────────
+  summary["elaine_conversations"] = await copyTable(source, dest, {
+    table: "elaine_conversations",
     columns: ["id", "user_id", "messages", "updated_at"],
     orderBy: "id",
     jsonbColumns: ["messages"],
   });
-  await resetSequence(dest, "travels_assistant_conversations", "id");
+  await resetSequence(dest, "elaine_conversations", "id");
 
-  summary["travels_assistant_settings"] = await copyTable(source, dest, {
-    table: "travels_assistant_settings",
-    columns: ["user_id", "enabled", "updated_at"],
+  summary["elaine_settings"] = await copyTable(source, dest, {
+    table: "elaine_settings",
+    columns: ["user_id", "enabled", "action_confirmation_mode", "updated_at"],
     orderBy: "user_id",
   });
 
-  summary["travels_household_memory"] = await copyTable(source, dest, {
-    table: "travels_household_memory",
+  summary["elaine_memory"] = await copyTable(source, dest, {
+    table: "elaine_memory",
     columns: ["id", "content", "created_by_user_id", "created_at"],
     orderBy: "id",
   });
-  await resetSequence(dest, "travels_household_memory", "id");
+  await resetSequence(dest, "elaine_memory", "id");
+
+  summary["elaine_nudges"] = await copyTable(source, dest, {
+    table: "elaine_nudges",
+    columns: [
+      "id",
+      "user_id",
+      "source_app",
+      "source_id",
+      "nudge_key",
+      "message",
+      "created_at",
+      "seen_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "elaine_nudges", "id");
 
   // ── Gmail travel-document scanning ───────────────────────────────────────
   summary["travels_gmail_connections"] = await copyTable(source, dest, {

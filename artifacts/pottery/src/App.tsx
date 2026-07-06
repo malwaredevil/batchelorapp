@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth, redirectToMainLogin } from "@/lib/auth";
 import { ThemeProvider } from "@/hooks/use-theme";
 import { AppShell } from "@/components/app-shell";
+import { ElainePageContextProvider, ElaineWidget } from "@workspace/elaine-ui";
 import "@/features";
 import ForgotPassword from "@/pages/forgot-password";
 import ResetPassword from "@/pages/reset-password";
@@ -72,6 +73,7 @@ function Routes() {
         </Route>
         <Route component={NotFound} />
       </Switch>
+      <ElaineWidget appId="pottery" />
     </AppShell>
   );
 }
@@ -83,7 +85,9 @@ function App() {
         <TooltipProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <AuthProvider>
-              <Routes />
+              <ElainePageContextProvider>
+                <Routes />
+              </ElainePageContextProvider>
             </AuthProvider>
           </WouterRouter>
           <Toaster />

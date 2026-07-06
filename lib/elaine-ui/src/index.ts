@@ -4,4 +4,4 @@ export * from "./useElaineChat";
 export * from "./ElaineChatPanel";
 export * from "./ElaineWidget";
 export * from "./ElaineSettingsCard";
-export * from "./ElaineAdminConfigCard";
+export * from "./GlobalConfigCard";

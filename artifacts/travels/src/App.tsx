@@ -6,7 +6,7 @@ import { AuthProvider, ProtectedRoute } from "@/lib/auth";
 import { Layout } from "@/components/Layout";
 import { queryClient } from "@/lib/query-client";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { ThemeProvider } from "@/hooks/use-theme";
+import { ThemeProvider } from "@workspace/elaine-ui";
 import { AssistantContextProvider } from "@/lib/assistant-context";
 
 import Dashboard from "@/pages/Dashboard";

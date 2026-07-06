@@ -52,14 +52,21 @@ function useSurfacedContent(
  */
 export default function Chat() {
   const chat = useFullChat({ active: true });
-  const { links, images } = useSurfacedContent(chat.messages, chat.magnetResult);
+  const { links, images } = useSurfacedContent(
+    chat.messages,
+    chat.magnetResult,
+  );
   const hasSidePanelContent = links.length > 0 || images.length > 0;
 
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col">
       <div className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col border-r border-border/50 md:max-w-2xl md:mx-auto md:w-full">
-          <FullChatPanel chat={chat} avatarSize={30} bubbleWidthClass="max-w-[75%]" />
+          <FullChatPanel
+            chat={chat}
+            avatarSize={30}
+            bubbleWidthClass="max-w-[75%]"
+          />
         </div>
 
         <aside className="hidden w-80 shrink-0 flex-col overflow-y-auto p-4 lg:flex">

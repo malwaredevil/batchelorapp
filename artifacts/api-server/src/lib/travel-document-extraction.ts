@@ -143,7 +143,11 @@ function parseAiExtractionJson(result: string): Record<string, unknown> {
 // on failure) or "documentType" (near-always guessable even from a bad read).
 function isThinExtraction(fields: Record<string, unknown>): boolean {
   const substantive = Object.keys(fields).filter(
-    (k) => k !== "notes" && k !== "documentType" && fields[k] != null && fields[k] !== "",
+    (k) =>
+      k !== "notes" &&
+      k !== "documentType" &&
+      fields[k] != null &&
+      fields[k] !== "",
   );
   return substantive.length < 2;
 }
@@ -154,7 +158,10 @@ export async function extractFromImage(
 ): Promise<Record<string, unknown>> {
   const b64 = buffer.toString("base64");
   const dataUrl = `data:${mimeType};base64,${b64}`;
-  const [models, thresholds] = await Promise.all([getModels(), getThresholds()]);
+  const [models, thresholds] = await Promise.all([
+    getModels(),
+    getThresholds(),
+  ]);
 
   const promptText = `You are extracting structured information from a travel document (ticket, confirmation, rental agreement, boarding pass, hotel voucher, etc).
 
@@ -234,7 +241,10 @@ export async function extractFromPdf(
     return { notes: "Could not parse PDF text" };
   }
 
-  const [models, thresholds] = await Promise.all([getModels(), getThresholds()]);
+  const [models, thresholds] = await Promise.all([
+    getModels(),
+    getThresholds(),
+  ]);
   const promptText = `You are extracting structured information from travel document text.
 
 If any date, time, or field is genuinely ambiguous or hard to read, consult the advisor tool before finalizing your answer rather than guessing.
@@ -277,9 +287,12 @@ Return ONLY valid JSON, no extra text.`;
   }
 
   try {
-    const fused = await callFusion(() => [{ role: "user", content: promptText }], {
-      maxTokens: thresholds.travelDocExtractionMaxTokens,
-    });
+    const fused = await callFusion(
+      () => [{ role: "user", content: promptText }],
+      {
+        maxTokens: thresholds.travelDocExtractionMaxTokens,
+      },
+    );
     const fusedParsed = parseAiExtractionJson(fused);
     return isThinExtraction(fusedParsed) ? parsed : fusedParsed;
   } catch {

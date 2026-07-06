@@ -286,10 +286,7 @@ function serialize(
 }
 
 router.get("/layouts", async (_req, res) => {
-  const rows = await db
-    .select()
-    .from(layouts)
-    .orderBy(desc(layouts.createdAt));
+  const rows = await db.select().from(layouts).orderBy(desc(layouts.createdAt));
   const catMap = await fetchLayoutCategories(rows.map((r) => r.id));
 
   const allBlockIds = new Set<number>();

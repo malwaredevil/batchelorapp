@@ -95,12 +95,8 @@ function isUniqueConstraintViolation(err: unknown): boolean {
   );
 }
 
-/** Resolve category names → IDs for a specific user, creating per-user
- * categories as needed. Names taken globally by another user are skipped. */
-async function resolveOrCreateCategories(
-  names: string[],
-  userId: number,
-): Promise<number[]> {
+/** Resolve category names → IDs, creating shared household categories as needed. */
+async function resolveOrCreateCategories(names: string[]): Promise<number[]> {
   const unique = [...new Set(names.map((n) => n.trim()).filter(Boolean))].slice(
     0,
     MAX_CATEGORY_NAMES,
@@ -110,7 +106,7 @@ async function resolveOrCreateCategories(
     const [existing] = await db
       .select({ id: categories.id })
       .from(categories)
-      .where(and(eq(categories.name, name), eq(categories.userId, userId)))
+      .where(eq(categories.name, name))
       .limit(1);
     if (existing) {
       ids.push(existing.id);
@@ -118,12 +114,18 @@ async function resolveOrCreateCategories(
       try {
         const [created] = await db
           .insert(categories)
-          .values({ name, userId })
+          .values({ name })
           .returning({ id: categories.id });
         if (created) ids.push(created.id);
       } catch (err) {
         if (!isUniqueConstraintViolation(err)) throw err;
-        // Name taken globally by another user — skip
+        // Created concurrently by another request — look it up.
+        const [race] = await db
+          .select({ id: categories.id })
+          .from(categories)
+          .where(eq(categories.name, name))
+          .limit(1);
+        if (race) ids.push(race.id);
       }
     }
   }
@@ -170,7 +172,6 @@ const HEX_RE = /#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?/g;
 
 async function buildFabricColorMap(
   allCells: string[][],
-  userId: number,
 ): Promise<Map<number, string[]>> {
   const ids = new Set<number>();
   for (const cells of allCells) {
@@ -183,7 +184,7 @@ async function buildFabricColorMap(
   const rows = await db
     .select({ id: fabrics.id, dominantColors: fabrics.dominantColors })
     .from(fabrics)
-    .where(and(inArray(fabrics.id, [...ids]), eq(fabrics.userId, userId)));
+    .where(inArray(fabrics.id, [...ids]));
   for (const r of rows) map.set(r.id, r.dominantColors ?? []);
   return map;
 }
@@ -269,19 +270,11 @@ router.post("/blocks/detect-seams", aiLimiter, async (req, res) => {
 // CRUD
 // ---------------------------------------------------------------------------
 
-router.get("/blocks", async (req, res) => {
-  const userId = req.session.userId!;
-  const rows = await db
-    .select()
-    .from(blocks)
-    .where(eq(blocks.userId, userId))
-    .orderBy(desc(blocks.createdAt));
+router.get("/blocks", async (_req, res) => {
+  const rows = await db.select().from(blocks).orderBy(desc(blocks.createdAt));
   const [catMap, fabricColorMap] = await Promise.all([
     fetchBlockCategories(rows.map((r) => r.id)),
-    buildFabricColorMap(
-      rows.map((r) => r.cells),
-      userId,
-    ),
+    buildFabricColorMap(rows.map((r) => r.cells)),
   ]);
   res.json(
     rows.map((r) => serialize(r, catMap.get(r.id) ?? [], fabricColorMap)),
@@ -307,7 +300,7 @@ router.post("/blocks", async (req, res) => {
 
   let cats: CategoryResult[] = [];
   if (data.categoryNames && data.categoryNames.length > 0) {
-    const catIds = await resolveOrCreateCategories(data.categoryNames, userId);
+    const catIds = await resolveOrCreateCategories(data.categoryNames);
     if (catIds.length > 0) {
       await db.insert(entityCategories).values(
         catIds.map((cid) => ({
@@ -326,29 +319,24 @@ router.post("/blocks", async (req, res) => {
 
 router.get("/blocks/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const userId = req.session.userId!;
   if (!Number.isInteger(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
   }
-  const [row] = await db
-    .select()
-    .from(blocks)
-    .where(and(eq(blocks.id, id), eq(blocks.userId, userId)));
+  const [row] = await db.select().from(blocks).where(eq(blocks.id, id));
   if (!row) {
     res.status(404).json({ error: "Block not found" });
     return;
   }
   const [catMap, fabricColorMap] = await Promise.all([
     fetchBlockCategories([id]),
-    buildFabricColorMap([row.cells], userId),
+    buildFabricColorMap([row.cells]),
   ]);
   res.json(serialize(row, catMap.get(id) ?? [], fabricColorMap));
 });
 
 router.patch("/blocks/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const userId = req.session.userId!;
   if (!Number.isInteger(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
@@ -363,7 +351,7 @@ router.patch("/blocks/:id", async (req, res) => {
       const [existing] = await db
         .select({ gridSize: blocks.gridSize })
         .from(blocks)
-        .where(and(eq(blocks.id, id), eq(blocks.userId, userId)));
+        .where(eq(blocks.id, id));
       gridSize = existing?.gridSize ?? 8;
     }
     update.cells = normalizeCells(data.cells, gridSize);
@@ -379,14 +367,11 @@ router.patch("/blocks/:id", async (req, res) => {
     const [updated] = await db
       .update(blocks)
       .set(update)
-      .where(and(eq(blocks.id, id), eq(blocks.userId, userId)))
+      .where(eq(blocks.id, id))
       .returning();
     row = updated;
   } else {
-    const [existing] = await db
-      .select()
-      .from(blocks)
-      .where(and(eq(blocks.id, id), eq(blocks.userId, userId)));
+    const [existing] = await db.select().from(blocks).where(eq(blocks.id, id));
     row = existing;
   }
   if (!row) {
@@ -404,10 +389,7 @@ router.patch("/blocks/:id", async (req, res) => {
         ),
       );
     if (data.categoryNames.length > 0) {
-      const catIds = await resolveOrCreateCategories(
-        data.categoryNames,
-        userId,
-      );
+      const catIds = await resolveOrCreateCategories(data.categoryNames);
       if (catIds.length > 0) {
         await db.insert(entityCategories).values(
           catIds.map((cid) => ({
@@ -426,17 +408,15 @@ router.patch("/blocks/:id", async (req, res) => {
 
 router.delete("/blocks/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const userId = req.session.userId!;
   if (!Number.isInteger(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
   }
 
-  // Verify ownership before deleting
   const [existing] = await db
     .select({ id: blocks.id })
     .from(blocks)
-    .where(and(eq(blocks.id, id), eq(blocks.userId, userId)));
+    .where(eq(blocks.id, id));
   if (!existing) {
     res.status(404).json({ error: "Block not found" });
     return;
@@ -450,9 +430,7 @@ router.delete("/blocks/:id", async (req, res) => {
         eq(entityCategories.entityId, id),
       ),
     );
-  await db
-    .delete(blocks)
-    .where(and(eq(blocks.id, id), eq(blocks.userId, userId)));
+  await db.delete(blocks).where(eq(blocks.id, id));
   res.status(204).send();
 });
 

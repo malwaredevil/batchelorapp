@@ -47,7 +47,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useTheme } from "@/hooks/use-theme";
+import { useTheme } from "@workspace/elaine-ui";
 import { useWidgets, type WidgetSlot, type RssSlot } from "@/hooks/use-widgets";
 import { RssFeedWidget } from "@/components/widgets";
 import { useAuth } from "@/lib/auth";

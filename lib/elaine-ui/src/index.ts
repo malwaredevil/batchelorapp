@@ -6,3 +6,4 @@ export * from "./ElaineChatPanel";
 export * from "./ElaineWidget";
 export * from "./ElaineSettingsCard";
 export * from "./GlobalConfigCard";
+export * from "./theme";

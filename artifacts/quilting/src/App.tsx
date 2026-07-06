@@ -6,10 +6,13 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth, redirectToMainLogin } from "@/lib/auth";
 import { NavGuardProvider } from "@/lib/nav-guard";
-import { ThemeProvider } from "@/hooks/use-theme";
 import { AppShell } from "@/components/app-shell";
 import { BulkAddProvider } from "@/contexts/bulk-add-context";
-import { ElainePageContextProvider, ElaineWidget } from "@workspace/elaine-ui";
+import {
+  ThemeProvider,
+  ElainePageContextProvider,
+  ElaineWidget,
+} from "@workspace/elaine-ui";
 
 // Register all features before the shell renders
 import "@/features/index";

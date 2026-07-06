@@ -4076,6 +4076,11 @@ export default function TripDetail({ id }: { id: number }) {
                               <h2 className="font-serif text-xl text-foreground flex items-center gap-2">
                                 <FileText className="w-5 h-5" />
                                 Documents
+                                {documents.length > 0 && (
+                                  <span className="font-sans text-xs font-semibold px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
+                                    {documents.length}
+                                  </span>
+                                )}
                               </h2>
                               <div className="flex items-center gap-2">
                                 <button

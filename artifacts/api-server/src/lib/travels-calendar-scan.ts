@@ -22,7 +22,7 @@ import {
   getValidAccessToken,
 } from "./google-calendar-tokens";
 import { listCalendarEvents, type CalendarEvent } from "./google-calendar";
-import { callModel, MODELS } from "./ai-client";
+import { callModel, getModels } from "./ai-client";
 import { logger } from "./logger";
 
 const SCAN_WINDOW_DAYS_PAST = 7;
@@ -83,7 +83,8 @@ Return ONLY valid JSON in this exact shape, with no extra text:
 
 Only include a trip if at least one relatedEventIds entry is present. If no events look travel-related, return {"trips": []}.`;
 
-  const raw = await callModel(MODELS.FAST_VISION, async (client, model) => {
+  const models = await getModels();
+  const raw = await callModel(models.fastVision, async (client, model) => {
     const resp = await client.chat.completions.create({
       model,
       messages: [{ role: "user", content: prompt }],

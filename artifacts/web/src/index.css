@@ -153,7 +153,7 @@
   --chart-5: 280 40% 50%;
 
   --app-font-sans: "Inter", sans-serif;
-  --app-font-serif: Georgia, serif;
+  --app-font-serif: "Inter", sans-serif;
   --app-font-mono: Menlo, monospace;
   --radius: 0.5rem; /* 8px */
   --shadow-2xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0); /*replace with H S L */

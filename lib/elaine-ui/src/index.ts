@@ -1,3 +1,4 @@
+export * from "./CommandPalette";
 export * from "./ElaineAvatar";
 export * from "./AppSwitcher";
 export * from "./ElainePageContext";
@@ -9,3 +10,4 @@ export * from "./GlobalConfigCard";
 export * from "./theme";
 export * from "./ChatWidgets";
 export * from "./MarkdownMessage";
+export * from "./useVoiceInput";

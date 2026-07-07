@@ -3992,7 +3992,10 @@ export default function TripDetail({ id }: { id: number }) {
                                   </Button>
                                 )}
                                 {localItinerary && (
-                                  <ItineraryShareExportButtons tripId={id} shareToken={trip.shareToken ?? null} />
+                                  <ItineraryShareExportButtons
+                                    tripId={id}
+                                    shareToken={trip.shareToken ?? null}
+                                  />
                                 )}
                               </div>
                             </div>

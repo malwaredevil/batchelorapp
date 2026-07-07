@@ -1,8 +1,27 @@
-import { useMemo } from "react";
-import { ExternalLink, ImageIcon, Link2 } from "lucide-react";
+import { useMemo, useState, useCallback } from "react";
+import {
+  ExternalLink,
+  ImageIcon,
+  Link2,
+  Plus,
+  Search,
+  MessageSquare,
+  Trash2,
+} from "lucide-react";
 import { getTripPhotoImageUrl } from "@workspace/api-client-react";
+import {
+  useListElaineConversations,
+  useDeleteElaineConversation,
+  type ConversationMessage,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  getListElaineConversationsQueryKey,
+} from "@workspace/api-client-react";
 import { useFullChat } from "@/lib/useFullChat";
 import { FullChatPanel } from "@/components/FullChatPanel";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 const URL_RE = /https?:\/\/[^\s)"'>\]]+/g;
 
@@ -41,6 +60,19 @@ function useSurfacedContent(
   }, [messages, magnetResult]);
 }
 
+function formatConversationDate(iso: string): string {
+  const date = new Date(iso);
+  const now = new Date();
+  const diffDays = Math.floor(
+    (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24),
+  );
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7)
+    return date.toLocaleDateString(undefined, { weekday: "short" });
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 /**
  * Elaine's own dedicated, ChatGPT-style full chat surface. This is the
  * "SUPER AI Agent" home for the standalone module — appId="elaine" gives
@@ -57,11 +89,133 @@ export default function Chat() {
     chat.magnetResult,
   );
   const hasSidePanelContent = links.length > 0 || images.length > 0;
+  const qc = useQueryClient();
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [loadingConvId, setLoadingConvId] = useState<number | null>(null);
+
+  const { data: conversations = [] } = useListElaineConversations({
+    query: {
+      queryKey: getListElaineConversationsQueryKey(),
+      refetchOnWindowFocus: false,
+    },
+  });
+  const deleteConversation = useDeleteElaineConversation({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListElaineConversationsQueryKey() });
+      },
+    },
+  });
+
+  const filteredConversations = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return conversations;
+    return conversations.filter((c) =>
+      c.title.toLowerCase().includes(q),
+    );
+  }, [conversations, searchQuery]);
+
+  const handleSelectConversation = useCallback(
+    async (id: number) => {
+      if (loadingConvId === id) return;
+      setLoadingConvId(id);
+      try {
+        const res = await fetch(`/api/elaine/conversations/${id}/messages`);
+        if (!res.ok) throw new Error("Failed to load conversation");
+        const msgs = (await res.json()) as ConversationMessage[];
+        chat.handleLoadConversation(id, msgs);
+      } catch {
+        // If load fails, just clear to a new conversation
+        chat.handleNewConversation();
+      } finally {
+        setLoadingConvId(null);
+      }
+    },
+    [chat, loadingConvId],
+  );
 
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col">
       <div className="flex min-h-0 flex-1">
-        <div className="flex min-w-0 flex-1 flex-col border-r border-border/50 md:max-w-2xl md:mx-auto md:w-full">
+        {/* ── Left sidebar: conversation history ──────────────────────────── */}
+        <aside className="hidden w-56 shrink-0 flex-col border-r border-border/50 lg:flex">
+          <div className="shrink-0 border-b border-border/50 p-3">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full justify-start gap-2 text-xs"
+              onClick={() => chat.handleNewConversation()}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              New chat
+            </Button>
+            <div className="relative mt-2">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search…"
+                className="h-7 pl-8 text-xs"
+              />
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto py-1">
+            {filteredConversations.length === 0 && (
+              <p className="px-3 py-4 text-center text-xs text-muted-foreground">
+                {searchQuery ? "No results" : "No conversations yet"}
+              </p>
+            )}
+            {filteredConversations.map((conv) => {
+              const isActive = chat.conversationId === conv.id;
+              const isLoading = loadingConvId === conv.id;
+              return (
+                <div
+                  key={conv.id}
+                  className={`group relative flex cursor-pointer items-start gap-2 px-3 py-2 transition-colors hover:bg-muted/60 ${
+                    isActive ? "bg-muted" : ""
+                  }`}
+                  onClick={() => void handleSelectConversation(conv.id)}
+                >
+                  <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className={`truncate text-xs font-medium leading-snug ${
+                        isActive
+                          ? "text-foreground"
+                          : "text-foreground/80"
+                      }`}
+                    >
+                      {isLoading ? "Loading…" : conv.title}
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                      {formatConversationDate(conv.updatedAt)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="invisible ml-1 mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:visible group-hover:opacity-100"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteConversation.mutate(conv.id, {
+                        onSuccess: () => {
+                          if (isActive) chat.handleNewConversation();
+                        },
+                      });
+                    }}
+                    title="Delete conversation"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </aside>
+
+        {/* ── Main chat panel ───────────────────────────────────────────── */}
+        <div className="flex min-w-0 flex-1 flex-col">
           <FullChatPanel
             chat={chat}
             avatarSize={30}
@@ -69,7 +223,8 @@ export default function Chat() {
           />
         </div>
 
-        <aside className="hidden w-80 shrink-0 flex-col overflow-y-auto p-4 lg:flex">
+        {/* ── Right sidebar: surfaced content ───────────────────────────── */}
+        <aside className="hidden w-72 shrink-0 flex-col overflow-y-auto p-4 lg:flex">
           <h2 className="mb-3 text-sm font-semibold text-foreground">
             Elaine surfaced
           </h2>

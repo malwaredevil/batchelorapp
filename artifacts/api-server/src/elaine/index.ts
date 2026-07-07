@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod/v4";
-import { and, eq, desc, isNull } from "drizzle-orm";
+import { and, eq, desc, isNull, count } from "drizzle-orm";
 import type OpenAI from "openai";
 import {
   db,
@@ -10,6 +10,8 @@ import {
   elaineSettings,
   elaineMemory,
   elaineGlobalConfig,
+  elaineHistoryConversations,
+  elaineHistoryMessages,
   travelsTrips,
   travelsTripDocuments,
   travelsTripPhotos,
@@ -64,6 +66,10 @@ import {
   quiltingActionTools,
   type QuiltingActionType,
 } from "./quilting-actions";
+import multer from "multer";
+import { createClient } from "@supabase/supabase-js";
+import { randomUUID } from "node:crypto";
+import { env } from "../lib/env";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -98,6 +104,10 @@ const ChatBody = z.object({
   // suggestions stay scoped to real paths in that app. Defaults to "hub"
   // since Elaine is one continuous conversation shown everywhere.
   appId: z.enum(APP_IDS).default("hub"),
+  // Named conversation to continue. Omit to auto-create a new one.
+  conversationId: z.number().int().positive().optional(),
+  // Public Supabase Storage URLs for images the user attached (max 5, 5 MB each).
+  attachmentUrls: z.array(z.string()).max(5).optional(),
 });
 
 // How elAIne confirms a turn that proposes more than one write-action:
@@ -2298,6 +2308,200 @@ async function applyUnseenNudges(userId: number): Promise<ChatMessage[]> {
   return updatedHistory;
 }
 
+// ---------------------------------------------------------------------------
+// Attachment storage — public `elaine-attachments` Supabase bucket.
+// Images are stored under `{userId}/{uuid}.{ext}` and served via the public
+// bucket URL (no expiry). Only JPEG, PNG, and WebP are accepted, max 5 MB.
+// ---------------------------------------------------------------------------
+
+const ATTACHMENT_BUCKET = "elaine-attachments";
+const attachmentStorage = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
+
+let attachmentBucketReady: Promise<void> | null = null;
+async function ensureAttachmentBucket(): Promise<void> {
+  if (!attachmentBucketReady) {
+    attachmentBucketReady = (async () => {
+      const { data } = await attachmentStorage.storage.getBucket(ATTACHMENT_BUCKET);
+      if (!data) {
+        const { error } = await attachmentStorage.storage.createBucket(ATTACHMENT_BUCKET, {
+          public: true,
+        });
+        if (error && !/already exists/i.test(error.message)) {
+          attachmentBucketReady = null;
+          throw error;
+        }
+      }
+    })();
+  }
+  return attachmentBucketReady;
+}
+
+const attachmentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    const ok = ["image/jpeg", "image/png", "image/webp"].includes(file.mimetype);
+    if (!ok) {
+      cb(new Error("Only JPEG, PNG, and WebP images are accepted"));
+    } else {
+      cb(null, true);
+    }
+  },
+});
+
+// POST /attachments — upload a single image for use as a message attachment.
+router.post("/attachments", attachmentUpload.single("file"), async (req, res) => {
+  if (!req.file) {
+    res.status(400).json({ error: "No file provided" });
+    return;
+  }
+  const userId = req.session.userId!;
+  const ext =
+    req.file.mimetype === "image/jpeg"
+      ? "jpg"
+      : req.file.mimetype === "image/webp"
+        ? "webp"
+        : "png";
+  const path = `${userId}/${randomUUID()}.${ext}`;
+
+  try {
+    await ensureAttachmentBucket();
+  } catch (err) {
+    req.log.error({ err }, "elaine attachment bucket init failed");
+    res.status(500).json({ error: "Storage unavailable" });
+    return;
+  }
+
+  const { error: uploadError } = await attachmentStorage.storage
+    .from(ATTACHMENT_BUCKET)
+    .upload(path, req.file.buffer, { contentType: req.file.mimetype, upsert: false });
+
+  if (uploadError) {
+    req.log.error({ err: uploadError }, "elaine attachment upload failed");
+    res.status(500).json({ error: "Upload failed" });
+    return;
+  }
+
+  const { data: publicUrlData } = attachmentStorage.storage
+    .from(ATTACHMENT_BUCKET)
+    .getPublicUrl(path);
+
+  res.status(201).json({ url: publicUrlData.publicUrl });
+});
+
+// ---------------------------------------------------------------------------
+// Named conversation CRUD
+// ---------------------------------------------------------------------------
+
+// GET /conversations — list this user's named conversations, newest first.
+router.get("/conversations", async (req, res) => {
+  const userId = req.session.userId!;
+  const rows = await db
+    .select({
+      id: elaineHistoryConversations.id,
+      title: elaineHistoryConversations.title,
+      createdAt: elaineHistoryConversations.createdAt,
+      updatedAt: elaineHistoryConversations.updatedAt,
+      messageCount: count(elaineHistoryMessages.id),
+    })
+    .from(elaineHistoryConversations)
+    .leftJoin(
+      elaineHistoryMessages,
+      eq(elaineHistoryMessages.conversationId, elaineHistoryConversations.id),
+    )
+    .where(eq(elaineHistoryConversations.userId, userId))
+    .groupBy(elaineHistoryConversations.id)
+    .orderBy(desc(elaineHistoryConversations.updatedAt));
+
+  res.json(
+    rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+      messageCount: Number(r.messageCount),
+    })),
+  );
+});
+
+// POST /conversations — create a new named conversation.
+router.post("/conversations", async (req, res) => {
+  const userId = req.session.userId!;
+  const [row] = await db
+    .insert(elaineHistoryConversations)
+    .values({ userId, title: "New conversation" })
+    .returning();
+  if (!row) {
+    res.status(500).json({ error: "Failed to create conversation" });
+    return;
+  }
+  res.status(201).json({
+    id: row.id,
+    title: row.title,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    messageCount: 0,
+  });
+});
+
+// GET /conversations/:id/messages — load messages for a named conversation.
+router.get("/conversations/:id/messages", async (req, res) => {
+  const userId = req.session.userId!;
+  const convId = parseInt(String(req.params["id"] ?? "0"), 10);
+  if (!convId) {
+    res.status(400).json({ error: "Invalid conversation ID" });
+    return;
+  }
+  const [conv] = await db
+    .select({ id: elaineHistoryConversations.id })
+    .from(elaineHistoryConversations)
+    .where(
+      and(
+        eq(elaineHistoryConversations.id, convId),
+        eq(elaineHistoryConversations.userId, userId),
+      ),
+    );
+  if (!conv) {
+    res.status(404).json({ error: "Conversation not found" });
+    return;
+  }
+  const msgs = await db
+    .select()
+    .from(elaineHistoryMessages)
+    .where(eq(elaineHistoryMessages.conversationId, convId))
+    .orderBy(elaineHistoryMessages.createdAt);
+  res.json(
+    msgs.map((m) => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      attachmentUrls: (m.attachmentUrls as string[]) ?? [],
+      createdAt: m.createdAt.toISOString(),
+    })),
+  );
+});
+
+// DELETE /conversations/:id — permanently remove a named conversation.
+router.delete("/conversations/:id", async (req, res) => {
+  const userId = req.session.userId!;
+  const convId = parseInt(String(req.params["id"] ?? "0"), 10);
+  if (!convId) {
+    res.status(400).json({ error: "Invalid conversation ID" });
+    return;
+  }
+  await db
+    .delete(elaineHistoryConversations)
+    .where(
+      and(
+        eq(elaineHistoryConversations.id, convId),
+        eq(elaineHistoryConversations.userId, userId),
+      ),
+    );
+  res.status(204).end();
+});
+
 router.get("/conversation", async (req, res) => {
   const userId = req.session.userId!;
   const messages = await applyUnseenNudges(userId);
@@ -2328,7 +2532,8 @@ router.delete("/conversation", async (req, res) => {
 
 router.post("/chat", async (req, res) => {
   const userId = req.session.userId!;
-  const { message, pageContext, appId } = ChatBody.parse(req.body);
+  const { message, pageContext, appId, conversationId, attachmentUrls } =
+    ChatBody.parse(req.body);
 
   const [user] = await db
     .select({ displayName: appUsers.displayName, email: appUsers.email })
@@ -2336,8 +2541,48 @@ router.post("/chat", async (req, res) => {
     .where(eq(appUsers.id, userId));
   const userName = user?.displayName || user?.email || "there";
 
-  const conversation = await getOrCreateConversation(userId);
-  const history = (conversation?.messages as ChatMessage[] | null) ?? [];
+  // Resolve the named history conversation — create one if not provided.
+  let histConvId: number | null = conversationId ?? null;
+  if (histConvId === null) {
+    const [newConv] = await db
+      .insert(elaineHistoryConversations)
+      .values({ userId, title: "New conversation" })
+      .returning({ id: elaineHistoryConversations.id });
+    histConvId = newConv?.id ?? null;
+  } else {
+    // Verify the named conversation belongs to this user before loading it.
+    const [conv] = await db
+      .select({ id: elaineHistoryConversations.id })
+      .from(elaineHistoryConversations)
+      .where(
+        and(
+          eq(elaineHistoryConversations.id, histConvId),
+          eq(elaineHistoryConversations.userId, userId),
+        ),
+      );
+    if (!conv) histConvId = null;
+  }
+
+  // Load history from named conversation rows (preferred) or fall back to the
+  // rolling elaineConversations table for backward compat with pre-history sends.
+  let history: ChatMessage[] = [];
+  if (histConvId !== null) {
+    const histMsgs = await db
+      .select({
+        role: elaineHistoryMessages.role,
+        content: elaineHistoryMessages.content,
+      })
+      .from(elaineHistoryMessages)
+      .where(eq(elaineHistoryMessages.conversationId, histConvId))
+      .orderBy(elaineHistoryMessages.createdAt);
+    history = histMsgs.map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    }));
+  } else {
+    const conversation = await getOrCreateConversation(userId);
+    history = (conversation?.messages as ChatMessage[] | null) ?? [];
+  }
 
   const memoryRows = await db
     .select({ content: elaineMemory.content })
@@ -2464,10 +2709,24 @@ FORMATTING: Your visible replies are rendered in a chat bubble with a markdown r
 
 Keep replies concise and easy to read in a chat bubble.`;
 
+  // If the user attached images, format the current user turn as a vision
+  // content-array so the model can see them. History messages are always
+  // text-only (image URLs are stored in the DB but not re-sent to the model).
+  const userTurnContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] | string =
+    attachmentUrls && attachmentUrls.length > 0
+      ? [
+          { type: "text", text: message },
+          ...attachmentUrls.map((url) => ({
+            type: "image_url" as const,
+            image_url: { url },
+          })),
+        ]
+      : message;
+
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: systemPrompt },
     ...history.map((m) => ({ role: m.role, content: m.content })),
-    { role: "user", content: message },
+    { role: "user", content: userTurnContent },
   ];
 
   // Streamed as Server-Sent Events so the client can show elAIne's reply (and
@@ -2951,10 +3210,54 @@ Keep replies concise and easy to read in a chat bubble.`;
 
   const updatedHistory: ChatMessage[] = [
     ...history,
-    { role: "user", content: message },
+    {
+      role: "user",
+      content: message,
+      ...(attachmentUrls && attachmentUrls.length > 0
+        ? { attachmentUrls }
+        : {}),
+    },
     { role: "assistant", content },
   ];
 
+  // Save turn to the named history conversation.
+  if (histConvId !== null) {
+    await db.insert(elaineHistoryMessages).values([
+      {
+        conversationId: histConvId,
+        userId,
+        role: "user",
+        content: message,
+        attachmentUrls: attachmentUrls ?? [],
+      },
+      {
+        conversationId: histConvId,
+        userId,
+        role: "assistant",
+        content,
+        attachmentUrls: [],
+      },
+    ]);
+
+    // Auto-title from the first user message (first 60 chars), then just
+    // bump updatedAt on subsequent turns.
+    if (history.length === 0) {
+      const autoTitle =
+        message.length > 60 ? message.slice(0, 60) + "…" : message;
+      await db
+        .update(elaineHistoryConversations)
+        .set({ title: autoTitle, updatedAt: new Date() })
+        .where(eq(elaineHistoryConversations.id, histConvId));
+    } else {
+      await db
+        .update(elaineHistoryConversations)
+        .set({ updatedAt: new Date() })
+        .where(eq(elaineHistoryConversations.id, histConvId));
+    }
+  }
+
+  // Also keep the rolling elaineConversations row current for backward compat
+  // (GET /conversation and the floating widget's initial load still use it).
   await db
     .update(elaineConversations)
     .set({ messages: updatedHistory, updatedAt: new Date() })
@@ -2969,6 +3272,7 @@ Keep replies concise and easy to read in a chat bubble.`;
     actionConfirmationMode:
       updatedActionConfirmationMode ?? actionConfirmationMode,
     messages: updatedHistory,
+    conversationId: histConvId,
   });
   res.end();
 });

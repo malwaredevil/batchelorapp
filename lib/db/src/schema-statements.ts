@@ -950,4 +950,26 @@ export const STATEMENTS: string[] = [
   )`,
   `ALTER TABLE travels_packing_templates ENABLE ROW LEVEL SECURITY`,
   `CREATE INDEX IF NOT EXISTS travels_packing_templates_user_id_idx ON travels_packing_templates (user_id)`,
+
+  `CREATE TABLE IF NOT EXISTS elaine_history_conversations (
+    id         SERIAL PRIMARY KEY,
+    user_id    INTEGER NOT NULL,
+    title      TEXT NOT NULL DEFAULT 'New conversation',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE elaine_history_conversations ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS elaine_history_conversations_user_updated_idx ON elaine_history_conversations (user_id, updated_at DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS elaine_history_messages (
+    id              SERIAL PRIMARY KEY,
+    conversation_id INTEGER NOT NULL REFERENCES elaine_history_conversations(id) ON DELETE CASCADE,
+    user_id         INTEGER NOT NULL,
+    role            TEXT NOT NULL,
+    content         TEXT NOT NULL DEFAULT '',
+    attachment_urls JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE elaine_history_messages ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS elaine_history_messages_conversation_id_idx ON elaine_history_messages (conversation_id)`,
 ];

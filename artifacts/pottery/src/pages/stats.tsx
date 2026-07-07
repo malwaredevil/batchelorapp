@@ -14,6 +14,19 @@ import {
 import { Loader2, Package, Layers, TrendingUp } from "lucide-react";
 import { colorToHex } from "@/lib/colors";
 
+// ── Palette ───────────────────────────────────────────────────────────────────
+
+const DONUT_COLORS = [
+  "#6366f1",
+  "#8b5cf6",
+  "#a78bfa",
+  "#c084fc",
+  "#818cf8",
+  "#4f46e5",
+  "#7c3aed",
+  "#9333ea",
+];
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function StatCard({
@@ -53,9 +66,155 @@ function ChartTooltip({
   return (
     <div className="rounded-lg border border-card-border bg-background px-3 py-2 shadow-md text-sm">
       <p className="font-medium">{label}</p>
-      <p className="text-muted-foreground">{payload[0].value} piece{payload[0].value !== 1 ? "s" : ""}</p>
+      <p className="text-muted-foreground">
+        {payload[0].value} piece{payload[0].value !== 1 ? "s" : ""}
+      </p>
     </div>
   );
+}
+
+// ── SVG Donut chart ───────────────────────────────────────────────────────────
+
+interface DonutSegment {
+  name: string;
+  value: number;
+  color: string;
+}
+
+function DonutChart({
+  data,
+  size = 180,
+}: {
+  data: DonutSegment[];
+  size?: number;
+}) {
+  const total = data.reduce((s, d) => s + d.value, 0);
+  if (total === 0) return null;
+
+  const cx = size / 2;
+  const cy = size / 2;
+  const strokeWidth = 28;
+  const r = (size - strokeWidth - 4) / 2;
+  const circumference = 2 * Math.PI * r;
+
+  let accumulated = 0;
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      aria-label="Shape breakdown donut chart"
+    >
+      {/* Background ring */}
+      <circle
+        cx={cx}
+        cy={cy}
+        r={r}
+        fill="none"
+        stroke="#e5e7eb"
+        strokeWidth={strokeWidth}
+      />
+      {data.map((seg, i) => {
+        const pct = seg.value / total;
+        const dash = pct * circumference - 1.5; // 1.5px gap between segments
+        const gap = circumference - dash;
+        const rotation = (accumulated / total) * 360 - 90;
+        accumulated += seg.value;
+
+        return (
+          <circle
+            key={i}
+            cx={cx}
+            cy={cy}
+            r={r}
+            fill="none"
+            stroke={seg.color}
+            strokeWidth={strokeWidth}
+            strokeDasharray={`${dash} ${gap}`}
+            style={{
+              transform: `rotate(${rotation}deg)`,
+              transformOrigin: `${cx}px ${cy}px`,
+            }}
+          >
+            <title>
+              {seg.name}: {seg.value} piece{seg.value !== 1 ? "s" : ""}
+            </title>
+          </circle>
+        );
+      })}
+      {/* Centre label */}
+      <text
+        x={cx}
+        y={cy - 4}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        style={{ fontSize: 22, fontWeight: 700, fill: "#111" }}
+      >
+        {total}
+      </text>
+      <text
+        x={cx}
+        y={cy + 14}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        style={{ fontSize: 10, fill: "#6b7280" }}
+      >
+        pieces
+      </text>
+    </svg>
+  );
+}
+
+// ── Horizontal bar row ────────────────────────────────────────────────────────
+
+function BarRow({
+  label,
+  value,
+  max,
+  color,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  color?: string;
+}) {
+  const pct = max > 0 ? (value / max) * 100 : 0;
+  return (
+    <div className="flex items-center gap-3">
+      <span className="w-28 shrink-0 truncate text-sm capitalize">{label}</span>
+      <div className="relative flex-1 overflow-hidden rounded-full bg-muted h-3">
+        <div
+          className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
+          style={{
+            width: `${pct}%`,
+            backgroundColor: color ?? "hsl(var(--primary))",
+          }}
+        />
+      </div>
+      <span className="w-8 shrink-0 text-right text-xs text-muted-foreground">
+        {value}
+      </span>
+    </div>
+  );
+}
+
+// ── Size bucketing ────────────────────────────────────────────────────────────
+
+const SIZE_BUCKETS: { label: string; min: number; max: number }[] = [
+  { label: "Small (< 8 cm)", min: 0, max: 8 },
+  { label: "Medium (8–15 cm)", min: 8, max: 15 },
+  { label: "Large (> 15 cm)", min: 15, max: Infinity },
+];
+
+function parseDimensionCm(dim: string | null | undefined): number | null {
+  if (!dim) return null;
+  const match = dim.match(/(\d+(?:\.\d+)?)\s*(?:cm|mm|in)?/i);
+  if (!match) return null;
+  let n = parseFloat(match[1]);
+  if (/\bmm\b/i.test(dim)) n /= 10;
+  if (/\bin\b/i.test(dim)) n *= 2.54;
+  return n;
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
@@ -66,27 +225,51 @@ export default function StatsPage() {
 
   const isLoading = itemsLoading || statsLoading;
 
-  // ── Derived aggregates ─────────────────────────────────────────────────────
+  // ── Derived aggregates ──────────────────────────────────────────────────────
 
-  const { timelineData, shapeData, uniqueCount } = useMemo(() => {
-    if (!items) return { timelineData: [], shapeData: [], uniqueCount: 0 };
+  const { timelineData, shapeData, sizeData, uniqueCount } = useMemo(() => {
+    if (!items)
+      return {
+        timelineData: [],
+        shapeData: [],
+        sizeData: [],
+        uniqueCount: 0,
+      };
 
     const yearCounts = new Map<string, number>();
     const shapeCounts = new Map<string, number>();
+    const sizeCounts = new Map<string, number>([
+      ["Small (< 8 cm)", 0],
+      ["Medium (8–15 cm)", 0],
+      ["Large (> 15 cm)", 0],
+      ["Unknown", 0],
+    ]);
 
     for (const item of items) {
       const qty = item.quantity ?? 1;
 
+      // Timeline
       if (item.acquiredAt) {
         const yr = item.acquiredAt.slice(0, 4);
         yearCounts.set(yr, (yearCounts.get(yr) ?? 0) + qty);
       }
 
+      // Shape
       const rawShape = item.shape?.trim();
       const shape = rawShape
         ? rawShape.charAt(0).toUpperCase() + rawShape.slice(1).toLowerCase()
         : "Unknown";
       shapeCounts.set(shape, (shapeCounts.get(shape) ?? 0) + qty);
+
+      // Size
+      const cm = parseDimensionCm(item.dimensions);
+      if (cm === null) {
+        sizeCounts.set("Unknown", (sizeCounts.get("Unknown") ?? 0) + qty);
+      } else {
+        const bucket =
+          SIZE_BUCKETS.find((b) => cm >= b.min && cm < b.max) ?? SIZE_BUCKETS[2];
+        sizeCounts.set(bucket.label, (sizeCounts.get(bucket.label) ?? 0) + qty);
+      }
     }
 
     const timelineData = [...yearCounts.entries()]
@@ -96,9 +279,17 @@ export default function StatsPage() {
     const shapeData = [...shapeCounts.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, 8)
+      .map(([name, value], i) => ({
+        name,
+        value,
+        color: DONUT_COLORS[i % DONUT_COLORS.length],
+      }));
+
+    const sizeData = [...sizeCounts.entries()]
+      .filter(([, v]) => v > 0)
       .map(([name, value]) => ({ name, value }));
 
-    return { timelineData, shapeData, uniqueCount: items.length };
+    return { timelineData, shapeData, sizeData, uniqueCount: items.length };
   }, [items]);
 
   if (isLoading) {
@@ -125,11 +316,7 @@ export default function StatsPage() {
           value={stats?.totalItems ?? 0}
           icon={Package}
         />
-        <StatCard
-          label="Unique items"
-          value={uniqueCount}
-          icon={Layers}
-        />
+        <StatCard label="Unique items" value={uniqueCount} icon={Layers} />
         <StatCard
           label="Years tracked"
           value={timelineData.length}
@@ -178,57 +365,66 @@ export default function StatsPage() {
           <h2 className="mb-3 text-base font-semibold">Top motifs</h2>
           <div className="rounded-xl border border-card-border bg-card p-4">
             <div className="space-y-2">
-              {stats!.topMotifs.map((m, i) => {
-                const max = stats!.topMotifs[0].count;
-                const pct = max > 0 ? (m.count / max) * 100 : 0;
-                return (
-                  <div key={i} className="flex items-center gap-3">
-                    <span className="w-28 shrink-0 truncate text-sm capitalize">
-                      {m.label}
-                    </span>
-                    <div className="relative flex-1 overflow-hidden rounded-full bg-muted h-3">
-                      <div
-                        className="absolute inset-y-0 left-0 rounded-full bg-primary transition-all duration-500"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    <span className="w-6 shrink-0 text-right text-xs text-muted-foreground">
-                      {m.count}
-                    </span>
-                  </div>
-                );
-              })}
+              {stats!.topMotifs.map((m, i) => (
+                <BarRow
+                  key={i}
+                  label={m.label}
+                  value={m.count}
+                  max={stats!.topMotifs[0].count}
+                />
+              ))}
             </div>
           </div>
         </section>
       )}
 
-      {/* Shape distribution */}
+      {/* Shape donut */}
       {shapeData.length > 0 && (
         <section>
           <h2 className="mb-3 text-base font-semibold">Shape breakdown</h2>
           <div className="rounded-xl border border-card-border bg-card p-4">
-            <div className="space-y-2">
-              {shapeData.map((entry, i) => {
-                const max = shapeData[0].value;
-                const pct = max > 0 ? (entry.value / max) * 100 : 0;
-                return (
-                  <div key={i} className="flex items-center gap-3">
-                    <span className="w-28 shrink-0 truncate text-sm capitalize">
+            <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-start">
+              {/* Donut */}
+              <div className="shrink-0">
+                <DonutChart data={shapeData} size={180} />
+              </div>
+              {/* Legend */}
+              <div className="flex-1 w-full space-y-2">
+                {shapeData.map((entry, i) => (
+                  <div key={i} className="flex items-center gap-2.5">
+                    <span
+                      className="inline-block h-3 w-3 rounded-full shrink-0"
+                      style={{ backgroundColor: entry.color }}
+                    />
+                    <span className="flex-1 text-sm capitalize truncate">
                       {entry.name}
                     </span>
-                    <div className="relative flex-1 overflow-hidden rounded-full bg-muted h-3">
-                      <div
-                        className="absolute inset-y-0 left-0 rounded-full bg-violet-500 transition-all duration-500"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    <span className="w-6 shrink-0 text-right text-xs text-muted-foreground">
+                    <span className="text-xs text-muted-foreground tabular-nums">
                       {entry.value}
                     </span>
                   </div>
-                );
-              })}
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Size distribution */}
+      {sizeData.length > 0 && (
+        <section>
+          <h2 className="mb-3 text-base font-semibold">Size distribution</h2>
+          <div className="rounded-xl border border-card-border bg-card p-4">
+            <div className="space-y-2">
+              {sizeData.map((entry, i) => (
+                <BarRow
+                  key={i}
+                  label={entry.name}
+                  value={entry.value}
+                  max={sizeData[0].value}
+                  color="#8b5cf6"
+                />
+              ))}
             </div>
           </div>
         </section>

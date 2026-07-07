@@ -176,6 +176,8 @@ function MapPanel({
     let animInterval: ReturnType<typeof setInterval> | null = null;
     let dataLayer: google.maps.Data | null = null;
     let infoWindow: google.maps.InfoWindow | null = null;
+    let heatmapLayer: { setMap: (m: google.maps.Map | null) => void } | null = null;
+    let heatmapCancelled = false;
 
     try {
       const { AdvancedMarkerElement } = google.maps.marker;
@@ -399,6 +401,42 @@ function MapPanel({
         }
       }
 
+      // ── HeatmapLayer — density of completed/booked destinations ──────────────
+      // Loaded asynchronously so it doesn't block marker rendering. Each visited
+      // location contributes one data point per trip, so repeat-visit cities
+      // appear hotter. Silently skipped if the visualization library is absent.
+      type HeatmapLayerCtor = new (opts: {
+        data: google.maps.LatLngLiteral[];
+        map: google.maps.Map;
+        radius?: number;
+        opacity?: number;
+      }) => { setMap: (m: google.maps.Map | null) => void };
+
+      void google.maps.importLibrary("visualization")
+        .then((lib) => {
+          if (heatmapCancelled) return;
+          const { HeatmapLayer } = lib as unknown as { HeatmapLayer: HeatmapLayerCtor };
+          const heatData: google.maps.LatLngLiteral[] = trips
+            .filter(
+              (t) =>
+                (t.status === "completed" || t.status === "booked") &&
+                t.lat != null &&
+                t.lng != null,
+            )
+            .map((t) => ({ lat: t.lat!, lng: t.lng! }));
+          if (heatData.length > 0 && !heatmapCancelled) {
+            heatmapLayer = new HeatmapLayer({
+              data: heatData,
+              map,
+              radius: 40,
+              opacity: 0.45,
+            });
+          }
+        })
+        .catch(() => {
+          // visualization library unavailable — skip silently
+        });
+
       // Fit bounds to all plotted points once, and store as the "home" view for recenter
       const allPoints: google.maps.LatLngLiteral[] = [
         ...trips
@@ -428,6 +466,8 @@ function MapPanel({
       }
 
       return () => {
+        heatmapCancelled = true;
+        heatmapLayer?.setMap(null);
         if (animInterval != null) clearInterval(animInterval);
         arcs.forEach((a) => a.setMap(null));
         arcs = [];
@@ -438,10 +478,12 @@ function MapPanel({
         infoWindow?.close();
       };
     } catch (err) {
+      heatmapCancelled = true;
       setLoadError(
         err instanceof Error ? err.message : "Failed to render map markers",
       );
       return () => {
+        heatmapLayer?.setMap(null);
         if (animInterval != null) clearInterval(animInterval);
         arcs.forEach((a) => a.setMap(null));
         dataLayer?.setMap(null);
@@ -526,7 +568,7 @@ export default function WorldMap() {
   const totalMapped = mappedTrips.length + mappedWishlist.length;
   const totalAll = trips.length + wishlistItems.length;
 
-  // Stats derived from completed/booked trips
+  // Stats derived from completed trips
   const completedTrips = useMemo(
     () => trips.filter((t) => t.status === "completed"),
     [trips],
@@ -537,9 +579,19 @@ export default function WorldMap() {
     completedTrips.forEach((t) => {
       const parts = t.destination.split(",");
       const country = (parts[parts.length - 1] ?? "").trim();
-      if (country) countries.add(country);
+      if (country) countries.add(country.toLowerCase());
     });
     return countries.size;
+  }, [completedTrips]);
+
+  // Distinct cities visited (first token of destination)
+  const uniqueCities = useMemo(() => {
+    const cities = new Set<string>();
+    completedTrips.forEach((t) => {
+      const city = (t.destination.split(",")[0] ?? "").trim().toLowerCase();
+      if (city) cities.add(city);
+    });
+    return cities.size;
   }, [completedTrips]);
 
   const totalNights = useMemo(() => {
@@ -634,9 +686,9 @@ export default function WorldMap() {
               <TrendingUp className="w-4 h-4 text-primary" />
             </div>
             <div>
-              <p className="text-xl font-bold text-foreground tabular-nums">{completedTrips.length}</p>
+              <p className="text-xl font-bold text-foreground tabular-nums">{uniqueCities}</p>
               <p className="text-xs text-muted-foreground leading-tight">
-                {completedTrips.length === 1 ? "trip" : "trips"} completed
+                {uniqueCities === 1 ? "city" : "cities"} visited
               </p>
             </div>
           </div>

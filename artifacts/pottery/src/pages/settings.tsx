@@ -57,7 +57,7 @@ function escHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** Fetch an image URL and return a data URL, or null on failure. */
+/** Fetch one image as a data URL (uses session credentials). */
 async function fetchAsDataUrl(url: string): Promise<string | null> {
   try {
     const res = await fetch(url, { credentials: "include" });
@@ -74,155 +74,211 @@ async function fetchAsDataUrl(url: string): Promise<string | null> {
   }
 }
 
-/** Fetch images in parallel batches; returns array indexed by item position. */
+/** Pre-fetch all item images in parallel batches. */
 async function prefetchImages(
   items: PotteryItem[],
   onProgress: (loaded: number, total: number) => void,
 ): Promise<(string | null)[]> {
   const results: (string | null)[] = new Array(items.length).fill(null);
-  const BATCH = 10;
+  const BATCH = 8;
   let loaded = 0;
 
   for (let i = 0; i < items.length; i += BATCH) {
-    const batch = items.slice(i, i + BATCH);
+    const slice = items.slice(i, i + BATCH);
     const fetched = await Promise.all(
-      batch.map((item) => (item.imageUrl ? fetchAsDataUrl(item.imageUrl) : Promise.resolve(null))),
+      slice.map((item) =>
+        item.imageUrl ? fetchAsDataUrl(item.imageUrl) : Promise.resolve(null),
+      ),
     );
     fetched.forEach((dataUrl, j) => {
       results[i + j] = dataUrl;
     });
-    loaded += batch.length;
+    loaded += slice.length;
     onProgress(Math.min(loaded, items.length), items.length);
   }
 
   return results;
 }
 
-/** Build a print-layout DOM container from items + pre-fetched image data URLs. */
-function buildPrintContainer(
+// PDF page dimensions (A4 at 96dpi equivalent)
+const PAGE_WIDTH_PX = 794; // ~A4 width at 96dpi
+const ITEMS_PER_PAGE = 6; // safe chunk: 6 items × ~100px row ≈ 900px canvas height
+
+/** Build a single-page DOM container for a chunk of items. */
+function buildPageContainer(
   items: PotteryItem[],
   imageDataUrls: (string | null)[],
+  pageNum: number,
+  totalPages: number,
+  exportDate: string,
+  totalItems: number,
 ): HTMLDivElement {
   const container = document.createElement("div");
   container.style.cssText = [
     "position: absolute",
     "left: -9999px",
-    "top: -9999px",
-    "width: 794px",
+    "top: 0",
+    `width: ${PAGE_WIDTH_PX}px`,
     "font-family: Georgia, 'Times New Roman', serif",
     "background: #fff",
     "color: #111",
-    "padding: 40px 40px 20px",
+    "padding: 32px 36px 24px",
     "box-sizing: border-box",
   ].join("; ");
 
-  const coverDate = formatDate(new Date().toISOString());
+  const header =
+    pageNum === 1
+      ? `<div style="margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid #1f2937;">
+           <div style="font-size:22px;font-weight:bold;margin-bottom:4px;">Pottery Collection</div>
+           <div style="font-size:12px;color:#555;">Insurance &amp; Provenance Record — ${escHtml(exportDate)} — ${totalItems} piece${totalItems !== 1 ? "s" : ""}</div>
+         </div>`
+      : `<div style="margin-bottom:12px;font-size:10px;color:#aaa;">Pottery Collection — Insurance Record (continued)</div>`;
 
   const rows = items
     .map((item, i) => {
       const imgSrc = imageDataUrls[i];
       const imgTag = imgSrc
-        ? `<img src="${imgSrc}" style="width:90px;height:90px;object-fit:cover;border-radius:6px;border:1px solid #ddd;" />`
-        : `<div style="width:90px;height:90px;border-radius:6px;background:#f3f4f6;border:1px solid #ddd;display:flex;align-items:center;justify-content:center;font-size:11px;color:#9ca3af;">No image</div>`;
+        ? `<img src="${imgSrc}" style="width:80px;height:80px;object-fit:cover;border-radius:5px;border:1px solid #ddd;display:block;" />`
+        : `<div style="width:80px;height:80px;border-radius:5px;background:#f3f4f6;border:1px solid #ddd;display:flex;align-items:center;justify-content:center;font-size:9px;color:#9ca3af;text-align:center;">No image</div>`;
 
       const fields = [
-        item.maker ? `<div style="margin-top:3px;font-size:11px;"><b>Maker:</b> ${escHtml(item.maker)}</div>` : "",
-        item.makerInfo ? `<div style="margin-top:2px;font-size:10px;color:#555;">${escHtml(item.makerInfo)}</div>` : "",
-        item.shape ? `<div style="margin-top:3px;font-size:11px;"><b>Shape:</b> ${escHtml(item.shape)}</div>` : "",
-        item.style ? `<div style="margin-top:2px;font-size:11px;"><b>Style:</b> ${escHtml(item.style)}</div>` : "",
-        item.dimensions ? `<div style="margin-top:2px;font-size:11px;"><b>Dimensions:</b> ${escHtml(item.dimensions)}</div>` : "",
-        item.acquiredAt ? `<div style="margin-top:2px;font-size:11px;"><b>Acquired:</b> ${formatDate(item.acquiredAt)}</div>` : "",
-        item.quantity && item.quantity > 1 ? `<div style="margin-top:2px;font-size:11px;"><b>Qty:</b> ${item.quantity}</div>` : "",
-        item.categories && item.categories.length > 0
-          ? `<div style="margin-top:2px;font-size:11px;"><b>Categories:</b> ${item.categories.map((c) => escHtml(c.name)).join(", ")}</div>`
+        item.maker
+          ? `<span style="font-size:10.5px;"><b>Maker:</b> ${escHtml(item.maker)}</span>`
           : "",
-        item.notes ? `<div style="margin-top:4px;font-size:10px;color:#666;font-style:italic;">${escHtml(item.notes)}</div>` : "",
-      ].join("");
+        item.shape
+          ? `<span style="font-size:10.5px;"><b>Shape:</b> ${escHtml(item.shape)}</span>`
+          : "",
+        item.style
+          ? `<span style="font-size:10.5px;"><b>Style:</b> ${escHtml(item.style)}</span>`
+          : "",
+        item.dimensions
+          ? `<span style="font-size:10.5px;"><b>Dimensions:</b> ${escHtml(item.dimensions)}</span>`
+          : "",
+        item.acquiredAt
+          ? `<span style="font-size:10.5px;"><b>Acquired:</b> ${formatDate(item.acquiredAt)}</span>`
+          : "",
+        item.quantity && item.quantity > 1
+          ? `<span style="font-size:10.5px;"><b>Qty:</b> ${item.quantity}</span>`
+          : "",
+        item.categories && item.categories.length > 0
+          ? `<span style="font-size:10.5px;"><b>Categories:</b> ${item.categories.map((c) => escHtml(c.name)).join(", ")}</span>`
+          : "",
+        item.notes
+          ? `<span style="font-size:9.5px;color:#666;font-style:italic;">${escHtml(item.notes)}</span>`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(`<span style="color:#ddd;margin:0 4px;">·</span>`);
 
       return `
         <tr>
-          <td style="padding:10px 8px;vertical-align:top;border-bottom:1px solid #e5e7eb;">${imgTag}</td>
-          <td style="padding:10px 10px;vertical-align:top;border-bottom:1px solid #e5e7eb;">
-            <div style="font-size:13px;font-weight:bold;margin-bottom:2px;">${escHtml(item.name)}</div>
-            ${fields}
+          <td style="padding:8px 6px;vertical-align:top;border-bottom:1px solid #eee;width:96px;">${imgTag}</td>
+          <td style="padding:8px 10px;vertical-align:top;border-bottom:1px solid #eee;">
+            <div style="font-size:12px;font-weight:bold;margin-bottom:5px;">${escHtml(item.name)}</div>
+            <div style="line-height:1.8;">${fields}</div>
           </td>
         </tr>`;
     })
     .join("\n");
 
+  const footer = `
+    <div style="margin-top:14px;padding-top:8px;border-top:1px solid #e5e7eb;font-size:9px;color:#aaa;display:flex;justify-content:space-between;">
+      <span>Batchelor Pottery Collection</span>
+      <span>Page ${pageNum} of ${totalPages}</span>
+    </div>`;
+
   container.innerHTML = `
-    <div style="margin-bottom:28px;padding-bottom:20px;border-bottom:2px solid #1f2937;">
-      <div style="font-size:26px;font-weight:bold;margin-bottom:6px;">Pottery Collection</div>
-      <div style="font-size:13px;color:#555;margin-bottom:4px;">Insurance &amp; Provenance Record</div>
-      <div style="font-size:12px;color:#444;">${items.length} piece${items.length !== 1 ? "s" : ""} — exported ${escHtml(coverDate)}</div>
-    </div>
+    ${header}
     <table style="width:100%;border-collapse:collapse;">
       <tbody>${rows}</tbody>
-    </table>`;
+    </table>
+    ${footer}`;
 
   return container;
 }
 
-// ── PDF export ─────────────────────────────────────────────────────────────────
+/** Render a DOM container to a JPEG data URL via html2canvas. */
+async function containerToJpeg(el: HTMLElement): Promise<string> {
+  const canvas = await html2canvas(el, {
+    scale: 2,
+    useCORS: false,
+    allowTaint: false,
+    backgroundColor: "#ffffff",
+    logging: false,
+  });
+  return canvas.toDataURL("image/jpeg", 0.90);
+}
+
+// ── Main PDF generator ────────────────────────────────────────────────────────
 
 async function generateInsurancePdf(
   items: PotteryItem[],
   onProgress: (msg: string) => void,
 ): Promise<void> {
-  onProgress(`Loading images…  0 / ${items.length}`);
+  const exportDate = formatDate(new Date().toISOString());
 
+  // Phase 1: fetch images
+  onProgress(`Loading images… 0 / ${items.length}`);
   const imageDataUrls = await prefetchImages(items, (loaded, total) => {
     onProgress(`Loading images… ${loaded} / ${total}`);
   });
 
-  onProgress("Rendering layout…");
+  // Phase 2: paginate + rasterize per-page
+  const totalPages = Math.ceil(items.length / ITEMS_PER_PAGE);
+  const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+  const pdfW = pdf.internal.pageSize.getWidth();
+  const pdfH = pdf.internal.pageSize.getHeight();
 
-  const container = buildPrintContainer(items, imageDataUrls);
-  document.body.appendChild(container);
+  for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
+    const pageNum = pageIdx + 1;
+    onProgress(`Rendering page ${pageNum} of ${totalPages}…`);
 
-  try {
-    const canvas = await html2canvas(container, {
-      scale: 2,
-      useCORS: false,
-      allowTaint: false,
-      backgroundColor: "#ffffff",
-      logging: false,
-    });
+    const start = pageIdx * ITEMS_PER_PAGE;
+    const end = Math.min(start + ITEMS_PER_PAGE, items.length);
+    const pageItems = items.slice(start, end);
+    const pageImages = imageDataUrls.slice(start, end);
 
-    onProgress("Building PDF…");
+    const container = buildPageContainer(
+      pageItems,
+      pageImages,
+      pageNum,
+      totalPages,
+      exportDate,
+      items.length,
+    );
+    document.body.appendChild(container);
 
-    const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
-    const pdfW = pdf.internal.pageSize.getWidth();
-    const pdfH = pdf.internal.pageSize.getHeight();
+    try {
+      const jpeg = await containerToJpeg(container);
 
-    const imgData = canvas.toDataURL("image/jpeg", 0.88);
-    const imgRatio = canvas.width / canvas.height;
-    const imgW = pdfW;
-    const imgH = imgW / imgRatio;
+      if (pageIdx > 0) pdf.addPage();
 
-    let yOffset = 0;
-    let pageNum = 0;
+      // Scale image to fill A4 page
+      const tempCanvas = document.createElement("canvas");
+      const img = new Image();
+      await new Promise<void>((resolve) => {
+        img.onload = () => resolve();
+        img.src = jpeg;
+      });
+      tempCanvas.width = img.naturalWidth;
+      tempCanvas.height = img.naturalHeight;
 
-    while (yOffset < imgH) {
-      if (pageNum > 0) pdf.addPage();
-      pdf.addImage(imgData, "JPEG", 0, -yOffset, imgW, imgH);
-      yOffset += pdfH;
-      pageNum++;
+      const aspectRatio = img.naturalWidth / img.naturalHeight;
+      const imgWmm = pdfW;
+      const imgHmm = imgWmm / aspectRatio;
+      // If content is shorter than page, just place it at top; if taller, scale to fit
+      const finalH = Math.min(imgHmm, pdfH);
+      const finalW = finalH * aspectRatio;
+      const xOffset = (pdfW - finalW) / 2;
+
+      pdf.addImage(jpeg, "JPEG", xOffset, 0, finalW, finalH);
+    } finally {
+      document.body.removeChild(container);
     }
-
-    // Page numbers
-    for (let p = 1; p <= pageNum; p++) {
-      pdf.setPage(p);
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(8);
-      pdf.setTextColor(160, 160, 160);
-      pdf.text(`Page ${p} of ${pageNum}`, pdfW - 12, pdfH - 8, { align: "right" });
-    }
-
-    pdf.save("pottery-collection-insurance.pdf");
-  } finally {
-    document.body.removeChild(container);
   }
+
+  onProgress("Saving PDF…");
+  pdf.save("pottery-collection-insurance.pdf");
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────

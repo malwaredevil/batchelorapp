@@ -5,6 +5,7 @@ import {
   useQueryClient,
   type UseQueryResult,
 } from "@tanstack/react-query";
+import { customFetch } from "@workspace/api-client-react";
 
 const API = "/api/gmail";
 
@@ -94,16 +95,11 @@ async function apiFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const res = await fetch(`${API}${path}`, {
+  return customFetch<T>(`${API}${path}`, {
     credentials: "include",
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
     ...init,
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error ?? `Request failed (${res.status})`);
-  }
-  return res.json() as Promise<T>;
 }
 
 // ── Status ────────────────────────────────────────────────────────────────────

@@ -21,6 +21,7 @@ import TravelCalendar from "@/pages/TravelCalendar";
 import GmailReview from "@/pages/GmailReview";
 import GoogleApisDemo from "@/pages/GoogleApisDemo";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
+import TripShare from "@/pages/TripShare";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -117,6 +118,9 @@ function Router() {
           </Layout>
         </ProtectedRoute>
       </Route>
+
+      {/* Public share route — no auth required */}
+      <Route path="/trips/share/:token" component={TripShare} />
 
       <Route component={NotFound} />
     </Switch>

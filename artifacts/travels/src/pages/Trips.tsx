@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Link, useSearch } from "wouter";
 import {
   useListTrips,
@@ -29,10 +29,298 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Plus, Plane, ArrowRight, Filter, X } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { MapPin, Plus, Plane, ArrowRight, Filter, X, Sparkles, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { MagnetCheckDialog } from "@/components/MagnetCheckDialog";
 import { usePageAssistantContext } from "@/lib/assistant-context";
+
+// ---------------------------------------------------------------------------
+// AI Trip Planner dialog — streaming SSE response from POST /travels/trips/plan
+// ---------------------------------------------------------------------------
+type PlannerPhase = "idle" | "streaming" | "done" | "error";
+
+function AiPlannerDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const qc = useQueryClient();
+  const createTrip = useCreateTrip();
+
+  const [prompt, setPrompt] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [travellerCount, setTravellerCount] = useState(2);
+  const [phase, setPhase] = useState<PlannerPhase>("idle");
+  const [streamText, setStreamText] = useState("");
+  const [scaffold, setScaffold] = useState<Record<string, unknown> | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Auto-scroll streaming text
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [streamText]);
+
+  // Reset state when dialog closes
+  useEffect(() => {
+    if (!open) {
+      abortRef.current?.abort();
+      setPhase("idle");
+      setStreamText("");
+      setScaffold(null);
+      setPrompt("");
+      setStartDate("");
+      setEndDate("");
+      setTravellerCount(2);
+    }
+  }, [open]);
+
+  const handlePlan = async () => {
+    if (!prompt.trim()) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setPhase("streaming");
+    setStreamText("");
+    setScaffold(null);
+
+    try {
+      const res = await fetch("/api/travels/trips/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: prompt.trim(),
+          startDate: startDate || undefined,
+          endDate: endDate || undefined,
+          travellerCount,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        throw new Error(`Request failed: ${res.status}`);
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response body");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (line.startsWith("event: chunk")) continue;
+          if (line.startsWith("event: done")) continue;
+          if (line.startsWith("event: error")) {
+            setPhase("error");
+            return;
+          }
+          if (line.startsWith("data: ")) {
+            const raw = line.slice(6);
+            try {
+              const parsed = JSON.parse(raw) as { text?: string; scaffold?: Record<string, unknown>; error?: string };
+              if (parsed.text != null) {
+                setStreamText((t) => t + parsed.text);
+              }
+              if (parsed.scaffold) {
+                setScaffold(parsed.scaffold);
+              }
+              if (parsed.error) {
+                setPhase("error");
+                return;
+              }
+            } catch {
+              // not JSON — ignore
+            }
+          }
+        }
+      }
+
+      setPhase("done");
+    } catch (err) {
+      if ((err as Error).name === "AbortError") return;
+      setPhase("error");
+      toast.error("AI planner failed — please try again");
+    }
+  };
+
+  const handleCreate = () => {
+    if (!scaffold) return;
+    const body: CreateTripBody = {
+      title: String(scaffold["title"] ?? prompt.slice(0, 60)),
+      destination: String(scaffold["destination"] ?? ""),
+      status: "planning",
+      startDate: ((scaffold["startDate"] as string | undefined) ?? startDate) || undefined,
+      endDate: ((scaffold["endDate"] as string | undefined) ?? endDate) || undefined,
+      travellerCount,
+      hasRentalCar: false,
+      notes: scaffold["notes"] as string | undefined,
+    };
+    createTrip.mutate(body, {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListTripsQueryKey() });
+        qc.invalidateQueries({ queryKey: getGetTravelsStatsQueryKey() });
+        toast.success("Trip created from AI plan");
+        onOpenChange(false);
+      },
+      onError: () => toast.error("Failed to create trip"),
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="font-serif text-xl flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-primary" />
+            Plan a trip with AI
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {phase === "idle" || phase === "error" ? (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="ai-prompt">Describe your trip idea</Label>
+                <Textarea
+                  id="ai-prompt"
+                  placeholder="e.g. A week in southern Japan — temples, food, and nature. We love hiking and authentic local experiences."
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  className="min-h-[100px] resize-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="ai-start">Start date (optional)</Label>
+                  <Input
+                    id="ai-start"
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="ai-end">End date (optional)</Label>
+                  <Input
+                    id="ai-end"
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ai-travellers">Travellers</Label>
+                <Input
+                  id="ai-travellers"
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={travellerCount}
+                  onChange={(e) => setTravellerCount(Number(e.target.value))}
+                  className="w-24"
+                />
+              </div>
+              {phase === "error" && (
+                <p className="text-sm text-destructive">
+                  Something went wrong. Try again.
+                </p>
+              )}
+            </>
+          ) : phase === "streaming" ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Planning your trip…
+              </div>
+              <div
+                ref={scrollRef}
+                className="bg-muted/40 rounded-lg p-3 text-sm text-foreground whitespace-pre-wrap max-h-72 overflow-y-auto font-mono leading-relaxed"
+              >
+                {streamText || <span className="text-muted-foreground">Thinking…</span>}
+              </div>
+            </div>
+          ) : (
+            /* done */
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400 font-medium">
+                <Sparkles className="w-4 h-4" />
+                Trip plan ready!
+              </div>
+              <div
+                ref={scrollRef}
+                className="bg-muted/40 rounded-lg p-3 text-sm text-foreground whitespace-pre-wrap max-h-72 overflow-y-auto font-mono leading-relaxed"
+              >
+                {streamText}
+              </div>
+              {scaffold && (
+                <div className="bg-card border border-border/60 rounded-lg p-3 space-y-1 text-sm">
+                  <p className="font-medium text-foreground">{String(scaffold["title"] ?? "")}</p>
+                  {!!scaffold["destination"] && (
+                    <p className="text-muted-foreground">{String(scaffold["destination"])}</p>
+                  )}
+                  {!!(scaffold["startDate"] ?? startDate) && (
+                    <p className="text-muted-foreground text-xs">
+                      {String(scaffold["startDate"] ?? startDate)}
+                      {!!(scaffold["endDate"] ?? endDate) ? ` → ${String(scaffold["endDate"] ?? endDate)}` : ""}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          {(phase === "idle" || phase === "error") && (
+            <Button onClick={() => void handlePlan()} disabled={!prompt.trim()}>
+              <Sparkles className="w-4 h-4 mr-2" />
+              Generate plan
+            </Button>
+          )}
+          {phase === "streaming" && (
+            <Button variant="outline" onClick={() => abortRef.current?.abort()}>
+              Stop
+            </Button>
+          )}
+          {phase === "done" && (
+            <>
+              <Button variant="outline" onClick={() => setPhase("idle")}>
+                Regenerate
+              </Button>
+              <Button onClick={handleCreate} disabled={createTrip.isPending}>
+                {createTrip.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Plus className="w-4 h-4 mr-2" />
+                )}
+                Create trip
+              </Button>
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
 
 const ALL_STATUSES: TripStatus[] = [
   "wishlist",
@@ -234,6 +522,7 @@ export default function Trips() {
     initialDestination,
   );
   const [creating, setCreating] = useState(false);
+  const [planning, setPlanning] = useState(false);
 
   const availableYears = Array.from(
     new Set(
@@ -294,6 +583,10 @@ export default function Trips() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <MagnetCheckDialog />
+          <Button variant="outline" onClick={() => setPlanning(true)}>
+            <Sparkles className="w-4 h-4 mr-2" />
+            Plan with AI
+          </Button>
           <Button onClick={() => setCreating(true)}>
             <Plus className="w-4 h-4 mr-2" />
             New trip
@@ -507,6 +800,7 @@ export default function Trips() {
       )}
 
       <CreateTripDialog open={creating} onOpenChange={setCreating} />
+      <AiPlannerDialog open={planning} onOpenChange={setPlanning} />
     </div>
   );
 }

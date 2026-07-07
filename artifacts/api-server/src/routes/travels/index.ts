@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import shareRouter from "./share";
 import tripsRouter from "./trips";
 import documentsRouter from "./documents";
 import aiRouter from "./ai";
@@ -20,6 +21,9 @@ import documentTypesRouter from "./document-types";
 
 const router: IRouter = Router();
 
+// shareRouter must come first: its public GET /trips/share/:token must be
+// matched before tripsRouter's requireAuth middleware catches /trips/:id
+router.use(shareRouter);
 router.use(tripsRouter);
 router.use(cardLayoutRouter);
 router.use(documentsRouter);

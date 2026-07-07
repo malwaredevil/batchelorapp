@@ -38,6 +38,7 @@ function displayFrom(from: string): string {
 interface ThreadRowProps {
   thread: ThreadSummary;
   selected: boolean;
+  isEven: boolean;
   onSelect: () => void;
   onStar: () => void;
   onArchive: () => void;
@@ -45,7 +46,7 @@ interface ThreadRowProps {
   onToggleRead: () => void;
 }
 
-function ThreadRow({ thread, selected, onSelect, onStar, onArchive, onTrash, onToggleRead }: ThreadRowProps) {
+function ThreadRow({ thread, selected, isEven, onSelect, onStar, onArchive, onTrash, onToggleRead }: ThreadRowProps) {
   return (
     <div
       onClick={onSelect}
@@ -54,8 +55,8 @@ function ThreadRow({ thread, selected, onSelect, onStar, onArchive, onTrash, onT
         selected
           ? "bg-blue-50 dark:bg-blue-950/30"
           : thread.isUnread
-          ? "bg-card hover:bg-muted/50"
-          : "hover:bg-muted/40",
+          ? [isEven ? "bg-card" : "bg-sky-50/80 dark:bg-sky-950/25", "hover:bg-muted/50"]
+          : [isEven ? "" : "bg-sky-50/50 dark:bg-sky-950/15", "hover:bg-muted/40"],
       )}
     >
       {/* Unread bar */}
@@ -263,11 +264,12 @@ export function ThreadList({
             <p className="text-sm">No messages here</p>
           </div>
         ) : (
-          threads.map((t) => (
+          threads.map((t, i) => (
             <ThreadRow
               key={t.id}
               thread={t}
               selected={t.id === selectedId}
+              isEven={i % 2 === 0}
               onSelect={() => onSelect(t.id)}
               onStar={() => onStar(t)}
               onArchive={() => onArchive(t)}

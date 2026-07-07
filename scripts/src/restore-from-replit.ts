@@ -119,6 +119,23 @@ async function main() {
   });
   await resetSequence(dest, "app_users", "id");
 
+  await dest.query("TRUNCATE app_gmail_connections CASCADE");
+  await copyTable(source, dest, {
+    table: "app_gmail_connections",
+    columns: [
+      "id",
+      "user_id",
+      "google_email",
+      "refresh_token",
+      "access_token",
+      "access_token_expires_at",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "app_gmail_connections", "id");
+
   // ── Pottery ───────────────────────────────────────────────────────────────
   await dest.query("TRUNCATE pottery_item_categories CASCADE");
   await dest.query("TRUNCATE pottery_images CASCADE");

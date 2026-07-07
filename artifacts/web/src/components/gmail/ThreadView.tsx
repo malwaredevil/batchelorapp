@@ -25,7 +25,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { FullThread, ThreadMessage, ComposeParams } from "@/hooks/use-gmail";
+import type {
+  FullThread,
+  ThreadMessage,
+  ComposeParams,
+} from "@/hooks/use-gmail";
 import { attachmentUrl } from "@/hooks/use-gmail";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -44,7 +48,11 @@ function formatDate(dateStr: string): string {
   });
 }
 
-function parseFrom(from: string): { name: string; email: string; initials: string } {
+function parseFrom(from: string): {
+  name: string;
+  email: string;
+  initials: string;
+} {
   if (!from) return { name: "?", email: "", initials: "?" };
   const match = from.match(/^"?(.+?)"?\s*<(.+?)>$/);
   const name = match ? match[1].trim() : from;
@@ -59,8 +67,14 @@ function parseFrom(from: string): { name: string; email: string; initials: strin
 
 function getAvatarColor(email: string): string {
   const colors = [
-    "bg-blue-500","bg-emerald-500","bg-violet-500","bg-amber-500",
-    "bg-rose-500","bg-cyan-500","bg-fuchsia-500","bg-teal-500",
+    "bg-blue-500",
+    "bg-emerald-500",
+    "bg-violet-500",
+    "bg-amber-500",
+    "bg-rose-500",
+    "bg-cyan-500",
+    "bg-fuchsia-500",
+    "bg-teal-500",
   ];
   let hash = 0;
   for (const c of email) hash = (hash * 31 + c.charCodeAt(0)) & 0x7fffffff;
@@ -81,7 +95,10 @@ function HtmlBody({ html }: { html: string }) {
         const body = iframe.contentDocument?.body;
         if (body) {
           // A small delay lets images/fonts settle
-          setTimeout(() => setHeight(Math.max(100, body.scrollHeight + 20)), 50);
+          setTimeout(
+            () => setHeight(Math.max(100, body.scrollHeight + 20)),
+            50,
+          );
         }
       } catch {
         /* cross-origin fallback */
@@ -201,7 +218,9 @@ function CollapsedMessage({
       <div className="text-sm font-medium text-foreground/80 group-hover:text-foreground">
         {name}
       </div>
-      <div className="flex-1 text-sm text-muted-foreground truncate">{msg.snippet}</div>
+      <div className="flex-1 text-sm text-muted-foreground truncate">
+        {msg.snippet}
+      </div>
       <div className="text-xs text-muted-foreground flex-shrink-0">
         {formatDate(msg.date)}
       </div>
@@ -277,10 +296,11 @@ export function ThreadView({
   const subject = safeThread.messages[0]?.subject ?? "(no subject)";
 
   function handleReply(all = false) {
-    const replyTo =
-      lastMsg.replyTo || lastMsg.from;
+    const replyTo = lastMsg.replyTo || lastMsg.from;
     const toPart = all
-      ? [lastMsg.from, lastMsg.to].filter((x) => x && x !== lastMsg.from).join(", ")
+      ? [lastMsg.from, lastMsg.to]
+          .filter((x) => x && x !== lastMsg.from)
+          .join(", ")
       : replyTo;
 
     onReply({
@@ -299,7 +319,12 @@ export function ThreadView({
     <div className="flex flex-col h-full">
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-10">
-        <Button variant="ghost" size="icon" onClick={onBack} className="h-8 w-8">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onBack}
+          className="h-8 w-8"
+        >
           <ArrowLeft className="w-4 h-4" />
         </Button>
         <div className="flex items-center gap-1 ml-1">
@@ -424,7 +449,10 @@ export function ThreadView({
                     )}
                   </div>
                 ) : (
-                  <CollapsedMessage msg={msg} onClick={() => toggleExpand(msg.id)} />
+                  <CollapsedMessage
+                    msg={msg}
+                    onClick={() => toggleExpand(msg.id)}
+                  />
                 )}
               </div>
             );

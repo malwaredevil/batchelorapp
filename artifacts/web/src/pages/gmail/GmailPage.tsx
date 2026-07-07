@@ -37,12 +37,18 @@ import { ComposeModal } from "@/components/gmail/ComposeModal";
 
 function labelToApi(id: LabelId): { labelIds?: string[] } {
   switch (id) {
-    case "ALL": return {};
-    case "STARRED": return { labelIds: ["STARRED"] };
-    case "SENT": return { labelIds: ["SENT"] };
-    case "DRAFTS": return { labelIds: ["DRAFT"] };
-    case "SPAM": return { labelIds: ["SPAM"] };
-    case "TRASH": return { labelIds: ["TRASH"] };
+    case "ALL":
+      return {};
+    case "STARRED":
+      return { labelIds: ["STARRED"] };
+    case "SENT":
+      return { labelIds: ["SENT"] };
+    case "DRAFTS":
+      return { labelIds: ["DRAFT"] };
+    case "SPAM":
+      return { labelIds: ["SPAM"] };
+    case "TRASH":
+      return { labelIds: ["TRASH"] };
     case "INBOX":
     default:
       return { labelIds: id === "INBOX" ? ["INBOX"] : [id] };
@@ -51,14 +57,22 @@ function labelToApi(id: LabelId): { labelIds?: string[] } {
 
 function labelDisplayName(id: LabelId): string {
   switch (id) {
-    case "INBOX": return "Inbox";
-    case "STARRED": return "Starred";
-    case "SENT": return "Sent";
-    case "DRAFTS": return "Drafts";
-    case "SPAM": return "Spam";
-    case "TRASH": return "Trash";
-    case "ALL": return "All Mail";
-    default: return id;
+    case "INBOX":
+      return "Inbox";
+    case "STARRED":
+      return "Starred";
+    case "SENT":
+      return "Sent";
+    case "DRAFTS":
+      return "Drafts";
+    case "SPAM":
+      return "Spam";
+    case "TRASH":
+      return "Trash";
+    case "ALL":
+      return "All Mail";
+    default:
+      return id;
   }
 }
 
@@ -146,12 +160,18 @@ function GmailPage() {
   // ── Auth / logout ──────────────────────────────────────────────────────────
   const logout = useLogout({
     mutation: {
-      onMutate: async () => { await queryClient.cancelQueries(); },
+      onMutate: async () => {
+        await queryClient.cancelQueries();
+      },
       onSuccess: () => {
         queryClient.setQueryData(getGetCurrentUserQueryKey(), null);
         window.location.href = "/login";
       },
-      onError: () => toast({ title: "Could not sign out. Please try again.", variant: "destructive" }),
+      onError: () =>
+        toast({
+          title: "Could not sign out. Please try again.",
+          variant: "destructive",
+        }),
     },
   });
 
@@ -165,11 +185,16 @@ function GmailPage() {
     if (gmailParam === "connected") {
       toast({ title: "Gmail connected", description: "Your inbox is ready." });
     } else if (gmailParam === "error") {
-      toast({ title: "Connection failed", description: "Could not connect Gmail. Try again.", variant: "destructive" });
+      toast({
+        title: "Connection failed",
+        description: "Could not connect Gmail. Try again.",
+        variant: "destructive",
+      });
     } else if (gmailParam === "no_refresh_token") {
       toast({
         title: "Connection failed",
-        description: "No refresh token was issued. Revoke access in your Google account settings and try again.",
+        description:
+          "No refresh token was issued. Revoke access in your Google account settings and try again.",
         variant: "destructive",
       });
     }
@@ -178,7 +203,7 @@ function GmailPage() {
       url.searchParams.delete("gmail");
       window.history.replaceState({}, "", url.toString());
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Layout + split size (persisted) ───────────────────────────────────────
@@ -187,7 +212,10 @@ function GmailPage() {
     return saved === "vertical" || saved === "horizontal" ? saved : "none";
   });
 
-  const [splitSize, setSplitSize] = useState<{ vertical: number; horizontal: number }>(() => {
+  const [splitSize, setSplitSize] = useState<{
+    vertical: number;
+    horizontal: number;
+  }>(() => {
     try {
       const saved = localStorage.getItem("gmail-split-size");
       return saved ? JSON.parse(saved) : { vertical: 40, horizontal: 50 };
@@ -205,7 +233,10 @@ function GmailPage() {
     if (!contentRef.current) return;
     const pct = (delta / contentRef.current.offsetWidth) * 100;
     setSplitSize((prev) => {
-      const next = { ...prev, vertical: Math.min(75, Math.max(20, prev.vertical + pct)) };
+      const next = {
+        ...prev,
+        vertical: Math.min(75, Math.max(20, prev.vertical + pct)),
+      };
       localStorage.setItem("gmail-split-size", JSON.stringify(next));
       return next;
     });
@@ -215,7 +246,10 @@ function GmailPage() {
     if (!contentRef.current) return;
     const pct = (delta / contentRef.current.offsetHeight) * 100;
     setSplitSize((prev) => {
-      const next = { ...prev, horizontal: Math.min(75, Math.max(20, prev.horizontal + pct)) };
+      const next = {
+        ...prev,
+        horizontal: Math.min(75, Math.max(20, prev.horizontal + pct)),
+      };
       localStorage.setItem("gmail-split-size", JSON.stringify(next));
       return next;
     });
@@ -227,9 +261,14 @@ function GmailPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
   const [pageHistory, setPageHistory] = useState<string[]>([]);
-  const [currentPageToken, setCurrentPageToken] = useState<string | undefined>();
+  const [currentPageToken, setCurrentPageToken] = useState<
+    string | undefined
+  >();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [compose, setCompose] = useState<{ open: boolean; initial?: Partial<ComposeParams> }>({ open: false });
+  const [compose, setCompose] = useState<{
+    open: boolean;
+    initial?: Partial<ComposeParams>;
+  }>({ open: false });
 
   // ── Data ───────────────────────────────────────────────────────────────────
   const { data: labelsData } = useGmailLabels(connected);
@@ -246,7 +285,8 @@ function GmailPage() {
     refetch: refetchThreads,
   } = useThreadList(threadListParams, connected);
 
-  const { data: threadData, isLoading: threadLoading } = useThread(selectedThreadId);
+  const { data: threadData, isLoading: threadLoading } =
+    useThread(selectedThreadId);
 
   // ── Mutations ──────────────────────────────────────────────────────────────
   const modify = useGmailModify();
@@ -259,7 +299,9 @@ function GmailPage() {
   // Auto-mark thread as read when it loads
   useEffect(() => {
     if (!threadData || !selectedThreadId) return;
-    const unreadIds = threadData.messages.filter((m) => m.isUnread).map((m) => m.id);
+    const unreadIds = threadData.messages
+      .filter((m) => m.isUnread)
+      .map((m) => m.id);
     if (unreadIds.length === 0) return;
     markThreadRead(selectedThreadId, unreadIds);
   }, [threadData?.id, selectedThreadId, markThreadRead]);
@@ -302,29 +344,38 @@ function GmailPage() {
     setSelectedThreadId(null);
   }
 
-  const handleStar = useCallback((thread: ThreadSummary) => {
-    modify.mutate({
-      messageId: thread.id,
-      addLabelIds: thread.isStarred ? [] : ["STARRED"],
-      removeLabelIds: thread.isStarred ? ["STARRED"] : [],
-    });
-  }, [modify]);
+  const handleStar = useCallback(
+    (thread: ThreadSummary) => {
+      modify.mutate({
+        messageId: thread.id,
+        addLabelIds: thread.isStarred ? [] : ["STARRED"],
+        removeLabelIds: thread.isStarred ? ["STARRED"] : [],
+      });
+    },
+    [modify],
+  );
 
-  const handleMsgStar = useCallback((msg: ThreadMessage) => {
-    modify.mutate({
-      messageId: msg.id,
-      addLabelIds: msg.isStarred ? [] : ["STARRED"],
-      removeLabelIds: msg.isStarred ? ["STARRED"] : [],
-    });
-  }, [modify]);
+  const handleMsgStar = useCallback(
+    (msg: ThreadMessage) => {
+      modify.mutate({
+        messageId: msg.id,
+        addLabelIds: msg.isStarred ? [] : ["STARRED"],
+        removeLabelIds: msg.isStarred ? ["STARRED"] : [],
+      });
+    },
+    [modify],
+  );
 
-  const handleMsgToggleRead = useCallback((msg: ThreadMessage) => {
-    modify.mutate({
-      messageId: msg.id,
-      addLabelIds: msg.isUnread ? [] : ["UNREAD"],
-      removeLabelIds: msg.isUnread ? ["UNREAD"] : [],
-    });
-  }, [modify]);
+  const handleMsgToggleRead = useCallback(
+    (msg: ThreadMessage) => {
+      modify.mutate({
+        messageId: msg.id,
+        addLabelIds: msg.isUnread ? [] : ["UNREAD"],
+        removeLabelIds: msg.isUnread ? ["UNREAD"] : [],
+      });
+    },
+    [modify],
+  );
 
   function handleArchive(messageId: string) {
     modify.mutate({ messageId, addLabelIds: [], removeLabelIds: ["INBOX"] });
@@ -364,7 +415,11 @@ function GmailPage() {
     onSelect: (id: string) => setSelectedThreadId(id),
     onStar: handleStar,
     onArchive: (t: ThreadSummary) => {
-      modify.mutate({ messageId: t.id, addLabelIds: [], removeLabelIds: ["INBOX"] });
+      modify.mutate({
+        messageId: t.id,
+        addLabelIds: [],
+        removeLabelIds: ["INBOX"],
+      });
       toast({ title: "Archived" });
     },
     onTrash: (t: ThreadSummary) => {
@@ -380,7 +435,11 @@ function GmailPage() {
     },
     // Bulk actions
     onBulkArchive: (ids: string[]) => {
-      bulkModify.mutate({ messageIds: ids, addLabelIds: [], removeLabelIds: ["INBOX"] });
+      bulkModify.mutate({
+        messageIds: ids,
+        addLabelIds: [],
+        removeLabelIds: ["INBOX"],
+      });
       toast({ title: `${ids.length} archived` });
     },
     onBulkTrash: (ids: string[]) => {
@@ -388,13 +447,25 @@ function GmailPage() {
       toast({ title: `${ids.length} moved to Trash` });
     },
     onBulkMarkRead: (ids: string[]) => {
-      bulkModify.mutate({ messageIds: ids, addLabelIds: [], removeLabelIds: ["UNREAD"] });
+      bulkModify.mutate({
+        messageIds: ids,
+        addLabelIds: [],
+        removeLabelIds: ["UNREAD"],
+      });
     },
     onBulkMarkUnread: (ids: string[]) => {
-      bulkModify.mutate({ messageIds: ids, addLabelIds: ["UNREAD"], removeLabelIds: [] });
+      bulkModify.mutate({
+        messageIds: ids,
+        addLabelIds: ["UNREAD"],
+        removeLabelIds: [],
+      });
     },
     onBulkSpam: (ids: string[]) => {
-      bulkModify.mutate({ messageIds: ids, addLabelIds: ["SPAM"], removeLabelIds: ["INBOX"] });
+      bulkModify.mutate({
+        messageIds: ids,
+        addLabelIds: ["SPAM"],
+        removeLabelIds: ["INBOX"],
+      });
       toast({ title: `${ids.length} reported as spam` });
     },
     isLoading: threadsLoading,
@@ -404,7 +475,9 @@ function GmailPage() {
     onPrevPage: handlePrevPage,
     canPrevPage: pageHistory.length > 0,
     onRefresh: () => refetchThreads(),
-    labelName: activeSearch ? `Search: "${activeSearch}"` : labelDisplayName(selectedLabel),
+    labelName: activeSearch
+      ? `Search: "${activeSearch}"`
+      : labelDisplayName(selectedLabel),
     layoutMode,
     onLayoutChange: handleLayoutChange,
     resultSizeEstimate: threadListData?.resultSizeEstimate ?? null,
@@ -426,7 +499,6 @@ function GmailPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="h-screen overflow-hidden bg-background text-foreground font-sans flex flex-col">
-
       {/* Standard Batchelor header */}
       <header className="sticky top-0 z-40 border-b border-card-border bg-background/85 backdrop-blur flex-shrink-0">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
@@ -439,7 +511,11 @@ function GmailPage() {
               aria-label="Toggle dark mode"
               className="h-9 w-9 text-muted-foreground hover:text-foreground"
             >
-              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              {isDark ? (
+                <Sun className="h-4 w-4" />
+              ) : (
+                <Moon className="h-4 w-4" />
+              )}
             </Button>
             <Button
               variant="ghost"
@@ -495,21 +571,24 @@ function GmailPage() {
 
           {/* Main column */}
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-
             {/* Secondary toolbar: mobile menu toggle + search */}
             <div className="flex items-center gap-2 px-4 py-2 border-b border-border/60 bg-background/60 flex-shrink-0">
               <button
                 onClick={() => setSidebarOpen((v) => !v)}
                 className="lg:hidden p-1.5 rounded hover:bg-muted transition-colors"
               >
-                {sidebarOpen
-                  ? <X className="w-5 h-5 text-muted-foreground" />
-                  : <Menu className="w-5 h-5 text-muted-foreground" />
-                }
+                {sidebarOpen ? (
+                  <X className="w-5 h-5 text-muted-foreground" />
+                ) : (
+                  <Menu className="w-5 h-5 text-muted-foreground" />
+                )}
               </button>
 
               {showSearch && (
-                <form onSubmit={handleSearch} className="flex-1 max-w-xl flex gap-2">
+                <form
+                  onSubmit={handleSearch}
+                  className="flex-1 max-w-xl flex gap-2"
+                >
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                     <Input
@@ -560,7 +639,6 @@ function GmailPage() {
 
             {/* Content area */}
             <div ref={contentRef} className="flex-1 min-h-0 overflow-hidden">
-
               {/* ── No split ── */}
               {layoutMode === "none" && (
                 <div className="relative h-full">
@@ -585,12 +663,16 @@ function GmailPage() {
                   >
                     <ThreadList {...threadListSharedProps} />
                   </div>
-                  <ResizeDivider direction="vertical" onResize={handleVerticalResize} />
+                  <ResizeDivider
+                    direction="vertical"
+                    onResize={handleVerticalResize}
+                  />
                   <div className="flex-1 overflow-y-auto min-w-0">
-                    {selectedThreadId
-                      ? <ThreadView {...threadViewSharedProps} />
-                      : <PreviewPlaceholder />
-                    }
+                    {selectedThreadId ? (
+                      <ThreadView {...threadViewSharedProps} />
+                    ) : (
+                      <PreviewPlaceholder />
+                    )}
                   </div>
                 </div>
               )}
@@ -604,16 +686,19 @@ function GmailPage() {
                   >
                     <ThreadList {...threadListSharedProps} />
                   </div>
-                  <ResizeDivider direction="horizontal" onResize={handleHorizontalResize} />
+                  <ResizeDivider
+                    direction="horizontal"
+                    onResize={handleHorizontalResize}
+                  />
                   <div className="flex-1 overflow-y-auto min-h-0">
-                    {selectedThreadId
-                      ? <ThreadView {...threadViewSharedProps} />
-                      : <PreviewPlaceholder />
-                    }
+                    {selectedThreadId ? (
+                      <ThreadView {...threadViewSharedProps} />
+                    ) : (
+                      <PreviewPlaceholder />
+                    )}
                   </div>
                 </div>
               )}
-
             </div>
           </div>
 

@@ -36,7 +36,11 @@ export function ComposeModal({ initial = {}, onClose }: ComposeModalProps) {
 
   async function handleSend() {
     if (!to.trim()) {
-      toast({ title: "Add a recipient", description: "Please fill in the To field.", variant: "destructive" });
+      toast({
+        title: "Add a recipient",
+        description: "Please fill in the To field.",
+        variant: "destructive",
+      });
       return;
     }
     try {
@@ -50,12 +54,16 @@ export function ComposeModal({ initial = {}, onClose }: ComposeModalProps) {
         references: initial.references,
         threadId: initial.threadId,
       });
-      toast({ title: "Message sent", description: "Your email has been sent." });
+      toast({
+        title: "Message sent",
+        description: "Your email has been sent.",
+      });
       onClose();
     } catch (err) {
       toast({
         title: "Failed to send",
-        description: err instanceof Error ? err.message : "Something went wrong.",
+        description:
+          err instanceof Error ? err.message : "Something went wrong.",
         variant: "destructive",
       });
     }
@@ -68,8 +76,8 @@ export function ComposeModal({ initial = {}, onClose }: ComposeModalProps) {
         expanded
           ? "inset-8"
           : minimized
-          ? "bottom-0 right-4 sm:right-8 w-72 h-12 rounded-b-none"
-          : "bottom-0 right-4 sm:right-8 w-full sm:w-[520px] h-[480px] rounded-b-none",
+            ? "bottom-0 right-4 sm:right-8 w-72 h-12 rounded-b-none"
+            : "bottom-0 right-4 sm:right-8 w-full sm:w-[520px] h-[480px] rounded-b-none",
       )}
     >
       {/* Title bar */}
@@ -85,21 +93,32 @@ export function ComposeModal({ initial = {}, onClose }: ComposeModalProps) {
         </span>
         <div className="flex items-center gap-1 ml-2">
           <button
-            onClick={(e) => { e.stopPropagation(); setMinimized((v) => !v); setExpanded(false); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setMinimized((v) => !v);
+              setExpanded(false);
+            }}
             className="p-1 rounded hover:bg-muted"
             title={minimized ? "Restore" : "Minimise"}
           >
             <Minus className="w-4 h-4 text-muted-foreground" />
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); setMinimized(false); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded((v) => !v);
+              setMinimized(false);
+            }}
             className="p-1 rounded hover:bg-muted"
             title={expanded ? "Restore" : "Expand"}
           >
             <Maximize2 className="w-4 h-4 text-muted-foreground" />
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); onClose(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
             className="p-1 rounded hover:bg-muted"
             title="Discard draft"
           >
@@ -113,7 +132,9 @@ export function ComposeModal({ initial = {}, onClose }: ComposeModalProps) {
           {/* Fields */}
           <div className="border-b border-border">
             <div className="flex items-center gap-2 px-4 py-1.5 border-b border-border/50">
-              <label className="text-xs text-muted-foreground w-8 flex-shrink-0">To</label>
+              <label className="text-xs text-muted-foreground w-8 flex-shrink-0">
+                To
+              </label>
               <Input
                 value={to}
                 onChange={(e) => setTo(e.target.value)}
@@ -121,14 +142,30 @@ export function ComposeModal({ initial = {}, onClose }: ComposeModalProps) {
                 placeholder="Recipients"
               />
               <div className="flex gap-2 text-xs text-muted-foreground flex-shrink-0">
-                {!showCc && <button onClick={() => setShowCc(true)} className="hover:text-foreground">Cc</button>}
-                {!showBcc && <button onClick={() => setShowBcc(true)} className="hover:text-foreground">Bcc</button>}
+                {!showCc && (
+                  <button
+                    onClick={() => setShowCc(true)}
+                    className="hover:text-foreground"
+                  >
+                    Cc
+                  </button>
+                )}
+                {!showBcc && (
+                  <button
+                    onClick={() => setShowBcc(true)}
+                    className="hover:text-foreground"
+                  >
+                    Bcc
+                  </button>
+                )}
               </div>
             </div>
 
             {showCc && (
               <div className="flex items-center gap-2 px-4 py-1.5 border-b border-border/50">
-                <label className="text-xs text-muted-foreground w-8 flex-shrink-0">Cc</label>
+                <label className="text-xs text-muted-foreground w-8 flex-shrink-0">
+                  Cc
+                </label>
                 <Input
                   value={cc}
                   onChange={(e) => setCc(e.target.value)}
@@ -139,7 +176,9 @@ export function ComposeModal({ initial = {}, onClose }: ComposeModalProps) {
             )}
             {showBcc && (
               <div className="flex items-center gap-2 px-4 py-1.5 border-b border-border/50">
-                <label className="text-xs text-muted-foreground w-8 flex-shrink-0">Bcc</label>
+                <label className="text-xs text-muted-foreground w-8 flex-shrink-0">
+                  Bcc
+                </label>
                 <Input
                   value={bcc}
                   onChange={(e) => setBcc(e.target.value)}

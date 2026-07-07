@@ -2503,6 +2503,25 @@ export function useCreatePackingItem<TError = unknown, TContext = unknown>(
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
+export interface ReorderPackingItemsBody {
+  order: number[];
+}
+
+const reorderPackingItemsFn = (tripId: number, body: ReorderPackingItemsBody, options?: RequestInit): Promise<{ reordered: number }> =>
+  customFetch<{ reordered: number }>(`/api/travels/trips/${tripId}/packing/items/reorder`, {
+    ...options, method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export function useReorderPackingItems<TError = unknown, TContext = unknown>(
+  options?: { mutation?: UseMutationOptions<{ reordered: number }, TError, { tripId: number; body: ReorderPackingItemsBody }, TContext> },
+): UseMutationResult<{ reordered: number }, TError, { tripId: number; body: ReorderPackingItemsBody }, TContext> {
+  const mutationFn: MutationFunction<{ reordered: number }, { tripId: number; body: ReorderPackingItemsBody }> = ({ tripId, body }) =>
+    reorderPackingItemsFn(tripId, body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
 const bulkCreatePackingItemsFn = (tripId: number, body: BulkCreatePackingItemsBody, options?: RequestInit): Promise<PackingItem[]> =>
   customFetch<PackingItem[]>(`/api/travels/trips/${tripId}/packing/items/bulk`, {
     ...options, method: "POST",

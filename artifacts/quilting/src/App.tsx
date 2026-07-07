@@ -12,6 +12,7 @@ import {
   ThemeProvider,
   ElainePageContextProvider,
   ElaineWidget,
+  CommandPalette,
 } from "@workspace/elaine-ui";
 
 // Register all features before the shell renders
@@ -149,6 +150,7 @@ function App() {
               </NavGuardProvider>
             </WouterRouter>
             <Toaster />
+            <CommandPalette />
           </BulkAddProvider>
         </TooltipProvider>
       </ThemeProvider>

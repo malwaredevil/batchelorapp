@@ -10,7 +10,6 @@ router.use(requireAuth);
 const MAX_TAGS = 20;
 const MAX_TAG_LEN = 100;
 const MAX_NAME_LEN = 120;
-const MAX_THUMBNAIL_LEN = 500_000;
 
 const SeamLineSchema = z.object({
   axis: z.enum(["h", "v"]),
@@ -37,7 +36,6 @@ const CreateTemplateSchema = z.object({
   seams: z.array(SeamLineSchema).optional().default([]),
   blockSizeInches: z.number().min(1).max(120).nullable().optional(),
   seamAllowanceInches: z.number().min(0.0625).max(1).nullable().optional(),
-  thumbnailSvg: z.string().max(MAX_THUMBNAIL_LEN).optional().nullable(),
 });
 
 const PatchTemplateSchema = z.object({
@@ -65,7 +63,6 @@ function formatTemplate(row: typeof blockTemplates.$inferSelect) {
     seams: (row.seams as object[]) ?? [],
     blockSizeInches: row.blockSizeInches ?? null,
     seamAllowanceInches: row.seamAllowanceInches ?? null,
-    thumbnailSvg: row.thumbnailSvg ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -124,7 +121,6 @@ router.post("/block-templates", async (req, res) => {
       seams: d.seams,
       blockSizeInches: d.blockSizeInches ?? null,
       seamAllowanceInches: d.seamAllowanceInches ?? null,
-      thumbnailSvg: d.thumbnailSvg ?? null,
     })
     .returning();
 

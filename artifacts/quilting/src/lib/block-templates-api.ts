@@ -19,7 +19,6 @@ export type BlockTemplate = {
   seams: BlockTemplateSeam[];
   blockSizeInches: number | null;
   seamAllowanceInches: number | null;
-  thumbnailSvg: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -69,7 +68,6 @@ type CreatePayload = {
   seams?: BlockTemplateSeam[];
   blockSizeInches?: number | null;
   seamAllowanceInches?: number | null;
-  thumbnailSvg?: string | null;
 };
 
 export function useCreateBlockTemplate() {

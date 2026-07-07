@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useDeferredValue } from "react";
 import {
   ExternalLink,
   ImageIcon,
@@ -92,31 +92,26 @@ export default function Chat() {
   const qc = useQueryClient();
 
   const [searchQuery, setSearchQuery] = useState("");
+  // useDeferredValue delays the query sent to the server by one render cycle,
+  // preventing a fetch on every keystroke.
+  const deferredSearch = useDeferredValue(searchQuery.trim() || undefined);
   const [loadingConvId, setLoadingConvId] = useState<number | null>(null);
 
   const { data: conversations = [] } = useListElaineConversations({
+    q: deferredSearch,
     query: {
-      queryKey: getListElaineConversationsQueryKey(),
+      queryKey: getListElaineConversationsQueryKey(deferredSearch),
       refetchOnWindowFocus: false,
     },
   });
   const deleteConversation = useDeleteElaineConversation({
     mutation: {
       onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getListElaineConversationsQueryKey() });
+        // Invalidate both the unfiltered list and any active search result.
+        void qc.invalidateQueries({ queryKey: getListElaineConversationsQueryKey() });
       },
     },
   });
-
-  const filteredConversations = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
-    if (!q) return conversations;
-    return conversations.filter(
-      (c) =>
-        c.title.toLowerCase().includes(q) ||
-        (c.preview?.toLowerCase().includes(q) ?? false),
-    );
-  }, [conversations, searchQuery]);
 
   const handleSelectConversation = useCallback(
     async (id: number) => {
@@ -164,12 +159,12 @@ export default function Chat() {
           </div>
 
           <div className="flex-1 overflow-y-auto py-1">
-            {filteredConversations.length === 0 && (
+            {conversations.length === 0 && (
               <p className="px-3 py-4 text-center text-xs text-muted-foreground">
                 {searchQuery ? "No results" : "No conversations yet"}
               </p>
             )}
-            {filteredConversations.map((conv) => {
+            {conversations.map((conv) => {
               const isActive = chat.conversationId === conv.id;
               const isLoading = loadingConvId === conv.id;
               return (

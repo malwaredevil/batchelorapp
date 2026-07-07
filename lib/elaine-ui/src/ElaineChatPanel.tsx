@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { Send, ArrowRight, Check, X } from "lucide-react";
+import { useRef, type ReactNode } from "react";
+import { Send, ArrowRight, Check, X, Paperclip, Loader2 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { ElaineAvatar, ElaineName } from "./ElaineAvatar";
@@ -115,6 +115,9 @@ export function ElaineChatPanel({
     statusMessage,
     endRef,
     executeAction,
+    pendingAttachments,
+    handleAddAttachment,
+    handleRemoveAttachment,
     handleSend,
     handleConfirmNavigate,
     handleConfirmAction,
@@ -122,6 +125,10 @@ export function ElaineChatPanel({
     handleConfirmAll,
     handleCancelAll,
   } = chat;
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const hasUploadingAttachments = pendingAttachments.some((a) => a.uploading);
 
   return (
     <>
@@ -143,9 +150,23 @@ export function ElaineChatPanel({
             return (
               <div key={i} className="flex gap-2.5 justify-end">
                 <div
-                  className={`${bubbleWidthClass} whitespace-pre-wrap rounded-2xl rounded-tr-sm bg-primary px-3.5 py-2.5 text-sm leading-relaxed text-primary-foreground`}
+                  className={`${bubbleWidthClass} rounded-2xl rounded-tr-sm bg-primary px-3.5 py-2.5 text-sm leading-relaxed text-primary-foreground`}
                 >
-                  {msg.content}
+                  {msg.attachmentUrls && msg.attachmentUrls.length > 0 && (
+                    <div className="mb-1.5 flex flex-wrap gap-1.5">
+                      {msg.attachmentUrls.map((url, j) => (
+                        <img
+                          key={j}
+                          src={url}
+                          alt=""
+                          className="h-20 w-20 rounded-lg object-cover"
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {msg.content && (
+                    <span className="whitespace-pre-wrap">{msg.content}</span>
+                  )}
                 </div>
               </div>
             );
@@ -387,9 +408,69 @@ export function ElaineChatPanel({
 
       {belowMessagesSlot}
 
+      {/* Pending attachment previews */}
+      {pendingAttachments.length > 0 && (
+        <div className="shrink-0 flex gap-2 flex-wrap border-t border-border/40 bg-background/80 px-3 pt-2 pb-1 backdrop-blur-sm">
+          {pendingAttachments.map((a) => (
+            <div
+              key={a.previewUrl}
+              className="relative h-14 w-14 shrink-0 rounded-lg overflow-hidden border border-border/50"
+            >
+              <img
+                src={a.previewUrl}
+                alt=""
+                className="h-full w-full object-cover"
+              />
+              {a.uploading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-background/60">
+                  <Loader2 className="h-4 w-4 animate-spin text-foreground" />
+                </div>
+              )}
+              {a.error && (
+                <div className="absolute inset-0 flex items-center justify-center bg-destructive/20">
+                  <X className="h-4 w-4 text-destructive" />
+                </div>
+              )}
+              {!a.uploading && (
+                <button
+                  type="button"
+                  onClick={() => handleRemoveAttachment(a.previewUrl)}
+                  className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-background/80 text-foreground hover:bg-background"
+                  aria-label="Remove attachment"
+                >
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="shrink-0 border-t border-border/60 bg-background/80 px-3 py-2.5 backdrop-blur-sm">
+        {/* Hidden file input for paperclip */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) void handleAddAttachment(file);
+          }}
+        />
         <div className="flex items-end gap-2">
           {composerLeftSlot}
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-[38px] w-[38px] shrink-0 rounded-xl"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isStreaming || pendingAttachments.length >= 5}
+            title="Attach an image"
+          >
+            <Paperclip className="h-4 w-4" />
+          </Button>
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -408,7 +489,11 @@ export function ElaineChatPanel({
             size="sm"
             className="h-[38px] w-[38px] shrink-0 rounded-xl p-0"
             onClick={() => void handleSend()}
-            disabled={!input.trim() || isStreaming}
+            disabled={
+              (!input.trim() && pendingAttachments.every((a) => !a.uploadedUrl)) ||
+              isStreaming ||
+              hasUploadingAttachments
+            }
           >
             <Send className="h-4 w-4" />
           </Button>

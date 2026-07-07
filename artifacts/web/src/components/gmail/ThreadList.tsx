@@ -1,7 +1,15 @@
-import { Star, Paperclip, ChevronLeft, ChevronRight, RefreshCw, Archive, Trash2, MailOpen, Mail } from "lucide-react";
+import { Star, Paperclip, ChevronLeft, ChevronRight, RefreshCw, Archive, Trash2, MailOpen, Mail, Columns2, PanelBottom, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ThreadSummary } from "@/hooks/use-gmail";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+export type LayoutMode = "none" | "vertical" | "horizontal";
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -27,10 +35,23 @@ function displayFrom(from: string): string {
   if (!from) return "(unknown)";
   const match = from.match(/^"?(.+?)"?\s*<.+>$/);
   if (match) return match[1].trim();
-  // bare email — shorten to local part
   const atIdx = from.indexOf("@");
   if (atIdx > 0) return from.slice(0, atIdx);
   return from;
+}
+
+// ── Layout toggle button ──────────────────────────────────────────────────────
+
+function LayoutIcon({ mode }: { mode: LayoutMode }) {
+  if (mode === "vertical") return <Columns2 className="w-4 h-4" />;
+  if (mode === "horizontal") return <PanelBottom className="w-4 h-4" />;
+  return (
+    <svg viewBox="0 0 16 16" className="w-4 h-4" fill="currentColor">
+      <rect x="1" y="3" width="14" height="2" rx="1" />
+      <rect x="1" y="7" width="14" height="2" rx="1" />
+      <rect x="1" y="11" width="14" height="2" rx="1" />
+    </svg>
+  );
 }
 
 // ── Row ───────────────────────────────────────────────────────────────────────
@@ -115,12 +136,10 @@ function ThreadRow({ thread, selected, isEven, onSelect, onStar, onArchive, onTr
 
       {/* Right: date (hidden on hover) + hover action buttons */}
       <div className="flex items-center gap-1 flex-shrink-0">
-        {/* Attachment icon — hidden on hover */}
         {thread.hasAttachment && (
           <Paperclip className="w-3.5 h-3.5 text-muted-foreground/60 group-hover:hidden" />
         )}
 
-        {/* Date — hidden on hover */}
         <span
           className={cn(
             "text-xs whitespace-nowrap group-hover:hidden",
@@ -130,7 +149,7 @@ function ThreadRow({ thread, selected, isEven, onSelect, onStar, onArchive, onTr
           {formatDate(thread.date)}
         </span>
 
-        {/* Hover actions — shown on hover */}
+        {/* Hover actions */}
         <div className="hidden group-hover:flex items-center gap-0.5">
           <button
             onClick={(e) => { e.stopPropagation(); onArchive(); }}
@@ -193,6 +212,8 @@ interface ThreadListProps {
   canPrevPage: boolean;
   onRefresh: () => void;
   labelName: string;
+  layoutMode: LayoutMode;
+  onLayoutChange: (mode: LayoutMode) => void;
 }
 
 export function ThreadList({
@@ -211,6 +232,8 @@ export function ThreadList({
   canPrevPage,
   onRefresh,
   labelName,
+  layoutMode,
+  onLayoutChange,
 }: ThreadListProps) {
   if (isError) {
     return (
@@ -252,6 +275,47 @@ export function ThreadList({
           >
             <ChevronRight className="w-4 h-4 text-muted-foreground" />
           </button>
+
+          {/* Layout toggle */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className={cn(
+                  "p-1.5 rounded transition-colors text-muted-foreground",
+                  layoutMode !== "none"
+                    ? "bg-primary/10 text-primary hover:bg-primary/20"
+                    : "hover:bg-muted",
+                )}
+                aria-label="Reading pane layout"
+                title="Reading pane"
+              >
+                <LayoutIcon mode={layoutMode} />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem
+                onClick={() => onLayoutChange("none")}
+                className={cn("gap-2", layoutMode === "none" && "text-primary font-medium")}
+              >
+                <Square className="w-4 h-4 flex-shrink-0" />
+                No split
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onLayoutChange("vertical")}
+                className={cn("gap-2", layoutMode === "vertical" && "text-primary font-medium")}
+              >
+                <Columns2 className="w-4 h-4 flex-shrink-0" />
+                Vertical split
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onLayoutChange("horizontal")}
+                className={cn("gap-2", layoutMode === "horizontal" && "text-primary font-medium")}
+              >
+                <PanelBottom className="w-4 h-4 flex-shrink-0" />
+                Horizontal split
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

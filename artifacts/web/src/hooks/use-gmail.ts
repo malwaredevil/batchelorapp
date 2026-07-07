@@ -2,6 +2,7 @@ import {
   useQuery,
   useMutation,
   useQueryClient,
+  useCallback,
   type UseQueryResult,
 } from "@tanstack/react-query";
 
@@ -250,6 +251,72 @@ export function useGmailDisconnect() {
       qc.invalidateQueries({ queryKey: ["gmail"] });
     },
   });
+}
+
+// ── Mark thread as read ────────────────────────────────────────────────────────
+// Optimistically marks the thread as read in the list cache immediately, then
+// fires parallel PATCH requests to remove UNREAD from each message on the server.
+
+export function useMarkThreadRead() {
+  const qc = useQueryClient();
+
+  return useCallback(
+    (threadId: string, unreadMessageIds: string[]) => {
+      if (unreadMessageIds.length === 0) return;
+
+      // Optimistic update 1 — thread list: mark thread row as read immediately
+      qc.setQueriesData(
+        { queryKey: ["gmail", "threads"] },
+        (old: { threads: ThreadSummary[]; nextPageToken: string | null } | undefined) => {
+          if (!old) return old;
+          return {
+            ...old,
+            threads: old.threads.map((t) =>
+              t.id === threadId ? { ...t, isUnread: false } : t,
+            ),
+          };
+        },
+      );
+
+      // Optimistic update 2 — thread detail: clear isUnread on each message
+      qc.setQueryData(
+        ["gmail", "thread", threadId],
+        (old: FullThread | undefined) => {
+          if (!old) return old;
+          const idSet = new Set(unreadMessageIds);
+          return {
+            ...old,
+            messages: old.messages.map((m) =>
+              idSet.has(m.id)
+                ? {
+                    ...m,
+                    isUnread: false,
+                    labelIds: m.labelIds.filter((l) => l !== "UNREAD"),
+                  }
+                : m,
+            ),
+          };
+        },
+      );
+
+      // Fire server calls in parallel, then sync the list once
+      Promise.all(
+        unreadMessageIds.map((id) =>
+          apiFetch<{ ok: boolean }>(`/messages/${id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ addLabelIds: [], removeLabelIds: ["UNREAD"] }),
+          }),
+        ),
+      )
+        .then(() => {
+          qc.invalidateQueries({ queryKey: ["gmail", "threads"] });
+        })
+        .catch(() => {
+          // Optimistic state stays; next refetch will reconcile
+        });
+    },
+    [qc],
+  );
 }
 
 // ── Attachment URL helper ─────────────────────────────────────────────────────

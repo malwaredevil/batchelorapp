@@ -47,6 +47,8 @@ import {
   type TripStatus,
   type TransportTo,
   type TripDocument,
+  useGenerateTripShareToken,
+  useRevokeTripShareToken,
   type TripPhoto,
   type PhotoType,
   type Reminder,
@@ -129,6 +131,9 @@ import {
   Mail,
   Plus,
   ExternalLink,
+  Share2,
+  Printer,
+  Copy,
   Camera,
   Bell,
   Image as ImageIcon,
@@ -184,6 +189,121 @@ import {
 } from "@/lib/weather-icons";
 import { TripLocationMap } from "@/components/TripLocationMap";
 import { DocTypeTrainingDialog } from "@/components/DocTypeTrainingDialog";
+
+// ─── ItineraryShareExportButtons ──────────────────────────────────────────────
+
+function ItineraryShareExportButtons({
+  tripId,
+  shareToken,
+}: {
+  tripId: number;
+  shareToken: string | null;
+}) {
+  const qc = useQueryClient();
+  const generateShare = useGenerateTripShareToken();
+  const revokeShare = useRevokeTripShareToken();
+  const [localToken, setLocalToken] = useState<string | null>(shareToken);
+
+  // keep localToken in sync if the trip data refreshes from the server
+  useEffect(() => {
+    setLocalToken(shareToken);
+  }, [shareToken]);
+
+  const shareUrl =
+    localToken != null
+      ? `${window.location.origin}/travels/trips/share/${localToken}`
+      : null;
+
+  const handleShare = () => {
+    if (localToken) {
+      // Already have a token — copy URL
+      navigator.clipboard
+        .writeText(shareUrl!)
+        .then(() => toast.success("Share link copied to clipboard"))
+        .catch(() => toast.error("Failed to copy link"));
+      return;
+    }
+    generateShare.mutate(tripId, {
+      onSuccess: (data) => {
+        setLocalToken(data.shareToken);
+        const url = `${window.location.origin}/travels/trips/share/${data.shareToken}`;
+        navigator.clipboard
+          .writeText(url)
+          .then(() => toast.success("Share link copied to clipboard"))
+          .catch(() => {});
+        qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
+      },
+      onError: () => toast.error("Failed to generate share link"),
+    });
+  };
+
+  const handleRevoke = () => {
+    revokeShare.mutate(tripId, {
+      onSuccess: () => {
+        setLocalToken(null);
+        toast.success("Share link revoked");
+        qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
+      },
+      onError: () => toast.error("Failed to revoke share link"),
+    });
+  };
+
+  const handlePrint = () => {
+    if (localToken) {
+      window.open(shareUrl!, "_blank");
+    } else {
+      generateShare.mutate(tripId, {
+        onSuccess: (data) => {
+          setLocalToken(data.shareToken);
+          const url = `${window.location.origin}/travels/trips/share/${data.shareToken}`;
+          window.open(url, "_blank");
+          qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
+        },
+        onError: () => toast.error("Failed to generate share link"),
+      });
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-1">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleShare}
+        disabled={generateShare.isPending}
+        title={localToken ? "Copy share link" : "Generate share link"}
+      >
+        {localToken ? (
+          <Copy className="w-4 h-4 mr-1.5" />
+        ) : (
+          <Share2 className="w-4 h-4 mr-1.5" />
+        )}
+        {localToken ? "Copy link" : "Share"}
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handlePrint}
+        disabled={generateShare.isPending}
+        title="Print / export itinerary"
+      >
+        <Printer className="w-4 h-4" />
+      </Button>
+      {localToken && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleRevoke}
+          disabled={revokeShare.isPending}
+          title="Revoke share link"
+          className="text-muted-foreground hover:text-destructive"
+        >
+          Revoke
+        </Button>
+      )}
+    </div>
+  );
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -3869,6 +3989,9 @@ export default function TripDetail({ id }: { id: number }) {
                                     />
                                     AI regenerate
                                   </Button>
+                                )}
+                                {localItinerary && (
+                                  <ItineraryShareExportButtons tripId={id} shareToken={trip.shareToken ?? null} />
                                 )}
                               </div>
                             </div>

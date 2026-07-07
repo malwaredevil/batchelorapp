@@ -45,6 +45,7 @@ export interface Trip {
   travelers?: string[] | null;
   theOneThing?: string[] | null;
   iconPhotoId?: number | null;
+  shareToken?: string | null;
   createdAt: string;
 }
 
@@ -241,6 +242,28 @@ export const getListTripsUrl = () => `/api/travels/trips`;
 export const listTrips = (options?: RequestInit): Promise<Trip[]> =>
   customFetch<Trip[]>(getListTripsUrl(), { ...options, method: "GET" });
 export const getListTripsQueryKey = () => [`/api/travels/trips`] as const;
+
+export const generateTripShareToken = (
+  id: number,
+  options?: RequestInit,
+): Promise<{ shareToken: string }> =>
+  customFetch<{ shareToken: string }>(`/api/travels/trips/${id}/share`, {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify({}),
+  });
+
+export const revokeTripShareToken = (
+  id: number,
+  options?: RequestInit,
+): Promise<void> =>
+  customFetch<void>(`/api/travels/trips/${id}/share`, {
+    ...options,
+    method: "DELETE",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify({ confirm: true }),
+  });
 
 export const getTripUrl = (id: number) => `/api/travels/trips/${id}`;
 export const getTrip = (id: number, options?: RequestInit): Promise<TripDetail> =>
@@ -708,6 +731,26 @@ export function useDeleteTrip<TError = unknown, TContext = unknown>(
   },
 ): UseMutationResult<void, TError, number, TContext> {
   const mutationFn: MutationFunction<void, number> = (id) => deleteTrip(id);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+export function useGenerateTripShareToken<TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<{ shareToken: string }, TError, number, TContext>;
+  },
+): UseMutationResult<{ shareToken: string }, TError, number, TContext> {
+  const mutationFn: MutationFunction<{ shareToken: string }, number> = (id) =>
+    generateTripShareToken(id);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+export function useRevokeTripShareToken<TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<void, TError, number, TContext>;
+  },
+): UseMutationResult<void, TError, number, TContext> {
+  const mutationFn: MutationFunction<void, number> = (id) =>
+    revokeTripShareToken(id);
   return useMutation({ mutationFn, ...options?.mutation });
 }
 

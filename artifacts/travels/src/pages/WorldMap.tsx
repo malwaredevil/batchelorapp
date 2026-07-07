@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -10,7 +10,7 @@ import {
   type WishlistItem,
   getListWishlistQueryKey,
 } from "@workspace/api-client-react";
-import { Globe, MapPin, LocateFixed } from "lucide-react";
+import { Globe, MapPin, LocateFixed, TrendingUp, Calendar, Flag } from "lucide-react";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 import { loadGoogleMaps, svgToMarkerContent } from "@/lib/google-maps-loader";
 
@@ -356,6 +356,33 @@ export default function WorldMap() {
   const totalMapped = mappedTrips.length + mappedWishlist.length;
   const totalAll = trips.length + wishlistItems.length;
 
+  // Stats derived from completed/booked trips
+  const completedTrips = useMemo(
+    () => trips.filter((t) => t.status === "completed"),
+    [trips],
+  );
+
+  const uniqueCountries = useMemo(() => {
+    const countries = new Set<string>();
+    completedTrips.forEach((t) => {
+      const parts = t.destination.split(",");
+      const country = (parts[parts.length - 1] ?? "").trim();
+      if (country) countries.add(country);
+    });
+    return countries.size;
+  }, [completedTrips]);
+
+  const totalNights = useMemo(() => {
+    return completedTrips.reduce((sum, t) => {
+      if (!t.startDate || !t.endDate) return sum;
+      const nights = Math.round(
+        (new Date(t.endDate).getTime() - new Date(t.startDate).getTime()) /
+          86400000,
+      );
+      return sum + Math.max(0, nights);
+    }, 0);
+  }, [completedTrips]);
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -417,6 +444,45 @@ export default function WorldMap() {
           </div>
         </div>
       </div>
+
+      {/* Stats bar */}
+      {!isLoading && completedTrips.length > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-card border border-border/50 rounded-xl p-3 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+              <Flag className="w-4 h-4 text-primary" />
+            </div>
+            <div>
+              <p className="text-xl font-bold text-foreground tabular-nums">{uniqueCountries}</p>
+              <p className="text-xs text-muted-foreground leading-tight">
+                {uniqueCountries === 1 ? "country" : "countries"}
+              </p>
+            </div>
+          </div>
+          <div className="bg-card border border-border/50 rounded-xl p-3 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+              <TrendingUp className="w-4 h-4 text-primary" />
+            </div>
+            <div>
+              <p className="text-xl font-bold text-foreground tabular-nums">{completedTrips.length}</p>
+              <p className="text-xs text-muted-foreground leading-tight">
+                {completedTrips.length === 1 ? "trip" : "trips"} completed
+              </p>
+            </div>
+          </div>
+          <div className="bg-card border border-border/50 rounded-xl p-3 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+              <Calendar className="w-4 h-4 text-primary" />
+            </div>
+            <div>
+              <p className="text-xl font-bold text-foreground tabular-nums">{totalNights}</p>
+              <p className="text-xs text-muted-foreground leading-tight">
+                {totalNights === 1 ? "night" : "nights"} abroad
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Map */}
       <div

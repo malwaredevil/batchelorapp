@@ -41,6 +41,7 @@ export const travelsTrips = pgTable(
     chatHistory: jsonb("chat_history"),
     todoList: jsonb("todo_list"),
     iconPhotoId: integer("icon_photo_id"),
+    shareToken: text("share_token"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

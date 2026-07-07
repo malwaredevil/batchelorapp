@@ -8,6 +8,7 @@ import {
   callModel,
   callModelWithSubagent,
   getModels,
+  getOpenRouterClient,
 } from "../../lib/ai-client";
 import { getTimeZone } from "../../lib/travels/google-maps";
 
@@ -508,6 +509,142 @@ Answer questions about ${trip.destination}: things to do, local food, customs, t
     .where(eq(travelsTrips.id, id));
 
   res.json({ role: "assistant", content: aiContent, history: updatedHistory });
+});
+
+// ── AI Trip Planner ───────────────────────────────────────────────────────────
+// POST /travels/trips/plan — stream a complete trip scaffold (title, destination,
+// dates, itinerary skeleton, packing hints, reminders) based on a free-form
+// natural-language prompt. Uses SSE so the client can show the response
+// building up incrementally before the user confirms and creates the trip.
+//
+// Must be registered BEFORE /:id routes so "plan" isn't captured as :id.
+
+const PlanTripBody = z.object({
+  prompt: z.string().min(1).max(2000),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  travellerCount: z.number().int().min(1).max(20).optional(),
+});
+
+router.post("/trips/plan", async (req, res) => {
+  const parse = PlanTripBody.safeParse(req.body);
+  if (!parse.success) {
+    res.status(400).json({ error: "Invalid request" });
+    return;
+  }
+  const { prompt, startDate, endDate, travellerCount } = parse.data;
+
+  const dateContext =
+    startDate && endDate
+      ? `The trip runs from ${startDate} to ${endDate}.`
+      : startDate
+        ? `The trip starts around ${startDate}.`
+        : "";
+  const countContext = travellerCount
+    ? `There are ${travellerCount} traveller(s).`
+    : "";
+
+  const systemPrompt = `You are a travel planning assistant. Given a free-form trip description, produce a complete, well-structured trip plan as a JSON object. Always return ONLY valid JSON — no markdown fences, no extra text.
+
+The JSON must match this shape exactly:
+{
+  "title": "Short memorable trip title",
+  "destination": "City, Country",
+  "status": "planning",
+  "travellerCount": 2,
+  "startDate": "YYYY-MM-DD or null",
+  "endDate": "YYYY-MM-DD or null",
+  "transportTo": "flew" | "train" | "drove" | null,
+  "notes": "2-3 sentence overview of the trip",
+  "theOneThing": ["The single most unmissable experience"],
+  "itinerary": {
+    "days": [
+      {
+        "date": "YYYY-MM-DD",
+        "title": "Day theme",
+        "activities": [
+          {
+            "time": "09:00",
+            "name": "Activity",
+            "description": "Practical 2-sentence description",
+            "proximity": "🚶 Walking",
+            "tip": "One insider tip"
+          }
+        ]
+      }
+    ]
+  },
+  "packingList": [
+    { "item": "Packing item", "packed": false }
+  ],
+  "reminders": [
+    { "title": "Book X", "daysBeforeTrip": 30 }
+  ]
+}
+
+Rules:
+- If dates are provided, generate one itinerary day per day of the trip (max 14 days).
+- If no dates, generate 3–5 sample days as a template.
+- packingList should have 8–12 relevant items for the destination and transport mode.
+- reminders should have 3–5 useful pre-trip tasks with daysBeforeTrip (e.g. 60, 30, 14, 7, 1).
+- Return ONLY the JSON object, nothing else.`;
+
+  const userMessage = `Plan this trip: ${prompt}${dateContext ? "\n" + dateContext : ""}${countContext ? "\n" + countContext : ""}`;
+
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  function sendEvent(event: string, data: unknown) {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  }
+
+  try {
+    const models = await getModels();
+    const client = getOpenRouterClient();
+
+    const stream = await client.chat.completions.create({
+      model: models.fastVision,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage },
+      ],
+      stream: true,
+      max_tokens: 3000,
+    } as Parameters<typeof client.chat.completions.create>[0]);
+
+    let fullText = "";
+    for await (const chunk of stream as AsyncIterable<{
+      choices: Array<{ delta?: { content?: string } }>;
+    }>) {
+      const text = chunk.choices[0]?.delta?.content ?? "";
+      if (text) {
+        fullText += text;
+        sendEvent("chunk", { text });
+      }
+    }
+
+    // Strip markdown fences if the model wrapped the JSON despite instructions
+    const cleaned = fullText
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/, "")
+      .trim();
+
+    try {
+      const scaffold = JSON.parse(cleaned) as unknown;
+      sendEvent("done", { scaffold });
+    } catch {
+      sendEvent("error", { message: "Could not parse trip plan" });
+    }
+  } catch (err) {
+    sendEvent("error", {
+      message: err instanceof Error ? err.message : "AI call failed",
+    });
+  }
+
+  res.end();
 });
 
 router.delete("/trips/:id/chat", async (req, res) => {

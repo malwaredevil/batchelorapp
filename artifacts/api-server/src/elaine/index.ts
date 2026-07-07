@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod/v4";
-import { and, eq, desc, isNull, count, inArray } from "drizzle-orm";
+import { and, eq, desc, isNull, count, inArray, sql } from "drizzle-orm";
 import type OpenAI from "openai";
 import {
   db,
@@ -96,7 +96,8 @@ const APP_IDS = ["travels", "pottery", "quilting", "hub", "elaine"] as const;
 type AppId = (typeof APP_IDS)[number];
 
 const ChatBody = z.object({
-  message: z.string().min(1).max(4000),
+  // Empty string is allowed when the user sends attachments only (no text).
+  message: z.string().max(4000),
   // Freeform description of what's currently on the user's screen — page
   // name plus any live/unsaved field values a page has chosen to publish via
   // usePageAssistantContext(). Never persisted; only used for this one call.
@@ -2452,14 +2453,62 @@ router.post("/attachments", attachmentUpload.single("file"), async (req, res) =>
 // ---------------------------------------------------------------------------
 
 // GET /conversations — list this user's named conversations, newest first.
-// Supports ?q= for server-side full-text search across title + message content.
+// Supports ?q= for server-side search across conversation title and all message content.
 // Each row includes a `preview` snippet (≤80 chars from the first user message).
 router.get("/conversations", async (req, res) => {
   const userId = req.session.userId!;
   const searchQuery = String(req.query["q"] ?? "").trim();
 
-  // Subquery: first user message text per conversation (used for preview + search).
-  // We fetch all needed data and compute preview in JS to stay Drizzle-compatible.
+  // When a search query is provided, first find matching conversation IDs via
+  // a DB-level ILIKE across both the conversation title and all message content.
+  let matchingConvIds: Set<number> | null = null;
+  if (searchQuery) {
+    const pattern = `%${searchQuery.replace(/%/g, "\\%").replace(/_/g, "\\_")}%`;
+    // Title matches
+    const titleMatches = await db
+      .select({ id: elaineHistoryConversations.id })
+      .from(elaineHistoryConversations)
+      .where(
+        and(
+          eq(elaineHistoryConversations.userId, userId),
+          sql`lower(${elaineHistoryConversations.title}) like lower(${pattern})`,
+        ),
+      );
+    // Message content matches
+    const contentMatches = await db
+      .select({ conversationId: elaineHistoryMessages.conversationId })
+      .from(elaineHistoryMessages)
+      .innerJoin(
+        elaineHistoryConversations,
+        eq(elaineHistoryMessages.conversationId, elaineHistoryConversations.id),
+      )
+      .where(
+        and(
+          eq(elaineHistoryConversations.userId, userId),
+          sql`lower(${elaineHistoryMessages.content}) like lower(${pattern})`,
+        ),
+      );
+    matchingConvIds = new Set([
+      ...titleMatches.map((r) => r.id),
+      ...contentMatches
+        .map((r) => r.conversationId)
+        .filter((id): id is number => id !== null),
+    ]);
+    // Short-circuit: no matches at all
+    if (matchingConvIds.size === 0) {
+      res.json([]);
+      return;
+    }
+  }
+
+  // Fetch all (or matching) conversations with message counts.
+  const baseWhere = matchingConvIds
+    ? and(
+        eq(elaineHistoryConversations.userId, userId),
+        inArray(elaineHistoryConversations.id, Array.from(matchingConvIds)),
+      )
+    : eq(elaineHistoryConversations.userId, userId);
+
   const rows = await db
     .select({
       id: elaineHistoryConversations.id,
@@ -2473,15 +2522,14 @@ router.get("/conversations", async (req, res) => {
       elaineHistoryMessages,
       eq(elaineHistoryMessages.conversationId, elaineHistoryConversations.id),
     )
-    .where(eq(elaineHistoryConversations.userId, userId))
+    .where(baseWhere)
     .groupBy(elaineHistoryConversations.id)
     .orderBy(desc(elaineHistoryConversations.updatedAt));
 
-  // Resolve preview snippets for each conversation in one batch query.
+  // Resolve preview snippets (first user message ≤80 chars) for each conversation.
   const convIds = rows.map((r) => r.id);
   const previewMap = new Map<number, string | null>();
   if (convIds.length > 0) {
-    // Fetch the earliest user message per conversation.
     const firstMsgs = await db
       .select({
         conversationId: elaineHistoryMessages.conversationId,
@@ -2496,7 +2544,6 @@ router.get("/conversations", async (req, res) => {
       )
       .orderBy(elaineHistoryMessages.createdAt);
 
-    // Keep only the first user message per conversation.
     for (const msg of firstMsgs) {
       if (msg.conversationId !== null && !previewMap.has(msg.conversationId)) {
         const snippet = msg.content.replace(/\s+/g, " ").trim().slice(0, 80);
@@ -2505,26 +2552,16 @@ router.get("/conversations", async (req, res) => {
     }
   }
 
-  let result = rows.map((r) => ({
-    id: r.id,
-    title: r.title,
-    createdAt: r.createdAt.toISOString(),
-    updatedAt: r.updatedAt.toISOString(),
-    messageCount: Number(r.messageCount),
-    preview: previewMap.get(r.id) ?? null,
-  }));
-
-  // Apply search filter if provided (title + preview snippet).
-  if (searchQuery) {
-    const q = searchQuery.toLowerCase();
-    result = result.filter(
-      (c) =>
-        c.title.toLowerCase().includes(q) ||
-        (c.preview?.toLowerCase().includes(q) ?? false),
-    );
-  }
-
-  res.json(result);
+  res.json(
+    rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+      messageCount: Number(r.messageCount),
+      preview: previewMap.get(r.id) ?? null,
+    })),
+  );
 });
 
 // POST /conversations — create a new named conversation.

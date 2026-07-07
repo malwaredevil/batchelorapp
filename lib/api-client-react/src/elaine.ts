@@ -29,6 +29,9 @@ export type ElaineAppId =
 export interface AssistantMessage {
   role: "user" | "assistant";
   content: string;
+  /** Public Supabase Storage URLs for images the user attached to this turn.
+   *  Only present on user messages; undefined/empty for assistant messages. */
+  attachmentUrls?: string[];
 }
 
 export type TravelActionType =
@@ -155,6 +158,8 @@ export interface AssistantChatResponse {
   actionConfirmationMode: ActionConfirmationMode;
   messages: AssistantMessage[];
   widgets?: ChatWidget[];
+  /** ID of the named conversation this turn was saved to. */
+  conversationId?: number;
 }
 
 export interface AssistantSettings {
@@ -226,7 +231,15 @@ function parseSseDataLines(rawEvent: string): string | null {
 }
 
 export async function streamElaineMessage(
-  body: { message: string; pageContext?: string; appId: ElaineAppId },
+  body: {
+    message: string;
+    pageContext?: string;
+    appId: ElaineAppId;
+    /** ID of the named conversation to continue. Omit to start a new one. */
+    conversationId?: number;
+    /** Public Supabase Storage URLs for images attached to this message. */
+    attachmentUrls?: string[];
+  },
   callbacks: AssistantChatStreamCallbacks = {},
   signal?: AbortSignal,
 ): Promise<AssistantChatResponse> {
@@ -477,6 +490,150 @@ export function useDeleteElaineMemoryItem(options?: {
   const mutationFn: MutationFunction<void, number> = (id) =>
     deleteElaineMemoryItemFn(id);
   return useMutation({ mutationFn, ...options?.mutation });
+}
+
+// ---------------------------------------------------------------------------
+// Conversation history — named, persistent conversations accessible from
+// the Elaine app's left sidebar. Separate from the rolling single-thread
+// `elaineConversations` table used by the floating widget.
+// ---------------------------------------------------------------------------
+
+export interface ConversationSummary {
+  id: number;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+}
+
+export interface ConversationMessage {
+  id: number;
+  role: "user" | "assistant";
+  content: string;
+  attachmentUrls: string[];
+  createdAt: string;
+}
+
+export const getListElaineConversationsQueryKey = () =>
+  [`/api/elaine/conversations`] as const;
+
+const listElaineConversationsFn = (
+  options?: RequestInit,
+): Promise<ConversationSummary[]> =>
+  customFetch<ConversationSummary[]>("/api/elaine/conversations", {
+    ...options,
+    method: "GET",
+  });
+
+export function useListElaineConversations<
+  TData = ConversationSummary[],
+  TError = unknown,
+>(options?: {
+  query?: UseQueryOptions<ConversationSummary[], TError, TData>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey =
+    queryOptions?.queryKey ?? getListElaineConversationsQueryKey();
+  const queryFn: QueryFunction<ConversationSummary[]> = ({ signal }) =>
+    listElaineConversationsFn({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    ConversationSummary[],
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const createElaineConversationFn = (): Promise<ConversationSummary> =>
+  customFetch<ConversationSummary>("/api/elaine/conversations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+
+export function useCreateElaineConversation(options?: {
+  mutation?: UseMutationOptions<ConversationSummary, unknown, void>;
+}) {
+  const mutationFn = () => createElaineConversationFn();
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const deleteElaineConversationFn = (id: number): Promise<void> =>
+  customFetch<void>(`/api/elaine/conversations/${id}`, { method: "DELETE" });
+
+export function useDeleteElaineConversation(options?: {
+  mutation?: UseMutationOptions<void, unknown, number>;
+}): UseMutationResult<void, unknown, number> {
+  const mutationFn: MutationFunction<void, number> = (id) =>
+    deleteElaineConversationFn(id);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+export const getGetElaineConversationMessagesQueryKey = (id: number) =>
+  [`/api/elaine/conversations`, id, `messages`] as const;
+
+const getElaineConversationMessagesFn = (
+  id: number,
+  options?: RequestInit,
+): Promise<ConversationMessage[]> =>
+  customFetch<ConversationMessage[]>(
+    `/api/elaine/conversations/${id}/messages`,
+    { ...options, method: "GET" },
+  );
+
+export function useGetElaineConversationMessages<
+  TData = ConversationMessage[],
+  TError = unknown,
+>(
+  id: number | null,
+  options?: {
+    query?: UseQueryOptions<ConversationMessage[], TError, TData>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey =
+    queryOptions?.queryKey ??
+    (id !== null
+      ? getGetElaineConversationMessagesQueryKey(id)
+      : (["disabled"] as const));
+  const queryFn: QueryFunction<ConversationMessage[]> = ({ signal }) =>
+    getElaineConversationMessagesFn(id!, { signal });
+  const queryOpts = {
+    queryKey,
+    queryFn,
+    enabled: id !== null,
+    ...queryOptions,
+  } as UseQueryOptions<ConversationMessage[], TError, TData> & {
+    queryKey: QueryKey;
+  };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+// ---------------------------------------------------------------------------
+// Attachment upload — images attached to Elaine chat messages.
+// Stored in the public `elaine-attachments` Supabase Storage bucket.
+// ---------------------------------------------------------------------------
+
+export async function uploadElaineAttachment(
+  file: File,
+): Promise<{ url: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch("/api/elaine/attachments", {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `Upload failed with status ${res.status}`);
+  }
+  return res.json() as Promise<{ url: string }>;
 }
 
 // ---------------------------------------------------------------------------

@@ -921,8 +921,26 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE travels_packing_items ENABLE ROW LEVEL SECURITY`,
   `CREATE INDEX IF NOT EXISTS travels_packing_items_list_id_idx ON travels_packing_items (list_id)`,
 
-  // Reusable named packing templates (household-scoped: any user can see and use
-  // any template, user_id is attribution only).
+  // ── Block Templates (reusable block library) ─────────────────────────────
+  // Household-shared (no per-user filter on reads). created_by_user_id is
+  // attribution metadata only, consistent with the rest of the quilting app.
+  `CREATE TABLE IF NOT EXISTS quilting_block_templates (
+    id                    SERIAL PRIMARY KEY,
+    created_by_user_id    INTEGER REFERENCES app_users(id) ON DELETE SET NULL,
+    name                  TEXT NOT NULL,
+    tags                  TEXT[] NOT NULL DEFAULT '{}',
+    grid_w                INTEGER NOT NULL DEFAULT 8,
+    grid_h                INTEGER NOT NULL DEFAULT 8,
+    cells                 TEXT[] NOT NULL DEFAULT '{}',
+    seams                 JSONB NOT NULL DEFAULT '[]'::jsonb,
+    block_size_inches     REAL,
+    seam_allowance_inches REAL,
+    thumbnail_svg         TEXT,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE quilting_block_templates ENABLE ROW LEVEL SECURITY`,
+
   `CREATE TABLE IF NOT EXISTS travels_packing_templates (
     id          SERIAL PRIMARY KEY,
     user_id     INTEGER NOT NULL,

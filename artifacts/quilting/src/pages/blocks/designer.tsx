@@ -43,6 +43,10 @@ import {
   ZoomOut,
   Check,
   Sliders,
+  BookmarkPlus,
+  Library,
+  Trash2 as Trash2Icon,
+  Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,6 +68,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -91,6 +102,12 @@ import {
 import type { QuiltingCategory } from "@workspace/api-client-react";
 import { TagSelector } from "@/components/tag-selector";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  useListBlockTemplates,
+  useCreateBlockTemplate,
+  useDeleteBlockTemplate,
+  type BlockTemplate,
+} from "@/lib/block-templates-api";
 import {
   parseCell,
   encodeXline,
@@ -3379,6 +3396,63 @@ export default function BlockDesigner() {
 
   const isSaving = createBlock.isPending || updateBlock.isPending;
 
+  // ── Block Library ──────────────────────────────────────────────────────────
+  const createTemplate = useCreateBlockTemplate();
+  const deleteTemplate = useDeleteBlockTemplate();
+  const { data: templates } = useListBlockTemplates();
+  const [saveToLibOpen, setSaveToLibOpen] = useState(false);
+  const [libBrowserOpen, setLibBrowserOpen] = useState(false);
+  const [libSaveName, setLibSaveName] = useState("");
+  const [libSaveTags, setLibSaveTags] = useState("");
+  const isSavingToLib = createTemplate.isPending;
+
+  function openSaveToLib() {
+    setLibSaveName(name.trim() || "Untitled block");
+    setLibSaveTags("");
+    setSaveToLibOpen(true);
+  }
+
+  function handleSaveToLibrary() {
+    const templateName = libSaveName.trim();
+    if (!templateName) {
+      toast.error("Please enter a name for the template.");
+      return;
+    }
+    const tags = libSaveTags
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    const svgEl = document.querySelector<SVGSVGElement>("[data-grid-export]");
+    let thumbnailSvg: string | null = null;
+    if (svgEl) {
+      const serializer = new XMLSerializer();
+      let svgStr = serializer.serializeToString(svgEl);
+      if (!svgStr.includes('xmlns='))
+        svgStr = svgStr.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+      if (svgStr.length < 400_000) thumbnailSvg = svgStr;
+    }
+    createTemplate.mutate(
+      {
+        name: templateName,
+        tags,
+        gridW,
+        gridH,
+        cells,
+        seams,
+        blockSizeInches: blockSizeInches ?? null,
+        seamAllowanceInches: seamAllowanceInches ?? null,
+        thumbnailSvg,
+      },
+      {
+        onSuccess: () => {
+          setSaveToLibOpen(false);
+          toast.success(`"${templateName}" saved to block library`);
+        },
+        onError: () => toast.error("Failed to save to library"),
+      },
+    );
+  }
+
   async function handleExport(format: "png" | "jpeg" | "gif" | "pdf") {
     const svgEl = document.querySelector<SVGSVGElement>("[data-grid-export]");
     if (!svgEl) {
@@ -3732,15 +3806,36 @@ export default function BlockDesigner() {
           className="h-8 max-w-[220px] text-sm font-semibold"
           placeholder="Block name…"
         />
-        <Button
-          onClick={handleSave}
-          disabled={isSaving}
-          size="sm"
-          className="ml-auto h-8"
-        >
-          <Save className="mr-1.5 h-3.5 w-3.5" />
-          {isNew ? "Save" : "Update"}
-        </Button>
+        <div className="ml-auto flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5"
+            onClick={openSaveToLib}
+            title="Save current design as a reusable library template"
+          >
+            <BookmarkPlus className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Save to Library</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setLibBrowserOpen(true)}
+            title="Browse block library"
+          >
+            <Library className="h-4 w-4" />
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={isSaving}
+            size="sm"
+            className="h-8"
+          >
+            <Save className="mr-1.5 h-3.5 w-3.5" />
+            {isNew ? "Save" : "Update"}
+          </Button>
+        </div>
       </div>
 
       {/* ── Block dimensions bar ─────────────────────────────────────── */}
@@ -5455,6 +5550,135 @@ export default function BlockDesigner() {
           </div>
         </div>
       )}
+
+      {/* ── Save to Library dialog ───────────────────────────────────── */}
+      <Dialog open={saveToLibOpen} onOpenChange={setSaveToLibOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Save to Block Library</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="lib-name">Template name</Label>
+              <Input
+                id="lib-name"
+                value={libSaveName}
+                onChange={(e) => setLibSaveName(e.target.value)}
+                placeholder="e.g. Flying Geese"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSaveToLibrary();
+                }}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="lib-tags" className="flex items-center gap-1">
+                <Tag className="h-3.5 w-3.5" />
+                Tags
+                <span className="text-xs font-normal text-muted-foreground">
+                  (comma-separated)
+                </span>
+              </Label>
+              <Input
+                id="lib-tags"
+                value={libSaveTags}
+                onChange={(e) => setLibSaveTags(e.target.value)}
+                placeholder="e.g. traditional, geese, triangle"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Saves a reusable snapshot of the current design ({gridW}×{gridH})
+              to the shared block library. It won{"'"}t affect this block.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setSaveToLibOpen(false)}
+              disabled={isSavingToLib}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveToLibrary} disabled={isSavingToLib}>
+              {isSavingToLib ? "Saving…" : "Save to Library"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Library browser dialog ───────────────────────────────────── */}
+      <Dialog open={libBrowserOpen} onOpenChange={setLibBrowserOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Block Library</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 py-2">
+            {(!templates || templates.length === 0) && (
+              <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
+                <Library className="mx-auto mb-2 h-8 w-8 text-muted-foreground/50" />
+                <p className="text-sm text-muted-foreground">
+                  No templates saved yet.
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Use <span className="font-medium">Save to Library</span> to
+                  save the current design as a reusable template.
+                </p>
+              </div>
+            )}
+            {templates && templates.length > 0 && (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 max-h-[380px] overflow-y-auto pr-1">
+                {templates.map((tpl: BlockTemplate) => (
+                  <div
+                    key={tpl.id}
+                    className="group relative flex flex-col gap-2 rounded-lg border border-border p-3"
+                  >
+                    <div className="flex aspect-square items-center justify-center overflow-hidden rounded bg-muted/30">
+                      {tpl.thumbnailSvg ? (
+                        <span
+                          className="h-full w-full"
+                          dangerouslySetInnerHTML={{
+                            __html: tpl.thumbnailSvg,
+                          }}
+                        />
+                      ) : (
+                        <Library className="h-8 w-8 text-muted-foreground/30" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{tpl.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {tpl.gridW}×{tpl.gridH}
+                      </p>
+                      {tpl.tags.length > 0 && (
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground/70">
+                          {tpl.tags.join(", ")}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      className="absolute right-1.5 top-1.5 hidden rounded-full bg-destructive/90 p-1 text-white hover:bg-destructive group-hover:flex"
+                      onClick={() => {
+                        if (!confirm(`Delete template "${tpl.name}"?`)) return;
+                        deleteTemplate.mutate(tpl.id, {
+                          onError: () =>
+                            toast.error("Failed to delete template"),
+                        });
+                      }}
+                      title="Delete template"
+                    >
+                      <Trash2Icon className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLibBrowserOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -237,11 +237,10 @@ export function ThreadView({
   // Auto-expand the latest message + any unread ones
   useEffect(() => {
     if (!thread?.messages.length) return;
+    const msgs = thread.messages;
     const toExpand = new Set<string>();
-    // Always expand latest
-    toExpand.add(thread!.messages[thread!.messages.length - 1]!.id);
-    // Also expand unread
-    for (const m of safeThread.messages) {
+    toExpand.add(msgs[msgs.length - 1]!.id);
+    for (const m of msgs) {
       if (m.isUnread) toExpand.add(m.id);
     }
     setExpandedIds(toExpand);

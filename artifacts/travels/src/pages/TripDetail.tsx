@@ -249,13 +249,14 @@ function ItineraryShareExportButtons({
   };
 
   const handlePrint = () => {
+    // Open with ?print=1 so the share page auto-triggers window.print() on load
     if (localToken) {
-      window.open(shareUrl!, "_blank");
+      window.open(shareUrl + "?print=1", "_blank");
     } else {
       generateShare.mutate(tripId, {
         onSuccess: (data) => {
           setLocalToken(data.shareToken);
-          const url = `${window.location.origin}/travels/trips/share/${data.shareToken}`;
+          const url = `${window.location.origin}/travels/trips/share/${data.shareToken}?print=1`;
           window.open(url, "_blank");
           qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
         },

@@ -174,11 +174,93 @@ function MapPanel({
     let markers: google.maps.marker.AdvancedMarkerElement[] = [];
     let arcs: google.maps.Polyline[] = [];
     let animInterval: ReturnType<typeof setInterval> | null = null;
+    let dataLayer: google.maps.Data | null = null;
     let infoWindow: google.maps.InfoWindow | null = null;
 
     try {
       const { AdvancedMarkerElement } = google.maps.marker;
       infoWindow = new google.maps.InfoWindow({ maxWidth: 260 });
+
+      // ── Pulse CSS (injected once per document) ──────────────────────────────
+      const PULSE_STYLE_ID = "travels-map-pulse-style";
+      if (!document.getElementById(PULSE_STYLE_ID)) {
+        const styleEl = document.createElement("style");
+        styleEl.id = PULSE_STYLE_ID;
+        styleEl.textContent = `
+          @keyframes map-pulse {
+            0%   { transform: scale(1);   opacity: 0.55; }
+            70%  { transform: scale(2.6); opacity: 0;    }
+            100% { transform: scale(2.6); opacity: 0;    }
+          }
+          .map-pulse-ring {
+            width: 18px; height: 18px; border-radius: 50%;
+            background: rgba(37,99,235,0.4);
+            animation: map-pulse 2.2s ease-out infinite;
+            pointer-events: none;
+          }
+        `;
+        document.head.appendChild(styleEl);
+      }
+
+      // ── Country visit counts for polygon fills ──────────────────────────────
+      // Extract the last comma-separated token from the destination as the
+      // country name; normalise to lower-case for fuzzy matching.
+      const visitedCountryNames = new Set(
+        trips
+          .filter((t) => t.status === "completed" || t.status === "booked")
+          .map((t) => {
+            const parts = t.destination.split(",");
+            return (parts[parts.length - 1] ?? "").trim().toLowerCase();
+          })
+          .filter(Boolean),
+      );
+
+      if (visitedCountryNames.size > 0) {
+        dataLayer = new google.maps.Data({ map });
+        // Natural Earth 1:110m world boundaries (~1.1 MB) — loaded once, cached
+        // by the browser on repeat visits.
+        dataLayer.loadGeoJson(
+          "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson",
+          {},
+          () => {
+            dataLayer!.setStyle((feature) => {
+              const name = String(
+                feature.getProperty("NAME") ?? "",
+              ).toLowerCase();
+              const nameLong = String(
+                feature.getProperty("NAME_LONG") ?? "",
+              ).toLowerCase();
+              const isVisited =
+                visitedCountryNames.has(name) ||
+                visitedCountryNames.has(nameLong) ||
+                [...visitedCountryNames].some(
+                  (v) =>
+                    name.includes(v) ||
+                    v.includes(name) ||
+                    nameLong.includes(v),
+                );
+              return {
+                fillColor: "#2563eb",
+                fillOpacity: isVisited ? 0.1 : 0,
+                strokeWeight: isVisited ? 1 : 0,
+                strokeColor: "#2563eb",
+                strokeOpacity: isVisited ? 0.25 : 0,
+                clickable: false,
+              };
+            });
+          },
+        );
+      }
+
+      // ── Multi-visit location counts ─────────────────────────────────────────
+      // Key by lat/lng rounded to 3 dp (~110 m precision) to group co-located trips.
+      const visitCount = new Map<string, number>();
+      trips
+        .filter((t) => t.lat != null && t.lng != null)
+        .forEach((t) => {
+          const key = `${Math.round(t.lat! * 1000)},${Math.round(t.lng! * 1000)}`;
+          visitCount.set(key, (visitCount.get(key) ?? 0) + 1);
+        });
 
       const attachPopupNav = (win: google.maps.InfoWindow) => {
         const listener = google.maps.event.addListener(win, "domready", () => {
@@ -196,12 +278,29 @@ function MapPanel({
       };
       const domReadyListener = attachPopupNav(infoWindow);
 
-      // Trip markers — only those with a computable map status
+      // ── Trip markers — only those with a computable map status ───────────────
       trips
         .filter((t) => t.lat != null && t.lng != null)
         .forEach((trip) => {
           const mapStatus = getMapStatus(trip);
           if (!mapStatus) return; // planning/active with no end date → skip
+
+          const posKey = `${Math.round(trip.lat! * 1000)},${Math.round(trip.lng! * 1000)}`;
+          const visits = visitCount.get(posKey) ?? 1;
+
+          // Pulse ring for multi-visit destinations
+          if (visits > 1) {
+            const ringEl = document.createElement("div");
+            ringEl.className = "map-pulse-ring";
+            const pulseMarker = new AdvancedMarkerElement({
+              map,
+              position: { lat: trip.lat!, lng: trip.lng! },
+              content: ringEl,
+              zIndex: 0,
+            });
+            markers.push(pulseMarker);
+          }
+
           const content = svgToMarkerContent(
             mapStatus === "wishlist"
               ? makeStarSvg(MAP_COLORS.wishlist)
@@ -238,13 +337,13 @@ function MapPanel({
           markers.push(marker);
         });
 
-      // ── Animated geodesic arcs between consecutive completed trips ──────────
-      // Sort completed trips with coords chronologically, then connect each
-      // adjacent pair with an animated dashed polyline.
+      // ── Animated geodesic arcs between consecutive completed/booked trips ────
+      // Sort completed AND booked trips with coords chronologically, then
+      // connect each adjacent pair with an animated dashed polyline.
       const completedWithCoords = trips
         .filter(
           (t) =>
-            t.status === "completed" &&
+            (t.status === "completed" || t.status === "booked") &&
             t.lat != null &&
             t.lng != null &&
             t.startDate,
@@ -332,6 +431,7 @@ function MapPanel({
         if (animInterval != null) clearInterval(animInterval);
         arcs.forEach((a) => a.setMap(null));
         arcs = [];
+        dataLayer?.setMap(null);
         markers.forEach((m) => (m.map = null));
         markers = [];
         google.maps.event.removeListener(domReadyListener);
@@ -344,6 +444,7 @@ function MapPanel({
       return () => {
         if (animInterval != null) clearInterval(animInterval);
         arcs.forEach((a) => a.setMap(null));
+        dataLayer?.setMap(null);
         markers.forEach((m) => (m.map = null));
         infoWindow?.close();
       };

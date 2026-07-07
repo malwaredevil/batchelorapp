@@ -140,10 +140,16 @@ export interface ThreadListParams {
   maxResults?: number;
 }
 
+export interface ThreadListResponse {
+  threads: ThreadSummary[];
+  nextPageToken: string | null;
+  resultSizeEstimate: number | null;
+}
+
 export function useThreadList(
   params: ThreadListParams,
   enabled = true,
-): UseQueryResult<{ threads: ThreadSummary[]; nextPageToken: string | null }> {
+): UseQueryResult<ThreadListResponse> {
   const queryParams = new URLSearchParams();
   if (params.labelIds?.length) queryParams.set("labelIds", params.labelIds.join(","));
   if (params.q) queryParams.set("q", params.q);
@@ -153,7 +159,7 @@ export function useThreadList(
   return useQuery({
     queryKey: ["gmail", "threads", params],
     queryFn: () =>
-      apiFetch<{ threads: ThreadSummary[]; nextPageToken: string | null }>(
+      apiFetch<ThreadListResponse>(
         `/threads?${queryParams.toString()}`,
       ),
     staleTime: 30_000,
@@ -242,6 +248,53 @@ export function useGmailUntrash() {
   });
 }
 
+export function useBulkModify() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      messageIds,
+      addLabelIds,
+      removeLabelIds,
+    }: {
+      messageIds: string[];
+      addLabelIds?: string[];
+      removeLabelIds?: string[];
+    }) => {
+      await Promise.all(
+        messageIds.map((id) =>
+          apiFetch<{ ok: boolean }>(`/messages/${id}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              addLabelIds: addLabelIds ?? [],
+              removeLabelIds: removeLabelIds ?? [],
+            }),
+          }),
+        ),
+      );
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["gmail", "threads"] });
+      qc.invalidateQueries({ queryKey: ["gmail", "thread"] });
+    },
+  });
+}
+
+export function useBulkTrash() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (messageIds: string[]) => {
+      await Promise.all(
+        messageIds.map((id) =>
+          apiFetch<{ ok: boolean }>(`/messages/${id}/trash`, { method: "POST" }),
+        ),
+      );
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["gmail", "threads"] });
+    },
+  });
+}
+
 export function useGmailDisconnect() {
   const qc = useQueryClient();
   return useMutation({
@@ -267,7 +320,7 @@ export function useMarkThreadRead() {
       // Optimistic update 1 — thread list: mark thread row as read immediately
       qc.setQueriesData(
         { queryKey: ["gmail", "threads"] },
-        (old: { threads: ThreadSummary[]; nextPageToken: string | null } | undefined) => {
+        (old: ThreadListResponse | undefined) => {
           if (!old) return old;
           return {
             ...old,

@@ -16,6 +16,7 @@ import {
   useGmailModify,
   useGmailTrash,
   useGmailDisconnect,
+  useMarkThreadRead,
   type ThreadSummary,
   type ThreadMessage,
   type ComposeParams,
@@ -128,6 +129,17 @@ function GmailPage() {
   const modify = useGmailModify();
   const trash = useGmailTrash();
   const disconnect = useGmailDisconnect();
+  const markThreadRead = useMarkThreadRead();
+
+  // Auto-mark thread as read when it loads
+  useEffect(() => {
+    if (!threadData || !selectedThreadId) return;
+    const unreadIds = threadData.messages
+      .filter((m) => m.isUnread)
+      .map((m) => m.id);
+    if (unreadIds.length === 0) return;
+    markThreadRead(selectedThreadId, unreadIds);
+  }, [threadData?.id, selectedThreadId, markThreadRead]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 

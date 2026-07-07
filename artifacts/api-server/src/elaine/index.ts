@@ -2437,7 +2437,7 @@ EXPERT ADVICE: For genuine expertise/advice/recommendation questions — a judgm
 
 LIVE MAPS DATA: You also have five Google Maps-backed tools for real, current data instead of guessing — prefer these over web_search when they apply, since they return structured, accurate data rather than a text summary. get_weather_forecast gives a real multi-day forecast for a place (use it for "what's the weather", packing-for-climate, or rain-risk questions). find_nearby_places gives real restaurants/attractions/hotels/etc. with ratings (use it for recommendations or "what's near X"). get_route_info gives real distance/time between two places for a given travel mode (use it for "how far"/"how long to get there" questions). get_air_quality gives real current AQI/category/dominant pollutant (use it for pollution/smog questions or when giving packing/health advice for a destination). get_pollen_forecast gives real grass/tree/weed pollen categories (use it for allergy/hay-fever questions or packing advice when someone has allergies). When someone asks "what should I pack" for a trip, proactively check weather, and check air quality/pollen too if it's relevant (long trip, known allergy mentioned, or the destination is known for pollution) rather than only guessing from general knowledge. All five need real lat/lng — pull coordinates from the on-screen state above (trip/destination coordinates) or from a place returned by find_nearby_places; never invent coordinates. If you don't have any usable coordinates on screen, ask the user which trip/destination they mean rather than guessing.
 
-FORMATTING: Your visible replies are shown as plain text in a chat bubble — there is no markdown renderer on the other end. Never use markdown syntax: no **bold**, no *italics*, no # headers, no markdown bullet/dash lists, no backtick code formatting. Any of these will show up as literal stray asterisks/hashes/dashes to the user instead of formatting. When you need structure (e.g. a multi-day forecast or a list of options), write it as plain sentences or simple numbered lines like "1. ..." / "2. ..." separated by line breaks — never asterisks or dashes as bullet markers.
+FORMATTING: Your visible replies are rendered in a chat bubble with a markdown renderer. Use markdown naturally to make replies easier to read, but keep it light — this is a chat bubble, not a document. Good uses: **bold** for key terms or place names, bullet lists (- item) for 3+ items, numbered lists (1. step) for instructions, ## for a section heading only when the reply is genuinely multi-section. Do not use headers for short replies. Do not use markdown for a single sentence or two — plain prose is fine. Never use backtick code blocks. When you call a weather, places, air-quality, or pollen tool and it succeeds, a rich visual card is automatically shown below your reply — so in that case keep your reply text very short (1–2 sentences summarising the key point) rather than spelling out all the data again in text.
 
 Keep replies concise and easy to read in a chat bubble.`;
 
@@ -2749,19 +2749,26 @@ Keep replies concise and easy to read in a chat bubble.`;
                 parsed.data.lat,
                 parsed.data.lng,
               );
-              resultText =
-                forecast.length > 0
-                  ? `Forecast for ${parsed.data.locationName}:\n` +
-                    forecast
-                      .map(
-                        (d) =>
-                          `${d.date}: ${d.conditionDescription}, ${d.minTempC ?? "?"}–${d.maxTempC ?? "?"}°C` +
-                          (d.precipitationChancePercent != null
-                            ? `, ${d.precipitationChancePercent}% chance of rain`
-                            : ""),
-                      )
-                      .join("\n")
-                  : `No forecast data available for ${parsed.data.locationName}.`;
+              if (forecast.length > 0) {
+                resultText =
+                  `Forecast for ${parsed.data.locationName}:\n` +
+                  forecast
+                    .map(
+                      (d) =>
+                        `${d.date}: ${d.conditionDescription}, ${d.minTempC ?? "?"}–${d.maxTempC ?? "?"}°C` +
+                        (d.precipitationChancePercent != null
+                          ? `, ${d.precipitationChancePercent}% chance of rain`
+                          : ""),
+                    )
+                    .join("\n");
+                sendEvent("widget", {
+                  type: "weather",
+                  locationName: parsed.data.locationName,
+                  days: forecast,
+                });
+              } else {
+                resultText = `No forecast data available for ${parsed.data.locationName}.`;
+              }
             }
           } else if (call.name === FIND_NEARBY_PLACES_TOOL_NAME) {
             const parsed = FindNearbyPlacesToolPayload.safeParse(
@@ -2775,15 +2782,21 @@ Keep replies concise and easy to read in a chat bubble.`;
                 parsed.data.lat,
                 parsed.data.lng,
               );
-              resultText =
-                places.length > 0
-                  ? places
-                      .map(
-                        (p) =>
-                          `${p.name} — ${p.address}${p.rating != null ? ` (${p.rating}★, ${p.userRatingCount ?? 0} ratings)` : ""}`,
-                      )
-                      .join("\n")
-                  : "No places found for that search.";
+              if (places.length > 0) {
+                resultText = places
+                  .map(
+                    (p) =>
+                      `${p.name} — ${p.address}${p.rating != null ? ` (${p.rating}★, ${p.userRatingCount ?? 0} ratings)` : ""}`,
+                  )
+                  .join("\n");
+                sendEvent("widget", {
+                  type: "places",
+                  query: parsed.data.query,
+                  places,
+                });
+              } else {
+                resultText = "No places found for that search.";
+              }
             }
           } else if (call.name === GET_ROUTE_INFO_TOOL_NAME) {
             const parsed = GetRouteInfoToolPayload.safeParse(
@@ -2816,9 +2829,20 @@ Keep replies concise and easy to read in a chat bubble.`;
                 parsed.data.lat,
                 parsed.data.lng,
               );
-              resultText = airQuality
-                ? `Air quality in ${parsed.data.locationName}: Universal AQI ${airQuality.aqi} (${airQuality.category}), dominant pollutant ${airQuality.dominantPollutant}.`
-                : `No air quality data available for ${parsed.data.locationName}.`;
+              if (airQuality) {
+                resultText = `Air quality in ${parsed.data.locationName}: Universal AQI ${airQuality.aqi} (${airQuality.category}), dominant pollutant ${airQuality.dominantPollutant}.`;
+                sendEvent("widget", {
+                  type: "air_quality",
+                  data: {
+                    aqi: airQuality.aqi,
+                    category: airQuality.category,
+                    dominantPollutant: airQuality.dominantPollutant,
+                    locationName: parsed.data.locationName,
+                  },
+                });
+              } else {
+                resultText = `No air quality data available for ${parsed.data.locationName}.`;
+              }
             }
           } else if (call.name === GET_POLLEN_FORECAST_TOOL_NAME) {
             const parsed = GetPollenForecastToolPayload.safeParse(
@@ -2832,12 +2856,24 @@ Keep replies concise and easy to read in a chat bubble.`;
                 parsed.data.lat,
                 parsed.data.lng,
               );
-              resultText = pollen
-                ? `Pollen forecast for ${parsed.data.locationName} (${pollen.date}): overall ${pollen.overallCategory}. ` +
+              if (pollen) {
+                resultText =
+                  `Pollen forecast for ${parsed.data.locationName} (${pollen.date}): overall ${pollen.overallCategory}. ` +
                   pollen.types
                     .map((t) => `${t.displayName}: ${t.category}`)
-                    .join(", ")
-                : `No pollen data available for ${parsed.data.locationName}.`;
+                    .join(", ");
+                sendEvent("widget", {
+                  type: "pollen",
+                  data: {
+                    date: pollen.date,
+                    overallCategory: pollen.overallCategory,
+                    locationName: parsed.data.locationName,
+                    types: pollen.types,
+                  },
+                });
+              } else {
+                resultText = `No pollen data available for ${parsed.data.locationName}.`;
+              }
             }
           } else {
             resultText = "Unsupported tool.";

@@ -40,11 +40,14 @@ function AppearanceCard() {
     update.mutate({ data: { themePreference: next } });
   }
 
-  const options: { value: "light" | "dark"; label: string; icon: typeof Sun }[] =
-    [
-      { value: "light", label: "Light", icon: Sun },
-      { value: "dark", label: "Dark", icon: Moon },
-    ];
+  const options: {
+    value: "light" | "dark";
+    label: string;
+    icon: typeof Sun;
+  }[] = [
+    { value: "light", label: "Light", icon: Sun },
+    { value: "dark", label: "Dark", icon: Moon },
+  ];
 
   return (
     <div className="rounded-2xl border border-card-border bg-card p-6">
@@ -112,8 +115,8 @@ export default function Settings() {
               Global configuration
             </h2>
             <p className="mb-4 text-sm text-muted-foreground">
-              Models, timeouts, feature toggles, and thresholds across every
-              app live on your account page.
+              Models, timeouts, feature toggles, and thresholds across every app
+              live on your account page.
             </p>
             <button
               type="button"

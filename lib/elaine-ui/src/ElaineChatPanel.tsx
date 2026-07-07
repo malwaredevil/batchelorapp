@@ -159,7 +159,11 @@ export function ElaineChatPanel({
           const { text, citations } = parseMessageCitations(msg.content);
           return (
             <div key={i} className="flex gap-2.5 justify-start">
-              <ElaineAvatar size={avatarSize} className="mt-0.5" animated={false} />
+              <ElaineAvatar
+                size={avatarSize}
+                className="mt-0.5"
+                animated={false}
+              />
               <div className={`${bubbleWidthClass} flex flex-col gap-1.5`}>
                 <div className="whitespace-pre-wrap rounded-2xl rounded-tl-sm bg-muted px-3.5 py-2.5 text-sm leading-relaxed text-foreground">
                   <MessageText text={text} citations={citations} />
@@ -197,7 +201,11 @@ export function ElaineChatPanel({
 
         {isStreaming && (
           <div className="flex gap-2.5 justify-start">
-            <ElaineAvatar size={avatarSize} className="mt-0.5" animated={false} />
+            <ElaineAvatar
+              size={avatarSize}
+              className="mt-0.5"
+              animated={false}
+            />
             {streamingContent ? (
               <div
                 className={`${bubbleWidthClass} whitespace-pre-wrap rounded-2xl rounded-tl-sm bg-muted px-3.5 py-2.5 text-sm leading-relaxed text-foreground`}

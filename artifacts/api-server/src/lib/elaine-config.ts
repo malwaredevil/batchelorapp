@@ -142,11 +142,17 @@ function mergeModels(stored: unknown): ExtraModelsConfig {
 }
 
 function mergeTimeouts(stored: unknown): TimeoutsConfig {
-  return { ...DEFAULT_TIMEOUTS, ...((stored ?? {}) as Partial<TimeoutsConfig>) };
+  return {
+    ...DEFAULT_TIMEOUTS,
+    ...((stored ?? {}) as Partial<TimeoutsConfig>),
+  };
 }
 
 function mergeFeatures(stored: unknown): FeaturesConfig {
-  return { ...DEFAULT_FEATURES, ...((stored ?? {}) as Partial<FeaturesConfig>) };
+  return {
+    ...DEFAULT_FEATURES,
+    ...((stored ?? {}) as Partial<FeaturesConfig>),
+  };
 }
 
 function mergeThresholds(stored: unknown): ThresholdsConfig {

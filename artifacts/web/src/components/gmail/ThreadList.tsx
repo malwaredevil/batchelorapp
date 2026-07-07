@@ -1,4 +1,4 @@
-import { Star, Paperclip, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { Star, Paperclip, ChevronLeft, ChevronRight, RefreshCw, Archive, Trash2, MailOpen, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ThreadSummary } from "@/hooks/use-gmail";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,9 +40,12 @@ interface ThreadRowProps {
   selected: boolean;
   onSelect: () => void;
   onStar: () => void;
+  onArchive: () => void;
+  onTrash: () => void;
+  onToggleRead: () => void;
 }
 
-function ThreadRow({ thread, selected, onSelect, onStar }: ThreadRowProps) {
+function ThreadRow({ thread, selected, onSelect, onStar, onArchive, onTrash, onToggleRead }: ThreadRowProps) {
   return (
     <div
       onClick={onSelect}
@@ -109,19 +112,50 @@ function ThreadRow({ thread, selected, onSelect, onStar }: ThreadRowProps) {
         </span>
       </div>
 
-      {/* Right: attachment + date */}
-      <div className="flex items-center gap-1.5 flex-shrink-0">
+      {/* Right: date (hidden on hover) + hover action buttons */}
+      <div className="flex items-center gap-1 flex-shrink-0">
+        {/* Attachment icon — hidden on hover */}
         {thread.hasAttachment && (
-          <Paperclip className="w-3.5 h-3.5 text-muted-foreground/60" />
+          <Paperclip className="w-3.5 h-3.5 text-muted-foreground/60 group-hover:hidden" />
         )}
+
+        {/* Date — hidden on hover */}
         <span
           className={cn(
-            "text-xs whitespace-nowrap",
+            "text-xs whitespace-nowrap group-hover:hidden",
             thread.isUnread ? "font-semibold text-foreground" : "text-muted-foreground",
           )}
         >
           {formatDate(thread.date)}
         </span>
+
+        {/* Hover actions — shown on hover */}
+        <div className="hidden group-hover:flex items-center gap-0.5">
+          <button
+            onClick={(e) => { e.stopPropagation(); onArchive(); }}
+            title="Archive"
+            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Archive className="w-4 h-4" />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onTrash(); }}
+            title="Delete"
+            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-red-500 transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleRead(); }}
+            title={thread.isUnread ? "Mark as read" : "Mark as unread"}
+            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {thread.isUnread
+              ? <MailOpen className="w-4 h-4" />
+              : <Mail className="w-4 h-4" />
+            }
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -147,6 +181,9 @@ interface ThreadListProps {
   selectedId: string | null;
   onSelect: (id: string) => void;
   onStar: (thread: ThreadSummary) => void;
+  onArchive: (thread: ThreadSummary) => void;
+  onTrash: (thread: ThreadSummary) => void;
+  onToggleRead: (thread: ThreadSummary) => void;
   isLoading: boolean;
   isError: boolean;
   nextPageToken: string | null;
@@ -162,6 +199,9 @@ export function ThreadList({
   selectedId,
   onSelect,
   onStar,
+  onArchive,
+  onTrash,
+  onToggleRead,
   isLoading,
   isError,
   nextPageToken,
@@ -230,6 +270,9 @@ export function ThreadList({
               selected={t.id === selectedId}
               onSelect={() => onSelect(t.id)}
               onStar={() => onStar(t)}
+              onArchive={() => onArchive(t)}
+              onTrash={() => onTrash(t)}
+              onToggleRead={() => onToggleRead(t)}
             />
           ))
         )}

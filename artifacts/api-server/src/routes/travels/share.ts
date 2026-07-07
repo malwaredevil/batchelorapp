@@ -9,11 +9,11 @@ const router: IRouter = Router();
 
 // ── Public — no requireAuth ───────────────────────────────────────────────────
 
-// GET /trips/share/:token — read-only itinerary view, no session required.
+// GET /trips/:id/share?token=<token> — read-only itinerary view, no session required.
 // Returns only the fields safe to show publicly (no user_id, no chatHistory,
 // no documents, no private notes beyond trip-level notes).
-router.get("/trips/share/:token", async (req, res) => {
-  const token = String(req.params["token"] ?? "");
+router.get("/trips/:id/share", async (req, res) => {
+  const token = String(req.query["token"] ?? "");
   if (!token) {
     res.status(400).json({ error: "Invalid token" });
     return;

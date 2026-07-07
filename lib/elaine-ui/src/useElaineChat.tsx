@@ -9,17 +9,28 @@ import {
   useGetElaineSettings,
   useUpdateElaineSettings,
   useExecuteElaineAction,
+  uploadElaineAttachment,
   getGetElaineConversationQueryKey,
   getGetElaineSettingsQueryKey,
   getGetElaineNudgesUnseenCountQueryKey,
+  getListElaineConversationsQueryKey,
   type AssistantMessage,
   type AssistantAction,
   type ExecutedAssistantAction,
   type ElaineAppId,
   type ChatWidget,
+  type ConversationMessage,
 } from "@workspace/api-client-react";
 import { ElaineName } from "./ElaineAvatar";
 import { useElainePageContextReader } from "./ElainePageContext";
+
+export interface PendingAttachment {
+  file: File;
+  previewUrl: string;
+  uploadedUrl: string | null;
+  uploading: boolean;
+  error: boolean;
+}
 
 /**
  * Shared conversation/tooling state for Elaine, used identically by the
@@ -61,6 +72,14 @@ export function useElaineChat({
   const [statusMessage, setStatusMessage] = useState("");
   const endRef = useRef<HTMLDivElement | null>(null);
 
+  // Active named conversation ID (null = use the rolling single-thread history)
+  const [conversationId, setConversationId] = useState<number | null>(null);
+
+  // Files queued for attachment to the next message
+  const [pendingAttachments, setPendingAttachments] = useState<
+    PendingAttachment[]
+  >([]);
+
   const { data: settings } = useGetElaineSettings();
   const updateSettings = useUpdateElaineSettings();
   const { data: conversation } = useGetElaineConversation({
@@ -83,12 +102,85 @@ export function useElaineChat({
   }, [conversation, initialized, qc]);
 
   function handleNewConversation() {
+    setConversationId(null);
+    setPendingAttachments([]);
     newConversation.mutate(undefined, {
       onSuccess: (result) => {
         setMessages(result.messages);
         setPendingNavigate(null);
         qc.setQueryData(getGetElaineConversationQueryKey(), result);
       },
+    });
+  }
+
+  /** Load a specific named conversation into the chat panel. */
+  function handleLoadConversation(
+    id: number,
+    msgs: ConversationMessage[],
+  ) {
+    setConversationId(id);
+    setPendingAttachments([]);
+    setPendingNavigate(null);
+    setPendingActions([]);
+    setExecutedActions([]);
+    setActionDone(false);
+    setMessageWidgets(new Map());
+    setMessages(
+      msgs.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+        attachmentUrls:
+          m.attachmentUrls.length > 0 ? m.attachmentUrls : undefined,
+      })),
+    );
+  }
+
+  // Attachment management -------------------------------------------------------
+
+  async function handleAddAttachment(file: File) {
+    const previewUrl = URL.createObjectURL(file);
+    const idx = Date.now(); // used as a stable per-upload key
+    setPendingAttachments((prev) => [
+      ...prev,
+      { file, previewUrl, uploadedUrl: null, uploading: true, error: false },
+    ]);
+
+    try {
+      const { url } = await uploadElaineAttachment(file);
+      setPendingAttachments((prev) =>
+        prev.map((a) =>
+          a.previewUrl === previewUrl
+            ? { ...a, uploadedUrl: url, uploading: false }
+            : a,
+        ),
+      );
+    } catch {
+      setPendingAttachments((prev) =>
+        prev.map((a) =>
+          a.previewUrl === previewUrl
+            ? { ...a, uploading: false, error: true }
+            : a,
+        ),
+      );
+      toast.error("Couldn't upload the attachment. Please try again.");
+    }
+
+    // suppress unused-variable warning for idx — it's the closure anchor
+    void idx;
+  }
+
+  function handleRemoveAttachment(previewUrl: string) {
+    setPendingAttachments((prev) => {
+      const item = prev.find((a) => a.previewUrl === previewUrl);
+      if (item) URL.revokeObjectURL(item.previewUrl);
+      return prev.filter((a) => a.previewUrl !== previewUrl);
+    });
+  }
+
+  function clearAttachments() {
+    setPendingAttachments((prev) => {
+      prev.forEach((a) => URL.revokeObjectURL(a.previewUrl));
+      return [];
     });
   }
 
@@ -103,21 +195,41 @@ export function useElaineChat({
   async function handleSend(overrideText?: string) {
     const trimmed = (overrideText ?? input).trim();
     if (!trimmed || isStreaming) return;
+
+    const uploadedAttachmentUrls = pendingAttachments
+      .filter((a) => a.uploadedUrl && !a.error)
+      .map((a) => a.uploadedUrl!);
+    const hasAttachments = uploadedAttachmentUrls.length > 0;
+
     setInput("");
+    clearAttachments();
     setPendingNavigate(null);
     setPendingActions([]);
     setExecutedActions([]);
     setActionDone(false);
     setStreamingContent("");
     setStatusMessage("");
-    setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "user",
+        content: trimmed,
+        ...(hasAttachments ? { attachmentUrls: uploadedAttachmentUrls } : {}),
+      },
+    ]);
     setIsStreaming(true);
     // accumulate widgets for the new assistant turn
     const pendingWidgets: ChatWidget[] = [];
 
     try {
-      await streamElaineMessage(
-        { message: trimmed, pageContext: getPageContext(), appId },
+      const result = await streamElaineMessage(
+        {
+          message: trimmed,
+          pageContext: getPageContext(),
+          appId,
+          ...(conversationId !== null ? { conversationId } : {}),
+          ...(hasAttachments ? { attachmentUrls: uploadedAttachmentUrls } : {}),
+        },
         {
           onDelta: (text) => {
             setStatusMessage("");
@@ -126,33 +238,42 @@ export function useElaineChat({
           onAction: (action) => setPendingActions((prev) => [...prev, action]),
           onStatus: (msg) => setStatusMessage(msg),
           onWidget: (widget) => pendingWidgets.push(widget),
-          onDone: (result) => {
-            setMessages(result.messages);
+          onDone: (res) => {
+            setMessages(res.messages);
             // attach widgets to the last assistant message index
             if (pendingWidgets.length > 0) {
-              const lastIdx = result.messages.length - 1;
+              const lastIdx = res.messages.length - 1;
               setMessageWidgets((prev) => {
                 const next = new Map(prev);
                 next.set(lastIdx, pendingWidgets);
                 return next;
               });
             }
-            if (result.navigate) setPendingNavigate(result.navigate);
-            if (result.actions.length > 0) setPendingActions(result.actions);
-            if (result.executedActions.length > 0) {
-              setExecutedActions(result.executedActions);
+            if (res.navigate) setPendingNavigate(res.navigate);
+            if (res.actions.length > 0) setPendingActions(res.actions);
+            if (res.executedActions.length > 0) {
+              setExecutedActions(res.executedActions);
               invalidateActionQueries();
             }
             if (
-              result.actionConfirmationMode !== settings?.actionConfirmationMode
+              res.actionConfirmationMode !== settings?.actionConfirmationMode
             ) {
               qc.invalidateQueries({
                 queryKey: getGetElaineSettingsQueryKey(),
               });
             }
+            // Track the conversation ID returned by the server so future
+            // sends continue in the same named conversation.
+            if (res.conversationId !== undefined) {
+              setConversationId(res.conversationId);
+              qc.invalidateQueries({
+                queryKey: getListElaineConversationsQueryKey(),
+              });
+            }
           },
         },
       );
+      void result;
     } catch {
       toast.error(
         <>
@@ -267,7 +388,13 @@ export function useElaineChat({
     statusMessage,
     endRef,
     executeAction,
+    conversationId,
+    setConversationId,
+    pendingAttachments,
+    handleAddAttachment,
+    handleRemoveAttachment,
     handleNewConversation,
+    handleLoadConversation,
     handleSend,
     handleConfirmNavigate,
     handleConfirmAction,

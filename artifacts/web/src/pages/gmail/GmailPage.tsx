@@ -1,13 +1,17 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSearch } from "wouter";
-import { Menu, X, Search, ArrowLeft, Sun, Moon, Mail } from "lucide-react";
+import { LogOut, Sun, Moon, Menu, X, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/lib/auth";
 import { useTheme } from "@workspace/elaine-ui";
+import { AppSwitcher } from "@workspace/elaine-ui";
+import {
+  useLogout,
+  getGetCurrentUserQueryKey,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useGmailStatus,
   useGmailLabels,
@@ -26,8 +30,6 @@ import { GmailSidebar, type LabelId } from "@/components/gmail/GmailSidebar";
 import { ThreadList } from "@/components/gmail/ThreadList";
 import { ThreadView } from "@/components/gmail/ThreadView";
 import { ComposeModal } from "@/components/gmail/ComposeModal";
-
-const base = import.meta.env.BASE_URL;
 
 // Map our label IDs to Gmail API label IDs for the threads list query
 function labelToApi(id: LabelId): { labelIds?: string[] } {
@@ -57,24 +59,30 @@ function labelDisplayName(id: LabelId): string {
   }
 }
 
-function initialsFrom(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
-  return name.slice(0, 2).toUpperCase();
-}
-
 function GmailPage() {
   const search = useSearch();
   const params = new URLSearchParams(search);
   const { toast } = useToast();
-  const { user } = useAuth();
   const { isDark, toggleTheme } = useTheme();
+  const queryClient = useQueryClient();
 
-  // ── Auth status ─────────────────────────────────────────────────────────────
+  // ── Auth / logout ──────────────────────────────────────────────────────────
+  const logout = useLogout({
+    mutation: {
+      onMutate: async () => { await queryClient.cancelQueries(); },
+      onSuccess: () => {
+        queryClient.setQueryData(getGetCurrentUserQueryKey(), null);
+        window.location.href = "/login";
+      },
+      onError: () => toast({ title: "Could not sign out. Please try again.", variant: "destructive" }),
+    },
+  });
+
+  // ── Gmail status ───────────────────────────────────────────────────────────
   const { data: status, isLoading: statusLoading } = useGmailStatus();
   const connected = status?.connected ?? false;
 
-  // ── OAuth callback toasts ────────────────────────────────────────────────────
+  // ── OAuth callback toasts ──────────────────────────────────────────────────
   useEffect(() => {
     const gmailParam = params.get("gmail");
     if (gmailParam === "connected") {
@@ -96,7 +104,7 @@ function GmailPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── State ───────────────────────────────────────────────────────────────────
+  // ── State ──────────────────────────────────────────────────────────────────
   const [selectedLabel, setSelectedLabel] = useState<LabelId>("INBOX");
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -108,7 +116,7 @@ function GmailPage() {
     open: false,
   });
 
-  // ── Data ────────────────────────────────────────────────────────────────────
+  // ── Data ───────────────────────────────────────────────────────────────────
   const { data: labelsData } = useGmailLabels(connected);
   const threadListParams = {
     ...labelToApi(selectedLabel),
@@ -125,7 +133,7 @@ function GmailPage() {
 
   const { data: threadData, isLoading: threadLoading } = useThread(selectedThreadId);
 
-  // ── Mutations ─────────────────────────────────────────────────────────────
+  // ── Mutations ──────────────────────────────────────────────────────────────
   const modify = useGmailModify();
   const trash = useGmailTrash();
   const disconnect = useGmailDisconnect();
@@ -141,7 +149,7 @@ function GmailPage() {
     markThreadRead(selectedThreadId, unreadIds);
   }, [threadData?.id, selectedThreadId, markThreadRead]);
 
-  // ── Handlers ─────────────────────────────────────────────────────────────────
+  // ── Handlers ───────────────────────────────────────────────────────────────
 
   function handleSelectLabel(id: LabelId) {
     setSelectedLabel(id);
@@ -228,65 +236,45 @@ function GmailPage() {
     toast({ title: "Gmail disconnected" });
   }
 
-  // ── User display ─────────────────────────────────────────────────────────────
-  const displayName = user?.displayName?.trim() || user?.email || "";
-  const initials = initialsFrom(displayName || "?");
   const hasThread = !!selectedThreadId;
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="h-screen overflow-hidden bg-background text-foreground font-sans flex flex-col">
-      {/* Nav bar */}
-      <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border flex-shrink-0">
-        <div className="flex h-14 items-center gap-3 px-4">
-          {/* Back to hub */}
-          <a
-            href={base}
-            className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
-            aria-label="Back to hub"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <div className="flex items-center gap-1.5">
-              <div className="w-6 h-6 rounded bg-blue-600 flex items-center justify-center">
-                <Mail className="w-3.5 h-3.5 text-white" />
-              </div>
-              <span className="text-sm font-semibold hidden sm:block">Gmail</span>
-            </div>
-          </a>
 
-          <div className="flex-1" />
+      {/* ── Standard Batchelor header ────────────────────────────────────────── */}
+      <header className="sticky top-0 z-40 border-b border-card-border bg-background/85 backdrop-blur flex-shrink-0">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+          <AppSwitcher currentAppId="gmail" />
 
-          {/* Theme toggle */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleTheme}
-            aria-label="Toggle dark mode"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-          >
-            {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </Button>
-
-          {/* User avatar */}
-          {user && (
-            <div className="flex items-center gap-2 border-l border-border pl-3">
-              <span className="text-xs text-muted-foreground hidden sm:block">
-                {user.email}
-              </span>
-              <Avatar className="h-7 w-7 border border-border">
-                <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
-            </div>
-          )}
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleTheme}
+              aria-label="Toggle dark mode"
+              className="h-9 w-9 text-muted-foreground hover:text-foreground"
+            >
+              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => logout.mutate(undefined)}
+              disabled={logout.isPending}
+              title="Sign out"
+              className="h-9 w-9 text-muted-foreground hover:text-foreground"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </header>
 
-      {/* Body */}
+      {/* ── Body ─────────────────────────────────────────────────────────────── */}
       {statusLoading ? (
         <div className="flex items-center justify-center flex-1">
-          <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
         </div>
       ) : !connected ? (
         <div className="flex-1 overflow-y-auto">
@@ -305,13 +293,13 @@ function GmailPage() {
           {/* Sidebar */}
           <aside
             className={cn(
-              "flex-shrink-0 w-56 bg-background border-r border-border overflow-y-auto transition-transform duration-200 z-50",
+              "flex-shrink-0 w-56 bg-background border-r border-card-border overflow-y-auto transition-transform duration-200 z-50",
               "lg:relative lg:translate-x-0",
               sidebarOpen
                 ? "fixed inset-y-0 left-0 translate-x-0 shadow-xl"
                 : "fixed -translate-x-full lg:translate-x-0",
             )}
-            style={{ top: "3.5rem" }}
+            style={{ top: "4rem" }}
           >
             <GmailSidebar
               selectedLabel={selectedLabel}

@@ -47,6 +47,8 @@ import {
   Library,
   Trash2 as Trash2Icon,
   Tag,
+  Pencil,
+  FolderOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -106,8 +108,11 @@ import {
   useListBlockTemplates,
   useCreateBlockTemplate,
   useDeleteBlockTemplate,
+  usePatchBlockTemplate,
   type BlockTemplate,
+  type BlockTemplateSeam,
 } from "@/lib/block-templates-api";
+import { BlockPreviewSvg } from "@/components/BlockPreviewSvg";
 import {
   parseCell,
   encodeXline,
@@ -3400,11 +3405,15 @@ export default function BlockDesigner() {
   const createTemplate = useCreateBlockTemplate();
   const deleteTemplate = useDeleteBlockTemplate();
   const { data: templates } = useListBlockTemplates();
+  const patchTemplate = usePatchBlockTemplate();
   const [saveToLibOpen, setSaveToLibOpen] = useState(false);
   const [libBrowserOpen, setLibBrowserOpen] = useState(false);
   const [libSaveName, setLibSaveName] = useState("");
   const [libSaveTags, setLibSaveTags] = useState("");
   const isSavingToLib = createTemplate.isPending;
+  const [editTemplateId, setEditTemplateId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editTags, setEditTags] = useState("");
 
   function openSaveToLib() {
     setLibSaveName(name.trim() || "Untitled block");
@@ -3422,15 +3431,6 @@ export default function BlockDesigner() {
       .split(",")
       .map((t) => t.trim())
       .filter(Boolean);
-    const svgEl = document.querySelector<SVGSVGElement>("[data-grid-export]");
-    let thumbnailSvg: string | null = null;
-    if (svgEl) {
-      const serializer = new XMLSerializer();
-      let svgStr = serializer.serializeToString(svgEl);
-      if (!svgStr.includes('xmlns='))
-        svgStr = svgStr.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
-      if (svgStr.length < 400_000) thumbnailSvg = svgStr;
-    }
     createTemplate.mutate(
       {
         name: templateName,
@@ -3438,10 +3438,9 @@ export default function BlockDesigner() {
         gridW,
         gridH,
         cells,
-        seams,
+        seams: seams as BlockTemplateSeam[],
         blockSizeInches: blockSizeInches ?? null,
         seamAllowanceInches: seamAllowanceInches ?? null,
-        thumbnailSvg,
       },
       {
         onSuccess: () => {
@@ -3451,6 +3450,28 @@ export default function BlockDesigner() {
         onError: () => toast.error("Failed to save to library"),
       },
     );
+  }
+
+  function handleLoadTemplate(tpl: BlockTemplate) {
+    if (
+      isDirty &&
+      !confirm(
+        "This will replace your current unsaved design. Continue?",
+      )
+    ) {
+      return;
+    }
+    setCells(tpl.cells.length > 0 ? tpl.cells : makeEmptyCells(tpl.gridW, tpl.gridH));
+    setGridW(tpl.gridW);
+    setGridH(tpl.gridH);
+    setSeams(tpl.seams as SeamLine[]);
+    if (tpl.blockSizeInches !== null)
+      setBlockSizeInches(tpl.blockSizeInches);
+    if (tpl.seamAllowanceInches !== null)
+      setSeamAllowanceInches(tpl.seamAllowanceInches);
+    setIsDirty(true);
+    setLibBrowserOpen(false);
+    toast.success(`Loaded template "${tpl.name}"`);
   }
 
   async function handleExport(format: "png" | "jpeg" | "gif" | "pdf") {
@@ -5631,42 +5652,122 @@ export default function BlockDesigner() {
                     key={tpl.id}
                     className="group relative flex flex-col gap-2 rounded-lg border border-border p-3"
                   >
+                    {/* Preview using safe structured SVG renderer */}
                     <div className="flex aspect-square items-center justify-center overflow-hidden rounded bg-muted/30">
-                      {tpl.thumbnailSvg ? (
-                        <span
-                          className="h-full w-full"
-                          dangerouslySetInnerHTML={{
-                            __html: tpl.thumbnailSvg,
-                          }}
+                      <BlockPreviewSvg
+                        cells={tpl.cells}
+                        gridSize={tpl.gridW}
+                        seams={tpl.seams}
+                        size={80}
+                      />
+                    </div>
+                    {/* Inline edit form — shown when this template is being renamed */}
+                    {editTemplateId === tpl.id ? (
+                      <div className="flex flex-col gap-1.5">
+                        <Input
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          placeholder="Template name"
+                          className="h-7 text-xs"
+                          autoFocus
                         />
-                      ) : (
-                        <Library className="h-8 w-8 text-muted-foreground/30" />
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{tpl.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {tpl.gridW}×{tpl.gridH}
-                      </p>
-                      {tpl.tags.length > 0 && (
-                        <p className="mt-0.5 truncate text-xs text-muted-foreground/70">
-                          {tpl.tags.join(", ")}
+                        <Input
+                          value={editTags}
+                          onChange={(e) => setEditTags(e.target.value)}
+                          placeholder="Tags (comma-separated)"
+                          className="h-7 text-xs"
+                        />
+                        <div className="flex gap-1">
+                          <Button
+                            size="sm"
+                            className="h-6 flex-1 text-xs"
+                            disabled={patchTemplate.isPending}
+                            onClick={() => {
+                              const newName = editName.trim();
+                              if (!newName) return;
+                              const newTags = editTags
+                                .split(",")
+                                .map((t) => t.trim())
+                                .filter(Boolean);
+                              patchTemplate.mutate(
+                                { id: tpl.id, name: newName, tags: newTags },
+                                {
+                                  onSuccess: () => setEditTemplateId(null),
+                                  onError: () =>
+                                    toast.error("Failed to save changes"),
+                                },
+                              );
+                            }}
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 text-xs"
+                            onClick={() => setEditTemplateId(null)}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">
+                          {tpl.name}
                         </p>
-                      )}
-                    </div>
-                    <button
-                      className="absolute right-1.5 top-1.5 hidden rounded-full bg-destructive/90 p-1 text-white hover:bg-destructive group-hover:flex"
-                      onClick={() => {
-                        if (!confirm(`Delete template "${tpl.name}"?`)) return;
-                        deleteTemplate.mutate(tpl.id, {
-                          onError: () =>
-                            toast.error("Failed to delete template"),
-                        });
-                      }}
-                      title="Delete template"
-                    >
-                      <Trash2Icon className="h-3 w-3" />
-                    </button>
+                        <p className="text-xs text-muted-foreground">
+                          {tpl.gridW}×{tpl.gridH}
+                        </p>
+                        {tpl.tags.length > 0 && (
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground/70">
+                            {tpl.tags.join(", ")}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {/* Load into canvas button */}
+                    {editTemplateId !== tpl.id && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mt-auto h-7 w-full gap-1 text-xs"
+                        onClick={() => handleLoadTemplate(tpl)}
+                      >
+                        <FolderOpen className="h-3 w-3" />
+                        Load into canvas
+                      </Button>
+                    )}
+                    {/* Action buttons (edit + delete) — shown on hover */}
+                    {editTemplateId !== tpl.id && (
+                      <div className="absolute right-1.5 top-1.5 hidden gap-1 group-hover:flex">
+                        <button
+                          className="rounded-full bg-muted p-1 text-foreground hover:bg-accent"
+                          onClick={() => {
+                            setEditTemplateId(tpl.id);
+                            setEditName(tpl.name);
+                            setEditTags(tpl.tags.join(", "));
+                          }}
+                          title="Rename / retag"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                        <button
+                          className="rounded-full bg-destructive/90 p-1 text-white hover:bg-destructive"
+                          onClick={() => {
+                            if (!confirm(`Delete template "${tpl.name}"?`))
+                              return;
+                            deleteTemplate.mutate(tpl.id, {
+                              onError: () =>
+                                toast.error("Failed to delete template"),
+                            });
+                          }}
+                          title="Delete template"
+                        >
+                          <Trash2Icon className="h-3 w-3" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

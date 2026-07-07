@@ -50,6 +50,7 @@ import {
   useListBlockTemplates,
   type BlockTemplate,
 } from "@/lib/block-templates-api";
+import { BlockPreviewSvg } from "@/components/BlockPreviewSvg";
 import { FabricPicker, buildFabricUrlMap } from "@/components/FabricPicker";
 import type { QuiltingCategory } from "@workspace/api-client-react";
 import { TagSelector } from "@/components/tag-selector";
@@ -1804,14 +1805,12 @@ export default function LayoutComposer() {
                   title="Create a block from this template and add to palette"
                 >
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-muted/30">
-                    {tpl.thumbnailSvg ? (
-                      <span
-                        className="h-full w-full"
-                        dangerouslySetInnerHTML={{ __html: tpl.thumbnailSvg }}
-                      />
-                    ) : (
-                      <Library className="h-5 w-5 text-muted-foreground/40" />
-                    )}
+                    <BlockPreviewSvg
+                      cells={tpl.cells}
+                      gridSize={tpl.gridW}
+                      seams={tpl.seams}
+                      size={40}
+                    />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{tpl.name}</p>

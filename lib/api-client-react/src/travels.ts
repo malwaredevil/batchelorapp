@@ -2414,3 +2414,190 @@ export function useAcceptCalendarTripSuggestion(
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
+// ---------------------------------------------------------------------------
+// Packing List
+// ---------------------------------------------------------------------------
+
+export interface PackingItem {
+  id: number;
+  listId: number;
+  text: string;
+  packed: boolean;
+  sortOrder: number;
+  addedByUserId?: number | null;
+  createdAt: string;
+}
+
+export interface PackingListWithItems {
+  id: number;
+  tripId: number;
+  name: string;
+  createdAt: string;
+  items: PackingItem[];
+}
+
+export interface PackingTemplate {
+  id: number;
+  userId: number;
+  name: string;
+  items: string[];
+  createdAt: string;
+}
+
+export interface CreatePackingItemBody {
+  text: string;
+  sortOrder?: number;
+}
+
+export interface UpdatePackingItemBody {
+  text?: string;
+  packed?: boolean;
+  sortOrder?: number;
+}
+
+export interface CreatePackingTemplateBody {
+  name: string;
+  items: string[];
+}
+
+export interface BulkCreatePackingItemsBody {
+  items: { text: string }[];
+}
+
+export interface LoadTemplateResult {
+  added: number;
+  items: PackingItem[];
+}
+
+// Query key helpers
+export const getGetPackingListQueryKey = (tripId: number) =>
+  [`/api/travels/trips/${tripId}/packing`] as const;
+
+const getPackingListFn = (tripId: number, options?: RequestInit): Promise<PackingListWithItems> =>
+  customFetch<PackingListWithItems>(`/api/travels/trips/${tripId}/packing`, { ...options, method: "GET" });
+
+export function useGetPackingList<TData = PackingListWithItems, TError = unknown>(
+  tripId: number,
+  options?: { query?: UseQueryOptions<PackingListWithItems, TError, TData> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetPackingListQueryKey(tripId);
+  const queryFn: QueryFunction<PackingListWithItems> = ({ signal }) => getPackingListFn(tripId, { signal });
+  const queryOpts = { queryKey, queryFn, enabled: tripId > 0, ...queryOptions } as UseQueryOptions<PackingListWithItems, TError, TData> & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const createPackingItemFn = (tripId: number, body: CreatePackingItemBody, options?: RequestInit): Promise<PackingItem> =>
+  customFetch<PackingItem>(`/api/travels/trips/${tripId}/packing/items`, {
+    ...options, method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export function useCreatePackingItem<TError = unknown, TContext = unknown>(
+  options?: { mutation?: UseMutationOptions<PackingItem, TError, { tripId: number; body: CreatePackingItemBody }, TContext> },
+): UseMutationResult<PackingItem, TError, { tripId: number; body: CreatePackingItemBody }, TContext> {
+  const mutationFn: MutationFunction<PackingItem, { tripId: number; body: CreatePackingItemBody }> = ({ tripId, body }) =>
+    createPackingItemFn(tripId, body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const bulkCreatePackingItemsFn = (tripId: number, body: BulkCreatePackingItemsBody, options?: RequestInit): Promise<PackingItem[]> =>
+  customFetch<PackingItem[]>(`/api/travels/trips/${tripId}/packing/items/bulk`, {
+    ...options, method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export function useBulkCreatePackingItems<TError = unknown, TContext = unknown>(
+  options?: { mutation?: UseMutationOptions<PackingItem[], TError, { tripId: number; body: BulkCreatePackingItemsBody }, TContext> },
+): UseMutationResult<PackingItem[], TError, { tripId: number; body: BulkCreatePackingItemsBody }, TContext> {
+  const mutationFn: MutationFunction<PackingItem[], { tripId: number; body: BulkCreatePackingItemsBody }> = ({ tripId, body }) =>
+    bulkCreatePackingItemsFn(tripId, body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const updatePackingItemFn = (tripId: number, itemId: number, body: UpdatePackingItemBody, options?: RequestInit): Promise<PackingItem> =>
+  customFetch<PackingItem>(`/api/travels/trips/${tripId}/packing/items/${itemId}`, {
+    ...options, method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export function useUpdatePackingItem<TError = unknown, TContext = unknown>(
+  options?: { mutation?: UseMutationOptions<PackingItem, TError, { tripId: number; itemId: number; body: UpdatePackingItemBody }, TContext> },
+): UseMutationResult<PackingItem, TError, { tripId: number; itemId: number; body: UpdatePackingItemBody }, TContext> {
+  const mutationFn: MutationFunction<PackingItem, { tripId: number; itemId: number; body: UpdatePackingItemBody }> = ({ tripId, itemId, body }) =>
+    updatePackingItemFn(tripId, itemId, body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const deletePackingItemFn = (tripId: number, itemId: number, options?: RequestInit): Promise<void> =>
+  customFetch<void>(`/api/travels/trips/${tripId}/packing/items/${itemId}`, { ...options, method: "DELETE" });
+
+export function useDeletePackingItem<TError = unknown, TContext = unknown>(
+  options?: { mutation?: UseMutationOptions<void, TError, { tripId: number; itemId: number }, TContext> },
+): UseMutationResult<void, TError, { tripId: number; itemId: number }, TContext> {
+  const mutationFn: MutationFunction<void, { tripId: number; itemId: number }> = ({ tripId, itemId }) =>
+    deletePackingItemFn(tripId, itemId);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const loadPackingTemplateFn = (tripId: number, templateId: number, options?: RequestInit): Promise<LoadTemplateResult> =>
+  customFetch<LoadTemplateResult>(`/api/travels/trips/${tripId}/packing/load-template/${templateId}`, {
+    ...options, method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+
+export function useLoadPackingTemplate<TError = unknown, TContext = unknown>(
+  options?: { mutation?: UseMutationOptions<LoadTemplateResult, TError, { tripId: number; templateId: number }, TContext> },
+): UseMutationResult<LoadTemplateResult, TError, { tripId: number; templateId: number }, TContext> {
+  const mutationFn: MutationFunction<LoadTemplateResult, { tripId: number; templateId: number }> = ({ tripId, templateId }) =>
+    loadPackingTemplateFn(tripId, templateId);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+export const getListPackingTemplatesQueryKey = () => [`/api/travels/packing-templates`] as const;
+
+const listPackingTemplatesFn = (options?: RequestInit): Promise<PackingTemplate[]> =>
+  customFetch<PackingTemplate[]>(`/api/travels/packing-templates`, { ...options, method: "GET" });
+
+export function useListPackingTemplates<TData = PackingTemplate[], TError = unknown>(
+  options?: { query?: UseQueryOptions<PackingTemplate[], TError, TData> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getListPackingTemplatesQueryKey();
+  const queryFn: QueryFunction<PackingTemplate[]> = ({ signal }) => listPackingTemplatesFn({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<PackingTemplate[], TError, TData> & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const createPackingTemplateFn = (body: CreatePackingTemplateBody, options?: RequestInit): Promise<PackingTemplate> =>
+  customFetch<PackingTemplate>(`/api/travels/packing-templates`, {
+    ...options, method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export function useCreatePackingTemplate<TError = unknown, TContext = unknown>(
+  options?: { mutation?: UseMutationOptions<PackingTemplate, TError, CreatePackingTemplateBody, TContext> },
+): UseMutationResult<PackingTemplate, TError, CreatePackingTemplateBody, TContext> {
+  const mutationFn: MutationFunction<PackingTemplate, CreatePackingTemplateBody> = (body) =>
+    createPackingTemplateFn(body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const deletePackingTemplateFn = (templateId: number, options?: RequestInit): Promise<void> =>
+  customFetch<void>(`/api/travels/packing-templates/${templateId}`, { ...options, method: "DELETE" });
+
+export function useDeletePackingTemplate<TError = unknown, TContext = unknown>(
+  options?: { mutation?: UseMutationOptions<void, TError, number, TContext> },
+): UseMutationResult<void, TError, number, TContext> {
+  const mutationFn: MutationFunction<void, number> = (templateId) =>
+    deletePackingTemplateFn(templateId);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+

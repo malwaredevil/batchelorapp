@@ -1,10 +1,4 @@
-import {
-  pgTable,
-  serial,
-  integer,
-  text,
-  timestamp,
-} from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp } from "drizzle-orm/pg-core";
 
 // Per-user Gmail OAuth connection for the main Batchelor hub webmail feature.
 // Separate from travels_gmail_connections (which has gmail.readonly + gmail.labels

@@ -91,10 +91,7 @@ export interface ComposeParams {
 
 // ── Fetch helpers ─────────────────────────────────────────────────────────────
 
-async function apiFetch<T>(
-  path: string,
-  init?: RequestInit,
-): Promise<T> {
+async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return customFetch<T>(`${API}${path}`, {
     credentials: "include",
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
@@ -147,17 +144,17 @@ export function useThreadList(
   enabled = true,
 ): UseQueryResult<ThreadListResponse> {
   const queryParams = new URLSearchParams();
-  if (params.labelIds?.length) queryParams.set("labelIds", params.labelIds.join(","));
+  if (params.labelIds?.length)
+    queryParams.set("labelIds", params.labelIds.join(","));
   if (params.q) queryParams.set("q", params.q);
   if (params.pageToken) queryParams.set("pageToken", params.pageToken);
-  if (params.maxResults) queryParams.set("maxResults", String(params.maxResults));
+  if (params.maxResults)
+    queryParams.set("maxResults", String(params.maxResults));
 
   return useQuery({
     queryKey: ["gmail", "threads", params],
     queryFn: () =>
-      apiFetch<ThreadListResponse>(
-        `/threads?${queryParams.toString()}`,
-      ),
+      apiFetch<ThreadListResponse>(`/threads?${queryParams.toString()}`),
     staleTime: 30_000,
     enabled,
   });
@@ -165,9 +162,7 @@ export function useThreadList(
 
 // ── Full thread ───────────────────────────────────────────────────────────────
 
-export function useThread(
-  threadId: string | null,
-): UseQueryResult<FullThread> {
+export function useThread(threadId: string | null): UseQueryResult<FullThread> {
   return useQuery({
     queryKey: ["gmail", "thread", threadId],
     queryFn: () => apiFetch<FullThread>(`/threads/${threadId}`),
@@ -281,7 +276,9 @@ export function useBulkTrash() {
     mutationFn: async (messageIds: string[]) => {
       await Promise.all(
         messageIds.map((id) =>
-          apiFetch<{ ok: boolean }>(`/messages/${id}/trash`, { method: "POST" }),
+          apiFetch<{ ok: boolean }>(`/messages/${id}/trash`, {
+            method: "POST",
+          }),
         ),
       );
     },
@@ -353,7 +350,10 @@ export function useMarkThreadRead() {
         unreadMessageIds.map((id) =>
           apiFetch<{ ok: boolean }>(`/messages/${id}`, {
             method: "PATCH",
-            body: JSON.stringify({ addLabelIds: [], removeLabelIds: ["UNREAD"] }),
+            body: JSON.stringify({
+              addLabelIds: [],
+              removeLabelIds: ["UNREAD"],
+            }),
           }),
         ),
       )

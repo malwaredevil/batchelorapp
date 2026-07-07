@@ -18,22 +18,31 @@ export function GmailConnect() {
         <div className="rounded-xl border border-border bg-card p-4">
           <Inbox className="w-5 h-5 text-blue-500 mb-2" />
           <div className="text-sm font-medium mb-1">Read & search</div>
-          <div className="text-xs text-muted-foreground">Browse your inbox and search across all messages.</div>
+          <div className="text-xs text-muted-foreground">
+            Browse your inbox and search across all messages.
+          </div>
         </div>
         <div className="rounded-xl border border-border bg-card p-4">
           <Send className="w-5 h-5 text-blue-500 mb-2" />
           <div className="text-sm font-medium mb-1">Compose & reply</div>
-          <div className="text-xs text-muted-foreground">Write new emails and reply to threads.</div>
+          <div className="text-xs text-muted-foreground">
+            Write new emails and reply to threads.
+          </div>
         </div>
         <div className="rounded-xl border border-border bg-card p-4">
           <FileText className="w-5 h-5 text-blue-500 mb-2" />
           <div className="text-sm font-medium mb-1">Manage messages</div>
-          <div className="text-xs text-muted-foreground">Archive, trash, star and organise with labels.</div>
+          <div className="text-xs text-muted-foreground">
+            Archive, trash, star and organise with labels.
+          </div>
         </div>
       </div>
 
       <a href="/api/gmail/connect">
-        <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white gap-2 shadow">
+        <Button
+          size="lg"
+          className="bg-blue-600 hover:bg-blue-700 text-white gap-2 shadow"
+        >
           <Mail className="w-4 h-4" />
           Connect Gmail account
         </Button>

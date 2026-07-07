@@ -72,7 +72,9 @@ function NavItem({
       <Icon
         className={cn(
           "w-4 h-4 flex-shrink-0",
-          selected ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground",
+          selected
+            ? "text-blue-600 dark:text-blue-400"
+            : "text-muted-foreground",
         )}
       />
       <span className="flex-1 min-w-0 truncate">{label}</span>
@@ -125,7 +127,13 @@ export function GmailSidebar({
             icon={icon}
             label={name}
             selected={selectedLabel === id}
-            unread={id === "INBOX" ? unreadFor("INBOX") : id === "DRAFTS" ? unreadFor("DRAFT") : undefined}
+            unread={
+              id === "INBOX"
+                ? unreadFor("INBOX")
+                : id === "DRAFTS"
+                  ? unreadFor("DRAFT")
+                  : undefined
+            }
             onClick={() => onSelectLabel(id)}
           />
         ))}

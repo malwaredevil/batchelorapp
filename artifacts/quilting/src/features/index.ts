@@ -9,6 +9,7 @@ import {
   LayoutGrid,
   ShoppingCart,
   Wrench,
+  Ruler,
 } from "lucide-react";
 
 // ── Collection ────────────────────────────────────────────────────────────────
@@ -91,6 +92,17 @@ registerFeature({
     label: "Layout Composer",
     icon: LayoutGrid,
     order: 20,
+  },
+});
+
+registerFeature({
+  id: "yardage",
+  nav: {
+    group: "design",
+    href: "/tools/yardage",
+    label: "Yardage Calculator",
+    icon: Ruler,
+    order: 30,
   },
 });
 

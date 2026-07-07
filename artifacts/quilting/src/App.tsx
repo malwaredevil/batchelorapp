@@ -43,6 +43,7 @@ import WholeQuiltList from "@/pages/blocks/whole-quilt-list";
 import Shopping from "@/pages/shopping";
 import Maintenance from "@/pages/maintenance";
 import NotFound from "@/pages/not-found";
+import YardageCalculator from "@/pages/tools/yardage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -116,6 +117,8 @@ function Routes() {
         <Route path="/whole-quilt" component={WholeQuiltList} />
         <Route path="/whole-quilt/designer" component={WholeQuiltDesigner} />
         <Route path="/shopping" component={Shopping} />
+        {/* Tools */}
+        <Route path="/tools/yardage" component={YardageCalculator} />
         {/* Settings */}
         <Route path="/categories" component={Categories} />
         <Route path="/maintenance" component={Maintenance} />

@@ -18,6 +18,7 @@ import {
   ZoomIn,
   Tag,
   Camera,
+  Sparkles,
 } from "lucide-react";
 import { useBulkAdd } from "@/contexts/bulk-add-context";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,7 @@ import { downloadCollectionImage } from "@/lib/svg-export";
 import { colorToHex, getCategoryPalette } from "@workspace/web-core";
 import { PreviewZoomModal } from "@/components/PreviewZoomModal";
 import { CategoryEditDialog } from "@/components/CategoryEditDialog";
+import { PaletteMatchModal } from "@/components/PaletteMatchModal";
 
 type SortOption = "newest" | "oldest" | "az" | "za";
 
@@ -305,6 +307,7 @@ export default function Fabrics() {
   const { data: stats } = useGetStats();
   const [categoryEditItem, setCategoryEditItem] =
     useState<FabricSummary | null>(null);
+  const [paletteMatchOpen, setPaletteMatchOpen] = useState(false);
   const { data: categoryApiList } = useListQuiltingCategories();
 
   const updateFabricCategories = useUpdateFabric({
@@ -535,6 +538,15 @@ export default function Fabrics() {
               {isBulkMode ? "Done" : "Select"}
             </Button>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPaletteMatchOpen(true)}
+            title="Find fabrics that match a photo's colour palette"
+          >
+            <Sparkles className="mr-0 sm:mr-2 h-4 w-4" />
+            <span className="hidden sm:inline">Match from photo</span>
+          </Button>
           <Button variant="outline" size="sm" asChild>
             <Link href="/fabrics/bulk-add">
               <Camera className="mr-0 sm:mr-2 h-4 w-4" />
@@ -859,6 +871,10 @@ export default function Fabrics() {
           }
         }}
         isSaving={updateFabricCategories.isPending}
+      />
+      <PaletteMatchModal
+        open={paletteMatchOpen}
+        onClose={() => setPaletteMatchOpen(false)}
       />
     </div>
   );

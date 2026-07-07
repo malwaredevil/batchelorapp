@@ -6,3 +6,7 @@ pnpm-lock.yaml
 *.tsbuildinfo
 lib/api-zod/src/
 lib/api-client-react/src/
+**/.generated/
+**/*.semgrep*
+**/semgrep_rules.json
+.config/

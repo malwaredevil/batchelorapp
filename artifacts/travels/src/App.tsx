@@ -6,7 +6,7 @@ import { AuthProvider, ProtectedRoute } from "@/lib/auth";
 import { Layout } from "@/components/Layout";
 import { queryClient } from "@/lib/query-client";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { ThemeProvider } from "@workspace/elaine-ui";
+import { ThemeProvider, CommandPalette } from "@workspace/elaine-ui";
 import { AssistantContextProvider } from "@/lib/assistant-context";
 
 import Dashboard from "@/pages/Dashboard";
@@ -141,6 +141,7 @@ export default function App() {
                   <Router />
                 </WouterRouter>
                 <Toaster richColors position="top-right" />
+                <CommandPalette />
               </AssistantContextProvider>
             </ErrorBoundary>
           </TooltipProvider>

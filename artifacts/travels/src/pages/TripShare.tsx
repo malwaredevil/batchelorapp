@@ -60,8 +60,9 @@ function TransportIcon({ transport }: { transport?: string | null }) {
 }
 
 export default function TripShare() {
-  const [, params] = useRoute("/trips/share/:token");
-  const token = params?.token ?? "";
+  const [, params] = useRoute("/trips/:id/share");
+  const tripId = params?.id ?? "";
+  const token = new URLSearchParams(window.location.search).get("token") ?? "";
   const [trip, setTrip] = useState<TripShareData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +78,7 @@ export default function TripShare() {
       setLoading(false);
       return;
     }
-    fetch(`/api/travels/trips/share/${encodeURIComponent(token)}`)
+    fetch(`/api/travels/trips/${encodeURIComponent(tripId)}/share?token=${encodeURIComponent(token)}`)
       .then(async (res) => {
         if (!res.ok) {
           const data = await res.json().catch(() => ({})) as { error?: string };

@@ -4,11 +4,13 @@ import {
   useListTrips,
   useCreateTrip,
   useUpdateTrip,
+  useCreateReminder,
   getListTripsQueryKey,
   getGetTravelsStatsQueryKey,
   getTripPhotoImageUrl,
   type TripStatus,
   type CreateTripBody,
+  type CreateReminderBody,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -52,6 +54,7 @@ function AiPlannerDialog({
   const [, navigate] = useLocation();
   const createTrip = useCreateTrip();
   const updateTrip = useUpdateTrip();
+  const createReminder = useCreateReminder();
 
   const [prompt, setPrompt] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -201,6 +204,23 @@ function AiPlannerDialog({
           onOpenChange(false);
           navigate(`/trips/${newTrip.id}`);
         };
+        // Persist reminders from scaffold (fire-and-forget, non-blocking)
+        const scaffoldReminders = scaffold["reminders"];
+        if (Array.isArray(scaffoldReminders)) {
+          for (const rem of scaffoldReminders as unknown[]) {
+            if (rem === null || typeof rem !== "object") continue;
+            const r = rem as Record<string, unknown>;
+            const title = typeof r["title"] === "string" ? r["title"].trim() : "";
+            if (!title) continue;
+            const body: CreateReminderBody = {
+              title,
+              description: typeof r["description"] === "string" ? r["description"] : null,
+              dueDate: typeof r["dueDate"] === "string" ? r["dueDate"] : undefined,
+            };
+            createReminder.mutate({ tripId: newTrip.id, body });
+          }
+        }
+
         // Persist itinerary scaffold if the AI generated day-by-day plan
         if (itinerary) {
           updateTrip.mutate({ id: newTrip.id, body: { itinerary } }, { onSettled: finish });

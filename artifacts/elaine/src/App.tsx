@@ -11,6 +11,7 @@ import {
   useTheme,
 } from "@workspace/elaine-ui";
 import { Header } from "@/components/Header";
+import { InstallBanner } from "@workspace/web-core";
 import Chat from "@/pages/Chat";
 import Settings from "@/pages/Settings";
 import NotFound from "@/pages/not-found";
@@ -58,6 +59,7 @@ function Routes() {
     <div className="min-h-screen bg-background">
       <ThemeSync />
       <Header />
+      <InstallBanner />
       <main>
         <Switch>
           <Route path="/" component={Chat} />

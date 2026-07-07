@@ -4,6 +4,8 @@ import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { ElaineAvatar, ElaineName } from "./ElaineAvatar";
 import type { ElaineChat } from "./useElaineChat";
+import { MarkdownMessage } from "./MarkdownMessage";
+import { ChatWidget } from "./ChatWidgets";
 
 /** Splits a stored message content into display text + citation URL list.
  *  \x1f (ASCII unit separator) is the delimiter — safe in PostgreSQL JSONB
@@ -25,19 +27,7 @@ function parseMessageCitations(content: string): {
   return { text: content.slice(0, nullIdx), citations };
 }
 
-/** Strips stray markdown syntax the model may slip into a visible reply
- *  despite being told not to (the chat bubble has no markdown renderer, so
- *  **bold**, * bullets, and # headers would otherwise show up as literal
- *  asterisks/hashes). Belt-and-suspenders on top of the system prompt
- *  instruction — also cleans up any already-stored history. */
-function stripStrayMarkdown(text: string): string {
-  return text
-    .replace(/\*\*(.+?)\*\*/g, "$1")
-    .replace(/^#{1,6}\s+/gm, "")
-    .replace(/^([ \t]*)[*-]\s+/gm, "$1");
-}
-
-/** Renders message text with [N] citation markers turned into clickable links. */
+/** Renders message text with markdown + [N] citation markers turned into clickable links. */
 function MessageText({
   text,
   citations,
@@ -45,11 +35,14 @@ function MessageText({
   text: string;
   citations: string[];
 }) {
-  const cleaned = stripStrayMarkdown(text);
-  if (citations.length === 0) return <>{cleaned}</>;
-  const parts = cleaned.split(/(\[\d+\])/g);
+  if (citations.length === 0) return <MarkdownMessage text={text} />;
+
+  // Inject citation links as inline [N] markers inside the final text block
+  // by replacing [N] references with anchor elements after markdown rendering.
+  // For simplicity: split on [N] markers, render text blocks as markdown, links inline.
+  const parts = text.split(/(\[\d+\])/g);
   return (
-    <>
+    <div className="space-y-0.5">
       {parts.map((part, i) => {
         const m = part.match(/^\[(\d+)\]$/);
         if (m) {
@@ -70,9 +63,9 @@ function MessageText({
             );
           }
         }
-        return <span key={i}>{part}</span>;
+        return part ? <MarkdownMessage key={i} text={part} /> : null;
       })}
-    </>
+    </div>
   );
 }
 
@@ -110,6 +103,7 @@ export function ElaineChatPanel({
     input,
     setInput,
     messages,
+    messageWidgets,
     pendingNavigate,
     setPendingNavigate,
     pendingActions,
@@ -157,6 +151,7 @@ export function ElaineChatPanel({
             );
           }
           const { text, citations } = parseMessageCitations(msg.content);
+          const widgets = messageWidgets.get(i);
           return (
             <div key={i} className="flex gap-2.5 justify-start">
               <ElaineAvatar
@@ -165,9 +160,16 @@ export function ElaineChatPanel({
                 animated={false}
               />
               <div className={`${bubbleWidthClass} flex flex-col gap-1.5`}>
-                <div className="whitespace-pre-wrap rounded-2xl rounded-tl-sm bg-muted px-3.5 py-2.5 text-sm leading-relaxed text-foreground">
+                <div className="rounded-2xl rounded-tl-sm bg-muted px-3.5 py-2.5 text-sm leading-relaxed text-foreground">
                   <MessageText text={text} citations={citations} />
                 </div>
+                {widgets && widgets.length > 0 && (
+                  <div className="flex flex-col gap-2 pl-0.5">
+                    {widgets.map((widget, wi) => (
+                      <ChatWidget key={wi} widget={widget} />
+                    ))}
+                  </div>
+                )}
                 {citations.length > 0 && (
                   <div className="flex flex-wrap gap-x-3 gap-y-1 px-1">
                     {citations.map((url, ci) => {
@@ -208,9 +210,9 @@ export function ElaineChatPanel({
             />
             {streamingContent ? (
               <div
-                className={`${bubbleWidthClass} whitespace-pre-wrap rounded-2xl rounded-tl-sm bg-muted px-3.5 py-2.5 text-sm leading-relaxed text-foreground`}
+                className={`${bubbleWidthClass} rounded-2xl rounded-tl-sm bg-muted px-3.5 py-2.5 text-sm leading-relaxed text-foreground`}
               >
-                {stripStrayMarkdown(streamingContent)}
+                <MarkdownMessage text={streamingContent} />
               </div>
             ) : statusMessage ? (
               <div
@@ -277,11 +279,14 @@ export function ElaineChatPanel({
             <div className="flex gap-2">
               <Button
                 size="sm"
+                variant="default"
                 className="h-7 text-xs"
-                onClick={() => handleConfirmNavigate(onNavigated)}
+                onClick={() => {
+                  handleConfirmNavigate(onNavigated);
+                }}
               >
-                <ArrowRight className="h-3 w-3 mr-1" />
-                Yes, take me there
+                <ArrowRight className="h-3.5 w-3.5" />
+                Go
               </Button>
               <Button
                 size="sm"
@@ -289,148 +294,125 @@ export function ElaineChatPanel({
                 className="h-7 text-xs"
                 onClick={() => setPendingNavigate(null)}
               >
-                No thanks
+                Stay here
               </Button>
             </div>
           </div>
         )}
 
-        {pendingActions.length > 0 &&
-          settings?.actionConfirmationMode === "all_at_once" && (
-            <div className="ml-8 flex flex-col gap-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
-              <p className="text-xs text-muted-foreground">
-                {pendingActions.length === 1
-                  ? "1 thing"
-                  : `${pendingActions.length} things`}{" "}
-                to confirm:
-              </p>
-              <ul className="space-y-1">
-                {pendingActions.map((action, i) => (
-                  <li
-                    key={i}
-                    className="flex items-start gap-1.5 text-xs text-foreground"
+        {pendingActions.length > 0 && !actionDone && (
+          <div className="ml-8 flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-800 dark:bg-amber-950/30">
+            {settings?.actionConfirmationMode === "one_by_one" ? (
+              <>
+                <p className="text-xs font-medium text-foreground">
+                  {pendingActions[0]!.label}
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="default"
+                    className="h-7 text-xs"
+                    disabled={executeAction.isPending}
+                    onClick={handleConfirmAction}
                   >
-                    <Check className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
-                    {action.label}
-                  </li>
-                ))}
-              </ul>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={handleConfirmAll}
-                  disabled={confirmingAll}
-                >
-                  <Check className="h-3 w-3 mr-1" />
-                  {confirmingAll ? "Doing it…" : "Yes, do all of it"}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 text-xs"
-                  onClick={handleCancelAll}
-                  disabled={confirmingAll}
-                >
-                  Cancel all
-                </Button>
-              </div>
-            </div>
-          )}
-
-        {pendingActions.length > 0 &&
-          settings?.actionConfirmationMode !== "all_at_once" && (
-            <div className="ml-8 flex flex-col gap-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
-              <p className="text-xs text-muted-foreground">
-                {pendingActions[0]!.label}?
+                    <Check className="h-3.5 w-3.5" />
+                    Confirm
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs"
+                    onClick={handleSkipAction}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Skip
+                  </Button>
+                </div>
                 {pendingActions.length > 1 && (
-                  <span className="text-muted-foreground/70">
-                    {" "}
-                    ({pendingActions.length} more after this)
-                  </span>
+                  <p className="text-xs text-muted-foreground">
+                    +{pendingActions.length - 1} more
+                  </p>
                 )}
-              </p>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={handleConfirmAction}
-                  disabled={executeAction.isPending}
-                >
-                  <Check className="h-3 w-3 mr-1" />
-                  {executeAction.isPending ? "Doing it…" : "Yes, do it"}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 text-xs"
-                  onClick={handleSkipAction}
-                  disabled={executeAction.isPending}
-                >
-                  No thanks
-                </Button>
-              </div>
-            </div>
-          )}
+              </>
+            ) : (
+              <>
+                <p className="text-xs font-medium text-foreground">
+                  {pendingActions.length} action
+                  {pendingActions.length > 1 ? "s" : ""} ready
+                </p>
+                <ul className="space-y-1">
+                  {pendingActions.map((action, i) => (
+                    <li key={i} className="text-xs text-muted-foreground">
+                      • {action.label}
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="default"
+                    className="h-7 text-xs"
+                    disabled={confirmingAll}
+                    onClick={handleConfirmAll}
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    Confirm all
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs"
+                    onClick={handleCancelAll}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Cancel
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
-        {executedActions.length > 0 && (
-          <div className="ml-8 flex flex-col gap-1 rounded-xl border border-primary/30 bg-primary/5 p-3">
-            <p className="text-xs text-muted-foreground">
-              Already done automatically:
+        {actionDone && executedActions.length > 0 && (
+          <div className="ml-8 rounded-xl border border-green-200 bg-green-50/60 px-3 py-2 dark:border-green-800 dark:bg-green-950/30">
+            <p className="text-xs font-medium text-green-800 dark:text-green-300">
+              <Check className="mr-1 inline h-3.5 w-3.5" />
+              Done
             </p>
-            <ul className="space-y-1">
-              {executedActions.map((action, i) => (
-                <li
-                  key={i}
-                  className="flex items-start gap-1.5 text-xs text-foreground"
-                >
-                  {action.status < 400 ? (
-                    <Check className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
-                  ) : (
-                    <X className="mt-0.5 h-3 w-3 shrink-0 text-destructive" />
-                  )}
-                  {action.label}
-                </li>
-              ))}
-            </ul>
           </div>
         )}
-
-        {actionDone && (
-          <div className="ml-8 flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Check className="h-3 w-3 text-primary" />
-            Done!
-          </div>
-        )}
-
-        {belowMessagesSlot}
 
         <div ref={endRef} />
       </div>
 
-      <div className="flex gap-2 border-t border-border/50 p-3">
-        {composerLeftSlot}
-        <Textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask Elaine anything…"
-          className="min-h-9 flex-1 resize-none"
-          rows={1}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              handleSend();
-            }
-          }}
-          disabled={isStreaming}
-        />
-        <Button
-          size="icon"
-          onClick={() => handleSend()}
-          disabled={!input.trim() || isStreaming}
-        >
-          <Send className="h-4 w-4" />
-        </Button>
+      {belowMessagesSlot}
+
+      <div className="shrink-0 border-t border-border/60 bg-background/80 px-3 py-2.5 backdrop-blur-sm">
+        <div className="flex items-end gap-2">
+          {composerLeftSlot}
+          <Textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void handleSend();
+              }
+            }}
+            placeholder="Message Elaine…"
+            className="min-h-[38px] flex-1 resize-none rounded-xl border-border/50 bg-muted/50 py-2 text-sm shadow-none focus-visible:ring-1"
+            rows={1}
+            disabled={isStreaming}
+          />
+          <Button
+            size="sm"
+            className="h-[38px] w-[38px] shrink-0 rounded-xl p-0"
+            onClick={() => void handleSend()}
+            disabled={!input.trim() || isStreaming}
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
     </>
   );

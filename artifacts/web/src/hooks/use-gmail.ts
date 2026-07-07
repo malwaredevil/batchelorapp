@@ -1,8 +1,8 @@
+import { useCallback } from "react";
 import {
   useQuery,
   useMutation,
   useQueryClient,
-  useCallback,
   type UseQueryResult,
 } from "@tanstack/react-query";
 

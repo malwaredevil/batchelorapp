@@ -68,7 +68,7 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         runtimeCaching: [
           {
-            urlPattern: /^\/api\/travels\//,
+            urlPattern: ({ url }: { url: URL }) => url.pathname.startsWith("/api/travels/"),
             handler: "NetworkFirst",
             options: {
               cacheName: "travels-api-cache",

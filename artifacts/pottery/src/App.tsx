@@ -18,9 +18,11 @@ import Collection from "@/pages/collection";
 import AddPiece from "@/pages/add";
 import PieceDetail from "@/pages/detail";
 import Compare from "@/pages/compare";
+import Scan from "@/pages/scan";
 import Categories from "@/pages/categories";
 import Maintenance from "@/pages/maintenance";
 import Settings from "@/pages/settings";
+import StatsPage from "@/pages/stats";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -67,6 +69,8 @@ function Routes() {
         <Route path="/" component={Collection} />
         <Route path="/add" component={AddPiece} />
         <Route path="/compare" component={Compare} />
+        <Route path="/scan" component={Scan} />
+        <Route path="/stats" component={StatsPage} />
         <Route path="/piece/:id" component={PieceDetail} />
         <Route path="/categories" component={Categories} />
         <Route path="/maintenance" component={Maintenance} />

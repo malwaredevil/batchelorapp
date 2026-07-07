@@ -1,5 +1,5 @@
 import { registerFeature } from "./registry";
-import { LayoutGrid, PlusCircle, ScanSearch, Tag, Wrench } from "lucide-react";
+import { LayoutGrid, PlusCircle, ScanSearch, Tag, Wrench, Camera, BarChart3 } from "lucide-react";
 
 // ── Main ────────────────────────────────────────────────────────────────────
 
@@ -36,6 +36,17 @@ registerFeature({
   },
 });
 
+registerFeature({
+  id: "scan",
+  nav: {
+    group: "main",
+    href: "/scan",
+    label: "Scan",
+    icon: Camera,
+    order: 35,
+  },
+});
+
 // ── Settings ──────────────────────────────────────────────────────────────────
 
 registerFeature({
@@ -46,6 +57,17 @@ registerFeature({
     label: "Categories",
     icon: Tag,
     order: 10,
+  },
+});
+
+registerFeature({
+  id: "stats",
+  nav: {
+    group: "settings",
+    href: "/stats",
+    label: "Collection Stats",
+    icon: BarChart3,
+    order: 15,
   },
 });
 

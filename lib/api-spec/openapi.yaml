@@ -7,6 +7,52 @@ servers:
   - url: /api
     description: Base API path
 paths:
+  /elaine/daily-brief:
+    get:
+      operationId: getElaineDailyBrief
+      tags:
+        - elaine
+      summary: Get (or generate) today's personalised morning brief
+      description: Returns today's brief if already generated. On first call of the UTC day, generates a new one via OpenRouter (may take a few seconds). The brief is cached until midnight UTC.
+      responses:
+        "200":
+          description: Today's brief
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ElaineDailyBrief"
+        "401":
+          description: Unauthorized
+        "503":
+          description: Brief generation unavailable (AI service error)
+  /elaine/daily-brief/dismiss:
+    post:
+      operationId: dismissElaineDailyBrief
+      tags:
+        - elaine
+      summary: Mark today's brief as dismissed
+      responses:
+        "204":
+          description: Dismissed
+        "401":
+          description: Unauthorized
+  /elaine/daily-brief/regenerate:
+    post:
+      operationId: regenerateElaineDailyBrief
+      tags:
+        - elaine
+      summary: Delete today's brief and generate a fresh one
+      responses:
+        "200":
+          description: Fresh brief
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ElaineDailyBrief"
+        "401":
+          description: Unauthorized
+        "503":
+          description: Brief generation unavailable
   /elaine/attachments:
     post:
       operationId: uploadElaineAttachment
@@ -4839,6 +4885,23 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TravelsPackingItem"
+    ElaineDailyBrief:
+      type: object
+      required:
+        - id
+        - content
+        - generatedAt
+        - dismissed
+      properties:
+        id:
+          type: integer
+        content:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+        dismissed:
+          type: boolean
     ElaineConversationSummary:
       type: object
       required:

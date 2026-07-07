@@ -12,6 +12,7 @@ import {
   elaineGlobalConfig,
   elaineHistoryConversations,
   elaineHistoryMessages,
+  elaineDailyBriefs,
   travelsTrips,
   travelsTripDocuments,
   travelsTripPhotos,
@@ -19,10 +20,14 @@ import {
   travelsWishlist,
   travelsGoogleCalendarConnections,
   travelsConnectedCalendars,
+  potteryItems,
+  fabrics,
+  quiltPatterns,
+  finishedQuilts,
 } from "@workspace/db";
 import { requireAuth } from "../middleware/auth";
 import { logger } from "../lib/logger";
-import { callModelWithSubagent } from "../lib/ai-client";
+import { callModel, callModelWithSubagent } from "../lib/ai-client";
 import {
   getElaineGlobalConfig,
   invalidateElaineGlobalConfigCache,
@@ -3511,6 +3516,355 @@ async function requireOwner(req: Request, res: Response): Promise<boolean> {
   }
   return true;
 }
+
+// ---------------------------------------------------------------------------
+// Daily brief — a personalised once-per-UTC-day morning summary.
+// Queries next upcoming trip, overdue reminders, and yesterday's household
+// activity across all apps, then asks OpenRouter to compose a 2–4 sentence
+// friendly brief with one highlighted action for the day.
+// ---------------------------------------------------------------------------
+
+async function generateDailyBriefContent(): Promise<string> {
+  const now = new Date();
+  const startOfTodayUtc = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
+  const startOfYesterdayUtc = new Date(
+    startOfTodayUtc.getTime() - 24 * 60 * 60 * 1000,
+  );
+  const todayDateStr = startOfTodayUtc.toISOString().slice(0, 10);
+  const yesterdayIso = startOfYesterdayUtc.toISOString();
+  const todayIso = startOfTodayUtc.toISOString();
+
+  const contextParts: string[] = [];
+
+  // 1. Next upcoming trip
+  const [nextTrip] = await db
+    .select({
+      title: travelsTrips.title,
+      destination: travelsTrips.destination,
+      startDate: travelsTrips.startDate,
+    })
+    .from(travelsTrips)
+    .where(sql`${travelsTrips.startDate} >= ${todayDateStr}::date`)
+    .orderBy(travelsTrips.startDate)
+    .limit(1);
+
+  if (nextTrip) {
+    if (nextTrip.startDate) {
+      const tripStart = new Date(nextTrip.startDate + "T00:00:00Z");
+      const daysUntil = Math.round(
+        (tripStart.getTime() - startOfTodayUtc.getTime()) /
+          (1000 * 60 * 60 * 24),
+      );
+      contextParts.push(
+        `Next upcoming trip: "${nextTrip.title}" to ${nextTrip.destination} — ${
+          daysUntil === 0
+            ? "starts today!"
+            : daysUntil === 1
+              ? "starts tomorrow!"
+              : `starts in ${daysUntil} days`
+        } (${nextTrip.startDate})`,
+      );
+    } else {
+      contextParts.push(
+        `Next upcoming trip: "${nextTrip.title}" to ${nextTrip.destination} (no date set yet)`,
+      );
+    }
+  } else {
+    contextParts.push("No upcoming trips currently planned");
+  }
+
+  // 2. Overdue reminders
+  const overdueReminders = await db
+    .select({ title: travelsReminders.title, dueDate: travelsReminders.dueDate })
+    .from(travelsReminders)
+    .where(
+      and(
+        sql`${travelsReminders.dueDate} < ${todayDateStr}::date`,
+        eq(travelsReminders.done, false),
+      ),
+    )
+    .orderBy(travelsReminders.dueDate)
+    .limit(5);
+
+  if (overdueReminders.length > 0) {
+    const list = overdueReminders
+      .map((r) => `"${r.title}" (due ${r.dueDate})`)
+      .join(", ");
+    contextParts.push(`Overdue reminders: ${list}`);
+  } else {
+    contextParts.push("No overdue reminders");
+  }
+
+  // 3. Yesterday's household activity across all apps (parallel queries)
+  const [
+    newPotteryItems,
+    newFabricItems,
+    newPatternItems,
+    newQuiltItems,
+    newTripItems,
+    newWishlistItems,
+  ] = await Promise.all([
+    db
+      .select({ name: potteryItems.name })
+      .from(potteryItems)
+      .where(
+        and(
+          sql`${potteryItems.createdAt} >= ${yesterdayIso}`,
+          sql`${potteryItems.createdAt} < ${todayIso}`,
+        ),
+      ),
+    db
+      .select({ name: fabrics.name })
+      .from(fabrics)
+      .where(
+        and(
+          sql`${fabrics.createdAt} >= ${yesterdayIso}`,
+          sql`${fabrics.createdAt} < ${todayIso}`,
+        ),
+      ),
+    db
+      .select({ name: quiltPatterns.name })
+      .from(quiltPatterns)
+      .where(
+        and(
+          sql`${quiltPatterns.createdAt} >= ${yesterdayIso}`,
+          sql`${quiltPatterns.createdAt} < ${todayIso}`,
+        ),
+      ),
+    db
+      .select({ name: finishedQuilts.name })
+      .from(finishedQuilts)
+      .where(
+        and(
+          sql`${finishedQuilts.createdAt} >= ${yesterdayIso}`,
+          sql`${finishedQuilts.createdAt} < ${todayIso}`,
+        ),
+      ),
+    db
+      .select({
+        title: travelsTrips.title,
+        destination: travelsTrips.destination,
+      })
+      .from(travelsTrips)
+      .where(
+        and(
+          sql`${travelsTrips.createdAt} >= ${yesterdayIso}`,
+          sql`${travelsTrips.createdAt} < ${todayIso}`,
+        ),
+      ),
+    db
+      .select({ destination: travelsWishlist.destination })
+      .from(travelsWishlist)
+      .where(
+        and(
+          sql`${travelsWishlist.createdAt} >= ${yesterdayIso}`,
+          sql`${travelsWishlist.createdAt} < ${todayIso}`,
+        ),
+      ),
+  ]);
+
+  const activityParts: string[] = [];
+  if (newPotteryItems.length > 0)
+    activityParts.push(
+      `${newPotteryItems.length} new pottery piece${newPotteryItems.length > 1 ? "s" : ""}: ${newPotteryItems.map((p) => p.name).join(", ")}`,
+    );
+  if (newFabricItems.length > 0)
+    activityParts.push(
+      `${newFabricItems.length} new fabric${newFabricItems.length > 1 ? "s" : ""}: ${newFabricItems.map((f) => f.name).join(", ")}`,
+    );
+  if (newPatternItems.length > 0)
+    activityParts.push(
+      `${newPatternItems.length} new quilt pattern${newPatternItems.length > 1 ? "s" : ""}: ${newPatternItems.map((p) => p.name).join(", ")}`,
+    );
+  if (newQuiltItems.length > 0)
+    activityParts.push(
+      `${newQuiltItems.length} quilt${newQuiltItems.length > 1 ? "s" : ""} finished: ${newQuiltItems.map((q) => q.name).join(", ")}`,
+    );
+  if (newTripItems.length > 0)
+    activityParts.push(
+      `${newTripItems.length} new trip${newTripItems.length > 1 ? "s" : ""} added: ${newTripItems.map((t) => `${t.title} to ${t.destination}`).join(", ")}`,
+    );
+  if (newWishlistItems.length > 0)
+    activityParts.push(
+      `${newWishlistItems.length} wishlist destination${newWishlistItems.length > 1 ? "s" : ""} added: ${newWishlistItems.map((w) => w.destination).join(", ")}`,
+    );
+
+  contextParts.push(
+    activityParts.length > 0
+      ? `Yesterday's household activity: ${activityParts.join("; ")}`
+      : "No new items added to any collection yesterday",
+  );
+
+  const contextText = contextParts.join("\n");
+  const config = await getElaineGlobalConfig();
+
+  return callModel(config.chatModel, async (client, model) => {
+    const completion = await client.chat.completions.create({
+      model,
+      max_tokens: 250,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are Elaine, a warm and practical personal assistant for the Batchelor household. Write a brief, friendly morning summary (2–4 sentences) from the data below. End with one specific, actionable suggestion for the day. No headers or bullet points — just natural, conversational flowing text. Refer to the household collectively as 'you'.",
+        },
+        {
+          role: "user",
+          content: `Today's household status:\n\n${contextText}\n\nWrite the morning brief.`,
+        },
+      ],
+    });
+    return (completion.choices[0]?.message?.content ?? "").trim();
+  });
+}
+
+// GET /daily-brief — return today's brief (generate on first call of the day).
+router.get("/daily-brief", async (req, res) => {
+  const userId = req.session.userId!;
+  const startOfTodayUtc = new Date();
+  startOfTodayUtc.setUTCHours(0, 0, 0, 0);
+  const todayIso = startOfTodayUtc.toISOString();
+
+  const [existing] = await db
+    .select()
+    .from(elaineDailyBriefs)
+    .where(
+      and(
+        eq(elaineDailyBriefs.userId, userId),
+        sql`${elaineDailyBriefs.generatedAt} >= ${todayIso}`,
+      ),
+    )
+    .orderBy(desc(elaineDailyBriefs.generatedAt))
+    .limit(1);
+
+  if (existing) {
+    res.json({
+      id: existing.id,
+      content: existing.content,
+      generatedAt: existing.generatedAt.toISOString(),
+      dismissed: existing.dismissed,
+    });
+    return;
+  }
+
+  let content: string;
+  try {
+    content = await generateDailyBriefContent();
+  } catch (err) {
+    req.log.error({ err }, "elaine daily brief generation failed");
+    res.status(503).json({ error: "Brief generation unavailable" });
+    return;
+  }
+
+  if (!content) {
+    res.status(503).json({ error: "Brief generation returned empty content" });
+    return;
+  }
+
+  try {
+    const [row] = await db
+      .insert(elaineDailyBriefs)
+      .values({ userId, content })
+      .returning();
+    if (!row) throw new Error("insert returned no row");
+    res.json({
+      id: row.id,
+      content: row.content,
+      generatedAt: row.generatedAt.toISOString(),
+      dismissed: row.dismissed,
+    });
+  } catch (err) {
+    // Could be a unique-constraint race — reload and return whatever is there.
+    req.log.warn({ err }, "elaine daily brief insert failed, reloading");
+    const [reloaded] = await db
+      .select()
+      .from(elaineDailyBriefs)
+      .where(
+        and(
+          eq(elaineDailyBriefs.userId, userId),
+          sql`${elaineDailyBriefs.generatedAt} >= ${todayIso}`,
+        ),
+      )
+      .orderBy(desc(elaineDailyBriefs.generatedAt))
+      .limit(1);
+    if (reloaded) {
+      res.json({
+        id: reloaded.id,
+        content: reloaded.content,
+        generatedAt: reloaded.generatedAt.toISOString(),
+        dismissed: reloaded.dismissed,
+      });
+    } else {
+      res.status(500).json({ error: "Failed to store brief" });
+    }
+  }
+});
+
+// POST /daily-brief/dismiss — mark today's brief as seen/dismissed.
+router.post("/daily-brief/dismiss", async (req, res) => {
+  const userId = req.session.userId!;
+  const startOfTodayUtc = new Date();
+  startOfTodayUtc.setUTCHours(0, 0, 0, 0);
+  await db
+    .update(elaineDailyBriefs)
+    .set({ dismissed: true })
+    .where(
+      and(
+        eq(elaineDailyBriefs.userId, userId),
+        sql`${elaineDailyBriefs.generatedAt} >= ${startOfTodayUtc.toISOString()}`,
+      ),
+    );
+  res.status(204).end();
+});
+
+// POST /daily-brief/regenerate — delete today's brief and generate a fresh one.
+router.post("/daily-brief/regenerate", async (req, res) => {
+  const userId = req.session.userId!;
+  const startOfTodayUtc = new Date();
+  startOfTodayUtc.setUTCHours(0, 0, 0, 0);
+
+  await db
+    .delete(elaineDailyBriefs)
+    .where(
+      and(
+        eq(elaineDailyBriefs.userId, userId),
+        sql`${elaineDailyBriefs.generatedAt} >= ${startOfTodayUtc.toISOString()}`,
+      ),
+    );
+
+  let content: string;
+  try {
+    content = await generateDailyBriefContent();
+  } catch (err) {
+    req.log.error({ err }, "elaine daily brief regeneration failed");
+    res.status(503).json({ error: "Brief generation unavailable" });
+    return;
+  }
+
+  if (!content) {
+    res.status(503).json({ error: "Brief generation returned empty content" });
+    return;
+  }
+
+  const [row] = await db
+    .insert(elaineDailyBriefs)
+    .values({ userId, content })
+    .returning();
+
+  if (!row) {
+    res.status(500).json({ error: "Failed to store regenerated brief" });
+    return;
+  }
+
+  res.json({
+    id: row.id,
+    content: row.content,
+    generatedAt: row.generatedAt.toISOString(),
+    dismissed: false,
+  });
+});
 
 router.get("/admin/config", async (req, res) => {
   if (!(await requireOwner(req, res))) return;

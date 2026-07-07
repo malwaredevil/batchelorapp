@@ -2,6 +2,7 @@ import { type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { LogOut, Settings, ChevronDown } from "lucide-react";
 import { AppSwitcher } from "@workspace/elaine-ui";
+import { InstallBanner } from "@workspace/web-core";
 import {
   useLogout,
   getGetCurrentUserQueryKey,
@@ -125,6 +126,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
+      <InstallBanner />
 
       <main className="mx-auto max-w-6xl px-4 pb-28 pt-6 md:pb-12">
         {children}

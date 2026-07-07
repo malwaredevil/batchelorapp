@@ -2698,6 +2698,7 @@ function RemindersSection({ tripId }: { tripId: number }) {
         onOpenChange={(open) => {
           if (!open) setEditingReminder(null);
         }}
+        initialMode="edit"
       />
     </div>
   );

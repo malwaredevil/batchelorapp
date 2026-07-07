@@ -139,13 +139,25 @@ function WeatherWidget({
   locationName: string;
   days: WeatherDay[];
 }) {
+  const forecastUrl = `https://www.google.com/search?q=${encodeURIComponent("weather " + locationName)}`;
   return (
     <div className="mt-2 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-      <div className="flex items-center gap-1.5 border-b border-border/60 bg-sky-50/60 px-3 py-2 dark:bg-sky-950/30">
-        <span className="text-base">🌤️</span>
-        <span className="text-xs font-semibold text-foreground">
-          {locationName} forecast
-        </span>
+      <div className="flex items-center justify-between border-b border-border/60 bg-sky-50/60 px-3 py-2 dark:bg-sky-950/30">
+        <div className="flex items-center gap-1.5">
+          <span className="text-base">🌤️</span>
+          <span className="text-xs font-semibold text-foreground">
+            {locationName} forecast
+          </span>
+        </div>
+        <a
+          href={forecastUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-0.5 text-xs text-sky-600 hover:text-sky-700"
+          onClick={(e) => e.stopPropagation()}
+        >
+          Full forecast <ArrowRight className="h-3 w-3" />
+        </a>
       </div>
       <div className="divide-y divide-border/50">
         {days.map((day, i) => (

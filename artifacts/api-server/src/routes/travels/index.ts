@@ -18,6 +18,7 @@ import mapsRouter from "./maps";
 import walletRouter from "./wallet";
 import cardLayoutRouter from "./card-layout";
 import documentTypesRouter from "./document-types";
+import packingRouter from "./packing";
 
 const router: IRouter = Router();
 
@@ -42,5 +43,6 @@ router.use(gmailRouter);
 router.use(mapsRouter);
 router.use(walletRouter);
 router.use(documentTypesRouter);
+router.use(packingRouter);
 
 export default router;

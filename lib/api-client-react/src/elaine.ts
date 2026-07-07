@@ -518,28 +518,35 @@ export interface ConversationMessage {
   createdAt: string;
 }
 
-export const getListElaineConversationsQueryKey = () =>
-  [`/api/elaine/conversations`] as const;
+export const getListElaineConversationsQueryKey = (q?: string) =>
+  q ? [`/api/elaine/conversations`, { q }] as const
+    : [`/api/elaine/conversations`] as const;
 
 const listElaineConversationsFn = (
+  q?: string,
   options?: RequestInit,
-): Promise<ConversationSummary[]> =>
-  customFetch<ConversationSummary[]>("/api/elaine/conversations", {
+): Promise<ConversationSummary[]> => {
+  const url = q
+    ? `/api/elaine/conversations?q=${encodeURIComponent(q)}`
+    : "/api/elaine/conversations";
+  return customFetch<ConversationSummary[]>(url, {
     ...options,
     method: "GET",
   });
+};
 
 export function useListElaineConversations<
   TData = ConversationSummary[],
   TError = unknown,
 >(options?: {
+  q?: string;
   query?: UseQueryOptions<ConversationSummary[], TError, TData>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const { query: queryOptions } = options ?? {};
+  const { q, query: queryOptions } = options ?? {};
   const queryKey =
-    queryOptions?.queryKey ?? getListElaineConversationsQueryKey();
+    queryOptions?.queryKey ?? getListElaineConversationsQueryKey(q);
   const queryFn: QueryFunction<ConversationSummary[]> = ({ signal }) =>
-    listElaineConversationsFn({ signal });
+    listElaineConversationsFn(q, { signal });
   const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     ConversationSummary[],
     TError,

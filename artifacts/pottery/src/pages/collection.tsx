@@ -620,12 +620,14 @@ export default function Collection() {
   const [filterColor, setFilterColor] = useState<string | null>(null);
   const [sort, setSort] = useState<SortKey>("added-desc");
 
-  // On mount: if a ?cat=ID query param was passed (e.g. from clicking a chip on the
-  // detail page), pre-select that category filter and clean the URL.
+  // On mount: read ?cat=ID, ?color=..., and ?search=... query params so
+  // external links (e.g. from Elaine cross-app navigation) can pre-filter the
+  // collection. All params are consumed and cleaned from the URL immediately.
   useEffect(() => {
     const params = new URLSearchParams(locationSearch);
     const catParam = params.get("cat");
     const colorParam = params.get("color");
+    const searchParam = params.get("search");
     if (catParam) {
       const id = parseInt(catParam, 10);
       if (!isNaN(id)) setFilterCategoryIds(new Set([id]));
@@ -633,7 +635,10 @@ export default function Collection() {
     if (colorParam) {
       setFilterColor(decodeURIComponent(colorParam));
     }
-    if (catParam || colorParam) {
+    if (searchParam) {
+      setSearch(decodeURIComponent(searchParam));
+    }
+    if (catParam || colorParam || searchParam) {
       navigate("/", { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -10,6 +10,7 @@ import {
   ThemeProvider,
   ElainePageContextProvider,
   ElaineWidget,
+  CommandPalette,
 } from "@workspace/elaine-ui";
 import "@/features";
 import ForgotPassword from "@/pages/forgot-password";
@@ -98,6 +99,7 @@ function App() {
             </AuthProvider>
           </WouterRouter>
           <Toaster />
+          <CommandPalette />
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>

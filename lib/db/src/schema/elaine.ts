@@ -155,3 +155,68 @@ export const elaineGlobalConfig = pgTable("elaine_global_config", {
 
 export type ElaineGlobalConfigRow = typeof elaineGlobalConfig.$inferSelect;
 export type InsertElaineGlobalConfig = typeof elaineGlobalConfig.$inferInsert;
+
+// Named conversation history — one row per saved conversation.
+// These are distinct from `elaineConversations` (the single-threaded rolling
+// history) and power the multi-conversation sidebar in the Elaine app.
+// Messages live in elaine_history_messages below.
+export const elaineHistoryConversations = pgTable(
+  "elaine_history_conversations",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull(),
+    title: text("title").notNull().default("New conversation"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("elaine_history_conversations_user_updated_idx").on(
+      table.userId,
+      table.updatedAt,
+    ),
+  ],
+).enableRLS();
+
+export type ElaineHistoryConversationRow =
+  typeof elaineHistoryConversations.$inferSelect;
+export type InsertElaineHistoryConversation =
+  typeof elaineHistoryConversations.$inferInsert;
+
+// One message per row for a named conversation.
+// `attachment_urls` stores public Supabase Storage URLs for any images the
+// user attached to a user message (empty array for assistant messages and
+// unattached user messages).
+export const elaineHistoryMessages = pgTable(
+  "elaine_history_messages",
+  {
+    id: serial("id").primaryKey(),
+    conversationId: integer("conversation_id")
+      .notNull()
+      .references(() => elaineHistoryConversations.id, {
+        onDelete: "cascade",
+      }),
+    userId: integer("user_id").notNull(),
+    role: text("role").notNull(),
+    content: text("content").notNull().default(""),
+    attachmentUrls: jsonb("attachment_urls")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("elaine_history_messages_conversation_id_idx").on(
+      table.conversationId,
+    ),
+  ],
+).enableRLS();
+
+export type ElaineHistoryMessageRow =
+  typeof elaineHistoryMessages.$inferSelect;
+export type InsertElaineHistoryMessage =
+  typeof elaineHistoryMessages.$inferInsert;

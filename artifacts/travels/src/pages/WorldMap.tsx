@@ -10,7 +10,14 @@ import {
   type WishlistItem,
   getListWishlistQueryKey,
 } from "@workspace/api-client-react";
-import { Globe, MapPin, LocateFixed, TrendingUp, Calendar, Flag } from "lucide-react";
+import {
+  Globe,
+  MapPin,
+  LocateFixed,
+  TrendingUp,
+  Calendar,
+  Flag,
+} from "lucide-react";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 import { loadGoogleMaps, svgToMarkerContent } from "@/lib/google-maps-loader";
 
@@ -176,7 +183,8 @@ function MapPanel({
     let animInterval: ReturnType<typeof setInterval> | null = null;
     let dataLayer: google.maps.Data | null = null;
     let infoWindow: google.maps.InfoWindow | null = null;
-    let heatmapLayer: { setMap: (m: google.maps.Map | null) => void } | null = null;
+    let heatmapLayer: { setMap: (m: google.maps.Map | null) => void } | null =
+      null;
     let heatmapCancelled = false;
 
     try {
@@ -412,10 +420,13 @@ function MapPanel({
         opacity?: number;
       }) => { setMap: (m: google.maps.Map | null) => void };
 
-      void google.maps.importLibrary("visualization")
+      void google.maps
+        .importLibrary("visualization")
         .then((lib) => {
           if (heatmapCancelled) return;
-          const { HeatmapLayer } = lib as unknown as { HeatmapLayer: HeatmapLayerCtor };
+          const { HeatmapLayer } = lib as unknown as {
+            HeatmapLayer: HeatmapLayerCtor;
+          };
           const heatData: google.maps.LatLngLiteral[] = trips
             .filter(
               (t) =>
@@ -675,7 +686,9 @@ export default function WorldMap() {
               <Flag className="w-4 h-4 text-primary" />
             </div>
             <div>
-              <p className="text-xl font-bold text-foreground tabular-nums">{uniqueCountries}</p>
+              <p className="text-xl font-bold text-foreground tabular-nums">
+                {uniqueCountries}
+              </p>
               <p className="text-xs text-muted-foreground leading-tight">
                 {uniqueCountries === 1 ? "country" : "countries"}
               </p>
@@ -686,7 +699,9 @@ export default function WorldMap() {
               <TrendingUp className="w-4 h-4 text-primary" />
             </div>
             <div>
-              <p className="text-xl font-bold text-foreground tabular-nums">{uniqueCities}</p>
+              <p className="text-xl font-bold text-foreground tabular-nums">
+                {uniqueCities}
+              </p>
               <p className="text-xs text-muted-foreground leading-tight">
                 {uniqueCities === 1 ? "city" : "cities"} visited
               </p>
@@ -697,7 +712,9 @@ export default function WorldMap() {
               <Calendar className="w-4 h-4 text-primary" />
             </div>
             <div>
-              <p className="text-xl font-bold text-foreground tabular-nums">{totalNights}</p>
+              <p className="text-xl font-bold text-foreground tabular-nums">
+                {totalNights}
+              </p>
               <p className="text-xs text-muted-foreground leading-tight">
                 {totalNights === 1 ? "night" : "nights"} abroad
               </p>

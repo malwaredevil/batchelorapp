@@ -409,20 +409,49 @@ router.post("/trips/:tripId/packing/items/reorder", async (req, res) => {
     return;
   }
   const body = ReorderBody.parse(req.body);
-  await Promise.all(
-    body.order.map((itemId, idx) =>
-      db
-        .update(travelsPackingItems)
-        .set({ sortOrder: idx })
-        .where(
-          and(
-            eq(travelsPackingItems.id, itemId),
-            eq(travelsPackingItems.listId, list.id),
+
+  // Validate: submitted IDs must exactly match the list's current item IDs
+  const existing = await db
+    .select({ id: travelsPackingItems.id })
+    .from(travelsPackingItems)
+    .where(eq(travelsPackingItems.listId, list.id));
+
+  const existingIds = new Set(existing.map((r) => r.id));
+  const submittedIds = body.order;
+
+  if (submittedIds.length !== existingIds.size) {
+    res.status(400).json({ error: "order length does not match item count" });
+    return;
+  }
+  const hasDuplicates = new Set(submittedIds).size !== submittedIds.length;
+  if (hasDuplicates) {
+    res.status(400).json({ error: "order contains duplicate item IDs" });
+    return;
+  }
+  const unknownIds = submittedIds.filter((id) => !existingIds.has(id));
+  if (unknownIds.length > 0) {
+    res.status(400).json({ error: "order contains IDs not in this list" });
+    return;
+  }
+
+  // Apply atomically inside a transaction
+  await db.transaction(async (tx) => {
+    await Promise.all(
+      submittedIds.map((itemId, idx) =>
+        tx
+          .update(travelsPackingItems)
+          .set({ sortOrder: idx })
+          .where(
+            and(
+              eq(travelsPackingItems.id, itemId),
+              eq(travelsPackingItems.listId, list.id),
+            ),
           ),
-        ),
-    ),
-  );
-  res.json({ reordered: body.order.length });
+      ),
+    );
+  });
+
+  res.json({ reordered: submittedIds.length });
 });
 
 // ── POST /trips/:tripId/packing/load-template/:templateId ─────────────────────

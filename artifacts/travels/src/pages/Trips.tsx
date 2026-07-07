@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from "react";
-import { Link, useSearch } from "wouter";
+import { Link, useSearch, useLocation } from "wouter";
 import {
   useListTrips,
   useCreateTrip,
+  useUpdateTrip,
   getListTripsQueryKey,
   getGetTravelsStatsQueryKey,
   getTripPhotoImageUrl,
@@ -48,7 +49,9 @@ function AiPlannerDialog({
   onOpenChange: (v: boolean) => void;
 }) {
   const qc = useQueryClient();
+  const [, navigate] = useLocation();
   const createTrip = useCreateTrip();
+  const updateTrip = useUpdateTrip();
 
   const [prompt, setPrompt] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -158,6 +161,23 @@ function AiPlannerDialog({
 
   const handleCreate = () => {
     if (!scaffold) return;
+
+    // Parse transportTo — AI may return "flew", "drove", "train" or synonyms
+    const transportRaw = String(scaffold["transportTo"] ?? scaffold["transport"] ?? "");
+    const transportTo = (["drove", "flew", "train"] as const).includes(
+      transportRaw as "drove" | "flew" | "train",
+    )
+      ? (transportRaw as "drove" | "flew" | "train")
+      : undefined;
+
+    // Parse theOneThing — may be an array or a single string from the AI
+    const rawOne = scaffold["theOneThing"];
+    const theOneThing: string[] | undefined = Array.isArray(rawOne)
+      ? (rawOne as unknown[]).filter((x): x is string => typeof x === "string")
+      : typeof rawOne === "string" && rawOne.trim()
+        ? [rawOne.trim()]
+        : undefined;
+
     const body: CreateTripBody = {
       title: String(scaffold["title"] ?? prompt.slice(0, 60)),
       destination: String(scaffold["destination"] ?? ""),
@@ -167,13 +187,26 @@ function AiPlannerDialog({
       travellerCount,
       hasRentalCar: false,
       notes: scaffold["notes"] as string | undefined,
+      transportTo,
+      theOneThing,
     };
+
     createTrip.mutate(body, {
-      onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getListTripsQueryKey() });
-        qc.invalidateQueries({ queryKey: getGetTravelsStatsQueryKey() });
-        toast.success("Trip created from AI plan");
-        onOpenChange(false);
+      onSuccess: (newTrip) => {
+        const itinerary = scaffold["itinerary"];
+        const finish = () => {
+          qc.invalidateQueries({ queryKey: getListTripsQueryKey() });
+          qc.invalidateQueries({ queryKey: getGetTravelsStatsQueryKey() });
+          toast.success("Trip created from AI plan");
+          onOpenChange(false);
+          navigate(`/trips/${newTrip.id}`);
+        };
+        // Persist itinerary scaffold if the AI generated day-by-day plan
+        if (itinerary) {
+          updateTrip.mutate({ id: newTrip.id, body: { itinerary } }, { onSettled: finish });
+        } else {
+          finish();
+        }
       },
       onError: () => toast.error("Failed to create trip"),
     });

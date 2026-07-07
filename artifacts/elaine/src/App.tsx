@@ -9,6 +9,7 @@ import {
   ElainePageContextProvider,
   ThemeProvider,
   useTheme,
+  CommandPalette,
 } from "@workspace/elaine-ui";
 import { Header } from "@/components/Header";
 import { InstallBanner } from "@workspace/web-core";
@@ -84,6 +85,7 @@ function App() {
             </AuthProvider>
           </WouterRouter>
           <Toaster richColors position="top-right" />
+          <CommandPalette />
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>

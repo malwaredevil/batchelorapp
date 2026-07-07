@@ -1,3 +1,4 @@
+export * from "./CommandPalette";
 export * from "./ElaineAvatar";
 export * from "./AppSwitcher";
 export * from "./ElainePageContext";

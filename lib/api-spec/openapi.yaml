@@ -4715,6 +4715,45 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TravelsPackingItem"
+    ElaineConversationSummary:
+      type: object
+      required:
+        - id
+        - title
+        - createdAt
+        - updatedAt
+        - messageCount
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        messageCount:
+          type: integer
+        preview:
+          type: string
+          nullable: true
+    ElaineAttachmentUploadResult:
+      type: object
+      required:
+        - url
+        - type
+      properties:
+        url:
+          type: string
+        type:
+          type: string
+          enum: [image, pdf]
+        name:
+          type: string
+        extractedText:
+          type: string
   parameters:
     IdParam:
       name: id

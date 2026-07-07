@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod/v4";
-import { and, eq, desc, isNull, count } from "drizzle-orm";
+import { and, eq, desc, isNull, count, inArray } from "drizzle-orm";
 import type OpenAI from "openai";
 import {
   db,
@@ -70,6 +70,7 @@ import multer from "multer";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import { env } from "../lib/env";
+import pdfParse from "pdf-parse";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -106,8 +107,19 @@ const ChatBody = z.object({
   appId: z.enum(APP_IDS).default("hub"),
   // Named conversation to continue. Omit to auto-create a new one.
   conversationId: z.number().int().positive().optional(),
-  // Public Supabase Storage URLs for images the user attached (max 5, 5 MB each).
+  // Signed Supabase Storage URLs for images the user attached (max 5, 5 MB each).
   attachmentUrls: z.array(z.string()).max(5).optional(),
+  // PDF attachments: signed URL + original filename + already-extracted text.
+  attachmentPdfs: z
+    .array(
+      z.object({
+        url: z.string().max(2000),
+        name: z.string().max(200),
+        extractedText: z.string().max(8000).optional(),
+      }),
+    )
+    .max(3)
+    .optional(),
 });
 
 // How elAIne confirms a turn that proposes more than one write-action:
@@ -2326,7 +2338,7 @@ async function ensureAttachmentBucket(): Promise<void> {
       const { data } = await attachmentStorage.storage.getBucket(ATTACHMENT_BUCKET);
       if (!data) {
         const { error } = await attachmentStorage.storage.createBucket(ATTACHMENT_BUCKET, {
-          public: true,
+          public: false,
         });
         if (error && !/already exists/i.test(error.message)) {
           attachmentBucketReady = null;
@@ -2338,33 +2350,47 @@ async function ensureAttachmentBucket(): Promise<void> {
   return attachmentBucketReady;
 }
 
+const ACCEPTED_ATTACHMENT_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/pdf",
+] as const;
+
 const attachmentUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter(_req, file, cb) {
-    const ok = ["image/jpeg", "image/png", "image/webp"].includes(file.mimetype);
+    const ok = (ACCEPTED_ATTACHMENT_TYPES as readonly string[]).includes(
+      file.mimetype,
+    );
     if (!ok) {
-      cb(new Error("Only JPEG, PNG, and WebP images are accepted"));
+      cb(new Error("Only JPEG, PNG, WebP images and PDFs are accepted"));
     } else {
       cb(null, true);
     }
   },
 });
 
-// POST /attachments — upload a single image for use as a message attachment.
+// POST /attachments — upload a single image or PDF for use as a message attachment.
+// Images are accepted for AI vision; PDFs have their text extracted server-side.
+// Files are stored in the PRIVATE elaine-attachments bucket; a 5-year signed URL
+// is returned so the client can display the file and pass it back on chat sends.
 router.post("/attachments", attachmentUpload.single("file"), async (req, res) => {
   if (!req.file) {
     res.status(400).json({ error: "No file provided" });
     return;
   }
   const userId = req.session.userId!;
-  const ext =
-    req.file.mimetype === "image/jpeg"
+  const isPdf = req.file.mimetype === "application/pdf";
+  const ext = isPdf
+    ? "pdf"
+    : req.file.mimetype === "image/jpeg"
       ? "jpg"
       : req.file.mimetype === "image/webp"
         ? "webp"
         : "png";
-  const path = `${userId}/${randomUUID()}.${ext}`;
+  const storagePath = `${userId}/${randomUUID()}.${ext}`;
 
   try {
     await ensureAttachmentBucket();
@@ -2376,7 +2402,10 @@ router.post("/attachments", attachmentUpload.single("file"), async (req, res) =>
 
   const { error: uploadError } = await attachmentStorage.storage
     .from(ATTACHMENT_BUCKET)
-    .upload(path, req.file.buffer, { contentType: req.file.mimetype, upsert: false });
+    .upload(storagePath, req.file.buffer, {
+      contentType: req.file.mimetype,
+      upsert: false,
+    });
 
   if (uploadError) {
     req.log.error({ err: uploadError }, "elaine attachment upload failed");
@@ -2384,11 +2413,38 @@ router.post("/attachments", attachmentUpload.single("file"), async (req, res) =>
     return;
   }
 
-  const { data: publicUrlData } = attachmentStorage.storage
+  // 5-year signed URL (private bucket — no public URL available).
+  const FIVE_YEARS_SECS = 5 * 365 * 24 * 3600;
+  const { data: signedData, error: signError } = await attachmentStorage.storage
     .from(ATTACHMENT_BUCKET)
-    .getPublicUrl(path);
+    .createSignedUrl(storagePath, FIVE_YEARS_SECS);
 
-  res.status(201).json({ url: publicUrlData.publicUrl });
+  if (signError || !signedData) {
+    req.log.error({ err: signError }, "elaine attachment sign failed");
+    res.status(500).json({ error: "Could not generate file URL" });
+    return;
+  }
+
+  if (isPdf) {
+    // Extract text so the AI can read the document without vision tokens.
+    let extractedText: string | undefined;
+    try {
+      const parsed = await pdfParse(req.file.buffer);
+      const raw = parsed.text ?? "";
+      extractedText = raw.slice(0, 8000) || undefined;
+    } catch (err) {
+      req.log.warn({ err }, "elaine pdf text extraction failed (non-fatal)");
+    }
+    res.status(201).json({
+      url: signedData.signedUrl,
+      type: "pdf",
+      name: req.file.originalname ?? "document.pdf",
+      ...(extractedText !== undefined ? { extractedText } : {}),
+    });
+    return;
+  }
+
+  res.status(201).json({ url: signedData.signedUrl, type: "image" });
 });
 
 // ---------------------------------------------------------------------------
@@ -2396,8 +2452,14 @@ router.post("/attachments", attachmentUpload.single("file"), async (req, res) =>
 // ---------------------------------------------------------------------------
 
 // GET /conversations — list this user's named conversations, newest first.
+// Supports ?q= for server-side full-text search across title + message content.
+// Each row includes a `preview` snippet (≤80 chars from the first user message).
 router.get("/conversations", async (req, res) => {
   const userId = req.session.userId!;
+  const searchQuery = String(req.query["q"] ?? "").trim();
+
+  // Subquery: first user message text per conversation (used for preview + search).
+  // We fetch all needed data and compute preview in JS to stay Drizzle-compatible.
   const rows = await db
     .select({
       id: elaineHistoryConversations.id,
@@ -2415,15 +2477,54 @@ router.get("/conversations", async (req, res) => {
     .groupBy(elaineHistoryConversations.id)
     .orderBy(desc(elaineHistoryConversations.updatedAt));
 
-  res.json(
-    rows.map((r) => ({
-      id: r.id,
-      title: r.title,
-      createdAt: r.createdAt.toISOString(),
-      updatedAt: r.updatedAt.toISOString(),
-      messageCount: Number(r.messageCount),
-    })),
-  );
+  // Resolve preview snippets for each conversation in one batch query.
+  const convIds = rows.map((r) => r.id);
+  const previewMap = new Map<number, string | null>();
+  if (convIds.length > 0) {
+    // Fetch the earliest user message per conversation.
+    const firstMsgs = await db
+      .select({
+        conversationId: elaineHistoryMessages.conversationId,
+        content: elaineHistoryMessages.content,
+      })
+      .from(elaineHistoryMessages)
+      .where(
+        and(
+          eq(elaineHistoryMessages.role, "user"),
+          inArray(elaineHistoryMessages.conversationId, convIds),
+        ),
+      )
+      .orderBy(elaineHistoryMessages.createdAt);
+
+    // Keep only the first user message per conversation.
+    for (const msg of firstMsgs) {
+      if (msg.conversationId !== null && !previewMap.has(msg.conversationId)) {
+        const snippet = msg.content.replace(/\s+/g, " ").trim().slice(0, 80);
+        previewMap.set(msg.conversationId, snippet || null);
+      }
+    }
+  }
+
+  let result = rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    createdAt: r.createdAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
+    messageCount: Number(r.messageCount),
+    preview: previewMap.get(r.id) ?? null,
+  }));
+
+  // Apply search filter if provided (title + preview snippet).
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    result = result.filter(
+      (c) =>
+        c.title.toLowerCase().includes(q) ||
+        (c.preview?.toLowerCase().includes(q) ?? false),
+    );
+  }
+
+  res.json(result);
 });
 
 // POST /conversations — create a new named conversation.
@@ -2443,6 +2544,7 @@ router.post("/conversations", async (req, res) => {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     messageCount: 0,
+    preview: null,
   });
 });
 
@@ -2532,8 +2634,14 @@ router.delete("/conversation", async (req, res) => {
 
 router.post("/chat", async (req, res) => {
   const userId = req.session.userId!;
-  const { message, pageContext, appId, conversationId, attachmentUrls } =
-    ChatBody.parse(req.body);
+  const {
+    message,
+    pageContext,
+    appId,
+    conversationId,
+    attachmentUrls,
+    attachmentPdfs,
+  } = ChatBody.parse(req.body);
 
   const [user] = await db
     .select({ displayName: appUsers.displayName, email: appUsers.email })
@@ -2709,19 +2817,35 @@ FORMATTING: Your visible replies are rendered in a chat bubble with a markdown r
 
 Keep replies concise and easy to read in a chat bubble.`;
 
-  // If the user attached images, format the current user turn as a vision
-  // content-array so the model can see them. History messages are always
-  // text-only (image URLs are stored in the DB but not re-sent to the model).
+  // Build the user turn content. PDFs are injected as text blocks (extracted
+  // server-side at upload time) before any vision image parts. History messages
+  // are always text-only (URLs are stored in the DB but not re-sent to the model).
+  const hasImages = attachmentUrls && attachmentUrls.length > 0;
+  const hasPdfs = attachmentPdfs && attachmentPdfs.length > 0;
   const userTurnContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] | string =
-    attachmentUrls && attachmentUrls.length > 0
+    hasImages || hasPdfs
       ? [
-          { type: "text", text: message },
-          ...attachmentUrls.map((url) => ({
-            type: "image_url" as const,
-            image_url: { url },
-          })),
+          ...(hasPdfs
+            ? attachmentPdfs!.map((pdf) => ({
+                type: "text" as const,
+                text: `[Attached PDF: ${pdf.name}]\n${pdf.extractedText ?? "(no text extracted)"}`,
+              }))
+            : []),
+          { type: "text" as const, text: message },
+          ...(hasImages
+            ? attachmentUrls!.map((url) => ({
+                type: "image_url" as const,
+                image_url: { url },
+              }))
+            : []),
         ]
       : message;
+
+  // Combine all attachment URLs (images + PDFs) for history storage.
+  const allAttachmentUrls = [
+    ...(attachmentUrls ?? []),
+    ...(attachmentPdfs?.map((p) => p.url) ?? []),
+  ];
 
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: systemPrompt },
@@ -3213,9 +3337,7 @@ Keep replies concise and easy to read in a chat bubble.`;
     {
       role: "user",
       content: message,
-      ...(attachmentUrls && attachmentUrls.length > 0
-        ? { attachmentUrls }
-        : {}),
+      ...(allAttachmentUrls.length > 0 ? { attachmentUrls: allAttachmentUrls } : {}),
     },
     { role: "assistant", content },
   ];
@@ -3228,7 +3350,7 @@ Keep replies concise and easy to read in a chat bubble.`;
         userId,
         role: "user",
         content: message,
-        attachmentUrls: attachmentUrls ?? [],
+        attachmentUrls: allAttachmentUrls,
       },
       {
         conversationId: histConvId,

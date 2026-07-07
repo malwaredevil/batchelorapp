@@ -237,8 +237,10 @@ export async function streamElaineMessage(
     appId: ElaineAppId;
     /** ID of the named conversation to continue. Omit to start a new one. */
     conversationId?: number;
-    /** Public Supabase Storage URLs for images attached to this message. */
+    /** Signed Supabase Storage URLs for image attachments (JPEG/PNG/WebP). */
     attachmentUrls?: string[];
+    /** PDF attachments: signed URL + original filename + extracted text. */
+    attachmentPdfs?: Array<{ url: string; name: string; extractedText?: string }>;
   },
   callbacks: AssistantChatStreamCallbacks = {},
   signal?: AbortSignal,
@@ -504,6 +506,8 @@ export interface ConversationSummary {
   createdAt: string;
   updatedAt: string;
   messageCount: number;
+  /** Snippet from the first user message in the conversation (≤80 chars). */
+  preview: string | null;
 }
 
 export interface ConversationMessage {
@@ -616,13 +620,25 @@ export function useGetElaineConversationMessages<
 }
 
 // ---------------------------------------------------------------------------
-// Attachment upload — images attached to Elaine chat messages.
-// Stored in the public `elaine-attachments` Supabase Storage bucket.
+// Attachment upload — images and PDFs attached to Elaine chat messages.
+// Stored in the private `elaine-attachments` Supabase Storage bucket;
+// the server returns a long-lived signed URL for display and AI vision.
 // ---------------------------------------------------------------------------
+
+export interface ElaineAttachmentUploadResult {
+  /** Long-lived signed URL for display and AI context. */
+  url: string;
+  /** 'image' for JPEG/PNG/WebP; 'pdf' for PDF documents. */
+  type: "image" | "pdf";
+  /** Original filename (provided for PDFs so the UI can show it). */
+  name?: string;
+  /** Extracted plain-text content for PDF files (max 8 000 chars). */
+  extractedText?: string;
+}
 
 export async function uploadElaineAttachment(
   file: File,
-): Promise<{ url: string }> {
+): Promise<ElaineAttachmentUploadResult> {
   const formData = new FormData();
   formData.append("file", file);
   const res = await fetch("/api/elaine/attachments", {
@@ -633,7 +649,7 @@ export async function uploadElaineAttachment(
     const text = await res.text().catch(() => "");
     throw new Error(text || `Upload failed with status ${res.status}`);
   }
-  return res.json() as Promise<{ url: string }>;
+  return res.json() as Promise<ElaineAttachmentUploadResult>;
 }
 
 // ---------------------------------------------------------------------------

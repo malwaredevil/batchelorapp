@@ -1,4 +1,8 @@
-import { Star, Paperclip, ChevronLeft, ChevronRight, RefreshCw, Archive, Trash2, MailOpen, Mail, Columns2, PanelBottom, Square } from "lucide-react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import {
+  Star, Paperclip, ChevronLeft, ChevronRight, ChevronDown, RefreshCw,
+  Archive, Trash2, MailOpen, Mail, Columns2, PanelBottom, Square, AlertCircle,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ThreadSummary } from "@/hooks/use-gmail";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,12 +26,8 @@ function formatDate(dateStr: string): string {
     d.getDate() === now.getDate() &&
     d.getMonth() === now.getMonth() &&
     d.getFullYear() === now.getFullYear();
-  if (isToday) {
-    return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  }
-  if (d.getFullYear() === now.getFullYear()) {
-    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  }
+  if (isToday) return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  if (d.getFullYear() === now.getFullYear()) return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
@@ -40,7 +40,11 @@ function displayFrom(from: string): string {
   return from;
 }
 
-// ── Layout toggle button ──────────────────────────────────────────────────────
+// ── Shared UI pieces ──────────────────────────────────────────────────────────
+
+function Sep() {
+  return <div className="h-5 w-px bg-border/70 mx-1 flex-shrink-0" />;
+}
 
 function LayoutIcon({ mode }: { mode: LayoutMode }) {
   if (mode === "vertical") return <Columns2 className="w-4 h-4" />;
@@ -54,20 +58,127 @@ function LayoutIcon({ mode }: { mode: LayoutMode }) {
   );
 }
 
+function LayoutToggle({
+  layoutMode,
+  onLayoutChange,
+}: {
+  layoutMode: LayoutMode;
+  onLayoutChange: (m: LayoutMode) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          className={cn(
+            "p-1.5 rounded transition-colors text-muted-foreground",
+            layoutMode !== "none" ? "bg-primary/10 text-primary hover:bg-primary/20" : "hover:bg-muted",
+          )}
+          title="Reading pane"
+        >
+          <LayoutIcon mode={layoutMode} />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuItem
+          onClick={() => onLayoutChange("none")}
+          className={cn("gap-2", layoutMode === "none" && "text-primary font-medium")}
+        >
+          <Square className="w-4 h-4 flex-shrink-0" /> No split
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => onLayoutChange("vertical")}
+          className={cn("gap-2", layoutMode === "vertical" && "text-primary font-medium")}
+        >
+          <Columns2 className="w-4 h-4 flex-shrink-0" /> Vertical split
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => onLayoutChange("horizontal")}
+          className={cn("gap-2", layoutMode === "horizontal" && "text-primary font-medium")}
+        >
+          <PanelBottom className="w-4 h-4 flex-shrink-0" /> Horizontal split
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+// Master checkbox — supports indeterminate state
+function MasterCheckbox({
+  total,
+  checkedCount,
+  onChange,
+}: {
+  total: number;
+  checkedCount: number;
+  onChange: (checked: boolean) => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  const isAll = total > 0 && checkedCount === total;
+  const isPartial = checkedCount > 0 && checkedCount < total;
+
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = isPartial;
+  }, [isPartial]);
+
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={isAll}
+      onChange={(e) => onChange(e.target.checked)}
+      onClick={(e) => e.stopPropagation()}
+      className="w-4 h-4 cursor-pointer accent-primary"
+      aria-label="Select all visible threads"
+    />
+  );
+}
+
+// Selection scope dropdown — All / None / Read / Unread / Starred / Unstarred
+type SelectScope = "all" | "none" | "read" | "unread" | "starred" | "unstarred";
+
+function SelectionDropdown({ onSelect }: { onSelect: (s: SelectScope) => void }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          className="p-0.5 rounded hover:bg-muted transition-colors text-muted-foreground"
+          aria-label="Selection options"
+        >
+          <ChevronDown className="w-3 h-3" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-36">
+        <DropdownMenuItem onClick={() => onSelect("all")}>All</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSelect("none")}>None</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSelect("read")}>Read</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSelect("unread")}>Unread</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSelect("starred")}>Starred</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSelect("unstarred")}>Unstarred</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 // ── Row ───────────────────────────────────────────────────────────────────────
 
 interface ThreadRowProps {
   thread: ThreadSummary;
   selected: boolean;
+  isChecked: boolean;
+  anyChecked: boolean;
   isEven: boolean;
   onSelect: () => void;
+  onToggleCheck: () => void;
   onStar: () => void;
   onArchive: () => void;
   onTrash: () => void;
   onToggleRead: () => void;
 }
 
-function ThreadRow({ thread, selected, isEven, onSelect, onStar, onArchive, onTrash, onToggleRead }: ThreadRowProps) {
+function ThreadRow({
+  thread, selected, isChecked, anyChecked, isEven,
+  onSelect, onToggleCheck, onStar, onArchive, onTrash, onToggleRead,
+}: ThreadRowProps) {
   return (
     <div
       onClick={onSelect}
@@ -80,17 +191,31 @@ function ThreadRow({ thread, selected, isEven, onSelect, onStar, onArchive, onTr
           : [isEven ? "" : "bg-sky-50/50 dark:bg-sky-950/15", "hover:bg-muted/40"],
       )}
     >
-      {/* Unread bar */}
+      {/* Unread indicator bar */}
       {thread.isUnread && (
         <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-blue-500 rounded-r" />
       )}
 
+      {/* Checkbox — always shown when anything is selected; otherwise reveal on hover */}
+      <div
+        className={cn(
+          "flex-shrink-0 w-5 flex items-center",
+          !anyChecked && "opacity-0 group-hover:opacity-100 transition-opacity",
+        )}
+      >
+        <input
+          type="checkbox"
+          checked={isChecked}
+          onChange={onToggleCheck}
+          onClick={(e) => e.stopPropagation()}
+          className="w-4 h-4 cursor-pointer accent-primary"
+          aria-label="Select thread"
+        />
+      </div>
+
       {/* Star */}
       <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onStar();
-        }}
+        onClick={(e) => { e.stopPropagation(); onStar(); }}
         className="flex-shrink-0 p-0.5 rounded hover:scale-110 transition-transform"
         aria-label={thread.isStarred ? "Unstar" : "Star"}
       >
@@ -107,26 +232,19 @@ function ThreadRow({ thread, selected, isEven, onSelect, onStar, onArchive, onTr
       {/* From */}
       <div
         className={cn(
-          "w-28 sm:w-36 flex-shrink-0 text-sm truncate",
+          "w-24 sm:w-32 flex-shrink-0 text-sm truncate",
           thread.isUnread ? "font-semibold text-foreground" : "text-foreground/80",
         )}
       >
         {displayFrom(thread.from)}
         {thread.messageCount > 1 && (
-          <span className="text-muted-foreground font-normal ml-1">
-            ({thread.messageCount})
-          </span>
+          <span className="text-muted-foreground font-normal ml-1">({thread.messageCount})</span>
         )}
       </div>
 
       {/* Subject + Snippet */}
       <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden">
-        <span
-          className={cn(
-            "text-sm truncate",
-            thread.isUnread ? "font-semibold text-foreground" : "text-foreground/80",
-          )}
-        >
+        <span className={cn("text-sm truncate", thread.isUnread ? "font-semibold text-foreground" : "text-foreground/80")}>
           {thread.subject}
         </span>
         <span className="text-sm text-muted-foreground truncate hidden sm:block">
@@ -134,12 +252,11 @@ function ThreadRow({ thread, selected, isEven, onSelect, onStar, onArchive, onTr
         </span>
       </div>
 
-      {/* Right: date (hidden on hover) + hover action buttons */}
+      {/* Right: date hidden on hover, actions revealed */}
       <div className="flex items-center gap-1 flex-shrink-0">
         {thread.hasAttachment && (
           <Paperclip className="w-3.5 h-3.5 text-muted-foreground/60 group-hover:hidden" />
         )}
-
         <span
           className={cn(
             "text-xs whitespace-nowrap group-hover:hidden",
@@ -149,31 +266,19 @@ function ThreadRow({ thread, selected, isEven, onSelect, onStar, onArchive, onTr
           {formatDate(thread.date)}
         </span>
 
-        {/* Hover actions */}
         <div className="hidden group-hover:flex items-center gap-0.5">
-          <button
-            onClick={(e) => { e.stopPropagation(); onArchive(); }}
-            title="Archive"
-            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-          >
+          <button onClick={(e) => { e.stopPropagation(); onArchive(); }} title="Archive"
+            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
             <Archive className="w-4 h-4" />
           </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onTrash(); }}
-            title="Delete"
-            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-red-500 transition-colors"
-          >
+          <button onClick={(e) => { e.stopPropagation(); onTrash(); }} title="Delete"
+            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-red-500 transition-colors">
             <Trash2 className="w-4 h-4" />
           </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onToggleRead(); }}
+          <button onClick={(e) => { e.stopPropagation(); onToggleRead(); }}
             title={thread.isUnread ? "Mark as read" : "Mark as unread"}
-            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {thread.isUnread
-              ? <MailOpen className="w-4 h-4" />
-              : <Mail className="w-4 h-4" />
-            }
+            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+            {thread.isUnread ? <MailOpen className="w-4 h-4" /> : <Mail className="w-4 h-4" />}
           </button>
         </div>
       </div>
@@ -186,7 +291,8 @@ function ThreadRow({ thread, selected, isEven, onSelect, onStar, onArchive, onTr
 function ThreadSkeleton() {
   return (
     <div className="flex items-center gap-2 px-4 py-3 border-b border-border/40">
-      <Skeleton className="w-4 h-4 rounded-full flex-shrink-0" />
+      <Skeleton className="w-4 h-4 rounded flex-shrink-0" />
+      <Skeleton className="w-4 h-4 rounded flex-shrink-0" />
       <Skeleton className="w-28 h-4 flex-shrink-0" />
       <Skeleton className="flex-1 h-4" />
       <Skeleton className="w-12 h-3 flex-shrink-0" />
@@ -204,6 +310,11 @@ interface ThreadListProps {
   onArchive: (thread: ThreadSummary) => void;
   onTrash: (thread: ThreadSummary) => void;
   onToggleRead: (thread: ThreadSummary) => void;
+  onBulkArchive: (ids: string[]) => void;
+  onBulkTrash: (ids: string[]) => void;
+  onBulkMarkRead: (ids: string[]) => void;
+  onBulkMarkUnread: (ids: string[]) => void;
+  onBulkSpam: (ids: string[]) => void;
   isLoading: boolean;
   isError: boolean;
   nextPageToken: string | null;
@@ -214,6 +325,8 @@ interface ThreadListProps {
   labelName: string;
   layoutMode: LayoutMode;
   onLayoutChange: (mode: LayoutMode) => void;
+  resultSizeEstimate: number | null;
+  pageStart: number;
 }
 
 export function ThreadList({
@@ -224,6 +337,11 @@ export function ThreadList({
   onArchive,
   onTrash,
   onToggleRead,
+  onBulkArchive,
+  onBulkTrash,
+  onBulkMarkRead,
+  onBulkMarkUnread,
+  onBulkSpam,
   isLoading,
   isError,
   nextPageToken,
@@ -234,7 +352,92 @@ export function ThreadList({
   labelName,
   layoutMode,
   onLayoutChange,
+  resultSizeEstimate,
+  pageStart,
 }: ThreadListProps) {
+  // ── Selection state ──────────────────────────────────────────────────────
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+
+  // Clear selection when the thread list changes (page nav / label switch)
+  useEffect(() => {
+    setCheckedIds(new Set());
+  }, [threads]);
+
+  // ── Sort order (persisted) ───────────────────────────────────────────────
+  const [sortOrder, setSortOrder] = useState<"newest" | "oldest">(() => {
+    const saved = localStorage.getItem("gmail-sort-order");
+    return saved === "oldest" ? "oldest" : "newest";
+  });
+
+  function handleSortChange(order: "newest" | "oldest") {
+    setSortOrder(order);
+    localStorage.setItem("gmail-sort-order", order);
+  }
+
+  // Sorted display list
+  const displayThreads = useMemo(
+    () => (sortOrder === "oldest" ? [...threads].reverse() : threads),
+    [threads, sortOrder],
+  );
+
+  // ── Derived selection values ─────────────────────────────────────────────
+  const checkedCount = checkedIds.size;
+  const anyChecked = checkedCount > 0;
+
+  function applyScope(scope: SelectScope) {
+    switch (scope) {
+      case "all":       setCheckedIds(new Set(threads.map((t) => t.id))); break;
+      case "none":      setCheckedIds(new Set()); break;
+      case "read":      setCheckedIds(new Set(threads.filter((t) => !t.isUnread).map((t) => t.id))); break;
+      case "unread":    setCheckedIds(new Set(threads.filter((t) => t.isUnread).map((t) => t.id))); break;
+      case "starred":   setCheckedIds(new Set(threads.filter((t) => t.isStarred).map((t) => t.id))); break;
+      case "unstarred": setCheckedIds(new Set(threads.filter((t) => !t.isStarred).map((t) => t.id))); break;
+    }
+  }
+
+  function toggleThread(id: string) {
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  // ── Bulk action handlers (clear selection after action) ──────────────────
+  function doBulkArchive()    { onBulkArchive(Array.from(checkedIds));    setCheckedIds(new Set()); }
+  function doBulkTrash()      { onBulkTrash(Array.from(checkedIds));      setCheckedIds(new Set()); }
+  function doBulkMarkRead()   { onBulkMarkRead(Array.from(checkedIds));   setCheckedIds(new Set()); }
+  function doBulkMarkUnread() { onBulkMarkUnread(Array.from(checkedIds)); setCheckedIds(new Set()); }
+  function doBulkSpam()       { onBulkSpam(Array.from(checkedIds));       setCheckedIds(new Set()); }
+
+  // ── Count label ──────────────────────────────────────────────────────────
+  const pageEnd = pageStart + displayThreads.length - 1;
+  const countLabel =
+    resultSizeEstimate != null
+      ? `${pageStart}–${pageEnd} of ~${resultSizeEstimate.toLocaleString()}`
+      : `${pageStart}–${pageEnd}`;
+
+  // ── Icon button helper ────────────────────────────────────────────────────
+  const IconBtn = ({
+    onClick, title, children, danger,
+  }: {
+    onClick: () => void;
+    title: string;
+    children: React.ReactNode;
+    danger?: boolean;
+  }) => (
+    <button
+      onClick={onClick}
+      title={title}
+      className={cn(
+        "p-1.5 rounded transition-colors text-muted-foreground",
+        danger ? "hover:text-red-500 hover:bg-muted" : "hover:text-foreground hover:bg-muted",
+      )}
+    >
+      {children}
+    </button>
+  );
+
   if (isError) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
@@ -248,17 +451,87 @@ export function ThreadList({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-10">
-        <h2 className="text-sm font-semibold text-foreground capitalize">{labelName}</h2>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={onRefresh}
-            className="p-1.5 rounded hover:bg-muted transition-colors"
-            aria-label="Refresh"
-          >
-            <RefreshCw className="w-4 h-4 text-muted-foreground" />
-          </button>
+
+      {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-10 gap-2">
+
+        {/* Left side — changes based on selection */}
+        <div className="flex items-center gap-1 min-w-0">
+          {/* Master checkbox + scope dropdown */}
+          <div className="flex items-center gap-0.5 flex-shrink-0">
+            <MasterCheckbox
+              total={threads.length}
+              checkedCount={checkedCount}
+              onChange={(checked) => applyScope(checked ? "all" : "none")}
+            />
+            <SelectionDropdown onSelect={applyScope} />
+          </div>
+
+          {anyChecked ? (
+            /* ── Bulk action buttons ── */
+            <>
+              <Sep />
+              <IconBtn onClick={doBulkArchive} title="Archive">
+                <Archive className="w-4 h-4" />
+              </IconBtn>
+              <IconBtn onClick={doBulkSpam} title="Report spam">
+                <AlertCircle className="w-4 h-4" />
+              </IconBtn>
+              <IconBtn onClick={doBulkTrash} title="Delete" danger>
+                <Trash2 className="w-4 h-4" />
+              </IconBtn>
+              <Sep />
+              <IconBtn onClick={doBulkMarkRead} title="Mark as read">
+                <MailOpen className="w-4 h-4" />
+              </IconBtn>
+              <IconBtn onClick={doBulkMarkUnread} title="Mark as unread">
+                <Mail className="w-4 h-4" />
+              </IconBtn>
+            </>
+          ) : (
+            /* ── Normal label + refresh ── */
+            <>
+              <IconBtn onClick={onRefresh} title="Refresh">
+                <RefreshCw className="w-4 h-4" />
+              </IconBtn>
+              <span className="text-sm font-semibold text-foreground capitalize truncate hidden sm:block ml-1">
+                {labelName}
+              </span>
+            </>
+          )}
+        </div>
+
+        {/* Right side */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {anyChecked ? (
+            <span className="text-xs text-muted-foreground px-1.5 whitespace-nowrap">
+              {checkedCount} selected
+            </span>
+          ) : (
+            /* Count with sort dropdown */
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="text-xs text-muted-foreground hover:text-foreground px-1.5 py-1 rounded hover:bg-muted transition-colors whitespace-nowrap">
+                  {countLabel}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem
+                  onClick={() => handleSortChange("newest")}
+                  className={cn("gap-2", sortOrder === "newest" && "text-primary font-medium")}
+                >
+                  Newest to oldest
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handleSortChange("oldest")}
+                  className={cn("gap-2", sortOrder === "oldest" && "text-primary font-medium")}
+                >
+                  Oldest to newest
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
           <button
             disabled={!canPrevPage}
             onClick={onPrevPage}
@@ -276,65 +549,29 @@ export function ThreadList({
             <ChevronRight className="w-4 h-4 text-muted-foreground" />
           </button>
 
-          {/* Layout toggle */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                className={cn(
-                  "p-1.5 rounded transition-colors text-muted-foreground",
-                  layoutMode !== "none"
-                    ? "bg-primary/10 text-primary hover:bg-primary/20"
-                    : "hover:bg-muted",
-                )}
-                aria-label="Reading pane layout"
-                title="Reading pane"
-              >
-                <LayoutIcon mode={layoutMode} />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem
-                onClick={() => onLayoutChange("none")}
-                className={cn("gap-2", layoutMode === "none" && "text-primary font-medium")}
-              >
-                <Square className="w-4 h-4 flex-shrink-0" />
-                No split
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => onLayoutChange("vertical")}
-                className={cn("gap-2", layoutMode === "vertical" && "text-primary font-medium")}
-              >
-                <Columns2 className="w-4 h-4 flex-shrink-0" />
-                Vertical split
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => onLayoutChange("horizontal")}
-                className={cn("gap-2", layoutMode === "horizontal" && "text-primary font-medium")}
-              >
-                <PanelBottom className="w-4 h-4 flex-shrink-0" />
-                Horizontal split
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <LayoutToggle layoutMode={layoutMode} onLayoutChange={onLayoutChange} />
         </div>
       </div>
 
-      {/* List */}
+      {/* ── Thread rows ──────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto">
         {isLoading ? (
           Array.from({ length: 12 }).map((_, i) => <ThreadSkeleton key={i} />)
-        ) : threads.length === 0 ? (
+        ) : displayThreads.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
             <p className="text-sm">No messages here</p>
           </div>
         ) : (
-          threads.map((t, i) => (
+          displayThreads.map((t, i) => (
             <ThreadRow
               key={t.id}
               thread={t}
               selected={t.id === selectedId}
+              isChecked={checkedIds.has(t.id)}
+              anyChecked={anyChecked}
               isEven={i % 2 === 0}
               onSelect={() => onSelect(t.id)}
+              onToggleCheck={() => toggleThread(t.id)}
               onStar={() => onStar(t)}
               onArchive={() => onArchive(t)}
               onTrash={() => onTrash(t)}

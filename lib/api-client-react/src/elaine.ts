@@ -99,6 +99,53 @@ export interface ExecutedAssistantAction extends AssistantAction {
   result: unknown;
 }
 
+// Rich widget payloads surfaced by tool calls (weather, places, etc.)
+export interface WeatherDay {
+  date: string;
+  conditionDescription: string;
+  maxTempC: number | null;
+  minTempC: number | null;
+  precipitationChancePercent: number | null;
+}
+
+export interface PlaceResult {
+  id: string;
+  name: string;
+  address: string;
+  rating: number | null;
+  userRatingCount: number | null;
+  lat: number | null;
+  lng: number | null;
+  googleMapsUri: string | null;
+  websiteUri: string | null;
+}
+
+export type ChatWidget =
+  | { type: "weather"; locationName: string; days: WeatherDay[] }
+  | {
+      type: "places";
+      query: string;
+      places: PlaceResult[];
+    }
+  | {
+      type: "air_quality";
+      data: {
+        aqi: number;
+        category: string;
+        dominantPollutant: string;
+        locationName: string;
+      };
+    }
+  | {
+      type: "pollen";
+      data: {
+        date: string;
+        overallCategory: string;
+        locationName: string;
+        types: Array<{ displayName: string; category: string }>;
+      };
+    };
+
 export interface AssistantChatResponse {
   role: "assistant";
   content: string;
@@ -107,6 +154,7 @@ export interface AssistantChatResponse {
   executedActions: ExecutedAssistantAction[];
   actionConfirmationMode: ActionConfirmationMode;
   messages: AssistantMessage[];
+  widgets?: ChatWidget[];
 }
 
 export interface AssistantSettings {
@@ -165,6 +213,7 @@ export interface AssistantChatStreamCallbacks {
   onDelta?: (text: string) => void;
   onAction?: (action: AssistantAction) => void;
   onStatus?: (message: string) => void;
+  onWidget?: (widget: ChatWidget) => void;
   onDone?: (result: AssistantChatResponse) => void;
 }
 
@@ -233,6 +282,9 @@ export async function streamElaineMessage(
           break;
         case "status":
           callbacks.onStatus?.((data as { message: string }).message);
+          break;
+        case "widget":
+          callbacks.onWidget?.(data as ChatWidget);
           break;
         case "done":
           done = data as AssistantChatResponse;

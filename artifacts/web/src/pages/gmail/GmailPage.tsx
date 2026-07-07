@@ -21,6 +21,8 @@ import {
   useGmailTrash,
   useGmailDisconnect,
   useMarkThreadRead,
+  useBulkModify,
+  useBulkTrash,
   type ThreadSummary,
   type ThreadMessage,
   type ComposeParams,
@@ -249,6 +251,8 @@ function GmailPage() {
   // ── Mutations ──────────────────────────────────────────────────────────────
   const modify = useGmailModify();
   const trash = useGmailTrash();
+  const bulkModify = useBulkModify();
+  const bulkTrash = useBulkTrash();
   const disconnect = useGmailDisconnect();
   const markThreadRead = useMarkThreadRead();
 
@@ -374,6 +378,25 @@ function GmailPage() {
         removeLabelIds: t.isUnread ? ["UNREAD"] : [],
       });
     },
+    // Bulk actions
+    onBulkArchive: (ids: string[]) => {
+      bulkModify.mutate({ messageIds: ids, addLabelIds: [], removeLabelIds: ["INBOX"] });
+      toast({ title: `${ids.length} archived` });
+    },
+    onBulkTrash: (ids: string[]) => {
+      bulkTrash.mutate(ids);
+      toast({ title: `${ids.length} moved to Trash` });
+    },
+    onBulkMarkRead: (ids: string[]) => {
+      bulkModify.mutate({ messageIds: ids, addLabelIds: [], removeLabelIds: ["UNREAD"] });
+    },
+    onBulkMarkUnread: (ids: string[]) => {
+      bulkModify.mutate({ messageIds: ids, addLabelIds: ["UNREAD"], removeLabelIds: [] });
+    },
+    onBulkSpam: (ids: string[]) => {
+      bulkModify.mutate({ messageIds: ids, addLabelIds: ["SPAM"], removeLabelIds: ["INBOX"] });
+      toast({ title: `${ids.length} reported as spam` });
+    },
     isLoading: threadsLoading,
     isError: threadsError,
     nextPageToken: threadListData?.nextPageToken ?? null,
@@ -384,6 +407,8 @@ function GmailPage() {
     labelName: activeSearch ? `Search: "${activeSearch}"` : labelDisplayName(selectedLabel),
     layoutMode,
     onLayoutChange: handleLayoutChange,
+    resultSizeEstimate: threadListData?.resultSizeEstimate ?? null,
+    pageStart: pageHistory.length * 20 + 1,
   };
 
   // ── Shared thread view props ───────────────────────────────────────────────

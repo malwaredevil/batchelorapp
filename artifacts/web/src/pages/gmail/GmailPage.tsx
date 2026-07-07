@@ -396,6 +396,21 @@ function GmailPage() {
                     selectedId={selectedThreadId}
                     onSelect={(id) => setSelectedThreadId(id)}
                     onStar={handleStar}
+                    onArchive={(t) => {
+                      modify.mutate({ messageId: t.id, addLabelIds: [], removeLabelIds: ["INBOX"] });
+                      toast({ title: "Archived" });
+                    }}
+                    onTrash={(t) => {
+                      trash.mutate(t.id);
+                      toast({ title: "Moved to Trash" });
+                    }}
+                    onToggleRead={(t) => {
+                      modify.mutate({
+                        messageId: t.id,
+                        addLabelIds: t.isUnread ? [] : ["UNREAD"],
+                        removeLabelIds: t.isUnread ? ["UNREAD"] : [],
+                      });
+                    }}
                     isLoading={threadsLoading}
                     isError={threadsError}
                     nextPageToken={threadListData?.nextPageToken ?? null}

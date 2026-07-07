@@ -24,6 +24,7 @@ import {
   Sparkles,
   MessageCircle,
   SlidersHorizontal,
+  Mail,
 } from "lucide-react";
 import { AppSwitcher } from "@workspace/elaine-ui";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -602,6 +603,16 @@ export function AppLauncher() {
               ) : (
                 <Moon className="w-5 h-5" />
               )}
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate(`${base}gmail`)}
+              aria-label="Open Gmail"
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <Mail className="w-5 h-5" />
             </Button>
 
             <DropdownMenu>

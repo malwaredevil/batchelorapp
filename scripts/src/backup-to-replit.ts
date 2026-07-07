@@ -61,6 +61,17 @@ ALTER TABLE app_users ADD COLUMN IF NOT EXISTS hub_widget_ids TEXT;
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS hub_weather_config TEXT;
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS travels_reminder_email TEXT;
 
+CREATE TABLE IF NOT EXISTS app_gmail_connections (
+  id                      SERIAL PRIMARY KEY,
+  user_id                 INTEGER NOT NULL UNIQUE,
+  google_email            TEXT NOT NULL,
+  refresh_token           TEXT NOT NULL,
+  access_token            TEXT,
+  access_token_expires_at TIMESTAMPTZ,
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Pottery
 CREATE TABLE IF NOT EXISTS pottery_categories (
   id         SERIAL PRIMARY KEY,
@@ -594,6 +605,22 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "app_users", "id");
+
+  summary["app_gmail_connections"] = await copyTable(source, dest, {
+    table: "app_gmail_connections",
+    columns: [
+      "id",
+      "user_id",
+      "google_email",
+      "refresh_token",
+      "access_token",
+      "access_token_expires_at",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "app_gmail_connections", "id");
 
   // ── Pottery ───────────────────────────────────────────────────────────────
   summary["pottery_categories"] = await copyTable(source, dest, {

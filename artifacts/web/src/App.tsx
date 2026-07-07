@@ -17,6 +17,7 @@ import ForgotPassword from "@/pages/forgot-password";
 import ResetPassword from "@/pages/reset-password";
 import Account from "@/pages/account";
 import NotFound from "@/pages/not-found";
+import GmailPageRoute from "@/pages/gmail/GmailPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -71,6 +72,7 @@ function Routes() {
       <Switch>
         <Route path="/" component={AppLauncher} />
         <Route path="/account" component={Account} />
+        <Route path="/gmail" component={GmailPageRoute} />
         <Route path="/login">
           <Redirect to="/" />
         </Route>

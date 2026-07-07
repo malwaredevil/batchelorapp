@@ -66,6 +66,11 @@ export default function TripShare() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Detect ?print=1 — auto-trigger print dialog once data loads
+  const autoPrint =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("print") === "1";
+
   useEffect(() => {
     if (!token) {
       setError("Invalid share link");
@@ -89,6 +94,14 @@ export default function TripShare() {
         setLoading(false);
       });
   }, [token]);
+
+  // Auto-print once the trip data has fully loaded
+  useEffect(() => {
+    if (!autoPrint || !trip || loading) return;
+    // Small delay lets the DOM finish rendering before the print dialog opens
+    const t = setTimeout(() => window.print(), 400);
+    return () => clearTimeout(t);
+  }, [autoPrint, trip, loading]);
 
   if (loading) {
     return (

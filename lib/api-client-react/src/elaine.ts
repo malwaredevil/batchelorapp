@@ -801,6 +801,75 @@ const listElaineAdminModelsFn = (
     method: "GET",
   });
 
+// ---------------------------------------------------------------------------
+// Daily brief — personalised once-per-UTC-day morning summary.
+// ---------------------------------------------------------------------------
+
+export interface DailyBrief {
+  id: number;
+  content: string;
+  generatedAt: string;
+  dismissed: boolean;
+}
+
+export const getElaineDailyBriefQueryKey = () =>
+  [`/api/elaine/daily-brief`] as const;
+
+const getElaineDailyBriefFn = (
+  options?: RequestInit,
+): Promise<DailyBrief> =>
+  customFetch<DailyBrief>("/api/elaine/daily-brief", {
+    ...options,
+    method: "GET",
+  });
+
+export function useGetElaineDailyBrief<
+  TData = DailyBrief,
+  TError = unknown,
+>(options?: {
+  query?: UseQueryOptions<DailyBrief, TError, TData>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getElaineDailyBriefQueryKey();
+  const queryFn: QueryFunction<DailyBrief> = ({ signal }) =>
+    getElaineDailyBriefFn({ signal });
+  const queryOpts = {
+    queryKey,
+    queryFn,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+    ...queryOptions,
+  } as UseQueryOptions<DailyBrief, TError, TData> & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const dismissElaineDailyBriefFn = (): Promise<void> =>
+  customFetch<void>("/api/elaine/daily-brief/dismiss", { method: "POST" });
+
+export function useDismissElaineDailyBrief(options?: {
+  mutation?: UseMutationOptions<void, unknown, void>;
+}): UseMutationResult<void, unknown, void> {
+  const mutationFn: MutationFunction<void, void> = () =>
+    dismissElaineDailyBriefFn();
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const regenerateElaineDailyBriefFn = (): Promise<DailyBrief> =>
+  customFetch<DailyBrief>("/api/elaine/daily-brief/regenerate", {
+    method: "POST",
+  });
+
+export function useRegenerateElaineDailyBrief(options?: {
+  mutation?: UseMutationOptions<DailyBrief, unknown, void>;
+}): UseMutationResult<DailyBrief, unknown, void> {
+  const mutationFn: MutationFunction<DailyBrief, void> = () =>
+    regenerateElaineDailyBriefFn();
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
 export function useListElaineAdminModels<
   TData = OpenRouterModelSummary[],
   TError = unknown,

@@ -972,4 +972,18 @@ export const STATEMENTS: string[] = [
   )`,
   `ALTER TABLE elaine_history_messages ENABLE ROW LEVEL SECURITY`,
   `CREATE INDEX IF NOT EXISTS elaine_history_messages_conversation_id_idx ON elaine_history_messages (conversation_id)`,
+
+  // Daily morning brief — generated once per user per UTC day, cached until
+  // midnight. The unique functional index prevents duplicate generation even
+  // under concurrent requests; ON CONFLICT DO NOTHING is the safe insert path.
+  `CREATE TABLE IF NOT EXISTS elaine_daily_briefs (
+    id           SERIAL PRIMARY KEY,
+    user_id      INTEGER NOT NULL,
+    content      TEXT NOT NULL,
+    generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    dismissed    BOOLEAN NOT NULL DEFAULT FALSE
+  )`,
+  `ALTER TABLE elaine_daily_briefs ENABLE ROW LEVEL SECURITY`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS elaine_daily_briefs_user_day_idx
+     ON elaine_daily_briefs (user_id, (date_trunc('day', generated_at AT TIME ZONE 'UTC')))`,
 ];

@@ -5,6 +5,7 @@ import { useListPottery } from "@workspace/api-client-react";
 import type { PotteryPotteryItem as PotteryItem } from "@workspace/api-client-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import jsPDF from "jspdf";
 
 const SETTINGS_ITEMS = [
   {
@@ -38,80 +39,135 @@ const SETTINGS_ITEMS = [
 function formatDate(d: string | null | undefined): string {
   if (!d) return "—";
   const dt = new Date(d);
-  return isNaN(dt.getTime()) ? "—" : dt.toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" });
+  return isNaN(dt.getTime())
+    ? "—"
+    : dt.toLocaleDateString("en-GB", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
 }
 
-function buildPrintHtml(items: PotteryItem[]): string {
-  const rows = items
-    .map(
-      (item) => `
-    <tr class="item-row">
-      <td class="img-cell">
-        <img src="${item.imageUrl}" alt="${escHtml(item.name)}" />
-      </td>
-      <td class="details-cell">
-        <div class="item-name">${escHtml(item.name)}</div>
-        ${item.maker ? `<div class="field"><span class="label">Maker:</span> ${escHtml(item.maker)}</div>` : ""}
-        ${item.makerInfo ? `<div class="field"><span class="label">Maker info:</span> ${escHtml(item.makerInfo)}</div>` : ""}
-        ${item.shape ? `<div class="field"><span class="label">Shape:</span> ${escHtml(item.shape)}</div>` : ""}
-        ${item.style ? `<div class="field"><span class="label">Style:</span> ${escHtml(item.style)}</div>` : ""}
-        ${item.dimensions ? `<div class="field"><span class="label">Dimensions:</span> ${escHtml(item.dimensions)}</div>` : ""}
-        <div class="field"><span class="label">Acquired:</span> ${formatDate(item.acquiredAt)}</div>
-        ${item.quantity && item.quantity > 1 ? `<div class="field"><span class="label">Quantity:</span> ${item.quantity}</div>` : ""}
-        ${item.categories && item.categories.length > 0 ? `<div class="field"><span class="label">Categories:</span> ${item.categories.map((c) => escHtml(c.name)).join(", ")}</div>` : ""}
-        ${item.notes ? `<div class="field notes"><span class="label">Notes:</span> ${escHtml(item.notes)}</div>` : ""}
-      </td>
-    </tr>`,
-    )
-    .join("\n");
+async function generateInsurancePdf(items: PotteryItem[]): Promise<void> {
+  const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 20;
+  const contentWidth = pageWidth - margin * 2;
 
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Pottery Collection — Insurance Export</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Georgia, 'Times New Roman', serif; color: #111; background: #fff; font-size: 12px; }
-    .cover { page-break-after: always; padding: 60px 40px; border-bottom: 2px solid #111; }
-    .cover h1 { font-size: 28px; margin-bottom: 8px; }
-    .cover p { color: #555; font-size: 14px; }
-    .cover .count { margin-top: 16px; font-size: 16px; font-weight: bold; }
-    table { width: 100%; border-collapse: collapse; }
-    .item-row { border-bottom: 1px solid #ddd; page-break-inside: avoid; }
-    .img-cell { width: 120px; padding: 12px; vertical-align: top; }
-    .img-cell img { width: 100px; height: 100px; object-fit: cover; border-radius: 6px; border: 1px solid #ddd; }
-    .details-cell { padding: 12px 12px 12px 4px; vertical-align: top; }
-    .item-name { font-size: 14px; font-weight: bold; margin-bottom: 4px; }
-    .field { margin-top: 3px; line-height: 1.4; }
-    .label { font-weight: bold; color: #444; }
-    .notes { color: #555; font-style: italic; }
-    @media print {
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  // ── Cover page ─────────────────────────────────────────────────────────────
+  doc.setFillColor(245, 245, 240);
+  doc.rect(0, 0, pageWidth, pageHeight, "F");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(26);
+  doc.setTextColor(17, 17, 17);
+  doc.text("Pottery Collection", margin, 44);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(13);
+  doc.setTextColor(80, 80, 80);
+  doc.text("Insurance & Provenance Record", margin, 54);
+
+  doc.setLineWidth(0.5);
+  doc.setDrawColor(180, 180, 180);
+  doc.line(margin, 60, pageWidth - margin, 60);
+
+  doc.setFontSize(11);
+  doc.setTextColor(50, 50, 50);
+  doc.text(
+    `${items.length} piece${items.length !== 1 ? "s" : ""} — exported ${formatDate(new Date().toISOString())}`,
+    margin,
+    68,
+  );
+
+  // ── Item pages ─────────────────────────────────────────────────────────────
+  let y = 90;
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+
+    if (y > pageHeight - 40) {
+      doc.addPage();
+      y = margin;
     }
-  </style>
-</head>
-<body>
-  <div class="cover">
-    <h1>Pottery Collection</h1>
-    <p>Insurance &amp; Provenance Record</p>
-    <p class="count">${items.length} piece${items.length !== 1 ? "s" : ""} — exported ${new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" })}</p>
-  </div>
-  <table>
-    <tbody>
-      ${rows}
-    </tbody>
-  </table>
-</body>
-</html>`;
-}
 
-function escHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    // Item name
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(17, 17, 17);
+    const nameLines = doc.splitTextToSize(item.name, contentWidth);
+    doc.text(nameLines, margin, y);
+    y += nameLines.length * 6 + 1;
+
+    // Fields
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+    doc.setTextColor(60, 60, 60);
+
+    const fields: [string, string | undefined | null][] = [
+      ["Maker", item.maker],
+      ["Shape", item.shape],
+      ["Style", item.style],
+      ["Dimensions", item.dimensions],
+      ["Acquired", item.acquiredAt ? formatDate(item.acquiredAt) : null],
+      ["Quantity", item.quantity && item.quantity > 1 ? String(item.quantity) : null],
+      ["Categories", item.categories?.map((c) => c.name).join(", ") || null],
+    ];
+
+    for (const [label, value] of fields) {
+      if (!value) continue;
+      if (y > pageHeight - 20) {
+        doc.addPage();
+        y = margin;
+      }
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(80, 80, 80);
+      doc.text(`${label}:`, margin + 3, y);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(40, 40, 40);
+      const valueLines = doc.splitTextToSize(value, contentWidth - 30);
+      doc.text(valueLines, margin + 28, y);
+      y += Math.max(valueLines.length, 1) * 5 + 1;
+    }
+
+    if (item.notes) {
+      if (y > pageHeight - 20) {
+        doc.addPage();
+        y = margin;
+      }
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(9);
+      doc.setTextColor(100, 100, 100);
+      const noteLines = doc.splitTextToSize(`Notes: ${item.notes}`, contentWidth - 6);
+      doc.text(noteLines, margin + 3, y);
+      y += noteLines.length * 4.5 + 1;
+    }
+
+    // Divider
+    doc.setLineWidth(0.2);
+    doc.setDrawColor(210, 210, 210);
+    doc.line(margin, y + 3, pageWidth - margin, y + 3);
+    y += 10;
+  }
+
+  // ── Footer on every page ───────────────────────────────────────────────────
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(160, 160, 160);
+    doc.text(
+      `Page ${p} of ${totalPages}`,
+      pageWidth - margin,
+      pageHeight - 8,
+      { align: "right" },
+    );
+    doc.text("Batchelor Pottery Collection", margin, pageHeight - 8);
+  }
+
+  doc.save("pottery-collection-insurance.pdf");
 }
 
 function InsuranceExportButton({ items }: { items: PotteryItem[] | undefined }) {
@@ -123,23 +179,12 @@ function InsuranceExportButton({ items }: { items: PotteryItem[] | undefined }) 
       return;
     }
     setGenerating(true);
-
     try {
-      const html = buildPrintHtml(items);
-      const win = window.open("", "_blank");
-      if (!win) {
-        toast.error("Pop-up blocked — allow pop-ups and try again");
-        return;
-      }
-      win.document.write(html);
-      win.document.close();
-      win.focus();
-      setTimeout(() => {
-        win.print();
-        setGenerating(false);
-      }, 600);
+      await generateInsurancePdf(items);
+      toast.success(`PDF downloaded — ${items.length} pieces`);
     } catch {
-      toast.error("Export failed. Try again.");
+      toast.error("PDF generation failed. Try again.");
+    } finally {
       setGenerating(false);
     }
   };
@@ -159,7 +204,7 @@ function InsuranceExportButton({ items }: { items: PotteryItem[] | undefined }) 
       <div className="flex-1 text-left">
         <p className="font-medium">Export for insurance</p>
         <p className="text-sm text-muted-foreground">
-          Generate a printable PDF record of every piece
+          Download a PDF record of every piece
         </p>
       </div>
     </Button>

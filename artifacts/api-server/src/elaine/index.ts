@@ -1858,12 +1858,24 @@ const NAVIGATE_PATH_RE_BY_APP: Record<AppId, RegExp> = {
   elaine: /^\/$/,
 };
 
+// Cross-app navigation paths — any app can navigate the user to another app's
+// root or a known sub-path. Query params are whitelisted (search, cat, color).
+// The client detects these prefixes and uses window.location.href instead of
+// the SPA router so the correct React bundle loads.
+const CROSS_APP_NAVIGATE_RE =
+  /^\/(pottery|quilting|travels|elaine)(\/[^?#]*)?(\?[a-zA-Z0-9=+%._~!$&'()*+,;:-]*)?\/?$/;
+
 function navigatePayloadSchemaFor(appId: AppId) {
   return z.object({
     path: z
       .string()
-      .max(60)
-      .regex(NAVIGATE_PATH_RE_BY_APP[appId], "not an allowed in-app path"),
+      .max(200)
+      .refine(
+        (p) =>
+          NAVIGATE_PATH_RE_BY_APP[appId].test(p) ||
+          CROSS_APP_NAVIGATE_RE.test(p),
+        "not an allowed in-app or cross-app path",
+      ),
     reason: z.string().min(1).max(300),
   });
 }
@@ -1899,8 +1911,9 @@ const ConsultExpertsToolPayload = z.object({
 const GET_WEATHER_TOOL_NAME = "get_weather_forecast";
 
 const GetWeatherToolPayload = z.object({
-  lat: z.number().min(-90).max(90),
-  lng: z.number().min(-180).max(180),
+  // lat/lng are optional — if omitted the server geocodes from locationName
+  lat: z.number().min(-90).max(90).optional(),
+  lng: z.number().min(-180).max(180).optional(),
   locationName: z.string().max(200),
 });
 
@@ -1950,18 +1963,18 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: NAVIGATE_TOOL_NAME,
       description:
-        'Suggest moving the user to another screen IN THE APP THEY ARE CURRENTLY VIEWING. You are never allowed to navigate them yourself — the UI only offers a button, the user must click it. First ASK in plain language in your visible reply (e.g. "Want me to open your Wishlist so you can add that?"). Only call this if you actually just asked permission in your visible text, and never for the page the user is already on.',
+        'Suggest navigating the user to a screen — either in the CURRENT app or in a DIFFERENT app. You are never allowed to navigate them yourself — the UI only offers a button the user must click. First ASK in plain language in your visible reply (e.g. "Want me to open your pottery collection?"). Only call this after asking permission in your visible text.\n\nFor the current app, use relative paths: e.g. "/trips/42", "/piece/7", "/fabrics".\nFor cross-app navigation use the app\'s base path prefix:\n  • Pottery collection → "/pottery/" (add ?search=term to pre-filter, e.g. "/pottery/?search=polish")\n  • Pottery piece detail → "/pottery/piece/42"\n  • Quilting fabrics → "/quilting/fabrics"\n  • Quilting root → "/quilting/"\n  • Travels → "/travels/"\n  • Elaine chat → "/elaine/"\nNever use paths from another app without the prefix.',
       parameters: {
         type: "object",
         properties: {
           path: {
             type: "string",
             description:
-              'A real in-app path for the app the user is currently on, e.g. "/trips/42", "/piece/7", or "/fabrics/add". Never invent a path outside that app.',
+              'The destination path. Use relative paths for the current app (e.g. "/trips/42"). Use prefixed paths for other apps (e.g. "/pottery/?search=polish", "/quilting/fabrics").',
           },
           reason: {
             type: "string",
-            description: "Short reason shown to the user",
+            description: "Short user-friendly description of where they will be taken, e.g. 'your pottery collection filtered for polish pottery'",
           },
         },
         required: ["path", "reason"],
@@ -2049,18 +2062,18 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: GET_WEATHER_TOOL_NAME,
       description:
-        "Get a live multi-day weather forecast for a specific place using Google's Weather API — call this whenever the user asks about weather, what to pack for the climate, or whether a planned day might be rained out, instead of guessing or using web_search for this. Requires a real lat/lng — use coordinates you can see on screen (e.g. a trip's destination) or from a prior find_nearby_places/geocode result; never invent coordinates.",
+        "Get a live multi-day weather forecast for a specific place using Google's Weather API — call this whenever the user asks about weather, what to pack for the climate, or whether a planned day might be rained out, instead of guessing or using web_search for this. lat/lng are optional: provide them if you have real coordinates from the screen (e.g. a trip's destination); if not, omit them and just provide locationName — the server will geocode automatically. Never invent coordinates.",
       parameters: {
         type: "object",
         properties: {
-          lat: { type: "number", description: "Latitude" },
-          lng: { type: "number", description: "Longitude" },
+          lat: { type: "number", description: "Latitude (optional — omit if unknown, server will geocode from locationName)" },
+          lng: { type: "number", description: "Longitude (optional — omit if unknown, server will geocode from locationName)" },
           locationName: {
             type: "string",
-            description: "Human-readable place name, for your own reply",
+            description: "Human-readable place name (required). Used to geocode when lat/lng not provided, and shown in the widget.",
           },
         },
-        required: ["lat", "lng", "locationName"],
+        required: ["locationName"],
       },
     },
   },
@@ -2435,9 +2448,9 @@ WEB SEARCH: You have a real-time web_search tool, unlike a plain language model 
 
 EXPERT ADVICE: For genuine expertise/advice/recommendation questions — a judgment call where being one-sided could actually steer the user wrong (packing/gear advice for specific constraints, which option to book, negotiating tactics, whether something is a good idea, etc.) — use consult_experts rather than just answering solo; it cross-checks more than one independent source and gives you back a single synthesized answer to relay. Don't use it for simple facts, small talk, or anything that needs web_search instead (current/live data). It takes a bit longer than a normal reply — that's expected, not a malfunction.
 
-LIVE MAPS DATA: You also have five Google Maps-backed tools for real, current data instead of guessing — prefer these over web_search when they apply, since they return structured, accurate data rather than a text summary. get_weather_forecast gives a real multi-day forecast for a place (use it for "what's the weather", packing-for-climate, or rain-risk questions). find_nearby_places gives real restaurants/attractions/hotels/etc. with ratings (use it for recommendations or "what's near X"). get_route_info gives real distance/time between two places for a given travel mode (use it for "how far"/"how long to get there" questions). get_air_quality gives real current AQI/category/dominant pollutant (use it for pollution/smog questions or when giving packing/health advice for a destination). get_pollen_forecast gives real grass/tree/weed pollen categories (use it for allergy/hay-fever questions or packing advice when someone has allergies). When someone asks "what should I pack" for a trip, proactively check weather, and check air quality/pollen too if it's relevant (long trip, known allergy mentioned, or the destination is known for pollution) rather than only guessing from general knowledge. All five need real lat/lng — pull coordinates from the on-screen state above (trip/destination coordinates) or from a place returned by find_nearby_places; never invent coordinates. If you don't have any usable coordinates on screen, ask the user which trip/destination they mean rather than guessing.
+LIVE MAPS DATA: You also have five Google Maps-backed tools for real, current data instead of guessing — prefer these over web_search when they apply, since they return structured, accurate data rather than a text summary. get_weather_forecast gives a real multi-day forecast for a place (use it for "what's the weather", packing-for-climate, or rain-risk questions). find_nearby_places gives real restaurants/attractions/hotels/etc. with ratings (use it for recommendations or "what's near X"). get_route_info gives real distance/time between two places for a given travel mode (use it for "how far"/"how long to get there" questions). get_air_quality gives real current AQI/category/dominant pollutant (use it for pollution/smog questions or when giving packing/health advice for a destination). get_pollen_forecast gives real grass/tree/weed pollen categories (use it for allergy/hay-fever questions or packing advice when someone has allergies). When someone asks "what should I pack" for a trip, proactively check weather, and check air quality/pollen too if it's relevant (long trip, known allergy mentioned, or the destination is known for pollution) rather than only guessing from general knowledge. For get_weather_forecast: lat/lng are optional — just provide locationName and the server geocodes automatically, so ALWAYS call this tool when asked about weather (never use web_search as a fallback for weather). For find_nearby_places and get_route_info: still need real lat/lng — pull coordinates from on-screen trip/destination data or a prior find_nearby_places result; never invent coordinates. For get_air_quality and get_pollen_forecast: also need lat/lng from context.
 
-FORMATTING: Your visible replies are shown as plain text in a chat bubble — there is no markdown renderer on the other end. Never use markdown syntax: no **bold**, no *italics*, no # headers, no markdown bullet/dash lists, no backtick code formatting. Any of these will show up as literal stray asterisks/hashes/dashes to the user instead of formatting. When you need structure (e.g. a multi-day forecast or a list of options), write it as plain sentences or simple numbered lines like "1. ..." / "2. ..." separated by line breaks — never asterisks or dashes as bullet markers.
+FORMATTING: Your visible replies are rendered in a chat bubble with a markdown renderer. Use markdown naturally to make replies easier to read, but keep it light — this is a chat bubble, not a document. Good uses: **bold** for key terms or place names, bullet lists (- item) for 3+ items, numbered lists (1. step) for instructions, ## for a section heading only when the reply is genuinely multi-section. Do not use headers for short replies. Do not use markdown for a single sentence or two — plain prose is fine. Never use backtick code blocks. When you call a weather, places, air-quality, or pollen tool and it succeeds, a rich visual card is automatically shown below your reply — so in that case keep your reply text very short (1–2 sentences summarising the key point) rather than spelling out all the data again in text.
 
 Keep replies concise and easy to read in a chat bubble.`;
 
@@ -2742,16 +2755,29 @@ Keep replies concise and easy to read in a chat bubble.`;
               JSON.parse(call.args),
             );
             if (!parsed.success) {
-              resultText =
-                "Invalid location — ask the user to clarify or use on-screen coordinates.";
+              resultText = "Invalid location — ask the user to clarify.";
             } else {
-              const forecast = await getWeatherForecast(
-                parsed.data.lat,
-                parsed.data.lng,
-              );
-              resultText =
-                forecast.length > 0
-                  ? `Forecast for ${parsed.data.locationName}:\n` +
+              const locationName = parsed.data.locationName;
+              // Normalize optional lat/lng to null for clean narrowing
+              let lat: number | null = parsed.data.lat ?? null;
+              let lng: number | null = parsed.data.lng ?? null;
+              // Geocode from locationName when coordinates weren't provided
+              if (lat == null || lng == null) {
+                const geoPlaces = await searchPlaces(locationName);
+                if (
+                  geoPlaces.length > 0 &&
+                  geoPlaces[0].lat != null &&
+                  geoPlaces[0].lng != null
+                ) {
+                  lat = geoPlaces[0].lat;
+                  lng = geoPlaces[0].lng;
+                }
+              }
+              if (lat != null && lng != null) {
+                const forecast = await getWeatherForecast(lat, lng);
+                if (forecast.length > 0) {
+                  resultText =
+                    `Forecast for ${locationName}:\n` +
                     forecast
                       .map(
                         (d) =>
@@ -2760,8 +2786,18 @@ Keep replies concise and easy to read in a chat bubble.`;
                             ? `, ${d.precipitationChancePercent}% chance of rain`
                             : ""),
                       )
-                      .join("\n")
-                  : `No forecast data available for ${parsed.data.locationName}.`;
+                      .join("\n");
+                  sendEvent("widget", {
+                    type: "weather",
+                    locationName,
+                    days: forecast,
+                  });
+                } else {
+                  resultText = `No forecast data available for ${locationName}.`;
+                }
+              } else {
+                resultText = `Couldn't find coordinates for "${locationName}" — tell the user to try a more specific place name.`;
+              }
             }
           } else if (call.name === FIND_NEARBY_PLACES_TOOL_NAME) {
             const parsed = FindNearbyPlacesToolPayload.safeParse(
@@ -2775,15 +2811,21 @@ Keep replies concise and easy to read in a chat bubble.`;
                 parsed.data.lat,
                 parsed.data.lng,
               );
-              resultText =
-                places.length > 0
-                  ? places
-                      .map(
-                        (p) =>
-                          `${p.name} — ${p.address}${p.rating != null ? ` (${p.rating}★, ${p.userRatingCount ?? 0} ratings)` : ""}`,
-                      )
-                      .join("\n")
-                  : "No places found for that search.";
+              if (places.length > 0) {
+                resultText = places
+                  .map(
+                    (p) =>
+                      `${p.name} — ${p.address}${p.rating != null ? ` (${p.rating}★, ${p.userRatingCount ?? 0} ratings)` : ""}`,
+                  )
+                  .join("\n");
+                sendEvent("widget", {
+                  type: "places",
+                  query: parsed.data.query,
+                  places,
+                });
+              } else {
+                resultText = "No places found for that search.";
+              }
             }
           } else if (call.name === GET_ROUTE_INFO_TOOL_NAME) {
             const parsed = GetRouteInfoToolPayload.safeParse(
@@ -2816,9 +2858,20 @@ Keep replies concise and easy to read in a chat bubble.`;
                 parsed.data.lat,
                 parsed.data.lng,
               );
-              resultText = airQuality
-                ? `Air quality in ${parsed.data.locationName}: Universal AQI ${airQuality.aqi} (${airQuality.category}), dominant pollutant ${airQuality.dominantPollutant}.`
-                : `No air quality data available for ${parsed.data.locationName}.`;
+              if (airQuality) {
+                resultText = `Air quality in ${parsed.data.locationName}: Universal AQI ${airQuality.aqi} (${airQuality.category}), dominant pollutant ${airQuality.dominantPollutant}.`;
+                sendEvent("widget", {
+                  type: "air_quality",
+                  data: {
+                    aqi: airQuality.aqi,
+                    category: airQuality.category,
+                    dominantPollutant: airQuality.dominantPollutant,
+                    locationName: parsed.data.locationName,
+                  },
+                });
+              } else {
+                resultText = `No air quality data available for ${parsed.data.locationName}.`;
+              }
             }
           } else if (call.name === GET_POLLEN_FORECAST_TOOL_NAME) {
             const parsed = GetPollenForecastToolPayload.safeParse(
@@ -2832,12 +2885,24 @@ Keep replies concise and easy to read in a chat bubble.`;
                 parsed.data.lat,
                 parsed.data.lng,
               );
-              resultText = pollen
-                ? `Pollen forecast for ${parsed.data.locationName} (${pollen.date}): overall ${pollen.overallCategory}. ` +
+              if (pollen) {
+                resultText =
+                  `Pollen forecast for ${parsed.data.locationName} (${pollen.date}): overall ${pollen.overallCategory}. ` +
                   pollen.types
                     .map((t) => `${t.displayName}: ${t.category}`)
-                    .join(", ")
-                : `No pollen data available for ${parsed.data.locationName}.`;
+                    .join(", ");
+                sendEvent("widget", {
+                  type: "pollen",
+                  data: {
+                    date: pollen.date,
+                    overallCategory: pollen.overallCategory,
+                    locationName: parsed.data.locationName,
+                    types: pollen.types,
+                  },
+                });
+              } else {
+                resultText = `No pollen data available for ${parsed.data.locationName}.`;
+              }
             }
           } else {
             resultText = "Unsupported tool.";

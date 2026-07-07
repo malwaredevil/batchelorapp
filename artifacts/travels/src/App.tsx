@@ -120,7 +120,7 @@ function Router() {
       </Route>
 
       {/* Public share route — no auth required */}
-      <Route path="/trips/share/:token" component={TripShare} />
+      <Route path="/trips/:id/share" component={TripShare} />
 
       <Route component={NotFound} />
     </Switch>

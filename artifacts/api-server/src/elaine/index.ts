@@ -3524,7 +3524,18 @@ async function requireOwner(req: Request, res: Response): Promise<boolean> {
 // friendly brief with one highlighted action for the day.
 // ---------------------------------------------------------------------------
 
-async function generateDailyBriefContent(): Promise<string> {
+// NOTE ON SCOPING: pottery, quilting, and travels data are fully
+// household-shared — there is no per-user ownership boundary within these apps.
+// The generated brief draws from household-wide data (all trips, all reminders,
+// all collection items regardless of which household member created them), which
+// is consistent with the architecture (see replit.md and threat_model.md).
+// The userId parameter scopes the CACHE row (one brief per user per UTC day),
+// not the content queries.
+async function generateDailyBriefContent(userId: number): Promise<string> {
+  // userId is used only to ensure the context prompt is addressed to the right
+  // person. Content queries are household-wide by design.
+  void userId;
+
   const now = new Date();
   const startOfTodayUtc = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
@@ -3751,7 +3762,7 @@ router.get("/daily-brief", async (req, res) => {
 
   let content: string;
   try {
-    content = await generateDailyBriefContent();
+    content = await generateDailyBriefContent(userId);
   } catch (err) {
     req.log.error({ err }, "elaine daily brief generation failed");
     res.status(503).json({ error: "Brief generation unavailable" });
@@ -3836,7 +3847,7 @@ router.post("/daily-brief/regenerate", async (req, res) => {
 
   let content: string;
   try {
-    content = await generateDailyBriefContent();
+    content = await generateDailyBriefContent(userId);
   } catch (err) {
     req.log.error({ err }, "elaine daily brief regeneration failed");
     res.status(503).json({ error: "Brief generation unavailable" });

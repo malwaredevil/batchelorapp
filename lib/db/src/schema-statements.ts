@@ -895,4 +895,41 @@ export const STATEMENTS: string[] = [
   // travels_trips.share_token: random hex token for public read-only itinerary share links.
   // Null until the user generates a share link for the first time.
   `ALTER TABLE travels_trips ADD COLUMN IF NOT EXISTS share_token TEXT`,
+
+  // ── Packing Lists ────────────────────────────────────────────────────────────
+  // One packing list per trip (auto-created on first use). Separate from the
+  // legacy travels_trips.packing_list jsonb column which was used before this
+  // feature; new rows use these tables exclusively.
+  `CREATE TABLE IF NOT EXISTS travels_packing_lists (
+    id          SERIAL PRIMARY KEY,
+    trip_id     INTEGER NOT NULL UNIQUE,
+    name        TEXT NOT NULL DEFAULT 'Packing List',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_packing_lists ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travels_packing_lists_trip_id_idx ON travels_packing_lists (trip_id)`,
+
+  `CREATE TABLE IF NOT EXISTS travels_packing_items (
+    id                SERIAL PRIMARY KEY,
+    list_id           INTEGER NOT NULL REFERENCES travels_packing_lists(id) ON DELETE CASCADE,
+    text              TEXT NOT NULL,
+    packed            BOOLEAN NOT NULL DEFAULT false,
+    sort_order        INTEGER NOT NULL DEFAULT 0,
+    added_by_user_id  INTEGER,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_packing_items ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travels_packing_items_list_id_idx ON travels_packing_items (list_id)`,
+
+  // Reusable named packing templates (household-scoped: any user can see and use
+  // any template, user_id is attribution only).
+  `CREATE TABLE IF NOT EXISTS travels_packing_templates (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER NOT NULL,
+    name        TEXT NOT NULL,
+    items       JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_packing_templates ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travels_packing_templates_user_id_idx ON travels_packing_templates (user_id)`,
 ];

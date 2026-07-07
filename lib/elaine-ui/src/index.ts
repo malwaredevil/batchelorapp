@@ -7,3 +7,5 @@ export * from "./ElaineWidget";
 export * from "./ElaineSettingsCard";
 export * from "./GlobalConfigCard";
 export * from "./theme";
+export * from "./ChatWidgets";
+export * from "./MarkdownMessage";

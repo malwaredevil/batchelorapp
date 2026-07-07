@@ -33,7 +33,16 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { MapPin, Plus, Plane, ArrowRight, Filter, X, Sparkles, Loader2 } from "lucide-react";
+import {
+  MapPin,
+  Plus,
+  Plane,
+  ArrowRight,
+  Filter,
+  X,
+  Sparkles,
+  Loader2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { MagnetCheckDialog } from "@/components/MagnetCheckDialog";
 import { usePageAssistantContext } from "@/lib/assistant-context";
@@ -62,7 +71,9 @@ function AiPlannerDialog({
   const [travellerCount, setTravellerCount] = useState(2);
   const [phase, setPhase] = useState<PlannerPhase>("idle");
   const [streamText, setStreamText] = useState("");
-  const [scaffold, setScaffold] = useState<Record<string, unknown> | null>(null);
+  const [scaffold, setScaffold] = useState<Record<string, unknown> | null>(
+    null,
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -136,7 +147,11 @@ function AiPlannerDialog({
           if (line.startsWith("data: ")) {
             const raw = line.slice(6);
             try {
-              const parsed = JSON.parse(raw) as { text?: string; scaffold?: Record<string, unknown>; error?: string };
+              const parsed = JSON.parse(raw) as {
+                text?: string;
+                scaffold?: Record<string, unknown>;
+                error?: string;
+              };
               if (parsed.text != null) {
                 setStreamText((t) => t + parsed.text);
               }
@@ -166,7 +181,9 @@ function AiPlannerDialog({
     if (!scaffold) return;
 
     // Parse transportTo — AI may return "flew", "drove", "train" or synonyms
-    const transportRaw = String(scaffold["transportTo"] ?? scaffold["transport"] ?? "");
+    const transportRaw = String(
+      scaffold["transportTo"] ?? scaffold["transport"] ?? "",
+    );
     const transportTo = (["drove", "flew", "train"] as const).includes(
       transportRaw as "drove" | "flew" | "train",
     )
@@ -185,8 +202,11 @@ function AiPlannerDialog({
       title: String(scaffold["title"] ?? prompt.slice(0, 60)),
       destination: String(scaffold["destination"] ?? ""),
       status: "planning",
-      startDate: ((scaffold["startDate"] as string | undefined) ?? startDate) || undefined,
-      endDate: ((scaffold["endDate"] as string | undefined) ?? endDate) || undefined,
+      startDate:
+        ((scaffold["startDate"] as string | undefined) ?? startDate) ||
+        undefined,
+      endDate:
+        ((scaffold["endDate"] as string | undefined) ?? endDate) || undefined,
       travellerCount,
       hasRentalCar: false,
       notes: scaffold["notes"] as string | undefined,
@@ -210,12 +230,15 @@ function AiPlannerDialog({
           for (const rem of scaffoldReminders as unknown[]) {
             if (rem === null || typeof rem !== "object") continue;
             const r = rem as Record<string, unknown>;
-            const title = typeof r["title"] === "string" ? r["title"].trim() : "";
+            const title =
+              typeof r["title"] === "string" ? r["title"].trim() : "";
             if (!title) continue;
             const body: CreateReminderBody = {
               title,
-              description: typeof r["description"] === "string" ? r["description"] : null,
-              dueDate: typeof r["dueDate"] === "string" ? r["dueDate"] : undefined,
+              description:
+                typeof r["description"] === "string" ? r["description"] : null,
+              dueDate:
+                typeof r["dueDate"] === "string" ? r["dueDate"] : undefined,
             };
             createReminder.mutate({ tripId: newTrip.id, body });
           }
@@ -223,7 +246,10 @@ function AiPlannerDialog({
 
         // Persist itinerary scaffold if the AI generated day-by-day plan
         if (itinerary) {
-          updateTrip.mutate({ id: newTrip.id, body: { itinerary } }, { onSettled: finish });
+          updateTrip.mutate(
+            { id: newTrip.id, body: { itinerary } },
+            { onSettled: finish },
+          );
         } else {
           finish();
         }
@@ -303,7 +329,9 @@ function AiPlannerDialog({
                 ref={scrollRef}
                 className="bg-muted/40 rounded-lg p-3 text-sm text-foreground whitespace-pre-wrap max-h-72 overflow-y-auto font-mono leading-relaxed"
               >
-                {streamText || <span className="text-muted-foreground">Thinking…</span>}
+                {streamText || (
+                  <span className="text-muted-foreground">Thinking…</span>
+                )}
               </div>
             </div>
           ) : (
@@ -321,14 +349,20 @@ function AiPlannerDialog({
               </div>
               {scaffold && (
                 <div className="bg-card border border-border/60 rounded-lg p-3 space-y-1 text-sm">
-                  <p className="font-medium text-foreground">{String(scaffold["title"] ?? "")}</p>
+                  <p className="font-medium text-foreground">
+                    {String(scaffold["title"] ?? "")}
+                  </p>
                   {!!scaffold["destination"] && (
-                    <p className="text-muted-foreground">{String(scaffold["destination"])}</p>
+                    <p className="text-muted-foreground">
+                      {String(scaffold["destination"])}
+                    </p>
                   )}
                   {!!(scaffold["startDate"] ?? startDate) && (
                     <p className="text-muted-foreground text-xs">
                       {String(scaffold["startDate"] ?? startDate)}
-                      {!!(scaffold["endDate"] ?? endDate) ? ` → ${String(scaffold["endDate"] ?? endDate)}` : ""}
+                      {!!(scaffold["endDate"] ?? endDate)
+                        ? ` → ${String(scaffold["endDate"] ?? endDate)}`
+                        : ""}
                     </p>
                   )}
                 </div>

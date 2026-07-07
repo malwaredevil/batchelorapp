@@ -1,6 +1,14 @@
 import { useRoute } from "wouter";
 import { useEffect, useState } from "react";
-import { Calendar, MapPin, Users, Plane, Train, Car, Clock } from "lucide-react";
+import {
+  Calendar,
+  MapPin,
+  Users,
+  Plane,
+  Train,
+  Car,
+  Clock,
+} from "lucide-react";
 
 type ItineraryActivity = {
   time: string;
@@ -44,7 +52,9 @@ function formatDate(d: string | null | undefined) {
 function formatTime(time: string) {
   const match = time.match(/^(\d{1,2}):(\d{2})/);
   if (!match) return time;
-  const parsed = new Date(`2000-01-01T${match[1]!.padStart(2, "0")}:${match[2]}:00`);
+  const parsed = new Date(
+    `2000-01-01T${match[1]!.padStart(2, "0")}:${match[2]}:00`,
+  );
   if (isNaN(parsed.getTime())) return time;
   return parsed.toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -78,10 +88,14 @@ export default function TripShare() {
       setLoading(false);
       return;
     }
-    fetch(`/api/travels/trips/${encodeURIComponent(tripId)}/share?token=${encodeURIComponent(token)}`)
+    fetch(
+      `/api/travels/trips/${encodeURIComponent(tripId)}/share?token=${encodeURIComponent(token)}`,
+    )
       .then(async (res) => {
         if (!res.ok) {
-          const data = await res.json().catch(() => ({})) as { error?: string };
+          const data = (await res.json().catch(() => ({}))) as {
+            error?: string;
+          };
           throw new Error(data.error ?? "Not found");
         }
         return res.json() as Promise<TripShareData>;
@@ -107,7 +121,9 @@ export default function TripShare() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-muted-foreground animate-pulse">Loading itinerary…</div>
+        <div className="text-muted-foreground animate-pulse">
+          Loading itinerary…
+        </div>
       </div>
     );
   }
@@ -116,7 +132,9 @@ export default function TripShare() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-3 px-6">
         <MapPin className="w-10 h-10 text-muted-foreground/40" />
-        <p className="text-lg font-medium text-foreground">Itinerary not found</p>
+        <p className="text-lg font-medium text-foreground">
+          Itinerary not found
+        </p>
         <p className="text-sm text-muted-foreground text-center max-w-sm">
           This share link may have expired or been revoked.
         </p>
@@ -128,7 +146,8 @@ export default function TripShare() {
   const nights =
     trip.startDate && trip.endDate
       ? Math.round(
-          (new Date(trip.endDate).getTime() - new Date(trip.startDate).getTime()) /
+          (new Date(trip.endDate).getTime() -
+            new Date(trip.startDate).getTime()) /
             86400000,
         )
       : null;
@@ -148,7 +167,9 @@ export default function TripShare() {
         {/* Header */}
         <div className="bg-card border-b border-border/50 sticky top-0 z-10 no-print">
           <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">Shared itinerary via Batchelor Travels</p>
+            <p className="text-xs text-muted-foreground">
+              Shared itinerary via Batchelor Travels
+            </p>
             <button
               onClick={() => window.print()}
               className="text-xs px-3 py-1.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-medium"
@@ -162,7 +183,9 @@ export default function TripShare() {
         <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
           {/* Trip header */}
           <div className="space-y-3">
-            <h1 className="font-serif text-3xl text-foreground leading-tight">{trip.title}</h1>
+            <h1 className="font-serif text-3xl text-foreground leading-tight">
+              {trip.title}
+            </h1>
             <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
               <span className="flex items-center gap-1.5">
                 <MapPin className="w-4 h-4" />
@@ -173,12 +196,15 @@ export default function TripShare() {
                   <Calendar className="w-4 h-4" />
                   {formatDate(trip.startDate)}
                   {trip.endDate && ` – ${formatDate(trip.endDate)}`}
-                  {nights != null && nights > 0 && ` (${nights} night${nights !== 1 ? "s" : ""})`}
+                  {nights != null &&
+                    nights > 0 &&
+                    ` (${nights} night${nights !== 1 ? "s" : ""})`}
                 </span>
               )}
               <span className="flex items-center gap-1.5">
                 <Users className="w-4 h-4" />
-                {trip.travellerCount} traveller{trip.travellerCount !== 1 ? "s" : ""}
+                {trip.travellerCount} traveller
+                {trip.travellerCount !== 1 ? "s" : ""}
               </span>
               {trip.transportTo && (
                 <span className="flex items-center gap-1.5">
@@ -193,20 +219,27 @@ export default function TripShare() {
             </div>
             {trip.accommodationName && (
               <p className="text-sm text-muted-foreground">
-                Staying at: <span className="text-foreground font-medium">{trip.accommodationName}</span>
+                Staying at:{" "}
+                <span className="text-foreground font-medium">
+                  {trip.accommodationName}
+                </span>
                 {trip.accommodationArea && `, ${trip.accommodationArea}`}
               </p>
             )}
             {trip.theOneThing && (trip.theOneThing as string[]).length > 0 && (
               <div className="bg-primary/5 border border-primary/20 rounded-lg px-4 py-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-primary/70 mb-1">The one thing</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-primary/70 mb-1">
+                  The one thing
+                </p>
                 <p className="text-sm text-foreground italic">
                   "{(trip.theOneThing as string[]).join(", ")}"
                 </p>
               </div>
             )}
             {trip.notes && (
-              <p className="text-sm text-muted-foreground leading-relaxed">{trip.notes}</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {trip.notes}
+              </p>
             )}
           </div>
 
@@ -221,12 +254,18 @@ export default function TripShare() {
                   {/* Day header */}
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                      <span className="text-xs font-bold text-primary">{dayIdx + 1}</span>
+                      <span className="text-xs font-bold text-primary">
+                        {dayIdx + 1}
+                      </span>
                     </div>
                     <div>
-                      <p className="font-semibold text-foreground">{day.title}</p>
+                      <p className="font-semibold text-foreground">
+                        {day.title}
+                      </p>
                       {day.date && (
-                        <p className="text-xs text-muted-foreground">{formatDate(day.date)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDate(day.date)}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -244,10 +283,14 @@ export default function TripShare() {
                               <Clock className="w-3 h-3" />
                               {formatTime(act.time)}
                             </span>
-                            <span className="font-medium text-sm text-foreground">{act.name}</span>
+                            <span className="font-medium text-sm text-foreground">
+                              {act.name}
+                            </span>
                           </div>
                           {act.proximity && (
-                            <span className="text-xs text-muted-foreground shrink-0">{act.proximity}</span>
+                            <span className="text-xs text-muted-foreground shrink-0">
+                              {act.proximity}
+                            </span>
                           )}
                         </div>
                         {act.description && (
@@ -277,10 +320,7 @@ export default function TripShare() {
           <div className="border-t border-border/50 pt-6 text-center no-print">
             <p className="text-xs text-muted-foreground">
               Created with{" "}
-              <a
-                href="/travels"
-                className="text-primary hover:underline"
-              >
+              <a href="/travels" className="text-primary hover:underline">
                 Batchelor Travels
               </a>
             </p>

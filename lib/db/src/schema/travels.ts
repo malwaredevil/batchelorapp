@@ -601,3 +601,63 @@ export type TravelsCustomDocumentTypeRow =
   typeof travelsCustomDocumentTypes.$inferSelect;
 export type InsertTravelsCustomDocumentType =
   typeof travelsCustomDocumentTypes.$inferInsert;
+
+// ── Packing Lists ─────────────────────────────────────────────────────────────
+// One list per trip (auto-created on first use). Items are stored in
+// travels_packing_items. Templates are reusable named lists stored separately.
+
+export const travelsPackingLists = pgTable(
+  "travels_packing_lists",
+  {
+    id: serial("id").primaryKey(),
+    tripId: integer("trip_id").notNull().unique(),
+    name: text("name").notNull().default("Packing List"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("travels_packing_lists_trip_id_idx").on(table.tripId)],
+).enableRLS();
+
+export type TravelsPackingListRow = typeof travelsPackingLists.$inferSelect;
+export type InsertTravelsPackingList = typeof travelsPackingLists.$inferInsert;
+
+export const travelsPackingItems = pgTable(
+  "travels_packing_items",
+  {
+    id: serial("id").primaryKey(),
+    listId: integer("list_id").notNull(),
+    text: text("text").notNull(),
+    packed: boolean("packed").notNull().default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
+    addedByUserId: integer("added_by_user_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("travels_packing_items_list_id_idx").on(table.listId)],
+).enableRLS();
+
+export type TravelsPackingItemRow = typeof travelsPackingItems.$inferSelect;
+export type InsertTravelsPackingItem = typeof travelsPackingItems.$inferInsert;
+
+export const travelsPackingTemplates = pgTable(
+  "travels_packing_templates",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull(),
+    name: text("name").notNull(),
+    items: jsonb("items").notNull().default(sql`'[]'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("travels_packing_templates_user_id_idx").on(table.userId),
+  ],
+).enableRLS();
+
+export type TravelsPackingTemplateRow =
+  typeof travelsPackingTemplates.$inferSelect;
+export type InsertTravelsPackingTemplate =
+  typeof travelsPackingTemplates.$inferInsert;

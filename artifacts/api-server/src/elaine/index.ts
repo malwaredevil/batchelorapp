@@ -1974,7 +1974,8 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           },
           reason: {
             type: "string",
-            description: "Short user-friendly description of where they will be taken, e.g. 'your pottery collection filtered for polish pottery'",
+            description:
+              "Short user-friendly description of where they will be taken, e.g. 'your pottery collection filtered for polish pottery'",
           },
         },
         required: ["path", "reason"],
@@ -2066,11 +2067,20 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       parameters: {
         type: "object",
         properties: {
-          lat: { type: "number", description: "Latitude (optional — omit if unknown, server will geocode from locationName)" },
-          lng: { type: "number", description: "Longitude (optional — omit if unknown, server will geocode from locationName)" },
+          lat: {
+            type: "number",
+            description:
+              "Latitude (optional — omit if unknown, server will geocode from locationName)",
+          },
+          lng: {
+            type: "number",
+            description:
+              "Longitude (optional — omit if unknown, server will geocode from locationName)",
+          },
           locationName: {
             type: "string",
-            description: "Human-readable place name (required). Used to geocode when lat/lng not provided, and shown in the widget.",
+            description:
+              "Human-readable place name (required). Used to geocode when lat/lng not provided, and shown in the widget.",
           },
         },
         required: ["locationName"],

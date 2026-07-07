@@ -1,7 +1,19 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
-  Star, Paperclip, ChevronLeft, ChevronRight, ChevronDown, RefreshCw,
-  Archive, Trash2, MailOpen, Mail, Columns2, PanelBottom, Square, AlertCircle,
+  Star,
+  Paperclip,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  RefreshCw,
+  Archive,
+  Trash2,
+  MailOpen,
+  Mail,
+  Columns2,
+  PanelBottom,
+  Square,
+  AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ThreadSummary } from "@/hooks/use-gmail";
@@ -26,9 +38,18 @@ function formatDate(dateStr: string): string {
     d.getDate() === now.getDate() &&
     d.getMonth() === now.getMonth() &&
     d.getFullYear() === now.getFullYear();
-  if (isToday) return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  if (d.getFullYear() === now.getFullYear()) return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  if (isToday)
+    return d.toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  if (d.getFullYear() === now.getFullYear())
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 function displayFrom(from: string): string {
@@ -71,7 +92,9 @@ function LayoutToggle({
         <button
           className={cn(
             "p-1.5 rounded transition-colors text-muted-foreground",
-            layoutMode !== "none" ? "bg-primary/10 text-primary hover:bg-primary/20" : "hover:bg-muted",
+            layoutMode !== "none"
+              ? "bg-primary/10 text-primary hover:bg-primary/20"
+              : "hover:bg-muted",
           )}
           title="Reading pane"
         >
@@ -81,19 +104,28 @@ function LayoutToggle({
       <DropdownMenuContent align="end" className="w-44">
         <DropdownMenuItem
           onClick={() => onLayoutChange("none")}
-          className={cn("gap-2", layoutMode === "none" && "text-primary font-medium")}
+          className={cn(
+            "gap-2",
+            layoutMode === "none" && "text-primary font-medium",
+          )}
         >
           <Square className="w-4 h-4 flex-shrink-0" /> No split
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => onLayoutChange("vertical")}
-          className={cn("gap-2", layoutMode === "vertical" && "text-primary font-medium")}
+          className={cn(
+            "gap-2",
+            layoutMode === "vertical" && "text-primary font-medium",
+          )}
         >
           <Columns2 className="w-4 h-4 flex-shrink-0" /> Vertical split
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => onLayoutChange("horizontal")}
-          className={cn("gap-2", layoutMode === "horizontal" && "text-primary font-medium")}
+          className={cn(
+            "gap-2",
+            layoutMode === "horizontal" && "text-primary font-medium",
+          )}
         >
           <PanelBottom className="w-4 h-4 flex-shrink-0" /> Horizontal split
         </DropdownMenuItem>
@@ -136,7 +168,11 @@ function MasterCheckbox({
 // Selection scope dropdown — All / None / Read / Unread / Starred / Unstarred
 type SelectScope = "all" | "none" | "read" | "unread" | "starred" | "unstarred";
 
-function SelectionDropdown({ onSelect }: { onSelect: (s: SelectScope) => void }) {
+function SelectionDropdown({
+  onSelect,
+}: {
+  onSelect: (s: SelectScope) => void;
+}) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -149,11 +185,21 @@ function SelectionDropdown({ onSelect }: { onSelect: (s: SelectScope) => void })
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-36">
         <DropdownMenuItem onClick={() => onSelect("all")}>All</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onSelect("none")}>None</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onSelect("read")}>Read</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onSelect("unread")}>Unread</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onSelect("starred")}>Starred</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onSelect("unstarred")}>Unstarred</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSelect("none")}>
+          None
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSelect("read")}>
+          Read
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSelect("unread")}>
+          Unread
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSelect("starred")}>
+          Starred
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSelect("unstarred")}>
+          Unstarred
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -176,8 +222,17 @@ interface ThreadRowProps {
 }
 
 function ThreadRow({
-  thread, selected, isChecked, anyChecked, isEven,
-  onSelect, onToggleCheck, onStar, onArchive, onTrash, onToggleRead,
+  thread,
+  selected,
+  isChecked,
+  anyChecked,
+  isEven,
+  onSelect,
+  onToggleCheck,
+  onStar,
+  onArchive,
+  onTrash,
+  onToggleRead,
 }: ThreadRowProps) {
   return (
     <div
@@ -187,8 +242,14 @@ function ThreadRow({
         selected
           ? "bg-blue-50 dark:bg-blue-950/30"
           : thread.isUnread
-          ? [isEven ? "bg-card" : "bg-sky-50/80 dark:bg-sky-950/25", "hover:bg-muted/50"]
-          : [isEven ? "" : "bg-sky-50/50 dark:bg-sky-950/15", "hover:bg-muted/40"],
+            ? [
+                isEven ? "bg-card" : "bg-sky-50/80 dark:bg-sky-950/25",
+                "hover:bg-muted/50",
+              ]
+            : [
+                isEven ? "" : "bg-sky-50/50 dark:bg-sky-950/15",
+                "hover:bg-muted/40",
+              ],
       )}
     >
       {/* Unread indicator bar */}
@@ -215,7 +276,10 @@ function ThreadRow({
 
       {/* Star */}
       <button
-        onClick={(e) => { e.stopPropagation(); onStar(); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onStar();
+        }}
         className="flex-shrink-0 p-0.5 rounded hover:scale-110 transition-transform"
         aria-label={thread.isStarred ? "Unstar" : "Star"}
       >
@@ -233,18 +297,29 @@ function ThreadRow({
       <div
         className={cn(
           "w-24 sm:w-32 flex-shrink-0 text-sm truncate",
-          thread.isUnread ? "font-semibold text-foreground" : "text-foreground/80",
+          thread.isUnread
+            ? "font-semibold text-foreground"
+            : "text-foreground/80",
         )}
       >
         {displayFrom(thread.from)}
         {thread.messageCount > 1 && (
-          <span className="text-muted-foreground font-normal ml-1">({thread.messageCount})</span>
+          <span className="text-muted-foreground font-normal ml-1">
+            ({thread.messageCount})
+          </span>
         )}
       </div>
 
       {/* Subject + Snippet */}
       <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden">
-        <span className={cn("text-sm truncate", thread.isUnread ? "font-semibold text-foreground" : "text-foreground/80")}>
+        <span
+          className={cn(
+            "text-sm truncate",
+            thread.isUnread
+              ? "font-semibold text-foreground"
+              : "text-foreground/80",
+          )}
+        >
           {thread.subject}
         </span>
         <span className="text-sm text-muted-foreground truncate hidden sm:block">
@@ -260,25 +335,48 @@ function ThreadRow({
         <span
           className={cn(
             "text-xs whitespace-nowrap group-hover:hidden",
-            thread.isUnread ? "font-semibold text-foreground" : "text-muted-foreground",
+            thread.isUnread
+              ? "font-semibold text-foreground"
+              : "text-muted-foreground",
           )}
         >
           {formatDate(thread.date)}
         </span>
 
         <div className="hidden group-hover:flex items-center gap-0.5">
-          <button onClick={(e) => { e.stopPropagation(); onArchive(); }} title="Archive"
-            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onArchive();
+            }}
+            title="Archive"
+            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+          >
             <Archive className="w-4 h-4" />
           </button>
-          <button onClick={(e) => { e.stopPropagation(); onTrash(); }} title="Delete"
-            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-red-500 transition-colors">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onTrash();
+            }}
+            title="Delete"
+            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-red-500 transition-colors"
+          >
             <Trash2 className="w-4 h-4" />
           </button>
-          <button onClick={(e) => { e.stopPropagation(); onToggleRead(); }}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleRead();
+            }}
             title={thread.isUnread ? "Mark as read" : "Mark as unread"}
-            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
-            {thread.isUnread ? <MailOpen className="w-4 h-4" /> : <Mail className="w-4 h-4" />}
+            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {thread.isUnread ? (
+              <MailOpen className="w-4 h-4" />
+            ) : (
+              <Mail className="w-4 h-4" />
+            )}
           </button>
         </div>
       </div>
@@ -386,12 +484,32 @@ export function ThreadList({
 
   function applyScope(scope: SelectScope) {
     switch (scope) {
-      case "all":       setCheckedIds(new Set(threads.map((t) => t.id))); break;
-      case "none":      setCheckedIds(new Set()); break;
-      case "read":      setCheckedIds(new Set(threads.filter((t) => !t.isUnread).map((t) => t.id))); break;
-      case "unread":    setCheckedIds(new Set(threads.filter((t) => t.isUnread).map((t) => t.id))); break;
-      case "starred":   setCheckedIds(new Set(threads.filter((t) => t.isStarred).map((t) => t.id))); break;
-      case "unstarred": setCheckedIds(new Set(threads.filter((t) => !t.isStarred).map((t) => t.id))); break;
+      case "all":
+        setCheckedIds(new Set(threads.map((t) => t.id)));
+        break;
+      case "none":
+        setCheckedIds(new Set());
+        break;
+      case "read":
+        setCheckedIds(
+          new Set(threads.filter((t) => !t.isUnread).map((t) => t.id)),
+        );
+        break;
+      case "unread":
+        setCheckedIds(
+          new Set(threads.filter((t) => t.isUnread).map((t) => t.id)),
+        );
+        break;
+      case "starred":
+        setCheckedIds(
+          new Set(threads.filter((t) => t.isStarred).map((t) => t.id)),
+        );
+        break;
+      case "unstarred":
+        setCheckedIds(
+          new Set(threads.filter((t) => !t.isStarred).map((t) => t.id)),
+        );
+        break;
     }
   }
 
@@ -404,11 +522,26 @@ export function ThreadList({
   }
 
   // ── Bulk action handlers (clear selection after action) ──────────────────
-  function doBulkArchive()    { onBulkArchive(Array.from(checkedIds));    setCheckedIds(new Set()); }
-  function doBulkTrash()      { onBulkTrash(Array.from(checkedIds));      setCheckedIds(new Set()); }
-  function doBulkMarkRead()   { onBulkMarkRead(Array.from(checkedIds));   setCheckedIds(new Set()); }
-  function doBulkMarkUnread() { onBulkMarkUnread(Array.from(checkedIds)); setCheckedIds(new Set()); }
-  function doBulkSpam()       { onBulkSpam(Array.from(checkedIds));       setCheckedIds(new Set()); }
+  function doBulkArchive() {
+    onBulkArchive(Array.from(checkedIds));
+    setCheckedIds(new Set());
+  }
+  function doBulkTrash() {
+    onBulkTrash(Array.from(checkedIds));
+    setCheckedIds(new Set());
+  }
+  function doBulkMarkRead() {
+    onBulkMarkRead(Array.from(checkedIds));
+    setCheckedIds(new Set());
+  }
+  function doBulkMarkUnread() {
+    onBulkMarkUnread(Array.from(checkedIds));
+    setCheckedIds(new Set());
+  }
+  function doBulkSpam() {
+    onBulkSpam(Array.from(checkedIds));
+    setCheckedIds(new Set());
+  }
 
   // ── Count label ──────────────────────────────────────────────────────────
   const pageEnd = pageStart + displayThreads.length - 1;
@@ -419,7 +552,10 @@ export function ThreadList({
 
   // ── Icon button helper ────────────────────────────────────────────────────
   const IconBtn = ({
-    onClick, title, children, danger,
+    onClick,
+    title,
+    children,
+    danger,
   }: {
     onClick: () => void;
     title: string;
@@ -431,7 +567,9 @@ export function ThreadList({
       title={title}
       className={cn(
         "p-1.5 rounded transition-colors text-muted-foreground",
-        danger ? "hover:text-red-500 hover:bg-muted" : "hover:text-foreground hover:bg-muted",
+        danger
+          ? "hover:text-red-500 hover:bg-muted"
+          : "hover:text-foreground hover:bg-muted",
       )}
     >
       {children}
@@ -442,7 +580,10 @@ export function ThreadList({
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
         <p>Failed to load messages</p>
-        <button onClick={onRefresh} className="text-sm text-blue-500 hover:underline">
+        <button
+          onClick={onRefresh}
+          className="text-sm text-blue-500 hover:underline"
+        >
           Try again
         </button>
       </div>
@@ -451,10 +592,8 @@ export function ThreadList({
 
   return (
     <div className="flex flex-col h-full">
-
       {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-10 gap-2">
-
         {/* Left side — changes based on selection */}
         <div className="flex items-center gap-1 min-w-0">
           {/* Master checkbox + scope dropdown */}
@@ -518,13 +657,19 @@ export function ThreadList({
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem
                   onClick={() => handleSortChange("newest")}
-                  className={cn("gap-2", sortOrder === "newest" && "text-primary font-medium")}
+                  className={cn(
+                    "gap-2",
+                    sortOrder === "newest" && "text-primary font-medium",
+                  )}
                 >
                   Newest to oldest
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => handleSortChange("oldest")}
-                  className={cn("gap-2", sortOrder === "oldest" && "text-primary font-medium")}
+                  className={cn(
+                    "gap-2",
+                    sortOrder === "oldest" && "text-primary font-medium",
+                  )}
                 >
                   Oldest to newest
                 </DropdownMenuItem>
@@ -549,7 +694,10 @@ export function ThreadList({
             <ChevronRight className="w-4 h-4 text-muted-foreground" />
           </button>
 
-          <LayoutToggle layoutMode={layoutMode} onLayoutChange={onLayoutChange} />
+          <LayoutToggle
+            layoutMode={layoutMode}
+            onLayoutChange={onLayoutChange}
+          />
         </div>
       </div>
 

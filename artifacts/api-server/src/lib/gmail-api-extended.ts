@@ -120,9 +120,7 @@ export interface GmailLabel {
   threadsTotal?: number;
 }
 
-export async function listLabels(
-  accessToken: string,
-): Promise<GmailLabel[]> {
+export async function listLabels(accessToken: string): Promise<GmailLabel[]> {
   const data = await gmailGet<{ labels: GmailLabel[] }>(
     accessToken,
     "/users/me/labels",
@@ -153,7 +151,11 @@ export async function listThreads(
     pageToken?: string;
     maxResults?: number;
   } = {},
-): Promise<{ threads: GmailThreadListItem[]; nextPageToken?: string; resultSizeEstimate?: number }> {
+): Promise<{
+  threads: GmailThreadListItem[];
+  nextPageToken?: string;
+  resultSizeEstimate?: number;
+}> {
   const params = new URLSearchParams();
   if (opts.maxResults) params.set("maxResults", String(opts.maxResults));
   if (opts.pageToken) params.set("pageToken", opts.pageToken);
@@ -205,7 +207,11 @@ function decodeBase64url(data?: string): string {
 
 function extractParts(
   part: GmailMessagePart | undefined,
-  acc: { text: string; html: string; attachments: DecodedMessage["attachments"] },
+  acc: {
+    text: string;
+    html: string;
+    attachments: DecodedMessage["attachments"];
+  },
 ): void {
   if (!part) return;
   const mt = part.mimeType ?? "";
@@ -230,7 +236,11 @@ function extractParts(
 }
 
 function decodeMessage(raw: GmailMessage): DecodedMessage {
-  const acc = { text: "", html: "", attachments: [] as DecodedMessage["attachments"] };
+  const acc = {
+    text: "",
+    html: "",
+    attachments: [] as DecodedMessage["attachments"],
+  };
   extractParts(raw.payload, acc);
 
   const labelIds = (raw as unknown as { labelIds?: string[] }).labelIds ?? [];
@@ -247,7 +257,9 @@ function decodeMessage(raw: GmailMessage): DecodedMessage {
     subject: findHeader(raw.payload, "Subject") ?? "(no subject)",
     date:
       findHeader(raw.payload, "Date") ??
-      (raw.internalDate ? new Date(Number(raw.internalDate)).toISOString() : ""),
+      (raw.internalDate
+        ? new Date(Number(raw.internalDate)).toISOString()
+        : ""),
     snippet: (raw as unknown as { snippet?: string }).snippet ?? "",
     isUnread,
     isStarred,
@@ -325,8 +337,13 @@ export async function getThreadSummary(
     const uniqueLabels = [...new Set(labelIds)];
     const isUnread = uniqueLabels.includes("UNREAD");
     const isStarred = uniqueLabels.includes("STARRED");
-    const hasAttachment = uniqueLabels.includes("HAS_ATTACHMENT") ||
-      msgs.some((m) => ((m as unknown as { labelIds?: string[] }).labelIds ?? []).includes("HAS_ATTACHMENT"));
+    const hasAttachment =
+      uniqueLabels.includes("HAS_ATTACHMENT") ||
+      msgs.some((m) =>
+        ((m as unknown as { labelIds?: string[] }).labelIds ?? []).includes(
+          "HAS_ATTACHMENT",
+        ),
+      );
 
     const subject =
       findHeader(first.payload, "Subject") ??
@@ -344,7 +361,10 @@ export async function getThreadSummary(
       id: data.id,
       subject,
       from,
-      snippet: data.snippet ?? (latest as unknown as { snippet?: string }).snippet ?? "",
+      snippet:
+        data.snippet ??
+        (latest as unknown as { snippet?: string }).snippet ??
+        "",
       date,
       isUnread,
       isStarred,
@@ -509,7 +529,9 @@ export async function getThreadSummariesLimited(
   accessToken: string,
   threadIds: string[],
 ): Promise<(ThreadSummary | null)[]> {
-  const results: (ThreadSummary | null)[] = new Array(threadIds.length).fill(null);
+  const results: (ThreadSummary | null)[] = new Array(threadIds.length).fill(
+    null,
+  );
   let nextIndex = 0;
   async function worker(): Promise<void> {
     for (;;) {

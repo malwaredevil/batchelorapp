@@ -7,6 +7,7 @@ import {
   travelsTripDocuments,
   travelsTripPhotos,
   travelsReminders,
+  travelsPackingLists,
 } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { deleteTripPhoto } from "../../lib/travels/storage";
@@ -262,6 +263,10 @@ router.delete("/trips/:id", async (req, res) => {
     .delete(travelsTripDocuments)
     .where(eq(travelsTripDocuments.tripId, id));
   await db.delete(travelsReminders).where(eq(travelsReminders.tripId, id));
+  // Packing list items cascade via FK; delete the list row directly
+  await db
+    .delete(travelsPackingLists)
+    .where(eq(travelsPackingLists.tripId, id));
   await db.delete(travelsTrips).where(eq(travelsTrips.id, id));
 
   res.status(204).send();

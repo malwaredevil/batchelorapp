@@ -40,6 +40,7 @@ import {
   SheetClose,
 } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth";
+import { InstallBanner } from "@workspace/web-core";
 import { AssistantWidget } from "@/components/assistant/AssistantWidget";
 
 type NavItem = { href: string; label: string; icon: typeof Home };
@@ -312,6 +313,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </SheetContent>
         </Sheet>
       </header>
+      <InstallBanner />
 
       <main className="mx-auto w-full max-w-5xl px-4 pb-24 pt-6 md:pb-8">
         {children}

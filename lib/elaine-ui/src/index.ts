@@ -9,3 +9,4 @@ export * from "./GlobalConfigCard";
 export * from "./theme";
 export * from "./ChatWidgets";
 export * from "./MarkdownMessage";
+export * from "./useVoiceInput";

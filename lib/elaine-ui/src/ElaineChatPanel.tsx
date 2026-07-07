@@ -1,5 +1,6 @@
-import { useRef, type ReactNode } from "react";
-import { Send, ArrowRight, Check, X, Paperclip, Loader2, FileText } from "lucide-react";
+import { useRef, useCallback, type ReactNode } from "react";
+import { Send, ArrowRight, Check, X, Paperclip, Loader2, FileText, Mic } from "lucide-react";
+import { useVoiceInput } from "./useVoiceInput";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { ElaineAvatar, ElaineName } from "./ElaineAvatar";
@@ -129,6 +130,36 @@ export function ElaineChatPanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const hasUploadingAttachments = pendingAttachments.some((a) => a.uploading);
+
+  // ── Voice input ─────────────────────────────────────────────────────────
+  // Saves the input text at the moment recording starts so interim / final
+  // results are appended rather than replacing what the user already typed.
+  const voiceBaseRef = useRef("");
+
+  const voice = useVoiceInput({
+    onTranscript: useCallback(
+      (text: string, isFinal: boolean) => {
+        const base = voiceBaseRef.current;
+        const sep = base.length > 0 ? " " : "";
+        const next = base + sep + text;
+        setInput(next);
+        if (isFinal) {
+          // Update base so a subsequent recording session appends to this.
+          voiceBaseRef.current = next;
+        }
+      },
+      [setInput],
+    ),
+  });
+
+  const handleMicToggle = useCallback(() => {
+    if (voice.isListening) {
+      voice.stop();
+    } else {
+      voiceBaseRef.current = input;
+      voice.start();
+    }
+  }, [voice, input]);
 
   return (
     <>
@@ -511,6 +542,26 @@ export function ElaineChatPanel({
             rows={1}
             disabled={isStreaming}
           />
+          {voice.isSupported && (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className={`relative h-[38px] w-[38px] shrink-0 rounded-xl transition-colors ${
+                voice.isListening
+                  ? "text-red-500 hover:text-red-600"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={handleMicToggle}
+              disabled={isStreaming}
+              title={voice.isListening ? "Stop recording" : "Voice input"}
+            >
+              {voice.isListening && (
+                <span className="absolute inset-0 animate-ping rounded-xl bg-red-500/20" />
+              )}
+              <Mic className="h-4 w-4" />
+            </Button>
+          )}
           <Button
             size="sm"
             className="h-[38px] w-[38px] shrink-0 rounded-xl p-0"

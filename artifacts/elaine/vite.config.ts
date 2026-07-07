@@ -68,7 +68,7 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         runtimeCaching: [
           {
-            urlPattern: /^\/api\/elaine\//,
+            urlPattern: ({ url }: { url: URL }) => url.pathname.startsWith("/api/elaine/"),
             handler: "NetworkFirst",
             options: {
               cacheName: "elaine-api-cache",

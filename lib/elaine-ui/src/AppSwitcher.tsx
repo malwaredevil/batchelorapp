@@ -14,7 +14,13 @@ import {
 } from "./ui/dropdown-menu";
 import { ElaineAvatar } from "./ElaineAvatar";
 
-export type AppId = "hub" | "pottery" | "quilting" | "travels" | "elaine" | "gmail";
+export type AppId =
+  | "hub"
+  | "pottery"
+  | "quilting"
+  | "travels"
+  | "elaine"
+  | "gmail";
 
 function HubLogo({ className }: { className?: string }) {
   return (
@@ -186,9 +192,25 @@ function GmailLogo({ className }: { className?: string }) {
     >
       <rect width="100" height="100" rx="22" fill="#1B3A5C" />
       {/* Envelope body */}
-      <rect x="18" y="30" width="64" height="42" rx="5" stroke="#F0E8D8" strokeWidth="3.5" fill="none" />
+      <rect
+        x="18"
+        y="30"
+        width="64"
+        height="42"
+        rx="5"
+        stroke="#F0E8D8"
+        strokeWidth="3.5"
+        fill="none"
+      />
       {/* Envelope flap V */}
-      <polyline points="18,30 50,56 82,30" stroke="#F0E8D8" strokeWidth="3.5" fill="none" strokeLinejoin="round" strokeLinecap="round" />
+      <polyline
+        points="18,30 50,56 82,30"
+        stroke="#F0E8D8"
+        strokeWidth="3.5"
+        fill="none"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }

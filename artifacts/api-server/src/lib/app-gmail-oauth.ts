@@ -9,10 +9,7 @@ import { env } from "./env";
 // https://mail.google.com/ is a restricted scope; Google requires apps to
 // complete a security assessment OR stay in OAuth "Testing" status. This app
 // stays in Testing (household-only, ≤100 test users).
-export const APP_GMAIL_SCOPES = [
-  "https://mail.google.com/",
-  "email",
-];
+export const APP_GMAIL_SCOPES = ["https://mail.google.com/", "email"];
 
 export function appGmailOAuthEnabled(): boolean {
   return Boolean(env.googleClientId && env.googleClientSecret);

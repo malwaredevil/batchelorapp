@@ -63,12 +63,23 @@ function InlineMarkdown({ text }: { text: string }): ReactNode {
       parts.push(<span key={key++}>{text.slice(last, match.index)}</span>);
     }
     if (match[2] !== undefined) {
-      parts.push(<strong key={key++} className="font-semibold text-foreground">{match[2]}</strong>);
+      parts.push(
+        <strong key={key++} className="font-semibold text-foreground">
+          {match[2]}
+        </strong>,
+      );
     } else if (match[3] !== undefined) {
-      parts.push(<em key={key++} className="italic">{match[3]}</em>);
+      parts.push(
+        <em key={key++} className="italic">
+          {match[3]}
+        </em>,
+      );
     } else if (match[4] !== undefined) {
       parts.push(
-        <code key={key++} className="rounded bg-muted-foreground/15 px-1 py-0.5 font-mono text-[0.8em]">
+        <code
+          key={key++}
+          className="rounded bg-muted-foreground/15 px-1 py-0.5 font-mono text-[0.8em]"
+        >
           {match[4]}
         </code>,
       );
@@ -88,7 +99,8 @@ function InlineMarkdown({ text }: { text: string }): ReactNode {
     }
     last = match.index + match[0].length;
   }
-  if (last < text.length) parts.push(<span key={key++}>{text.slice(last)}</span>);
+  if (last < text.length)
+    parts.push(<span key={key++}>{text.slice(last)}</span>);
   return <>{parts}</>;
 }
 
@@ -112,7 +124,9 @@ function buildNodes(tokens: Token[]): ReactNode[] {
           {items.map((item, j) => (
             <li key={j} className="flex gap-2 text-sm leading-relaxed">
               <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70" />
-              <span><InlineMarkdown text={item} /></span>
+              <span>
+                <InlineMarkdown text={item} />
+              </span>
             </li>
           ))}
         </ul>,
@@ -133,7 +147,9 @@ function buildNodes(tokens: Token[]): ReactNode[] {
               <span className="shrink-0 font-semibold text-primary/80">
                 {item.n}.
               </span>
-              <span><InlineMarkdown text={item.text} /></span>
+              <span>
+                <InlineMarkdown text={item.text} />
+              </span>
             </li>
           ))}
         </ol>,
@@ -143,19 +159,28 @@ function buildNodes(tokens: Token[]): ReactNode[] {
 
     if (t.kind === "h1") {
       nodes.push(
-        <p key={key++} className="mt-2 text-base font-bold text-foreground first:mt-0">
+        <p
+          key={key++}
+          className="mt-2 text-base font-bold text-foreground first:mt-0"
+        >
           <InlineMarkdown text={t.text} />
         </p>,
       );
     } else if (t.kind === "h2") {
       nodes.push(
-        <p key={key++} className="mt-1.5 text-sm font-bold text-foreground first:mt-0">
+        <p
+          key={key++}
+          className="mt-1.5 text-sm font-bold text-foreground first:mt-0"
+        >
           <InlineMarkdown text={t.text} />
         </p>,
       );
     } else if (t.kind === "h3") {
       nodes.push(
-        <p key={key++} className="mt-1 text-sm font-semibold text-foreground/90 first:mt-0">
+        <p
+          key={key++}
+          className="mt-1 text-sm font-semibold text-foreground/90 first:mt-0"
+        >
           <InlineMarkdown text={t.text} />
         </p>,
       );

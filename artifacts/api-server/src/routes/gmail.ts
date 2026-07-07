@@ -236,7 +236,10 @@ router.delete("/disconnect", async (req, res) => {
 // ── Labels ────────────────────────────────────────────────────────────────────
 
 router.get("/labels", async (req, res) => {
-  const token = await resolveToken(req, res as Parameters<typeof resolveToken>[1]);
+  const token = await resolveToken(
+    req,
+    res as Parameters<typeof resolveToken>[1],
+  );
   if (!token) return;
   try {
     const labels = await listLabels(token);
@@ -257,7 +260,10 @@ const ThreadListQuery = z.object({
 });
 
 router.get("/threads", async (req, res) => {
-  const token = await resolveToken(req, res as Parameters<typeof resolveToken>[1]);
+  const token = await resolveToken(
+    req,
+    res as Parameters<typeof resolveToken>[1],
+  );
   if (!token) return;
 
   const parsed = ThreadListQuery.safeParse(req.query);
@@ -266,7 +272,12 @@ router.get("/threads", async (req, res) => {
     return;
   }
   const { labelIds, q, pageToken, maxResults } = parsed.data;
-  const labelIdList = labelIds ? labelIds.split(",").map((s) => s.trim()).filter(Boolean) : undefined;
+  const labelIdList = labelIds
+    ? labelIds
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : undefined;
 
   try {
     const page = await listThreads(token, {
@@ -295,13 +306,19 @@ router.get("/threads", async (req, res) => {
 // ── Full thread ───────────────────────────────────────────────────────────────
 
 router.get("/threads/:threadId", async (req, res) => {
-  const token = await resolveToken(req, res as Parameters<typeof resolveToken>[1]);
+  const token = await resolveToken(
+    req,
+    res as Parameters<typeof resolveToken>[1],
+  );
   if (!token) return;
   try {
     const thread = await getFullThread(token, req.params.threadId);
     res.json(thread);
   } catch (err) {
-    req.log.error({ err, threadId: req.params.threadId }, "gmail get-thread failed");
+    req.log.error(
+      { err, threadId: req.params.threadId },
+      "gmail get-thread failed",
+    );
     res.status(502).json({ error: "Failed to fetch thread." });
   }
 });
@@ -311,7 +328,10 @@ router.get("/threads/:threadId", async (req, res) => {
 router.get(
   "/messages/:messageId/attachments/:attachmentId",
   async (req, res) => {
-    const token = await resolveToken(req, res as Parameters<typeof resolveToken>[1]);
+    const token = await resolveToken(
+      req,
+      res as Parameters<typeof resolveToken>[1],
+    );
     if (!token) return;
     const { filename } = req.query;
     try {
@@ -320,8 +340,9 @@ router.get(
         req.params.messageId,
         req.params.attachmentId,
       );
-      const safeFilename = (typeof filename === "string" ? filename : "attachment")
-        .replace(/["\r\n\\]/g, "_");
+      const safeFilename = (
+        typeof filename === "string" ? filename : "attachment"
+      ).replace(/["\r\n\\]/g, "_");
       res.setHeader(
         "Content-Disposition",
         `attachment; filename="${safeFilename}"`,
@@ -349,7 +370,10 @@ const ComposeSchema = z.object({
 });
 
 router.post("/messages/send", async (req, res) => {
-  const token = await resolveToken(req, res as Parameters<typeof resolveToken>[1]);
+  const token = await resolveToken(
+    req,
+    res as Parameters<typeof resolveToken>[1],
+  );
   if (!token) return;
 
   const parsed = ComposeSchema.safeParse(req.body);
@@ -383,7 +407,10 @@ router.post("/messages/send", async (req, res) => {
 });
 
 router.post("/drafts", async (req, res) => {
-  const token = await resolveToken(req, res as Parameters<typeof resolveToken>[1]);
+  const token = await resolveToken(
+    req,
+    res as Parameters<typeof resolveToken>[1],
+  );
   if (!token) return;
 
   const parsed = ComposeSchema.safeParse(req.body);
@@ -413,7 +440,10 @@ router.post("/drafts", async (req, res) => {
 });
 
 router.put("/drafts/:draftId", async (req, res) => {
-  const token = await resolveToken(req, res as Parameters<typeof resolveToken>[1]);
+  const token = await resolveToken(
+    req,
+    res as Parameters<typeof resolveToken>[1],
+  );
   if (!token) return;
 
   const parsed = ComposeSchema.safeParse(req.body);
@@ -434,7 +464,12 @@ router.put("/drafts/:draftId", async (req, res) => {
 
   try {
     const raw = buildRawMessage({ from: row.googleEmail, ...parsed.data });
-    const result = await updateDraft(token, req.params.draftId, raw, parsed.data.threadId);
+    const result = await updateDraft(
+      token,
+      req.params.draftId,
+      raw,
+      parsed.data.threadId,
+    );
     res.json(result);
   } catch (err) {
     req.log.error({ err }, "gmail update-draft failed");
@@ -443,7 +478,10 @@ router.put("/drafts/:draftId", async (req, res) => {
 });
 
 router.post("/drafts/:draftId/send", async (req, res) => {
-  const token = await resolveToken(req, res as Parameters<typeof resolveToken>[1]);
+  const token = await resolveToken(
+    req,
+    res as Parameters<typeof resolveToken>[1],
+  );
   if (!token) return;
   try {
     const result = await sendDraft(token, req.params.draftId);
@@ -455,7 +493,10 @@ router.post("/drafts/:draftId/send", async (req, res) => {
 });
 
 router.delete("/drafts/:draftId", async (req, res) => {
-  const token = await resolveToken(req, res as Parameters<typeof resolveToken>[1]);
+  const token = await resolveToken(
+    req,
+    res as Parameters<typeof resolveToken>[1],
+  );
   if (!token) return;
   try {
     await deleteDraft(token, req.params.draftId);
@@ -467,14 +508,19 @@ router.delete("/drafts/:draftId", async (req, res) => {
 });
 
 router.get("/drafts", async (req, res) => {
-  const token = await resolveToken(req, res as Parameters<typeof resolveToken>[1]);
+  const token = await resolveToken(
+    req,
+    res as Parameters<typeof resolveToken>[1],
+  );
   if (!token) return;
   const { pageToken, maxResults } = req.query;
   try {
     const result = await listDrafts(
       token,
       typeof pageToken === "string" ? pageToken : undefined,
-      typeof maxResults === "string" ? Math.min(50, Math.max(1, parseInt(maxResults, 10))) : 20,
+      typeof maxResults === "string"
+        ? Math.min(50, Math.max(1, parseInt(maxResults, 10)))
+        : 20,
     );
     res.json(result);
   } catch (err) {
@@ -491,7 +537,10 @@ const ModifySchema = z.object({
 });
 
 router.patch("/messages/:messageId", async (req, res) => {
-  const token = await resolveToken(req, res as Parameters<typeof resolveToken>[1]);
+  const token = await resolveToken(
+    req,
+    res as Parameters<typeof resolveToken>[1],
+  );
   if (!token) return;
 
   const parsed = ModifySchema.safeParse(req.body);
@@ -515,7 +564,10 @@ router.patch("/messages/:messageId", async (req, res) => {
 });
 
 router.post("/messages/:messageId/trash", async (req, res) => {
-  const token = await resolveToken(req, res as Parameters<typeof resolveToken>[1]);
+  const token = await resolveToken(
+    req,
+    res as Parameters<typeof resolveToken>[1],
+  );
   if (!token) return;
   try {
     await trashMessage(token, req.params.messageId);
@@ -527,7 +579,10 @@ router.post("/messages/:messageId/trash", async (req, res) => {
 });
 
 router.post("/messages/:messageId/untrash", async (req, res) => {
-  const token = await resolveToken(req, res as Parameters<typeof resolveToken>[1]);
+  const token = await resolveToken(
+    req,
+    res as Parameters<typeof resolveToken>[1],
+  );
   if (!token) return;
   try {
     await untrashMessage(token, req.params.messageId);

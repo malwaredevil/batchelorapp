@@ -85,8 +85,7 @@ function aqiColor(category: string): string {
     return "text-yellow-700 bg-yellow-50 border-yellow-200";
   if (c.includes("unhealthy for sensitive"))
     return "text-orange-600 bg-orange-50 border-orange-200";
-  if (c.includes("unhealthy"))
-    return "text-red-600 bg-red-50 border-red-200";
+  if (c.includes("unhealthy")) return "text-red-600 bg-red-50 border-red-200";
   if (c.includes("very unhealthy") || c.includes("hazardous"))
     return "text-purple-700 bg-purple-50 border-purple-200";
   return "text-foreground bg-muted border-border";
@@ -97,8 +96,7 @@ function pollenColor(category: string): string {
   if (c === "none" || c === "very low")
     return "text-green-600 bg-green-50 border-green-200";
   if (c === "low") return "text-yellow-700 bg-yellow-50 border-yellow-200";
-  if (c === "moderate")
-    return "text-orange-600 bg-orange-50 border-orange-200";
+  if (c === "moderate") return "text-orange-600 bg-orange-50 border-orange-200";
   if (c === "high" || c === "very high")
     return "text-red-600 bg-red-50 border-red-200";
   return "text-foreground bg-muted border-border";
@@ -161,10 +159,7 @@ function WeatherWidget({
       </div>
       <div className="divide-y divide-border/50">
         {days.map((day, i) => (
-          <div
-            key={i}
-            className="flex items-center gap-2 px-3 py-2.5"
-          >
+          <div key={i} className="flex items-center gap-2 px-3 py-2.5">
             <span className="text-xl leading-none" aria-hidden>
               {weatherEmoji(day.conditionDescription)}
             </span>
@@ -187,7 +182,9 @@ function WeatherWidget({
                 {day.maxTempC != null ? `${Math.round(day.maxTempC)}°` : "—"}
                 <span className="font-normal text-muted-foreground">
                   {" "}
-                  / {day.minTempC != null ? `${Math.round(day.minTempC)}°` : "—"}°C
+                  /{" "}
+                  {day.minTempC != null ? `${Math.round(day.minTempC)}°` : "—"}
+                  °C
                 </span>
               </p>
               <p className="text-xs text-muted-foreground">
@@ -216,9 +213,7 @@ function PlacesWidget({
       <div className="flex items-center justify-between border-b border-border/60 bg-emerald-50/60 px-3 py-2 dark:bg-emerald-950/30">
         <div className="flex items-center gap-1.5">
           <MapPin className="h-3.5 w-3.5 text-emerald-600" />
-          <span className="text-xs font-semibold text-foreground">
-            {query}
-          </span>
+          <span className="text-xs font-semibold text-foreground">{query}</span>
         </div>
         <a
           href={mapsSearchUrl}
@@ -311,7 +306,9 @@ function PollenWidget({ data }: { data: PollenData }) {
         <span className="text-xs font-semibold text-foreground">
           Pollen — {data.locationName}
         </span>
-        <span className="ml-auto text-xs text-muted-foreground">{data.date}</span>
+        <span className="ml-auto text-xs text-muted-foreground">
+          {data.date}
+        </span>
       </div>
       <div className="px-3 py-2.5">
         <div className="mb-2 flex items-center gap-2">

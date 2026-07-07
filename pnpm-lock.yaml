@@ -1259,6 +1259,9 @@ importers:
       '@workspace/elaine-ui':
         specifier: workspace:*
         version: link:../../lib/elaine-ui
+      '@workspace/web-core':
+        specifier: workspace:*
+        version: link:../../lib/web-core
       class-variance-authority:
         specifier: 'catalog:'
         version: 0.7.1

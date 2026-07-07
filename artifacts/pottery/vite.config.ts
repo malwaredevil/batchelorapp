@@ -68,7 +68,7 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         runtimeCaching: [
           {
-            urlPattern: /^\/api\/pottery\//,
+            urlPattern: ({ url }: { url: URL }) => url.pathname.startsWith("/api/pottery/"),
             handler: "NetworkFirst",
             options: {
               cacheName: "pottery-api-cache",

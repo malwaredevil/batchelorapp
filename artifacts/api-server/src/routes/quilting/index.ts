@@ -9,6 +9,7 @@ import blocksRouter from "./blocks";
 import layoutsRouter from "./layouts";
 import shoppingRouter from "./shopping";
 import patternImportRouter from "./pattern-import";
+import toolsRouter from "./tools";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(blocksRouter);
 router.use(layoutsRouter);
 router.use(shoppingRouter);
 router.use(patternImportRouter);
+router.use(toolsRouter);
 
 export default router;

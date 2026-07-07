@@ -47,6 +47,15 @@ router.get("/trips/share/:token", async (req, res) => {
 });
 
 // ── Authenticated ─────────────────────────────────────────────────────────────
+//
+// Security note: these endpoints intentionally do NOT perform a per-user
+// ownership check on the trip before generating or revoking a share token.
+// Travels data is fully household-shared by design (see threat_model.md §
+// "Household-sharing boundary"): every authenticated household member may
+// view, create, edit, and delete ANY trip record.  The correct access
+// boundary here is authentication (requireAuth), not per-row user ownership.
+// The user_id column on trips is attribution-only and is never used as a
+// read/write gate.
 
 // POST /trips/:id/share — generate (or return existing) share token.
 router.post("/trips/:id/share", requireAuth, async (req, res) => {

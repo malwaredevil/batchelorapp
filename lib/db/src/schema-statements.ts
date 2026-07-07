@@ -876,4 +876,19 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS thresholds JSONB NOT NULL DEFAULT '{}'::jsonb`,
   `INSERT INTO elaine_global_config (id) VALUES (1)
      ON CONFLICT (id) DO NOTHING`,
+
+  // ── Hub webmail Gmail connections ────────────────────────────────────────────
+  // Separate from travels_gmail_connections — uses https://mail.google.com/
+  // scope for full read/write/send/delete inbox access (not just travel scanning).
+  `CREATE TABLE IF NOT EXISTS app_gmail_connections (
+    id                     SERIAL PRIMARY KEY,
+    user_id                INTEGER NOT NULL UNIQUE,
+    google_email           TEXT NOT NULL,
+    refresh_token          TEXT NOT NULL,
+    access_token           TEXT,
+    access_token_expires_at TIMESTAMPTZ,
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE app_gmail_connections ENABLE ROW LEVEL SECURITY`,
 ];

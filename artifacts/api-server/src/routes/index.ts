@@ -8,12 +8,14 @@ import hubRouter from "./hub";
 import devScreenshotLoginRouter from "./dev-screenshot-login";
 import elaineRouter from "../elaine";
 import gmailRouter from "./gmail";
+import searchRouter from "./search";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(authRouter);
 router.use(devScreenshotLoginRouter);
+router.use(searchRouter);
 router.use("/pottery", potteryRouter);
 router.use("/quilting", quiltingRouter);
 router.use("/travels", travelsRouter);

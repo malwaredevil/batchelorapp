@@ -1,42 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
-import {
-  MessageCircle,
-  X,
-  MoreVertical,
-  RotateCcw,
-  Maximize2,
-  Settings as SettingsIcon,
-} from "lucide-react";
-import { toast } from "sonner";
+import { MessageCircle, X, MessageSquarePlus, Maximize2 } from "lucide-react";
 import {
   useGetElaineNudgesUnseenCount,
   getGetElaineNudgesUnseenCountQueryKey,
   type ElaineAppId,
 } from "@workspace/api-client-react";
 import { Button } from "./ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
-import { ElaineAvatar, ElaineName, ElaineWordmark } from "./ElaineAvatar";
+import { ElaineAvatar, ElaineWordmark } from "./ElaineAvatar";
 import { useElaineChat } from "./useElaineChat";
 import { ElaineChatPanel } from "./ElaineChatPanel";
 
-const HIDE_FOR_VISIT_KEY = "elaine_hidden_for_visit";
-
-// Desktop popup dimensions per size preference. All are capped by
-// max-w-[calc(100vw-2rem)]/max-h so small viewports (mobile) never overflow
-// regardless of which size is picked — mobile effectively always gets the
-// screen-width behavior the user expects there.
-const CHAT_WINDOW_SIZE_CLASSES: Record<string, string> = {
-  compact: "h-[28rem] w-[20rem]",
-  comfortable: "h-[32rem] w-[24rem]",
-  large: "h-[38rem] w-[28rem]",
+// Default pixel dimensions per size preference.
+const CHAT_WINDOW_DEFAULT_SIZES: Record<string, { w: number; h: number }> = {
+  compact: { w: 320, h: 448 },
+  comfortable: { w: 384, h: 512 },
+  large: { w: 448, h: 608 },
 };
+
+const MIN_W = 280;
+const MIN_H = 340;
 
 export function ElaineWidget({
   appId,
@@ -44,23 +27,10 @@ export function ElaineWidget({
   currentPath,
 }: {
   appId: ElaineAppId;
-  /** If provided, shows a "full-screen chat" link pointing at this route
-   *  (e.g. travels' `/elaine`). Omit for apps with no full-screen surface. */
   fullScreenPath?: string;
-  /** Current route, used to hide the widget while the full-screen chat page
-   *  itself is open (so there's only one Elaine surface on screen). */
   currentPath?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [hiddenForVisit, setHiddenForVisit] = useState(
-    () => sessionStorage.getItem(HIDE_FOR_VISIT_KEY) === "1",
-  );
-  // Positioning offset is applied via inline styles (not Tailwind bottom-4/
-  // right-4 utilities) — see git history for why: those utilities were
-  // observed to silently fail to generate in some app bundles' Tailwind
-  // content scan, and separately position:fixed + a non-zero `bottom` value
-  // could drift to the full document height in some pages. An
-  // inset-0/absolute wrapper anchored with inline styles is immune to both.
   const [isDesktop, setIsDesktop] = useState(
     () =>
       typeof window !== "undefined" &&
@@ -74,14 +44,66 @@ export function ElaineWidget({
   }, []);
 
   const chat = useElaineChat({ appId, active: open });
-  const { settings, updateSettings, messages, isStreaming, streamingContent } =
-    chat;
+  const { settings, messages, isStreaming, streamingContent } = chat;
 
-  // Proactive nudges (e.g. "your trip starts in 2 days...") are computed by
-  // a background job and surfaced as a badge on the closed floating button.
-  // Polled while the widget is closed; opening it fetches the conversation,
-  // which folds any unseen nudges into chat history server-side and marks
-  // them seen, so we just need to drop the badge once that happens.
+  // Resize state — null means use defaults from settings.chatWindowSize
+  const [customSize, setCustomSize] = useState<{ w: number; h: number } | null>(
+    null,
+  );
+
+  // Drag state ref — avoids stale closures without triggering re-renders
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    startW: number;
+    startH: number;
+  } | null>(null);
+
+  const getDefaultSize = useCallback(() => {
+    const key = settings?.chatWindowSize ?? "compact";
+    return CHAT_WINDOW_DEFAULT_SIZES[key] ?? CHAT_WINDOW_DEFAULT_SIZES.compact;
+  }, [settings?.chatWindowSize]);
+
+  const currentSize = customSize ?? getDefaultSize();
+
+  const onResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const size = customSize ?? getDefaultSize();
+      dragRef.current = {
+        startX: e.clientX,
+        startY: e.clientY,
+        startW: size.w,
+        startH: size.h,
+      };
+
+      function onMove(ev: MouseEvent) {
+        if (!dragRef.current) return;
+        // Widget is anchored at bottom-right, so dragging toward top-left
+        // increases the dimensions.
+        const dx = dragRef.current.startX - ev.clientX;
+        const dy = dragRef.current.startY - ev.clientY;
+        const maxW = Math.floor(window.innerWidth * 0.9);
+        const maxH = Math.floor(window.innerHeight * 0.88);
+        setCustomSize({
+          w: Math.max(MIN_W, Math.min(maxW, dragRef.current.startW + dx)),
+          h: Math.max(MIN_H, Math.min(maxH, dragRef.current.startH + dy)),
+        });
+      }
+
+      function onUp() {
+        dragRef.current = null;
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      }
+
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [customSize, getDefaultSize],
+  );
+
   const { data: unseenNudges } = useGetElaineNudgesUnseenCount({
     query: {
       enabled: !open,
@@ -97,30 +119,8 @@ export function ElaineWidget({
   const onFullScreenChat =
     fullScreenPath !== undefined && currentPath === fullScreenPath;
 
-  if (!settings?.enabled || hiddenForVisit || onFullScreenChat) {
+  if (!settings?.enabled || onFullScreenChat) {
     return null;
-  }
-
-  function handleHideForVisit() {
-    sessionStorage.setItem(HIDE_FOR_VISIT_KEY, "1");
-    setHiddenForVisit(true);
-    setOpen(false);
-  }
-
-  function handleTurnOff() {
-    updateSettings.mutate(
-      { enabled: false },
-      {
-        onSuccess: () => {
-          setOpen(false);
-          toast.info(
-            <>
-              <ElaineName /> is turned off. Re-enable her anytime from settings.
-            </>,
-          );
-        },
-      },
-    );
   }
 
   return createPortal(
@@ -144,10 +144,50 @@ export function ElaineWidget({
       >
         {open && (
           <div
-            className={`flex max-w-[calc(100vw-2rem)] max-h-[calc(100vh-6rem)] flex-col overflow-hidden rounded-2xl border border-card-border bg-card shadow-2xl ${
-              CHAT_WINDOW_SIZE_CLASSES[settings?.chatWindowSize ?? "compact"]
-            }`}
+            className="flex flex-col overflow-hidden rounded-2xl border border-card-border bg-card shadow-2xl"
+            style={{
+              width: isDesktop ? `${currentSize.w}px` : "calc(100vw - 2rem)",
+              height: isDesktop ? `${currentSize.h}px` : "calc(100vh - 6rem)",
+              maxWidth: "calc(100vw - 2rem)",
+              maxHeight: "calc(100vh - 6rem)",
+              position: "relative",
+            }}
           >
+            {/* Resize handle — top-left corner (opposite of the bottom-right anchor).
+                Dragging toward the top-left makes the widget larger; toward
+                the bottom-right makes it smaller. Only shown on desktop. */}
+            {isDesktop && (
+              <div
+                onMouseDown={onResizeStart}
+                title="Drag to resize"
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "20px",
+                  height: "20px",
+                  cursor: "nw-resize",
+                  zIndex: 10,
+                  display: "flex",
+                  alignItems: "flex-start",
+                  justifyContent: "flex-start",
+                  padding: "4px",
+                }}
+              >
+                {/* Three-dot corner grip indicator */}
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 10 10"
+                  style={{ opacity: 0.3 }}
+                >
+                  <circle cx="2" cy="2" r="1.2" fill="currentColor" />
+                  <circle cx="2" cy="6" r="1.2" fill="currentColor" />
+                  <circle cx="6" cy="2" r="1.2" fill="currentColor" />
+                </svg>
+              </div>
+            )}
+
             <div className="flex items-center justify-between gap-2 border-b border-border/50 bg-muted/40 px-4 py-3">
               <div className="flex items-center gap-2.5">
                 <ElaineAvatar size={34} />
@@ -161,59 +201,21 @@ export function ElaineWidget({
                     className="h-8 w-8"
                     title="Open full-screen chat"
                     onClick={() => {
-                      // fullScreenPath may point at a different deployed
-                      // artifact (e.g. "/elaine/" from pottery/quilting/hub),
-                      // which is a separate SPA bundle entirely. A client-side
-                      // router Link can't cross that boundary, so this must
-                      // always be a hard navigation.
                       window.location.href = fullScreenPath;
                     }}
                   >
                     <Maximize2 className="h-4 w-4" />
                   </Button>
                 )}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <DropdownMenuItem
-                      onSelect={chat.handleNewConversation}
-                      className="cursor-pointer"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5 mr-2" />
-                      New conversation
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={() => {
-                        // Elaine's config always lives in the standalone
-                        // Elaine app, regardless of which sub-app the widget
-                        // is mounted in — same cross-bundle caveat as
-                        // fullScreenPath above.
-                        window.location.href = "/elaine/settings";
-                      }}
-                      className="cursor-pointer"
-                    >
-                      <SettingsIcon className="h-3.5 w-3.5 mr-2" />
-                      <ElaineName /> settings
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onSelect={handleHideForVisit}
-                      className="cursor-pointer"
-                    >
-                      Hide for this visit
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={handleTurnOff}
-                      className="cursor-pointer text-destructive focus:text-destructive"
-                    >
-                      Turn off <ElaineName />
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  title="New conversation"
+                  onClick={chat.handleNewConversation}
+                >
+                  <MessageSquarePlus className="h-4 w-4" />
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon"

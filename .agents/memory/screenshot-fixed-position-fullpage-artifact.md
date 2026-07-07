@@ -8,6 +8,7 @@ An earlier investigation concluded that `app_preview` screenshots lay out `posit
 **This conclusion was later disproven** (2026-07) when the same drift was reproduced with live `getComputedStyle`/`getBoundingClientRect` debug logging inside the actual running app (not just screenshots) on the Travels app. The rect data showed the same numeric pattern (`bottom` computed to match `-scrollHeight`), but this happened in the live browser too — end users would have seen the same drift, not just the screenshot tool.
 
 The real causes were two genuine bugs, documented in `cross-app-shared-tailwind-positioning.md`:
+
 1. A real browser bug where `position: fixed` + a CSS `bottom` offset can drift to track full document scroll height instead of the viewport in some layouts.
 2. Tailwind's automatic content-scanning failing to generate specific utility classes (`.bottom-4` was completely missing from generated CSS in some apps sharing a component from a lib package, while `.right-4` was present) — a real per-app build gap, not a screenshot issue.
 

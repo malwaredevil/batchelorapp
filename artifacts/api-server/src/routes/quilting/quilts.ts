@@ -336,7 +336,10 @@ router.patch("/quilts/:id", async (req, res) => {
   if (body.lockedFields !== undefined) updates.lockedFields = body.lockedFields;
 
   if (Object.keys(updates).length > 0) {
-    await db.update(finishedQuilts).set(updates).where(eq(finishedQuilts.id, id));
+    await db
+      .update(finishedQuilts)
+      .set(updates)
+      .where(eq(finishedQuilts.id, id));
   }
 
   if (body.categories !== undefined) {

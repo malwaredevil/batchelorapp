@@ -8,7 +8,10 @@ import {
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { useLogout, getGetCurrentUserQueryKey } from "@workspace/api-client-react";
+import {
+  useLogout,
+  getGetCurrentUserQueryKey,
+} from "@workspace/api-client-react";
 import {
   AppSwitcher,
   ElaineAvatar,

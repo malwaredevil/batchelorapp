@@ -466,7 +466,10 @@ export async function locateBackstampAndEnhanceMaker(
           { role: "system", content: BACKSTAMP_PROMPT },
           { role: "user", content: backstampUserContent },
         ],
-        { maxTokens: thresholds.potteryBackstampMaxTokens, responseFormatJson: true },
+        {
+          maxTokens: thresholds.potteryBackstampMaxTokens,
+          responseFormatJson: true,
+        },
       );
       const fusedRaw = parseJson(fused || null);
       if (fusedRaw) raw = fusedRaw;

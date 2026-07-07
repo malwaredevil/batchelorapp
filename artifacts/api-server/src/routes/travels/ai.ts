@@ -358,21 +358,24 @@ Include 6-8 highlights. Return ONLY valid JSON, no extra text.`,
 router.post("/highlights/suggest", async (req, res) => {
   const { destination } = SuggestBody.parse(req.body);
   const suggestModels = await getModels();
-  const raw = await callModel(suggestModels.fastVision, async (client, model) => {
-    const resp = await client.chat.completions.create({
-      model,
-      messages: [
-        {
-          role: "user",
-          content: `List 10 top must-do experiences, attractions, and highlights for a trip to ${destination}.
+  const raw = await callModel(
+    suggestModels.fastVision,
+    async (client, model) => {
+      const resp = await client.chat.completions.create({
+        model,
+        messages: [
+          {
+            role: "user",
+            content: `List 10 top must-do experiences, attractions, and highlights for a trip to ${destination}.
 Return ONLY a JSON array of short, specific names (2-5 words each). No descriptions or explanations.
 Example: ["Old Town Square", "Sunset Tram Ride", "Castle Tour", "Local Food Market", "River Cruise"]`,
-        },
-      ],
-      max_tokens: 300,
-    });
-    return resp.choices[0]?.message?.content ?? "[]";
-  });
+          },
+        ],
+        max_tokens: 300,
+      });
+      return resp.choices[0]?.message?.content ?? "[]";
+    },
+  );
   let suggestions: string[];
   try {
     suggestions = parseAiJson(raw) as string[];

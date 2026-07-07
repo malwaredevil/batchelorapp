@@ -4,7 +4,11 @@ import type { ReactNode } from "react";
 import type { MagnetCheckResult } from "@workspace/api-client-react";
 import { getTripPhotoImageUrl } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { ElaineChatPanel, ElaineAvatar, ElaineName } from "@workspace/elaine-ui";
+import {
+  ElaineChatPanel,
+  ElaineAvatar,
+  ElaineName,
+} from "@workspace/elaine-ui";
 import type { FullChat } from "@/lib/useFullChat";
 
 const MAGNET_VERDICT_COPY: Record<

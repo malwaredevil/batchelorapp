@@ -37,8 +37,7 @@ export function ElaineSettingsCard({
   const { data: assistantSettings, isLoading: settingsLoading } =
     useGetElaineSettings();
   const updateAssistantSettings = useUpdateElaineSettings();
-  const { data: memory = [], isLoading: memoryLoading } =
-    useListElaineMemory();
+  const { data: memory = [], isLoading: memoryLoading } = useListElaineMemory();
   const deleteMemory = useDeleteElaineMemoryItem();
 
   function handleToggle(enabled: boolean) {
@@ -99,7 +98,8 @@ export function ElaineSettingsCard({
           qc.setQueryData(getGetElaineSettingsQueryKey(), result);
           toast.success(
             <>
-              Updated <ElaineName />'s chat window size
+              Updated <ElaineName />
+              's chat window size
             </>,
           );
         },
@@ -181,9 +181,7 @@ export function ElaineSettingsCard({
       </div>
 
       <div className="space-y-2 rounded-lg border border-card-border p-4">
-        <p className="text-sm font-medium text-foreground">
-          Chat window size
-        </p>
+        <p className="text-sm font-medium text-foreground">Chat window size</p>
         <p className="text-xs text-muted-foreground pb-1">
           How big the floating chat popup is on desktop. On phones it always
           fills the screen width.

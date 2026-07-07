@@ -921,8 +921,26 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE travels_packing_items ENABLE ROW LEVEL SECURITY`,
   `CREATE INDEX IF NOT EXISTS travels_packing_items_list_id_idx ON travels_packing_items (list_id)`,
 
-  // Reusable named packing templates (household-scoped: any user can see and use
-  // any template, user_id is attribution only).
+  // ── Block Templates (reusable block library) ─────────────────────────────
+  // Household-shared (no per-user filter on reads). created_by_user_id is
+  // attribution metadata only, consistent with the rest of the quilting app.
+  `CREATE TABLE IF NOT EXISTS quilting_block_templates (
+    id                    SERIAL PRIMARY KEY,
+    created_by_user_id    INTEGER REFERENCES app_users(id) ON DELETE SET NULL,
+    name                  TEXT NOT NULL,
+    tags                  TEXT[] NOT NULL DEFAULT '{}',
+    grid_w                INTEGER NOT NULL DEFAULT 8,
+    grid_h                INTEGER NOT NULL DEFAULT 8,
+    cells                 TEXT[] NOT NULL DEFAULT '{}',
+    seams                 JSONB NOT NULL DEFAULT '[]'::jsonb,
+    block_size_inches     REAL,
+    seam_allowance_inches REAL,
+    thumbnail_svg         TEXT,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE quilting_block_templates ENABLE ROW LEVEL SECURITY`,
+
   `CREATE TABLE IF NOT EXISTS travels_packing_templates (
     id          SERIAL PRIMARY KEY,
     user_id     INTEGER NOT NULL,
@@ -932,4 +950,26 @@ export const STATEMENTS: string[] = [
   )`,
   `ALTER TABLE travels_packing_templates ENABLE ROW LEVEL SECURITY`,
   `CREATE INDEX IF NOT EXISTS travels_packing_templates_user_id_idx ON travels_packing_templates (user_id)`,
+
+  `CREATE TABLE IF NOT EXISTS elaine_history_conversations (
+    id         SERIAL PRIMARY KEY,
+    user_id    INTEGER NOT NULL,
+    title      TEXT NOT NULL DEFAULT 'New conversation',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE elaine_history_conversations ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS elaine_history_conversations_user_updated_idx ON elaine_history_conversations (user_id, updated_at DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS elaine_history_messages (
+    id              SERIAL PRIMARY KEY,
+    conversation_id INTEGER NOT NULL REFERENCES elaine_history_conversations(id) ON DELETE CASCADE,
+    user_id         INTEGER NOT NULL,
+    role            TEXT NOT NULL,
+    content         TEXT NOT NULL DEFAULT '',
+    attachment_urls JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE elaine_history_messages ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS elaine_history_messages_conversation_id_idx ON elaine_history_messages (conversation_id)`,
 ];

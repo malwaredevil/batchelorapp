@@ -102,8 +102,7 @@ function SortableItem({ item, onToggle, onDelete }: SortableItemProps) {
       <button
         {...attributes}
         {...listeners}
-        className="shrink-0 text-muted-foreground/40 hover:text-muted-foreground transition-colors cursor-grab active:cursor-grabbing touch-none"
-        tabIndex={-1}
+        className="shrink-0 text-muted-foreground/40 hover:text-muted-foreground focus-visible:text-muted-foreground transition-colors cursor-grab active:cursor-grabbing touch-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded"
         aria-label="Drag to reorder"
       >
         <GripVertical className="w-3.5 h-3.5" />

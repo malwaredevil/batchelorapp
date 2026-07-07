@@ -25,7 +25,7 @@ import {
   Moon,
   Bell,
   Square,
-  Edit2,
+  Pencil,
   X,
 } from "lucide-react";
 import TripTimeline from "@/components/TripTimeline";
@@ -146,6 +146,16 @@ export default function Dashboard() {
     },
   });
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
+  const [dialogMode, setDialogMode] = useState<"view" | "edit">("view");
+
+  function openReminderView(r: Reminder) {
+    setDialogMode("view");
+    setEditingReminder(r);
+  }
+  function openReminderEdit(r: Reminder) {
+    setDialogMode("edit");
+    setEditingReminder(r);
+  }
 
   usePageAssistantContext(
     "dashboard",
@@ -257,10 +267,17 @@ export default function Dashboard() {
                   >
                     <Square className="w-4 h-4 text-yellow-700/70 hover:text-yellow-900 dark:text-yellow-400/70" />
                   </button>
+                  <button
+                    className="shrink-0 text-yellow-700/40 hover:text-yellow-900 dark:text-yellow-400/40"
+                    title="Edit reminder"
+                    onClick={() => openReminderEdit(r)}
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
                   <div className="flex-1 min-w-0">
                     <button
                       type="button"
-                      onClick={() => setEditingReminder(r)}
+                      onClick={() => openReminderView(r)}
                       className={`text-sm text-left hover:underline ${overdue ? "text-red-700 font-medium" : "text-yellow-900 dark:text-yellow-200"}`}
                     >
                       {r.title}
@@ -284,13 +301,6 @@ export default function Dashboard() {
                       })}
                     </span>
                   )}
-                  <button
-                    className="shrink-0 text-yellow-700/60 hover:text-yellow-900 dark:text-yellow-400/60"
-                    title="Edit reminder"
-                    onClick={() => setEditingReminder(r)}
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
                   <button
                     className="shrink-0 text-yellow-700/60 hover:text-destructive dark:text-yellow-400/60"
                     title="Delete reminder"
@@ -320,6 +330,7 @@ export default function Dashboard() {
         onOpenChange={(open) => {
           if (!open) setEditingReminder(null);
         }}
+        initialMode={dialogMode}
       />
 
       {/* Next trip countdown */}

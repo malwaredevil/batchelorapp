@@ -1,32 +1,15 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import {
-  MessageCircle,
-  X,
-  MoreVertical,
-  RotateCcw,
-  Maximize2,
-  Settings as SettingsIcon,
-} from "lucide-react";
-import { toast } from "sonner";
+import { MessageCircle, X, MessageSquarePlus, Maximize2 } from "lucide-react";
 import {
   useGetElaineNudgesUnseenCount,
   getGetElaineNudgesUnseenCountQueryKey,
   type ElaineAppId,
 } from "@workspace/api-client-react";
 import { Button } from "./ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
-import { ElaineAvatar, ElaineName, ElaineWordmark } from "./ElaineAvatar";
+import { ElaineAvatar, ElaineWordmark } from "./ElaineAvatar";
 import { useElaineChat } from "./useElaineChat";
 import { ElaineChatPanel } from "./ElaineChatPanel";
-
-const HIDE_FOR_VISIT_KEY = "elaine_hidden_for_visit";
 
 // Desktop popup dimensions per size preference. All are capped by
 // max-w-[calc(100vw-2rem)]/max-h so small viewports (mobile) never overflow
@@ -52,9 +35,6 @@ export function ElaineWidget({
   currentPath?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [hiddenForVisit, setHiddenForVisit] = useState(
-    () => sessionStorage.getItem(HIDE_FOR_VISIT_KEY) === "1",
-  );
   // Positioning offset is applied via inline styles (not Tailwind bottom-4/
   // right-4 utilities) — see git history for why: those utilities were
   // observed to silently fail to generate in some app bundles' Tailwind
@@ -74,8 +54,7 @@ export function ElaineWidget({
   }, []);
 
   const chat = useElaineChat({ appId, active: open });
-  const { settings, updateSettings, messages, isStreaming, streamingContent } =
-    chat;
+  const { settings, messages, isStreaming, streamingContent } = chat;
 
   // Proactive nudges (e.g. "your trip starts in 2 days...") are computed by
   // a background job and surfaced as a badge on the closed floating button.
@@ -97,30 +76,8 @@ export function ElaineWidget({
   const onFullScreenChat =
     fullScreenPath !== undefined && currentPath === fullScreenPath;
 
-  if (!settings?.enabled || hiddenForVisit || onFullScreenChat) {
+  if (!settings?.enabled || onFullScreenChat) {
     return null;
-  }
-
-  function handleHideForVisit() {
-    sessionStorage.setItem(HIDE_FOR_VISIT_KEY, "1");
-    setHiddenForVisit(true);
-    setOpen(false);
-  }
-
-  function handleTurnOff() {
-    updateSettings.mutate(
-      { enabled: false },
-      {
-        onSuccess: () => {
-          setOpen(false);
-          toast.info(
-            <>
-              <ElaineName /> is turned off. Re-enable her anytime from settings.
-            </>,
-          );
-        },
-      },
-    );
   }
 
   return createPortal(
@@ -172,48 +129,15 @@ export function ElaineWidget({
                     <Maximize2 className="h-4 w-4" />
                   </Button>
                 )}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <DropdownMenuItem
-                      onSelect={chat.handleNewConversation}
-                      className="cursor-pointer"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5 mr-2" />
-                      New conversation
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={() => {
-                        // Elaine's config always lives in the standalone
-                        // Elaine app, regardless of which sub-app the widget
-                        // is mounted in — same cross-bundle caveat as
-                        // fullScreenPath above.
-                        window.location.href = "/elaine/settings";
-                      }}
-                      className="cursor-pointer"
-                    >
-                      <SettingsIcon className="h-3.5 w-3.5 mr-2" />
-                      <ElaineName /> settings
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onSelect={handleHideForVisit}
-                      className="cursor-pointer"
-                    >
-                      Hide for this visit
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={handleTurnOff}
-                      className="cursor-pointer text-destructive focus:text-destructive"
-                    >
-                      Turn off <ElaineName />
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  title="New conversation"
+                  onClick={chat.handleNewConversation}
+                >
+                  <MessageSquarePlus className="h-4 w-4" />
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon"

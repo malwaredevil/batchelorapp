@@ -111,8 +111,10 @@ export default function Chat() {
   const filteredConversations = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     if (!q) return conversations;
-    return conversations.filter((c) =>
-      c.title.toLowerCase().includes(q),
+    return conversations.filter(
+      (c) =>
+        c.title.toLowerCase().includes(q) ||
+        (c.preview?.toLowerCase().includes(q) ?? false),
     );
   }, [conversations, searchQuery]);
 
@@ -189,6 +191,11 @@ export default function Chat() {
                     >
                       {isLoading ? "Loading…" : conv.title}
                     </p>
+                    {conv.preview && (
+                      <p className="mt-0.5 truncate text-[10px] text-muted-foreground/70 leading-snug">
+                        {conv.preview}
+                      </p>
+                    )}
                     <p className="mt-0.5 text-[10px] text-muted-foreground">
                       {formatConversationDate(conv.updatedAt)}
                     </p>

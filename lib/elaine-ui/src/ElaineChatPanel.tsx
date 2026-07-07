@@ -272,7 +272,7 @@ export function ElaineChatPanel({
             <p className="text-xs text-muted-foreground">
               Take you to{" "}
               <span className="font-medium text-foreground">
-                {pendingNavigate.path}
+                {pendingNavigate.reason}
               </span>
               ?
             </p>

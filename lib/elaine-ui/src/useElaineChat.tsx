@@ -170,9 +170,25 @@ export function useElaineChat({
 
   function handleConfirmNavigate(onAfter?: () => void) {
     if (!pendingNavigate) return;
-    navigate(pendingNavigate.path);
+    const path = pendingNavigate.path;
     setPendingNavigate(null);
-    onAfter?.();
+    // Cross-SPA paths (start with /pottery, /quilting, /travels, /elaine) need
+    // a full page load because they belong to a different React bundle.
+    // Using wouter's navigate() for these would just render a 404 within the
+    // current SPA instead of loading the correct app.
+    const CROSS_SPA_PREFIXES = ["/pottery", "/quilting", "/travels", "/elaine"];
+    const isCrossSpa = CROSS_SPA_PREFIXES.some(
+      (prefix) =>
+        path === prefix ||
+        path.startsWith(prefix + "/") ||
+        path.startsWith(prefix + "?"),
+    );
+    if (isCrossSpa) {
+      window.location.href = path;
+    } else {
+      navigate(path);
+      onAfter?.();
+    }
   }
 
   function handleConfirmAction() {

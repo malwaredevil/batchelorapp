@@ -1858,12 +1858,24 @@ const NAVIGATE_PATH_RE_BY_APP: Record<AppId, RegExp> = {
   elaine: /^\/$/,
 };
 
+// Cross-app navigation paths — any app can navigate the user to another app's
+// root or a known sub-path. Query params are whitelisted (search, cat, color).
+// The client detects these prefixes and uses window.location.href instead of
+// the SPA router so the correct React bundle loads.
+const CROSS_APP_NAVIGATE_RE =
+  /^\/(pottery|quilting|travels|elaine)(\/[^?#]*)?(\?[a-zA-Z0-9=+%._~!$&'()*+,;:-]*)?\/?$/;
+
 function navigatePayloadSchemaFor(appId: AppId) {
   return z.object({
     path: z
       .string()
-      .max(60)
-      .regex(NAVIGATE_PATH_RE_BY_APP[appId], "not an allowed in-app path"),
+      .max(200)
+      .refine(
+        (p) =>
+          NAVIGATE_PATH_RE_BY_APP[appId].test(p) ||
+          CROSS_APP_NAVIGATE_RE.test(p),
+        "not an allowed in-app or cross-app path",
+      ),
     reason: z.string().min(1).max(300),
   });
 }
@@ -1950,18 +1962,18 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: NAVIGATE_TOOL_NAME,
       description:
-        'Suggest moving the user to another screen IN THE APP THEY ARE CURRENTLY VIEWING. You are never allowed to navigate them yourself — the UI only offers a button, the user must click it. First ASK in plain language in your visible reply (e.g. "Want me to open your Wishlist so you can add that?"). Only call this if you actually just asked permission in your visible text, and never for the page the user is already on.',
+        'Suggest navigating the user to a screen — either in the CURRENT app or in a DIFFERENT app. You are never allowed to navigate them yourself — the UI only offers a button the user must click. First ASK in plain language in your visible reply (e.g. "Want me to open your pottery collection?"). Only call this after asking permission in your visible text.\n\nFor the current app, use relative paths: e.g. "/trips/42", "/piece/7", "/fabrics".\nFor cross-app navigation use the app\'s base path prefix:\n  • Pottery collection → "/pottery/" (add ?search=term to pre-filter, e.g. "/pottery/?search=polish")\n  • Pottery piece detail → "/pottery/piece/42"\n  • Quilting fabrics → "/quilting/fabrics"\n  • Quilting root → "/quilting/"\n  • Travels → "/travels/"\n  • Elaine chat → "/elaine/"\nNever use paths from another app without the prefix.',
       parameters: {
         type: "object",
         properties: {
           path: {
             type: "string",
             description:
-              'A real in-app path for the app the user is currently on, e.g. "/trips/42", "/piece/7", or "/fabrics/add". Never invent a path outside that app.',
+              'The destination path. Use relative paths for the current app (e.g. "/trips/42"). Use prefixed paths for other apps (e.g. "/pottery/?search=polish", "/quilting/fabrics").',
           },
           reason: {
             type: "string",
-            description: "Short reason shown to the user",
+            description: "Short user-friendly description of where they will be taken, e.g. 'your pottery collection filtered for polish pottery'",
           },
         },
         required: ["path", "reason"],

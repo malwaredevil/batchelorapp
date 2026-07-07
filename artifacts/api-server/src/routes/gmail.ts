@@ -320,9 +320,11 @@ router.get(
         req.params.messageId,
         req.params.attachmentId,
       );
+      const safeFilename = (typeof filename === "string" ? filename : "attachment")
+        .replace(/["\r\n\\]/g, "_");
       res.setHeader(
         "Content-Disposition",
-        `attachment; filename="${typeof filename === "string" ? filename : "attachment"}"`,
+        `attachment; filename="${safeFilename}"`,
       );
       res.setHeader("Content-Type", "application/octet-stream");
       res.send(buf);

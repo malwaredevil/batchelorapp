@@ -381,6 +381,8 @@ export function buildRawMessage(params: {
       : s;
   };
 
+  const bodyB64 = Buffer.from(params.body, "utf-8").toString("base64");
+
   const lines: string[] = [
     `From: ${params.from}`,
     `To: ${params.to}`,
@@ -389,11 +391,11 @@ export function buildRawMessage(params: {
     `Subject: ${encodeSubject(params.subject)}`,
     `MIME-Version: 1.0`,
     `Content-Type: text/plain; charset=UTF-8`,
-    `Content-Transfer-Encoding: quoted-printable`,
+    `Content-Transfer-Encoding: base64`,
     ...(params.inReplyTo ? [`In-Reply-To: ${params.inReplyTo}`] : []),
     ...(params.references ? [`References: ${params.references}`] : []),
     "",
-    params.body,
+    bodyB64,
   ];
 
   return Buffer.from(lines.join("\r\n"), "utf-8").toString("base64url");

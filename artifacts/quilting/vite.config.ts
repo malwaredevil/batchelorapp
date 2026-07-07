@@ -68,7 +68,7 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         runtimeCaching: [
           {
-            urlPattern: /^\/api\/quilting\//,
+            urlPattern: ({ url }: { url: URL }) => url.pathname.startsWith("/api/quilting/"),
             handler: "NetworkFirst",
             options: {
               cacheName: "quilting-api-cache",

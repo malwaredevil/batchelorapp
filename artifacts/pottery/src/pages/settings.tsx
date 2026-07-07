@@ -6,6 +6,7 @@ import type { PotteryPotteryItem as PotteryItem } from "@workspace/api-client-re
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 
 const SETTINGS_ITEMS = [
   {
@@ -34,7 +35,7 @@ const SETTINGS_ITEMS = [
   },
 ];
 
-// ── Insurance PDF export ──────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatDate(d: string | null | undefined): string {
   if (!d) return "—";
@@ -48,144 +49,202 @@ function formatDate(d: string | null | undefined): string {
       });
 }
 
-async function generateInsurancePdf(items: PotteryItem[]): Promise<void> {
-  const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 20;
-  const contentWidth = pageWidth - margin * 2;
-
-  // ── Cover page ─────────────────────────────────────────────────────────────
-  doc.setFillColor(245, 245, 240);
-  doc.rect(0, 0, pageWidth, pageHeight, "F");
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(26);
-  doc.setTextColor(17, 17, 17);
-  doc.text("Pottery Collection", margin, 44);
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(13);
-  doc.setTextColor(80, 80, 80);
-  doc.text("Insurance & Provenance Record", margin, 54);
-
-  doc.setLineWidth(0.5);
-  doc.setDrawColor(180, 180, 180);
-  doc.line(margin, 60, pageWidth - margin, 60);
-
-  doc.setFontSize(11);
-  doc.setTextColor(50, 50, 50);
-  doc.text(
-    `${items.length} piece${items.length !== 1 ? "s" : ""} — exported ${formatDate(new Date().toISOString())}`,
-    margin,
-    68,
-  );
-
-  // ── Item pages ─────────────────────────────────────────────────────────────
-  let y = 90;
-
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-
-    if (y > pageHeight - 40) {
-      doc.addPage();
-      y = margin;
-    }
-
-    // Item name
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.setTextColor(17, 17, 17);
-    const nameLines = doc.splitTextToSize(item.name, contentWidth);
-    doc.text(nameLines, margin, y);
-    y += nameLines.length * 6 + 1;
-
-    // Fields
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9.5);
-    doc.setTextColor(60, 60, 60);
-
-    const fields: [string, string | undefined | null][] = [
-      ["Maker", item.maker],
-      ["Shape", item.shape],
-      ["Style", item.style],
-      ["Dimensions", item.dimensions],
-      ["Acquired", item.acquiredAt ? formatDate(item.acquiredAt) : null],
-      ["Quantity", item.quantity && item.quantity > 1 ? String(item.quantity) : null],
-      ["Categories", item.categories?.map((c) => c.name).join(", ") || null],
-    ];
-
-    for (const [label, value] of fields) {
-      if (!value) continue;
-      if (y > pageHeight - 20) {
-        doc.addPage();
-        y = margin;
-      }
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(80, 80, 80);
-      doc.text(`${label}:`, margin + 3, y);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(40, 40, 40);
-      const valueLines = doc.splitTextToSize(value, contentWidth - 30);
-      doc.text(valueLines, margin + 28, y);
-      y += Math.max(valueLines.length, 1) * 5 + 1;
-    }
-
-    if (item.notes) {
-      if (y > pageHeight - 20) {
-        doc.addPage();
-        y = margin;
-      }
-      doc.setFont("helvetica", "italic");
-      doc.setFontSize(9);
-      doc.setTextColor(100, 100, 100);
-      const noteLines = doc.splitTextToSize(`Notes: ${item.notes}`, contentWidth - 6);
-      doc.text(noteLines, margin + 3, y);
-      y += noteLines.length * 4.5 + 1;
-    }
-
-    // Divider
-    doc.setLineWidth(0.2);
-    doc.setDrawColor(210, 210, 210);
-    doc.line(margin, y + 3, pageWidth - margin, y + 3);
-    y += 10;
-  }
-
-  // ── Footer on every page ───────────────────────────────────────────────────
-  const totalPages = doc.getNumberOfPages();
-  for (let p = 1; p <= totalPages; p++) {
-    doc.setPage(p);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(160, 160, 160);
-    doc.text(
-      `Page ${p} of ${totalPages}`,
-      pageWidth - margin,
-      pageHeight - 8,
-      { align: "right" },
-    );
-    doc.text("Batchelor Pottery Collection", margin, pageHeight - 8);
-  }
-
-  doc.save("pottery-collection-insurance.pdf");
+function escHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
+/** Fetch an image URL and return a data URL, or null on failure. */
+async function fetchAsDataUrl(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, { credentials: "include" });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return new Promise<string | null>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** Fetch images in parallel batches; returns array indexed by item position. */
+async function prefetchImages(
+  items: PotteryItem[],
+  onProgress: (loaded: number, total: number) => void,
+): Promise<(string | null)[]> {
+  const results: (string | null)[] = new Array(items.length).fill(null);
+  const BATCH = 10;
+  let loaded = 0;
+
+  for (let i = 0; i < items.length; i += BATCH) {
+    const batch = items.slice(i, i + BATCH);
+    const fetched = await Promise.all(
+      batch.map((item) => (item.imageUrl ? fetchAsDataUrl(item.imageUrl) : Promise.resolve(null))),
+    );
+    fetched.forEach((dataUrl, j) => {
+      results[i + j] = dataUrl;
+    });
+    loaded += batch.length;
+    onProgress(Math.min(loaded, items.length), items.length);
+  }
+
+  return results;
+}
+
+/** Build a print-layout DOM container from items + pre-fetched image data URLs. */
+function buildPrintContainer(
+  items: PotteryItem[],
+  imageDataUrls: (string | null)[],
+): HTMLDivElement {
+  const container = document.createElement("div");
+  container.style.cssText = [
+    "position: absolute",
+    "left: -9999px",
+    "top: -9999px",
+    "width: 794px",
+    "font-family: Georgia, 'Times New Roman', serif",
+    "background: #fff",
+    "color: #111",
+    "padding: 40px 40px 20px",
+    "box-sizing: border-box",
+  ].join("; ");
+
+  const coverDate = formatDate(new Date().toISOString());
+
+  const rows = items
+    .map((item, i) => {
+      const imgSrc = imageDataUrls[i];
+      const imgTag = imgSrc
+        ? `<img src="${imgSrc}" style="width:90px;height:90px;object-fit:cover;border-radius:6px;border:1px solid #ddd;" />`
+        : `<div style="width:90px;height:90px;border-radius:6px;background:#f3f4f6;border:1px solid #ddd;display:flex;align-items:center;justify-content:center;font-size:11px;color:#9ca3af;">No image</div>`;
+
+      const fields = [
+        item.maker ? `<div style="margin-top:3px;font-size:11px;"><b>Maker:</b> ${escHtml(item.maker)}</div>` : "",
+        item.makerInfo ? `<div style="margin-top:2px;font-size:10px;color:#555;">${escHtml(item.makerInfo)}</div>` : "",
+        item.shape ? `<div style="margin-top:3px;font-size:11px;"><b>Shape:</b> ${escHtml(item.shape)}</div>` : "",
+        item.style ? `<div style="margin-top:2px;font-size:11px;"><b>Style:</b> ${escHtml(item.style)}</div>` : "",
+        item.dimensions ? `<div style="margin-top:2px;font-size:11px;"><b>Dimensions:</b> ${escHtml(item.dimensions)}</div>` : "",
+        item.acquiredAt ? `<div style="margin-top:2px;font-size:11px;"><b>Acquired:</b> ${formatDate(item.acquiredAt)}</div>` : "",
+        item.quantity && item.quantity > 1 ? `<div style="margin-top:2px;font-size:11px;"><b>Qty:</b> ${item.quantity}</div>` : "",
+        item.categories && item.categories.length > 0
+          ? `<div style="margin-top:2px;font-size:11px;"><b>Categories:</b> ${item.categories.map((c) => escHtml(c.name)).join(", ")}</div>`
+          : "",
+        item.notes ? `<div style="margin-top:4px;font-size:10px;color:#666;font-style:italic;">${escHtml(item.notes)}</div>` : "",
+      ].join("");
+
+      return `
+        <tr>
+          <td style="padding:10px 8px;vertical-align:top;border-bottom:1px solid #e5e7eb;">${imgTag}</td>
+          <td style="padding:10px 10px;vertical-align:top;border-bottom:1px solid #e5e7eb;">
+            <div style="font-size:13px;font-weight:bold;margin-bottom:2px;">${escHtml(item.name)}</div>
+            ${fields}
+          </td>
+        </tr>`;
+    })
+    .join("\n");
+
+  container.innerHTML = `
+    <div style="margin-bottom:28px;padding-bottom:20px;border-bottom:2px solid #1f2937;">
+      <div style="font-size:26px;font-weight:bold;margin-bottom:6px;">Pottery Collection</div>
+      <div style="font-size:13px;color:#555;margin-bottom:4px;">Insurance &amp; Provenance Record</div>
+      <div style="font-size:12px;color:#444;">${items.length} piece${items.length !== 1 ? "s" : ""} — exported ${escHtml(coverDate)}</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;">
+      <tbody>${rows}</tbody>
+    </table>`;
+
+  return container;
+}
+
+// ── PDF export ─────────────────────────────────────────────────────────────────
+
+async function generateInsurancePdf(
+  items: PotteryItem[],
+  onProgress: (msg: string) => void,
+): Promise<void> {
+  onProgress(`Loading images…  0 / ${items.length}`);
+
+  const imageDataUrls = await prefetchImages(items, (loaded, total) => {
+    onProgress(`Loading images… ${loaded} / ${total}`);
+  });
+
+  onProgress("Rendering layout…");
+
+  const container = buildPrintContainer(items, imageDataUrls);
+  document.body.appendChild(container);
+
+  try {
+    const canvas = await html2canvas(container, {
+      scale: 2,
+      useCORS: false,
+      allowTaint: false,
+      backgroundColor: "#ffffff",
+      logging: false,
+    });
+
+    onProgress("Building PDF…");
+
+    const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+    const pdfW = pdf.internal.pageSize.getWidth();
+    const pdfH = pdf.internal.pageSize.getHeight();
+
+    const imgData = canvas.toDataURL("image/jpeg", 0.88);
+    const imgRatio = canvas.width / canvas.height;
+    const imgW = pdfW;
+    const imgH = imgW / imgRatio;
+
+    let yOffset = 0;
+    let pageNum = 0;
+
+    while (yOffset < imgH) {
+      if (pageNum > 0) pdf.addPage();
+      pdf.addImage(imgData, "JPEG", 0, -yOffset, imgW, imgH);
+      yOffset += pdfH;
+      pageNum++;
+    }
+
+    // Page numbers
+    for (let p = 1; p <= pageNum; p++) {
+      pdf.setPage(p);
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(8);
+      pdf.setTextColor(160, 160, 160);
+      pdf.text(`Page ${p} of ${pageNum}`, pdfW - 12, pdfH - 8, { align: "right" });
+    }
+
+    pdf.save("pottery-collection-insurance.pdf");
+  } finally {
+    document.body.removeChild(container);
+  }
+}
+
+// ── Component ──────────────────────────────────────────────────────────────────
+
 function InsuranceExportButton({ items }: { items: PotteryItem[] | undefined }) {
-  const [generating, setGenerating] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
+  const generating = progress !== null;
 
   const handleExport = async () => {
     if (!items || items.length === 0) {
       toast.error("No items to export");
       return;
     }
-    setGenerating(true);
+    setProgress("Starting…");
     try {
-      await generateInsurancePdf(items);
+      await generateInsurancePdf(items, setProgress);
       toast.success(`PDF downloaded — ${items.length} pieces`);
-    } catch {
+    } catch (err) {
+      console.error("PDF export failed", err);
       toast.error("PDF generation failed. Try again.");
     } finally {
-      setGenerating(false);
+      setProgress(null);
     }
   };
 
@@ -204,7 +263,7 @@ function InsuranceExportButton({ items }: { items: PotteryItem[] | undefined }) 
       <div className="flex-1 text-left">
         <p className="font-medium">Export for insurance</p>
         <p className="text-sm text-muted-foreground">
-          Download a PDF record of every piece
+          {generating ? progress : "Download a PDF with photos of every piece"}
         </p>
       </div>
     </Button>

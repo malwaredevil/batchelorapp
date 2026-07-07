@@ -16,6 +16,7 @@ import {
   type AssistantAction,
   type ExecutedAssistantAction,
   type ElaineAppId,
+  type ChatWidget,
 } from "@workspace/api-client-react";
 import { ElaineName } from "./ElaineAvatar";
 import { useElainePageContextReader } from "./ElainePageContext";
@@ -40,6 +41,10 @@ export function useElaineChat({
 
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
+  // widgets[i] holds rich widget data for messages[i] (assistant turns only)
+  const [messageWidgets, setMessageWidgets] = useState<
+    Map<number, ChatWidget[]>
+  >(new Map());
   const [initialized, setInitialized] = useState(false);
   const [pendingNavigate, setPendingNavigate] = useState<{
     path: string;
@@ -107,6 +112,8 @@ export function useElaineChat({
     setStatusMessage("");
     setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
     setIsStreaming(true);
+    // accumulate widgets for the new assistant turn
+    const pendingWidgets: ChatWidget[] = [];
 
     try {
       await streamElaineMessage(
@@ -118,8 +125,18 @@ export function useElaineChat({
           },
           onAction: (action) => setPendingActions((prev) => [...prev, action]),
           onStatus: (msg) => setStatusMessage(msg),
+          onWidget: (widget) => pendingWidgets.push(widget),
           onDone: (result) => {
             setMessages(result.messages);
+            // attach widgets to the last assistant message index
+            if (pendingWidgets.length > 0) {
+              const lastIdx = result.messages.length - 1;
+              setMessageWidgets((prev) => {
+                const next = new Map(prev);
+                next.set(lastIdx, pendingWidgets);
+                return next;
+              });
+            }
             if (result.navigate) setPendingNavigate(result.navigate);
             if (result.actions.length > 0) setPendingActions(result.actions);
             if (result.executedActions.length > 0) {
@@ -153,9 +170,25 @@ export function useElaineChat({
 
   function handleConfirmNavigate(onAfter?: () => void) {
     if (!pendingNavigate) return;
-    navigate(pendingNavigate.path);
+    const path = pendingNavigate.path;
     setPendingNavigate(null);
-    onAfter?.();
+    // Cross-SPA paths (start with /pottery, /quilting, /travels, /elaine) need
+    // a full page load because they belong to a different React bundle.
+    // Using wouter's navigate() for these would just render a 404 within the
+    // current SPA instead of loading the correct app.
+    const CROSS_SPA_PREFIXES = ["/pottery", "/quilting", "/travels", "/elaine"];
+    const isCrossSpa = CROSS_SPA_PREFIXES.some(
+      (prefix) =>
+        path === prefix ||
+        path.startsWith(prefix + "/") ||
+        path.startsWith(prefix + "?"),
+    );
+    if (isCrossSpa) {
+      window.location.href = path;
+    } else {
+      navigate(path);
+      onAfter?.();
+    }
   }
 
   function handleConfirmAction() {
@@ -222,6 +255,7 @@ export function useElaineChat({
     input,
     setInput,
     messages,
+    messageWidgets,
     pendingNavigate,
     setPendingNavigate,
     pendingActions,

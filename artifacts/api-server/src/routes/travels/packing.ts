@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, asc, and } from "drizzle-orm";
+import { eq, asc, and, max } from "drizzle-orm";
 import { z } from "zod/v4";
 import {
   db,
@@ -83,12 +83,22 @@ router.post("/trips/:tripId/packing/items", async (req, res) => {
   const userId = req.session.userId!;
   const list = await getOrCreateList(tripId);
 
+  // Default sortOrder = max existing + 1 so new items always append
+  let nextOrder = body.sortOrder;
+  if (nextOrder === undefined) {
+    const [{ maxOrder }] = await db
+      .select({ maxOrder: max(travelsPackingItems.sortOrder) })
+      .from(travelsPackingItems)
+      .where(eq(travelsPackingItems.listId, list.id));
+    nextOrder = maxOrder != null ? maxOrder + 1 : 0;
+  }
+
   const [item] = await db
     .insert(travelsPackingItems)
     .values({
       listId: list.id,
       text: body.text,
-      sortOrder: body.sortOrder ?? 0,
+      sortOrder: nextOrder,
       addedByUserId: userId,
     })
     .returning();
@@ -375,6 +385,73 @@ router.delete("/packing-templates/:templateId", async (req, res) => {
     return;
   }
   res.status(204).send();
+});
+
+// ── POST /trips/:tripId/packing/items/reorder ─────────────────────────────────
+// Batch update sortOrder for a set of items (drag-and-drop reorder).
+
+const ReorderBody = z.object({
+  order: z.array(z.number().int()).min(1),
+});
+
+router.post("/trips/:tripId/packing/items/reorder", async (req, res) => {
+  const tripId = parseInt(req.params.tripId, 10);
+  if (isNaN(tripId)) {
+    res.status(400).json({ error: "Invalid tripId" });
+    return;
+  }
+  const [list] = await db
+    .select({ id: travelsPackingLists.id })
+    .from(travelsPackingLists)
+    .where(eq(travelsPackingLists.tripId, tripId));
+  if (!list) {
+    res.status(404).json({ error: "Packing list not found" });
+    return;
+  }
+  const body = ReorderBody.parse(req.body);
+
+  // Validate: submitted IDs must exactly match the list's current item IDs
+  const existing = await db
+    .select({ id: travelsPackingItems.id })
+    .from(travelsPackingItems)
+    .where(eq(travelsPackingItems.listId, list.id));
+
+  const existingIds = new Set(existing.map((r) => r.id));
+  const submittedIds = body.order;
+
+  if (submittedIds.length !== existingIds.size) {
+    res.status(400).json({ error: "order length does not match item count" });
+    return;
+  }
+  const hasDuplicates = new Set(submittedIds).size !== submittedIds.length;
+  if (hasDuplicates) {
+    res.status(400).json({ error: "order contains duplicate item IDs" });
+    return;
+  }
+  const unknownIds = submittedIds.filter((id) => !existingIds.has(id));
+  if (unknownIds.length > 0) {
+    res.status(400).json({ error: "order contains IDs not in this list" });
+    return;
+  }
+
+  // Apply atomically inside a transaction
+  await db.transaction(async (tx) => {
+    await Promise.all(
+      submittedIds.map((itemId, idx) =>
+        tx
+          .update(travelsPackingItems)
+          .set({ sortOrder: idx })
+          .where(
+            and(
+              eq(travelsPackingItems.id, itemId),
+              eq(travelsPackingItems.listId, list.id),
+            ),
+          ),
+      ),
+    );
+  });
+
+  res.json({ reordered: submittedIds.length });
 });
 
 // ── POST /trips/:tripId/packing/load-template/:templateId ─────────────────────

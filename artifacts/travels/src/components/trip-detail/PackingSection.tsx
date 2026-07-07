@@ -1,10 +1,28 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   useGetPackingList,
   useCreatePackingItem,
   useBulkCreatePackingItems,
   useUpdatePackingItem,
   useDeletePackingItem,
+  useReorderPackingItems,
   useLoadPackingTemplate,
   useListPackingTemplates,
   useCreatePackingTemplate,
@@ -42,12 +60,87 @@ import {
   Trash2,
   ChevronDown,
   Loader2,
+  GripVertical,
 } from "lucide-react";
 import { toast } from "sonner";
 
 interface PackingSectionProps {
   tripId: number;
 }
+
+// ── Sortable item row ─────────────────────────────────────────────────────────
+
+interface SortableItemProps {
+  item: PackingItem;
+  onToggle: (item: PackingItem) => void;
+  onDelete: (id: number) => void;
+}
+
+function SortableItem({ item, onToggle, onDelete }: SortableItemProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-muted/50 transition-colors group"
+    >
+      {/* drag handle */}
+      <button
+        {...attributes}
+        {...listeners}
+        className="shrink-0 text-muted-foreground/40 hover:text-muted-foreground focus-visible:text-muted-foreground transition-colors cursor-grab active:cursor-grabbing touch-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded"
+        aria-label="Drag to reorder"
+      >
+        <GripVertical className="w-3.5 h-3.5" />
+      </button>
+
+      {/* packed toggle */}
+      <button
+        onClick={() => onToggle(item)}
+        className="shrink-0 text-muted-foreground hover:text-primary transition-colors"
+      >
+        {item.packed ? (
+          <CheckSquare className="w-4 h-4 text-primary" />
+        ) : (
+          <Square className="w-4 h-4" />
+        )}
+      </button>
+
+      {/* text */}
+      <span
+        className={`flex-1 text-sm leading-tight select-none ${
+          item.packed ? "line-through text-muted-foreground" : "text-foreground"
+        }`}
+      >
+        {item.text}
+      </span>
+
+      {/* delete */}
+      <button
+        onClick={() => onDelete(item.id)}
+        className="shrink-0 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 export function PackingSection({ tripId }: PackingSectionProps) {
   const qc = useQueryClient();
@@ -56,6 +149,7 @@ export function PackingSection({ tripId }: PackingSectionProps) {
   const bulkCreate = useBulkCreatePackingItems();
   const updateItem = useUpdatePackingItem();
   const deleteItem = useDeletePackingItem();
+  const reorderItems = useReorderPackingItems();
   const loadTemplate = useLoadPackingTemplate();
   const { data: templates = [] } = useListPackingTemplates();
   const createTemplate = useCreatePackingTemplate();
@@ -68,14 +162,53 @@ export function PackingSection({ tripId }: PackingSectionProps) {
   const [showSaveTemplateDialog, setShowSaveTemplateDialog] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [showTemplatesDialog, setShowTemplatesDialog] = useState(false);
+  // Optimistic ordered list for DnD — null means use server order
+  const [localOrder, setLocalOrder] = useState<PackingItem[] | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const invalidate = () => {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  const invalidate = useCallback(() => {
+    setLocalOrder(null);
     void qc.invalidateQueries({ queryKey: getGetPackingListQueryKey(tripId) });
+  }, [qc, tripId]);
+
+  const serverItems = data?.items ?? [];
+  // Prefer local (optimistic) order during/after a drag, until server confirms
+  const items = localOrder ?? serverItems;
+  const packed = items.filter((i) => i.packed).length;
+
+  // ── Drag-and-drop ─────────────────────────────────────────────────────────
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = items.findIndex((i) => i.id === active.id);
+    const newIndex = items.findIndex((i) => i.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(items, oldIndex, newIndex);
+    setLocalOrder(reordered); // optimistic update
+
+    reorderItems.mutate(
+      { tripId, body: { order: reordered.map((i) => i.id) } },
+      {
+        onSuccess: invalidate,
+        onError: () => {
+          setLocalOrder(null); // rollback
+          toast.error("Failed to reorder items");
+        },
+      },
+    );
   };
 
-  const items = data?.items ?? [];
-  const packed = items.filter((i) => i.packed).length;
+  // ── CRUD ──────────────────────────────────────────────────────────────────
 
   const handleAdd = () => {
     const text = newItemText.trim();
@@ -110,7 +243,7 @@ export function PackingSection({ tripId }: PackingSectionProps) {
     );
   };
 
-  // ── AI Generate ──────────────────────────────────────────────────────────────
+  // ── AI Generate ──────────────────────────────────────────────────────────
 
   const handleGenerate = async () => {
     setGeneratedItems([]);
@@ -156,7 +289,7 @@ export function PackingSection({ tripId }: PackingSectionProps) {
                 setGeneratedItems(parsed.items as string[]);
               }
             } catch {
-              // ignore parse errors on partial chunks
+              // ignore partial chunks
             }
           }
         }
@@ -197,7 +330,7 @@ export function PackingSection({ tripId }: PackingSectionProps) {
     );
   };
 
-  // ── Save as Template ─────────────────────────────────────────────────────────
+  // ── Templates ─────────────────────────────────────────────────────────────
 
   const handleSaveTemplate = () => {
     if (!templateName.trim()) return;
@@ -215,15 +348,15 @@ export function PackingSection({ tripId }: PackingSectionProps) {
     );
   };
 
-  // ── Load Template ─────────────────────────────────────────────────────────────
-
   const handleLoadTemplate = (template: PackingTemplate) => {
     loadTemplate.mutate(
       { tripId, templateId: template.id },
       {
         onSuccess: (result) => {
           invalidate();
-          toast.success(`Added ${result.added} item${result.added !== 1 ? "s" : ""} from "${template.name}"`);
+          toast.success(
+            `Added ${result.added} item${result.added !== 1 ? "s" : ""} from "${template.name}"`,
+          );
           setShowTemplatesDialog(false);
         },
         onError: () => toast.error("Failed to load template"),
@@ -242,6 +375,8 @@ export function PackingSection({ tripId }: PackingSectionProps) {
     });
   };
 
+  // ── Render ────────────────────────────────────────────────────────────────
+
   if (isLoading) {
     return (
       <div className="flex justify-center py-6">
@@ -256,13 +391,19 @@ export function PackingSection({ tripId }: PackingSectionProps) {
       {items.length > 0 && (
         <div className="space-y-1">
           <div className="flex justify-between text-xs text-muted-foreground">
-            <span>{packed} of {items.length} packed</span>
-            <span>{items.length > 0 ? Math.round((packed / items.length) * 100) : 0}%</span>
+            <span>
+              {packed} of {items.length} packed
+            </span>
+            <span>
+              {items.length > 0 ? Math.round((packed / items.length) * 100) : 0}%
+            </span>
           </div>
           <div className="h-1.5 bg-muted rounded-full overflow-hidden">
             <div
               className="h-full bg-primary rounded-full transition-all duration-300"
-              style={{ width: `${items.length > 0 ? (packed / items.length) * 100 : 0}%` }}
+              style={{
+                width: `${items.length > 0 ? (packed / items.length) * 100 : 0}%`,
+              }}
             />
           </div>
         </div>
@@ -274,10 +415,17 @@ export function PackingSection({ tripId }: PackingSectionProps) {
           placeholder="Add item..."
           value={newItemText}
           onChange={(e) => setNewItemText(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAdd())}
+          onKeyDown={(e) =>
+            e.key === "Enter" && (e.preventDefault(), handleAdd())
+          }
           className="flex-1 h-8 text-sm"
         />
-        <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={handleAdd}>
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-8 w-8 shrink-0"
+          onClick={handleAdd}
+        >
           <Plus className="w-3.5 h-3.5" />
         </Button>
         <DropdownMenu>
@@ -297,7 +445,9 @@ export function PackingSection({ tripId }: PackingSectionProps) {
               Load template
             </DropdownMenuItem>
             {items.length > 0 && (
-              <DropdownMenuItem onClick={() => setShowSaveTemplateDialog(true)}>
+              <DropdownMenuItem
+                onClick={() => setShowSaveTemplateDialog(true)}
+              >
                 <BookMarked className="w-4 h-4 mr-2" />
                 Save as template
               </DropdownMenuItem>
@@ -306,54 +456,47 @@ export function PackingSection({ tripId }: PackingSectionProps) {
         </DropdownMenu>
       </div>
 
-      {/* Item list */}
+      {/* Item list with DnD */}
       {items.length === 0 ? (
         <p className="text-sm text-muted-foreground text-center py-4">
-          Nothing on the packing list yet. Add items above or try AI suggestions.
+          Nothing on the packing list yet. Add items above or try AI
+          suggestions.
         </p>
       ) : (
-        <div className="space-y-0.5">
-          {items.map((item) => (
-            <div
-              key={item.id}
-              className="flex items-center gap-2.5 py-1.5 px-2 rounded-lg hover:bg-muted/50 transition-colors group"
-            >
-              <button
-                onClick={() => handleToggle(item)}
-                className="shrink-0 text-muted-foreground hover:text-primary transition-colors"
-              >
-                {item.packed ? (
-                  <CheckSquare className="w-4 h-4 text-primary" />
-                ) : (
-                  <Square className="w-4 h-4" />
-                )}
-              </button>
-              <span
-                className={`flex-1 text-sm leading-tight ${
-                  item.packed ? "line-through text-muted-foreground" : "text-foreground"
-                }`}
-              >
-                {item.text}
-              </span>
-              <button
-                onClick={() => handleDelete(item.id)}
-                className="shrink-0 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={items.map((i) => i.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="space-y-0.5">
+              {items.map((item) => (
+                <SortableItem
+                  key={item.id}
+                  item={item}
+                  onToggle={handleToggle}
+                  onDelete={handleDelete}
+                />
+              ))}
             </div>
-          ))}
-        </div>
+          </SortableContext>
+        </DndContext>
       )}
 
       {/* AI Generate dialog */}
-      <Dialog open={showGenerateDialog} onOpenChange={(open) => {
-        if (!open) {
-          abortRef.current?.abort();
-          setShowGenerateDialog(false);
-          if (generating) setGenerating(false);
-        }
-      }}>
+      <Dialog
+        open={showGenerateDialog}
+        onOpenChange={(open) => {
+          if (!open) {
+            abortRef.current?.abort();
+            setShowGenerateDialog(false);
+            if (generating) setGenerating(false);
+          }
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -365,7 +508,9 @@ export function PackingSection({ tripId }: PackingSectionProps) {
             {generating ? (
               <div className="flex flex-col items-center gap-3 py-6">
                 <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">Generating suggestions…</p>
+                <p className="text-sm text-muted-foreground">
+                  Generating suggestions…
+                </p>
               </div>
             ) : generatedItems.length > 0 ? (
               <div className="space-y-1.5 max-h-64 overflow-y-auto">
@@ -386,12 +531,19 @@ export function PackingSection({ tripId }: PackingSectionProps) {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowGenerateDialog(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setShowGenerateDialog(false)}
+            >
               Cancel
             </Button>
             <Button
               onClick={handleAddGenerated}
-              disabled={generatedItems.length === 0 || generating || bulkCreate.isPending}
+              disabled={
+                generatedItems.length === 0 ||
+                generating ||
+                bulkCreate.isPending
+              }
             >
               {bulkCreate.isPending ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -405,7 +557,10 @@ export function PackingSection({ tripId }: PackingSectionProps) {
       </Dialog>
 
       {/* Save template dialog */}
-      <Dialog open={showSaveTemplateDialog} onOpenChange={setShowSaveTemplateDialog}>
+      <Dialog
+        open={showSaveTemplateDialog}
+        onOpenChange={setShowSaveTemplateDialog}
+      >
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Save as Template</DialogTitle>
@@ -420,7 +575,10 @@ export function PackingSection({ tripId }: PackingSectionProps) {
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowSaveTemplateDialog(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setShowSaveTemplateDialog(false)}
+            >
               Cancel
             </Button>
             <Button
@@ -439,7 +597,10 @@ export function PackingSection({ tripId }: PackingSectionProps) {
       </Dialog>
 
       {/* Load template dialog */}
-      <Dialog open={showTemplatesDialog} onOpenChange={setShowTemplatesDialog}>
+      <Dialog
+        open={showTemplatesDialog}
+        onOpenChange={setShowTemplatesDialog}
+      >
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Load Template</DialogTitle>
@@ -447,7 +608,8 @@ export function PackingSection({ tripId }: PackingSectionProps) {
           <div className="py-2 space-y-1 max-h-64 overflow-y-auto">
             {templates.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">
-                No templates saved yet. Save this list as a template to reuse it.
+                No templates saved yet. Save this list as a template to reuse
+                it.
               </p>
             ) : (
               templates.map((tmpl) => (
@@ -459,7 +621,8 @@ export function PackingSection({ tripId }: PackingSectionProps) {
                   <div>
                     <p className="text-sm font-medium">{tmpl.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {tmpl.items.length} item{tmpl.items.length !== 1 ? "s" : ""}
+                      {tmpl.items.length} item
+                      {tmpl.items.length !== 1 ? "s" : ""}
                     </p>
                   </div>
                   <button
@@ -473,7 +636,10 @@ export function PackingSection({ tripId }: PackingSectionProps) {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowTemplatesDialog(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setShowTemplatesDialog(false)}
+            >
               Close
             </Button>
           </DialogFooter>

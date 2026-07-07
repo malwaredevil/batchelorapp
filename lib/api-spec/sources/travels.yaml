@@ -386,6 +386,245 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /trips/{id}/packing:
+    get:
+      operationId: getPackingList
+      tags: [travels]
+      summary: Get (or auto-create) the packing list and items for a trip
+      parameters:
+        - $ref: "#/components/parameters/TripId"
+      responses:
+        "200":
+          description: Packing list with items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PackingListWithItems"
+        "404":
+          description: Trip not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /trips/{id}/packing/items:
+    post:
+      operationId: createPackingItem
+      tags: [travels]
+      summary: Add an item to a trip's packing list
+      parameters:
+        - $ref: "#/components/parameters/TripId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePackingItemBody"
+      responses:
+        "201":
+          description: Item created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PackingItem"
+        "404":
+          description: Trip not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /trips/{id}/packing/items/reorder:
+    post:
+      operationId: reorderPackingItems
+      tags: [travels]
+      summary: Batch-update sort order for packing items (drag-and-drop reorder)
+      parameters:
+        - $ref: "#/components/parameters/TripId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReorderPackingItemsBody"
+      responses:
+        "200":
+          description: Reorder applied
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reordered]
+                properties:
+                  reordered:
+                    type: integer
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /trips/{id}/packing/items/bulk:
+    post:
+      operationId: bulkCreatePackingItems
+      tags: [travels]
+      summary: Add multiple items to a trip's packing list
+      parameters:
+        - $ref: "#/components/parameters/TripId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkCreatePackingItemsBody"
+      responses:
+        "201":
+          description: Items created
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PackingItem"
+        "404":
+          description: Trip not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /trips/{id}/packing/items/{itemId}:
+    patch:
+      operationId: updatePackingItem
+      tags: [travels]
+      summary: Update a packing item (toggle packed, rename, reorder)
+      parameters:
+        - $ref: "#/components/parameters/TripId"
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePackingItemBody"
+      responses:
+        "200":
+          description: Updated item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PackingItem"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deletePackingItem
+      tags: [travels]
+      summary: Remove a packing item
+      parameters:
+        - $ref: "#/components/parameters/TripId"
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /trips/{id}/packing/load-template/{templateId}:
+    post:
+      operationId: loadPackingTemplate
+      tags: [travels]
+      summary: Merge a template's items into the trip's packing list
+      parameters:
+        - $ref: "#/components/parameters/TripId"
+        - name: templateId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: Items added from template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoadTemplateResult"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /packing-templates:
+    get:
+      operationId: listPackingTemplates
+      tags: [travels]
+      summary: List all saved packing templates
+      responses:
+        "200":
+          description: Template list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PackingTemplate"
+    post:
+      operationId: createPackingTemplate
+      tags: [travels]
+      summary: Save a new packing template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePackingTemplateBody"
+      responses:
+        "201":
+          description: Template created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PackingTemplate"
+
+  /packing-templates/{templateId}:
+    delete:
+      operationId: deletePackingTemplate
+      tags: [travels]
+      summary: Delete a packing template
+      parameters:
+        - name: templateId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
 components:
   parameters:
     TripId:
@@ -655,3 +894,123 @@ components:
           type: integer
         nextTrip:
           nullable: true
+
+    PackingItem:
+      type: object
+      required: [id, listId, text, packed, sortOrder, createdAt]
+      properties:
+        id:
+          type: integer
+        listId:
+          type: integer
+        text:
+          type: string
+        packed:
+          type: boolean
+        sortOrder:
+          type: integer
+        addedByUserId:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    PackingListWithItems:
+      type: object
+      required: [id, tripId, name, createdAt, items]
+      properties:
+        id:
+          type: integer
+        tripId:
+          type: integer
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PackingItem"
+
+    PackingTemplate:
+      type: object
+      required: [id, userId, name, items, createdAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        name:
+          type: string
+        items:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    CreatePackingItemBody:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+        sortOrder:
+          type: integer
+
+    BulkCreatePackingItemsBody:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [text]
+            properties:
+              text:
+                type: string
+
+    ReorderPackingItemsBody:
+      type: object
+      required: [order]
+      properties:
+        order:
+          type: array
+          items:
+            type: integer
+
+    UpdatePackingItemBody:
+      type: object
+      properties:
+        text:
+          type: string
+        packed:
+          type: boolean
+        sortOrder:
+          type: integer
+
+    CreatePackingTemplateBody:
+      type: object
+      required: [name, items]
+      properties:
+        name:
+          type: string
+        items:
+          type: array
+          items:
+            type: string
+
+    LoadTemplateResult:
+      type: object
+      required: [added, items]
+      properties:
+        added:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PackingItem"

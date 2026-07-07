@@ -24,7 +24,8 @@
  *             travels_trip_card_collapse_state, travels_custom_document_types,
  *             travels_calendar_trip_suggestions
  *   Elaine:   elaine_conversations, elaine_settings, elaine_memory, elaine_nudges,
- *             elaine_global_config (shared assistant, not namespaced per-app)
+ *             elaine_global_config, elaine_history_conversations, elaine_history_messages
+ *             (shared assistant, not namespaced per-app)
  *
  * What is intentionally skipped:
  *   - embedding / visual_embedding columns (require pgvector, unavailable on Replit DB)
@@ -428,6 +429,24 @@ CREATE TABLE IF NOT EXISTS elaine_nudges (
   message     TEXT NOT NULL,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   seen_at     TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS elaine_history_conversations (
+  id          SERIAL PRIMARY KEY,
+  user_id     INTEGER NOT NULL,
+  title       TEXT NOT NULL DEFAULT 'New conversation',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS elaine_history_messages (
+  id                SERIAL PRIMARY KEY,
+  conversation_id   INTEGER NOT NULL REFERENCES elaine_history_conversations(id) ON DELETE CASCADE,
+  user_id           INTEGER NOT NULL,
+  role              TEXT NOT NULL,
+  content           TEXT NOT NULL DEFAULT '',
+  attachment_urls   JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Gmail travel-document scanning
@@ -1077,6 +1096,28 @@ async function main() {
     ],
     orderBy: "id",
   });
+
+  summary["elaine_history_conversations"] = await copyTable(source, dest, {
+    table: "elaine_history_conversations",
+    columns: ["id", "user_id", "title", "created_at", "updated_at"],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "elaine_history_conversations", "id");
+
+  summary["elaine_history_messages"] = await copyTable(source, dest, {
+    table: "elaine_history_messages",
+    columns: [
+      "id",
+      "conversation_id",
+      "user_id",
+      "role",
+      "content",
+      "attachment_urls",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "elaine_history_messages", "id");
 
   // ── Gmail travel-document scanning ───────────────────────────────────────
   summary["travels_gmail_connections"] = await copyTable(source, dest, {

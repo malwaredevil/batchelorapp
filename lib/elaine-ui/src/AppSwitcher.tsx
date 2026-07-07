@@ -14,7 +14,7 @@ import {
 } from "./ui/dropdown-menu";
 import { ElaineAvatar } from "./ElaineAvatar";
 
-export type AppId = "hub" | "pottery" | "quilting" | "travels" | "elaine";
+export type AppId = "hub" | "pottery" | "quilting" | "travels" | "elaine" | "gmail";
 
 function HubLogo({ className }: { className?: string }) {
   return (
@@ -176,6 +176,23 @@ function ElaineLogo({ className }: { className?: string }) {
   return <ElaineAvatar className={className} size={32} />;
 }
 
+function GmailLogo({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 100 100"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect width="100" height="100" rx="22" fill="#1B3A5C" />
+      {/* Envelope body */}
+      <rect x="18" y="30" width="64" height="42" rx="5" stroke="#F0E8D8" strokeWidth="3.5" fill="none" />
+      {/* Envelope flap V */}
+      <polyline points="18,30 50,56 82,30" stroke="#F0E8D8" strokeWidth="3.5" fill="none" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 interface AppEntry {
   id: AppId;
   name: string;
@@ -230,6 +247,13 @@ function useApps(): AppEntry[] {
       subtitle: "Your AI assistant",
       href: "/elaine/",
       Logo: ElaineLogo,
+    },
+    {
+      id: "gmail",
+      name: "Gmail",
+      subtitle: "Your inbox",
+      href: "/gmail",
+      Logo: GmailLogo,
     },
   ];
 }

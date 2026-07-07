@@ -891,4 +891,8 @@ export const STATEMENTS: string[] = [
     updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
   `ALTER TABLE app_gmail_connections ENABLE ROW LEVEL SECURITY`,
+
+  // travels_trips.share_token: random hex token for public read-only itinerary share links.
+  // Null until the user generates a share link for the first time.
+  `ALTER TABLE travels_trips ADD COLUMN IF NOT EXISTS share_token TEXT`,
 ];

@@ -187,13 +187,17 @@ router.delete("/categories/:id", async (req, res) => {
   res.status(204).end();
 });
 
-router.post("/categories/:id/merge", async (req, res) => {
-  const { id } = DeleteCategoryParams.parse(req.params);
-  const { intoId } = MergeCategoryBody.parse(req.body);
-
+/**
+ * Merge category `id` into category `intoId`: re-points every item
+ * association, then deletes the source category. Shared by the merge route
+ * and Elaine's merge_pottery_categories action.
+ */
+export async function mergePotteryCategories(
+  id: number,
+  intoId: number,
+): Promise<{ status: number; error?: string }> {
   if (id === intoId) {
-    res.status(400).json({ error: "Cannot merge a category into itself." });
-    return;
+    return { status: 400, error: "Cannot merge a category into itself." };
   }
 
   const [source, target] = await Promise.all([
@@ -210,8 +214,7 @@ router.post("/categories/:id/merge", async (req, res) => {
   ]);
 
   if (!source || !target) {
-    res.status(404).json({ error: "Category not found." });
-    return;
+    return { status: 404, error: "Category not found." };
   }
 
   const sourceItems = await db
@@ -230,7 +233,18 @@ router.post("/categories/:id/merge", async (req, res) => {
 
   await db.delete(categories).where(eq(categories.id, id));
 
-  res.status(204).end();
+  return { status: 204 };
+}
+
+router.post("/categories/:id/merge", async (req, res) => {
+  const { id } = DeleteCategoryParams.parse(req.params);
+  const { intoId } = MergeCategoryBody.parse(req.body);
+  const result = await mergePotteryCategories(id, intoId);
+  if (result.status === 204) {
+    res.status(204).end();
+    return;
+  }
+  res.status(result.status).json({ error: result.error });
 });
 
 export default router;

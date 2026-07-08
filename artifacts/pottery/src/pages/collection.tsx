@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { QuickEditSheet } from "@/components/quick-edit-sheet";
 import { colorToHex } from "@/lib/colors";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 // ---------------------------------------------------------------------------
 // Collection compare modal
@@ -816,6 +817,23 @@ export default function Collection() {
   const selectedItems = useMemo(
     () => (data ?? []).filter((item) => selectedIds.includes(item.id)),
     [data, selectedIds],
+  );
+
+  usePageAssistantContext(
+    "pottery-collection",
+    isLoading
+      ? undefined
+      : `Pottery Collection page: browsing the household's pottery collection (${data?.length ?? 0} unique piece(s), ${usedCategories.length} categor(y/ies) in use). ${
+          filtered.length !== (data?.length ?? 0)
+            ? `Currently filtered to ${filtered.length} piece(s)${search.trim() ? ` matching search "${search.trim()}"` : ""}. `
+            : ""
+        }Visible pieces (itemId: name — key details): ${filtered
+          .slice(0, 40)
+          .map(
+            (item) =>
+              `itemId: ${item.id} — "${item.name}"${item.maker ? `, maker: ${item.maker}` : ""}${item.style ? `, style: ${item.style}` : ""}${item.shape ? `, shape: ${item.shape}` : ""}${(item.quantity ?? 1) > 1 ? `, qty: ${item.quantity}` : ""}${item.categories.length ? `, categories: ${item.categories.map((c) => c.name).join(", ")} (categoryIds: ${item.categories.map((c) => c.id).join(", ")})` : ""}`,
+          )
+          .join("; ")}${filtered.length > 40 ? "; (list truncated, more pieces exist)" : ""}. Available category ids for filtering/assignment: ${usedCategories.map((c) => `${c.name}=${c.id}`).join(", ") || "none"}.`,
   );
 
   return (

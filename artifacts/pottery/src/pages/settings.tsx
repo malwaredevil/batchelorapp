@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 const SETTINGS_ITEMS = [
   {
@@ -340,6 +341,11 @@ function InsuranceExportButton({
 
 export default function Settings() {
   const { data: items } = useListPottery();
+
+  usePageAssistantContext(
+    "pottery-settings",
+    `Settings page: links to Categories, Collection Stats, Maintenance, and Account. Also offers an "Export for insurance" action that downloads a PDF with photos and details of every piece (${items?.length ?? 0} piece(s) currently in the collection).`,
+  );
 
   return (
     <div className="mx-auto max-w-xl">

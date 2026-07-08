@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { Loader2, Package, Layers, TrendingUp } from "lucide-react";
 import { colorToHex } from "@/lib/colors";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 
@@ -292,6 +293,13 @@ export default function StatsPage() {
 
     return { timelineData, shapeData, sizeData, uniqueCount: items.length };
   }, [items]);
+
+  usePageAssistantContext(
+    "pottery-stats",
+    isLoading
+      ? undefined
+      : `Collection Stats page: ${stats?.totalItems ?? 0} total pieces (${uniqueCount} unique items) across ${timelineData.length} tracked years. Top motifs: ${stats?.topMotifs.slice(0, 5).map((m) => `${m.label} (${m.count})`).join(", ") || "none"}. Shape breakdown: ${shapeData.map((s) => `${s.name} (${s.value})`).join(", ") || "none"}. Size distribution: ${sizeData.map((s) => `${s.name} (${s.value})`).join(", ") || "none"}. Top glaze colours: ${stats?.topColors.slice(0, 8).map((c) => `${c.label} (${c.count})`).join(", ") || "none"}.`,
+  );
 
   if (isLoading) {
     return (

@@ -65,6 +65,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { ChevronsUpDown } from "lucide-react";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 /** Small palette + custom-colour picker shown in a popover on each category row. */
 function CategoryColorPicker({
@@ -551,6 +552,13 @@ export default function Categories() {
     if (!name || exactMatch) return;
     create.mutate({ data: { name, bgColor, textColor } });
   }
+
+  usePageAssistantContext(
+    "pottery-categories",
+    isLoading
+      ? undefined
+      : `Categories page: ${cats.length} categor${cats.length === 1 ? "y" : "ies"} in the collection, ${unusedCount} unused (assigned to no pieces). Categories (id, name, piece count): ${cats.map((c) => `${c.id}:"${c.name}" (${c.count ?? 0})`).join(", ") || "none"}.`,
+  );
 
   return (
     <div className="mx-auto max-w-xl">

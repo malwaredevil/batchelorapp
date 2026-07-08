@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 type RefreshStatus = "queued" | "processing" | "done" | "error";
 type RunSource = "bulk" | "stragglers";
@@ -369,6 +370,13 @@ export default function Maintenance() {
       </>
     );
   }
+
+  usePageAssistantContext(
+    "pottery-maintenance",
+    isLoading || stragglersLoading
+      ? undefined
+      : `Maintenance page: housekeeping tools for the collection. AI re-analyse stragglers: ${stragglerCount} piece(s) need attention (${embeddingCount} missing similarity data, ${attributeCount} missing details)${isRunning && runSource === "stragglers" ? ` — a straggler refresh is in progress (${progress.done}/${progress.total})` : ""}. Bulk re-analyse: ${data?.length ?? 0} total pieces, ${totalSelected} currently selected for re-analysis${isRunning && runSource === "bulk" ? ` — a bulk refresh is in progress (${progress.done}/${progress.total})` : ""}. Locked fields are never overwritten by re-analysis.`,
+  );
 
   return (
     <div className="space-y-6">

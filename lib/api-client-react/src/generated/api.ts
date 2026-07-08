@@ -7780,7 +7780,7 @@ export const getListBlockTemplatesUrl = () => {
 
 
 
-  return `/api/quilting/quilting/block-templates`
+  return `/api/quilting/block-templates`
 }
 
 /**
@@ -7803,7 +7803,7 @@ export const listBlockTemplates = async ( options?: RequestInit): Promise<Quilti
 
 export const getListBlockTemplatesQueryKey = () => {
     return [
-    `/api/quilting/quilting/block-templates`
+    `/api/quilting/block-templates`
     ] as const;
     }
 
@@ -7857,7 +7857,7 @@ export const getCreateBlockTemplateUrl = () => {
 
 
 
-  return `/api/quilting/quilting/block-templates`
+  return `/api/quilting/block-templates`
 }
 
 /**
@@ -7928,7 +7928,7 @@ export const getGetBlockTemplateUrl = (id: number,) => {
 
 
 
-  return `/api/quilting/quilting/block-templates/${id}`
+  return `/api/quilting/block-templates/${id}`
 }
 
 /**
@@ -7951,7 +7951,7 @@ export const getBlockTemplate = async (id: number, options?: RequestInit): Promi
 
 export const getGetBlockTemplateQueryKey = (id: number,) => {
     return [
-    `/api/quilting/quilting/block-templates/${id}`
+    `/api/quilting/block-templates/${id}`
     ] as const;
     }
 
@@ -8005,7 +8005,7 @@ export const getPatchBlockTemplateUrl = (id: number,) => {
 
 
 
-  return `/api/quilting/quilting/block-templates/${id}`
+  return `/api/quilting/block-templates/${id}`
 }
 
 /**
@@ -8077,7 +8077,7 @@ export const getDeleteBlockTemplateUrl = (id: number,) => {
 
 
 
-  return `/api/quilting/quilting/block-templates/${id}`
+  return `/api/quilting/block-templates/${id}`
 }
 
 /**

@@ -101,7 +101,7 @@ import {
   getGetBlockQueryKey,
   useListFabrics,
 } from "@workspace/api-client-react";
-import type { QuiltingCategory } from "@workspace/api-client-react";
+import type { QuiltingCategory, QuiltingBlock } from "@workspace/api-client-react";
 import { TagSelector } from "@/components/tag-selector";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
@@ -109,8 +109,10 @@ import {
   useListBlockTemplates,
   useCreateBlockTemplate,
   useDeleteBlockTemplate,
+  useGetBlockTemplate,
   usePatchBlockTemplate,
   getListBlockTemplatesQueryKey,
+  getGetBlockTemplateQueryKey,
   type QuiltingBlockTemplate,
   type QuiltingBlockTemplateSeamLine,
 } from "@workspace/api-client-react";
@@ -2486,16 +2488,37 @@ export function BlockRuler({
 
 export default function BlockDesigner() {
   const { id } = useParams<{ id?: string }>();
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const queryClient = useQueryClient();
   const isNew = !id || id === "new";
   const blockId = isNew ? null : Number(id);
+  const templateMode = location.startsWith("/library/blocks");
 
-  const { data: existing, isLoading: loadingExisting } = useGetBlock(
-    blockId ?? 0,
+  const { data: existingBlock, isLoading: loadingExistingBlock } = useGetBlock(
+    !templateMode ? (blockId ?? 0) : 0,
+    {
+      query: {
+        enabled: !templateMode,
+        queryKey: getGetBlockQueryKey(!templateMode ? (blockId ?? 0) : 0),
+      },
+    },
   );
+  const { data: existingTemplate, isLoading: loadingExistingTemplate } =
+    useGetBlockTemplate(templateMode ? (blockId ?? 0) : 0, {
+      query: {
+        enabled: templateMode,
+        queryKey: getGetBlockTemplateQueryKey(
+          templateMode ? (blockId ?? 0) : 0,
+        ),
+      },
+    });
+  const existing = templateMode ? existingTemplate : existingBlock;
+  const loadingExisting = templateMode
+    ? loadingExistingTemplate
+    : loadingExistingBlock;
 
   const [name, setName] = useState("Untitled block");
+  const [templateTagsInput, setTemplateTagsInput] = useState("");
   const [blockSizeInches, setBlockSizeInches] = useState<number | null>(null);
   const [seamAllowanceInches, setSeamAllowanceInches] = useState<number>(0.25);
   const [gridW, setGridW] = useState(8);
@@ -2628,7 +2651,16 @@ export default function BlockDesigner() {
       minimized: false,
     },
     { id: "fabrics", title: "My Fabrics", open: true, minimized: false },
-    { id: "categories", title: "Categories", open: true, minimized: false },
+    ...(templateMode
+      ? []
+      : [
+          {
+            id: "categories" as const,
+            title: "Categories",
+            open: true,
+            minimized: false,
+          },
+        ]),
   ]);
   const [dragPanelId, setDragPanelId] = useState<PanelId | null>(null);
   const [dragOverId, setDragOverId] = useState<PanelId | null>(null);
@@ -2785,18 +2817,30 @@ export default function BlockDesigner() {
       loadedOnceRef.current = true;
       dirtyEnabledRef.current = false;
       setName(existing.name);
-      const w = existing.gridSize;
-      const total = existing.cells.length;
-      const h = total > 0 && total % w === 0 ? total / w : w;
-      setGridW(w);
-      setGridH(h);
-      setCells(normalizeCells(existing.cells, w * h));
-      setSeams((existing.seams as SeamLine[]) ?? []);
-      setBlockSizeInches(existing.blockSizeInches ?? null);
-      setSeamAllowanceInches(existing.seamAllowanceInches ?? 0.25);
-      setSelectedCategoryIds(
-        (existing.categories ?? []).map((c: QuiltingCategory) => c.id),
-      );
+      if (templateMode) {
+        const tpl = existing as QuiltingBlockTemplate;
+        setGridW(tpl.gridW);
+        setGridH(tpl.gridH);
+        setCells(normalizeCells(tpl.cells, tpl.gridW * tpl.gridH));
+        setSeams((tpl.seams as SeamLine[]) ?? []);
+        setBlockSizeInches(tpl.blockSizeInches ?? null);
+        setSeamAllowanceInches(tpl.seamAllowanceInches ?? 0.25);
+        setTemplateTagsInput((tpl.tags ?? []).join(", "));
+      } else {
+        const blk = existing as QuiltingBlock;
+        const w = blk.gridSize;
+        const total = blk.cells.length;
+        const h = total > 0 && total % w === 0 ? total / w : w;
+        setGridW(w);
+        setGridH(h);
+        setCells(normalizeCells(blk.cells, w * h));
+        setSeams((blk.seams as SeamLine[]) ?? []);
+        setBlockSizeInches(blk.blockSizeInches ?? null);
+        setSeamAllowanceInches(blk.seamAllowanceInches ?? 0.25);
+        setSelectedCategoryIds(
+          (blk.categories ?? []).map((c: QuiltingCategory) => c.id),
+        );
+      }
       setIsDirty(false);
       setTimeout(() => {
         dirtyEnabledRef.current = true;
@@ -3346,7 +3390,86 @@ export default function BlockDesigner() {
   function handleSave() {
     const trimmed = name.trim();
     if (!trimmed) {
-      toast.error("Please enter a name for this design.");
+      toast.error(
+        templateMode
+          ? "Please enter a name for this template."
+          : "Please enter a name for this design.",
+      );
+      return;
+    }
+    if (templateMode) {
+      const tags = templateTagsInput
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+      if (isNew) {
+        createTemplate.mutate(
+          {
+            data: {
+              name: trimmed,
+              tags,
+              gridW,
+              gridH,
+              cells,
+              seams: seams as QuiltingBlockTemplateSeamLine[],
+              blockSizeInches: blockSizeInches ?? null,
+              seamAllowanceInches: seamAllowanceInches ?? null,
+            },
+          },
+          {
+            onSuccess: (data) => {
+              invalidateBlockTemplates();
+              setIsDirty(false);
+              if (exitAfterSaveRef.current) {
+                exitAfterSaveRef.current = false;
+                navigate("/library/blocks");
+              } else {
+                toast.success("Template saved!");
+                navigate(`/library/blocks/${data.id}/edit`);
+              }
+            },
+            onError: () => {
+              exitAfterSaveRef.current = false;
+              toast.error("Failed to save template.");
+            },
+          },
+        );
+      } else if (blockId) {
+        patchTemplate.mutate(
+          {
+            id: blockId,
+            data: {
+              name: trimmed,
+              tags,
+              gridW,
+              gridH,
+              cells,
+              seams: seams as QuiltingBlockTemplateSeamLine[],
+              blockSizeInches: blockSizeInches ?? null,
+              seamAllowanceInches: seamAllowanceInches ?? null,
+            },
+          },
+          {
+            onSuccess: () => {
+              invalidateBlockTemplates();
+              void queryClient.invalidateQueries({
+                queryKey: getGetBlockTemplateQueryKey(blockId),
+              });
+              setIsDirty(false);
+              if (exitAfterSaveRef.current) {
+                exitAfterSaveRef.current = false;
+                navigate("/library/blocks");
+              } else {
+                toast.success("Template updated!");
+              }
+            },
+            onError: () => {
+              exitAfterSaveRef.current = false;
+              toast.error("Failed to update template.");
+            },
+          },
+        );
+      }
       return;
     }
     const categoryNames = resolvedCategoryNames();
@@ -3823,7 +3946,10 @@ export default function BlockDesigner() {
               onClick={() => {
                 setShowExitDialog(false);
                 setIsDirty(false);
-                navigate(pendingNavRef.current ?? "/blocks");
+                navigate(
+                  pendingNavRef.current ??
+                    (templateMode ? "/library/blocks" : "/blocks"),
+                );
                 pendingNavRef.current = null;
               }}
             >
@@ -3849,7 +3975,15 @@ export default function BlockDesigner() {
           variant="ghost"
           size="icon"
           className="h-7 w-7"
-          onClick={() => requestNav(blockId ? `/blocks/${blockId}` : "/blocks")}
+          onClick={() =>
+            requestNav(
+              templateMode
+                ? "/library/blocks"
+                : blockId
+                  ? `/blocks/${blockId}`
+                  : "/blocks",
+            )
+          }
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
@@ -3857,28 +3991,32 @@ export default function BlockDesigner() {
           value={name}
           onChange={(e) => setName(e.target.value)}
           className="h-8 max-w-[220px] text-sm font-semibold"
-          placeholder="Block name…"
+          placeholder={templateMode ? "Template name…" : "Block name…"}
         />
         <div className="ml-auto flex items-center gap-1.5">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5"
-            onClick={openSaveToLib}
-            title="Save current design as a reusable library template"
-          >
-            <BookmarkPlus className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Save to Library</span>
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => setLibBrowserOpen(true)}
-            title="Browse block library"
-          >
-            <Library className="h-4 w-4" />
-          </Button>
+          {!templateMode && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5"
+                onClick={openSaveToLib}
+                title="Save current design as a reusable library template"
+              >
+                <BookmarkPlus className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Save to Library</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setLibBrowserOpen(true)}
+                title="Browse block library"
+              >
+                <Library className="h-4 w-4" />
+              </Button>
+            </>
+          )}
           <Button
             onClick={handleSave}
             disabled={isSaving}
@@ -3886,10 +4024,30 @@ export default function BlockDesigner() {
             className="h-8"
           >
             <Save className="mr-1.5 h-3.5 w-3.5" />
-            {isNew ? "Save" : "Update"}
+            {templateMode
+              ? isNew
+                ? "Save Template"
+                : "Update Template"
+              : isNew
+                ? "Save"
+                : "Update"}
           </Button>
         </div>
       </div>
+      {templateMode && (
+        <div className="flex shrink-0 items-center gap-2 border-b bg-muted/10 px-3 py-1.5">
+          <Tag className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <Label className="shrink-0 text-xs text-muted-foreground">
+            Tags
+          </Label>
+          <Input
+            value={templateTagsInput}
+            onChange={(e) => setTemplateTagsInput(e.target.value)}
+            className="h-6 max-w-sm px-2 text-xs"
+            placeholder="Comma-separated, e.g. Classic, Star, 4x4"
+          />
+        </div>
+      )}
 
       {/* ── Block dimensions bar ─────────────────────────────────────── */}
       <div className="flex shrink-0 items-center gap-3 border-b bg-muted/10 px-3 py-1">
@@ -3954,15 +4112,23 @@ export default function BlockDesigner() {
           <DropdownMenuContent align="start" className="w-48">
             <DropdownMenuItem onClick={handleSave} disabled={isSaving}>
               <Save className="mr-2 h-3.5 w-3.5" />
-              {isNew ? "Save" : "Update"}
+              {templateMode
+                ? isNew
+                  ? "Save Template"
+                  : "Update Template"
+                : isNew
+                  ? "Save"
+                  : "Update"}
               <span className="ml-auto text-[10px] text-muted-foreground">
                 ⌘S
               </span>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleSaveAs} disabled={isSaving}>
-              <Copy className="mr-2 h-3.5 w-3.5" />
-              Save As…
-            </DropdownMenuItem>
+            {!templateMode && (
+              <DropdownMenuItem onClick={handleSaveAs} disabled={isSaving}>
+                <Copy className="mr-2 h-3.5 w-3.5" />
+                Save As…
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => bgFileRef.current?.click()}>
               <Upload className="mr-2 h-3.5 w-3.5" />
@@ -3973,7 +4139,7 @@ export default function BlockDesigner() {
               Import from image (scan-to-grid)…
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            {!isNew && blockId && (
+            {!isNew && blockId && !templateMode && (
               <DropdownMenuItem
                 onClick={() => navigate(`/blocks/${blockId}/cut-pattern`)}
               >

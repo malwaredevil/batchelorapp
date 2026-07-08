@@ -59,6 +59,12 @@ const PatchTemplateSchema = z.object({
     )
     .max(MAX_TAGS)
     .optional(),
+  gridW: z.number().int().min(1).max(20).optional(),
+  gridH: z.number().int().min(1).max(20).optional(),
+  cells: z.array(z.string()).optional(),
+  seams: z.array(SeamLineSchema).optional(),
+  blockSizeInches: z.number().min(1).max(120).nullable().optional(),
+  seamAllowanceInches: z.number().min(0.0625).max(1).nullable().optional(),
 });
 
 function formatTemplate(row: typeof blockTemplates.$inferSelect) {
@@ -157,6 +163,14 @@ router.patch("/block-templates/:id", async (req, res) => {
   } = { updatedAt: new Date() };
   if (d.name !== undefined) updates.name = d.name;
   if (d.tags !== undefined) updates.tags = d.tags;
+  if (d.gridW !== undefined) updates.gridW = d.gridW;
+  if (d.gridH !== undefined) updates.gridH = d.gridH;
+  if (d.cells !== undefined) updates.cells = d.cells;
+  if (d.seams !== undefined) updates.seams = d.seams;
+  if (d.blockSizeInches !== undefined)
+    updates.blockSizeInches = d.blockSizeInches;
+  if (d.seamAllowanceInches !== undefined)
+    updates.seamAllowanceInches = d.seamAllowanceInches;
 
   const [row] = await db
     .update(blockTemplates)

@@ -225,7 +225,7 @@ async function main() {
 
   // ── Quilting ──────────────────────────────────────────────────────────────
   await dest.query(
-    "TRUNCATE quilting_entity_categories, quilting_fabric_links, quilting_pattern_links, quilting_images, quilting_blocks, quilting_layouts, quilting_shopping_items CASCADE",
+    "TRUNCATE quilting_entity_categories, quilting_fabric_links, quilting_pattern_links, quilting_images, quilting_blocks, quilting_block_templates, quilting_layouts, quilting_shopping_items CASCADE",
   );
   await dest.query("TRUNCATE quilting_finished_quilts CASCADE");
   await dest.query("TRUNCATE quilting_fabrics CASCADE");
@@ -353,6 +353,27 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "quilting_blocks", "id");
+
+  await copyTable(source, dest, {
+    table: "quilting_block_templates",
+    columns: [
+      "id",
+      "created_by_user_id",
+      "name",
+      "tags",
+      "grid_w",
+      "grid_h",
+      "cells",
+      "seams",
+      "block_size_inches",
+      "seam_allowance_inches",
+      "thumbnail_svg",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "quilting_block_templates", "id");
 
   await copyTable(source, dest, {
     table: "quilting_layouts",

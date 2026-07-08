@@ -110,6 +110,10 @@ export const quiltPatterns = pgTable(
     notes: text("notes"),
     imagePath: text("image_path"),
     acquiredAt: date("acquired_at"),
+    dominantColors: text("dominant_colors")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     lockedFields: text("locked_fields")
       .array()
       .notNull()
@@ -154,6 +158,10 @@ export const finishedQuilts = pgTable("quilting_finished_quilts", {
   recipient: text("recipient"),
   notes: text("notes"),
   imagePath: text("image_path").notNull(),
+  dominantColors: text("dominant_colors")
+    .array()
+    .notNull()
+    .default(sql`'{}'::text[]`),
   lockedFields: text("locked_fields")
     .array()
     .notNull()
@@ -293,6 +301,43 @@ export const blocks = pgTable("quilting_blocks", {
 
 export type BlockRow = typeof blocks.$inferSelect;
 export type InsertBlock = typeof blocks.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Block Templates (reusable library snapshots)
+// ---------------------------------------------------------------------------
+
+export const blockTemplates = pgTable("quilting_block_templates", {
+  id: serial("id").primaryKey(),
+  /** Attribution only — household-shared (not a filter). */
+  createdByUserId: integer("created_by_user_id"),
+  name: text("name").notNull(),
+  tags: text("tags")
+    .array()
+    .notNull()
+    .default(sql`'{}'::text[]`),
+  gridW: integer("grid_w").notNull().default(8),
+  gridH: integer("grid_h").notNull().default(8),
+  cells: text("cells")
+    .array()
+    .notNull()
+    .default(sql`'{}'::text[]`),
+  seams: jsonb("seams")
+    .notNull()
+    .default(sql`'[]'::jsonb`),
+  blockSizeInches: real("block_size_inches"),
+  seamAllowanceInches: real("seam_allowance_inches"),
+  /** Pre-rendered SVG thumbnail string, generated client-side on save. */
+  thumbnailSvg: text("thumbnail_svg"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+}).enableRLS();
+
+export type BlockTemplateRow = typeof blockTemplates.$inferSelect;
+export type InsertBlockTemplate = typeof blockTemplates.$inferInsert;
 
 // ---------------------------------------------------------------------------
 // Quilt Layouts (layout composer)

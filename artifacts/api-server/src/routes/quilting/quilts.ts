@@ -454,6 +454,7 @@ router.post("/quilts/:id/reanalyze", aiLimiter, async (req, res) => {
     .set({
       ...(lockedFields.includes("name") ? {} : { name: analysis.name }),
       ...(lockedFields.includes("notes") ? {} : { notes: analysis.notes }),
+      dominantColors: analysis.dominantColors,
     })
     .where(eq(finishedQuilts.id, id));
 
@@ -515,6 +516,7 @@ router.post("/quilts/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
         .set({
           ...(lockedFields.includes("name") ? {} : { name: analysis.name }),
           ...(lockedFields.includes("notes") ? {} : { notes: analysis.notes }),
+          dominantColors: analysis.dominantColors,
         })
         .where(eq(finishedQuilts.id, id));
       succeeded.push(id);

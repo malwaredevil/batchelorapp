@@ -18,6 +18,7 @@ export interface QuiltingQuiltPattern {
   sourceReference?: string | null;
   notes?: string | null;
   acquiredAt?: string | null;
+  dominantColors: string[];
   lockedFields: string[];
   categories: QuiltingCategory[];
   images: QuiltingEntityImage[];

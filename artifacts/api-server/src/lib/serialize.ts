@@ -88,6 +88,7 @@ export interface SerializedPattern {
   sourceReference: string | null;
   notes: string | null;
   acquiredAt: string | null;
+  dominantColors: string[];
   lockedFields: string[];
   categories: CategoryResult[];
   images: ImageResult[];
@@ -116,6 +117,7 @@ export interface SerializedQuilt {
   sizeHeight: number | null;
   recipient: string | null;
   notes: string | null;
+  dominantColors: string[];
   lockedFields: string[];
   categories: CategoryResult[];
   images: ImageResult[];
@@ -310,6 +312,7 @@ function toPattern(
     sourceReference: row.sourceReference,
     notes: row.notes,
     acquiredAt: row.acquiredAt,
+    dominantColors: row.dominantColors ?? [],
     lockedFields: row.lockedFields ?? [],
     categories: cats,
     images: imgs,
@@ -447,6 +450,7 @@ function toQuilt(
     sizeHeight: row.sizeHeight,
     recipient: row.recipient,
     notes: row.notes,
+    dominantColors: row.dominantColors ?? [],
     lockedFields: row.lockedFields ?? [],
     categories: cats,
     images: imgs,

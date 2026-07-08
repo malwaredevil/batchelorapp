@@ -95,7 +95,29 @@ router.use(requireAuth);
 const ASSISTANT_SUBAGENT_INSTRUCTIONS =
   "You are a fast research helper for a friendly travel assistant named Elaine. You will be given a small, self-contained sub-task (e.g. list facts, summarize options, draft a short list). Answer concisely and factually in plain text so Elaine can incorporate your answer into her reply.";
 
-type ChatMessage = { role: "user" | "assistant"; content: string };
+type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+  attachmentUrls?: AttachmentRef[];
+};
+
+// A single image/PDF attachment stored alongside a user message. `name` is
+// only meaningful for PDFs (the original upload filename — the storage path
+// itself is a random UUID and must never be shown to the user).
+type AttachmentRef = { url: string; type: "image" | "pdf"; name?: string };
+
+// Rows stored before this field existed as objects were plain URL strings.
+// Normalize on read so older conversations still render sensibly (falling
+// back to "document.pdf" instead of the ugly storage-path UUID filename).
+function normalizeAttachmentRefs(raw: unknown): AttachmentRef[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item): AttachmentRef => {
+    if (typeof item === "string") {
+      return { url: item, type: /\.pdf(\?|$)/i.test(item) ? "pdf" : "image" };
+    }
+    return item as AttachmentRef;
+  });
+}
 
 const APP_IDS = ["travels", "pottery", "quilting", "hub", "elaine"] as const;
 type AppId = (typeof APP_IDS)[number];
@@ -2621,7 +2643,7 @@ router.get("/conversations/:id/messages", async (req, res) => {
       id: m.id,
       role: m.role,
       content: m.content,
-      attachmentUrls: (m.attachmentUrls as string[]) ?? [],
+      attachmentUrls: normalizeAttachmentRefs(m.attachmentUrls),
       createdAt: m.createdAt.toISOString(),
     })),
   );
@@ -2883,10 +2905,14 @@ Keep replies concise and easy to read in a chat bubble.`;
         ]
       : message;
 
-  // Combine all attachment URLs (images + PDFs) for history storage.
-  const allAttachmentUrls = [
-    ...(attachmentUrls ?? []),
-    ...(attachmentPdfs?.map((p) => p.url) ?? []),
+  // Combine all attachments (images + PDFs) for history storage. PDFs keep
+  // their original upload filename so the UI never has to fall back to the
+  // random UUID storage path when rendering the chip.
+  const allAttachmentUrls: AttachmentRef[] = [
+    ...(attachmentUrls ?? []).map((url): AttachmentRef => ({ url, type: "image" })),
+    ...(attachmentPdfs?.map(
+      (p): AttachmentRef => ({ url: p.url, type: "pdf", name: p.name }),
+    ) ?? []),
   ];
 
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [

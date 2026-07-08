@@ -26,12 +26,23 @@ export type ElaineAppId =
   | "hub"
   | "elaine";
 
+/** A single image/PDF attachment on a user message. `name` is the original
+ *  upload filename (PDFs only — images are shown as thumbnails and don't
+ *  need a name). Older stored messages may still be plain strings; callers
+ *  should treat this as `AttachmentRef | string`. */
+export interface AttachmentRef {
+  url: string;
+  type: "image" | "pdf";
+  name?: string;
+}
+
 export interface AssistantMessage {
   role: "user" | "assistant";
   content: string;
-  /** Public Supabase Storage URLs for images the user attached to this turn.
-   *  Only present on user messages; undefined/empty for assistant messages. */
-  attachmentUrls?: string[];
+  /** Signed Supabase Storage URLs (+ type/filename) for images/PDFs the user
+   *  attached to this turn. Only present on user messages; undefined/empty
+   *  for assistant messages. */
+  attachmentUrls?: Array<AttachmentRef | string>;
 }
 
 export type TravelActionType =
@@ -514,7 +525,7 @@ export interface ConversationMessage {
   id: number;
   role: "user" | "assistant";
   content: string;
-  attachmentUrls: string[];
+  attachmentUrls: Array<AttachmentRef | string>;
   createdAt: string;
 }
 

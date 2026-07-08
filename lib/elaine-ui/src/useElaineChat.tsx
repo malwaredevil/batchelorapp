@@ -135,7 +135,7 @@ export function useElaineChat({
         content: m.content,
         attachmentUrls:
           m.attachmentUrls.length > 0 ? m.attachmentUrls : undefined,
-      })),
+      })) as AssistantMessage[],
     );
   }
 
@@ -240,12 +240,20 @@ export function useElaineChat({
     setActionDone(false);
     setStreamingContent("");
     setStatusMessage("");
+    const optimisticAttachmentRefs = [
+      ...imageAttachments.map((a) => ({ url: a.uploadedUrl!, type: "image" as const })),
+      ...pdfAttachments.map((a) => ({
+        url: a.uploadedUrl!,
+        type: "pdf" as const,
+        name: a.fileName,
+      })),
+    ];
     setMessages((prev) => [
       ...prev,
       {
         role: "user",
         content: trimmed,
-        ...(hasAttachments ? { attachmentUrls: uploadedAttachmentUrls } : {}),
+        ...(hasAttachments ? { attachmentUrls: optimisticAttachmentRefs } : {}),
       },
     ]);
     setIsStreaming(true);

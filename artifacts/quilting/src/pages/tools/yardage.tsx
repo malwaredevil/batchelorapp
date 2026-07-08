@@ -72,6 +72,14 @@ function roundUpToQuarter(yards: number): number {
   return Math.ceil(yards * 4) / 4;
 }
 
+/** Split `total` into `n` integer parts that are as even as possible and sum exactly to `total`. */
+function distributeEvenly(total: number, n: number): number[] {
+  if (n <= 0) return [];
+  const base = Math.floor(total / n);
+  const remainder = total - base * n;
+  return Array.from({ length: n }, (_, i) => base + (i < remainder ? 1 : 0));
+}
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function NumericField({
@@ -191,6 +199,7 @@ export default function YardageCalculator() {
   const [showFabricList, setShowFabricList] = useState(true);
   const [addingShortfalls, setAddingShortfalls] = useState<Set<number>>(new Set());
   const [addedToList, setAddedToList] = useState<Set<number>>(new Set());
+  const [blockAllocations, setBlockAllocations] = useState<Record<number, string>>({});
 
   const createShoppingItem = useCreateShoppingItem();
 
@@ -201,6 +210,20 @@ export default function YardageCalculator() {
       else next.add(id);
       return next;
     });
+    setBlockAllocations((prev) => {
+      if (!(id in prev)) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }
+
+  function setFabricBlocks(id: number, value: string) {
+    setBlockAllocations((prev) => ({ ...prev, [id]: value }));
+  }
+
+  function resetToEvenSplit() {
+    setBlockAllocations({});
   }
 
   const selectedFabrics = useMemo(
@@ -220,16 +243,27 @@ export default function YardageCalculator() {
     const blocksAcross = Math.max(1, Math.floor(w / bs));
     const blocksDown = Math.max(1, Math.floor(h / bs));
     const totalBlocks = blocksAcross * blocksDown;
-    const blocksPerFabric =
-      selectedFabrics.length > 0
-        ? Math.ceil(totalBlocks / selectedFabrics.length)
-        : totalBlocks;
 
-    const fabricResults = selectedFabrics.map((f) => ({
-      fabric: f,
-      ...computeFabricYardage(f, blocksPerFabric, cutBlock),
-      targetBlocks: blocksPerFabric,
-    }));
+    const evenSplit = distributeEvenly(totalBlocks, selectedFabrics.length);
+
+    const fabricResults = selectedFabrics.map((f, i) => {
+      const rawOverride = blockAllocations[f.id];
+      const overrideNum =
+        rawOverride !== undefined && rawOverride !== "" ? parseInt(rawOverride, 10) : NaN;
+      const isOverridden = !Number.isNaN(overrideNum) && overrideNum >= 0;
+      const targetBlocks = isOverridden ? overrideNum : (evenSplit[i] ?? 0);
+
+      return {
+        fabric: f,
+        ...computeFabricYardage(f, targetBlocks, cutBlock),
+        targetBlocks,
+        isOverridden,
+      };
+    });
+
+    const allocatedBlocksTotal = fabricResults.reduce((s, r) => s + r.targetBlocks, 0);
+    const allocationMismatch =
+      selectedFabrics.length > 0 && allocatedBlocksTotal !== totalBlocks;
 
     const totalBlocksAvailable = fabricResults.reduce(
       (s, r) => s + r.blocksAvailable,
@@ -263,8 +297,9 @@ export default function YardageCalculator() {
       blocksAcross,
       blocksDown,
       totalBlocks,
-      blocksPerFabric,
       fabricResults,
+      allocatedBlocksTotal,
+      allocationMismatch,
       totalBlocksAvailable,
       allSufficient: fabricResults.every((r) => r.sufficient),
       bindingYards,
@@ -278,6 +313,7 @@ export default function YardageCalculator() {
     includeBinding,
     includeBacking,
     selectedFabrics,
+    blockAllocations,
   ]);
 
   async function addShortfallToList(
@@ -516,6 +552,41 @@ export default function YardageCalculator() {
             </span>
           </div>
 
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-card-border px-5 py-2.5 text-xs">
+            <span className="text-muted-foreground">
+              Blocks allocated:{" "}
+              <span
+                className={`font-semibold ${
+                  calc.allocationMismatch
+                    ? "text-amber-600 dark:text-amber-400"
+                    : "text-foreground"
+                }`}
+              >
+                {calc.allocatedBlocksTotal}
+              </span>{" "}
+              / {calc.totalBlocks} needed
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 px-2 text-xs"
+              onClick={resetToEvenSplit}
+            >
+              Distribute evenly
+            </Button>
+          </div>
+
+          {calc.allocationMismatch && (
+            <div className="flex items-center gap-2 border-t border-amber-500/20 bg-amber-500/5 px-5 py-2.5 text-xs text-amber-700 dark:text-amber-400">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              <span>
+                Per-fabric block counts add up to {calc.allocatedBlocksTotal}, but
+                the quilt needs {calc.totalBlocks}. Adjust the counts below so they
+                match.
+              </span>
+            </div>
+          )}
+
           <div className="border-t border-card-border divide-y divide-card-border">
             {calc.fabricResults.map((r) => (
               <div key={r.fabric.id} className="px-5 py-4">
@@ -547,6 +618,31 @@ export default function YardageCalculator() {
                         )}
                         {r.sufficient ? "OK" : "Short"}
                       </span>
+                    </div>
+
+                    <div className="flex items-end gap-2">
+                      <div className="w-28">
+                        <Label
+                          htmlFor={`blocks-${r.fabric.id}`}
+                          className="text-xs text-muted-foreground"
+                        >
+                          Blocks for this fabric
+                        </Label>
+                        <Input
+                          id={`blocks-${r.fabric.id}`}
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={blockAllocations[r.fabric.id] ?? String(r.targetBlocks)}
+                          onChange={(e) => setFabricBlocks(r.fabric.id, e.target.value)}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                      {!r.isOverridden && (
+                        <span className="mb-1.5 text-xs text-muted-foreground">
+                          (even split)
+                        </span>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs sm:grid-cols-4">

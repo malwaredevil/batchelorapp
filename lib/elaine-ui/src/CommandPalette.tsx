@@ -43,6 +43,7 @@ interface SearchResult {
   id: number;
   title: string;
   subtitle?: string;
+  matchedContent?: boolean;
   url: string;
 }
 
@@ -81,6 +82,30 @@ function loadRecent(): RecentItem[] {
 function saveRecent(item: RecentItem) {
   const existing = loadRecent().filter((r) => r.url !== item.url);
   localStorage.setItem(RECENT_KEY, JSON.stringify([item, ...existing].slice(0, MAX_RECENT)));
+}
+
+/**
+ * Renders `text` with the first case-insensitive occurrence of `query`
+ * wrapped in a <mark> so message-snippet subtitles show why they matched.
+ */
+function highlightMatch(text: string, query: string) {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) return text;
+
+  const matchIndex = text.toLowerCase().indexOf(trimmedQuery.toLowerCase());
+  if (matchIndex === -1) return text;
+
+  const before = text.slice(0, matchIndex);
+  const match = text.slice(matchIndex, matchIndex + trimmedQuery.length);
+  const after = text.slice(matchIndex + trimmedQuery.length);
+
+  return (
+    <>
+      {before}
+      <mark className="rounded-sm bg-primary/20 text-inherit">{match}</mark>
+      {after}
+    </>
+  );
 }
 
 function ResultIcon({ type }: { type: string }) {
@@ -338,7 +363,9 @@ export function CommandPalette() {
                           <span className="block truncate font-medium">{result.title}</span>
                           {result.subtitle && (
                             <span className="block truncate text-xs text-muted-foreground">
-                              {result.subtitle}
+                              {result.matchedContent
+                                ? highlightMatch(result.subtitle, query)
+                                : result.subtitle}
                             </span>
                           )}
                         </span>

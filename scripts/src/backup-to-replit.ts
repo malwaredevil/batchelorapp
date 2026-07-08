@@ -1102,6 +1102,7 @@ async function main() {
       "updated_by_user_id",
     ],
     orderBy: "id",
+    jsonbColumns: ["extra_models", "timeouts", "features", "thresholds"],
   });
 
   summary["elaine_history_conversations"] = await copyTable(source, dest, {
@@ -1198,6 +1199,7 @@ async function main() {
       "created_at",
     ],
     orderBy: "id",
+    jsonbColumns: ["fields"],
   });
   await resetSequence(dest, "travels_custom_document_types", "id");
 

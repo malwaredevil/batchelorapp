@@ -1,6 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 
 const STORAGE_KEY = "elaine-tts-enabled";
+const VOICE_STORAGE_KEY = "elaine-tts-voice-uri";
+const RATE_STORAGE_KEY = "elaine-tts-rate";
+
+const MIN_RATE = 0.5;
+const MAX_RATE = 2;
+const DEFAULT_RATE = 1;
 
 export interface TTSState {
   /** Whether the user has spoken replies turned on (persisted in localStorage). */
@@ -9,8 +15,18 @@ export interface TTSState {
   isSupported: boolean;
   /** True while the browser is actively speaking an utterance. */
   isSpeaking: boolean;
+  /** All voices the browser/OS has installed (may be empty until the browser loads them async). */
+  voices: SpeechSynthesisVoice[];
+  /** The `voiceURI` of the user's preferred voice, or `null` for the browser default. */
+  selectedVoiceURI: string | null;
+  /** Speaking rate (0.5–2), persisted in localStorage. 1 is normal speed. */
+  rate: number;
   /** Flips `enabled` and persists the new value; stops any in-flight speech when turning off. */
   toggle: () => void;
+  /** Sets and persists the preferred voice. Pass `null` to use the browser default. */
+  setSelectedVoiceURI: (voiceURI: string | null) => void;
+  /** Sets and persists the speaking rate (clamped to 0.5–2). */
+  setRate: (rate: number) => void;
   /** Speaks the given text aloud. No-ops if TTS is unsupported or disabled. */
   speak: (text: string) => void;
   /** Immediately stops any in-flight or queued speech. */
@@ -23,6 +39,28 @@ function readStoredEnabled(): boolean {
     return localStorage.getItem(STORAGE_KEY) === "true";
   } catch {
     return false;
+  }
+}
+
+function readStoredVoiceURI(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem(VOICE_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function readStoredRate(): number {
+  if (typeof window === "undefined") return DEFAULT_RATE;
+  try {
+    const raw = localStorage.getItem(RATE_STORAGE_KEY);
+    if (!raw) return DEFAULT_RATE;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return DEFAULT_RATE;
+    return Math.min(MAX_RATE, Math.max(MIN_RATE, parsed));
+  } catch {
+    return DEFAULT_RATE;
   }
 }
 
@@ -42,7 +80,23 @@ export function useTTS(): TTSState {
 
   const [enabled, setEnabled] = useState<boolean>(readStoredEnabled);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedVoiceURI, setSelectedVoiceURIState] = useState<
+    string | null
+  >(readStoredVoiceURI);
+  const [rate, setRateState] = useState<number>(readStoredRate);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+
+  // The voice list loads asynchronously in most browsers (fires
+  // `voiceschanged` once the OS/browser voice catalog is ready).
+  useEffect(() => {
+    if (!isSupported) return;
+    const loadVoices = () => setVoices(window.speechSynthesis.getVoices());
+    loadVoices();
+    window.speechSynthesis.addEventListener("voiceschanged", loadVoices);
+    return () =>
+      window.speechSynthesis.removeEventListener("voiceschanged", loadVoices);
+  }, [isSupported]);
 
   const stop = useCallback(() => {
     if (!isSupported) return;
@@ -64,6 +118,29 @@ export function useTTS(): TTSState {
     });
   }, []);
 
+  const setSelectedVoiceURI = useCallback((voiceURI: string | null) => {
+    setSelectedVoiceURIState(voiceURI);
+    try {
+      if (voiceURI) {
+        localStorage.setItem(VOICE_STORAGE_KEY, voiceURI);
+      } else {
+        localStorage.removeItem(VOICE_STORAGE_KEY);
+      }
+    } catch {
+      // Preference just won't persist across sessions.
+    }
+  }, []);
+
+  const setRate = useCallback((next: number) => {
+    const clamped = Math.min(MAX_RATE, Math.max(MIN_RATE, next));
+    setRateState(clamped);
+    try {
+      localStorage.setItem(RATE_STORAGE_KEY, String(clamped));
+    } catch {
+      // Preference just won't persist across sessions.
+    }
+  }, []);
+
   // Stop immediately whenever the user disables TTS.
   useEffect(() => {
     if (!enabled) stop();
@@ -82,13 +159,20 @@ export function useTTS(): TTSState {
       window.speechSynthesis.cancel();
 
       const utterance = new SpeechSynthesisUtterance(clean);
+      utterance.rate = rate;
+      if (selectedVoiceURI) {
+        const match = window.speechSynthesis
+          .getVoices()
+          .find((v) => v.voiceURI === selectedVoiceURI);
+        if (match) utterance.voice = match;
+      }
       utterance.onstart = () => setIsSpeaking(true);
       utterance.onend = () => setIsSpeaking(false);
       utterance.onerror = () => setIsSpeaking(false);
       utteranceRef.current = utterance;
       window.speechSynthesis.speak(utterance);
     },
-    [isSupported, enabled],
+    [isSupported, enabled, rate, selectedVoiceURI],
   );
 
   // Stop and clean up if the component unmounts while speaking.
@@ -98,5 +182,17 @@ export function useTTS(): TTSState {
     };
   }, [isSupported]);
 
-  return { enabled, isSupported, isSpeaking, toggle, speak, stop };
+  return {
+    enabled,
+    isSupported,
+    isSpeaking,
+    voices,
+    selectedVoiceURI,
+    rate,
+    toggle,
+    setSelectedVoiceURI,
+    setRate,
+    speak,
+    stop,
+  };
 }

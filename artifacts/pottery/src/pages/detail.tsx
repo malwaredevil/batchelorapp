@@ -57,11 +57,11 @@ import { AutocompleteInput } from "@/components/autocomplete-input";
 import { TagSelector } from "@/components/tag-selector";
 import { CameraModal } from "@/components/image-picker";
 import { ImageEditor } from "@/components/image-editor";
+import { useUploadPotteryImage } from "@/hooks/use-pottery";
 import {
-  useUploadPotteryImage,
-  useRemovePotteryImage,
-  useRelabelPotteryImage,
-} from "@/hooks/use-pottery";
+  useUpdatePotteryImage,
+  useDeletePotteryImage,
+} from "@workspace/api-client-react";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -185,8 +185,8 @@ function ImageGallery({
 
   const queryClient = useQueryClient();
   const uploadImage = useUploadPotteryImage(itemId);
-  const removeImage = useRemovePotteryImage(itemId);
-  const relabelImage = useRelabelPotteryImage(itemId);
+  const removeImage = useDeletePotteryImage();
+  const relabelImage = useUpdatePotteryImage();
   const promotePrimary = useSetPrimaryImage();
 
   const [pendingLabel, setPendingLabel] = useState<string>("");
@@ -245,13 +245,19 @@ function ImageGallery({
 
   function handleRemove() {
     if (!selectedSupplemental) return;
-    removeImage.mutate(selectedSupplemental.id, {
-      onSuccess: () => {
-        setActiveIdx(Math.max(0, activeIdx - 1));
-        toast.success("Photo removed.");
+    removeImage.mutate(
+      { id: itemId, imageId: selectedSupplemental.id },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({
+            queryKey: getGetPotteryQueryKey(itemId),
+          });
+          setActiveIdx(Math.max(0, activeIdx - 1));
+          toast.success("Photo removed.");
+        },
+        onError: (err) => toast.error(err.message),
       },
-      onError: (err) => toast.error(err.message),
-    });
+    );
   }
 
   function handleSetPrimary() {
@@ -274,9 +280,16 @@ function ImageGallery({
   function handleSaveLabel() {
     if (!selectedSupplemental) return;
     relabelImage.mutate(
-      { imageId: selectedSupplemental.id, label: pendingLabel.trim() || null },
+      {
+        id: itemId,
+        imageId: selectedSupplemental.id,
+        data: { label: pendingLabel.trim() || null },
+      },
       {
         onSuccess: () => {
+          queryClient.invalidateQueries({
+            queryKey: getGetPotteryQueryKey(itemId),
+          });
           setShowLabelInput(false);
           toast.success("Label saved.");
         },

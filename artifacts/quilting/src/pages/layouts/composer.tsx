@@ -9,6 +9,8 @@ import {
   X,
   Download,
   Sliders,
+  Library,
+  Plus,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -41,7 +43,12 @@ import {
   useListQuiltingCategories,
   useListFabrics,
   getListLayoutsQueryKey,
+  useCreateBlock,
+  getListBlocksQueryKey,
+  useListBlockTemplates,
+  type QuiltingBlockTemplate,
 } from "@workspace/api-client-react";
+import { BlockPreviewSvg } from "@/components/BlockPreviewSvg";
 import { FabricPicker, buildFabricUrlMap } from "@/components/FabricPicker";
 import type { QuiltingCategory } from "@workspace/api-client-react";
 import { TagSelector } from "@/components/tag-selector";
@@ -778,6 +785,9 @@ export default function LayoutComposer() {
   );
   const { data: blockList } = useListBlocks();
   const { data: fabricsList, isLoading: fabricsLoading } = useListFabrics();
+  const { data: blockTemplates } = useListBlockTemplates();
+  const createBlockFromTemplate = useCreateBlock();
+  const [spawnTemplateId, setSpawnTemplateId] = useState<number | null>(null);
 
   const [name, setName] = useState("Untitled layout");
   const [rows, setRows] = useState(5);
@@ -1084,6 +1094,55 @@ export default function LayoutComposer() {
   }
 
   const isSaving = createLayout.isPending || updateLayout.isPending;
+
+  function handleSpawnFromTemplate(tpl: QuiltingBlockTemplate) {
+    if (spawnTemplateId !== null) return;
+    setSpawnTemplateId(tpl.id);
+    createBlockFromTemplate.mutate(
+      {
+        data: {
+          name: tpl.name,
+          gridSize: tpl.gridW as
+            | 1
+            | 2
+            | 3
+            | 4
+            | 5
+            | 6
+            | 7
+            | 8
+            | 9
+            | 10
+            | 11
+            | 12,
+          cells: tpl.cells,
+          seams: tpl.seams.map((s) => ({
+            axis: s.axis,
+            pos: s.pos,
+            cellIdx: s.cellIdx,
+            clipStart: s.clipStart ?? undefined,
+            clipEnd: s.clipEnd ?? undefined,
+          })),
+          blockSizeInches: tpl.blockSizeInches ?? undefined,
+          seamAllowanceInches: tpl.seamAllowanceInches ?? undefined,
+        },
+      },
+      {
+        onSuccess: (newBlock) => {
+          void queryClient.invalidateQueries({
+            queryKey: getListBlocksQueryKey(),
+          });
+          setSelectedBlock(newBlock.id);
+          setSpawnTemplateId(null);
+          toast.success(`Block "${tpl.name}" added to palette`);
+        },
+        onError: () => {
+          setSpawnTemplateId(null);
+          toast.error("Failed to create block from template");
+        },
+      },
+    );
+  }
 
   if (!isNew && loadingExisting) {
     return (
@@ -1740,6 +1799,49 @@ export default function LayoutComposer() {
                     <p className="text-xs text-muted-foreground">
                       {block.gridSize}×{block.gridSize}
                     </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Library Templates */}
+          {blockTemplates && blockTemplates.length > 0 && (
+            <div className="flex flex-col gap-2 border-t border-border pt-3">
+              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <Library className="h-3.5 w-3.5" />
+                Library Templates
+              </p>
+              {blockTemplates.map((tpl: QuiltingBlockTemplate) => (
+                <button
+                  key={tpl.id}
+                  disabled={spawnTemplateId === tpl.id}
+                  onClick={() => handleSpawnFromTemplate(tpl)}
+                  className="flex items-center gap-3 rounded-lg border border-border p-2 text-left transition-colors hover:border-primary/40 disabled:opacity-60"
+                  title="Create a block from this template and add to palette"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-muted/30">
+                    <BlockPreviewSvg
+                      cells={tpl.cells}
+                      gridSize={tpl.gridW}
+                      seams={tpl.seams as BlockSeamLine[]}
+                      size={40}
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{tpl.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {tpl.gridW}×{tpl.gridH}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-primary">
+                    {spawnTemplateId === tpl.id ? (
+                      <span className="text-xs text-muted-foreground">
+                        Adding…
+                      </span>
+                    ) : (
+                      <Plus className="h-4 w-4" />
+                    )}
                   </div>
                 </button>
               ))}

@@ -4,12 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "hello": "tsx ./src/hello.ts",
     "backup-to-replit": "tsx ./src/backup-to-replit.ts",
     "restore-from-replit": "tsx ./src/restore-from-replit.ts",
     "seed-travels": "tsx ./src/seed-travels-data.ts",
     "add-users": "tsx ./src/add-users.ts",
-    "migrate-to-elaine": "tsx ./src/migrate-to-elaine.ts",
+    "check-ci-status": "tsx ./src/check-ci-status.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

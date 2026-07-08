@@ -26,12 +26,23 @@ export type ElaineAppId =
   | "hub"
   | "elaine";
 
+/** A single image/PDF attachment on a user message. `name` is the original
+ *  upload filename (PDFs only — images are shown as thumbnails and don't
+ *  need a name). Older stored messages may still be plain strings; callers
+ *  should treat this as `AttachmentRef | string`. */
+export interface AttachmentRef {
+  url: string;
+  type: "image" | "pdf";
+  name?: string;
+}
+
 export interface AssistantMessage {
   role: "user" | "assistant";
   content: string;
-  /** Public Supabase Storage URLs for images the user attached to this turn.
-   *  Only present on user messages; undefined/empty for assistant messages. */
-  attachmentUrls?: string[];
+  /** Signed Supabase Storage URLs (+ type/filename) for images/PDFs the user
+   *  attached to this turn. Only present on user messages; undefined/empty
+   *  for assistant messages. */
+  attachmentUrls?: Array<AttachmentRef | string>;
 }
 
 export type TravelActionType =
@@ -237,8 +248,10 @@ export async function streamElaineMessage(
     appId: ElaineAppId;
     /** ID of the named conversation to continue. Omit to start a new one. */
     conversationId?: number;
-    /** Public Supabase Storage URLs for images attached to this message. */
+    /** Signed Supabase Storage URLs for image attachments (JPEG/PNG/WebP). */
     attachmentUrls?: string[];
+    /** PDF attachments: signed URL + original filename + extracted text. */
+    attachmentPdfs?: Array<{ url: string; name: string; extractedText?: string }>;
   },
   callbacks: AssistantChatStreamCallbacks = {},
   signal?: AbortSignal,
@@ -504,38 +517,47 @@ export interface ConversationSummary {
   createdAt: string;
   updatedAt: string;
   messageCount: number;
+  /** Snippet from the first user message in the conversation (≤80 chars). */
+  preview: string | null;
 }
 
 export interface ConversationMessage {
   id: number;
   role: "user" | "assistant";
   content: string;
-  attachmentUrls: string[];
+  attachmentUrls: Array<AttachmentRef | string>;
   createdAt: string;
 }
 
-export const getListElaineConversationsQueryKey = () =>
-  [`/api/elaine/conversations`] as const;
+export const getListElaineConversationsQueryKey = (q?: string) =>
+  q ? [`/api/elaine/conversations`, { q }] as const
+    : [`/api/elaine/conversations`] as const;
 
 const listElaineConversationsFn = (
+  q?: string,
   options?: RequestInit,
-): Promise<ConversationSummary[]> =>
-  customFetch<ConversationSummary[]>("/api/elaine/conversations", {
+): Promise<ConversationSummary[]> => {
+  const url = q
+    ? `/api/elaine/conversations?q=${encodeURIComponent(q)}`
+    : "/api/elaine/conversations";
+  return customFetch<ConversationSummary[]>(url, {
     ...options,
     method: "GET",
   });
+};
 
 export function useListElaineConversations<
   TData = ConversationSummary[],
   TError = unknown,
 >(options?: {
+  q?: string;
   query?: UseQueryOptions<ConversationSummary[], TError, TData>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const { query: queryOptions } = options ?? {};
+  const { q, query: queryOptions } = options ?? {};
   const queryKey =
-    queryOptions?.queryKey ?? getListElaineConversationsQueryKey();
+    queryOptions?.queryKey ?? getListElaineConversationsQueryKey(q);
   const queryFn: QueryFunction<ConversationSummary[]> = ({ signal }) =>
-    listElaineConversationsFn({ signal });
+    listElaineConversationsFn(q, { signal });
   const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     ConversationSummary[],
     TError,
@@ -558,6 +580,34 @@ export function useCreateElaineConversation(options?: {
   mutation?: UseMutationOptions<ConversationSummary, unknown, void>;
 }) {
   const mutationFn = () => createElaineConversationFn();
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const renameElaineConversationFn = (
+  id: number,
+  title: string,
+): Promise<ConversationSummary> =>
+  customFetch<ConversationSummary>(`/api/elaine/conversations/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+
+export function useRenameElaineConversation(options?: {
+  mutation?: UseMutationOptions<
+    ConversationSummary,
+    unknown,
+    { id: number; title: string }
+  >;
+}): UseMutationResult<
+  ConversationSummary,
+  unknown,
+  { id: number; title: string }
+> {
+  const mutationFn: MutationFunction<
+    ConversationSummary,
+    { id: number; title: string }
+  > = ({ id, title }) => renameElaineConversationFn(id, title);
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
@@ -616,13 +666,25 @@ export function useGetElaineConversationMessages<
 }
 
 // ---------------------------------------------------------------------------
-// Attachment upload — images attached to Elaine chat messages.
-// Stored in the public `elaine-attachments` Supabase Storage bucket.
+// Attachment upload — images and PDFs attached to Elaine chat messages.
+// Stored in the private `elaine-attachments` Supabase Storage bucket;
+// the server returns a long-lived signed URL for display and AI vision.
 // ---------------------------------------------------------------------------
+
+export interface ElaineAttachmentUploadResult {
+  /** Long-lived signed URL for display and AI context. */
+  url: string;
+  /** 'image' for JPEG/PNG/WebP; 'pdf' for PDF documents. */
+  type: "image" | "pdf";
+  /** Original filename (provided for PDFs so the UI can show it). */
+  name?: string;
+  /** Extracted plain-text content for PDF files (max 8 000 chars). */
+  extractedText?: string;
+}
 
 export async function uploadElaineAttachment(
   file: File,
-): Promise<{ url: string }> {
+): Promise<ElaineAttachmentUploadResult> {
   const formData = new FormData();
   formData.append("file", file);
   const res = await fetch("/api/elaine/attachments", {
@@ -633,7 +695,7 @@ export async function uploadElaineAttachment(
     const text = await res.text().catch(() => "");
     throw new Error(text || `Upload failed with status ${res.status}`);
   }
-  return res.json() as Promise<{ url: string }>;
+  return res.json() as Promise<ElaineAttachmentUploadResult>;
 }
 
 // ---------------------------------------------------------------------------
@@ -777,6 +839,75 @@ const listElaineAdminModelsFn = (
     ...options,
     method: "GET",
   });
+
+// ---------------------------------------------------------------------------
+// Daily brief — personalised once-per-UTC-day morning summary.
+// ---------------------------------------------------------------------------
+
+export interface DailyBrief {
+  id: number;
+  content: string;
+  generatedAt: string;
+  dismissed: boolean;
+}
+
+export const getElaineDailyBriefQueryKey = () =>
+  [`/api/elaine/daily-brief`] as const;
+
+const getElaineDailyBriefFn = (
+  options?: RequestInit,
+): Promise<DailyBrief> =>
+  customFetch<DailyBrief>("/api/elaine/daily-brief", {
+    ...options,
+    method: "GET",
+  });
+
+export function useGetElaineDailyBrief<
+  TData = DailyBrief,
+  TError = unknown,
+>(options?: {
+  query?: UseQueryOptions<DailyBrief, TError, TData>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getElaineDailyBriefQueryKey();
+  const queryFn: QueryFunction<DailyBrief> = ({ signal }) =>
+    getElaineDailyBriefFn({ signal });
+  const queryOpts = {
+    queryKey,
+    queryFn,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+    ...queryOptions,
+  } as UseQueryOptions<DailyBrief, TError, TData> & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const dismissElaineDailyBriefFn = (): Promise<void> =>
+  customFetch<void>("/api/elaine/daily-brief/dismiss", { method: "POST" });
+
+export function useDismissElaineDailyBrief(options?: {
+  mutation?: UseMutationOptions<void, unknown, void>;
+}): UseMutationResult<void, unknown, void> {
+  const mutationFn: MutationFunction<void, void> = () =>
+    dismissElaineDailyBriefFn();
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const regenerateElaineDailyBriefFn = (): Promise<DailyBrief> =>
+  customFetch<DailyBrief>("/api/elaine/daily-brief/regenerate", {
+    method: "POST",
+  });
+
+export function useRegenerateElaineDailyBrief(options?: {
+  mutation?: UseMutationOptions<DailyBrief, unknown, void>;
+}): UseMutationResult<DailyBrief, unknown, void> {
+  const mutationFn: MutationFunction<DailyBrief, void> = () =>
+    regenerateElaineDailyBriefFn();
+  return useMutation({ mutationFn, ...options?.mutation });
+}
 
 export function useListElaineAdminModels<
   TData = OpenRouterModelSummary[],

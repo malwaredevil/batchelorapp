@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { ilike, or } from "drizzle-orm";
+import { and, eq, ilike, or } from "drizzle-orm";
 import {
   db,
   potteryItems,
@@ -8,10 +8,59 @@ import {
   finishedQuilts,
   travelsTrips,
   travelsReminders,
+  elaineHistoryConversations,
+  elaineHistoryMessages,
 } from "@workspace/db";
 import { requireAuth } from "../middleware/auth";
 
 const router: IRouter = Router();
+
+const SNIPPET_RADIUS = 40;
+const SNIPPET_MAX_LENGTH = 140;
+
+/**
+ * Case-insensitive substring check used to determine which field a search
+ * result actually matched on, so we know whether to show a highlighted
+ * snippet or a plain static subtitle.
+ */
+function matchesField(
+  value: string | null | undefined,
+  query: string,
+): boolean {
+  return Boolean(value && value.toLowerCase().includes(query.toLowerCase()));
+}
+
+/**
+ * Builds a short excerpt of `content` centered on the first case-insensitive
+ * occurrence of `query`, so search results can show the matching text rather
+ * than a generic label.
+ */
+function buildMessageSnippet(
+  content: string,
+  query: string,
+): string | undefined {
+  const normalizedContent = content.replace(/\s+/g, " ").trim();
+  if (!normalizedContent) return undefined;
+
+  const matchIndex = normalizedContent
+    .toLowerCase()
+    .indexOf(query.toLowerCase());
+  if (matchIndex === -1) {
+    return normalizedContent.length > SNIPPET_MAX_LENGTH
+      ? `${normalizedContent.slice(0, SNIPPET_MAX_LENGTH).trimEnd()}…`
+      : normalizedContent;
+  }
+
+  const start = Math.max(0, matchIndex - SNIPPET_RADIUS);
+  const end = Math.min(
+    normalizedContent.length,
+    matchIndex + query.length + SNIPPET_RADIUS,
+  );
+
+  const prefix = start > 0 ? "…" : "";
+  const suffix = end < normalizedContent.length ? "…" : "";
+  return `${prefix}${normalizedContent.slice(start, end).trim()}${suffix}`;
+}
 
 router.get("/search", requireAuth, async (req, res) => {
   const q = String(req.query.q ?? "").trim();
@@ -24,6 +73,7 @@ router.get("/search", requireAuth, async (req, res) => {
 
   const pattern = `%${q}%`;
   const perSource = Math.max(4, Math.ceil(limit / 6));
+  const userId = req.session.userId!;
 
   const [
     potteryResults,
@@ -32,9 +82,16 @@ router.get("/search", requireAuth, async (req, res) => {
     quiltResults,
     tripResults,
     reminderResults,
+    conversationTitleMatches,
+    conversationContentMatches,
   ] = await Promise.all([
     db
-      .select({ id: potteryItems.id, name: potteryItems.name, maker: potteryItems.maker })
+      .select({
+        id: potteryItems.id,
+        name: potteryItems.name,
+        maker: potteryItems.maker,
+        patternDescription: potteryItems.patternDescription,
+      })
       .from(potteryItems)
       .where(
         or(
@@ -46,15 +103,38 @@ router.get("/search", requireAuth, async (req, res) => {
       .limit(perSource),
 
     db
-      .select({ id: fabrics.id, name: fabrics.name, designer: fabrics.designer, lineName: fabrics.lineName })
+      .select({
+        id: fabrics.id,
+        name: fabrics.name,
+        designer: fabrics.designer,
+        lineName: fabrics.lineName,
+        notes: fabrics.notes,
+      })
       .from(fabrics)
-      .where(or(ilike(fabrics.name, pattern), ilike(fabrics.designer, pattern)))
+      .where(
+        or(
+          ilike(fabrics.name, pattern),
+          ilike(fabrics.designer, pattern),
+          ilike(fabrics.notes, pattern),
+        ),
+      )
       .limit(perSource),
 
     db
-      .select({ id: quiltPatterns.id, name: quiltPatterns.name, designer: quiltPatterns.designer })
+      .select({
+        id: quiltPatterns.id,
+        name: quiltPatterns.name,
+        designer: quiltPatterns.designer,
+        notes: quiltPatterns.notes,
+      })
       .from(quiltPatterns)
-      .where(or(ilike(quiltPatterns.name, pattern), ilike(quiltPatterns.designer, pattern)))
+      .where(
+        or(
+          ilike(quiltPatterns.name, pattern),
+          ilike(quiltPatterns.designer, pattern),
+          ilike(quiltPatterns.notes, pattern),
+        ),
+      )
       .limit(perSource),
 
     db
@@ -64,17 +144,95 @@ router.get("/search", requireAuth, async (req, res) => {
       .limit(perSource),
 
     db
-      .select({ id: travelsTrips.id, title: travelsTrips.title, destination: travelsTrips.destination })
+      .select({
+        id: travelsTrips.id,
+        title: travelsTrips.title,
+        destination: travelsTrips.destination,
+        notes: travelsTrips.notes,
+      })
       .from(travelsTrips)
-      .where(or(ilike(travelsTrips.title, pattern), ilike(travelsTrips.destination, pattern)))
+      .where(
+        or(
+          ilike(travelsTrips.title, pattern),
+          ilike(travelsTrips.destination, pattern),
+          ilike(travelsTrips.notes, pattern),
+        ),
+      )
       .limit(perSource),
 
     db
-      .select({ id: travelsReminders.id, title: travelsReminders.title, tripId: travelsReminders.tripId })
+      .select({
+        id: travelsReminders.id,
+        title: travelsReminders.title,
+        tripId: travelsReminders.tripId,
+      })
       .from(travelsReminders)
       .where(ilike(travelsReminders.title, pattern))
       .limit(perSource),
+
+    db
+      .select({
+        id: elaineHistoryConversations.id,
+        title: elaineHistoryConversations.title,
+        updatedAt: elaineHistoryConversations.updatedAt,
+      })
+      .from(elaineHistoryConversations)
+      .where(
+        and(
+          eq(elaineHistoryConversations.userId, userId),
+          ilike(elaineHistoryConversations.title, pattern),
+        ),
+      )
+      .limit(perSource),
+
+    db
+      .select({
+        id: elaineHistoryConversations.id,
+        title: elaineHistoryConversations.title,
+        updatedAt: elaineHistoryConversations.updatedAt,
+        messageContent: elaineHistoryMessages.content,
+      })
+      .from(elaineHistoryMessages)
+      .innerJoin(
+        elaineHistoryConversations,
+        eq(elaineHistoryMessages.conversationId, elaineHistoryConversations.id),
+      )
+      .where(
+        and(
+          eq(elaineHistoryConversations.userId, userId),
+          ilike(elaineHistoryMessages.content, pattern),
+        ),
+      )
+      .limit(perSource),
   ]);
+
+  const conversationResultMap = new Map<
+    number,
+    { id: number; title: string; updatedAt: Date; snippet?: string }
+  >();
+  for (const r of conversationTitleMatches) {
+    conversationResultMap.set(r.id, {
+      id: r.id,
+      title: r.title,
+      updatedAt: r.updatedAt,
+    });
+  }
+  for (const r of conversationContentMatches) {
+    const existing = conversationResultMap.get(r.id);
+    if (existing) {
+      existing.snippet ??= buildMessageSnippet(r.messageContent, q);
+    } else {
+      conversationResultMap.set(r.id, {
+        id: r.id,
+        title: r.title,
+        updatedAt: r.updatedAt,
+        snippet: buildMessageSnippet(r.messageContent, q),
+      });
+    }
+  }
+  const conversationResults = Array.from(conversationResultMap.values())
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+    .slice(0, perSource);
 
   const groups = [];
 
@@ -82,12 +240,21 @@ router.get("/search", requireAuth, async (req, res) => {
     groups.push({
       type: "travels_trip",
       label: "Trips",
-      results: tripResults.map((r) => ({
-        id: r.id,
-        title: r.title,
-        subtitle: r.destination,
-        url: `/travels/trips/${r.id}`,
-      })),
+      results: tripResults.map((r) => {
+        const matchedContent =
+          !matchesField(r.title, q) &&
+          !matchesField(r.destination, q) &&
+          matchesField(r.notes, q);
+        return {
+          id: r.id,
+          title: r.title,
+          subtitle: matchedContent
+            ? buildMessageSnippet(r.notes ?? "", q)
+            : r.destination,
+          matchedContent,
+          url: `/travels/trips/${r.id}`,
+        };
+      }),
     });
   }
 
@@ -104,16 +271,39 @@ router.get("/search", requireAuth, async (req, res) => {
     });
   }
 
+  if (conversationResults.length > 0) {
+    groups.push({
+      type: "elaine_conversation",
+      label: "Conversations",
+      results: conversationResults.map((r) => ({
+        id: r.id,
+        title: r.title,
+        subtitle: r.snippet ?? "Elaine conversation",
+        matchedContent: Boolean(r.snippet),
+        url: `/elaine/`,
+      })),
+    });
+  }
+
   if (potteryResults.length > 0) {
     groups.push({
       type: "pottery",
       label: "Pottery",
-      results: potteryResults.map((r) => ({
-        id: r.id,
-        title: r.name,
-        subtitle: r.maker ?? undefined,
-        url: `/pottery/piece/${r.id}`,
-      })),
+      results: potteryResults.map((r) => {
+        const matchedContent =
+          !matchesField(r.name, q) &&
+          !matchesField(r.maker, q) &&
+          matchesField(r.patternDescription, q);
+        return {
+          id: r.id,
+          title: r.name,
+          subtitle: matchedContent
+            ? buildMessageSnippet(r.patternDescription ?? "", q)
+            : (r.maker ?? undefined),
+          matchedContent,
+          url: `/pottery/piece/${r.id}`,
+        };
+      }),
     });
   }
 
@@ -121,12 +311,24 @@ router.get("/search", requireAuth, async (req, res) => {
     groups.push({
       type: "quilting_fabric",
       label: "Fabrics",
-      results: fabricResults.map((r) => ({
-        id: r.id,
-        title: r.name,
-        subtitle: [r.designer, r.lineName].filter(Boolean).join(" · ") || undefined,
-        url: `/quilting/fabrics/${r.id}`,
-      })),
+      results: fabricResults.map((r) => {
+        const staticSubtitle =
+          [r.designer, r.lineName].filter(Boolean).join(" · ") || undefined;
+        const matchedContent =
+          !matchesField(r.name, q) &&
+          !matchesField(r.designer, q) &&
+          !matchesField(r.lineName, q) &&
+          matchesField(r.notes, q);
+        return {
+          id: r.id,
+          title: r.name,
+          subtitle: matchedContent
+            ? buildMessageSnippet(r.notes ?? "", q)
+            : staticSubtitle,
+          matchedContent,
+          url: `/quilting/fabrics/${r.id}`,
+        };
+      }),
     });
   }
 
@@ -134,12 +336,21 @@ router.get("/search", requireAuth, async (req, res) => {
     groups.push({
       type: "quilting_pattern",
       label: "Patterns",
-      results: patternResults.map((r) => ({
-        id: r.id,
-        title: r.name,
-        subtitle: r.designer ?? undefined,
-        url: `/quilting/patterns/${r.id}`,
-      })),
+      results: patternResults.map((r) => {
+        const matchedContent =
+          !matchesField(r.name, q) &&
+          !matchesField(r.designer, q) &&
+          matchesField(r.notes, q);
+        return {
+          id: r.id,
+          title: r.name,
+          subtitle: matchedContent
+            ? buildMessageSnippet(r.notes ?? "", q)
+            : (r.designer ?? undefined),
+          matchedContent,
+          url: `/quilting/patterns/${r.id}`,
+        };
+      }),
     });
   }
 

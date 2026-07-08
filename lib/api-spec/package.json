@@ -7,8 +7,8 @@
     "codegen": "pnpm run build-spec && orval --config ./orval.config.ts && node patch-index.cjs"
   },
   "devDependencies": {
-    "orval": "^8.9.1",
+    "orval": "8.9.1",
     "tsx": "catalog:",
-    "yaml": "^2.8.4"
+    "yaml": "2.8.4"
   }
 }

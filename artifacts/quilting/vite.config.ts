@@ -37,7 +37,11 @@ export default defineConfig({
     runtimeErrorOverlay(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon.svg", "icons/icon-192x192.png", "icons/icon-512x512.png"],
+      includeAssets: [
+        "favicon.svg",
+        "icons/icon-192x192.png",
+        "icons/icon-512x512.png",
+      ],
       manifest: {
         name: "Batchelor Quilting",
         short_name: "Quilting",
@@ -48,7 +52,11 @@ export default defineConfig({
         start_url: startUrl,
         scope: startUrl,
         icons: [
-          { src: "icons/icon-192x192.png", sizes: "192x192", type: "image/png" },
+          {
+            src: "icons/icon-192x192.png",
+            sizes: "192x192",
+            type: "image/png",
+          },
           {
             src: "icons/icon-512x512.png",
             sizes: "512x512",
@@ -68,7 +76,8 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         runtimeCaching: [
           {
-            urlPattern: ({ url }: { url: URL }) => url.pathname.startsWith("/api/quilting/"),
+            urlPattern: ({ url }: { url: URL }) =>
+              url.pathname.startsWith("/api/quilting/"),
             handler: "NetworkFirst",
             options: {
               cacheName: "quilting-api-cache",

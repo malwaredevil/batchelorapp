@@ -1,7 +1,36 @@
-import { useRef, type ReactNode } from "react";
-import { Send, ArrowRight, Check, X, Paperclip, Loader2 } from "lucide-react";
+import {
+  useRef,
+  useCallback,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  Send,
+  ArrowRight,
+  Check,
+  X,
+  Paperclip,
+  Loader2,
+  FileText,
+  Mic,
+  Volume2,
+  VolumeX,
+  Settings2,
+  Play,
+  Square,
+} from "lucide-react";
+import { useVoiceInput } from "./useVoiceInput";
+import { useTTS, DEFAULT_VOICE_PREVIEW_KEY } from "./useTTS";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "./ui/dropdown-menu";
 import { ElaineAvatar, ElaineName } from "./ElaineAvatar";
 import type { ElaineChat } from "./useElaineChat";
 import { MarkdownMessage } from "./MarkdownMessage";
@@ -69,6 +98,8 @@ function MessageText({
   );
 }
 
+const TTS_RATE_OPTIONS = [0.75, 1, 1.25, 1.5, 2] as const;
+
 interface ElaineChatPanelProps {
   chat: ElaineChat;
   onNavigated?: () => void;
@@ -127,8 +158,70 @@ export function ElaineChatPanel({
   } = chat;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const hasUploadingAttachments = pendingAttachments.some((a) => a.uploading);
+
+  // ── Voice input ─────────────────────────────────────────────────────────
+  // Saves the input text at the moment recording starts so interim / final
+  // results are appended rather than replacing what the user already typed.
+  const voiceBaseRef = useRef("");
+
+  const voice = useVoiceInput({
+    onTranscript: useCallback(
+      (text: string, isFinal: boolean) => {
+        const base = voiceBaseRef.current;
+        const sep = base.length > 0 ? " " : "";
+        const next = base + sep + text;
+        setInput(next);
+        if (isFinal) {
+          // Update base so a subsequent recording session appends to this.
+          voiceBaseRef.current = next;
+        }
+      },
+      [setInput],
+    ),
+  });
+
+  const handleMicToggle = useCallback(() => {
+    if (voice.isListening) {
+      voice.stop();
+    } else {
+      voiceBaseRef.current = input;
+      voice.start();
+    }
+  }, [voice, input]);
+
+  // ── Text-to-speech ──────────────────────────────────────────────────────
+  const tts = useTTS();
+
+  // Stop reading the instant a new message starts streaming in.
+  useEffect(() => {
+    if (isStreaming) tts.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStreaming]);
+
+  // Speak the latest assistant reply once it finishes streaming.
+  const wasStreamingRef = useRef(isStreaming);
+  useEffect(() => {
+    const wasStreaming = wasStreamingRef.current;
+    wasStreamingRef.current = isStreaming;
+    if (!wasStreaming || isStreaming || !tts.enabled) return;
+    const last = messages[messages.length - 1];
+    if (last?.role === "assistant") {
+      const { text } = parseMessageCitations(last.content);
+      tts.speak(text);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStreaming, messages, tts.enabled]);
+
+  const handleInputChange = useCallback(
+    (value: string) => {
+      setInput(value);
+      if (tts.isSpeaking) tts.stop();
+    },
+    [setInput, tts],
+  );
 
   return (
     <>
@@ -154,14 +247,55 @@ export function ElaineChatPanel({
                 >
                   {msg.attachmentUrls && msg.attachmentUrls.length > 0 && (
                     <div className="mb-1.5 flex flex-wrap gap-1.5">
-                      {msg.attachmentUrls.map((url, j) => (
-                        <img
-                          key={j}
-                          src={url}
-                          alt=""
-                          className="h-20 w-20 rounded-lg object-cover"
-                        />
-                      ))}
+                      {msg.attachmentUrls.map((ref, j) => {
+                        // Older stored messages may still be plain URL strings —
+                        // fall back to sniffing the URL when there's no `type`/`name`.
+                        const url = typeof ref === "string" ? ref : ref.url;
+                        const isPdf =
+                          typeof ref === "string"
+                            ? /\.pdf([?#]|$)/i.test(ref)
+                            : ref.type === "pdf";
+                        if (isPdf) {
+                          const storedName =
+                            typeof ref === "string" ? undefined : ref.name;
+                          const match = url.match(/\/([^/?#]+\.pdf)/i);
+                          const filename =
+                            storedName ??
+                            (match
+                              ? decodeURIComponent(match[1])
+                              : "document.pdf");
+                          return (
+                            <a
+                              key={j}
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1.5 rounded-lg bg-primary-foreground/15 px-2 py-1 transition-colors hover:bg-primary-foreground/25"
+                              title={`Open ${filename}`}
+                            >
+                              <FileText className="h-4 w-4 shrink-0" />
+                              <span className="max-w-[140px] truncate text-xs">
+                                {filename}
+                              </span>
+                            </a>
+                          );
+                        }
+                        return (
+                          <button
+                            key={j}
+                            type="button"
+                            onClick={() => setLightboxUrl(url)}
+                            className="block cursor-zoom-in"
+                            title="View image"
+                          >
+                            <img
+                              src={url}
+                              alt=""
+                              className="h-20 w-20 rounded-lg object-cover"
+                            />
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                   {msg.content && (
@@ -414,13 +548,26 @@ export function ElaineChatPanel({
           {pendingAttachments.map((a) => (
             <div
               key={a.previewUrl}
-              className="relative h-14 w-14 shrink-0 rounded-lg overflow-hidden border border-border/50"
+              className="relative h-14 shrink-0 rounded-lg overflow-hidden border border-border/50"
+              style={{
+                width: a.fileType === "pdf" ? "auto" : "3.5rem",
+                minWidth: "3.5rem",
+              }}
             >
-              <img
-                src={a.previewUrl}
-                alt=""
-                className="h-full w-full object-cover"
-              />
+              {a.fileType === "pdf" ? (
+                <div className="flex h-14 items-center gap-1.5 rounded-lg bg-muted px-2">
+                  <FileText className="h-5 w-5 shrink-0 text-destructive" />
+                  <span className="max-w-[120px] truncate text-xs text-foreground/80">
+                    {a.fileName ?? "document.pdf"}
+                  </span>
+                </div>
+              ) : (
+                <img
+                  src={a.previewUrl}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+              )}
               {a.uploading && (
                 <div className="absolute inset-0 flex items-center justify-center bg-background/60">
                   <Loader2 className="h-4 w-4 animate-spin text-foreground" />
@@ -451,7 +598,7 @@ export function ElaineChatPanel({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept="image/jpeg,image/png,image/webp,application/pdf"
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
@@ -473,7 +620,7 @@ export function ElaineChatPanel({
           </Button>
           <Textarea
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => handleInputChange(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -485,12 +632,168 @@ export function ElaineChatPanel({
             rows={1}
             disabled={isStreaming}
           />
+          {voice.isSupported && (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className={`relative h-[38px] w-[38px] shrink-0 rounded-xl transition-colors ${
+                voice.isListening
+                  ? "text-red-500 hover:text-red-600"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={handleMicToggle}
+              disabled={isStreaming}
+              title={voice.isListening ? "Stop recording" : "Voice input"}
+            >
+              {voice.isListening && (
+                <span className="absolute inset-0 animate-ping rounded-xl bg-red-500/20" />
+              )}
+              <Mic className="h-4 w-4" />
+            </Button>
+          )}
+          {tts.isSupported && (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className={`h-[38px] w-[38px] shrink-0 rounded-xl transition-colors ${
+                tts.enabled
+                  ? "text-primary hover:text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={tts.toggle}
+              title={
+                tts.enabled
+                  ? "Turn off spoken replies"
+                  : "Turn on spoken replies"
+              }
+            >
+              {tts.enabled ? (
+                <Volume2 className="h-4 w-4" />
+              ) : (
+                <VolumeX className="h-4 w-4" />
+              )}
+            </Button>
+          )}
+          {tts.isSupported && tts.enabled && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-[38px] w-[38px] shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
+                  title="Voice and speed"
+                >
+                  <Settings2 className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                  Voice
+                </div>
+                <DropdownMenuItem
+                  onSelect={() => tts.setSelectedVoiceURI(null)}
+                  className="justify-between"
+                >
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        tts.previewVoice(null);
+                      }}
+                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+                      title="Preview this voice"
+                    >
+                      {tts.previewingVoiceURI === DEFAULT_VOICE_PREVIEW_KEY ? (
+                        <Square className="h-3 w-3" />
+                      ) : (
+                        <Play className="h-3 w-3" />
+                      )}
+                    </button>
+                    Default
+                  </span>
+                  {tts.selectedVoiceURI === null && (
+                    <Check className="h-3.5 w-3.5 shrink-0" />
+                  )}
+                </DropdownMenuItem>
+                {tts.voices.map((v) => (
+                  <DropdownMenuItem
+                    key={v.voiceURI}
+                    onSelect={() => tts.setSelectedVoiceURI(v.voiceURI)}
+                    className="justify-between"
+                  >
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          tts.previewVoice(v.voiceURI);
+                        }}
+                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+                        title="Preview this voice"
+                      >
+                        {tts.previewingVoiceURI === v.voiceURI ? (
+                          <Square className="h-3 w-3" />
+                        ) : (
+                          <Play className="h-3 w-3" />
+                        )}
+                      </button>
+                      <span className="truncate">{v.name}</span>
+                    </span>
+                    {tts.selectedVoiceURI === v.voiceURI && (
+                      <Check className="h-3.5 w-3.5 shrink-0" />
+                    )}
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator />
+                <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                  Speed
+                </div>
+                {TTS_RATE_OPTIONS.map((r) => (
+                  <DropdownMenuItem
+                    key={r}
+                    onSelect={() => tts.setRate(r)}
+                    className="justify-between"
+                  >
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          tts.previewRate(r);
+                        }}
+                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+                        title="Preview this speed"
+                      >
+                        {tts.previewingRate === r ? (
+                          <Square className="h-3 w-3" />
+                        ) : (
+                          <Play className="h-3 w-3" />
+                        )}
+                      </button>
+                      {r}x
+                    </span>
+                    {tts.rate === r && (
+                      <Check className="h-3.5 w-3.5 shrink-0" />
+                    )}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           <Button
             size="sm"
             className="h-[38px] w-[38px] shrink-0 rounded-xl p-0"
             onClick={() => void handleSend()}
             disabled={
-              (!input.trim() && pendingAttachments.every((a) => !a.uploadedUrl)) ||
+              (!input.trim() &&
+                pendingAttachments.every((a) => !a.uploadedUrl)) ||
               isStreaming ||
               hasUploadingAttachments
             }
@@ -499,6 +802,30 @@ export function ElaineChatPanel({
           </Button>
         </div>
       </div>
+
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setLightboxUrl(null)}
+          role="button"
+          tabIndex={-1}
+        >
+          <button
+            type="button"
+            onClick={() => setLightboxUrl(null)}
+            className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-background/20 text-white hover:bg-background/30"
+            aria-label="Close preview"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <img
+            src={lightboxUrl}
+            alt=""
+            className="max-h-full max-w-full rounded-lg object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </>
   );
 }

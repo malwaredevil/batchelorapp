@@ -43,6 +43,12 @@ import {
   ZoomOut,
   Check,
   Sliders,
+  BookmarkPlus,
+  Library,
+  Trash2 as Trash2Icon,
+  Tag,
+  Pencil,
+  FolderOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,6 +70,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -90,7 +103,18 @@ import {
 } from "@workspace/api-client-react";
 import type { QuiltingCategory } from "@workspace/api-client-react";
 import { TagSelector } from "@/components/tag-selector";
+import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  useListBlockTemplates,
+  useCreateBlockTemplate,
+  useDeleteBlockTemplate,
+  usePatchBlockTemplate,
+  getListBlockTemplatesQueryKey,
+  type QuiltingBlockTemplate,
+  type QuiltingBlockTemplateSeamLine,
+} from "@workspace/api-client-react";
+import { BlockPreviewSvg } from "@/components/BlockPreviewSvg";
 import {
   parseCell,
   encodeXline,
@@ -3379,6 +3403,109 @@ export default function BlockDesigner() {
 
   const isSaving = createBlock.isPending || updateBlock.isPending;
 
+  // ── Block Library ──────────────────────────────────────────────────────────
+  const invalidateBlockTemplates = () =>
+    void queryClient.invalidateQueries({
+      queryKey: getListBlockTemplatesQueryKey(),
+    });
+  const createTemplate = useCreateBlockTemplate();
+  const deleteTemplate = useDeleteBlockTemplate();
+  const { data: templates } = useListBlockTemplates();
+  const patchTemplate = usePatchBlockTemplate();
+  const [saveToLibOpen, setSaveToLibOpen] = useState(false);
+  const [libBrowserOpen, setLibBrowserOpen] = useState(false);
+  const [libSaveName, setLibSaveName] = useState("");
+  const [libSaveTags, setLibSaveTags] = useState("");
+  const isSavingToLib = createTemplate.isPending;
+  const [editTemplateId, setEditTemplateId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editTags, setEditTags] = useState("");
+  const [libTagFilter, setLibTagFilter] = useState<Set<string>>(new Set());
+
+  const libraryTagOptions = Array.from(
+    new Set((templates ?? []).flatMap((tpl) => tpl.tags)),
+  ).sort((a, b) => a.localeCompare(b));
+
+  const filteredTemplates = (templates ?? []).filter(
+    (tpl) =>
+      libTagFilter.size === 0 || tpl.tags.some((tag) => libTagFilter.has(tag)),
+  );
+
+  function toggleLibTagFilter(tag: string) {
+    setLibTagFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(tag)) next.delete(tag);
+      else next.add(tag);
+      return next;
+    });
+  }
+
+  function closeLibBrowser() {
+    setLibBrowserOpen(false);
+    setLibTagFilter(new Set());
+  }
+
+  function openSaveToLib() {
+    setLibSaveName(name.trim() || "Untitled block");
+    setLibSaveTags("");
+    setSaveToLibOpen(true);
+  }
+
+  function handleSaveToLibrary() {
+    const templateName = libSaveName.trim();
+    if (!templateName) {
+      toast.error("Please enter a name for the template.");
+      return;
+    }
+    const tags = libSaveTags
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    createTemplate.mutate(
+      {
+        data: {
+          name: templateName,
+          tags,
+          gridW,
+          gridH,
+          cells,
+          seams: seams as QuiltingBlockTemplateSeamLine[],
+          blockSizeInches: blockSizeInches ?? null,
+          seamAllowanceInches: seamAllowanceInches ?? null,
+        },
+      },
+      {
+        onSuccess: () => {
+          invalidateBlockTemplates();
+          setSaveToLibOpen(false);
+          toast.success(`"${templateName}" saved to block library`);
+        },
+        onError: () => toast.error("Failed to save to library"),
+      },
+    );
+  }
+
+  function handleLoadTemplate(tpl: QuiltingBlockTemplate) {
+    if (
+      isDirty &&
+      !confirm("This will replace your current unsaved design. Continue?")
+    ) {
+      return;
+    }
+    setCells(
+      tpl.cells.length > 0 ? tpl.cells : makeEmptyCells(tpl.gridW, tpl.gridH),
+    );
+    setGridW(tpl.gridW);
+    setGridH(tpl.gridH);
+    setSeams(tpl.seams as SeamLine[]);
+    if (tpl.blockSizeInches != null) setBlockSizeInches(tpl.blockSizeInches);
+    if (tpl.seamAllowanceInches != null)
+      setSeamAllowanceInches(tpl.seamAllowanceInches);
+    setIsDirty(true);
+    closeLibBrowser();
+    toast.success(`Loaded template "${tpl.name}"`);
+  }
+
   async function handleExport(format: "png" | "jpeg" | "gif" | "pdf") {
     const svgEl = document.querySelector<SVGSVGElement>("[data-grid-export]");
     if (!svgEl) {
@@ -3732,15 +3859,36 @@ export default function BlockDesigner() {
           className="h-8 max-w-[220px] text-sm font-semibold"
           placeholder="Block name…"
         />
-        <Button
-          onClick={handleSave}
-          disabled={isSaving}
-          size="sm"
-          className="ml-auto h-8"
-        >
-          <Save className="mr-1.5 h-3.5 w-3.5" />
-          {isNew ? "Save" : "Update"}
-        </Button>
+        <div className="ml-auto flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5"
+            onClick={openSaveToLib}
+            title="Save current design as a reusable library template"
+          >
+            <BookmarkPlus className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Save to Library</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setLibBrowserOpen(true)}
+            title="Browse block library"
+          >
+            <Library className="h-4 w-4" />
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={isSaving}
+            size="sm"
+            className="h-8"
+          >
+            <Save className="mr-1.5 h-3.5 w-3.5" />
+            {isNew ? "Save" : "Update"}
+          </Button>
+        </div>
       </div>
 
       {/* ── Block dimensions bar ─────────────────────────────────────── */}
@@ -5455,6 +5603,274 @@ export default function BlockDesigner() {
           </div>
         </div>
       )}
+
+      {/* ── Save to Library dialog ───────────────────────────────────── */}
+      <Dialog open={saveToLibOpen} onOpenChange={setSaveToLibOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Save to Block Library</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="lib-name">Template name</Label>
+              <Input
+                id="lib-name"
+                value={libSaveName}
+                onChange={(e) => setLibSaveName(e.target.value)}
+                placeholder="e.g. Flying Geese"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSaveToLibrary();
+                }}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="lib-tags" className="flex items-center gap-1">
+                <Tag className="h-3.5 w-3.5" />
+                Tags
+                <span className="text-xs font-normal text-muted-foreground">
+                  (comma-separated)
+                </span>
+              </Label>
+              <Input
+                id="lib-tags"
+                value={libSaveTags}
+                onChange={(e) => setLibSaveTags(e.target.value)}
+                placeholder="e.g. traditional, geese, triangle"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Saves a reusable snapshot of the current design ({gridW}×{gridH})
+              to the shared block library. It won{"'"}t affect this block.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setSaveToLibOpen(false)}
+              disabled={isSavingToLib}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveToLibrary} disabled={isSavingToLib}>
+              {isSavingToLib ? "Saving…" : "Save to Library"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Library browser dialog ───────────────────────────────────── */}
+      <Dialog
+        open={libBrowserOpen}
+        onOpenChange={(open) =>
+          open ? setLibBrowserOpen(true) : closeLibBrowser()
+        }
+      >
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Block Library</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 py-2">
+            {(!templates || templates.length === 0) && (
+              <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
+                <Library className="mx-auto mb-2 h-8 w-8 text-muted-foreground/50" />
+                <p className="text-sm text-muted-foreground">
+                  No templates saved yet.
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Use <span className="font-medium">Save to Library</span> to
+                  save the current design as a reusable template.
+                </p>
+              </div>
+            )}
+            {templates &&
+              templates.length > 0 &&
+              libraryTagOptions.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 border-b border-border pb-3">
+                  <Tag className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  {libraryTagOptions.map((tag) => {
+                    const selected = libTagFilter.has(tag);
+                    return (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => toggleLibTagFilter(tag)}
+                        className={cn(
+                          "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors",
+                          selected
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-card-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                        )}
+                      >
+                        {tag}
+                        {selected && (
+                          <XIcon className="h-2.5 w-2.5 opacity-60" />
+                        )}
+                      </button>
+                    );
+                  })}
+                  {libTagFilter.size > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setLibTagFilter(new Set())}
+                      className="ml-1 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              )}
+            {templates &&
+              templates.length > 0 &&
+              filteredTemplates.length === 0 && (
+                <p className="py-6 text-center text-sm text-muted-foreground">
+                  No templates match the selected tags.
+                </p>
+              )}
+            {filteredTemplates.length > 0 && (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 max-h-[380px] overflow-y-auto pr-1">
+                {filteredTemplates.map((tpl: QuiltingBlockTemplate) => (
+                  <div
+                    key={tpl.id}
+                    className="group relative flex flex-col gap-2 rounded-lg border border-border p-3"
+                  >
+                    {/* Preview using safe structured SVG renderer */}
+                    <div className="flex aspect-square items-center justify-center overflow-hidden rounded bg-muted/30">
+                      <BlockPreviewSvg
+                        cells={tpl.cells}
+                        gridSize={tpl.gridW}
+                        seams={tpl.seams as SeamLine[]}
+                        size={80}
+                      />
+                    </div>
+                    {/* Inline edit form — shown when this template is being renamed */}
+                    {editTemplateId === tpl.id ? (
+                      <div className="flex flex-col gap-1.5">
+                        <Input
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          placeholder="Template name"
+                          className="h-7 text-xs"
+                          autoFocus
+                        />
+                        <Input
+                          value={editTags}
+                          onChange={(e) => setEditTags(e.target.value)}
+                          placeholder="Tags (comma-separated)"
+                          className="h-7 text-xs"
+                        />
+                        <div className="flex gap-1">
+                          <Button
+                            size="sm"
+                            className="h-6 flex-1 text-xs"
+                            disabled={patchTemplate.isPending}
+                            onClick={() => {
+                              const newName = editName.trim();
+                              if (!newName) return;
+                              const newTags = editTags
+                                .split(",")
+                                .map((t) => t.trim())
+                                .filter(Boolean);
+                              patchTemplate.mutate(
+                                {
+                                  id: tpl.id,
+                                  data: { name: newName, tags: newTags },
+                                },
+                                {
+                                  onSuccess: () => {
+                                    invalidateBlockTemplates();
+                                    setEditTemplateId(null);
+                                  },
+                                  onError: () =>
+                                    toast.error("Failed to save changes"),
+                                },
+                              );
+                            }}
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 text-xs"
+                            onClick={() => setEditTemplateId(null)}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">
+                          {tpl.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {tpl.gridW}×{tpl.gridH}
+                        </p>
+                        {tpl.tags.length > 0 && (
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground/70">
+                            {tpl.tags.join(", ")}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {/* Load into canvas button */}
+                    {editTemplateId !== tpl.id && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mt-auto h-7 w-full gap-1 text-xs"
+                        onClick={() => handleLoadTemplate(tpl)}
+                      >
+                        <FolderOpen className="h-3 w-3" />
+                        Load into canvas
+                      </Button>
+                    )}
+                    {/* Action buttons (edit + delete) — shown on hover */}
+                    {editTemplateId !== tpl.id && (
+                      <div className="absolute right-1.5 top-1.5 hidden gap-1 group-hover:flex">
+                        <button
+                          className="rounded-full bg-muted p-1 text-foreground hover:bg-accent"
+                          onClick={() => {
+                            setEditTemplateId(tpl.id);
+                            setEditName(tpl.name);
+                            setEditTags(tpl.tags.join(", "));
+                          }}
+                          title="Rename / retag"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                        <button
+                          className="rounded-full bg-destructive/90 p-1 text-white hover:bg-destructive"
+                          onClick={() => {
+                            if (!confirm(`Delete template "${tpl.name}"?`))
+                              return;
+                            deleteTemplate.mutate(
+                              { id: tpl.id },
+                              {
+                                onSuccess: invalidateBlockTemplates,
+                                onError: () =>
+                                  toast.error("Failed to delete template"),
+                              },
+                            );
+                          }}
+                          title="Delete template"
+                        >
+                          <Trash2Icon className="h-3 w-3" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeLibBrowser}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

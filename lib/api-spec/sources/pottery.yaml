@@ -394,7 +394,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  /pottery/items/bulk-reanalyze:
+  /pottery/bulk-reanalyze:
     post:
       operationId: bulkReanalyzePottery
       tags: [pottery]
@@ -707,14 +707,6 @@ components:
         newPassword:
           type: string
           minLength: 8
-    AuthUser:
-      type: object
-      required: [id, email]
-      properties:
-        id:
-          type: integer
-        email:
-          type: string
     ForgotPasswordInput:
       type: object
       required: [email]

@@ -216,7 +216,21 @@ export const elaineHistoryMessages = pgTable(
   ],
 ).enableRLS();
 
-export type ElaineHistoryMessageRow =
-  typeof elaineHistoryMessages.$inferSelect;
+export type ElaineHistoryMessageRow = typeof elaineHistoryMessages.$inferSelect;
 export type InsertElaineHistoryMessage =
   typeof elaineHistoryMessages.$inferInsert;
+
+// Daily morning brief — one personalised summary per user per UTC day.
+// Cached in this table; dismissed flag hides the card until regenerated.
+export const elaineDailyBriefs = pgTable("elaine_daily_briefs", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  content: text("content").notNull(),
+  generatedAt: timestamp("generated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  dismissed: boolean("dismissed").notNull().default(false),
+}).enableRLS();
+
+export type ElaineDailyBriefRow = typeof elaineDailyBriefs.$inferSelect;
+export type InsertElaineDailyBrief = typeof elaineDailyBriefs.$inferInsert;

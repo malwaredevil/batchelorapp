@@ -279,12 +279,11 @@ function EditableCategory({
             )}
             style={
               hasBg
-                ? {
+                ? ({
                     backgroundColor: cat.bgColor!,
                     color: cat.textColor ?? "#fff",
-                    // @ts-ignore
                     "--tw-ring-color": cat.bgColor,
-                  }
+                  } as React.CSSProperties)
                 : undefined
             }
           >

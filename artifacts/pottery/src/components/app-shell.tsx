@@ -1,7 +1,7 @@
 import { type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { LogOut, Settings, ChevronDown } from "lucide-react";
-import { AppSwitcher } from "@workspace/elaine-ui";
+import { AppSwitcher, SearchTrigger } from "@workspace/elaine-ui";
 import { InstallBanner } from "@workspace/web-core";
 import {
   useLogout,
@@ -112,6 +112,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </DropdownMenuContent>
               </DropdownMenu>
             </nav>
+
+            <SearchTrigger />
 
             <Button
               variant="ghost"

@@ -204,7 +204,16 @@ function PhoneCard() {
         Phone &amp; SMS
       </div>
       <p className="mb-4 text-sm text-muted-foreground">
-        Verify a phone number to receive Travels reminders by text.
+        Verify a phone number to receive Travels reminders by text. See our{" "}
+        <a
+          href={`${base}travels/privacy`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-foreground"
+        >
+          Privacy Policy
+        </a>{" "}
+        for details on how your phone number is used.
       </p>
 
       {user?.phoneVerified && user?.phoneNumber ? (
@@ -259,7 +268,17 @@ function PhoneCard() {
               I agree to receive SMS text messages from Batchelor App at the
               phone number above, including verification codes and Travels trip
               reminders. Message and data rates may apply. Message frequency
-              varies. Reply STOP to opt out at any time, or HELP for help.
+              varies. Reply STOP to opt out at any time, or HELP for help. See
+              our{" "}
+              <a
+                href={`${base}travels/privacy`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-foreground"
+              >
+                Privacy Policy
+              </a>
+              .
             </Label>
           </div>
           <Button

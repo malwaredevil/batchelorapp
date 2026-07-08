@@ -746,8 +746,28 @@ export function ElaineChatPanel({
                     onSelect={() => tts.setRate(r)}
                     className="justify-between"
                   >
-                    {r}x
-                    {tts.rate === r && <Check className="h-3.5 w-3.5" />}
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          tts.previewRate(r);
+                        }}
+                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+                        title="Preview this speed"
+                      >
+                        {tts.previewingRate === r ? (
+                          <Square className="h-3 w-3" />
+                        ) : (
+                          <Play className="h-3 w-3" />
+                        )}
+                      </button>
+                      {r}x
+                    </span>
+                    {tts.rate === r && (
+                      <Check className="h-3.5 w-3.5 shrink-0" />
+                    )}
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>

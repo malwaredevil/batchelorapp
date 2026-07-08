@@ -1,6 +1,44 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Search, Clock, MapPin, Package, Scissors, X } from "lucide-react";
 
+const OPEN_EVENT = "batchelor:open-command-palette";
+
+/**
+ * Opens the CommandPalette from anywhere in the app (e.g. a nav bar search
+ * button) without needing shared state — CommandPalette listens for this
+ * event globally.
+ */
+export function openCommandPalette() {
+  window.dispatchEvent(new Event(OPEN_EVENT));
+}
+
+/**
+ * Small nav-bar affordance that makes the command palette discoverable.
+ * Shows a "Search... ⌘K" pill on desktop and a bare search icon on mobile.
+ */
+export function SearchTrigger({ className }: { className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={openCommandPalette}
+      aria-label="Search"
+      title="Search"
+      className={
+        className ??
+        "flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      }
+    >
+      <Search className="h-4 w-4 shrink-0" />
+      <span className="hidden items-center gap-1 sm:inline-flex">
+        Search
+        <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] leading-none">
+          ⌘K
+        </kbd>
+      </span>
+    </button>
+  );
+}
+
 interface SearchResult {
   id: number;
   title: string;
@@ -117,6 +155,15 @@ export function CommandPalette() {
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  // Allow opening from outside (e.g. a nav bar search button) via openCommandPalette()
+  useEffect(() => {
+    function onOpenRequest() {
+      openPalette();
+    }
+    window.addEventListener(OPEN_EVENT, onOpenRequest);
+    return () => window.removeEventListener(OPEN_EVENT, onOpenRequest);
+  }, [openPalette]);
 
   // Focus input on open
   useEffect(() => {

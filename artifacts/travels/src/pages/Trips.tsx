@@ -5,7 +5,9 @@ import {
   useCreateTrip,
   useUpdateTrip,
   useCreateReminder,
+  useGetTrip,
   getListTripsQueryKey,
+  getGetTripQueryKey,
   getGetTravelsStatsQueryKey,
   getTripPhotoImageUrl,
   type TripStatus,
@@ -33,6 +35,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   MapPin,
   Plus,
@@ -42,6 +45,7 @@ import {
   X,
   Sparkles,
   Loader2,
+  CalendarCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { MagnetCheckDialog } from "@/components/MagnetCheckDialog";
@@ -51,6 +55,273 @@ import { usePageAssistantContext } from "@/lib/assistant-context";
 // AI Trip Planner dialog — streaming SSE response from POST /travels/trips/plan
 // ---------------------------------------------------------------------------
 type PlannerPhase = "idle" | "streaming" | "done" | "error";
+
+type ItineraryActivity = {
+  time?: string;
+  name?: string;
+  description?: string;
+  proximity?: string;
+  tip?: string;
+  status?: "tentative" | "confirmed";
+};
+
+type ItineraryDay = {
+  date?: string;
+  title?: string;
+  activities?: ItineraryActivity[];
+};
+
+type Itinerary = { days: ItineraryDay[] };
+
+function parseItinerary(value: unknown): Itinerary | null {
+  if (!value || typeof value !== "object") return null;
+  const days = (value as Record<string, unknown>)["days"];
+  if (!Array.isArray(days)) return null;
+  return { days: days as ItineraryDay[] };
+}
+
+// ---------------------------------------------------------------------------
+// Itinerary merge/diff dialog — lets a user apply an AI-generated itinerary
+// onto an existing trip without silently clobbering manually-edited days.
+// ---------------------------------------------------------------------------
+type MergeMode = "merge" | "replace";
+
+function ItineraryMergeDialog({
+  open,
+  onOpenChange,
+  targetTripId,
+  targetTripTitle,
+  newItinerary,
+  onApplied,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  targetTripId: number | null;
+  targetTripTitle: string;
+  newItinerary: Itinerary | null;
+  onApplied: () => void;
+}) {
+  const updateTrip = useUpdateTrip();
+  const {
+    data: targetTrip,
+    isLoading: isTargetLoading,
+    isError: isTargetError,
+    isSuccess: isTargetLoaded,
+  } = useGetTrip(targetTripId ?? 0, {
+    query: {
+      enabled: open && !!targetTripId,
+      queryKey: getGetTripQueryKey(targetTripId ?? 0),
+    },
+  });
+  const existingItinerary = parseItinerary(
+    (targetTrip as { itinerary?: unknown } | undefined)?.itinerary,
+  );
+  // Until we've confirmed the target trip's current itinerary, we must not
+  // let "Apply" run — otherwise a not-yet-loaded existingItinerary (null)
+  // looks identical to "trip has no itinerary" and would silently fall into
+  // replace behavior, overwriting manually-edited days we haven't seen yet.
+  const canApply = !!targetTripId && isTargetLoaded;
+
+  const [mode, setMode] = useState<MergeMode>("merge");
+  const [included, setIncluded] = useState<boolean[]>([]);
+
+  useEffect(() => {
+    if (open && newItinerary) {
+      setIncluded(newItinerary.days.map(() => true));
+    }
+  }, [open, newItinerary]);
+
+  useEffect(() => {
+    if (open && isTargetLoaded) {
+      setMode(existingItinerary?.days?.length ? "merge" : "replace");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isTargetLoaded, targetTrip]);
+
+  if (!newItinerary) return null;
+
+  const existingDates = new Set(
+    (existingItinerary?.days ?? [])
+      .map((d) => d.date)
+      .filter((d): d is string => !!d),
+  );
+
+  const handleApply = () => {
+    if (targetTripId == null || !canApply) return;
+    const selectedNewDays = newItinerary.days.filter((_, i) => included[i]);
+
+    let finalItinerary: Itinerary;
+    if (mode === "replace" || !existingItinerary?.days?.length) {
+      finalItinerary = { days: selectedNewDays };
+    } else {
+      const mergedDays = [...existingItinerary.days];
+      const appended: ItineraryDay[] = [];
+      for (const newDay of selectedNewDays) {
+        const idx = newDay.date
+          ? mergedDays.findIndex((d) => d.date === newDay.date)
+          : -1;
+        if (idx >= 0) {
+          mergedDays[idx] = newDay;
+        } else {
+          appended.push(newDay);
+        }
+      }
+      finalItinerary = { days: [...mergedDays, ...appended] };
+    }
+
+    updateTrip.mutate(
+      { id: targetTripId, body: { itinerary: finalItinerary } },
+      {
+        onSuccess: () => {
+          toast.success("Itinerary applied to trip");
+          onApplied();
+        },
+        onError: () => toast.error("Failed to apply itinerary"),
+      },
+    );
+  };
+
+  const selectedCount = included.filter(Boolean).length;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="font-serif text-xl flex items-center gap-2">
+            <CalendarCheck className="w-5 h-5 text-primary" />
+            Apply itinerary to &quot;{targetTripTitle}&quot;
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {isTargetLoading && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/40 rounded-lg p-3">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading this trip&apos;s current itinerary…
+            </div>
+          )}
+          {isTargetError && (
+            <p className="text-sm text-destructive">
+              Couldn&apos;t load this trip&apos;s current itinerary. Try
+              closing and reopening this dialog before applying, so we don't
+              risk overwriting anything.
+            </p>
+          )}
+
+          {!!existingItinerary?.days?.length && (
+            <div className="space-y-2">
+              <Label>
+                This trip already has {existingItinerary.days.length} day(s)
+                planned.
+              </Label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMode("merge")}
+                  className={`flex-1 rounded-lg border px-3 py-2 text-sm text-left transition-colors ${
+                    mode === "merge"
+                      ? "border-primary bg-primary/10 text-foreground"
+                      : "border-border text-muted-foreground hover:border-primary/50"
+                  }`}
+                >
+                  <span className="font-medium block">Merge</span>
+                  Matching dates get replaced; other existing days stay
+                  untouched.
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode("replace")}
+                  className={`flex-1 rounded-lg border px-3 py-2 text-sm text-left transition-colors ${
+                    mode === "replace"
+                      ? "border-destructive bg-destructive/10 text-foreground"
+                      : "border-border text-muted-foreground hover:border-destructive/50"
+                  }`}
+                >
+                  <span className="font-medium block">Replace all</span>
+                  Discards the existing itinerary entirely.
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label>
+              Days to apply ({selectedCount} of {newItinerary.days.length}{" "}
+              selected)
+            </Label>
+            <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+              {newItinerary.days.map((day, i) => {
+                const collides = !!day.date && existingDates.has(day.date);
+                return (
+                  <label
+                    key={i}
+                    className="flex items-start gap-2.5 rounded-lg border border-border/60 p-2.5 text-sm cursor-pointer hover:bg-muted/40"
+                  >
+                    <Checkbox
+                      checked={included[i] ?? true}
+                      onCheckedChange={(v) =>
+                        setIncluded((prev) => {
+                          const next = [...prev];
+                          next[i] = v === true;
+                          return next;
+                        })
+                      }
+                      className="mt-0.5"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-foreground">
+                          {day.title || `Day ${i + 1}`}
+                        </span>
+                        {day.date && (
+                          <span className="text-xs text-muted-foreground">
+                            {day.date}
+                          </span>
+                        )}
+                        {mode === "merge" && collides && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] border-amber-300 text-amber-700 bg-amber-50"
+                          >
+                            replaces existing day
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {day.activities?.length ?? 0} activit
+                        {day.activities?.length === 1 ? "y" : "ies"}
+                      </p>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleApply}
+            disabled={
+              updateTrip.isPending ||
+              selectedCount === 0 ||
+              !canApply ||
+              isTargetError
+            }
+          >
+            {(updateTrip.isPending || isTargetLoading) && (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            )}
+            Apply to trip
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function AiPlannerDialog({
   open,
@@ -64,6 +335,7 @@ function AiPlannerDialog({
   const createTrip = useCreateTrip();
   const updateTrip = useUpdateTrip();
   const createReminder = useCreateReminder();
+  const { data: existingTrips = [] } = useListTrips();
 
   const [prompt, setPrompt] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -74,6 +346,8 @@ function AiPlannerDialog({
   const [scaffold, setScaffold] = useState<Record<string, unknown> | null>(
     null,
   );
+  const [applyTarget, setApplyTarget] = useState<"new" | number>("new");
+  const [mergeOpen, setMergeOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -95,6 +369,8 @@ function AiPlannerDialog({
       setStartDate("");
       setEndDate("");
       setTravellerCount(2);
+      setApplyTarget("new");
+      setMergeOpen(false);
     }
   }, [open]);
 
@@ -367,6 +643,29 @@ function AiPlannerDialog({
                   )}
                 </div>
               )}
+              {!!scaffold?.["itinerary"] && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="ai-apply-target">Apply to</Label>
+                  <Select
+                    value={String(applyTarget)}
+                    onValueChange={(v) =>
+                      setApplyTarget(v === "new" ? "new" : Number(v))
+                    }
+                  >
+                    <SelectTrigger id="ai-apply-target">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="new">Create a new trip</SelectItem>
+                      {existingTrips.map((t) => (
+                        <SelectItem key={t.id} value={String(t.id)}>
+                          {t.title} — {t.destination}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -391,18 +690,52 @@ function AiPlannerDialog({
               <Button variant="outline" onClick={() => setPhase("idle")}>
                 Regenerate
               </Button>
-              <Button onClick={handleCreate} disabled={createTrip.isPending}>
-                {createTrip.isPending ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Plus className="w-4 h-4 mr-2" />
-                )}
-                Create trip
-              </Button>
+              {applyTarget === "new" ? (
+                <Button onClick={handleCreate} disabled={createTrip.isPending}>
+                  {createTrip.isPending ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Plus className="w-4 h-4 mr-2" />
+                  )}
+                  Create trip
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => setMergeOpen(true)}
+                  disabled={!scaffold?.["itinerary"]}
+                >
+                  <CalendarCheck className="w-4 h-4 mr-2" />
+                  Review &amp; apply
+                </Button>
+              )}
             </>
           )}
         </DialogFooter>
       </DialogContent>
+      <ItineraryMergeDialog
+        open={mergeOpen}
+        onOpenChange={setMergeOpen}
+        targetTripId={typeof applyTarget === "number" ? applyTarget : null}
+        targetTripTitle={
+          typeof applyTarget === "number"
+            ? (existingTrips.find((t) => t.id === applyTarget)?.title ??
+              "trip")
+            : ""
+        }
+        newItinerary={parseItinerary(scaffold?.["itinerary"])}
+        onApplied={() => {
+          qc.invalidateQueries({ queryKey: getListTripsQueryKey() });
+          qc.invalidateQueries({ queryKey: getGetTravelsStatsQueryKey() });
+          if (typeof applyTarget === "number") {
+            qc.invalidateQueries({ queryKey: getGetTripQueryKey(applyTarget) });
+          }
+          setMergeOpen(false);
+          onOpenChange(false);
+          if (typeof applyTarget === "number") {
+            navigate(`/trips/${applyTarget}`);
+          }
+        }}
+      />
     </Dialog>
   );
 }

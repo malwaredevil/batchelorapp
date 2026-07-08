@@ -7,6 +7,10 @@ const RATE_STORAGE_KEY = "elaine-tts-rate";
 const MIN_RATE = 0.5;
 const MAX_RATE = 2;
 const DEFAULT_RATE = 1;
+const PREVIEW_TEXT = "Hi, I'm Elaine.";
+
+/** Sentinel used as the `previewingVoiceURI` value while previewing the browser default voice (distinct from `null`, which means "no preview in flight"). */
+export const DEFAULT_VOICE_PREVIEW_KEY = "__default__";
 
 export interface TTSState {
   /** Whether the user has spoken replies turned on (persisted in localStorage). */
@@ -31,6 +35,18 @@ export interface TTSState {
   speak: (text: string) => void;
   /** Immediately stops any in-flight or queued speech. */
   stop: () => void;
+  /**
+   * The voice currently being previewed, or `null` if no preview is playing.
+   * Uses `DEFAULT_VOICE_PREVIEW_KEY` to represent the browser default voice.
+   */
+  previewingVoiceURI: string | null;
+  /**
+   * Speaks a short sample phrase using the given voice (or the browser
+   * default, when `voiceURI` is `null`) at the current rate — regardless of
+   * the `enabled` toggle, so users can preview before turning TTS on.
+   * Starting a new preview stops any in-flight one.
+   */
+  previewVoice: (voiceURI: string | null) => void;
 }
 
 function readStoredEnabled(): boolean {
@@ -85,6 +101,9 @@ export function useTTS(): TTSState {
     string | null
   >(readStoredVoiceURI);
   const [rate, setRateState] = useState<number>(readStoredRate);
+  const [previewingVoiceURI, setPreviewingVoiceURI] = useState<string | null>(
+    null,
+  );
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   // The voice list loads asynchronously in most browsers (fires
@@ -103,6 +122,7 @@ export function useTTS(): TTSState {
     window.speechSynthesis.cancel();
     utteranceRef.current = null;
     setIsSpeaking(false);
+    setPreviewingVoiceURI(null);
   }, [isSupported]);
 
   const toggle = useCallback(() => {
@@ -166,13 +186,51 @@ export function useTTS(): TTSState {
           .find((v) => v.voiceURI === selectedVoiceURI);
         if (match) utterance.voice = match;
       }
-      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onstart = () => {
+        setIsSpeaking(true);
+        setPreviewingVoiceURI(null);
+      };
       utterance.onend = () => setIsSpeaking(false);
       utterance.onerror = () => setIsSpeaking(false);
       utteranceRef.current = utterance;
       window.speechSynthesis.speak(utterance);
     },
     [isSupported, enabled, rate, selectedVoiceURI],
+  );
+
+  const previewVoice = useCallback(
+    (voiceURI: string | null) => {
+      if (!isSupported) return;
+
+      // Starting a new preview stops any in-flight speech (a reply being
+      // read aloud, or a previous preview).
+      window.speechSynthesis.cancel();
+
+      const previewKey = voiceURI ?? DEFAULT_VOICE_PREVIEW_KEY;
+      const utterance = new SpeechSynthesisUtterance(PREVIEW_TEXT);
+      utterance.rate = rate;
+      if (voiceURI) {
+        const match = window.speechSynthesis
+          .getVoices()
+          .find((v) => v.voiceURI === voiceURI);
+        if (match) utterance.voice = match;
+      }
+      utterance.onstart = () => {
+        setPreviewingVoiceURI(previewKey);
+        setIsSpeaking(true);
+      };
+      utterance.onend = () => {
+        setPreviewingVoiceURI(null);
+        setIsSpeaking(false);
+      };
+      utterance.onerror = () => {
+        setPreviewingVoiceURI(null);
+        setIsSpeaking(false);
+      };
+      utteranceRef.current = utterance;
+      window.speechSynthesis.speak(utterance);
+    },
+    [isSupported, rate],
   );
 
   // Stop and clean up if the component unmounts while speaking.
@@ -194,5 +252,7 @@ export function useTTS(): TTSState {
     setRate,
     speak,
     stop,
+    previewingVoiceURI,
+    previewVoice,
   };
 }

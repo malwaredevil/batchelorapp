@@ -102,7 +102,12 @@ function ItineraryMergeDialog({
   onApplied: () => void;
 }) {
   const updateTrip = useUpdateTrip();
-  const { data: targetTrip } = useGetTrip(targetTripId ?? 0, {
+  const {
+    data: targetTrip,
+    isLoading: isTargetLoading,
+    isError: isTargetError,
+    isSuccess: isTargetLoaded,
+  } = useGetTrip(targetTripId ?? 0, {
     query: {
       enabled: open && !!targetTripId,
       queryKey: getGetTripQueryKey(targetTripId ?? 0),
@@ -111,6 +116,11 @@ function ItineraryMergeDialog({
   const existingItinerary = parseItinerary(
     (targetTrip as { itinerary?: unknown } | undefined)?.itinerary,
   );
+  // Until we've confirmed the target trip's current itinerary, we must not
+  // let "Apply" run — otherwise a not-yet-loaded existingItinerary (null)
+  // looks identical to "trip has no itinerary" and would silently fall into
+  // replace behavior, overwriting manually-edited days we haven't seen yet.
+  const canApply = !!targetTripId && isTargetLoaded;
 
   const [mode, setMode] = useState<MergeMode>("merge");
   const [included, setIncluded] = useState<boolean[]>([]);
@@ -122,11 +132,11 @@ function ItineraryMergeDialog({
   }, [open, newItinerary]);
 
   useEffect(() => {
-    if (open) {
+    if (open && isTargetLoaded) {
       setMode(existingItinerary?.days?.length ? "merge" : "replace");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, targetTrip]);
+  }, [open, isTargetLoaded, targetTrip]);
 
   if (!newItinerary) return null;
 
@@ -137,7 +147,7 @@ function ItineraryMergeDialog({
   );
 
   const handleApply = () => {
-    if (targetTripId == null) return;
+    if (targetTripId == null || !canApply) return;
     const selectedNewDays = newItinerary.days.filter((_, i) => included[i]);
 
     let finalItinerary: Itinerary;
@@ -184,6 +194,20 @@ function ItineraryMergeDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {isTargetLoading && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/40 rounded-lg p-3">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading this trip&apos;s current itinerary…
+            </div>
+          )}
+          {isTargetError && (
+            <p className="text-sm text-destructive">
+              Couldn&apos;t load this trip&apos;s current itinerary. Try
+              closing and reopening this dialog before applying, so we don't
+              risk overwriting anything.
+            </p>
+          )}
+
           {!!existingItinerary?.days?.length && (
             <div className="space-y-2">
               <Label>
@@ -281,9 +305,14 @@ function ItineraryMergeDialog({
           </Button>
           <Button
             onClick={handleApply}
-            disabled={updateTrip.isPending || selectedCount === 0}
+            disabled={
+              updateTrip.isPending ||
+              selectedCount === 0 ||
+              !canApply ||
+              isTargetError
+            }
           >
-            {updateTrip.isPending && (
+            {(updateTrip.isPending || isTargetLoading) && (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
             )}
             Apply to trip

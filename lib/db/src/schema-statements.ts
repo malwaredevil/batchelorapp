@@ -195,12 +195,14 @@ export const STATEMENTS: string[] = [
     notes            TEXT,
     image_path       TEXT,
     acquired_at      DATE,
+    dominant_colors  TEXT[] NOT NULL DEFAULT '{}',
     locked_fields    TEXT[] NOT NULL DEFAULT '{}',
     embedding        vector(1536),
     created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
   `ALTER TABLE quilting_patterns ENABLE ROW LEVEL SECURITY`,
   `ALTER TABLE quilting_patterns ADD COLUMN IF NOT EXISTS locked_fields TEXT[] NOT NULL DEFAULT '{}'`,
+  `ALTER TABLE quilting_patterns ADD COLUMN IF NOT EXISTS dominant_colors TEXT[] NOT NULL DEFAULT '{}'`,
   `CREATE INDEX IF NOT EXISTS quilting_patterns_embedding_idx
      ON quilting_patterns USING hnsw (embedding vector_cosine_ops)`,
 
@@ -213,11 +215,13 @@ export const STATEMENTS: string[] = [
     recipient      TEXT,
     notes          TEXT,
     image_path     TEXT NOT NULL,
+    dominant_colors TEXT[] NOT NULL DEFAULT '{}',
     locked_fields  TEXT[] NOT NULL DEFAULT '{}',
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
   `ALTER TABLE quilting_finished_quilts ENABLE ROW LEVEL SECURITY`,
   `ALTER TABLE quilting_finished_quilts ADD COLUMN IF NOT EXISTS locked_fields TEXT[] NOT NULL DEFAULT '{}'`,
+  `ALTER TABLE quilting_finished_quilts ADD COLUMN IF NOT EXISTS dominant_colors TEXT[] NOT NULL DEFAULT '{}'`,
 
   `CREATE TABLE IF NOT EXISTS quilting_fabric_links (
     quilt_id  INTEGER NOT NULL REFERENCES quilting_finished_quilts(id) ON DELETE CASCADE,

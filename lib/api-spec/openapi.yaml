@@ -2023,6 +2023,64 @@ paths:
           description: No image supplied or unsupported format
         "422":
           description: Could not extract a colour palette from the image
+  /quilting/tools/palette-match-patterns:
+    post:
+      operationId: paletteMatchPatterns
+      tags:
+        - tools
+      summary: Extract dominant colours from an image and find matching patterns
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - image
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Extracted palette and matching patterns
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuiltingPatternPaletteMatchResponse"
+        "400":
+          description: No image supplied or unsupported format
+        "422":
+          description: Could not extract a colour palette from the image
+  /quilting/tools/palette-match-quilts:
+    post:
+      operationId: paletteMatchQuilts
+      tags:
+        - tools
+      summary: Extract dominant colours from an image and find matching quilts
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - image
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Extracted palette and matching quilts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuiltingQuiltPaletteMatchResponse"
+        "400":
+          description: No image supplied or unsupported format
+        "422":
+          description: Could not extract a colour palette from the image
   /quilting/stats:
     get:
       operationId: getStats
@@ -3412,6 +3470,7 @@ components:
       required:
         - id
         - name
+        - dominantColors
         - lockedFields
         - categories
         - images
@@ -3443,6 +3502,10 @@ components:
         acquiredAt:
           type: string
           nullable: true
+        dominantColors:
+          type: array
+          items:
+            type: string
         lockedFields:
           type: array
           items:
@@ -3551,6 +3614,7 @@ components:
       required:
         - id
         - name
+        - dominantColors
         - lockedFields
         - categories
         - images
@@ -3579,6 +3643,10 @@ components:
         notes:
           type: string
           nullable: true
+        dominantColors:
+          type: array
+          items:
+            type: string
         lockedFields:
           type: array
           items:
@@ -3841,6 +3909,70 @@ components:
           items:
             $ref: "#/components/schemas/QuiltingPaletteMatchResult"
           description: Top-10 stash fabrics sorted by colour similarity
+    QuiltingPatternPaletteMatchResult:
+      type: object
+      required:
+        - pattern
+        - score
+        - matchedColors
+      properties:
+        pattern:
+          $ref: "#/components/schemas/QuiltingQuiltPattern"
+        score:
+          type: number
+          description: Jaccard similarity score (0–1)
+        matchedColors:
+          type: array
+          items:
+            type: string
+    QuiltingPatternPaletteMatchResponse:
+      type: object
+      required:
+        - extractedColors
+        - matches
+      properties:
+        extractedColors:
+          type: array
+          items:
+            type: string
+          description: 5–7 CSS colour names extracted from the image
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuiltingPatternPaletteMatchResult"
+          description: Top-10 patterns sorted by colour similarity
+    QuiltingQuiltPaletteMatchResult:
+      type: object
+      required:
+        - quilt
+        - score
+        - matchedColors
+      properties:
+        quilt:
+          $ref: "#/components/schemas/QuiltingFinishedQuilt"
+        score:
+          type: number
+          description: Jaccard similarity score (0–1)
+        matchedColors:
+          type: array
+          items:
+            type: string
+    QuiltingQuiltPaletteMatchResponse:
+      type: object
+      required:
+        - extractedColors
+        - matches
+      properties:
+        extractedColors:
+          type: array
+          items:
+            type: string
+          description: 5–7 CSS colour names extracted from the image
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuiltingQuiltPaletteMatchResult"
+          description: Top-10 quilts sorted by colour similarity
     QuiltingCollectionStats:
       type: object
       required:

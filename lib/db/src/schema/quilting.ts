@@ -110,6 +110,10 @@ export const quiltPatterns = pgTable(
     notes: text("notes"),
     imagePath: text("image_path"),
     acquiredAt: date("acquired_at"),
+    dominantColors: text("dominant_colors")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     lockedFields: text("locked_fields")
       .array()
       .notNull()
@@ -154,6 +158,10 @@ export const finishedQuilts = pgTable("quilting_finished_quilts", {
   recipient: text("recipient"),
   notes: text("notes"),
   imagePath: text("image_path").notNull(),
+  dominantColors: text("dominant_colors")
+    .array()
+    .notNull()
+    .default(sql`'{}'::text[]`),
   lockedFields: text("locked_fields")
     .array()
     .notNull()

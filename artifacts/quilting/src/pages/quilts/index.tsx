@@ -17,6 +17,7 @@ import {
   Download,
   ZoomIn,
   Tag,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +30,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
-import { getCategoryPalette } from "@workspace/web-core";
+import { getCategoryPalette, colorToHex } from "@workspace/web-core";
 import { toast } from "sonner";
 import {
   useListQuilts,
@@ -46,6 +47,7 @@ import type { QuiltingCategory } from "@workspace/api-client-react";
 import { downloadCollectionImage } from "@/lib/svg-export";
 import { PreviewZoomModal } from "@/components/PreviewZoomModal";
 import { CategoryEditDialog } from "@/components/CategoryEditDialog";
+import { PaletteMatchModal } from "@/components/PaletteMatchModal";
 import { cn } from "@/lib/utils";
 
 type SortOption = "newest" | "oldest" | "az" | "za";
@@ -193,17 +195,17 @@ function QuiltCard({
             </div>
             {(quilt.dominantColors ?? []).length > 0 && (
               <div className="mt-1.5 flex flex-wrap gap-1">
-                {(quilt.dominantColors ?? []).map((hex) => (
+                {(quilt.dominantColors ?? []).map((c) => (
                   <button
-                    key={hex}
-                    title={hex}
+                    key={c}
+                    title={c}
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      onFilterByColor?.(hex);
+                      onFilterByColor?.(c);
                     }}
                     className="h-4 w-4 rounded-full border border-black/10 transition-transform hover:scale-110"
-                    style={{ backgroundColor: hex }}
+                    style={{ backgroundColor: colorToHex(c) }}
                   />
                 ))}
               </div>
@@ -290,6 +292,7 @@ export default function Quilts() {
   const [sort, setSort] = useState<SortOption>("newest");
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [paletteMatchOpen, setPaletteMatchOpen] = useState(false);
   const queryClient = useQueryClient();
   const { data: quilts, isLoading, isError } = useListQuilts();
   const [categoryEditItem, setCategoryEditItem] = useState<QuiltSummary | null>(
@@ -517,6 +520,15 @@ export default function Quilts() {
               {isBulkMode ? "Done" : "Select"}
             </Button>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPaletteMatchOpen(true)}
+            title="Find quilts that match a photo's colour palette"
+          >
+            <Sparkles className="mr-0 sm:mr-2 h-4 w-4" />
+            <span className="hidden sm:inline">Match from photo</span>
+          </Button>
           <Button asChild>
             <Link href="/quilts/add">
               <PlusCircle className="mr-0 sm:mr-2 h-4 w-4" />
@@ -616,24 +628,24 @@ export default function Quilts() {
 
           {usedColors.length > 0 && (
             <div className="flex flex-wrap gap-2 rounded-xl border border-card-border bg-card px-3 py-2.5">
-              {usedColors.map((hex) => (
+              {usedColors.map((c) => (
                 <button
-                  key={hex}
-                  title={hex}
+                  key={c}
+                  title={c}
                   onClick={() =>
                     setColorFilter((prev) =>
-                      prev.includes(hex)
-                        ? prev.filter((c) => c !== hex)
-                        : [...prev, hex],
+                      prev.includes(c)
+                        ? prev.filter((x) => x !== c)
+                        : [...prev, c],
                     )
                   }
                   className={cn(
                     "h-7 w-7 rounded-full border-2 transition-transform hover:scale-110",
-                    colorFilter.includes(hex)
+                    colorFilter.includes(c)
                       ? "border-foreground scale-110"
                       : "border-transparent",
                   )}
-                  style={{ backgroundColor: hex }}
+                  style={{ backgroundColor: colorToHex(c) }}
                 />
               ))}
               {colorFilter.length > 0 && (
@@ -802,6 +814,11 @@ export default function Quilts() {
           }
         }}
         isSaving={updateQuiltCategories.isPending}
+      />
+      <PaletteMatchModal
+        entity="quilt"
+        open={paletteMatchOpen}
+        onClose={() => setPaletteMatchOpen(false)}
       />
     </div>
   );

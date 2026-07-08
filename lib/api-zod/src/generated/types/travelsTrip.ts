@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { TravelsTripStatus } from './travelsTripStatus';
+import type { TravelsTripTransportTo } from './travelsTripTransportTo';
 
 export interface TravelsTrip {
   id: number;
@@ -17,11 +18,17 @@ export interface TravelsTrip {
   status: TravelsTripStatus;
   startDate?: Date | null;
   endDate?: Date | null;
-  transportTo?: string | null;
+  transportTo?: TravelsTripTransportTo;
+  transportDetails?: string | null;
   hasRentalCar: boolean;
   accommodationName?: string | null;
   accommodationArea?: string | null;
   notes?: string | null;
+  funFact?: string | null;
   travellerCount: number;
+  travelers?: string[] | null;
+  theOneThing?: string[] | null;
+  iconPhotoId?: number | null;
+  shareToken?: string | null;
   createdAt: Date;
 }

@@ -1,6 +1,9 @@
 import { useEffect, useRef } from "react";
 import { useLocation } from "wouter";
-import type { Trip, TripStatus } from "@workspace/api-client-react";
+import type {
+  TravelsTrip as Trip,
+  TripStatus,
+} from "@workspace/api-client-react";
 
 // ─── Scale ───────────────────────────────────────────────────────────────────
 const TIMELINE_START = new Date("2024-01-01");

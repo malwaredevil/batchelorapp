@@ -1121,6 +1121,15 @@ export const TravelsTripStatus = {
   completed: 'completed',
 } as const;
 
+export type TravelsTripTransportTo = typeof TravelsTripTransportTo[keyof typeof TravelsTripTransportTo] | null;
+
+
+export const TravelsTripTransportTo = {
+  drove: 'drove',
+  flew: 'flew',
+  train: 'train',
+} as const;
+
 export interface TravelsTrip {
   id: number;
   userId: number;
@@ -1131,30 +1140,42 @@ export interface TravelsTrip {
   status: TravelsTripStatus;
   startDate?: string | null;
   endDate?: string | null;
-  transportTo?: string | null;
+  transportTo?: TravelsTripTransportTo;
+  transportDetails?: string | null;
   hasRentalCar: boolean;
   accommodationName?: string | null;
   accommodationArea?: string | null;
   notes?: string | null;
+  funFact?: string | null;
   travellerCount: number;
+  travelers?: string[] | null;
+  theOneThing?: string[] | null;
+  iconPhotoId?: number | null;
+  shareToken?: string | null;
   createdAt: string;
 }
+
+export type TravelsTripDocumentExtractedData = { [key: string]: unknown } | null;
 
 export interface TravelsTripDocument {
   id: number;
   tripId: number;
   userId: number;
   storagePath: string;
+  title?: string | null;
   documentType?: string | null;
   originalFilename?: string | null;
-  extractedData?: unknown | null;
+  extractedData?: TravelsTripDocumentExtractedData;
   lockedFields?: string[];
+  gmailMessageId?: string | null;
+  iconOverride?: string | null;
   createdAt: string;
 }
 
 export type TravelsTripDetail = TravelsTrip & ({
   itinerary?: unknown | null;
   packingList?: unknown | null;
+  todoList?: unknown | null;
   documents?: TravelsTripDocument[];
 });
 
@@ -1187,11 +1208,15 @@ export interface TravelsCreateTripBody {
   startDate?: string;
   endDate?: string;
   transportTo?: TravelsCreateTripBodyTransportTo;
+  transportDetails?: string;
   hasRentalCar?: boolean;
   accommodationName?: string;
   accommodationArea?: string;
   notes?: string;
+  funFact?: string;
   travellerCount?: number;
+  travelers?: string[];
+  theOneThing?: string[];
 }
 
 export type TravelsUpdateTripBodyStatus = typeof TravelsUpdateTripBodyStatus[keyof typeof TravelsUpdateTripBodyStatus];
@@ -1223,13 +1248,18 @@ export interface TravelsUpdateTripBody {
   startDate?: string;
   endDate?: string;
   transportTo?: TravelsUpdateTripBodyTransportTo;
+  transportDetails?: string;
   hasRentalCar?: boolean;
   accommodationName?: string;
   accommodationArea?: string;
   notes?: string;
+  funFact?: string;
   travellerCount?: number;
+  travelers?: string[];
+  theOneThing?: string[];
   itinerary?: unknown | null;
   packingList?: unknown | null;
+  todoList?: unknown | null;
 }
 
 export type TravelsListTripsResponse = TravelsTrip[];
@@ -1276,7 +1306,7 @@ export interface TravelsTravelsStatsResponse {
   completedTrips: number;
   upcomingTrips: number;
   uniqueDestinations: number;
-  nextTrip: unknown | null;
+  nextTrip: TravelsTrip | null;
 }
 
 export interface TravelsPackingItem {
@@ -1379,6 +1409,9 @@ export type UpdateTripDocumentBodyExtractedData = { [key: string]: unknown };
 export type UpdateTripDocumentBody = {
   extractedData?: UpdateTripDocumentBodyExtractedData;
   lockedFields?: string[];
+  title?: string | null;
+  documentType?: string | null;
+  iconOverride?: string | null;
 };
 
 export type ReorderPackingItems200 = {

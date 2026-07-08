@@ -1,10 +1,15 @@
 ---
-name: travels.ts vs orval-generated hooks disambiguation guard
-description: why lib/api-client-react/src/travels.ts still shadows orval-generated travels hooks, and how the drift guard works
+name: travels.ts trips/packing hooks fully migrated to orval-generated hooks
+description: history of the travels.ts vs orval-generated hooks duplication and how it was fully resolved
 ---
 
-`lib/api-client-react/src/travels.ts` is a hand-maintained parallel implementation of ~40 travels hooks/functions (trips, packing) that orval also now generates from the OpenAPI spec. A full migration to the generated hooks was evaluated and rejected: the generated mutation hooks use `{data}` / `{id, data}` payload shapes (orval convention) vs `travels.ts`'s positional args, and generated body/response type names differ (`TravelsCreateTripBody` vs `CreateTripBody`, with some fields required in one and optional in the other) — migrating every consumer call site was judged higher-risk than the drift it would fix.
+`lib/api-client-react/src/travels.ts` used to hand-maintain ~42 travels hooks/functions (trips, packing) that orval also generated from the OpenAPI spec, with `index.ts` shadowing the generated versions and a guard script (`check-travels-overlap`) failing CI if the shadow list drifted. This has since been **fully migrated**: the duplicated hooks were deleted from `travels.ts`, the shadowing re-export block was removed from `index.ts`, the guard script was deleted, and every consumer was moved onto the orval-generated `Travels*` hooks/types.
 
-**Decision:** `travels.ts` stays authoritative for the colliding names; `index.ts` explicitly re-exports the `travels.ts` versions to win over the ambiguous `export *`. A guard script (`pnpm --filter @workspace/scripts run check-travels-overlap`, wired into root `typecheck`/CI) fails the build if the actual name-overlap between `travels.ts` and the generated files ever drifts out of sync with `index.ts`'s disambiguation list — this is what prevents the "spec changes silently have no effect" bug class from recurring silently.
+**Key adjustments made during the migration:**
+- Orval mutation hooks use `{data}` (create) / `{id, data}` (update) / `{id, docId, data}` (nested resource update) payload shapes, vs. `travels.ts`'s old positional-args / `{tripId, body}` shapes — every consumer call site needed reshaping, not just the import path.
+- Generated type names differ from the old local ones (e.g. `TravelsCreateTripBody` vs `CreateTripBody`, `TravelsTrip`/`TravelsTripDetail` vs `Trip`/`TripDetail`) — consumers alias on import (`type TravelsTrip as Trip`).
+- The migration surfaced real OpenAPI spec drift vs. the actual server route handlers (missing fields like `todoList`, `iconOverride`, document `title`/`documentType`, `TravelsStatsResponse.nextTrip`). When a generated type is missing a field a consumer needs, check the real Express route handler's accepted body fields before deciding whether it's a spec bug or an intentionally absent field.
 
-**How to apply:** If a *new* travels endpoint is added to the OpenAPI spec, wire consumers directly to the generated hook rather than hand-writing a `travels.ts` duplicate — only add to `travels.ts` if there's a strong reason (and then add the name to `index.ts`'s disambiguation block, or the guard script will fail CI).
+`travels.ts` now only retains hooks that were never part of the overlap: wishlist hooks and `useGetTripDocumentWalletPass`.
+
+**How to apply:** If a new travels endpoint is added to the spec, wire consumers directly to the generated hook — there is no more hand-written parallel implementation to keep in sync.

@@ -61,7 +61,7 @@ import {
   getGetGmailMessageQueryKey,
   type GmailScanDecision,
   type GmailInboxMessage,
-  type Trip,
+  type TravelsTrip as Trip,
 } from "@workspace/api-client-react";
 import { AttachmentPickerDialog } from "@/components/AttachmentPickerDialog";
 import { usePageAssistantContext } from "@/lib/assistant-context";

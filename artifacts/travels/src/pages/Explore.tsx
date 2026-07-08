@@ -69,11 +69,13 @@ function ExploreResult({ result }: { result: ExploreDestinationResult }) {
   const handleAddToWishlist = () => {
     createTrip.mutate(
       {
-        title: `Trip to ${result.destination}`,
-        destination: result.destination,
-        lat: result.lat,
-        lng: result.lng,
-        status: "wishlist",
+        data: {
+          title: `Trip to ${result.destination}`,
+          destination: result.destination,
+          lat: result.lat,
+          lng: result.lng,
+          status: "wishlist",
+        },
       },
       {
         onSuccess: (trip) => {
@@ -251,7 +253,7 @@ export default function Explore() {
     e.preventDefault();
     if (!destination.trim()) return;
     explore.mutate(
-      { destination: destination.trim() },
+      { data: { destination: destination.trim() } },
       {
         onError: () => toast.error("Failed to explore destination. Try again."),
       },

@@ -315,21 +315,23 @@ export default function GoogleApisDemo() {
 
   const handleCreateDemoTrip = () => {
     createTrip.mutate({
-      title: DEMO_TRIP_TITLE,
-      destination: DEMO_DESTINATION,
-      lat: DEMO_LAT,
-      lng: DEMO_LNG,
-      status: "planning",
-      startDate: "2026-10-12",
-      endDate: "2026-10-19",
-      transportTo: "flew",
-      accommodationName: "Sample Hotel (fake data)",
-      accommodationArea: "Le Marais",
-      notes:
-        "This trip was created for the Google APIs demo page — safe to delete. It uses fake data pinned at the Eiffel Tower so every Google Maps Platform integration in this app has real coordinates to demonstrate against.",
-      funFact:
-        "The Eiffel Tower was originally intended as a temporary structure for the 1889 World's Fair.",
-      travellerCount: 2,
+      data: {
+        title: DEMO_TRIP_TITLE,
+        destination: DEMO_DESTINATION,
+        lat: DEMO_LAT,
+        lng: DEMO_LNG,
+        status: "planning",
+        startDate: "2026-10-12",
+        endDate: "2026-10-19",
+        transportTo: "flew",
+        accommodationName: "Sample Hotel (fake data)",
+        accommodationArea: "Le Marais",
+        notes:
+          "This trip was created for the Google APIs demo page — safe to delete. It uses fake data pinned at the Eiffel Tower so every Google Maps Platform integration in this app has real coordinates to demonstrate against.",
+        funFact:
+          "The Eiffel Tower was originally intended as a temporary structure for the 1889 World's Fair.",
+        travellerCount: 2,
+      },
     });
   };
 

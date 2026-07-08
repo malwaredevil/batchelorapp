@@ -5,7 +5,7 @@ import {
   useListTrips,
   useListWishlist,
   useUpdateWishlistItem,
-  type Trip,
+  type TravelsTrip as Trip,
   type TripStatus,
   type WishlistItem,
   getListWishlistQueryKey,

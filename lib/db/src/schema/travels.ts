@@ -647,14 +647,14 @@ export const travelsPackingTemplates = pgTable(
     id: serial("id").primaryKey(),
     userId: integer("user_id").notNull(),
     name: text("name").notNull(),
-    items: jsonb("items").notNull().default(sql`'[]'::jsonb`),
+    items: jsonb("items")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
   },
-  (table) => [
-    index("travels_packing_templates_user_id_idx").on(table.userId),
-  ],
+  (table) => [index("travels_packing_templates_user_id_idx").on(table.userId)],
 ).enableRLS();
 
 export type TravelsPackingTemplateRow =

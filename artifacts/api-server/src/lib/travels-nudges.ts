@@ -132,8 +132,8 @@ export async function computeAndStoreNudges(): Promise<void> {
 
     for (const candidate of candidates) {
       await client.query(
-        `INSERT INTO travels_assistant_nudges (user_id, trip_id, nudge_key, message)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO elaine_nudges (user_id, source_app, source_id, nudge_key, message)
+         VALUES ($1, 'travels', $2, $3, $4)
          ON CONFLICT (user_id, nudge_key) DO NOTHING`,
         [
           candidate.userId,

@@ -17,6 +17,7 @@ import {
   ElaineAvatar,
   ElaineWordmark,
   useTheme,
+  SearchTrigger,
 } from "@workspace/elaine-ui";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -87,6 +88,8 @@ export function Header() {
               <span className="hidden md:inline">Settings</span>
             </Link>
           </nav>
+
+          <SearchTrigger />
 
           <Button
             variant="ghost"

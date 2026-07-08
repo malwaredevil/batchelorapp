@@ -1,23 +1,37 @@
-import { useMemo, useState, useCallback } from "react";
+import {
+  useMemo,
+  useState,
+  useCallback,
+  useDeferredValue,
+  useRef,
+  useEffect,
+} from "react";
 import {
   ExternalLink,
   ImageIcon,
   Link2,
-  Plus,
-  Search,
   MessageSquare,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  Sun,
   Trash2,
+  X,
 } from "lucide-react";
 import { getTripPhotoImageUrl } from "@workspace/api-client-react";
 import {
-  useListElaineConversations,
+  getElaineDailyBriefQueryKey,
+  getListElaineConversationsQueryKey,
   useDeleteElaineConversation,
+  useDismissElaineDailyBrief,
+  useGetElaineDailyBrief,
+  useListElaineConversations,
+  useRegenerateElaineDailyBrief,
+  useRenameElaineConversation,
   type ConversationMessage,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  getListElaineConversationsQueryKey,
-} from "@workspace/api-client-react";
 import { useFullChat } from "@/lib/useFullChat";
 import { FullChatPanel } from "@/components/FullChatPanel";
 import { Button } from "@/components/ui/button";
@@ -92,29 +106,85 @@ export default function Chat() {
   const qc = useQueryClient();
 
   const [searchQuery, setSearchQuery] = useState("");
+  // useDeferredValue delays the query sent to the server by one render cycle,
+  // preventing a fetch on every keystroke.
+  const deferredSearch = useDeferredValue(searchQuery.trim() || undefined);
   const [loadingConvId, setLoadingConvId] = useState<number | null>(null);
+  const [editingConvId, setEditingConvId] = useState<number | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   const { data: conversations = [] } = useListElaineConversations({
+    q: deferredSearch,
     query: {
-      queryKey: getListElaineConversationsQueryKey(),
+      queryKey: getListElaineConversationsQueryKey(deferredSearch),
       refetchOnWindowFocus: false,
     },
   });
   const deleteConversation = useDeleteElaineConversation({
     mutation: {
       onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getListElaineConversationsQueryKey() });
+        // Invalidate both the unfiltered list and any active search result.
+        void qc.invalidateQueries({
+          queryKey: getListElaineConversationsQueryKey(),
+        });
+      },
+    },
+  });
+  const renameConversation = useRenameElaineConversation({
+    mutation: {
+      onSuccess: () => {
+        void qc.invalidateQueries({
+          queryKey: getListElaineConversationsQueryKey(),
+        });
       },
     },
   });
 
-  const filteredConversations = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
-    if (!q) return conversations;
-    return conversations.filter((c) =>
-      c.title.toLowerCase().includes(q),
-    );
-  }, [conversations, searchQuery]);
+  useEffect(() => {
+    if (editingConvId !== null) {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    }
+  }, [editingConvId]);
+
+  const startEditing = useCallback((id: number, currentTitle: string) => {
+    setEditingConvId(id);
+    setEditingTitle(currentTitle);
+  }, []);
+
+  const cancelEditing = useCallback(() => {
+    setEditingConvId(null);
+    setEditingTitle("");
+  }, []);
+
+  const commitEditing = useCallback(
+    (id: number) => {
+      const trimmed = editingTitle.trim();
+      setEditingConvId(null);
+      if (!trimmed) return;
+      renameConversation.mutate({ id, title: trimmed });
+    },
+    [editingTitle, renameConversation],
+  );
+
+  // Daily morning brief
+  const { data: brief, isLoading: briefLoading } = useGetElaineDailyBrief();
+  const dismissBrief = useDismissElaineDailyBrief({
+    mutation: {
+      onSuccess: () => {
+        void qc.invalidateQueries({ queryKey: getElaineDailyBriefQueryKey() });
+      },
+    },
+  });
+  const regenerateBrief = useRegenerateElaineDailyBrief({
+    mutation: {
+      onSuccess: (data) => {
+        qc.setQueryData(getElaineDailyBriefQueryKey(), data);
+      },
+    },
+  });
+  const showBrief = brief != null && !brief.dismissed;
 
   const handleSelectConversation = useCallback(
     async (id: number) => {
@@ -137,6 +207,47 @@ export default function Chat() {
 
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col">
+      {/* Daily morning brief — spans full width above all three panels */}
+      {briefLoading && (
+        <div className="shrink-0 border-b border-amber-200/50 bg-amber-50/60 px-6 py-3 dark:border-amber-900/30 dark:bg-amber-950/15">
+          <div className="flex items-center gap-2.5 text-sm text-amber-700/60 dark:text-amber-300/40">
+            <Sun className="h-4 w-4 animate-pulse" />
+            <span>Preparing your morning brief…</span>
+          </div>
+        </div>
+      )}
+      {!briefLoading && showBrief && (
+        <div className="shrink-0 border-b border-amber-200/50 bg-amber-50/60 px-6 py-3 dark:border-amber-900/30 dark:bg-amber-950/15">
+          <div className="flex items-start gap-3">
+            <Sun className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+            <p className="flex-1 text-sm leading-relaxed text-foreground">
+              {brief.content}
+            </p>
+            <div className="flex shrink-0 items-center gap-1 pl-1">
+              <button
+                type="button"
+                onClick={() => regenerateBrief.mutate(undefined)}
+                disabled={regenerateBrief.isPending}
+                className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
+                title="Regenerate brief"
+              >
+                <RefreshCw
+                  className={`h-3.5 w-3.5 ${regenerateBrief.isPending ? "animate-spin" : ""}`}
+                />
+              </button>
+              <button
+                type="button"
+                onClick={() => dismissBrief.mutate(undefined)}
+                disabled={dismissBrief.isPending}
+                className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
+                title="Dismiss"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex min-h-0 flex-1">
         {/* ── Left sidebar: conversation history ──────────────────────────── */}
         <aside className="hidden w-56 shrink-0 flex-col border-r border-border/50 lg:flex">
@@ -162,37 +273,80 @@ export default function Chat() {
           </div>
 
           <div className="flex-1 overflow-y-auto py-1">
-            {filteredConversations.length === 0 && (
+            {conversations.length === 0 && (
               <p className="px-3 py-4 text-center text-xs text-muted-foreground">
                 {searchQuery ? "No results" : "No conversations yet"}
               </p>
             )}
-            {filteredConversations.map((conv) => {
+            {conversations.map((conv) => {
               const isActive = chat.conversationId === conv.id;
               const isLoading = loadingConvId === conv.id;
+              const isEditing = editingConvId === conv.id;
               return (
                 <div
                   key={conv.id}
                   className={`group relative flex cursor-pointer items-start gap-2 px-3 py-2 transition-colors hover:bg-muted/60 ${
                     isActive ? "bg-muted" : ""
                   }`}
-                  onClick={() => void handleSelectConversation(conv.id)}
+                  onClick={() =>
+                    !isEditing && void handleSelectConversation(conv.id)
+                  }
                 >
                   <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   <div className="min-w-0 flex-1">
-                    <p
-                      className={`truncate text-xs font-medium leading-snug ${
-                        isActive
-                          ? "text-foreground"
-                          : "text-foreground/80"
-                      }`}
-                    >
-                      {isLoading ? "Loading…" : conv.title}
-                    </p>
+                    {isEditing ? (
+                      <input
+                        ref={renameInputRef}
+                        value={editingTitle}
+                        onChange={(e) => setEditingTitle(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        onBlur={() => commitEditing(conv.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            commitEditing(conv.id);
+                          } else if (e.key === "Escape") {
+                            e.preventDefault();
+                            cancelEditing();
+                          }
+                        }}
+                        className="w-full rounded border border-border bg-background px-1 py-0.5 text-xs font-medium leading-snug text-foreground outline-none focus:border-ring"
+                      />
+                    ) : (
+                      <p
+                        className={`truncate text-xs font-medium leading-snug ${
+                          isActive ? "text-foreground" : "text-foreground/80"
+                        }`}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          startEditing(conv.id, conv.title);
+                        }}
+                      >
+                        {isLoading ? "Loading…" : conv.title}
+                      </p>
+                    )}
+                    {conv.preview && (
+                      <p className="mt-0.5 truncate text-[10px] text-muted-foreground/70 leading-snug">
+                        {conv.preview}
+                      </p>
+                    )}
                     <p className="mt-0.5 text-[10px] text-muted-foreground">
                       {formatConversationDate(conv.updatedAt)}
                     </p>
                   </div>
+                  {!isEditing && (
+                    <button
+                      type="button"
+                      className="invisible ml-1 mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:visible group-hover:opacity-100"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        startEditing(conv.id, conv.title);
+                      }}
+                      title="Rename conversation"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="invisible ml-1 mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:visible group-hover:opacity-100"

@@ -7,176 +7,6 @@ servers:
   - url: /api
     description: Base API path
 paths:
-  /elaine/daily-brief:
-    get:
-      operationId: getElaineDailyBrief
-      tags:
-        - elaine
-      summary: Get (or generate) today's personalised morning brief
-      description: Returns today's brief if already generated. On first call of the UTC day, generates a new one via OpenRouter (may take a few seconds). The brief is cached until midnight UTC.
-      responses:
-        "200":
-          description: Today's brief
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ElaineDailyBrief"
-        "401":
-          description: Unauthorized
-        "503":
-          description: Brief generation unavailable (AI service error)
-  /elaine/daily-brief/dismiss:
-    post:
-      operationId: dismissElaineDailyBrief
-      tags:
-        - elaine
-      summary: Mark today's brief as dismissed
-      responses:
-        "204":
-          description: Dismissed
-        "401":
-          description: Unauthorized
-  /elaine/daily-brief/regenerate:
-    post:
-      operationId: regenerateElaineDailyBrief
-      tags:
-        - elaine
-      summary: Delete today's brief and generate a fresh one
-      responses:
-        "200":
-          description: Fresh brief
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ElaineDailyBrief"
-        "401":
-          description: Unauthorized
-        "503":
-          description: Brief generation unavailable
-  /elaine/attachments:
-    post:
-      operationId: uploadElaineAttachment
-      tags:
-        - elaine
-      summary: Upload an image or PDF attachment for use in a chat message
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required:
-                - file
-              properties:
-                file:
-                  type: string
-                  format: binary
-      responses:
-        "201":
-          description: Attachment uploaded
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ElaineAttachmentUploadResult"
-        "400":
-          description: No file or unsupported type
-        "401":
-          description: Unauthorized
-  /elaine/conversations:
-    get:
-      operationId: listElaineConversations
-      tags:
-        - elaine
-      summary: List this user's named conversations, newest first
-      parameters:
-        - name: q
-          in: query
-          required: false
-          schema:
-            type: string
-          description: Optional search query matched against conversation title and all message content
-      responses:
-        "200":
-          description: Conversation list
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/ElaineConversationSummary"
-        "401":
-          description: Unauthorized
-    post:
-      operationId: newElaineConversation
-      tags:
-        - elaine
-      summary: Create a new named conversation
-      responses:
-        "201":
-          description: Conversation created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ElaineConversationSummary"
-        "401":
-          description: Unauthorized
-  /elaine/conversations/{id}:
-    delete:
-      operationId: deleteElaineConversation
-      tags:
-        - elaine
-      summary: Delete a conversation and all its messages
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "204":
-          description: Deleted
-        "401":
-          description: Unauthorized
-        "404":
-          description: Not found
-  /elaine/conversations/{id}/messages:
-    get:
-      operationId: getElaineConversation
-      tags:
-        - elaine
-      summary: Load messages for a named conversation
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: Messages
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-                  required:
-                    - role
-                    - content
-                  properties:
-                    role:
-                      type: string
-                      enum: [user, assistant]
-                    content:
-                      type: string
-                    attachmentUrls:
-                      type: array
-                      items:
-                        type: string
-        "401":
-          description: Unauthorized
-        "404":
-          description: Not found
   /healthz:
     get:
       operationId: healthCheck
@@ -593,7 +423,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  /pottery/items/items/bulk-reanalyze:
+  /pottery/items/bulk-reanalyze:
     post:
       operationId: bulkReanalyzePottery
       tags:
@@ -1544,6 +1374,117 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /quilting/tools/palette-match:
+    post:
+      operationId: paletteMatchFabrics
+      tags:
+        - tools
+      summary: Extract a colour palette from an inspiration image and find matching fabrics
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - image
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Extracted palette and matching fabrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuiltingPaletteMatchFabricResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Could not extract a colour palette from the image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /quilting/tools/palette-match-patterns:
+    post:
+      operationId: paletteMatchPatterns
+      tags:
+        - tools
+      summary: Extract a colour palette from an inspiration image and find matching quilt patterns
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - image
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Extracted palette and matching quilt patterns
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuiltingPaletteMatchPatternResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Could not extract a colour palette from the image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /quilting/tools/palette-match-quilts:
+    post:
+      operationId: paletteMatchQuilts
+      tags:
+        - tools
+      summary: Extract a colour palette from an inspiration image and find matching finished quilts
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - image
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Extracted palette and matching finished quilts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuiltingPaletteMatchQuiltResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Could not extract a colour palette from the image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /quilting/categories:
     get:
       operationId: listQuiltingCategories
@@ -1994,93 +1935,6 @@ paths:
       responses:
         "204":
           description: Deleted
-  /quilting/tools/palette-match:
-    post:
-      operationId: paletteMatch
-      tags:
-        - tools
-      summary: Extract dominant colours from an image and find matching stash fabrics
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required:
-                - image
-              properties:
-                image:
-                  type: string
-                  format: binary
-      responses:
-        "200":
-          description: Extracted palette and matching fabrics
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/QuiltingPaletteMatchResponse"
-        "400":
-          description: No image supplied or unsupported format
-        "422":
-          description: Could not extract a colour palette from the image
-  /quilting/tools/palette-match-patterns:
-    post:
-      operationId: paletteMatchPatterns
-      tags:
-        - tools
-      summary: Extract dominant colours from an image and find matching patterns
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required:
-                - image
-              properties:
-                image:
-                  type: string
-                  format: binary
-      responses:
-        "200":
-          description: Extracted palette and matching patterns
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/QuiltingPatternPaletteMatchResponse"
-        "400":
-          description: No image supplied or unsupported format
-        "422":
-          description: Could not extract a colour palette from the image
-  /quilting/tools/palette-match-quilts:
-    post:
-      operationId: paletteMatchQuilts
-      tags:
-        - tools
-      summary: Extract dominant colours from an image and find matching quilts
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required:
-                - image
-              properties:
-                image:
-                  type: string
-                  format: binary
-      responses:
-        "200":
-          description: Extracted palette and matching quilts
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/QuiltingQuiltPaletteMatchResponse"
-        "400":
-          description: No image supplied or unsupported format
-        "422":
-          description: Could not extract a colour palette from the image
   /quilting/stats:
     get:
       operationId: getStats
@@ -2107,6 +1961,90 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/QuiltingStaleCount"
+  /quilting/quilting/block-templates:
+    get:
+      tags:
+        - Block Templates
+      operationId: listBlockTemplates
+      summary: List all saved block templates (household-shared)
+      responses:
+        "200":
+          description: Array of block templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QuiltingBlockTemplate"
+    post:
+      tags:
+        - Block Templates
+      operationId: createBlockTemplate
+      summary: Save a new block design as a reusable template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuiltingCreateBlockTemplateInput"
+      responses:
+        "201":
+          description: Created template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuiltingBlockTemplate"
+  /quilting/quilting/block-templates/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags:
+        - Block Templates
+      operationId: getBlockTemplate
+      summary: Get a single block template by ID
+      responses:
+        "200":
+          description: Block template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuiltingBlockTemplate"
+        "404":
+          description: Not found
+    patch:
+      tags:
+        - Block Templates
+      operationId: patchBlockTemplate
+      summary: Rename or retag a block template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuiltingUpdateBlockTemplateInput"
+      responses:
+        "200":
+          description: Updated template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuiltingBlockTemplate"
+        "404":
+          description: Not found
+    delete:
+      tags:
+        - Block Templates
+      operationId: deleteBlockTemplate
+      summary: Delete a block template
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
   /travels/trips:
     get:
       operationId: listTrips
@@ -2340,6 +2278,15 @@ paths:
                   type: array
                   items:
                     type: string
+                title:
+                  type: string
+                  nullable: true
+                documentType:
+                  type: string
+                  nullable: true
+                iconOverride:
+                  type: string
+                  nullable: true
       responses:
         "200":
           description: Updated document
@@ -2771,6 +2718,8 @@ components:
             - light
             - dark
           nullable: true
+        isOwner:
+          type: boolean
     Error:
       type: object
       required:
@@ -3841,6 +3790,90 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/QuiltingFabricMatchResult"
+    QuiltingPaletteMatchFabricResult:
+      type: object
+      required:
+        - score
+        - matchedColors
+      properties:
+        fabric:
+          $ref: "#/components/schemas/QuiltingFabric"
+        score:
+          type: number
+        matchedColors:
+          type: array
+          items:
+            type: string
+    QuiltingPaletteMatchFabricResponse:
+      type: object
+      required:
+        - extractedColors
+        - matches
+      properties:
+        extractedColors:
+          type: array
+          items:
+            type: string
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuiltingPaletteMatchFabricResult"
+    QuiltingPaletteMatchPatternResult:
+      type: object
+      required:
+        - score
+        - matchedColors
+      properties:
+        pattern:
+          $ref: "#/components/schemas/QuiltingQuiltPattern"
+        score:
+          type: number
+        matchedColors:
+          type: array
+          items:
+            type: string
+    QuiltingPaletteMatchPatternResponse:
+      type: object
+      required:
+        - extractedColors
+        - matches
+      properties:
+        extractedColors:
+          type: array
+          items:
+            type: string
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuiltingPaletteMatchPatternResult"
+    QuiltingPaletteMatchQuiltResult:
+      type: object
+      required:
+        - score
+        - matchedColors
+      properties:
+        quilt:
+          $ref: "#/components/schemas/QuiltingFinishedQuilt"
+        score:
+          type: number
+        matchedColors:
+          type: array
+          items:
+            type: string
+    QuiltingPaletteMatchQuiltResponse:
+      type: object
+      required:
+        - extractedColors
+        - matches
+      properties:
+        extractedColors:
+          type: array
+          items:
+            type: string
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuiltingPaletteMatchQuiltResult"
     QuiltingCreateCategoryInput:
       type: object
       required:
@@ -3877,102 +3910,6 @@ components:
       properties:
         targetId:
           type: integer
-    QuiltingPaletteMatchResult:
-      type: object
-      required:
-        - fabric
-        - score
-        - matchedColors
-      properties:
-        fabric:
-          $ref: "#/components/schemas/QuiltingFabric"
-        score:
-          type: number
-          description: Jaccard similarity score (0–1)
-        matchedColors:
-          type: array
-          items:
-            type: string
-    QuiltingPaletteMatchResponse:
-      type: object
-      required:
-        - extractedColors
-        - matches
-      properties:
-        extractedColors:
-          type: array
-          items:
-            type: string
-          description: 5–7 CSS colour names extracted from the image
-        matches:
-          type: array
-          items:
-            $ref: "#/components/schemas/QuiltingPaletteMatchResult"
-          description: Top-10 stash fabrics sorted by colour similarity
-    QuiltingPatternPaletteMatchResult:
-      type: object
-      required:
-        - pattern
-        - score
-        - matchedColors
-      properties:
-        pattern:
-          $ref: "#/components/schemas/QuiltingQuiltPattern"
-        score:
-          type: number
-          description: Jaccard similarity score (0–1)
-        matchedColors:
-          type: array
-          items:
-            type: string
-    QuiltingPatternPaletteMatchResponse:
-      type: object
-      required:
-        - extractedColors
-        - matches
-      properties:
-        extractedColors:
-          type: array
-          items:
-            type: string
-          description: 5–7 CSS colour names extracted from the image
-        matches:
-          type: array
-          items:
-            $ref: "#/components/schemas/QuiltingPatternPaletteMatchResult"
-          description: Top-10 patterns sorted by colour similarity
-    QuiltingQuiltPaletteMatchResult:
-      type: object
-      required:
-        - quilt
-        - score
-        - matchedColors
-      properties:
-        quilt:
-          $ref: "#/components/schemas/QuiltingFinishedQuilt"
-        score:
-          type: number
-          description: Jaccard similarity score (0–1)
-        matchedColors:
-          type: array
-          items:
-            type: string
-    QuiltingQuiltPaletteMatchResponse:
-      type: object
-      required:
-        - extractedColors
-        - matches
-      properties:
-        extractedColors:
-          type: array
-          items:
-            type: string
-          description: 5–7 CSS colour names extracted from the image
-        matches:
-          type: array
-          items:
-            $ref: "#/components/schemas/QuiltingQuiltPaletteMatchResult"
-          description: Top-10 quilts sorted by colour similarity
     QuiltingCollectionStats:
       type: object
       required:
@@ -4238,6 +4175,7 @@ components:
         - cols
         - cells
         - categories
+        - dominantColors
         - createdAt
       properties:
         id:
@@ -4252,6 +4190,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/QuiltingLayoutCell"
+        dominantColors:
+          type: array
+          items:
+            type: string
+          description: Hex colours extracted from sashing/border/block cells, sorted by frequency
         sashingWidthInches:
           type: number
           nullable: true
@@ -4609,6 +4552,129 @@ components:
           nullable: true
           minimum: 0.0625
           maximum: 1
+    QuiltingBlockTemplateSeamLine:
+      type: object
+      required:
+        - axis
+        - pos
+        - cellIdx
+      properties:
+        axis:
+          type: string
+          enum:
+            - h
+            - v
+        pos:
+          type: integer
+        cellIdx:
+          type: integer
+        clipStart:
+          type: number
+          nullable: true
+        clipEnd:
+          type: number
+          nullable: true
+    QuiltingBlockTemplate:
+      type: object
+      required:
+        - id
+        - name
+        - tags
+        - gridW
+        - gridH
+        - cells
+        - seams
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        createdByUserId:
+          type: integer
+          nullable: true
+        name:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        gridW:
+          type: integer
+        gridH:
+          type: integer
+        cells:
+          type: array
+          items:
+            type: string
+        seams:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuiltingBlockTemplateSeamLine"
+        blockSizeInches:
+          type: number
+          nullable: true
+        seamAllowanceInches:
+          type: number
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    QuiltingCreateBlockTemplateInput:
+      type: object
+      required:
+        - name
+        - gridW
+        - gridH
+        - cells
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        tags:
+          type: array
+          items:
+            type: string
+        gridW:
+          type: integer
+          minimum: 1
+          maximum: 20
+        gridH:
+          type: integer
+          minimum: 1
+          maximum: 20
+        cells:
+          type: array
+          items:
+            type: string
+        seams:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuiltingBlockTemplateSeamLine"
+        blockSizeInches:
+          type: number
+          nullable: true
+          minimum: 1
+          maximum: 120
+        seamAllowanceInches:
+          type: number
+          nullable: true
+          minimum: 0.0625
+          maximum: 1
+    QuiltingUpdateBlockTemplateInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        tags:
+          type: array
+          items:
+            type: string
     TravelsTrip:
       type: object
       required:
@@ -4653,6 +4719,13 @@ components:
           nullable: true
         transportTo:
           type: string
+          enum:
+            - drove
+            - flew
+            - train
+          nullable: true
+        transportDetails:
+          type: string
           nullable: true
         hasRentalCar:
           type: boolean
@@ -4665,8 +4738,27 @@ components:
         notes:
           type: string
           nullable: true
+        funFact:
+          type: string
+          nullable: true
         travellerCount:
           type: integer
+        travelers:
+          type: array
+          items:
+            type: string
+          nullable: true
+        theOneThing:
+          type: array
+          items:
+            type: string
+          nullable: true
+        iconPhotoId:
+          type: integer
+          nullable: true
+        shareToken:
+          type: string
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -4678,6 +4770,8 @@ components:
             itinerary:
               nullable: true
             packingList:
+              nullable: true
+            todoList:
               nullable: true
             documents:
               type: array
@@ -4718,6 +4812,8 @@ components:
             - drove
             - flew
             - train
+        transportDetails:
+          type: string
         hasRentalCar:
           type: boolean
         accommodationName:
@@ -4726,8 +4822,18 @@ components:
           type: string
         notes:
           type: string
+        funFact:
+          type: string
         travellerCount:
           type: integer
+        travelers:
+          type: array
+          items:
+            type: string
+        theOneThing:
+          type: array
+          items:
+            type: string
     TravelsUpdateTripBody:
       type: object
       properties:
@@ -4759,6 +4865,8 @@ components:
             - drove
             - flew
             - train
+        transportDetails:
+          type: string
         hasRentalCar:
           type: boolean
         accommodationName:
@@ -4767,11 +4875,23 @@ components:
           type: string
         notes:
           type: string
+        funFact:
+          type: string
         travellerCount:
           type: integer
+        travelers:
+          type: array
+          items:
+            type: string
+        theOneThing:
+          type: array
+          items:
+            type: string
         itinerary:
           nullable: true
         packingList:
+          nullable: true
+        todoList:
           nullable: true
     TravelsListTripsResponse:
       type: array
@@ -4821,6 +4941,9 @@ components:
           type: integer
         storagePath:
           type: string
+        title:
+          type: string
+          nullable: true
         documentType:
           type: string
           nullable: true
@@ -4828,11 +4951,19 @@ components:
           type: string
           nullable: true
         extractedData:
+          type: object
+          additionalProperties: true
           nullable: true
         lockedFields:
           type: array
           items:
             type: string
+        gmailMessageId:
+          type: string
+          nullable: true
+        iconOverride:
+          type: string
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -4881,6 +5012,8 @@ components:
         uniqueDestinations:
           type: integer
         nextTrip:
+          allOf:
+            - $ref: "#/components/schemas/TravelsTrip"
           nullable: true
     TravelsPackingItem:
       type: object
@@ -5017,62 +5150,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TravelsPackingItem"
-    ElaineDailyBrief:
-      type: object
-      required:
-        - id
-        - content
-        - generatedAt
-        - dismissed
-      properties:
-        id:
-          type: integer
-        content:
-          type: string
-        generatedAt:
-          type: string
-          format: date-time
-        dismissed:
-          type: boolean
-    ElaineConversationSummary:
-      type: object
-      required:
-        - id
-        - title
-        - createdAt
-        - updatedAt
-        - messageCount
-      properties:
-        id:
-          type: integer
-        title:
-          type: string
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
-        messageCount:
-          type: integer
-        preview:
-          type: string
-          nullable: true
-    ElaineAttachmentUploadResult:
-      type: object
-      required:
-        - url
-        - type
-      properties:
-        url:
-          type: string
-        type:
-          type: string
-          enum: [image, pdf]
-        name:
-          type: string
-        extractedText:
-          type: string
   parameters:
     IdParam:
       name: id

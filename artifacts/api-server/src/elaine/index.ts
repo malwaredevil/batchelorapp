@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod/v4";
-import { and, eq, desc, isNull, count } from "drizzle-orm";
+import { and, eq, desc, isNull, count, inArray, sql } from "drizzle-orm";
 import type OpenAI from "openai";
 import {
   db,
@@ -12,6 +12,7 @@ import {
   elaineGlobalConfig,
   elaineHistoryConversations,
   elaineHistoryMessages,
+  elaineDailyBriefs,
   travelsTrips,
   travelsTripDocuments,
   travelsTripPhotos,
@@ -19,10 +20,14 @@ import {
   travelsWishlist,
   travelsGoogleCalendarConnections,
   travelsConnectedCalendars,
+  potteryItems,
+  fabrics,
+  quiltPatterns,
+  finishedQuilts,
 } from "@workspace/db";
 import { requireAuth } from "../middleware/auth";
 import { logger } from "../lib/logger";
-import { callModelWithSubagent } from "../lib/ai-client";
+import { callModel, callModelWithSubagent } from "../lib/ai-client";
 import {
   getElaineGlobalConfig,
   invalidateElaineGlobalConfigCache,
@@ -70,6 +75,7 @@ import multer from "multer";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import { env } from "../lib/env";
+import pdfParse from "pdf-parse";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -89,13 +95,36 @@ router.use(requireAuth);
 const ASSISTANT_SUBAGENT_INSTRUCTIONS =
   "You are a fast research helper for a friendly travel assistant named Elaine. You will be given a small, self-contained sub-task (e.g. list facts, summarize options, draft a short list). Answer concisely and factually in plain text so Elaine can incorporate your answer into her reply.";
 
-type ChatMessage = { role: "user" | "assistant"; content: string };
+type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+  attachmentUrls?: AttachmentRef[];
+};
+
+// A single image/PDF attachment stored alongside a user message. `name` is
+// only meaningful for PDFs (the original upload filename — the storage path
+// itself is a random UUID and must never be shown to the user).
+type AttachmentRef = { url: string; type: "image" | "pdf"; name?: string };
+
+// Rows stored before this field existed as objects were plain URL strings.
+// Normalize on read so older conversations still render sensibly (falling
+// back to "document.pdf" instead of the ugly storage-path UUID filename).
+function normalizeAttachmentRefs(raw: unknown): AttachmentRef[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item): AttachmentRef => {
+    if (typeof item === "string") {
+      return { url: item, type: /\.pdf(\?|$)/i.test(item) ? "pdf" : "image" };
+    }
+    return item as AttachmentRef;
+  });
+}
 
 const APP_IDS = ["travels", "pottery", "quilting", "hub", "elaine"] as const;
 type AppId = (typeof APP_IDS)[number];
 
 const ChatBody = z.object({
-  message: z.string().min(1).max(4000),
+  // Empty string is allowed when the user sends attachments only (no text).
+  message: z.string().max(4000),
   // Freeform description of what's currently on the user's screen — page
   // name plus any live/unsaved field values a page has chosen to publish via
   // usePageAssistantContext(). Never persisted; only used for this one call.
@@ -106,8 +135,19 @@ const ChatBody = z.object({
   appId: z.enum(APP_IDS).default("hub"),
   // Named conversation to continue. Omit to auto-create a new one.
   conversationId: z.number().int().positive().optional(),
-  // Public Supabase Storage URLs for images the user attached (max 5, 5 MB each).
+  // Signed Supabase Storage URLs for images the user attached (max 5, 5 MB each).
   attachmentUrls: z.array(z.string()).max(5).optional(),
+  // PDF attachments: signed URL + original filename + already-extracted text.
+  attachmentPdfs: z
+    .array(
+      z.object({
+        url: z.string().max(2000),
+        name: z.string().max(200),
+        extractedText: z.string().max(8000).optional(),
+      }),
+    )
+    .max(3)
+    .optional(),
 });
 
 // How elAIne confirms a turn that proposes more than one write-action:
@@ -2315,19 +2355,27 @@ async function applyUnseenNudges(userId: number): Promise<ChatMessage[]> {
 // ---------------------------------------------------------------------------
 
 const ATTACHMENT_BUCKET = "elaine-attachments";
-const attachmentStorage = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
+const attachmentStorage = createClient(
+  env.supabaseUrl,
+  env.supabaseServiceRoleKey,
+  {
+    auth: { persistSession: false, autoRefreshToken: false },
+  },
+);
 
 let attachmentBucketReady: Promise<void> | null = null;
 async function ensureAttachmentBucket(): Promise<void> {
   if (!attachmentBucketReady) {
     attachmentBucketReady = (async () => {
-      const { data } = await attachmentStorage.storage.getBucket(ATTACHMENT_BUCKET);
+      const { data } =
+        await attachmentStorage.storage.getBucket(ATTACHMENT_BUCKET);
       if (!data) {
-        const { error } = await attachmentStorage.storage.createBucket(ATTACHMENT_BUCKET, {
-          public: true,
-        });
+        const { error } = await attachmentStorage.storage.createBucket(
+          ATTACHMENT_BUCKET,
+          {
+            public: false,
+          },
+        );
         if (error && !/already exists/i.test(error.message)) {
           attachmentBucketReady = null;
           throw error;
@@ -2338,66 +2386,169 @@ async function ensureAttachmentBucket(): Promise<void> {
   return attachmentBucketReady;
 }
 
+const ACCEPTED_ATTACHMENT_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/pdf",
+] as const;
+
 const attachmentUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter(_req, file, cb) {
-    const ok = ["image/jpeg", "image/png", "image/webp"].includes(file.mimetype);
+    const ok = (ACCEPTED_ATTACHMENT_TYPES as readonly string[]).includes(
+      file.mimetype,
+    );
     if (!ok) {
-      cb(new Error("Only JPEG, PNG, and WebP images are accepted"));
+      cb(new Error("Only JPEG, PNG, WebP images and PDFs are accepted"));
     } else {
       cb(null, true);
     }
   },
 });
 
-// POST /attachments — upload a single image for use as a message attachment.
-router.post("/attachments", attachmentUpload.single("file"), async (req, res) => {
-  if (!req.file) {
-    res.status(400).json({ error: "No file provided" });
-    return;
-  }
-  const userId = req.session.userId!;
-  const ext =
-    req.file.mimetype === "image/jpeg"
-      ? "jpg"
-      : req.file.mimetype === "image/webp"
-        ? "webp"
-        : "png";
-  const path = `${userId}/${randomUUID()}.${ext}`;
+// POST /attachments — upload a single image or PDF for use as a message attachment.
+// Images are accepted for AI vision; PDFs have their text extracted server-side.
+// Files are stored in the PRIVATE elaine-attachments bucket; a 5-year signed URL
+// is returned so the client can display the file and pass it back on chat sends.
+router.post(
+  "/attachments",
+  attachmentUpload.single("file"),
+  async (req, res) => {
+    if (!req.file) {
+      res.status(400).json({ error: "No file provided" });
+      return;
+    }
+    const userId = req.session.userId!;
+    const isPdf = req.file.mimetype === "application/pdf";
+    const ext = isPdf
+      ? "pdf"
+      : req.file.mimetype === "image/jpeg"
+        ? "jpg"
+        : req.file.mimetype === "image/webp"
+          ? "webp"
+          : "png";
+    const storagePath = `${userId}/${randomUUID()}.${ext}`;
 
-  try {
-    await ensureAttachmentBucket();
-  } catch (err) {
-    req.log.error({ err }, "elaine attachment bucket init failed");
-    res.status(500).json({ error: "Storage unavailable" });
-    return;
-  }
+    try {
+      await ensureAttachmentBucket();
+    } catch (err) {
+      req.log.error({ err }, "elaine attachment bucket init failed");
+      res.status(500).json({ error: "Storage unavailable" });
+      return;
+    }
 
-  const { error: uploadError } = await attachmentStorage.storage
-    .from(ATTACHMENT_BUCKET)
-    .upload(path, req.file.buffer, { contentType: req.file.mimetype, upsert: false });
+    const { error: uploadError } = await attachmentStorage.storage
+      .from(ATTACHMENT_BUCKET)
+      .upload(storagePath, req.file.buffer, {
+        contentType: req.file.mimetype,
+        upsert: false,
+      });
 
-  if (uploadError) {
-    req.log.error({ err: uploadError }, "elaine attachment upload failed");
-    res.status(500).json({ error: "Upload failed" });
-    return;
-  }
+    if (uploadError) {
+      req.log.error({ err: uploadError }, "elaine attachment upload failed");
+      res.status(500).json({ error: "Upload failed" });
+      return;
+    }
 
-  const { data: publicUrlData } = attachmentStorage.storage
-    .from(ATTACHMENT_BUCKET)
-    .getPublicUrl(path);
+    // 5-year signed URL (private bucket — no public URL available).
+    const FIVE_YEARS_SECS = 5 * 365 * 24 * 3600;
+    const { data: signedData, error: signError } =
+      await attachmentStorage.storage
+        .from(ATTACHMENT_BUCKET)
+        .createSignedUrl(storagePath, FIVE_YEARS_SECS);
 
-  res.status(201).json({ url: publicUrlData.publicUrl });
-});
+    if (signError || !signedData) {
+      req.log.error({ err: signError }, "elaine attachment sign failed");
+      res.status(500).json({ error: "Could not generate file URL" });
+      return;
+    }
+
+    if (isPdf) {
+      // Extract text so the AI can read the document without vision tokens.
+      let extractedText: string | undefined;
+      try {
+        const parsed = await pdfParse(req.file.buffer);
+        const raw = parsed.text ?? "";
+        extractedText = raw.slice(0, 8000) || undefined;
+      } catch (err) {
+        req.log.warn({ err }, "elaine pdf text extraction failed (non-fatal)");
+      }
+      res.status(201).json({
+        url: signedData.signedUrl,
+        type: "pdf",
+        name: req.file.originalname ?? "document.pdf",
+        ...(extractedText !== undefined ? { extractedText } : {}),
+      });
+      return;
+    }
+
+    res.status(201).json({ url: signedData.signedUrl, type: "image" });
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Named conversation CRUD
 // ---------------------------------------------------------------------------
 
 // GET /conversations — list this user's named conversations, newest first.
+// Supports ?q= for server-side search across conversation title and all message content.
+// Each row includes a `preview` snippet (≤80 chars from the first user message).
 router.get("/conversations", async (req, res) => {
   const userId = req.session.userId!;
+  const searchQuery = String(req.query["q"] ?? "").trim();
+
+  // When a search query is provided, first find matching conversation IDs via
+  // a DB-level ILIKE across both the conversation title and all message content.
+  let matchingConvIds: Set<number> | null = null;
+  if (searchQuery) {
+    const pattern = `%${searchQuery.replace(/%/g, "\\%").replace(/_/g, "\\_")}%`;
+    // Title matches
+    const titleMatches = await db
+      .select({ id: elaineHistoryConversations.id })
+      .from(elaineHistoryConversations)
+      .where(
+        and(
+          eq(elaineHistoryConversations.userId, userId),
+          sql`lower(${elaineHistoryConversations.title}) like lower(${pattern})`,
+        ),
+      );
+    // Message content matches
+    const contentMatches = await db
+      .select({ conversationId: elaineHistoryMessages.conversationId })
+      .from(elaineHistoryMessages)
+      .innerJoin(
+        elaineHistoryConversations,
+        eq(elaineHistoryMessages.conversationId, elaineHistoryConversations.id),
+      )
+      .where(
+        and(
+          eq(elaineHistoryConversations.userId, userId),
+          sql`lower(${elaineHistoryMessages.content}) like lower(${pattern})`,
+        ),
+      );
+    matchingConvIds = new Set([
+      ...titleMatches.map((r) => r.id),
+      ...contentMatches
+        .map((r) => r.conversationId)
+        .filter((id): id is number => id !== null),
+    ]);
+    // Short-circuit: no matches at all
+    if (matchingConvIds.size === 0) {
+      res.json([]);
+      return;
+    }
+  }
+
+  // Fetch all (or matching) conversations with message counts.
+  const baseWhere = matchingConvIds
+    ? and(
+        eq(elaineHistoryConversations.userId, userId),
+        inArray(elaineHistoryConversations.id, Array.from(matchingConvIds)),
+      )
+    : eq(elaineHistoryConversations.userId, userId);
+
   const rows = await db
     .select({
       id: elaineHistoryConversations.id,
@@ -2411,9 +2562,35 @@ router.get("/conversations", async (req, res) => {
       elaineHistoryMessages,
       eq(elaineHistoryMessages.conversationId, elaineHistoryConversations.id),
     )
-    .where(eq(elaineHistoryConversations.userId, userId))
+    .where(baseWhere)
     .groupBy(elaineHistoryConversations.id)
     .orderBy(desc(elaineHistoryConversations.updatedAt));
+
+  // Resolve preview snippets (first user message ≤80 chars) for each conversation.
+  const convIds = rows.map((r) => r.id);
+  const previewMap = new Map<number, string | null>();
+  if (convIds.length > 0) {
+    const firstMsgs = await db
+      .select({
+        conversationId: elaineHistoryMessages.conversationId,
+        content: elaineHistoryMessages.content,
+      })
+      .from(elaineHistoryMessages)
+      .where(
+        and(
+          eq(elaineHistoryMessages.role, "user"),
+          inArray(elaineHistoryMessages.conversationId, convIds),
+        ),
+      )
+      .orderBy(elaineHistoryMessages.createdAt);
+
+    for (const msg of firstMsgs) {
+      if (msg.conversationId !== null && !previewMap.has(msg.conversationId)) {
+        const snippet = msg.content.replace(/\s+/g, " ").trim().slice(0, 80);
+        previewMap.set(msg.conversationId, snippet || null);
+      }
+    }
+  }
 
   res.json(
     rows.map((r) => ({
@@ -2422,6 +2599,7 @@ router.get("/conversations", async (req, res) => {
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
       messageCount: Number(r.messageCount),
+      preview: previewMap.get(r.id) ?? null,
     })),
   );
 });
@@ -2443,6 +2621,7 @@ router.post("/conversations", async (req, res) => {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     messageCount: 0,
+    preview: null,
   });
 });
 
@@ -2477,10 +2656,48 @@ router.get("/conversations/:id/messages", async (req, res) => {
       id: m.id,
       role: m.role,
       content: m.content,
-      attachmentUrls: (m.attachmentUrls as string[]) ?? [],
+      attachmentUrls: normalizeAttachmentRefs(m.attachmentUrls),
       createdAt: m.createdAt.toISOString(),
     })),
   );
+});
+
+// PATCH /conversations/:id — rename a named conversation.
+const RenameConversationBody = z.object({
+  title: z.string().trim().min(1).max(200),
+});
+router.patch("/conversations/:id", async (req, res) => {
+  const userId = req.session.userId!;
+  const convId = parseInt(String(req.params["id"] ?? "0"), 10);
+  if (!convId) {
+    res.status(400).json({ error: "Invalid conversation ID" });
+    return;
+  }
+  const parsed = RenameConversationBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid title" });
+    return;
+  }
+  const [row] = await db
+    .update(elaineHistoryConversations)
+    .set({ title: parsed.data.title, updatedAt: new Date() })
+    .where(
+      and(
+        eq(elaineHistoryConversations.id, convId),
+        eq(elaineHistoryConversations.userId, userId),
+      ),
+    )
+    .returning();
+  if (!row) {
+    res.status(404).json({ error: "Conversation not found" });
+    return;
+  }
+  res.json({
+    id: row.id,
+    title: row.title,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  });
 });
 
 // DELETE /conversations/:id — permanently remove a named conversation.
@@ -2532,8 +2749,14 @@ router.delete("/conversation", async (req, res) => {
 
 router.post("/chat", async (req, res) => {
   const userId = req.session.userId!;
-  const { message, pageContext, appId, conversationId, attachmentUrls } =
-    ChatBody.parse(req.body);
+  const {
+    message,
+    pageContext,
+    appId,
+    conversationId,
+    attachmentUrls,
+    attachmentPdfs,
+  } = ChatBody.parse(req.body);
 
   const [user] = await db
     .select({ displayName: appUsers.displayName, email: appUsers.email })
@@ -2709,19 +2932,43 @@ FORMATTING: Your visible replies are rendered in a chat bubble with a markdown r
 
 Keep replies concise and easy to read in a chat bubble.`;
 
-  // If the user attached images, format the current user turn as a vision
-  // content-array so the model can see them. History messages are always
-  // text-only (image URLs are stored in the DB but not re-sent to the model).
-  const userTurnContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] | string =
-    attachmentUrls && attachmentUrls.length > 0
+  // Build the user turn content. PDFs are injected as text blocks (extracted
+  // server-side at upload time) before any vision image parts. History messages
+  // are always text-only (URLs are stored in the DB but not re-sent to the model).
+  const hasImages = attachmentUrls && attachmentUrls.length > 0;
+  const hasPdfs = attachmentPdfs && attachmentPdfs.length > 0;
+  const userTurnContent:
+    | OpenAI.Chat.Completions.ChatCompletionContentPart[]
+    | string =
+    hasImages || hasPdfs
       ? [
-          { type: "text", text: message },
-          ...attachmentUrls.map((url) => ({
-            type: "image_url" as const,
-            image_url: { url },
-          })),
+          ...(hasPdfs
+            ? attachmentPdfs!.map((pdf) => ({
+                type: "text" as const,
+                text: `[Attached PDF: ${pdf.name}]\n${pdf.extractedText ?? "(no text extracted)"}`,
+              }))
+            : []),
+          { type: "text" as const, text: message },
+          ...(hasImages
+            ? attachmentUrls!.map((url) => ({
+                type: "image_url" as const,
+                image_url: { url },
+              }))
+            : []),
         ]
       : message;
+
+  // Combine all attachments (images + PDFs) for history storage. PDFs keep
+  // their original upload filename so the UI never has to fall back to the
+  // random UUID storage path when rendering the chip.
+  const allAttachmentUrls: AttachmentRef[] = [
+    ...(attachmentUrls ?? []).map(
+      (url): AttachmentRef => ({ url, type: "image" }),
+    ),
+    ...(attachmentPdfs?.map(
+      (p): AttachmentRef => ({ url: p.url, type: "pdf", name: p.name }),
+    ) ?? []),
+  ];
 
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: systemPrompt },
@@ -3213,8 +3460,8 @@ Keep replies concise and easy to read in a chat bubble.`;
     {
       role: "user",
       content: message,
-      ...(attachmentUrls && attachmentUrls.length > 0
-        ? { attachmentUrls }
+      ...(allAttachmentUrls.length > 0
+        ? { attachmentUrls: allAttachmentUrls }
         : {}),
     },
     { role: "assistant", content },
@@ -3228,7 +3475,7 @@ Keep replies concise and easy to read in a chat bubble.`;
         userId,
         role: "user",
         content: message,
-        attachmentUrls: attachmentUrls ?? [],
+        attachmentUrls: allAttachmentUrls,
       },
       {
         conversationId: histConvId,
@@ -3352,6 +3599,369 @@ async function requireOwner(req: Request, res: Response): Promise<boolean> {
   }
   return true;
 }
+
+// ---------------------------------------------------------------------------
+// Daily brief — a personalised once-per-UTC-day morning summary.
+// Queries next upcoming trip, overdue reminders, and yesterday's household
+// activity across all apps, then asks OpenRouter to compose a 2–4 sentence
+// friendly brief with one highlighted action for the day.
+// ---------------------------------------------------------------------------
+
+// NOTE ON SCOPING: pottery, quilting, and travels data are fully
+// household-shared — there is no per-user ownership boundary within these apps.
+// The generated brief draws from household-wide data (all trips, all reminders,
+// all collection items regardless of which household member created them), which
+// is consistent with the architecture (see replit.md and threat_model.md).
+// The userId parameter scopes the CACHE row (one brief per user per UTC day),
+// not the content queries.
+async function generateDailyBriefContent(userId: number): Promise<string> {
+  // userId is used only to ensure the context prompt is addressed to the right
+  // person. Content queries are household-wide by design.
+  void userId;
+
+  const now = new Date();
+  const startOfTodayUtc = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
+  const startOfYesterdayUtc = new Date(
+    startOfTodayUtc.getTime() - 24 * 60 * 60 * 1000,
+  );
+  const todayDateStr = startOfTodayUtc.toISOString().slice(0, 10);
+  const yesterdayIso = startOfYesterdayUtc.toISOString();
+  const todayIso = startOfTodayUtc.toISOString();
+
+  const contextParts: string[] = [];
+
+  // 1. Next upcoming trip
+  const [nextTrip] = await db
+    .select({
+      title: travelsTrips.title,
+      destination: travelsTrips.destination,
+      startDate: travelsTrips.startDate,
+    })
+    .from(travelsTrips)
+    .where(sql`${travelsTrips.startDate} >= ${todayDateStr}::date`)
+    .orderBy(travelsTrips.startDate)
+    .limit(1);
+
+  if (nextTrip) {
+    if (nextTrip.startDate) {
+      const tripStart = new Date(nextTrip.startDate + "T00:00:00Z");
+      const daysUntil = Math.round(
+        (tripStart.getTime() - startOfTodayUtc.getTime()) /
+          (1000 * 60 * 60 * 24),
+      );
+      contextParts.push(
+        `Next upcoming trip: "${nextTrip.title}" to ${nextTrip.destination} — ${
+          daysUntil === 0
+            ? "starts today!"
+            : daysUntil === 1
+              ? "starts tomorrow!"
+              : `starts in ${daysUntil} days`
+        } (${nextTrip.startDate})`,
+      );
+    } else {
+      contextParts.push(
+        `Next upcoming trip: "${nextTrip.title}" to ${nextTrip.destination} (no date set yet)`,
+      );
+    }
+  } else {
+    contextParts.push("No upcoming trips currently planned");
+  }
+
+  // 2. Overdue reminders
+  const overdueReminders = await db
+    .select({
+      title: travelsReminders.title,
+      dueDate: travelsReminders.dueDate,
+    })
+    .from(travelsReminders)
+    .where(
+      and(
+        sql`${travelsReminders.dueDate} < ${todayDateStr}::date`,
+        eq(travelsReminders.done, false),
+      ),
+    )
+    .orderBy(travelsReminders.dueDate)
+    .limit(5);
+
+  if (overdueReminders.length > 0) {
+    const list = overdueReminders
+      .map((r) => `"${r.title}" (due ${r.dueDate})`)
+      .join(", ");
+    contextParts.push(`Overdue reminders: ${list}`);
+  } else {
+    contextParts.push("No overdue reminders");
+  }
+
+  // 3. Yesterday's household activity across all apps (parallel queries)
+  const [
+    newPotteryItems,
+    newFabricItems,
+    newPatternItems,
+    newQuiltItems,
+    newTripItems,
+    newWishlistItems,
+  ] = await Promise.all([
+    db
+      .select({ name: potteryItems.name })
+      .from(potteryItems)
+      .where(
+        and(
+          sql`${potteryItems.createdAt} >= ${yesterdayIso}`,
+          sql`${potteryItems.createdAt} < ${todayIso}`,
+        ),
+      ),
+    db
+      .select({ name: fabrics.name })
+      .from(fabrics)
+      .where(
+        and(
+          sql`${fabrics.createdAt} >= ${yesterdayIso}`,
+          sql`${fabrics.createdAt} < ${todayIso}`,
+        ),
+      ),
+    db
+      .select({ name: quiltPatterns.name })
+      .from(quiltPatterns)
+      .where(
+        and(
+          sql`${quiltPatterns.createdAt} >= ${yesterdayIso}`,
+          sql`${quiltPatterns.createdAt} < ${todayIso}`,
+        ),
+      ),
+    db
+      .select({ name: finishedQuilts.name })
+      .from(finishedQuilts)
+      .where(
+        and(
+          sql`${finishedQuilts.createdAt} >= ${yesterdayIso}`,
+          sql`${finishedQuilts.createdAt} < ${todayIso}`,
+        ),
+      ),
+    db
+      .select({
+        title: travelsTrips.title,
+        destination: travelsTrips.destination,
+      })
+      .from(travelsTrips)
+      .where(
+        and(
+          sql`${travelsTrips.createdAt} >= ${yesterdayIso}`,
+          sql`${travelsTrips.createdAt} < ${todayIso}`,
+        ),
+      ),
+    db
+      .select({ destination: travelsWishlist.destination })
+      .from(travelsWishlist)
+      .where(
+        and(
+          sql`${travelsWishlist.createdAt} >= ${yesterdayIso}`,
+          sql`${travelsWishlist.createdAt} < ${todayIso}`,
+        ),
+      ),
+  ]);
+
+  const activityParts: string[] = [];
+  if (newPotteryItems.length > 0)
+    activityParts.push(
+      `${newPotteryItems.length} new pottery piece${newPotteryItems.length > 1 ? "s" : ""}: ${newPotteryItems.map((p) => p.name).join(", ")}`,
+    );
+  if (newFabricItems.length > 0)
+    activityParts.push(
+      `${newFabricItems.length} new fabric${newFabricItems.length > 1 ? "s" : ""}: ${newFabricItems.map((f) => f.name).join(", ")}`,
+    );
+  if (newPatternItems.length > 0)
+    activityParts.push(
+      `${newPatternItems.length} new quilt pattern${newPatternItems.length > 1 ? "s" : ""}: ${newPatternItems.map((p) => p.name).join(", ")}`,
+    );
+  if (newQuiltItems.length > 0)
+    activityParts.push(
+      `${newQuiltItems.length} quilt${newQuiltItems.length > 1 ? "s" : ""} finished: ${newQuiltItems.map((q) => q.name).join(", ")}`,
+    );
+  if (newTripItems.length > 0)
+    activityParts.push(
+      `${newTripItems.length} new trip${newTripItems.length > 1 ? "s" : ""} added: ${newTripItems.map((t) => `${t.title} to ${t.destination}`).join(", ")}`,
+    );
+  if (newWishlistItems.length > 0)
+    activityParts.push(
+      `${newWishlistItems.length} wishlist destination${newWishlistItems.length > 1 ? "s" : ""} added: ${newWishlistItems.map((w) => w.destination).join(", ")}`,
+    );
+
+  contextParts.push(
+    activityParts.length > 0
+      ? `Yesterday's household activity: ${activityParts.join("; ")}`
+      : "No new items added to any collection yesterday",
+  );
+
+  const contextText = contextParts.join("\n");
+  const config = await getElaineGlobalConfig();
+
+  return callModel(config.chatModel, async (client, model) => {
+    const completion = await client.chat.completions.create({
+      model,
+      max_tokens: 250,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are Elaine, a warm and practical personal assistant for the Batchelor household. Write a brief, friendly morning summary (2–4 sentences) from the data below. End with one specific, actionable suggestion for the day. No headers or bullet points — just natural, conversational flowing text. Refer to the household collectively as 'you'.",
+        },
+        {
+          role: "user",
+          content: `Today's household status:\n\n${contextText}\n\nWrite the morning brief.`,
+        },
+      ],
+    });
+    return (completion.choices[0]?.message?.content ?? "").trim();
+  });
+}
+
+// GET /daily-brief — return today's brief (generate on first call of the day).
+router.get("/daily-brief", async (req, res) => {
+  const userId = req.session.userId!;
+  const startOfTodayUtc = new Date();
+  startOfTodayUtc.setUTCHours(0, 0, 0, 0);
+  const todayIso = startOfTodayUtc.toISOString();
+
+  const [existing] = await db
+    .select()
+    .from(elaineDailyBriefs)
+    .where(
+      and(
+        eq(elaineDailyBriefs.userId, userId),
+        sql`${elaineDailyBriefs.generatedAt} >= ${todayIso}`,
+      ),
+    )
+    .orderBy(desc(elaineDailyBriefs.generatedAt))
+    .limit(1);
+
+  if (existing) {
+    res.json({
+      id: existing.id,
+      content: existing.content,
+      generatedAt: existing.generatedAt.toISOString(),
+      dismissed: existing.dismissed,
+    });
+    return;
+  }
+
+  let content: string;
+  try {
+    content = await generateDailyBriefContent(userId);
+  } catch (err) {
+    req.log.error({ err }, "elaine daily brief generation failed");
+    res.status(503).json({ error: "Brief generation unavailable" });
+    return;
+  }
+
+  if (!content) {
+    res.status(503).json({ error: "Brief generation returned empty content" });
+    return;
+  }
+
+  try {
+    const [row] = await db
+      .insert(elaineDailyBriefs)
+      .values({ userId, content })
+      .returning();
+    if (!row) throw new Error("insert returned no row");
+    res.json({
+      id: row.id,
+      content: row.content,
+      generatedAt: row.generatedAt.toISOString(),
+      dismissed: row.dismissed,
+    });
+  } catch (err) {
+    // Could be a unique-constraint race — reload and return whatever is there.
+    req.log.warn({ err }, "elaine daily brief insert failed, reloading");
+    const [reloaded] = await db
+      .select()
+      .from(elaineDailyBriefs)
+      .where(
+        and(
+          eq(elaineDailyBriefs.userId, userId),
+          sql`${elaineDailyBriefs.generatedAt} >= ${todayIso}`,
+        ),
+      )
+      .orderBy(desc(elaineDailyBriefs.generatedAt))
+      .limit(1);
+    if (reloaded) {
+      res.json({
+        id: reloaded.id,
+        content: reloaded.content,
+        generatedAt: reloaded.generatedAt.toISOString(),
+        dismissed: reloaded.dismissed,
+      });
+    } else {
+      res.status(500).json({ error: "Failed to store brief" });
+    }
+  }
+});
+
+// POST /daily-brief/dismiss — mark today's brief as seen/dismissed.
+router.post("/daily-brief/dismiss", async (req, res) => {
+  const userId = req.session.userId!;
+  const startOfTodayUtc = new Date();
+  startOfTodayUtc.setUTCHours(0, 0, 0, 0);
+  await db
+    .update(elaineDailyBriefs)
+    .set({ dismissed: true })
+    .where(
+      and(
+        eq(elaineDailyBriefs.userId, userId),
+        sql`${elaineDailyBriefs.generatedAt} >= ${startOfTodayUtc.toISOString()}`,
+      ),
+    );
+  res.status(204).end();
+});
+
+// POST /daily-brief/regenerate — delete today's brief and generate a fresh one.
+router.post("/daily-brief/regenerate", async (req, res) => {
+  const userId = req.session.userId!;
+  const startOfTodayUtc = new Date();
+  startOfTodayUtc.setUTCHours(0, 0, 0, 0);
+
+  await db
+    .delete(elaineDailyBriefs)
+    .where(
+      and(
+        eq(elaineDailyBriefs.userId, userId),
+        sql`${elaineDailyBriefs.generatedAt} >= ${startOfTodayUtc.toISOString()}`,
+      ),
+    );
+
+  let content: string;
+  try {
+    content = await generateDailyBriefContent(userId);
+  } catch (err) {
+    req.log.error({ err }, "elaine daily brief regeneration failed");
+    res.status(503).json({ error: "Brief generation unavailable" });
+    return;
+  }
+
+  if (!content) {
+    res.status(503).json({ error: "Brief generation returned empty content" });
+    return;
+  }
+
+  const [row] = await db
+    .insert(elaineDailyBriefs)
+    .values({ userId, content })
+    .returning();
+
+  if (!row) {
+    res.status(500).json({ error: "Failed to store regenerated brief" });
+    return;
+  }
+
+  res.json({
+    id: row.id,
+    content: row.content,
+    generatedAt: row.generatedAt.toISOString(),
+    dismissed: false,
+  });
+});
 
 router.get("/admin/config", async (req, res) => {
   if (!(await requireOwner(req, res))) return;

@@ -67,3 +67,28 @@ jobs:
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
       - run: pnpm run lint
+
+  codegen-drift:
+    name: Codegen drift
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request_target' || github.actor == 'dependabot[bot]'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/api-spec run codegen
+      - name: Fail if codegen produced a diff
+        run: |
+          if ! git diff --quiet; then
+            echo "Generated API types/spec are out of date. Run 'pnpm --filter @workspace/api-spec run codegen' locally and commit the result."
+            git --no-pager diff --stat
+            exit 1
+          fi

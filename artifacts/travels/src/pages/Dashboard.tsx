@@ -7,7 +7,7 @@ import {
   useUpdateReminder,
   useDeleteReminder,
   getListAllRemindersQueryKey,
-  type Trip,
+  type TravelsTrip as Trip,
   type TripStatus,
   type Reminder,
 } from "@workspace/api-client-react";
@@ -350,14 +350,20 @@ export default function Dashboard() {
                       : `${nextTripCountdown} days until your next trip`}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  {stats.nextTrip.destination} &middot;{" "}
-                  {new Date(stats.nextTrip.startDate).toLocaleDateString(
-                    "en-GB",
-                    {
-                      weekday: "long",
-                      day: "numeric",
-                      month: "long",
-                    },
+                  {stats.nextTrip.destination}
+                  {stats.nextTrip.startDate && (
+                    <>
+                      {" "}
+                      &middot;{" "}
+                      {new Date(stats.nextTrip.startDate).toLocaleDateString(
+                        "en-GB",
+                        {
+                          weekday: "long",
+                          day: "numeric",
+                          month: "long",
+                        },
+                      )}
+                    </>
                   )}
                 </p>
               </div>

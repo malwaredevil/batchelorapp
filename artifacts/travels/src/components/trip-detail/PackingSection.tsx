@@ -29,8 +29,8 @@ import {
   useDeletePackingTemplate,
   getGetPackingListQueryKey,
   getListPackingTemplatesQueryKey,
-  type PackingItem,
-  type PackingTemplate,
+  type TravelsPackingItem as PackingItem,
+  type TravelsPackingTemplate as PackingTemplate,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -197,7 +197,7 @@ export function PackingSection({ tripId }: PackingSectionProps) {
     setLocalOrder(reordered); // optimistic update
 
     reorderItems.mutate(
-      { tripId, body: { order: reordered.map((i) => i.id) } },
+      { id: tripId, data: { order: reordered.map((i) => i.id) } },
       {
         onSuccess: invalidate,
         onError: () => {
@@ -215,7 +215,7 @@ export function PackingSection({ tripId }: PackingSectionProps) {
     if (!text) return;
     setNewItemText("");
     createItem.mutate(
-      { tripId, body: { text } },
+      { id: tripId, data: { text } },
       {
         onSuccess: invalidate,
         onError: () => toast.error("Failed to add item"),
@@ -225,7 +225,7 @@ export function PackingSection({ tripId }: PackingSectionProps) {
 
   const handleToggle = (item: PackingItem) => {
     updateItem.mutate(
-      { tripId, itemId: item.id, body: { packed: !item.packed } },
+      { id: tripId, itemId: item.id, data: { packed: !item.packed } },
       {
         onSuccess: invalidate,
         onError: () => toast.error("Failed to update item"),
@@ -235,7 +235,7 @@ export function PackingSection({ tripId }: PackingSectionProps) {
 
   const handleDelete = (itemId: number) => {
     deleteItem.mutate(
-      { tripId, itemId },
+      { id: tripId, itemId },
       {
         onSuccess: invalidate,
         onError: () => toast.error("Failed to remove item"),
@@ -317,11 +317,13 @@ export function PackingSection({ tripId }: PackingSectionProps) {
     }
 
     bulkCreate.mutate(
-      { tripId, body: { items: toAdd } },
+      { id: tripId, data: { items: toAdd } },
       {
         onSuccess: () => {
           invalidate();
-          toast.success(`Added ${toAdd.length} item${toAdd.length !== 1 ? "s" : ""}`);
+          toast.success(
+            `Added ${toAdd.length} item${toAdd.length !== 1 ? "s" : ""}`,
+          );
           setShowGenerateDialog(false);
           setGeneratedItems([]);
         },
@@ -335,10 +337,17 @@ export function PackingSection({ tripId }: PackingSectionProps) {
   const handleSaveTemplate = () => {
     if (!templateName.trim()) return;
     createTemplate.mutate(
-      { name: templateName.trim(), items: items.map((i) => i.text) },
+      {
+        data: {
+          name: templateName.trim(),
+          items: items.map((i) => i.text),
+        },
+      },
       {
         onSuccess: () => {
-          void qc.invalidateQueries({ queryKey: getListPackingTemplatesQueryKey() });
+          void qc.invalidateQueries({
+            queryKey: getListPackingTemplatesQueryKey(),
+          });
           toast.success("Template saved");
           setShowSaveTemplateDialog(false);
           setTemplateName("");
@@ -350,7 +359,7 @@ export function PackingSection({ tripId }: PackingSectionProps) {
 
   const handleLoadTemplate = (template: PackingTemplate) => {
     loadTemplate.mutate(
-      { tripId, templateId: template.id },
+      { id: tripId, templateId: template.id },
       {
         onSuccess: (result) => {
           invalidate();
@@ -366,13 +375,18 @@ export function PackingSection({ tripId }: PackingSectionProps) {
 
   const handleDeleteTemplate = (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
-    deleteTemplate.mutate(id, {
-      onSuccess: () => {
-        void qc.invalidateQueries({ queryKey: getListPackingTemplatesQueryKey() });
-        toast.success("Template deleted");
+    deleteTemplate.mutate(
+      { templateId: id },
+      {
+        onSuccess: () => {
+          void qc.invalidateQueries({
+            queryKey: getListPackingTemplatesQueryKey(),
+          });
+          toast.success("Template deleted");
+        },
+        onError: () => toast.error("Failed to delete template"),
       },
-      onError: () => toast.error("Failed to delete template"),
-    });
+    );
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -395,7 +409,8 @@ export function PackingSection({ tripId }: PackingSectionProps) {
               {packed} of {items.length} packed
             </span>
             <span>
-              {items.length > 0 ? Math.round((packed / items.length) * 100) : 0}%
+              {items.length > 0 ? Math.round((packed / items.length) * 100) : 0}
+              %
             </span>
           </div>
           <div className="h-1.5 bg-muted rounded-full overflow-hidden">
@@ -445,9 +460,7 @@ export function PackingSection({ tripId }: PackingSectionProps) {
               Load template
             </DropdownMenuItem>
             {items.length > 0 && (
-              <DropdownMenuItem
-                onClick={() => setShowSaveTemplateDialog(true)}
-              >
+              <DropdownMenuItem onClick={() => setShowSaveTemplateDialog(true)}>
                 <BookMarked className="w-4 h-4 mr-2" />
                 Save as template
               </DropdownMenuItem>
@@ -597,10 +610,7 @@ export function PackingSection({ tripId }: PackingSectionProps) {
       </Dialog>
 
       {/* Load template dialog */}
-      <Dialog
-        open={showTemplatesDialog}
-        onOpenChange={setShowTemplatesDialog}
-      >
+      <Dialog open={showTemplatesDialog} onOpenChange={setShowTemplatesDialog}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Load Template</DialogTitle>

@@ -1,6 +1,14 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { Tag, Wrench, KeyRound, ChevronRight, FileDown, Loader2, BarChart3 } from "lucide-react";
+import {
+  Tag,
+  Wrench,
+  KeyRound,
+  ChevronRight,
+  FileDown,
+  Loader2,
+  BarChart3,
+} from "lucide-react";
 import { useListPottery } from "@workspace/api-client-react";
 import type { PotteryPotteryItem as PotteryItem } from "@workspace/api-client-react";
 import { toast } from "sonner";
@@ -206,7 +214,7 @@ async function containerToJpeg(el: HTMLElement): Promise<string> {
     backgroundColor: "#ffffff",
     logging: false,
   });
-  return canvas.toDataURL("image/jpeg", 0.90);
+  return canvas.toDataURL("image/jpeg", 0.9);
 }
 
 // ── Main PDF generator ────────────────────────────────────────────────────────
@@ -283,7 +291,11 @@ async function generateInsurancePdf(
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-function InsuranceExportButton({ items }: { items: PotteryItem[] | undefined }) {
+function InsuranceExportButton({
+  items,
+}: {
+  items: PotteryItem[] | undefined;
+}) {
   const [progress, setProgress] = useState<string | null>(null);
   const generating = progress !== null;
 

@@ -10,6 +10,7 @@ import layoutsRouter from "./layouts";
 import shoppingRouter from "./shopping";
 import patternImportRouter from "./pattern-import";
 import toolsRouter from "./tools";
+import blockTemplatesRouter from "./block-templates";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(layoutsRouter);
 router.use(shoppingRouter);
 router.use(patternImportRouter);
 router.use(toolsRouter);
+router.use(blockTemplatesRouter);
 
 export default router;

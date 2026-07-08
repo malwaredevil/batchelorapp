@@ -15,7 +15,7 @@ import {
   Menu,
   Sparkles,
 } from "lucide-react";
-import { AppSwitcher } from "@workspace/elaine-ui";
+import { AppSwitcher, SearchTrigger } from "@workspace/elaine-ui";
 import {
   useLogout,
   getGetCurrentUserQueryKey,
@@ -211,6 +211,8 @@ export function Layout({ children }: { children: ReactNode }) {
                 location={location}
               />
             </nav>
+
+            <SearchTrigger />
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

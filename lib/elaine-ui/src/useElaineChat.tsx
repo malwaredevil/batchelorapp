@@ -20,6 +20,7 @@ import {
   type ElaineAppId,
   type ChatWidget,
   type ConversationMessage,
+  type ElaineAttachmentUploadResult,
 } from "@workspace/api-client-react";
 import { ElaineName } from "./ElaineAvatar";
 import { useElainePageContextReader } from "./ElainePageContext";
@@ -30,6 +31,9 @@ export interface PendingAttachment {
   uploadedUrl: string | null;
   uploading: boolean;
   error: boolean;
+  fileType: "image" | "pdf";
+  fileName: string;
+  extractedText?: string;
 }
 
 /**
@@ -114,10 +118,7 @@ export function useElaineChat({
   }
 
   /** Load a specific named conversation into the chat panel. */
-  function handleLoadConversation(
-    id: number,
-    msgs: ConversationMessage[],
-  ) {
+  function handleLoadConversation(id: number, msgs: ConversationMessage[]) {
     setConversationId(id);
     setPendingAttachments([]);
     setPendingNavigate(null);
@@ -131,7 +132,7 @@ export function useElaineChat({
         content: m.content,
         attachmentUrls:
           m.attachmentUrls.length > 0 ? m.attachmentUrls : undefined,
-      })),
+      })) as AssistantMessage[],
     );
   }
 
@@ -139,18 +140,35 @@ export function useElaineChat({
 
   async function handleAddAttachment(file: File) {
     const previewUrl = URL.createObjectURL(file);
-    const idx = Date.now(); // used as a stable per-upload key
+    const fileType: "image" | "pdf" =
+      file.type === "application/pdf" ? "pdf" : "image";
     setPendingAttachments((prev) => [
       ...prev,
-      { file, previewUrl, uploadedUrl: null, uploading: true, error: false },
+      {
+        file,
+        previewUrl,
+        uploadedUrl: null,
+        uploading: true,
+        error: false,
+        fileType,
+        fileName: file.name,
+      },
     ]);
 
     try {
-      const { url } = await uploadElaineAttachment(file);
+      const result: ElaineAttachmentUploadResult =
+        await uploadElaineAttachment(file);
       setPendingAttachments((prev) =>
         prev.map((a) =>
           a.previewUrl === previewUrl
-            ? { ...a, uploadedUrl: url, uploading: false }
+            ? {
+                ...a,
+                uploadedUrl: result.url,
+                uploading: false,
+                fileType: result.type,
+                fileName: result.name ?? file.name,
+                extractedText: result.extractedText,
+              }
             : a,
         ),
       );
@@ -164,9 +182,6 @@ export function useElaineChat({
       );
       toast.error("Couldn't upload the attachment. Please try again.");
     }
-
-    // suppress unused-variable warning for idx — it's the closure anchor
-    void idx;
   }
 
   function handleRemoveAttachment(previewUrl: string) {
@@ -194,12 +209,25 @@ export function useElaineChat({
 
   async function handleSend(overrideText?: string) {
     const trimmed = (overrideText ?? input).trim();
-    if (!trimmed || isStreaming) return;
 
-    const uploadedAttachmentUrls = pendingAttachments
-      .filter((a) => a.uploadedUrl && !a.error)
-      .map((a) => a.uploadedUrl!);
-    const hasAttachments = uploadedAttachmentUrls.length > 0;
+    const readyAttachments = pendingAttachments.filter(
+      (a) => a.uploadedUrl && !a.error,
+    );
+    const imageAttachments = readyAttachments.filter(
+      (a) => a.fileType === "image",
+    );
+    const pdfAttachments = readyAttachments.filter((a) => a.fileType === "pdf");
+    const uploadedAttachmentUrls = imageAttachments.map((a) => a.uploadedUrl!);
+    const uploadedPdfs = pdfAttachments.map((a) => ({
+      url: a.uploadedUrl!,
+      name: a.fileName,
+      extractedText: a.extractedText,
+    }));
+    const hasAttachments =
+      uploadedAttachmentUrls.length > 0 || uploadedPdfs.length > 0;
+
+    // Must have either a message body or at least one ready attachment
+    if ((!trimmed && !hasAttachments) || isStreaming) return;
 
     setInput("");
     clearAttachments();
@@ -209,12 +237,23 @@ export function useElaineChat({
     setActionDone(false);
     setStreamingContent("");
     setStatusMessage("");
+    const optimisticAttachmentRefs = [
+      ...imageAttachments.map((a) => ({
+        url: a.uploadedUrl!,
+        type: "image" as const,
+      })),
+      ...pdfAttachments.map((a) => ({
+        url: a.uploadedUrl!,
+        type: "pdf" as const,
+        name: a.fileName,
+      })),
+    ];
     setMessages((prev) => [
       ...prev,
       {
         role: "user",
         content: trimmed,
-        ...(hasAttachments ? { attachmentUrls: uploadedAttachmentUrls } : {}),
+        ...(hasAttachments ? { attachmentUrls: optimisticAttachmentRefs } : {}),
       },
     ]);
     setIsStreaming(true);
@@ -228,7 +267,10 @@ export function useElaineChat({
           pageContext: getPageContext(),
           appId,
           ...(conversationId !== null ? { conversationId } : {}),
-          ...(hasAttachments ? { attachmentUrls: uploadedAttachmentUrls } : {}),
+          ...(uploadedAttachmentUrls.length > 0
+            ? { attachmentUrls: uploadedAttachmentUrls }
+            : {}),
+          ...(uploadedPdfs.length > 0 ? { attachmentPdfs: uploadedPdfs } : {}),
         },
         {
           onDelta: (text) => {

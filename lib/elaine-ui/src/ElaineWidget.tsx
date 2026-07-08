@@ -1,15 +1,23 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { MessageCircle, X, MessageSquarePlus, Maximize2 } from "lucide-react";
+import {
+  MessageCircle,
+  X,
+  MessageSquarePlus,
+  Maximize2,
+  History,
+} from "lucide-react";
 import {
   useGetElaineNudgesUnseenCount,
   getGetElaineNudgesUnseenCountQueryKey,
+  type ConversationMessage,
   type ElaineAppId,
 } from "@workspace/api-client-react";
 import { Button } from "./ui/button";
 import { ElaineAvatar, ElaineWordmark } from "./ElaineAvatar";
 import { useElaineChat } from "./useElaineChat";
 import { ElaineChatPanel } from "./ElaineChatPanel";
+import { ElaineHistoryPanel } from "./ElaineHistoryPanel";
 
 // Default pixel dimensions per size preference.
 const CHAT_WINDOW_DEFAULT_SIZES: Record<string, { w: number; h: number }> = {
@@ -31,6 +39,7 @@ export function ElaineWidget({
   currentPath?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [isDesktop, setIsDesktop] = useState(
     () =>
       typeof window !== "undefined" &&
@@ -115,6 +124,26 @@ export function ElaineWidget({
   useEffect(() => {
     if (open) chat.endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, open, isStreaming, streamingContent, chat.endRef]);
+
+  // Close the history panel whenever the widget itself closes, so reopening
+  // always lands back on the active chat rather than the history list.
+  useEffect(() => {
+    if (!open) setShowHistory(false);
+  }, [open]);
+
+  const handleSelectConversation = useCallback(
+    async (id: number) => {
+      try {
+        const res = await fetch(`/api/elaine/conversations/${id}/messages`);
+        if (!res.ok) throw new Error("Failed to load conversation");
+        const msgs = (await res.json()) as ConversationMessage[];
+        chat.handleLoadConversation(id, msgs);
+      } finally {
+        setShowHistory(false);
+      }
+    },
+    [chat],
+  );
 
   const onFullScreenChat =
     fullScreenPath !== undefined && currentPath === fullScreenPath;
@@ -210,9 +239,21 @@ export function ElaineWidget({
                 <Button
                   variant="ghost"
                   size="icon"
+                  className={`h-8 w-8 ${showHistory ? "bg-muted" : ""}`}
+                  title={showHistory ? "Back to chat" : "Conversation history"}
+                  onClick={() => setShowHistory((v) => !v)}
+                >
+                  <History className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
                   className="h-8 w-8"
                   title="New conversation"
-                  onClick={chat.handleNewConversation}
+                  onClick={() => {
+                    chat.handleNewConversation();
+                    setShowHistory(false);
+                  }}
                 >
                   <MessageSquarePlus className="h-4 w-4" />
                 </Button>
@@ -227,7 +268,16 @@ export function ElaineWidget({
               </div>
             </div>
 
-            <ElaineChatPanel chat={chat} onNavigated={() => setOpen(false)} />
+            {showHistory ? (
+              <ElaineHistoryPanel
+                activeConversationId={chat.conversationId}
+                onNewConversation={chat.handleNewConversation}
+                onSelectConversation={handleSelectConversation}
+                onClose={() => setShowHistory(false)}
+              />
+            ) : (
+              <ElaineChatPanel chat={chat} onNavigated={() => setOpen(false)} />
+            )}
           </div>
         )}
 

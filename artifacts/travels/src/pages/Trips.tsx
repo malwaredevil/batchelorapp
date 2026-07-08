@@ -11,7 +11,7 @@ import {
   getGetTravelsStatsQueryKey,
   getTripPhotoImageUrl,
   type TripStatus,
-  type CreateTripBody,
+  type TravelsCreateTripBody as CreateTripBody,
   type CreateReminderBody,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -170,7 +170,7 @@ function ItineraryMergeDialog({
     }
 
     updateTrip.mutate(
-      { id: targetTripId, body: { itinerary: finalItinerary } },
+      { id: targetTripId, data: { itinerary: finalItinerary } },
       {
         onSuccess: () => {
           toast.success("Itinerary applied to trip");
@@ -202,9 +202,9 @@ function ItineraryMergeDialog({
           )}
           {isTargetError && (
             <p className="text-sm text-destructive">
-              Couldn&apos;t load this trip&apos;s current itinerary. Try
-              closing and reopening this dialog before applying, so we don't
-              risk overwriting anything.
+              Couldn&apos;t load this trip&apos;s current itinerary. Try closing
+              and reopening this dialog before applying, so we don't risk
+              overwriting anything.
             </p>
           )}
 
@@ -490,48 +490,53 @@ function AiPlannerDialog({
       theOneThing,
     };
 
-    createTrip.mutate(body, {
-      onSuccess: (newTrip) => {
-        const itinerary = scaffold["itinerary"];
-        const finish = () => {
-          qc.invalidateQueries({ queryKey: getListTripsQueryKey() });
-          qc.invalidateQueries({ queryKey: getGetTravelsStatsQueryKey() });
-          toast.success("Trip created from AI plan");
-          onOpenChange(false);
-          navigate(`/trips/${newTrip.id}`);
-        };
-        // Persist reminders from scaffold (fire-and-forget, non-blocking)
-        const scaffoldReminders = scaffold["reminders"];
-        if (Array.isArray(scaffoldReminders)) {
-          for (const rem of scaffoldReminders as unknown[]) {
-            if (rem === null || typeof rem !== "object") continue;
-            const r = rem as Record<string, unknown>;
-            const title =
-              typeof r["title"] === "string" ? r["title"].trim() : "";
-            if (!title) continue;
-            const body: CreateReminderBody = {
-              title,
-              description:
-                typeof r["description"] === "string" ? r["description"] : null,
-              dueDate:
-                typeof r["dueDate"] === "string" ? r["dueDate"] : undefined,
-            };
-            createReminder.mutate({ tripId: newTrip.id, body });
+    createTrip.mutate(
+      { data: body },
+      {
+        onSuccess: (newTrip) => {
+          const itinerary = scaffold["itinerary"];
+          const finish = () => {
+            qc.invalidateQueries({ queryKey: getListTripsQueryKey() });
+            qc.invalidateQueries({ queryKey: getGetTravelsStatsQueryKey() });
+            toast.success("Trip created from AI plan");
+            onOpenChange(false);
+            navigate(`/trips/${newTrip.id}`);
+          };
+          // Persist reminders from scaffold (fire-and-forget, non-blocking)
+          const scaffoldReminders = scaffold["reminders"];
+          if (Array.isArray(scaffoldReminders)) {
+            for (const rem of scaffoldReminders as unknown[]) {
+              if (rem === null || typeof rem !== "object") continue;
+              const r = rem as Record<string, unknown>;
+              const title =
+                typeof r["title"] === "string" ? r["title"].trim() : "";
+              if (!title) continue;
+              const body: CreateReminderBody = {
+                title,
+                description:
+                  typeof r["description"] === "string"
+                    ? r["description"]
+                    : null,
+                dueDate:
+                  typeof r["dueDate"] === "string" ? r["dueDate"] : undefined,
+              };
+              createReminder.mutate({ tripId: newTrip.id, body });
+            }
           }
-        }
 
-        // Persist itinerary scaffold if the AI generated day-by-day plan
-        if (itinerary) {
-          updateTrip.mutate(
-            { id: newTrip.id, body: { itinerary } },
-            { onSettled: finish },
-          );
-        } else {
-          finish();
-        }
+          // Persist itinerary scaffold if the AI generated day-by-day plan
+          if (itinerary) {
+            updateTrip.mutate(
+              { id: newTrip.id, data: { itinerary } },
+              { onSettled: finish },
+            );
+          } else {
+            finish();
+          }
+        },
+        onError: () => toast.error("Failed to create trip"),
       },
-      onError: () => toast.error("Failed to create trip"),
-    });
+    );
   };
 
   return (
@@ -718,8 +723,7 @@ function AiPlannerDialog({
         targetTripId={typeof applyTarget === "number" ? applyTarget : null}
         targetTripTitle={
           typeof applyTarget === "number"
-            ? (existingTrips.find((t) => t.id === applyTarget)?.title ??
-              "trip")
+            ? (existingTrips.find((t) => t.id === applyTarget)?.title ?? "trip")
             : ""
         }
         newItinerary={parseItinerary(scaffold?.["itinerary"])}
@@ -794,16 +798,23 @@ function CreateTripDialog({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title || !form.destination) return;
-    createTrip.mutate(form as CreateTripBody, {
-      onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getListTripsQueryKey() });
-        qc.invalidateQueries({ queryKey: getGetTravelsStatsQueryKey() });
-        toast.success("Trip created");
-        onOpenChange(false);
-        setForm({ status: "wishlist", travellerCount: 2, hasRentalCar: false });
+    createTrip.mutate(
+      { data: form as CreateTripBody },
+      {
+        onSuccess: () => {
+          qc.invalidateQueries({ queryKey: getListTripsQueryKey() });
+          qc.invalidateQueries({ queryKey: getGetTravelsStatsQueryKey() });
+          toast.success("Trip created");
+          onOpenChange(false);
+          setForm({
+            status: "wishlist",
+            travellerCount: 2,
+            hasRentalCar: false,
+          });
+        },
+        onError: () => toast.error("Failed to create trip"),
       },
-      onError: () => toast.error("Failed to create trip"),
-    });
+    );
   };
 
   return (

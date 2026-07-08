@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, type ReactNode } from "react";
+import { useRef, useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   Send,
   ArrowRight,
@@ -140,6 +140,7 @@ export function ElaineChatPanel({
   } = chat;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const hasUploadingAttachments = pendingAttachments.some((a) => a.uploading);
 
@@ -243,22 +244,33 @@ export function ElaineChatPanel({
                             storedName ??
                             (match ? decodeURIComponent(match[1]) : "document.pdf");
                           return (
-                            <div
+                            <a
                               key={j}
-                              className="flex items-center gap-1.5 rounded-lg bg-primary-foreground/15 px-2 py-1"
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1.5 rounded-lg bg-primary-foreground/15 px-2 py-1 transition-colors hover:bg-primary-foreground/25"
+                              title={`Open ${filename}`}
                             >
                               <FileText className="h-4 w-4 shrink-0" />
                               <span className="max-w-[140px] truncate text-xs">{filename}</span>
-                            </div>
+                            </a>
                           );
                         }
                         return (
-                          <img
+                          <button
                             key={j}
-                            src={url}
-                            alt=""
-                            className="h-20 w-20 rounded-lg object-cover"
-                          />
+                            type="button"
+                            onClick={() => setLightboxUrl(url)}
+                            className="block cursor-zoom-in"
+                            title="View image"
+                          >
+                            <img
+                              src={url}
+                              alt=""
+                              className="h-20 w-20 rounded-lg object-cover"
+                            />
+                          </button>
                         );
                       })}
                     </div>
@@ -652,6 +664,30 @@ export function ElaineChatPanel({
           </Button>
         </div>
       </div>
+
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setLightboxUrl(null)}
+          role="button"
+          tabIndex={-1}
+        >
+          <button
+            type="button"
+            onClick={() => setLightboxUrl(null)}
+            className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-background/20 text-white hover:bg-background/30"
+            aria-label="Close preview"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <img
+            src={lightboxUrl}
+            alt=""
+            className="max-h-full max-w-full rounded-lg object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </>
   );
 }

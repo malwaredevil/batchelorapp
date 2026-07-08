@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { Search, Clock, MapPin, Package, Scissors, X } from "lucide-react";
+import { Search, Clock, MapPin, Package, Scissors, MessageCircle, X } from "lucide-react";
 
 const OPEN_EVENT = "batchelor:open-command-palette";
 
@@ -92,6 +92,9 @@ function ResultIcon({ type }: { type: string }) {
   }
   if (type.startsWith("quilting")) {
     return <Scissors className="h-4 w-4 shrink-0" style={{ color: "#a855f7" }} />;
+  }
+  if (type === "elaine_conversation") {
+    return <MessageCircle className="h-4 w-4 shrink-0" style={{ color: "#10b981" }} />;
   }
   return <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />;
 }

@@ -24,3 +24,5 @@ Embeddings also go through OpenRouter's unified embeddings endpoint (`MODELS.EMB
 **Exceptions (left untouched, not OpenRouter-routable):** Voyage AI reranking (`lib/reranker.ts`) and Jina visual/CLIP embeddings (`lib/visual-embed.ts`) remain direct API calls — OpenRouter doesn't offer either capability.
 
 **How to apply:** Any new AI call site must use `callModel`/`callModelWithAdvisor`/`callModelWithSubagent` with a `MODELS.*` OpenRouter identifier. Never instantiate a raw `new OpenAI({apiKey: ...})` client pointed at OpenAI's API directly — add a new `MODELS` entry with an OpenRouter model string instead.
+
+**Perplexity `return_images` passthrough is undocumented/best-effort on OpenRouter.** Sonar (research model) is called through OpenRouter, so adding Perplexity-only request extensions like `return_images: true` isn't guaranteed to reach the underlying provider or come back populated — treat any `raw.images`-style field as optional/absent-by-default, never assume it's reliably populated just because the direct Perplexity API docs say so.

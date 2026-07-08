@@ -15,6 +15,9 @@
  *     app's Settings > Maintenance > Bulk Re-analyse).
  *   - Image files are stored in Supabase Storage (not in the DB) and are
  *     unaffected by database disasters.
+ *   - Mirrors backup-to-replit.ts's table/column set exactly, including
+ *     app_users phone/SMS fields and the agentphone_* tables — keep both
+ *     scripts in sync when adding new tables or columns.
  *
  * Source:      Replit DB — PGHOST / PGPORT / PGUSER / PGPASSWORD / PGDATABASE
  * Destination: Supabase  — DATABASE_URL (rewritten to pooler by resolveDatabaseUrl)
@@ -113,11 +116,34 @@ async function main() {
       "hub_widget_ids",
       "hub_weather_config",
       "travels_reminder_email",
+      "timezone",
+      "is_owner",
+      "phone_number",
+      "phone_verified",
+      "phone_verified_at",
+      "sms_consent_at",
+      "sms_opted_out_at",
       "created_at",
     ],
     orderBy: "id",
   });
   await resetSequence(dest, "app_users", "id");
+
+  await dest.query(
+    "TRUNCATE agentphone_conversations, agentphone_webhook_deliveries CASCADE",
+  );
+  await copyTable(source, dest, {
+    table: "agentphone_conversations",
+    columns: ["id", "phone_number", "user_id", "messages", "updated_at"],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "agentphone_conversations", "id");
+
+  await copyTable(source, dest, {
+    table: "agentphone_webhook_deliveries",
+    columns: ["id", "received_at"],
+    orderBy: "received_at",
+  });
 
   await dest.query("TRUNCATE app_gmail_connections CASCADE");
   await copyTable(source, dest, {

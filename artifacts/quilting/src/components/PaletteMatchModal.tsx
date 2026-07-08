@@ -11,17 +11,22 @@ import { Button } from "@/components/ui/button";
 import { colorToHex } from "@workspace/web-core";
 import { Link } from "wouter";
 
-// Matches the shape returned by POST /api/quilting/tools/palette-match
+export type PaletteMatchEntity = "fabric" | "pattern" | "quilt";
+
+interface MatchItem {
+  id: number;
+  name: string;
+  imageUrl: string | null;
+  designer?: string | null;
+  quantity?: number;
+  quantityUnit?: string;
+  dateCompleted?: string | null;
+}
+
 interface PaletteMatch {
-  fabric: {
-    id: number;
-    name: string;
-    imageUrl: string;
-    designer?: string | null;
-    quantity: number;
-    quantityUnit: string;
-    dominantColors: string[];
-  };
+  fabric?: MatchItem;
+  pattern?: MatchItem;
+  quilt?: MatchItem;
   score: number;
   matchedColors: string[];
 }
@@ -31,12 +36,57 @@ interface PaletteMatchResponse {
   matches: PaletteMatch[];
 }
 
+interface EntityConfig {
+  endpoint: string;
+  dialogTitle: string;
+  uploadHint: string;
+  findLabel: string;
+  emptyLabel: string;
+  linkPrefix: string;
+  resultKey: "fabric" | "pattern" | "quilt";
+}
+
+const ENTITY_CONFIG: Record<PaletteMatchEntity, EntityConfig> = {
+  fabric: {
+    endpoint: "/api/quilting/tools/palette-match",
+    dialogTitle: "Match fabrics from photo",
+    uploadHint:
+      "Painting, room photo, outfit — we'll extract its colour palette and find matching fabrics in your stash",
+    findLabel: "Find matching fabrics",
+    emptyLabel: "No matching fabrics found in your stash",
+    linkPrefix: "/fabrics",
+    resultKey: "fabric",
+  },
+  pattern: {
+    endpoint: "/api/quilting/tools/palette-match-patterns",
+    dialogTitle: "Match patterns from photo",
+    uploadHint:
+      "Painting, room photo, outfit — we'll extract its colour palette and find matching patterns in your collection",
+    findLabel: "Find matching patterns",
+    emptyLabel: "No matching patterns found in your collection",
+    linkPrefix: "/patterns",
+    resultKey: "pattern",
+  },
+  quilt: {
+    endpoint: "/api/quilting/tools/palette-match-quilts",
+    dialogTitle: "Match quilts from photo",
+    uploadHint:
+      "Painting, room photo, outfit — we'll extract its colour palette and find matching quilts in your collection",
+    findLabel: "Find matching quilts",
+    emptyLabel: "No matching quilts found in your collection",
+    linkPrefix: "/quilts",
+    resultKey: "quilt",
+  },
+};
+
 interface Props {
   open: boolean;
   onClose: () => void;
+  entity?: PaletteMatchEntity;
 }
 
-export function PaletteMatchModal({ open, onClose }: Props) {
+export function PaletteMatchModal({ open, onClose, entity = "fabric" }: Props) {
+  const config = ENTITY_CONFIG[entity];
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -58,7 +108,7 @@ export function PaletteMatchModal({ open, onClose }: Props) {
     try {
       const form = new FormData();
       form.append("image", file);
-      const res = await fetch("/api/quilting/tools/palette-match", {
+      const res = await fetch(config.endpoint, {
         method: "POST",
         body: form,
         credentials: "include",
@@ -93,7 +143,7 @@ export function PaletteMatchModal({ open, onClose }: Props) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" />
-            Match fabrics from photo
+            {config.dialogTitle}
           </DialogTitle>
         </DialogHeader>
 
@@ -119,8 +169,7 @@ export function PaletteMatchModal({ open, onClose }: Props) {
                     Upload an inspiration image
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Painting, room photo, outfit — we'll extract its colour
-                    palette and find matching fabrics in your stash
+                    {config.uploadHint}
                   </p>
                 </div>
               )}
@@ -161,7 +210,7 @@ export function PaletteMatchModal({ open, onClose }: Props) {
                   ) : (
                     <>
                       <Sparkles className="mr-2 h-3.5 w-3.5" />
-                      Find matching fabrics
+                      {config.findLabel}
                     </>
                   )}
                 </Button>
@@ -205,11 +254,11 @@ export function PaletteMatchModal({ open, onClose }: Props) {
               </div>
             </div>
 
-            {/* Matched fabrics */}
+            {/* Matched items */}
             {result.matches.length === 0 ? (
               <div className="rounded-lg border border-dashed border-border py-8 text-center">
                 <p className="text-sm text-muted-foreground">
-                  No matching fabrics found in your stash
+                  {config.emptyLabel}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Try an image with more colour variety
@@ -218,54 +267,67 @@ export function PaletteMatchModal({ open, onClose }: Props) {
             ) : (
               <>
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  {result.matches.length} matching fabric
-                  {result.matches.length !== 1 ? "s" : ""} in your stash
+                  {result.matches.length} matching {config.resultKey}
+                  {result.matches.length !== 1 ? "s" : ""}
                 </p>
                 <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-                  {result.matches.map((m) => (
-                    <Link
-                      key={m.fabric.id}
-                      href={`/fabrics/${m.fabric.id}`}
-                      onClick={handleClose}
-                    >
-                      <div className="flex items-center gap-3 rounded-lg border border-card-border bg-card p-2 transition-colors hover:bg-muted/40">
-                        <img
-                          src={m.fabric.imageUrl}
-                          alt={m.fabric.name}
-                          className="h-12 w-12 shrink-0 rounded-md object-cover"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium">
-                            {m.fabric.name}
-                          </p>
-                          {m.fabric.designer && (
-                            <p className="truncate text-xs text-muted-foreground">
-                              {m.fabric.designer}
-                            </p>
+                  {result.matches.map((m) => {
+                    const item = m[config.resultKey];
+                    if (!item) return null;
+                    return (
+                      <Link
+                        key={item.id}
+                        href={`${config.linkPrefix}/${item.id}`}
+                        onClick={handleClose}
+                      >
+                        <div className="flex items-center gap-3 rounded-lg border border-card-border bg-card p-2 transition-colors hover:bg-muted/40">
+                          {item.imageUrl && (
+                            <img
+                              src={item.imageUrl}
+                              alt={item.name}
+                              className="h-12 w-12 shrink-0 rounded-md object-cover"
+                            />
                           )}
-                          <div className="mt-1 flex flex-wrap items-center gap-1">
-                            {m.matchedColors.map((c) => (
-                              <span
-                                key={c}
-                                className="h-3.5 w-3.5 rounded-full border border-border/30"
-                                style={{ backgroundColor: colorToHex(c) }}
-                                title={c}
-                              />
-                            ))}
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium">
+                              {item.name}
+                            </p>
+                            {item.designer && (
+                              <p className="truncate text-xs text-muted-foreground">
+                                {item.designer}
+                              </p>
+                            )}
+                            {item.dateCompleted && (
+                              <p className="truncate text-xs text-muted-foreground">
+                                {item.dateCompleted}
+                              </p>
+                            )}
+                            <div className="mt-1 flex flex-wrap items-center gap-1">
+                              {m.matchedColors.map((c) => (
+                                <span
+                                  key={c}
+                                  className="h-3.5 w-3.5 rounded-full border border-border/30"
+                                  style={{ backgroundColor: colorToHex(c) }}
+                                  title={c}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <div className="flex items-center gap-1 text-xs font-semibold text-green-600 dark:text-green-400">
+                              <CheckCircle2 className="h-3 w-3" />
+                              {Math.round(m.score * 100)}%
+                            </div>
+                            {item.quantity != null && (
+                              <p className="text-xs text-muted-foreground">
+                                {item.quantity} {item.quantityUnit}
+                              </p>
+                            )}
                           </div>
                         </div>
-                        <div className="shrink-0 text-right">
-                          <div className="flex items-center gap-1 text-xs font-semibold text-green-600 dark:text-green-400">
-                            <CheckCircle2 className="h-3 w-3" />
-                            {Math.round(m.score * 100)}%
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            {m.fabric.quantity} {m.fabric.quantityUnit}
-                          </p>
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
+                      </Link>
+                    );
+                  })}
                 </div>
               </>
             )}

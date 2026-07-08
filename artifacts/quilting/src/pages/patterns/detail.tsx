@@ -23,7 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { getCategoryPalette } from "@workspace/web-core";
+import { getCategoryPalette, colorToHex } from "@workspace/web-core";
 import { toast } from "sonner";
 import {
   useGetPattern,
@@ -751,12 +751,12 @@ export default function PatternDetail() {
                 Colours
               </p>
               <div className="flex flex-wrap gap-2">
-                {(p.dominantColors ?? []).map((hex) => (
+                {(p.dominantColors ?? []).map((c) => (
                   <div
-                    key={hex}
-                    title={hex}
+                    key={c}
+                    title={c}
                     className="h-7 w-7 rounded-full border border-black/10 shadow-sm"
-                    style={{ backgroundColor: hex }}
+                    style={{ backgroundColor: colorToHex(c) }}
                   />
                 ))}
               </div>

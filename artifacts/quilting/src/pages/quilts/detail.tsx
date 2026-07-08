@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { getCategoryPalette } from "@workspace/web-core";
+import { getCategoryPalette, colorToHex } from "@workspace/web-core";
 import { ShareModal } from "@/components/share-modal";
 import { toast } from "sonner";
 import {
@@ -566,14 +566,14 @@ export default function QuiltDetail() {
                 Colours
               </p>
               <div className="flex flex-wrap gap-2">
-                {q.dominantColors!.map((hex) => (
-                  <div key={hex} className="flex items-center gap-1.5">
+                {q.dominantColors!.map((c) => (
+                  <div key={c} className="flex items-center gap-1.5">
                     <span
                       className="h-6 w-6 rounded-full border border-black/10 shadow-sm"
-                      style={{ backgroundColor: hex }}
+                      style={{ backgroundColor: colorToHex(c) }}
                     />
                     <span className="font-mono text-xs text-muted-foreground">
-                      {hex}
+                      {c}
                     </span>
                   </div>
                 ))}

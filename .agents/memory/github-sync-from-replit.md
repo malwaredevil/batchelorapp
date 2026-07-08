@@ -77,3 +77,14 @@ a merge commit; never force-push to "fix" it.
   it's committed/pushed — not fixed reactively once GitHub Actions' Lint job
   fails. Recurred once already (2026-07-04, regenerated mockup-components.ts
   pushed unformatted, caught by CI, needed a follow-up fix-up commit).
+
+## Diff the sync against the working tree, not `git ls-tree HEAD`
+
+- When scripting a "resync GitHub to Replit's current state" pass, read local
+  file contents from the actual working tree (or `git status --porcelain` +
+  file reads), not from `git ls-tree -r HEAD` blobs. `HEAD` only reflects the
+  last local commit/checkpoint — any uncommitted fix made earlier in the same
+  session (e.g. a prettier `--write` pass) is silently absent from a
+  HEAD-sourced sync and gets dropped from the pushed commit. Caught this
+  2026-07-08: a sync built from `HEAD` blobs missed 2 just-reformatted files,
+  needed a follow-up commit with contents re-read from disk.

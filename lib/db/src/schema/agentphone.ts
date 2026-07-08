@@ -53,9 +53,7 @@ export const agentphoneWebhookDeliveries = pgTable(
       .notNull(),
   },
   (table) => [
-    index("agentphone_webhook_deliveries_received_at_idx").on(
-      table.receivedAt,
-    ),
+    index("agentphone_webhook_deliveries_received_at_idx").on(table.receivedAt),
   ],
 ).enableRLS();
 

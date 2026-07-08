@@ -7,6 +7,7 @@
     "backup-to-replit": "tsx ./src/backup-to-replit.ts",
     "restore-from-replit": "tsx ./src/restore-from-replit.ts",
     "seed-travels": "tsx ./src/seed-travels-data.ts",
+    "seed-quilting-block-templates": "tsx ./src/seed-quilting-block-templates.ts",
     "add-users": "tsx ./src/add-users.ts",
     "check-ci-status": "tsx ./src/check-ci-status.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"

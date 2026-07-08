@@ -108,7 +108,10 @@ export async function sendSms(
       .where(eq(appUsers.phoneNumber, toNumber))
       .limit(1);
     if (recipient?.smsOptedOutAt) {
-      logger.info({ toNumber }, "agentphone: skipping send to opted-out number");
+      logger.info(
+        { toNumber },
+        "agentphone: skipping send to opted-out number",
+      );
       throw new SmsOptedOutError();
     }
   }

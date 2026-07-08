@@ -60,7 +60,9 @@ function verifySignature(req: Request): boolean {
 
   const timestampSeconds = Number(timestampHeader);
   if (!Number.isFinite(timestampSeconds)) return false;
-  if (Math.abs(Date.now() / 1000 - timestampSeconds) > SIGNATURE_MAX_AGE_SECONDS) {
+  if (
+    Math.abs(Date.now() / 1000 - timestampSeconds) > SIGNATURE_MAX_AGE_SECONDS
+  ) {
     return false;
   }
 

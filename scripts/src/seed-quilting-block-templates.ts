@@ -194,38 +194,50 @@ const TEMPLATES: TemplateDef[] = [
     solid(GOLD),
     solid(RED),
   ]),
-  t("Log Cabin", ["Strips", "Traditional"], 8, 8, (() => {
-    const N = 8;
-    const cells: string[] = [];
-    for (let r = 0; r < N; r++) {
-      for (let c = 0; c < N; c++) {
-        if (r === N / 2 - 1 && c === N / 2 - 1) {
-          cells.push(solid(RED)); // hearth centre
-        } else if (r < c) {
-          cells.push(solid(LIGHT));
-        } else {
-          cells.push(solid(DARK));
+  t(
+    "Log Cabin",
+    ["Strips", "Traditional"],
+    8,
+    8,
+    (() => {
+      const N = 8;
+      const cells: string[] = [];
+      for (let r = 0; r < N; r++) {
+        for (let c = 0; c < N; c++) {
+          if (r === N / 2 - 1 && c === N / 2 - 1) {
+            cells.push(solid(RED)); // hearth centre
+          } else if (r < c) {
+            cells.push(solid(LIGHT));
+          } else {
+            cells.push(solid(DARK));
+          }
         }
       }
-    }
-    return cells;
-  })()),
-  t("Courthouse Steps", ["Strips", "Traditional"], 7, 7, (() => {
-    const N = 7;
-    const mid = Math.floor(N / 2);
-    const cells: string[] = [];
-    for (let r = 0; r < N; r++) {
-      for (let c = 0; c < N; c++) {
-        if (r === mid && c === mid) cells.push(solid(RED));
-        else if (r === mid) cells.push(c < mid ? solid(DARK) : solid(LIGHT));
-        else if (c === mid) cells.push(r < mid ? solid(LIGHT) : solid(DARK));
-        else if (Math.abs(r - mid) > Math.abs(c - mid))
-          cells.push(r < mid ? solid(LIGHT) : solid(DARK));
-        else cells.push(c < mid ? solid(DARK) : solid(LIGHT));
+      return cells;
+    })(),
+  ),
+  t(
+    "Courthouse Steps",
+    ["Strips", "Traditional"],
+    7,
+    7,
+    (() => {
+      const N = 7;
+      const mid = Math.floor(N / 2);
+      const cells: string[] = [];
+      for (let r = 0; r < N; r++) {
+        for (let c = 0; c < N; c++) {
+          if (r === mid && c === mid) cells.push(solid(RED));
+          else if (r === mid) cells.push(c < mid ? solid(DARK) : solid(LIGHT));
+          else if (c === mid) cells.push(r < mid ? solid(LIGHT) : solid(DARK));
+          else if (Math.abs(r - mid) > Math.abs(c - mid))
+            cells.push(r < mid ? solid(LIGHT) : solid(DARK));
+          else cells.push(c < mid ? solid(DARK) : solid(LIGHT));
+        }
       }
-    }
-    return cells;
-  })()),
+      return cells;
+    })(),
+  ),
   t("Streak of Lightning", ["Strips", "Zigzag"], 4, 4, [
     nesw(LIGHT, DARK),
     solid(DARK),
@@ -1005,7 +1017,9 @@ async function main() {
     body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
   });
   if (!loginRes.ok) {
-    throw new Error(`Login failed: ${loginRes.status} ${await loginRes.text()}`);
+    throw new Error(
+      `Login failed: ${loginRes.status} ${await loginRes.text()}`,
+    );
   }
   const setCookie = loginRes.headers.getSetCookie?.() ?? [];
   for (const c of setCookie) {

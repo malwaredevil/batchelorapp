@@ -7,7 +7,8 @@
  * consistent snapshot.
  *
  * What is backed up:
- *   Shared:  app_users
+ *   Shared:  app_users (including phone/SMS opt-in fields), agentphone_conversations,
+ *            agentphone_webhook_deliveries
  *   Pottery: pottery_categories, pottery_items (WITHOUT embedding/visual_embedding),
  *            pottery_images, pottery_item_categories
  *   Quilting: quilting_categories, quilting_fabrics (WITHOUT embedding/visual_embedding),
@@ -61,6 +62,27 @@ ALTER TABLE app_users ADD COLUMN IF NOT EXISTS theme_preference TEXT;
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS hub_widget_ids TEXT;
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS hub_weather_config TEXT;
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS travels_reminder_email TEXT;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS timezone TEXT;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS is_owner BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS phone_number TEXT;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS phone_verified BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS phone_verified_at TIMESTAMPTZ;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS sms_consent_at TIMESTAMPTZ;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS sms_opted_out_at TIMESTAMPTZ;
+
+-- AgentPhone SMS/voice webhook
+CREATE TABLE IF NOT EXISTS agentphone_conversations (
+  id            SERIAL PRIMARY KEY,
+  phone_number  TEXT NOT NULL UNIQUE,
+  user_id       INTEGER NOT NULL,
+  messages      JSONB NOT NULL DEFAULT '[]'::jsonb,
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS agentphone_webhook_deliveries (
+  id           TEXT PRIMARY KEY,
+  received_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
 CREATE TABLE IF NOT EXISTS app_gmail_connections (
   id                      SERIAL PRIMARY KEY,
@@ -626,11 +648,32 @@ async function main() {
       "hub_widget_ids",
       "hub_weather_config",
       "travels_reminder_email",
+      "timezone",
+      "is_owner",
+      "phone_number",
+      "phone_verified",
+      "phone_verified_at",
+      "sms_consent_at",
+      "sms_opted_out_at",
       "created_at",
     ],
     orderBy: "id",
   });
   await resetSequence(dest, "app_users", "id");
+
+  summary["agentphone_conversations"] = await copyTable(source, dest, {
+    table: "agentphone_conversations",
+    columns: ["id", "phone_number", "user_id", "messages", "updated_at"],
+    orderBy: "id",
+    jsonbColumns: ["messages"],
+  });
+  await resetSequence(dest, "agentphone_conversations", "id");
+
+  summary["agentphone_webhook_deliveries"] = await copyTable(source, dest, {
+    table: "agentphone_webhook_deliveries",
+    columns: ["id", "received_at"],
+    orderBy: "received_at",
+  });
 
   summary["app_gmail_connections"] = await copyTable(source, dest, {
     table: "app_gmail_connections",

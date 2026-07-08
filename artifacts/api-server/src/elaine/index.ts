@@ -2649,6 +2649,44 @@ router.get("/conversations/:id/messages", async (req, res) => {
   );
 });
 
+// PATCH /conversations/:id — rename a named conversation.
+const RenameConversationBody = z.object({
+  title: z.string().trim().min(1).max(200),
+});
+router.patch("/conversations/:id", async (req, res) => {
+  const userId = req.session.userId!;
+  const convId = parseInt(String(req.params["id"] ?? "0"), 10);
+  if (!convId) {
+    res.status(400).json({ error: "Invalid conversation ID" });
+    return;
+  }
+  const parsed = RenameConversationBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid title" });
+    return;
+  }
+  const [row] = await db
+    .update(elaineHistoryConversations)
+    .set({ title: parsed.data.title, updatedAt: new Date() })
+    .where(
+      and(
+        eq(elaineHistoryConversations.id, convId),
+        eq(elaineHistoryConversations.userId, userId),
+      ),
+    )
+    .returning();
+  if (!row) {
+    res.status(404).json({ error: "Conversation not found" });
+    return;
+  }
+  res.json({
+    id: row.id,
+    title: row.title,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  });
+});
+
 // DELETE /conversations/:id — permanently remove a named conversation.
 router.delete("/conversations/:id", async (req, res) => {
   const userId = req.session.userId!;

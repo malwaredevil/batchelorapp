@@ -99,7 +99,7 @@ export default function BlockDetail() {
         queryClient.invalidateQueries({
           queryKey: getListBlockTemplatesQueryKey(),
         });
-        toast.success("Saved to Block Library");
+        toast.success("Saved to Block Patterns");
         setTemplateDialogOpen(false);
         navigate(`/library/blocks/${String(data.id)}/edit`);
       },
@@ -478,7 +478,7 @@ export default function BlockDetail() {
             <DialogTitle>Save as template</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            This adds a copy of "{b.name}" to the Block Library as a reusable
+            This adds a copy of "{b.name}" to Block Patterns as a reusable
             template. The original block is left untouched.
           </p>
           <div className="space-y-1.5">

@@ -57,3 +57,4 @@
 - [Verifying Elaine action/chat additions](elaine-action-verification-via-curl.md) — test new action tools via login+chat+action curl calls, not the UI; screenshot tool's path param doesn't do $VAR substitution.
 - [Elaine action tool addition checklist](elaine-action-tool-checklist.md) — 9-point checklist (schema/union/label/executor/tool-def/nav-paths/prompt/app-map/agentphone-exclusion) for adding any new Elaine action tool.
 - [Hub vs Travels "/gmail" pages](hub-vs-travels-gmail-pages.md) — same path, unrelated features: Hub is a full inbox client, Travels is travel-doc email scanning/linking. Never conflate when updating Elaine.
+- [AgentPhone voice needs NDJSON streaming](agentphone-voice-streaming-required.md) — a slow buffered `{text}` reply makes AgentPhone re-deliver under a new webhook id, which correct dedup then silently swallows as duplicate.

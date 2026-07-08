@@ -260,8 +260,16 @@ async function handleVoice(req: Request, res: Response): Promise<void> {
   const transcript =
     typeof data.transcript === "string" ? data.transcript.trim() : "";
 
+  logger.info(
+    { hasFrom: Boolean(from), transcriptLength: transcript.length },
+    "agentphone: voice turn received",
+  );
+
   if (!transcript) {
     // First turn of the call — greet instead of reacting to empty input.
+    // In practice AgentPhone speaks the agent's configured `beginMessage`
+    // itself without calling this webhook, so this branch is a defensive
+    // fallback rather than the normal greeting path.
     res.status(200).json({
       text: "Hi, this is Elaine from the Batchelor household. I can help with trip reminders, packing lists, or trip status — what can I help with?",
     });
@@ -285,13 +293,45 @@ async function handleVoice(req: Request, res: Response): Promise<void> {
   }
 
   const conversation = await getOrCreateAgentphoneConversation(from, user.id);
-  const replyText = await runRestrictedTurnAndPersist(
-    conversation,
-    user.id,
-    transcript,
-  );
 
-  res.status(200).json({ text: replyText });
+  // Every real spoken turn runs a full LLM (and sometimes tool-calling) turn,
+  // which regularly takes several seconds — well past the ~1s AgentPhone's
+  // docs cite as the point where a caller notices dead air. A single
+  // buffered JSON response sends nothing until it's fully ready, and
+  // real-world testing showed AgentPhone re-delivering the same voice turn
+  // (with a new X-Webhook-ID) before our slow reply arrived, which our
+  // dedup then correctly rejected as a duplicate of the earlier attempt —
+  // leaving the caller with silence on both. Streaming an interim
+  // acknowledgement immediately (per AgentPhone's documented NDJSON
+  // contract) keeps the turn alive so no redelivery/duplicate ever happens.
+  const turnStartedAt = Date.now();
+  res.status(200);
+  res.setHeader("Content-Type", "application/x-ndjson");
+  res.write(`${JSON.stringify({ text: "Mm, one sec.", interim: true })}\n`);
+  (res as Response & { flush?: () => void }).flush?.();
+
+  let replyText: string;
+  try {
+    replyText = await runRestrictedTurnAndPersist(
+      conversation,
+      user.id,
+      transcript,
+    );
+  } catch (err) {
+    logger.error(
+      { err },
+      "agentphone: voice turn failed after interim ack was sent",
+    );
+    replyText =
+      "Sorry, something went wrong on our end — please try again or use the app.";
+  }
+
+  logger.info(
+    { durationMs: Date.now() - turnStartedAt },
+    "agentphone: voice turn completed",
+  );
+  res.write(`${JSON.stringify({ text: replyText })}\n`);
+  res.end();
 }
 
 router.post("/webhook", async (req: Request, res: Response) => {
@@ -306,13 +346,22 @@ router.post("/webhook", async (req: Request, res: Response) => {
     res.status(400).json({ error: "Missing X-Webhook-ID" });
     return;
   }
-  if (!(await claimDelivery(deliveryId))) {
-    res.status(200).json({ ok: true, duplicate: true });
-    return;
-  }
 
   const event = typeof req.body?.event === "string" ? req.body.event : "";
   const channel = typeof req.body?.channel === "string" ? req.body.channel : "";
+  logger.info(
+    { deliveryId, event, channel },
+    "agentphone: webhook delivery received",
+  );
+
+  if (!(await claimDelivery(deliveryId))) {
+    logger.warn(
+      { deliveryId, event, channel },
+      "agentphone: duplicate webhook delivery rejected",
+    );
+    res.status(200).json({ ok: true, duplicate: true });
+    return;
+  }
 
   if (event !== "agent.message") {
     res.status(200).json({ ok: true });

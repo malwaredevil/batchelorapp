@@ -149,6 +149,14 @@ export const travelsReminders = pgTable(
       .array()
       .notNull()
       .default(sql`'{14,7,3}'::integer[]`),
+    // app_users.id values (must have a verified phone number) who should also
+    // get an SMS alert for this reminder, alongside/instead of the email
+    // recipients above. Unlike recipientEmails, this can never contain
+    // freeform numbers — only verified household accounts.
+    smsRecipientUserIds: integer("sms_recipient_user_ids")
+      .array()
+      .notNull()
+      .default(sql`'{}'::integer[]`),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -191,6 +199,9 @@ export const travelsReminderAlertLog = pgTable(
     reminderId: integer("reminder_id").notNull(),
     userId: integer("user_id").notNull(),
     alertType: text("alert_type").notNull(),
+    // 'email' (default, preserves existing rows) or 'sms' — dedup key is
+    // (reminderId, userId, alertType, channel).
+    channel: text("channel").notNull().default("email"),
     sentAt: timestamp("sent_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [

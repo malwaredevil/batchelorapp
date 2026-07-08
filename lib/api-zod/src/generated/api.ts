@@ -30,7 +30,9 @@ export const LoginResponse = zod.object({
   "email": zod.string(),
   "displayName": zod.string().nullish(),
   "themePreference": zod.enum(['light', 'dark']).nullish(),
-  "isOwner": zod.boolean().optional()
+  "isOwner": zod.boolean().optional(),
+  "phoneNumber": zod.string().nullish(),
+  "phoneVerified": zod.boolean().optional()
 })
 
 
@@ -42,7 +44,9 @@ export const GetCurrentUserResponse = zod.object({
   "email": zod.string(),
   "displayName": zod.string().nullish(),
   "themePreference": zod.enum(['light', 'dark']).nullish(),
-  "isOwner": zod.boolean().optional()
+  "isOwner": zod.boolean().optional(),
+  "phoneNumber": zod.string().nullish(),
+  "phoneVerified": zod.boolean().optional()
 })
 
 
@@ -59,7 +63,9 @@ export const UpdateCurrentUserResponse = zod.object({
   "email": zod.string(),
   "displayName": zod.string().nullish(),
   "themePreference": zod.enum(['light', 'dark']).nullish(),
-  "isOwner": zod.boolean().optional()
+  "isOwner": zod.boolean().optional(),
+  "phoneNumber": zod.string().nullish(),
+  "phoneVerified": zod.boolean().optional()
 })
 
 
@@ -85,6 +91,38 @@ export const ForgotPasswordBody = zod.object({
 export const ResetPasswordBody = zod.object({
   "token": zod.string(),
   "newPassword": zod.string()
+})
+
+
+/**
+ * @summary Send a one-time SMS verification code to a candidate phone number
+ */
+export const SendPhoneVerificationCodeBody = zod.object({
+  "phoneNumber": zod.string().describe('E.164 format, e.g. \"+12105551234\"'),
+  "consent": zod.boolean().describe('Must be true. Explicit opt-in confirmation that the user agreed to receive SMS text messages (verification codes and Travels reminders) at this number. Required for A2P 10DLC compliance — requests without consent=true are rejected.')
+})
+
+
+/**
+ * @summary Verify a one-time code and commit the phone number to the account
+ */
+export const verifyPhoneCodeBodyCodeMin = 6;
+export const verifyPhoneCodeBodyCodeMax = 6;
+
+
+
+export const VerifyPhoneCodeBody = zod.object({
+  "code": zod.string().min(verifyPhoneCodeBodyCodeMin).max(verifyPhoneCodeBodyCodeMax)
+})
+
+export const VerifyPhoneCodeResponse = zod.object({
+  "id": zod.number(),
+  "email": zod.string(),
+  "displayName": zod.string().nullish(),
+  "themePreference": zod.enum(['light', 'dark']).nullish(),
+  "isOwner": zod.boolean().optional(),
+  "phoneNumber": zod.string().nullish(),
+  "phoneVerified": zod.boolean().optional()
 })
 
 

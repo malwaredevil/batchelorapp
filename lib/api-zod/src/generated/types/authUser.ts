@@ -13,4 +13,6 @@ export interface AuthUser {
   displayName?: string | null;
   themePreference?: AuthUserThemePreference;
   isOwner?: boolean;
+  phoneNumber?: string | null;
+  phoneVerified?: boolean;
 }

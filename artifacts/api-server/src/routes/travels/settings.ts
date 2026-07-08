@@ -40,6 +40,7 @@ router.get("/users", async (_req, res) => {
       id: appUsers.id,
       email: appUsers.email,
       displayName: appUsers.displayName,
+      phoneVerified: appUsers.phoneVerified,
     })
     .from(appUsers)
     .orderBy(appUsers.email);

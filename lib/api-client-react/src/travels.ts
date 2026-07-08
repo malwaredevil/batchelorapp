@@ -905,6 +905,7 @@ export interface Reminder {
   dueDate?: string | null;
   done: boolean;
   recipientEmails: string[];
+  smsRecipientUserIds?: number[];
   syncToCalendar: boolean;
   googleEventId?: string | null;
   alertDaysBefore?: number[];
@@ -916,6 +917,7 @@ export interface CreateReminderBody {
   description?: string | null;
   dueDate?: string;
   recipientEmails?: string[];
+  smsRecipientUserIds?: number[];
   syncToCalendar?: boolean;
   alertDaysBefore?: number[];
 }
@@ -926,6 +928,7 @@ export interface UpdateReminderBody {
   dueDate?: string | null;
   done?: boolean;
   recipientEmails?: string[];
+  smsRecipientUserIds?: number[];
   syncToCalendar?: boolean;
   alertDaysBefore?: number[];
 }
@@ -1148,6 +1151,7 @@ export interface TravelsAppUser {
   id: number;
   email: string;
   displayName: string | null;
+  phoneVerified: boolean;
 }
 
 const listTravelsAppUsers = (options?: RequestInit): Promise<TravelsAppUser[]> =>

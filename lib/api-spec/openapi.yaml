@@ -157,6 +157,90 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /auth/phone/send-code:
+    post:
+      operationId: sendPhoneVerificationCode
+      tags:
+        - auth
+      summary: Send a one-time SMS verification code to a candidate phone number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendPhoneCodeInput"
+      responses:
+        "204":
+          description: Code sent
+        "400":
+          description: Invalid phone number
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated
+  /auth/phone/verify:
+    post:
+      operationId: verifyPhoneCode
+      tags:
+        - auth
+      summary: Verify a one-time code and commit the phone number to the account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyPhoneCodeInput"
+      responses:
+        "200":
+          description: Phone number verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "400":
+          description: Invalid or expired code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated
+  /auth/test-sms:
+    post:
+      operationId: sendTestSms
+      tags:
+        - auth
+      summary: Send a test SMS to the current user's own verified phone number
+      responses:
+        "204":
+          description: Test SMS sent
+        "400":
+          description: No verified phone number on file
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated
+  /auth/test-email:
+    post:
+      operationId: sendTestEmail
+      tags:
+        - auth
+      summary: Send a test email to the current user's own account email
+      responses:
+        "204":
+          description: Test email sent
+        "401":
+          description: Not authenticated
+        "503":
+          description: Email service not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /auth/change-password:
     post:
       operationId: changePassword
@@ -2720,6 +2804,11 @@ components:
           nullable: true
         isOwner:
           type: boolean
+        phoneNumber:
+          type: string
+          nullable: true
+        phoneVerified:
+          type: boolean
     Error:
       type: object
       required:
@@ -2763,6 +2852,27 @@ components:
           type: string
         newPassword:
           type: string
+    SendPhoneCodeInput:
+      type: object
+      required:
+        - phoneNumber
+        - consent
+      properties:
+        phoneNumber:
+          type: string
+          description: E.164 format, e.g. "+12105551234"
+        consent:
+          type: boolean
+          description: Must be true. Explicit opt-in confirmation that the user agreed to receive SMS text messages (verification codes and Travels reminders) at this number. Required for A2P 10DLC compliance — requests without consent=true are rejected.
+    VerifyPhoneCodeInput:
+      type: object
+      required:
+        - code
+      properties:
+        code:
+          type: string
+          minLength: 6
+          maxLength: 6
     ChangePasswordInput:
       type: object
       required:

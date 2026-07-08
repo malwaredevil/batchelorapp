@@ -93,6 +93,7 @@ import type {
   QuiltingUpdateShoppingItemInput,
   ReorderPackingItems200,
   ResetPasswordInput,
+  SendPhoneCodeInput,
   TravelsBulkCreatePackingItemsBody,
   TravelsCreatePackingItemBody,
   TravelsCreatePackingTemplateBody,
@@ -116,7 +117,8 @@ import type {
   TravelsUpdateTripBody,
   UpdateAccountInput,
   UpdateTripDocumentBody,
-  UploadTripDocumentBody
+  UploadTripDocumentBody,
+  VerifyPhoneCodeInput
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -714,6 +716,288 @@ export const useResetPassword = <TError = ErrorType<Error>,
         TContext
       > => {
       return useMutation(getResetPasswordMutationOptions(options));
+    }
+
+export const getSendPhoneVerificationCodeUrl = () => {
+
+
+
+
+  return `/api/auth/phone/send-code`
+}
+
+/**
+ * @summary Send a one-time SMS verification code to a candidate phone number
+ */
+export const sendPhoneVerificationCode = async (sendPhoneCodeInput: SendPhoneCodeInput, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getSendPhoneVerificationCodeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      sendPhoneCodeInput,)
+  }
+);}
+
+
+
+
+export const getSendPhoneVerificationCodeMutationOptions = <TError = ErrorType<Error | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendPhoneVerificationCode>>, TError,{data: BodyType<SendPhoneCodeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendPhoneVerificationCode>>, TError,{data: BodyType<SendPhoneCodeInput>}, TContext> => {
+
+const mutationKey = ['sendPhoneVerificationCode'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendPhoneVerificationCode>>, {data: BodyType<SendPhoneCodeInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  sendPhoneVerificationCode(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendPhoneVerificationCodeMutationResult = NonNullable<Awaited<ReturnType<typeof sendPhoneVerificationCode>>>
+    export type SendPhoneVerificationCodeMutationBody = BodyType<SendPhoneCodeInput>
+    export type SendPhoneVerificationCodeMutationError = ErrorType<Error | void>
+
+    /**
+ * @summary Send a one-time SMS verification code to a candidate phone number
+ */
+export const useSendPhoneVerificationCode = <TError = ErrorType<Error | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendPhoneVerificationCode>>, TError,{data: BodyType<SendPhoneCodeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendPhoneVerificationCode>>,
+        TError,
+        {data: BodyType<SendPhoneCodeInput>},
+        TContext
+      > => {
+      return useMutation(getSendPhoneVerificationCodeMutationOptions(options));
+    }
+
+export const getVerifyPhoneCodeUrl = () => {
+
+
+
+
+  return `/api/auth/phone/verify`
+}
+
+/**
+ * @summary Verify a one-time code and commit the phone number to the account
+ */
+export const verifyPhoneCode = async (verifyPhoneCodeInput: VerifyPhoneCodeInput, options?: RequestInit): Promise<AuthUser> => {
+
+  return customFetch<AuthUser>(getVerifyPhoneCodeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      verifyPhoneCodeInput,)
+  }
+);}
+
+
+
+
+export const getVerifyPhoneCodeMutationOptions = <TError = ErrorType<Error | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyPhoneCode>>, TError,{data: BodyType<VerifyPhoneCodeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof verifyPhoneCode>>, TError,{data: BodyType<VerifyPhoneCodeInput>}, TContext> => {
+
+const mutationKey = ['verifyPhoneCode'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof verifyPhoneCode>>, {data: BodyType<VerifyPhoneCodeInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  verifyPhoneCode(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type VerifyPhoneCodeMutationResult = NonNullable<Awaited<ReturnType<typeof verifyPhoneCode>>>
+    export type VerifyPhoneCodeMutationBody = BodyType<VerifyPhoneCodeInput>
+    export type VerifyPhoneCodeMutationError = ErrorType<Error | void>
+
+    /**
+ * @summary Verify a one-time code and commit the phone number to the account
+ */
+export const useVerifyPhoneCode = <TError = ErrorType<Error | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyPhoneCode>>, TError,{data: BodyType<VerifyPhoneCodeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof verifyPhoneCode>>,
+        TError,
+        {data: BodyType<VerifyPhoneCodeInput>},
+        TContext
+      > => {
+      return useMutation(getVerifyPhoneCodeMutationOptions(options));
+    }
+
+export const getSendTestSmsUrl = () => {
+
+
+
+
+  return `/api/auth/test-sms`
+}
+
+/**
+ * @summary Send a test SMS to the current user's own verified phone number
+ */
+export const sendTestSms = async ( options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getSendTestSmsUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getSendTestSmsMutationOptions = <TError = ErrorType<Error | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendTestSms>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendTestSms>>, TError,void, TContext> => {
+
+const mutationKey = ['sendTestSms'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendTestSms>>, void> = () => {
+
+
+          return  sendTestSms(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendTestSmsMutationResult = NonNullable<Awaited<ReturnType<typeof sendTestSms>>>
+
+    export type SendTestSmsMutationError = ErrorType<Error | void>
+
+    /**
+ * @summary Send a test SMS to the current user's own verified phone number
+ */
+export const useSendTestSms = <TError = ErrorType<Error | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendTestSms>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendTestSms>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getSendTestSmsMutationOptions(options));
+    }
+
+export const getSendTestEmailUrl = () => {
+
+
+
+
+  return `/api/auth/test-email`
+}
+
+/**
+ * @summary Send a test email to the current user's own account email
+ */
+export const sendTestEmail = async ( options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getSendTestEmailUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getSendTestEmailMutationOptions = <TError = ErrorType<void | Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendTestEmail>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendTestEmail>>, TError,void, TContext> => {
+
+const mutationKey = ['sendTestEmail'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendTestEmail>>, void> = () => {
+
+
+          return  sendTestEmail(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendTestEmailMutationResult = NonNullable<Awaited<ReturnType<typeof sendTestEmail>>>
+
+    export type SendTestEmailMutationError = ErrorType<void | Error>
+
+    /**
+ * @summary Send a test email to the current user's own account email
+ */
+export const useSendTestEmail = <TError = ErrorType<void | Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendTestEmail>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendTestEmail>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getSendTestEmailMutationOptions(options));
     }
 
 export const getChangePasswordUrl = () => {

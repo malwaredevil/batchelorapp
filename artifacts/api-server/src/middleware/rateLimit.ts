@@ -63,6 +63,20 @@ export const compareLimiter = rateLimit({
   passOnStoreError: true,
 });
 
+// Phone verification codes send a real SMS via AgentPhone (cost + abuse
+// surface similar to email sends, but SMS costs money per message). Capped
+// tightly per session/IP; test-sms reuses the same limiter since it also
+// sends a real message.
+export const phoneVerifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: jsonLimitMessage,
+  store: new PostgresRateLimitStore("phone-verify"),
+  passOnStoreError: true,
+});
+
 // Supplemental image uploads attach extra photos to an existing pottery piece.
 // They do not invoke AI, so they get a more generous cap than aiLimiter, but
 // still bounded to prevent storage abuse from a single session.

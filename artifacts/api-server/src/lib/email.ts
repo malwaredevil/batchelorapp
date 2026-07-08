@@ -30,7 +30,7 @@ const REMINDER_FROM_EMAIL =
 // non-negative day count is a valid alert type, e.g. "10_day".
 export type ReminderAlertType = `${number}_day`;
 
-function alertLabel(days: number): string {
+export function alertLabel(days: number): string {
   if (days === 0) return "today";
   if (days === 1) return "1 day";
   if (days % 7 === 0) {
@@ -187,6 +187,57 @@ export async function sendAssistantEmail(
   if (error) {
     logger.error({ err: error }, "resend assistant email send failed");
     throw new Error(`Failed to send email: ${error.message}`);
+  }
+}
+
+// Simple connectivity-check email used by the account settings "Send test
+// email" button. Uses the same sender as password-reset emails since that's
+// the one guaranteed to be configured whenever resendConfigured() is true.
+export async function sendTestEmail(toEmail: string): Promise<void> {
+  const from = process.env.RESEND_FROM_EMAIL;
+  if (!from) {
+    throw new Error("RESEND_FROM_EMAIL environment variable is not set.");
+  }
+
+  const { error } = await getResend().emails.send({
+    from,
+    to: toEmail,
+    subject: "Test email from Batchelor App",
+    html: `
+<!DOCTYPE html>
+<html>
+  <head><meta charset="utf-8" /></head>
+  <body style="font-family: sans-serif; background: #f9f9f9; padding: 40px 0; margin: 0;">
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td align="center">
+          <table width="480" cellpadding="0" cellspacing="0"
+            style="background: #ffffff; border-radius: 8px; padding: 40px;
+                   box-shadow: 0 1px 4px rgba(0,0,0,0.08);">
+            <tr>
+              <td>
+                <h2 style="margin: 0 0 8px; font-size: 20px; color: #111;">
+                  It works!
+                </h2>
+                <p style="margin: 0; font-size: 14px; color: #555;">
+                  This is a test email sent from your Batchelor App account
+                  settings to confirm email delivery is working for
+                  <strong>${toEmail}</strong>.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`,
+    text: `It works!\n\nThis is a test email sent from your Batchelor App account settings to confirm email delivery is working for ${toEmail}.`,
+  });
+
+  if (error) {
+    logger.error({ err: error }, "resend test email send failed");
+    throw new Error(`Failed to send test email: ${error.message}`);
   }
 }
 

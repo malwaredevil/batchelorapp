@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { MapPlaceResult } from "@workspace/api-client-react";
-import { loadGoogleMaps } from "@/lib/google-maps-loader";
+import { loadGoogleMaps, onGoogleMapsAuthFailure } from "@/lib/google-maps-loader";
+
+const AUTH_FAILURE_MESSAGE =
+  "Map is currently unavailable (the Google Maps API key isn't authorized for this domain).";
 
 const DESTINATION_COLOR = "#2563eb";
 const PLACE_COLOR = "#f97316";
@@ -69,6 +72,20 @@ export function TripLocationMap({ lat, lng, places }: TripLocationMapProps) {
     let cancelled = false;
     if (!containerRef.current || mapRef.current) return;
 
+    // The Google Maps JS API reports referrer/key auth failures (e.g.
+    // RefererNotAllowedMapError) asynchronously via window.gm_authFailure,
+    // not by rejecting the load promise or throwing synchronously. Without
+    // this listener the component would keep trying to construct markers
+    // against a broken `google.maps` namespace, which is what produced the
+    // downstream "Cannot read properties of undefined (reading 'keys')"
+    // crash.
+    const unsubscribeAuthFailure = onGoogleMapsAuthFailure(() => {
+      if (cancelled) return;
+      cancelled = true;
+      console.error("Google Maps auth/referrer failure (gm_authFailure)");
+      setLoadError(AUTH_FAILURE_MESSAGE);
+    });
+
     loadGoogleMaps()
       .then(([{ Map }, { AdvancedMarkerElement }]) => {
         if (cancelled || !containerRef.current || mapRef.current) return;
@@ -119,14 +136,13 @@ export function TripLocationMap({ lat, lng, places }: TripLocationMapProps) {
       .catch((err) => {
         console.error("Failed to load Google Maps", err);
         if (!cancelled) {
-          setLoadError(
-            "Map is currently unavailable (the Google Maps API key may not be authorized for this domain).",
-          );
+          setLoadError(AUTH_FAILURE_MESSAGE);
         }
       });
 
     return () => {
       cancelled = true;
+      unsubscribeAuthFailure();
       placeMarkersRef.current.forEach((m) => (m.map = null));
       placeMarkersRef.current = [];
       destMarkerRef.current && (destMarkerRef.current.map = null);
@@ -145,7 +161,7 @@ export function TripLocationMap({ lat, lng, places }: TripLocationMapProps) {
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || typeof google === "undefined") return;
+    if (!map || typeof google === "undefined" || loadError) return;
 
     try {
       placeMarkersRef.current.forEach((m) => (m.map = null));
@@ -168,12 +184,10 @@ export function TripLocationMap({ lat, lng, places }: TripLocationMapProps) {
         });
     } catch (err) {
       console.error("Failed to render nearby place markers", err);
-      setLoadError(
-        "Map is currently unavailable (the Google Maps API key may not be authorized for this domain).",
-      );
+      setLoadError(AUTH_FAILURE_MESSAGE);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [places]);
+  }, [places, loadError]);
 
   if (loadError) {
     return (

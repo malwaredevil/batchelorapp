@@ -51,3 +51,4 @@
 - [OpenAPI source path remapping gotcha](orval-spec-path-remapping.md) — pottery.yaml paths are rewritten by build-spec.ts, not literal; copying the server's real route string double-prefixes the generated URL.
 - [Orval codegen broken by js-yaml major bump](orval-codegen-js-yaml-pin.md) — unbounded `>=` override let js-yaml jump to an ESM-only v5, breaking orval's import; also: ambiguous-export barrel fix pattern when regen collides with a hand-written parallel file.
 - [travels.ts trips/packing hooks fully migrated](travels-orval-disambiguation-guard.md) — the old shadow/guard-script setup is gone; consumers now use orval-generated `Travels*` hooks directly with `{data}`/`{id,data}` payload shapes.
+- [Screenshot tool async failure timing](screenshot-tool-async-failure-timing.md) — pixels captured early, console logs drained later; don't trust stale-looking pixels alone to falsify a fix for async callbacks (e.g. gm_authFailure).

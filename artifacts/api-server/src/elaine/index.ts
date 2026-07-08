@@ -4123,4 +4123,197 @@ router.delete("/memory/:id", async (req, res) => {
   res.status(204).end();
 });
 
+// ---------------------------------------------------------------------------
+// AgentPhone SMS/voice bridge — used by routes/agentphone.ts. Deliberately
+// NOT the full assistant: no destructive actions (no delete_*, cancel_trip),
+// no trip/wishlist creation, no email/itinerary-gen/calendar-connect tools,
+// and no UI-oriented "on-screen state" context (SMS/voice have no screen).
+// Runs in auto_run mode always — there is no confirmation UI over SMS/voice,
+// so every allowed action executes immediately and the reply reports what
+// happened. Restricted to a small allowlist of non-destructive household
+// actions per task #105.
+// ---------------------------------------------------------------------------
+
+export const AGENTPHONE_ACTION_TYPES = new Set<string>([
+  "add_reminder",
+  "edit_reminder",
+  "sync_reminder_to_calendar",
+  "add_packing_item",
+  "remove_packing_item",
+  "update_trip_status",
+]);
+
+const AGENTPHONE_ACTION_TOOLS = ACTION_TOOLS.filter((t) =>
+  t.type === "function" && AGENTPHONE_ACTION_TYPES.has(t.function.name),
+);
+
+export interface AgentphoneChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+const AGENTPHONE_SYSTEM_PROMPT =
+  "You are Elaine, the Batchelor household's assistant, replying over SMS or a phone call rather than the app's chat widget. Keep replies short — one to three sentences, plain text, no markdown, no emojis, no bullet points, since this may be read aloud or sent as a text message. You can help with trip reminders, packing lists, and moving a trip between stages (e.g. wishlist/planning/booked), using only the tools available to you here. Only act on a trip or reminder you can see listed in the context below; never invent a tripId or reminderId — if you can't find what the user means, ask them to clarify or say to use the app instead. If asked to do anything outside what your tools support here (creating or deleting a trip, wishlist items, connecting a calendar, sending email, generating an itinerary, editing itinerary days), say you can only help with reminders, packing lists, and trip status over text or call, and that they should use the app for anything else. There is no confirmation step over SMS/voice — any action you call runs immediately — so always briefly confirm in your reply what you actually did (or that it failed).";
+
+// Builds a compact text snapshot of trips/reminders/packing lists standing
+// in for the on-screen state the web widget's tools normally rely on to
+// avoid guessed ids. Household-shared by design (see threat_model.md) — not
+// filtered to the requesting phone number's userId.
+async function buildAgentphoneContext(): Promise<string> {
+  const trips = await db
+    .select({
+      id: travelsTrips.id,
+      title: travelsTrips.title,
+      destination: travelsTrips.destination,
+      status: travelsTrips.status,
+      packingList: travelsTrips.packingList,
+    })
+    .from(travelsTrips)
+    .orderBy(desc(travelsTrips.id))
+    .limit(30);
+
+  const reminders = await db
+    .select({
+      id: travelsReminders.id,
+      tripId: travelsReminders.tripId,
+      title: travelsReminders.title,
+      dueDate: travelsReminders.dueDate,
+      syncToCalendar: travelsReminders.syncToCalendar,
+    })
+    .from(travelsReminders)
+    .where(eq(travelsReminders.done, false))
+    .orderBy(desc(travelsReminders.id))
+    .limit(50);
+
+  const tripLines = trips.map((t) => {
+    const packing =
+      (t.packingList as Array<{ item: string; packed: boolean }> | null) ??
+      [];
+    const packingText =
+      packing.length > 0
+        ? ` | packing: ${packing.map((p) => `${p.item}${p.packed ? " (packed)" : ""}`).join(", ")}`
+        : "";
+    return `tripId: ${t.id} — "${t.title || t.destination}" (${t.destination}), status: ${t.status}${packingText}`;
+  });
+
+  const reminderLines = reminders.map(
+    (r) =>
+      `reminderId: ${r.id} (tripId: ${r.tripId}) — "${r.title}"${
+        r.dueDate ? `, due ${r.dueDate}` : ""
+      }${r.syncToCalendar ? "" : ", not synced to calendar"}`,
+  );
+
+  return [
+    trips.length > 0 ? `Trips:\n${tripLines.join("\n")}` : "No trips yet.",
+    reminders.length > 0
+      ? `Open reminders:\n${reminderLines.join("\n")}`
+      : "No open reminders.",
+  ].join("\n\n");
+}
+
+// Runs one restricted, non-streaming Elaine turn for an inbound SMS message
+// or voice-call transcript. Always auto-executes any allowed tool call
+// (there is no confirmation UI over SMS/voice) and returns the trimmed
+// conversation history to persist alongside the reply text.
+export async function runAgentphoneTurn(params: {
+  userId: number;
+  inputText: string;
+  history: AgentphoneChatMessage[];
+}): Promise<{ replyText: string; history: AgentphoneChatMessage[] }> {
+  const { userId, inputText, history } = params;
+  const config = await getElaineGlobalConfig();
+  const contextText = await buildAgentphoneContext();
+
+  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    {
+      role: "system",
+      content: `${AGENTPHONE_SYSTEM_PROMPT}\n\n${contextText}`,
+    },
+    ...history
+      .slice(-10)
+      .map(
+        (m) =>
+          ({ role: m.role, content: m.content }) as OpenAI.Chat.Completions.ChatCompletionMessageParam,
+      ),
+    { role: "user", content: inputText },
+  ];
+
+  let replyText = "";
+  const MAX_ROUNDS = 3;
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    const completion = await callModel(config.chatModel, (client, model) =>
+      client.chat.completions.create({
+        model,
+        max_tokens: 300,
+        messages,
+        tools: AGENTPHONE_ACTION_TOOLS,
+      }),
+    );
+    const message = completion.choices[0]?.message;
+    if (!message) break;
+    replyText = (message.content ?? "").trim();
+    const toolCalls = message.tool_calls ?? [];
+    if (toolCalls.length === 0) break;
+
+    messages.push({
+      role: "assistant",
+      content: message.content ?? null,
+      tool_calls: toolCalls,
+    });
+
+    for (const call of toolCalls) {
+      if (call.type !== "function") continue;
+      const name = call.function.name;
+      let resultText = "That action isn't available over SMS/voice.";
+      if (AGENTPHONE_ACTION_TYPES.has(name)) {
+        try {
+          const finalAction = await tryBuildAction(
+            name,
+            call.function.arguments,
+          );
+          if (finalAction) {
+            const executor = ACTION_EXECUTORS[finalAction.type as ActionType];
+            const { status, body } = await executor(
+              finalAction.payload as never,
+              userId,
+            );
+            resultText =
+              status < 400
+                ? `Done: ${finalAction.label}.`
+                : `Failed (${status}): ${JSON.stringify(body)}`;
+          } else {
+            resultText =
+              "Couldn't understand that request clearly enough to act — ask the user to clarify.";
+          }
+        } catch (err) {
+          logger.error(
+            { err, name },
+            "AgentPhone restricted action execution failed",
+          );
+          resultText =
+            "That action failed on our end — tell the user to try again or use the app.";
+        }
+      }
+      messages.push({
+        role: "tool",
+        tool_call_id: call.id,
+        content: resultText,
+      });
+    }
+  }
+
+  if (!replyText) {
+    replyText =
+      "Sorry, I couldn't process that — please try again or use the app.";
+  }
+
+  const updatedHistory: AgentphoneChatMessage[] = [
+    ...history,
+    { role: "user" as const, content: inputText },
+    { role: "assistant" as const, content: replyText },
+  ].slice(-20);
+
+  return { replyText, history: updatedHistory };
+}
+
 export default router;

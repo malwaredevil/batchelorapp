@@ -42,6 +42,11 @@ export const appUsers = pgTable("app_users", {
   // Required evidence for carrier campaign registration — never inferred,
   // only ever set by the send-code endpoint after `consent === true`.
   smsConsentAt: timestamp("sms_consent_at", { withTimezone: true }),
+  // A2P 10DLC compliance: set when this number replies STOP/STOPALL/
+  // UNSUBSCRIBE/CANCEL/END/QUIT to the AgentPhone webhook. While set, every
+  // outbound SMS send path (verification code, test SMS, reminder alerts)
+  // must skip this number. Cleared when the number replies START/UNSTOP/YES.
+  smsOptedOutAt: timestamp("sms_opted_out_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

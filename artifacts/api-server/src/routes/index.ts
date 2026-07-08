@@ -9,6 +9,7 @@ import devScreenshotLoginRouter from "./dev-screenshot-login";
 import elaineRouter from "../elaine";
 import gmailRouter from "./gmail";
 import searchRouter from "./search";
+import agentphoneRouter from "./agentphone";
 
 const router: IRouter = Router();
 
@@ -21,6 +22,7 @@ router.use("/quilting", quiltingRouter);
 router.use("/travels", travelsRouter);
 router.use("/gmail", gmailRouter);
 router.use("/elaine", elaineRouter);
+router.use("/agentphone", agentphoneRouter);
 router.use(hubRouter);
 
 export default router;

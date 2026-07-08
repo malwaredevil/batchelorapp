@@ -10,11 +10,19 @@ import {
   Mic,
   Volume2,
   VolumeX,
+  Settings2,
 } from "lucide-react";
 import { useVoiceInput } from "./useVoiceInput";
 import { useTTS } from "./useTTS";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "./ui/dropdown-menu";
 import { ElaineAvatar, ElaineName } from "./ElaineAvatar";
 import type { ElaineChat } from "./useElaineChat";
 import { MarkdownMessage } from "./MarkdownMessage";
@@ -81,6 +89,8 @@ function MessageText({
     </div>
   );
 }
+
+const TTS_RATE_OPTIONS = [0.75, 1, 1.25, 1.5, 2] as const;
 
 interface ElaineChatPanelProps {
   chat: ElaineChat;
@@ -649,6 +659,61 @@ export function ElaineChatPanel({
                 <VolumeX className="h-4 w-4" />
               )}
             </Button>
+          )}
+          {tts.isSupported && tts.enabled && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-[38px] w-[38px] shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
+                  title="Voice and speed"
+                >
+                  <Settings2 className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                  Voice
+                </div>
+                <DropdownMenuItem
+                  onSelect={() => tts.setSelectedVoiceURI(null)}
+                  className="justify-between"
+                >
+                  Default
+                  {tts.selectedVoiceURI === null && (
+                    <Check className="h-3.5 w-3.5" />
+                  )}
+                </DropdownMenuItem>
+                {tts.voices.map((v) => (
+                  <DropdownMenuItem
+                    key={v.voiceURI}
+                    onSelect={() => tts.setSelectedVoiceURI(v.voiceURI)}
+                    className="justify-between"
+                  >
+                    <span className="truncate">{v.name}</span>
+                    {tts.selectedVoiceURI === v.voiceURI && (
+                      <Check className="h-3.5 w-3.5 shrink-0" />
+                    )}
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator />
+                <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                  Speed
+                </div>
+                {TTS_RATE_OPTIONS.map((r) => (
+                  <DropdownMenuItem
+                    key={r}
+                    onSelect={() => tts.setRate(r)}
+                    className="justify-between"
+                  >
+                    {r}x
+                    {tts.rate === r && <Check className="h-3.5 w-3.5" />}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
           <Button
             size="sm"

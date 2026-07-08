@@ -103,6 +103,7 @@ import {
 } from "@workspace/api-client-react";
 import type { QuiltingCategory } from "@workspace/api-client-react";
 import { TagSelector } from "@/components/tag-selector";
+import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useListBlockTemplates,
@@ -3414,6 +3415,31 @@ export default function BlockDesigner() {
   const [editTemplateId, setEditTemplateId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [editTags, setEditTags] = useState("");
+  const [libTagFilter, setLibTagFilter] = useState<Set<string>>(new Set());
+
+  const libraryTagOptions = Array.from(
+    new Set((templates ?? []).flatMap((tpl) => tpl.tags)),
+  ).sort((a, b) => a.localeCompare(b));
+
+  const filteredTemplates = (templates ?? []).filter(
+    (tpl) =>
+      libTagFilter.size === 0 ||
+      tpl.tags.some((tag) => libTagFilter.has(tag)),
+  );
+
+  function toggleLibTagFilter(tag: string) {
+    setLibTagFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(tag)) next.delete(tag);
+      else next.add(tag);
+      return next;
+    });
+  }
+
+  function closeLibBrowser() {
+    setLibBrowserOpen(false);
+    setLibTagFilter(new Set());
+  }
 
   function openSaveToLib() {
     setLibSaveName(name.trim() || "Untitled block");
@@ -3470,7 +3496,7 @@ export default function BlockDesigner() {
     if (tpl.seamAllowanceInches !== null)
       setSeamAllowanceInches(tpl.seamAllowanceInches);
     setIsDirty(true);
-    setLibBrowserOpen(false);
+    closeLibBrowser();
     toast.success(`Loaded template "${tpl.name}"`);
   }
 
@@ -5627,7 +5653,10 @@ export default function BlockDesigner() {
       </Dialog>
 
       {/* ── Library browser dialog ───────────────────────────────────── */}
-      <Dialog open={libBrowserOpen} onOpenChange={setLibBrowserOpen}>
+      <Dialog
+        open={libBrowserOpen}
+        onOpenChange={(open) => (open ? setLibBrowserOpen(true) : closeLibBrowser())}
+      >
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>Block Library</DialogTitle>
@@ -5645,9 +5674,49 @@ export default function BlockDesigner() {
                 </p>
               </div>
             )}
-            {templates && templates.length > 0 && (
+            {templates && templates.length > 0 && libraryTagOptions.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 border-b border-border pb-3">
+                <Tag className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                {libraryTagOptions.map((tag) => {
+                  const selected = libTagFilter.has(tag);
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => toggleLibTagFilter(tag)}
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors",
+                        selected
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-card-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                      )}
+                    >
+                      {tag}
+                      {selected && <XIcon className="h-2.5 w-2.5 opacity-60" />}
+                    </button>
+                  );
+                })}
+                {libTagFilter.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setLibTagFilter(new Set())}
+                    className="ml-1 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            )}
+            {templates &&
+              templates.length > 0 &&
+              filteredTemplates.length === 0 && (
+                <p className="py-6 text-center text-sm text-muted-foreground">
+                  No templates match the selected tags.
+                </p>
+              )}
+            {filteredTemplates.length > 0 && (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 max-h-[380px] overflow-y-auto pr-1">
-                {templates.map((tpl: BlockTemplate) => (
+                {filteredTemplates.map((tpl: BlockTemplate) => (
                   <div
                     key={tpl.id}
                     className="group relative flex flex-col gap-2 rounded-lg border border-border p-3"
@@ -5774,7 +5843,7 @@ export default function BlockDesigner() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setLibBrowserOpen(false)}>
+            <Button variant="outline" onClick={closeLibBrowser}>
               Close
             </Button>
           </DialogFooter>

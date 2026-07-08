@@ -2278,6 +2278,15 @@ paths:
                   type: array
                   items:
                     type: string
+                title:
+                  type: string
+                  nullable: true
+                documentType:
+                  type: string
+                  nullable: true
+                iconOverride:
+                  type: string
+                  nullable: true
       responses:
         "200":
           description: Updated document
@@ -4710,6 +4719,13 @@ components:
           nullable: true
         transportTo:
           type: string
+          enum:
+            - drove
+            - flew
+            - train
+          nullable: true
+        transportDetails:
+          type: string
           nullable: true
         hasRentalCar:
           type: boolean
@@ -4722,8 +4738,27 @@ components:
         notes:
           type: string
           nullable: true
+        funFact:
+          type: string
+          nullable: true
         travellerCount:
           type: integer
+        travelers:
+          type: array
+          items:
+            type: string
+          nullable: true
+        theOneThing:
+          type: array
+          items:
+            type: string
+          nullable: true
+        iconPhotoId:
+          type: integer
+          nullable: true
+        shareToken:
+          type: string
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -4735,6 +4770,8 @@ components:
             itinerary:
               nullable: true
             packingList:
+              nullable: true
+            todoList:
               nullable: true
             documents:
               type: array
@@ -4775,6 +4812,8 @@ components:
             - drove
             - flew
             - train
+        transportDetails:
+          type: string
         hasRentalCar:
           type: boolean
         accommodationName:
@@ -4783,8 +4822,18 @@ components:
           type: string
         notes:
           type: string
+        funFact:
+          type: string
         travellerCount:
           type: integer
+        travelers:
+          type: array
+          items:
+            type: string
+        theOneThing:
+          type: array
+          items:
+            type: string
     TravelsUpdateTripBody:
       type: object
       properties:
@@ -4816,6 +4865,8 @@ components:
             - drove
             - flew
             - train
+        transportDetails:
+          type: string
         hasRentalCar:
           type: boolean
         accommodationName:
@@ -4824,11 +4875,23 @@ components:
           type: string
         notes:
           type: string
+        funFact:
+          type: string
         travellerCount:
           type: integer
+        travelers:
+          type: array
+          items:
+            type: string
+        theOneThing:
+          type: array
+          items:
+            type: string
         itinerary:
           nullable: true
         packingList:
+          nullable: true
+        todoList:
           nullable: true
     TravelsListTripsResponse:
       type: array
@@ -4878,6 +4941,9 @@ components:
           type: integer
         storagePath:
           type: string
+        title:
+          type: string
+          nullable: true
         documentType:
           type: string
           nullable: true
@@ -4885,11 +4951,19 @@ components:
           type: string
           nullable: true
         extractedData:
+          type: object
+          additionalProperties: true
           nullable: true
         lockedFields:
           type: array
           items:
             type: string
+        gmailMessageId:
+          type: string
+          nullable: true
+        iconOverride:
+          type: string
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -4938,6 +5012,8 @@ components:
         uniqueDestinations:
           type: integer
         nextTrip:
+          allOf:
+            - $ref: "#/components/schemas/TravelsTrip"
           nullable: true
     TravelsPackingItem:
       type: object

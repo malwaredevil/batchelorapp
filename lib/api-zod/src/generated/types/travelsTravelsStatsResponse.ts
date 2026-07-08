@@ -5,11 +5,12 @@
  * Unified API specification (pottery + quilting + travels)
  * OpenAPI spec version: 0.1.0
  */
+import type { TravelsTrip } from './travelsTrip';
 
 export interface TravelsTravelsStatsResponse {
   totalTrips: number;
   completedTrips: number;
   upcomingTrips: number;
   uniqueDestinations: number;
-  nextTrip: unknown | null;
+  nextTrip: TravelsTrip | null;
 }

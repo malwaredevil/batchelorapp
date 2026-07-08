@@ -17,11 +17,16 @@ export interface TravelsUpdateTripBody {
   startDate?: Date;
   endDate?: Date;
   transportTo?: TravelsUpdateTripBodyTransportTo;
+  transportDetails?: string;
   hasRentalCar?: boolean;
   accommodationName?: string;
   accommodationArea?: string;
   notes?: string;
+  funFact?: string;
   travellerCount?: number;
+  travelers?: string[];
+  theOneThing?: string[];
   itinerary?: unknown | null;
   packingList?: unknown | null;
+  todoList?: unknown | null;
 }

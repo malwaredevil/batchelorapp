@@ -5,15 +5,19 @@
  * Unified API specification (pottery + quilting + travels)
  * OpenAPI spec version: 0.1.0
  */
+import type { TravelsTripDocumentExtractedData } from './travelsTripDocumentExtractedData';
 
 export interface TravelsTripDocument {
   id: number;
   tripId: number;
   userId: number;
   storagePath: string;
+  title?: string | null;
   documentType?: string | null;
   originalFilename?: string | null;
-  extractedData?: unknown | null;
+  extractedData?: TravelsTripDocumentExtractedData;
   lockedFields?: string[];
+  gmailMessageId?: string | null;
+  iconOverride?: string | null;
   createdAt: Date;
 }

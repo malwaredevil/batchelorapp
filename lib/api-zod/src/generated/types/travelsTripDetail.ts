@@ -11,5 +11,6 @@ import type { TravelsTripDocument } from './travelsTripDocument';
 export type TravelsTripDetail = TravelsTrip & ({
   itinerary?: unknown | null;
   packingList?: unknown | null;
+  todoList?: unknown | null;
   documents?: TravelsTripDocument[];
 });

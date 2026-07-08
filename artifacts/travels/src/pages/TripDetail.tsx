@@ -43,10 +43,10 @@ import {
   getAirQualityInfo,
   getPollenInfo,
   searchNearbyPlaces,
-  type UpdateTripBody,
+  type TravelsUpdateTripBody as UpdateTripBody,
   type TripStatus,
   type TransportTo,
-  type TripDocument,
+  type TravelsTripDocument as TripDocument,
   useGenerateTripShareToken,
   useRevokeTripShareToken,
   type TripPhoto,
@@ -1103,7 +1103,7 @@ function DocumentRow({
 
   const saveDocumentType = (value: string) => {
     updateTripDocument.mutate(
-      { tripId, docId: doc.id, body: { documentType: value } },
+      { id: tripId, docId: doc.id, data: { documentType: value } },
       {
         onSuccess: () => {
           qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
@@ -1116,7 +1116,7 @@ function DocumentRow({
 
   const saveIconOverride = (iconName: string | null) => {
     updateTripDocument.mutate(
-      { tripId, docId: doc.id, body: { iconOverride: iconName } },
+      { id: tripId, docId: doc.id, data: { iconOverride: iconName } },
       {
         onSuccess: () =>
           qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) }),
@@ -1130,7 +1130,7 @@ function DocumentRow({
     setEditingTitle(false);
     if (val === (doc.title ?? "")) return;
     updateTripDocument.mutate(
-      { tripId, docId: doc.id, body: { title: val || null } },
+      { id: tripId, docId: doc.id, data: { title: val || null } },
       {
         onSuccess: () =>
           qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) }),
@@ -1145,7 +1145,7 @@ function DocumentRow({
       ? lockedFields.filter((f) => f !== key)
       : [...lockedFields, key];
     updateTripDocument.mutate(
-      { tripId, docId: doc.id, body: { lockedFields: next } },
+      { id: tripId, docId: doc.id, data: { lockedFields: next } },
       {
         onSuccess: () => {
           qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
@@ -1157,7 +1157,7 @@ function DocumentRow({
 
   const handleRescan = () => {
     rescanTripDocument.mutate(
-      { tripId, docId: doc.id },
+      { id: tripId, docId: doc.id },
       {
         onSuccess: () => {
           qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
@@ -1193,7 +1193,7 @@ function DocumentRow({
       [key]: value ? value : null,
     };
     updateTripDocument.mutate(
-      { tripId, docId: doc.id, body: { extractedData } },
+      { id: tripId, docId: doc.id, data: { extractedData } },
       {
         onSuccess: () => {
           qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
@@ -2966,7 +2966,7 @@ export default function TripDetail({ id }: { id: number }) {
     successMsg = "Trip updated",
   ) => {
     updateTrip.mutate(
-      { id, body },
+      { id, data: body },
       {
         onSuccess: () => {
           invalidate();
@@ -2978,14 +2978,17 @@ export default function TripDetail({ id }: { id: number }) {
   };
 
   const handleDelete = () => {
-    deleteTrip.mutate(id, {
-      onSuccess: () => {
-        invalidate();
-        toast.success("Trip deleted");
-        setLocation("/trips");
+    deleteTrip.mutate(
+      { id },
+      {
+        onSuccess: () => {
+          invalidate();
+          toast.success("Trip deleted");
+          setLocation("/trips");
+        },
+        onError: () => toast.error("Failed to delete trip"),
       },
-      onError: () => toast.error("Failed to delete trip"),
-    });
+    );
   };
 
   const handleFilePicked = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -3026,7 +3029,7 @@ export default function TripDetail({ id }: { id: number }) {
 
   const handleDeleteDocument = (docId: number) => {
     deleteTripDocument.mutate(
-      { tripId: id, docId },
+      { id, docId },
       {
         onSuccess: () => {
           invalidate();
@@ -3039,7 +3042,7 @@ export default function TripDetail({ id }: { id: number }) {
 
   const handleGenerateItinerary = () => {
     generateItinerary.mutate(
-      { id, body: { style: itinStyle, interests: itinInterests } },
+      { id, data: { style: itinStyle, interests: itinInterests } },
       {
         onSuccess: () => {
           invalidate();
@@ -3055,7 +3058,7 @@ export default function TripDetail({ id }: { id: number }) {
     generateItinerary.mutate(
       {
         id,
-        body: {
+        data: {
           style: itinStyle,
           interests: itinInterests,
           regenerateDay: dayIndex,
@@ -3074,7 +3077,7 @@ export default function TripDetail({ id }: { id: number }) {
 
   const handleSaveTodoList = (items: TodoItem[]) => {
     updateTrip.mutate(
-      { id, body: { todoList: items } },
+      { id, data: { todoList: items } },
       {
         onSuccess: () => {
           invalidate();
@@ -3096,7 +3099,7 @@ export default function TripDetail({ id }: { id: number }) {
 
   const handleSaveItinerary = () => {
     updateTrip.mutate(
-      { id, body: { itinerary: localItinerary } },
+      { id, data: { itinerary: localItinerary } },
       {
         onSuccess: () => {
           invalidate();
@@ -3171,7 +3174,7 @@ export default function TripDetail({ id }: { id: number }) {
     const updated: Itinerary = { days };
     setLocalItinerary(updated);
     updateTrip.mutate(
-      { id, body: { itinerary: updated } },
+      { id, data: { itinerary: updated } },
       {
         onSuccess: () => {
           invalidate();

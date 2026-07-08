@@ -10,4 +10,7 @@ import type { UpdateTripDocumentBodyExtractedData } from './updateTripDocumentBo
 export type UpdateTripDocumentBody = {
   extractedData?: UpdateTripDocumentBodyExtractedData;
   lockedFields?: string[];
+  title?: string | null;
+  documentType?: string | null;
+  iconOverride?: string | null;
 };

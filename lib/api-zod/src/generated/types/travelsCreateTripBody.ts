@@ -17,9 +17,13 @@ export interface TravelsCreateTripBody {
   startDate?: Date;
   endDate?: Date;
   transportTo?: TravelsCreateTripBodyTransportTo;
+  transportDetails?: string;
   hasRentalCar?: boolean;
   accommodationName?: string;
   accommodationArea?: string;
   notes?: string;
+  funFact?: string;
   travellerCount?: number;
+  travelers?: string[];
+  theOneThing?: string[];
 }

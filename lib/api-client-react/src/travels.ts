@@ -238,11 +238,6 @@ export interface TravelsStats {
 // Fetchers
 // ---------------------------------------------------------------------------
 
-export const getListTripsUrl = () => `/api/travels/trips`;
-export const listTrips = (options?: RequestInit): Promise<Trip[]> =>
-  customFetch<Trip[]>(getListTripsUrl(), { ...options, method: "GET" });
-export const getListTripsQueryKey = () => [`/api/travels/trips`] as const;
-
 export const generateTripShareToken = (
   id: number,
   options?: RequestInit,
@@ -263,82 +258,6 @@ export const revokeTripShareToken = (
     method: "DELETE",
     headers: { "Content-Type": "application/json", ...options?.headers },
     body: JSON.stringify({ confirm: true }),
-  });
-
-export const getTripUrl = (id: number) => `/api/travels/trips/${id}`;
-export const getTrip = (id: number, options?: RequestInit): Promise<TripDetail> =>
-  customFetch<TripDetail>(getTripUrl(id), { ...options, method: "GET" });
-export const getGetTripQueryKey = (id: number) =>
-  [`/api/travels/trips/${id}`] as const;
-
-export const createTrip = (body: CreateTripBody, options?: RequestInit): Promise<Trip> =>
-  customFetch<Trip>(getListTripsUrl(), {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(body),
-  });
-
-export const updateTrip = (
-  id: number,
-  body: UpdateTripBody,
-  options?: RequestInit,
-): Promise<Trip> =>
-  customFetch<Trip>(getTripUrl(id), {
-    ...options,
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(body),
-  });
-
-export const deleteTrip = (id: number, options?: RequestInit): Promise<void> =>
-  customFetch<void>(getTripUrl(id), { ...options, method: "DELETE" });
-
-export const generateItinerary = (
-  id: number,
-  body: GenerateItineraryBody,
-  options?: RequestInit,
-): Promise<ItineraryResult> =>
-  customFetch<ItineraryResult>(`/api/travels/trips/${id}/itinerary`, {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(body),
-  });
-
-export const listTripDocuments = (id: number, options?: RequestInit): Promise<TripDocument[]> =>
-  customFetch<TripDocument[]>(`/api/travels/trips/${id}/documents`, {
-    ...options,
-    method: "GET",
-  });
-
-export const deleteTripDocument = (
-  tripId: number,
-  docId: number,
-  options?: RequestInit,
-): Promise<void> =>
-  customFetch<void>(`/api/travels/trips/${tripId}/documents/${docId}`, {
-    ...options,
-    method: "DELETE",
-  });
-
-export const updateTripDocument = (
-  tripId: number,
-  docId: number,
-  body: {
-    extractedData?: Record<string, unknown>;
-    lockedFields?: string[];
-    title?: string | null;
-    documentType?: string | null;
-    iconOverride?: string | null;
-  },
-  options?: RequestInit,
-): Promise<TripDocument> =>
-  customFetch<TripDocument>(`/api/travels/trips/${tripId}/documents/${docId}`, {
-    ...options,
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(body),
   });
 
 export const listCustomDocumentTypes = (
@@ -378,19 +297,6 @@ export const suggestDocumentType = (
       method: "POST",
       headers: { "Content-Type": "application/json", ...options?.headers },
       body: JSON.stringify(body),
-    },
-  );
-
-export const rescanTripDocument = (
-  tripId: number,
-  docId: number,
-  options?: RequestInit,
-): Promise<TripDocument> =>
-  customFetch<TripDocument>(
-    `/api/travels/trips/${tripId}/documents/${docId}/rescan`,
-    {
-      ...options,
-      method: "POST",
     },
   );
 
@@ -570,17 +476,6 @@ export const getAerialViewInfo = (
     options,
   );
 
-export const exploreDestination = (
-  body: ExploreDestinationBody,
-  options?: RequestInit,
-): Promise<ExploreDestinationResult> =>
-  customFetch<ExploreDestinationResult>(`/api/travels/explore`, {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(body),
-  });
-
 export const sendTripMessage = (
   tripId: number,
   body: { message: string },
@@ -602,137 +497,9 @@ export const clearTripChat = (
     method: "DELETE",
   });
 
-export const getTravelsStatsUrl = () => `/api/travels/stats`;
-export const getTravelsStats = (options?: RequestInit): Promise<TravelsStats> =>
-  customFetch<TravelsStats>(getTravelsStatsUrl(), { ...options, method: "GET" });
-export const getGetTravelsStatsQueryKey = () => [`/api/travels/stats`] as const;
-
 // ---------------------------------------------------------------------------
 // Query / Mutation Hooks
 // ---------------------------------------------------------------------------
-
-export const getListTripsQueryOptions = <
-  TData = Awaited<ReturnType<typeof listTrips>>,
-  TError = unknown,
->(
-  options?: {
-    query?: UseQueryOptions<Awaited<ReturnType<typeof listTrips>>, TError, TData>;
-  },
-) => {
-  const { query: queryOptions } = options ?? {};
-  const queryKey = queryOptions?.queryKey ?? getListTripsQueryKey();
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof listTrips>>> = ({
-    signal,
-  }) => listTrips({ signal });
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof listTrips>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
-export function useListTrips<
-  TData = Awaited<ReturnType<typeof listTrips>>,
-  TError = unknown,
->(
-  options?: {
-    query?: UseQueryOptions<Awaited<ReturnType<typeof listTrips>>, TError, TData>;
-  },
-): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListTripsQueryOptions(options);
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-export const getGetTripQueryOptions = <
-  TData = Awaited<ReturnType<typeof getTrip>>,
-  TError = unknown,
->(
-  id: number,
-  options?: {
-    query?: UseQueryOptions<Awaited<ReturnType<typeof getTrip>>, TError, TData>;
-  },
-) => {
-  const { query: queryOptions } = options ?? {};
-  const queryKey = queryOptions?.queryKey ?? getGetTripQueryKey(id);
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTrip>>> = ({
-    signal,
-  }) => getTrip(id, { signal });
-  return {
-    queryKey,
-    queryFn,
-    enabled: !!id,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof getTrip>>, TError, TData> & {
-    queryKey: QueryKey;
-  };
-};
-
-export function useGetTrip<
-  TData = Awaited<ReturnType<typeof getTrip>>,
-  TError = unknown,
->(
-  id: number,
-  options?: {
-    query?: UseQueryOptions<Awaited<ReturnType<typeof getTrip>>, TError, TData>;
-  },
-): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetTripQueryOptions(id, options);
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-export function useCreateTrip<TError = unknown, TContext = unknown>(
-  options?: {
-    mutation?: UseMutationOptions<
-      Awaited<ReturnType<typeof createTrip>>,
-      TError,
-      CreateTripBody,
-      TContext
-    >;
-  },
-): UseMutationResult<Awaited<ReturnType<typeof createTrip>>, TError, CreateTripBody, TContext> {
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof createTrip>>,
-    CreateTripBody
-  > = (body) => createTrip(body);
-  return useMutation({ mutationFn, ...options?.mutation });
-}
-
-export function useUpdateTrip<TError = unknown, TContext = unknown>(
-  options?: {
-    mutation?: UseMutationOptions<
-      Awaited<ReturnType<typeof updateTrip>>,
-      TError,
-      { id: number; body: UpdateTripBody },
-      TContext
-    >;
-  },
-): UseMutationResult<
-  Awaited<ReturnType<typeof updateTrip>>,
-  TError,
-  { id: number; body: UpdateTripBody },
-  TContext
-> {
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof updateTrip>>,
-    { id: number; body: UpdateTripBody }
-  > = ({ id, body }) => updateTrip(id, body);
-  return useMutation({ mutationFn, ...options?.mutation });
-}
-
-export function useDeleteTrip<TError = unknown, TContext = unknown>(
-  options?: {
-    mutation?: UseMutationOptions<void, TError, number, TContext>;
-  },
-): UseMutationResult<void, TError, number, TContext> {
-  const mutationFn: MutationFunction<void, number> = (id) => deleteTrip(id);
-  return useMutation({ mutationFn, ...options?.mutation });
-}
 
 export function useGenerateTripShareToken<TError = unknown, TContext = unknown>(
   options?: {
@@ -751,80 +518,6 @@ export function useRevokeTripShareToken<TError = unknown, TContext = unknown>(
 ): UseMutationResult<void, TError, number, TContext> {
   const mutationFn: MutationFunction<void, number> = (id) =>
     revokeTripShareToken(id);
-  return useMutation({ mutationFn, ...options?.mutation });
-}
-
-export function useGenerateItinerary<TError = unknown, TContext = unknown>(
-  options?: {
-    mutation?: UseMutationOptions<
-      ItineraryResult,
-      TError,
-      { id: number; body: GenerateItineraryBody },
-      TContext
-    >;
-  },
-): UseMutationResult<
-  ItineraryResult,
-  TError,
-  { id: number; body: GenerateItineraryBody },
-  TContext
-> {
-  const mutationFn: MutationFunction<
-    ItineraryResult,
-    { id: number; body: GenerateItineraryBody }
-  > = ({ id, body }) => generateItinerary(id, body);
-  return useMutation({ mutationFn, ...options?.mutation });
-}
-
-export function useDeleteTripDocument<TError = unknown, TContext = unknown>(
-  options?: {
-    mutation?: UseMutationOptions<
-      void,
-      TError,
-      { tripId: number; docId: number },
-      TContext
-    >;
-  },
-): UseMutationResult<
-  void,
-  TError,
-  { tripId: number; docId: number },
-  TContext
-> {
-  const mutationFn: MutationFunction<
-    void,
-    { tripId: number; docId: number }
-  > = ({ tripId, docId }) => deleteTripDocument(tripId, docId);
-  return useMutation({ mutationFn, ...options?.mutation });
-}
-
-type UpdateTripDocumentBody = {
-  extractedData?: Record<string, unknown>;
-  lockedFields?: string[];
-  title?: string | null;
-  documentType?: string | null;
-  iconOverride?: string | null;
-};
-
-export function useUpdateTripDocument<TError = unknown, TContext = unknown>(
-  options?: {
-    mutation?: UseMutationOptions<
-      TripDocument,
-      TError,
-      { tripId: number; docId: number; body: UpdateTripDocumentBody },
-      TContext
-    >;
-  },
-): UseMutationResult<
-  TripDocument,
-  TError,
-  { tripId: number; docId: number; body: UpdateTripDocumentBody },
-  TContext
-> {
-  const mutationFn: MutationFunction<
-    TripDocument,
-    { tripId: number; docId: number; body: UpdateTripDocumentBody }
-  > = ({ tripId, docId, body }) => updateTripDocument(tripId, docId, body);
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
@@ -903,28 +596,6 @@ export function useSuggestDocumentType<TError = unknown, TContext = unknown>(
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
-export function useRescanTripDocument<TError = unknown, TContext = unknown>(
-  options?: {
-    mutation?: UseMutationOptions<
-      TripDocument,
-      TError,
-      { tripId: number; docId: number },
-      TContext
-    >;
-  },
-): UseMutationResult<
-  TripDocument,
-  TError,
-  { tripId: number; docId: number },
-  TContext
-> {
-  const mutationFn: MutationFunction<
-    TripDocument,
-    { tripId: number; docId: number }
-  > = ({ tripId, docId }) => rescanTripDocument(tripId, docId);
-  return useMutation({ mutationFn, ...options?.mutation });
-}
-
 export function useGetTripDocumentWalletPass<TError = unknown, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -944,28 +615,6 @@ export function useGetTripDocumentWalletPass<TError = unknown, TContext = unknow
     { saveUrl: string },
     { tripId: number; docId: number }
   > = ({ tripId, docId }) => getTripDocumentWalletPassUrl(tripId, docId);
-  return useMutation({ mutationFn, ...options?.mutation });
-}
-
-export function useExploreDestination<TError = unknown, TContext = unknown>(
-  options?: {
-    mutation?: UseMutationOptions<
-      ExploreDestinationResult,
-      TError,
-      ExploreDestinationBody,
-      TContext
-    >;
-  },
-): UseMutationResult<
-  ExploreDestinationResult,
-  TError,
-  ExploreDestinationBody,
-  TContext
-> {
-  const mutationFn: MutationFunction<
-    ExploreDestinationResult,
-    ExploreDestinationBody
-  > = (body) => exploreDestination(body);
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
@@ -992,30 +641,6 @@ export function useSendTestReminderEmail<TError = unknown, TContext = unknown>(
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
-export const getGetTravelsStatsQueryOptions = <
-  TData = Awaited<ReturnType<typeof getTravelsStats>>,
-  TError = unknown,
->(
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getTravelsStats>>,
-      TError,
-      TData
-    >;
-  },
-) => {
-  const { query: queryOptions } = options ?? {};
-  const queryKey = queryOptions?.queryKey ?? getGetTravelsStatsQueryKey();
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTravelsStats>>> = ({
-    signal,
-  }) => getTravelsStats({ signal });
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof getTravelsStats>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
 export function useSendTripMessage<TError = unknown, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -1041,25 +666,6 @@ export function useClearTripChat<TError = unknown, TContext = unknown>(
   const mutationFn: MutationFunction<{ history: ChatMessage[] }, number> = (tripId) =>
     clearTripChat(tripId);
   return useMutation({ mutationFn, ...options?.mutation });
-}
-
-export function useGetTravelsStats<
-  TData = Awaited<ReturnType<typeof getTravelsStats>>,
-  TError = unknown,
->(
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getTravelsStats>>,
-      TError,
-      TData
-    >;
-  },
-): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetTravelsStatsQueryOptions(options);
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-  return { ...query, queryKey: queryOptions.queryKey };
 }
 
 // ---------------------------------------------------------------------------
@@ -2411,212 +2017,6 @@ export function useAcceptCalendarTripSuggestion(
     id: number;
     body?: { title?: string; destination?: string };
   }) => postAcceptCalendarTripSuggestionFn(id, body);
-  return useMutation({ mutationFn, ...options?.mutation });
-}
-
-// ---------------------------------------------------------------------------
-// Packing List
-// ---------------------------------------------------------------------------
-
-export interface PackingItem {
-  id: number;
-  listId: number;
-  text: string;
-  packed: boolean;
-  sortOrder: number;
-  addedByUserId?: number | null;
-  createdAt: string;
-}
-
-export interface PackingListWithItems {
-  id: number;
-  tripId: number;
-  name: string;
-  createdAt: string;
-  items: PackingItem[];
-}
-
-export interface PackingTemplate {
-  id: number;
-  userId: number;
-  name: string;
-  items: string[];
-  createdAt: string;
-}
-
-export interface CreatePackingItemBody {
-  text: string;
-  sortOrder?: number;
-}
-
-export interface UpdatePackingItemBody {
-  text?: string;
-  packed?: boolean;
-  sortOrder?: number;
-}
-
-export interface CreatePackingTemplateBody {
-  name: string;
-  items: string[];
-}
-
-export interface BulkCreatePackingItemsBody {
-  items: { text: string }[];
-}
-
-export interface LoadTemplateResult {
-  added: number;
-  items: PackingItem[];
-}
-
-// Query key helpers
-export const getGetPackingListQueryKey = (tripId: number) =>
-  [`/api/travels/trips/${tripId}/packing`] as const;
-
-const getPackingListFn = (tripId: number, options?: RequestInit): Promise<PackingListWithItems> =>
-  customFetch<PackingListWithItems>(`/api/travels/trips/${tripId}/packing`, { ...options, method: "GET" });
-
-export function useGetPackingList<TData = PackingListWithItems, TError = unknown>(
-  tripId: number,
-  options?: { query?: UseQueryOptions<PackingListWithItems, TError, TData> },
-): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const { query: queryOptions } = options ?? {};
-  const queryKey = queryOptions?.queryKey ?? getGetPackingListQueryKey(tripId);
-  const queryFn: QueryFunction<PackingListWithItems> = ({ signal }) => getPackingListFn(tripId, { signal });
-  const queryOpts = { queryKey, queryFn, enabled: tripId > 0, ...queryOptions } as UseQueryOptions<PackingListWithItems, TError, TData> & { queryKey: QueryKey };
-  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
-  return { ...query, queryKey: queryOpts.queryKey };
-}
-
-const createPackingItemFn = (tripId: number, body: CreatePackingItemBody, options?: RequestInit): Promise<PackingItem> =>
-  customFetch<PackingItem>(`/api/travels/trips/${tripId}/packing/items`, {
-    ...options, method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-export function useCreatePackingItem<TError = unknown, TContext = unknown>(
-  options?: { mutation?: UseMutationOptions<PackingItem, TError, { tripId: number; body: CreatePackingItemBody }, TContext> },
-): UseMutationResult<PackingItem, TError, { tripId: number; body: CreatePackingItemBody }, TContext> {
-  const mutationFn: MutationFunction<PackingItem, { tripId: number; body: CreatePackingItemBody }> = ({ tripId, body }) =>
-    createPackingItemFn(tripId, body);
-  return useMutation({ mutationFn, ...options?.mutation });
-}
-
-export interface ReorderPackingItemsBody {
-  order: number[];
-}
-
-const reorderPackingItemsFn = (tripId: number, body: ReorderPackingItemsBody, options?: RequestInit): Promise<{ reordered: number }> =>
-  customFetch<{ reordered: number }>(`/api/travels/trips/${tripId}/packing/items/reorder`, {
-    ...options, method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-export function useReorderPackingItems<TError = unknown, TContext = unknown>(
-  options?: { mutation?: UseMutationOptions<{ reordered: number }, TError, { tripId: number; body: ReorderPackingItemsBody }, TContext> },
-): UseMutationResult<{ reordered: number }, TError, { tripId: number; body: ReorderPackingItemsBody }, TContext> {
-  const mutationFn: MutationFunction<{ reordered: number }, { tripId: number; body: ReorderPackingItemsBody }> = ({ tripId, body }) =>
-    reorderPackingItemsFn(tripId, body);
-  return useMutation({ mutationFn, ...options?.mutation });
-}
-
-const bulkCreatePackingItemsFn = (tripId: number, body: BulkCreatePackingItemsBody, options?: RequestInit): Promise<PackingItem[]> =>
-  customFetch<PackingItem[]>(`/api/travels/trips/${tripId}/packing/items/bulk`, {
-    ...options, method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-export function useBulkCreatePackingItems<TError = unknown, TContext = unknown>(
-  options?: { mutation?: UseMutationOptions<PackingItem[], TError, { tripId: number; body: BulkCreatePackingItemsBody }, TContext> },
-): UseMutationResult<PackingItem[], TError, { tripId: number; body: BulkCreatePackingItemsBody }, TContext> {
-  const mutationFn: MutationFunction<PackingItem[], { tripId: number; body: BulkCreatePackingItemsBody }> = ({ tripId, body }) =>
-    bulkCreatePackingItemsFn(tripId, body);
-  return useMutation({ mutationFn, ...options?.mutation });
-}
-
-const updatePackingItemFn = (tripId: number, itemId: number, body: UpdatePackingItemBody, options?: RequestInit): Promise<PackingItem> =>
-  customFetch<PackingItem>(`/api/travels/trips/${tripId}/packing/items/${itemId}`, {
-    ...options, method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-export function useUpdatePackingItem<TError = unknown, TContext = unknown>(
-  options?: { mutation?: UseMutationOptions<PackingItem, TError, { tripId: number; itemId: number; body: UpdatePackingItemBody }, TContext> },
-): UseMutationResult<PackingItem, TError, { tripId: number; itemId: number; body: UpdatePackingItemBody }, TContext> {
-  const mutationFn: MutationFunction<PackingItem, { tripId: number; itemId: number; body: UpdatePackingItemBody }> = ({ tripId, itemId, body }) =>
-    updatePackingItemFn(tripId, itemId, body);
-  return useMutation({ mutationFn, ...options?.mutation });
-}
-
-const deletePackingItemFn = (tripId: number, itemId: number, options?: RequestInit): Promise<void> =>
-  customFetch<void>(`/api/travels/trips/${tripId}/packing/items/${itemId}`, { ...options, method: "DELETE" });
-
-export function useDeletePackingItem<TError = unknown, TContext = unknown>(
-  options?: { mutation?: UseMutationOptions<void, TError, { tripId: number; itemId: number }, TContext> },
-): UseMutationResult<void, TError, { tripId: number; itemId: number }, TContext> {
-  const mutationFn: MutationFunction<void, { tripId: number; itemId: number }> = ({ tripId, itemId }) =>
-    deletePackingItemFn(tripId, itemId);
-  return useMutation({ mutationFn, ...options?.mutation });
-}
-
-const loadPackingTemplateFn = (tripId: number, templateId: number, options?: RequestInit): Promise<LoadTemplateResult> =>
-  customFetch<LoadTemplateResult>(`/api/travels/trips/${tripId}/packing/load-template/${templateId}`, {
-    ...options, method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({}),
-  });
-
-export function useLoadPackingTemplate<TError = unknown, TContext = unknown>(
-  options?: { mutation?: UseMutationOptions<LoadTemplateResult, TError, { tripId: number; templateId: number }, TContext> },
-): UseMutationResult<LoadTemplateResult, TError, { tripId: number; templateId: number }, TContext> {
-  const mutationFn: MutationFunction<LoadTemplateResult, { tripId: number; templateId: number }> = ({ tripId, templateId }) =>
-    loadPackingTemplateFn(tripId, templateId);
-  return useMutation({ mutationFn, ...options?.mutation });
-}
-
-export const getListPackingTemplatesQueryKey = () => [`/api/travels/packing-templates`] as const;
-
-const listPackingTemplatesFn = (options?: RequestInit): Promise<PackingTemplate[]> =>
-  customFetch<PackingTemplate[]>(`/api/travels/packing-templates`, { ...options, method: "GET" });
-
-export function useListPackingTemplates<TData = PackingTemplate[], TError = unknown>(
-  options?: { query?: UseQueryOptions<PackingTemplate[], TError, TData> },
-): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const { query: queryOptions } = options ?? {};
-  const queryKey = queryOptions?.queryKey ?? getListPackingTemplatesQueryKey();
-  const queryFn: QueryFunction<PackingTemplate[]> = ({ signal }) => listPackingTemplatesFn({ signal });
-  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<PackingTemplate[], TError, TData> & { queryKey: QueryKey };
-  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
-  return { ...query, queryKey: queryOpts.queryKey };
-}
-
-const createPackingTemplateFn = (body: CreatePackingTemplateBody, options?: RequestInit): Promise<PackingTemplate> =>
-  customFetch<PackingTemplate>(`/api/travels/packing-templates`, {
-    ...options, method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-export function useCreatePackingTemplate<TError = unknown, TContext = unknown>(
-  options?: { mutation?: UseMutationOptions<PackingTemplate, TError, CreatePackingTemplateBody, TContext> },
-): UseMutationResult<PackingTemplate, TError, CreatePackingTemplateBody, TContext> {
-  const mutationFn: MutationFunction<PackingTemplate, CreatePackingTemplateBody> = (body) =>
-    createPackingTemplateFn(body);
-  return useMutation({ mutationFn, ...options?.mutation });
-}
-
-const deletePackingTemplateFn = (templateId: number, options?: RequestInit): Promise<void> =>
-  customFetch<void>(`/api/travels/packing-templates/${templateId}`, { ...options, method: "DELETE" });
-
-export function useDeletePackingTemplate<TError = unknown, TContext = unknown>(
-  options?: { mutation?: UseMutationOptions<void, TError, number, TContext> },
-): UseMutationResult<void, TError, number, TContext> {
-  const mutationFn: MutationFunction<void, number> = (templateId) =>
-    deletePackingTemplateFn(templateId);
   return useMutation({ mutationFn, ...options?.mutation });
 }
 

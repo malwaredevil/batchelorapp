@@ -2532,12 +2532,18 @@ export const ListTripsResponseItem = zod.object({
   "status": zod.enum(['wishlist', 'planning', 'booked', 'active', 'completed']),
   "startDate": zod.coerce.date().nullish(),
   "endDate": zod.coerce.date().nullish(),
-  "transportTo": zod.string().nullish(),
+  "transportTo": zod.enum(['drove', 'flew', 'train']).nullish(),
+  "transportDetails": zod.string().nullish(),
   "hasRentalCar": zod.boolean(),
   "accommodationName": zod.string().nullish(),
   "accommodationArea": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "funFact": zod.string().nullish(),
   "travellerCount": zod.number(),
+  "travelers": zod.array(zod.string()).nullish(),
+  "theOneThing": zod.array(zod.string()).nullish(),
+  "iconPhotoId": zod.number().nullish(),
+  "shareToken": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 export const ListTripsResponse = zod.array(ListTripsResponseItem)
@@ -2555,11 +2561,15 @@ export const CreateTripBody = zod.object({
   "startDate": zod.coerce.date().optional(),
   "endDate": zod.coerce.date().optional(),
   "transportTo": zod.enum(['drove', 'flew', 'train']).optional(),
+  "transportDetails": zod.string().optional(),
   "hasRentalCar": zod.boolean().optional(),
   "accommodationName": zod.string().optional(),
   "accommodationArea": zod.string().optional(),
   "notes": zod.string().optional(),
-  "travellerCount": zod.number().optional()
+  "funFact": zod.string().optional(),
+  "travellerCount": zod.number().optional(),
+  "travelers": zod.array(zod.string()).optional(),
+  "theOneThing": zod.array(zod.string()).optional()
 })
 
 
@@ -2580,25 +2590,35 @@ export const GetTripResponse = zod.object({
   "status": zod.enum(['wishlist', 'planning', 'booked', 'active', 'completed']),
   "startDate": zod.coerce.date().nullish(),
   "endDate": zod.coerce.date().nullish(),
-  "transportTo": zod.string().nullish(),
+  "transportTo": zod.enum(['drove', 'flew', 'train']).nullish(),
+  "transportDetails": zod.string().nullish(),
   "hasRentalCar": zod.boolean(),
   "accommodationName": zod.string().nullish(),
   "accommodationArea": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "funFact": zod.string().nullish(),
   "travellerCount": zod.number(),
+  "travelers": zod.array(zod.string()).nullish(),
+  "theOneThing": zod.array(zod.string()).nullish(),
+  "iconPhotoId": zod.number().nullish(),
+  "shareToken": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 }).and(zod.object({
   "itinerary": zod.unknown().nullish(),
   "packingList": zod.unknown().nullish(),
+  "todoList": zod.unknown().nullish(),
   "documents": zod.array(zod.object({
   "id": zod.number(),
   "tripId": zod.number(),
   "userId": zod.number(),
   "storagePath": zod.string(),
+  "title": zod.string().nullish(),
   "documentType": zod.string().nullish(),
   "originalFilename": zod.string().nullish(),
-  "extractedData": zod.unknown().nullish(),
+  "extractedData": zod.record(zod.string(), zod.unknown()).nullish(),
   "lockedFields": zod.array(zod.string()).optional(),
+  "gmailMessageId": zod.string().nullish(),
+  "iconOverride": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })).optional()
 }))
@@ -2620,13 +2640,18 @@ export const UpdateTripBody = zod.object({
   "startDate": zod.coerce.date().optional(),
   "endDate": zod.coerce.date().optional(),
   "transportTo": zod.enum(['drove', 'flew', 'train']).optional(),
+  "transportDetails": zod.string().optional(),
   "hasRentalCar": zod.boolean().optional(),
   "accommodationName": zod.string().optional(),
   "accommodationArea": zod.string().optional(),
   "notes": zod.string().optional(),
+  "funFact": zod.string().optional(),
   "travellerCount": zod.number().optional(),
+  "travelers": zod.array(zod.string()).optional(),
+  "theOneThing": zod.array(zod.string()).optional(),
   "itinerary": zod.unknown().nullish(),
-  "packingList": zod.unknown().nullish()
+  "packingList": zod.unknown().nullish(),
+  "todoList": zod.unknown().nullish()
 })
 
 export const UpdateTripResponse = zod.object({
@@ -2639,12 +2664,18 @@ export const UpdateTripResponse = zod.object({
   "status": zod.enum(['wishlist', 'planning', 'booked', 'active', 'completed']),
   "startDate": zod.coerce.date().nullish(),
   "endDate": zod.coerce.date().nullish(),
-  "transportTo": zod.string().nullish(),
+  "transportTo": zod.enum(['drove', 'flew', 'train']).nullish(),
+  "transportDetails": zod.string().nullish(),
   "hasRentalCar": zod.boolean(),
   "accommodationName": zod.string().nullish(),
   "accommodationArea": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "funFact": zod.string().nullish(),
   "travellerCount": zod.number(),
+  "travelers": zod.array(zod.string()).nullish(),
+  "theOneThing": zod.array(zod.string()).nullish(),
+  "iconPhotoId": zod.number().nullish(),
+  "shareToken": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -2689,10 +2720,13 @@ export const ListTripDocumentsResponseItem = zod.object({
   "tripId": zod.number(),
   "userId": zod.number(),
   "storagePath": zod.string(),
+  "title": zod.string().nullish(),
   "documentType": zod.string().nullish(),
   "originalFilename": zod.string().nullish(),
-  "extractedData": zod.unknown().nullish(),
+  "extractedData": zod.record(zod.string(), zod.unknown()).nullish(),
   "lockedFields": zod.array(zod.string()).optional(),
+  "gmailMessageId": zod.string().nullish(),
+  "iconOverride": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 export const ListTripDocumentsResponse = zod.array(ListTripDocumentsResponseItem)
@@ -2720,7 +2754,10 @@ export const UpdateTripDocumentParams = zod.object({
 
 export const UpdateTripDocumentBody = zod.object({
   "extractedData": zod.record(zod.string(), zod.unknown()).optional(),
-  "lockedFields": zod.array(zod.string()).optional()
+  "lockedFields": zod.array(zod.string()).optional(),
+  "title": zod.string().nullish(),
+  "documentType": zod.string().nullish(),
+  "iconOverride": zod.string().nullish()
 })
 
 export const UpdateTripDocumentResponse = zod.object({
@@ -2728,10 +2765,13 @@ export const UpdateTripDocumentResponse = zod.object({
   "tripId": zod.number(),
   "userId": zod.number(),
   "storagePath": zod.string(),
+  "title": zod.string().nullish(),
   "documentType": zod.string().nullish(),
   "originalFilename": zod.string().nullish(),
-  "extractedData": zod.unknown().nullish(),
+  "extractedData": zod.record(zod.string(), zod.unknown()).nullish(),
   "lockedFields": zod.array(zod.string()).optional(),
+  "gmailMessageId": zod.string().nullish(),
+  "iconOverride": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -2758,10 +2798,13 @@ export const RescanTripDocumentResponse = zod.object({
   "tripId": zod.number(),
   "userId": zod.number(),
   "storagePath": zod.string(),
+  "title": zod.string().nullish(),
   "documentType": zod.string().nullish(),
   "originalFilename": zod.string().nullish(),
-  "extractedData": zod.unknown().nullish(),
+  "extractedData": zod.record(zod.string(), zod.unknown()).nullish(),
   "lockedFields": zod.array(zod.string()).optional(),
+  "gmailMessageId": zod.string().nullish(),
+  "iconOverride": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -2800,7 +2843,30 @@ export const GetTravelsStatsResponse = zod.object({
   "completedTrips": zod.number(),
   "upcomingTrips": zod.number(),
   "uniqueDestinations": zod.number(),
-  "nextTrip": zod.unknown().nullable()
+  "nextTrip": zod.object({
+  "id": zod.number(),
+  "userId": zod.number(),
+  "title": zod.string(),
+  "destination": zod.string(),
+  "lat": zod.number().nullish(),
+  "lng": zod.number().nullish(),
+  "status": zod.enum(['wishlist', 'planning', 'booked', 'active', 'completed']),
+  "startDate": zod.coerce.date().nullish(),
+  "endDate": zod.coerce.date().nullish(),
+  "transportTo": zod.enum(['drove', 'flew', 'train']).nullish(),
+  "transportDetails": zod.string().nullish(),
+  "hasRentalCar": zod.boolean(),
+  "accommodationName": zod.string().nullish(),
+  "accommodationArea": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "funFact": zod.string().nullish(),
+  "travellerCount": zod.number(),
+  "travelers": zod.array(zod.string()).nullish(),
+  "theOneThing": zod.array(zod.string()).nullish(),
+  "iconPhotoId": zod.number().nullish(),
+  "shareToken": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+}).nullable()
 })
 
 

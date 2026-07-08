@@ -34,6 +34,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { TagSelector } from "@/components/tag-selector";
 import { PreviewZoomModal } from "@/components/PreviewZoomModal";
 import { downloadCollectionImage } from "@/lib/svg-export";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 type Fabric = {
   id: number;
@@ -155,6 +156,13 @@ export default function FabricDetail() {
 
   const { data: fabric, isLoading, isError } = useGetFabric(fabricId);
   const { data: allCategories } = useListQuiltingCategories();
+
+  usePageAssistantContext(
+    "quilting-fabric-detail",
+    isLoading || !fabric
+      ? undefined
+      : `Fabric Detail page (fabricId: ${fabric.id}): "${fabric.name}"${fabric.designer ? ` by ${fabric.designer}` : ""}${fabric.lineName ? `, line "${fabric.lineName}"` : ""}. ${fabric.quantity} ${fabric.quantityUnit} on hand. Print type: ${fabric.printType ?? "unknown"}. Colours: ${(fabric.dominantColors ?? []).join(", ") || "none"}. Categories: ${(fabric.categories ?? []).map((c: { name: string }) => c.name).join(", ") || "none"}.`,
+  );
 
   const deleteFabric = useDeleteFabric({
     mutation: {

@@ -46,6 +46,7 @@ import { BlockPreviewSvg } from "@/components/BlockPreviewSvg";
 import { PreviewZoomModal } from "@/components/PreviewZoomModal";
 import { TagSelector } from "@/components/tag-selector";
 import type { QuiltingCategory } from "@workspace/api-client-react";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 export default function BlockDetail() {
   const { id } = useParams<{ id: string }>();
@@ -69,6 +70,13 @@ export default function BlockDetail() {
   const { data: allCategories } = useListQuiltingCategories();
   const numMap = buildFabricUrlMap(
     fabrics as Parameters<typeof buildFabricUrlMap>[0],
+  );
+
+  usePageAssistantContext(
+    "quilting-block-detail",
+    isLoading || !block
+      ? undefined
+      : `Block Detail page (blockId: ${block.id}): "${block.name}", ${block.gridSize}x${block.gridSize} grid.`,
   );
 
   const deleteBlock = useDeleteBlock({

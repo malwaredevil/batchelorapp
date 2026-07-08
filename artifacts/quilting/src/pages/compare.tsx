@@ -8,6 +8,7 @@ import { ImageEditor } from "@/components/image-editor";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 type Verdict = "yes" | "maybe" | "no";
 
@@ -180,6 +181,11 @@ export default function Compare() {
   const [file, setFile] = useState<File | null>(null);
   const [editingFile, setEditingFile] = useState<File | null>(null);
   const [result, setResult] = useState<CompareResult | null>(null);
+
+  usePageAssistantContext(
+    "quilting-compare",
+    "Compare page: upload a photo of a fabric to check whether it (or something with the same pattern) already exists in the stash. This is a photo-upload flow — you cannot run a comparison on the user's behalf from chat.",
+  );
 
   const compare = useCompareFabric({
     mutation: {

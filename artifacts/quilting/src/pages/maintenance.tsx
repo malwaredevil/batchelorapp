@@ -30,6 +30,7 @@ import {
   getGetStaleCountQueryKey,
 } from "@workspace/api-client-react";
 import type { ComponentType } from "react";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 type RunStatus = "queued" | "processing" | "done" | "error";
 
@@ -613,6 +614,11 @@ function QuiltsPanel() {
 // ---------------------------------------------------------------------------
 
 export default function Maintenance() {
+  usePageAssistantContext(
+    "quilting-maintenance",
+    "Maintenance page: housekeeping tools to find and bulk re-analyze fabrics/patterns/quilts that are missing AI embeddings (stale search results). You have bulk_reanalyze_quilting action tools for all three entity types.",
+  );
+
   return (
     <div className="mx-auto max-w-4xl">
       <h1 className="text-2xl font-bold tracking-tight">Maintenance</h1>

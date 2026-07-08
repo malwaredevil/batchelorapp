@@ -49,6 +49,7 @@ import { PreviewZoomModal } from "@/components/PreviewZoomModal";
 import { CategoryEditDialog } from "@/components/CategoryEditDialog";
 import { PaletteMatchModal } from "@/components/PaletteMatchModal";
 import { cn } from "@/lib/utils";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 type SortOption = "newest" | "oldest" | "az" | "za";
 
@@ -493,6 +494,16 @@ export default function Patterns() {
     colorFilter.length > 0;
 
   const { data: stats } = useGetStats();
+
+  usePageAssistantContext(
+    "quilting-patterns",
+    isLoading
+      ? undefined
+      : `Patterns page: ${patterns?.length ?? 0} pattern(s) saved${hasFilter ? ` (${sorted?.length ?? 0} shown after filters)` : ""}. Visible patterns: ${(sorted ?? [])
+          .slice(0, 30)
+          .map((p) => `${p.name} (patternId: ${p.id})`)
+          .join(", ") || "none"}.`,
+  );
 
   return (
     <div>

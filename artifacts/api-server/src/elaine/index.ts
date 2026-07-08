@@ -2882,6 +2882,7 @@ Quilting app:
 - Quilts ("/quilts", "/quilts/add", "/quilts/:id"): finished/in-progress quilts — browse, add, and view/edit details.
 - Compare ("/compare"): compare fabrics or patterns side by side.
 - Blocks ("/blocks", "/blocks/new", "/blocks/:id", "/blocks/:id/edit", "/blocks/:id/cut-pattern"): a quilt-block designer with generated cutting patterns.
+- Block Patterns ("/library/blocks", "/library/blocks/new", "/library/blocks/:id/edit"): a library of reusable named block templates (classic quilt blocks like Ohio Star, Log Cabin, Half Square Triangle, plus any custom ones saved from the Block Designer) — browse, search, and open one in the designer to start a new block from it.
 - Layouts ("/layouts", "/layouts/new", "/layouts/:id", "/layouts/:id/edit"): plan how blocks/fabrics come together into a quilt layout.
 - Whole Quilt ("/whole-quilt", "/whole-quilt/designer"): design/browse whole-quilt layouts.
 - Shopping ("/shopping"): the fabric/supplies shopping list.

@@ -335,7 +335,7 @@ export default function BlockLibrary() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Block Library</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Block Patterns</h1>
           <p className="text-sm text-muted-foreground">
             {templateList
               ? hasFilter

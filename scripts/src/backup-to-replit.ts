@@ -15,7 +15,7 @@
  *             quilting_patterns (WITHOUT embedding/visual_embedding),
  *             quilting_finished_quilts, quilting_fabric_links, quilting_pattern_links,
  *             quilting_entity_categories, quilting_images, quilting_blocks,
- *             quilting_layouts, quilting_shopping_items
+ *             quilting_block_templates, quilting_layouts, quilting_shopping_items
  *   Travels:  travels_trips, travels_trip_documents, travels_trip_photos,
  *             travels_wishlist, travels_reminders, travels_reminder_alert_log,
  *             travels_calendar_settings, travels_google_calendar_connections,
@@ -247,6 +247,22 @@ CREATE TABLE IF NOT EXISTS quilting_blocks (
   seam_allowance_inches REAL,
   seams                 JSONB NOT NULL DEFAULT '[]',
   created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS quilting_block_templates (
+  id                    SERIAL PRIMARY KEY,
+  created_by_user_id    INTEGER,
+  name                  TEXT NOT NULL,
+  tags                  TEXT[] NOT NULL DEFAULT '{}',
+  grid_w                INTEGER NOT NULL DEFAULT 8,
+  grid_h                INTEGER NOT NULL DEFAULT 8,
+  cells                 TEXT[] NOT NULL DEFAULT '{}',
+  seams                 JSONB NOT NULL DEFAULT '[]',
+  block_size_inches     REAL,
+  seam_allowance_inches REAL,
+  thumbnail_svg         TEXT,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS quilting_layouts (
@@ -872,6 +888,28 @@ async function main() {
     jsonbColumns: ["seams"],
   });
   await resetSequence(dest, "quilting_blocks", "id");
+
+  summary["quilting_block_templates"] = await copyTable(source, dest, {
+    table: "quilting_block_templates",
+    columns: [
+      "id",
+      "created_by_user_id",
+      "name",
+      "tags",
+      "grid_w",
+      "grid_h",
+      "cells",
+      "seams",
+      "block_size_inches",
+      "seam_allowance_inches",
+      "thumbnail_svg",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["seams"],
+  });
+  await resetSequence(dest, "quilting_block_templates", "id");
 
   summary["quilting_layouts"] = await copyTable(source, dest, {
     table: "quilting_layouts",

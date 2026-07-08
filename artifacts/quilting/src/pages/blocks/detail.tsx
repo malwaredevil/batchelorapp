@@ -10,10 +10,19 @@ import {
   Tag,
   Check,
   X as XIcon,
+  Library,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { getCategoryPalette } from "@workspace/web-core";
 import { toast } from "sonner";
 import {
@@ -21,10 +30,12 @@ import {
   useDeleteBlock,
   useCreateBlock,
   useUpdateBlock,
+  useCreateBlockTemplate,
   useListFabrics,
   useListQuiltingCategories,
   getListBlocksQueryKey,
   getGetBlockQueryKey,
+  getListBlockTemplatesQueryKey,
   QuiltingCreateBlockInputGridSize,
   QuiltingBlockSeamLine,
 } from "@workspace/api-client-react";
@@ -45,6 +56,8 @@ export default function BlockDetail() {
   const [catEditing, setCatEditing] = useState(false);
   const [selectedCatIds, setSelectedCatIds] = useState<number[]>([]);
   const [localNewCats, setLocalNewCats] = useState<QuiltingCategory[]>([]);
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [templateTagsInput, setTemplateTagsInput] = useState("");
 
   const {
     data: block,
@@ -79,6 +92,46 @@ export default function BlockDetail() {
       onError: () => toast.error("Could not duplicate this block."),
     },
   });
+
+  const createTemplate = useCreateBlockTemplate({
+    mutation: {
+      onSuccess: (data) => {
+        queryClient.invalidateQueries({
+          queryKey: getListBlockTemplatesQueryKey(),
+        });
+        toast.success("Saved to Block Library");
+        setTemplateDialogOpen(false);
+        navigate(`/library/blocks/${String(data.id)}/edit`);
+      },
+      onError: () => toast.error("Could not save this block as a template."),
+    },
+  });
+
+  function handleSaveAsTemplate() {
+    if (!block) return;
+    const tags = templateTagsInput
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    createTemplate.mutate({
+      data: {
+        name: block.name,
+        tags,
+        gridW: block.gridSize,
+        gridH: Math.max(1, Math.ceil(block.cells.length / block.gridSize)),
+        cells: block.cells,
+        seams: (block.seams ?? []).map((s) => ({
+          axis: s.axis,
+          pos: s.pos,
+          cellIdx: s.cellIdx,
+          clipStart: s.clipStart ?? undefined,
+          clipEnd: s.clipEnd ?? undefined,
+        })),
+        blockSizeInches: block.blockSizeInches ?? undefined,
+        seamAllowanceInches: block.seamAllowanceInches ?? undefined,
+      },
+    });
+  }
 
   const updateBlockCategories = useUpdateBlock({
     mutation: {
@@ -213,6 +266,17 @@ export default function BlockDetail() {
                 title="Cut pattern"
               >
                 <Scissors className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => {
+                  setTemplateTagsInput("");
+                  setTemplateDialogOpen(true);
+                }}
+                title="Save as template"
+              >
+                <Library className="h-4 w-4" />
               </Button>
               <Button
                 variant="outline"
@@ -408,6 +472,42 @@ export default function BlockDetail() {
           fabricUrlMap={numMap}
         />
       </PreviewZoomModal>
+      <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save as template</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This adds a copy of "{b.name}" to the Block Library as a reusable
+            template. The original block is left untouched.
+          </p>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">
+              Tags (comma-separated)
+            </label>
+            <Input
+              value={templateTagsInput}
+              onChange={(e) => setTemplateTagsInput(e.target.value)}
+              placeholder="e.g. Classic, Star"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setTemplateDialogOpen(false)}
+              disabled={createTemplate.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveAsTemplate}
+              disabled={createTemplate.isPending}
+            >
+              {createTemplate.isPending ? "Saving…" : "Save to library"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

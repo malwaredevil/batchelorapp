@@ -36,6 +36,7 @@ import Blocks from "@/pages/blocks";
 import BlockDesigner from "@/pages/blocks/designer";
 import BlockDetail from "@/pages/blocks/detail";
 import CutPatternPage from "@/pages/blocks/cut-pattern";
+import BlockLibrary from "@/pages/library/blocks";
 import Layouts from "@/pages/layouts";
 import LayoutComposer from "@/pages/layouts/composer";
 import LayoutDetail from "@/pages/layouts/detail";
@@ -111,6 +112,10 @@ function Routes() {
         <Route path="/blocks/:id/cut-pattern" component={CutPatternPage} />
         <Route path="/blocks/:id/edit" component={BlockDesigner} />
         <Route path="/blocks/:id" component={BlockDetail} />
+        {/* Block Library (reusable block templates) */}
+        <Route path="/library/blocks" component={BlockLibrary} />
+        <Route path="/library/blocks/new" component={BlockDesigner} />
+        <Route path="/library/blocks/:id/edit" component={BlockDesigner} />
         <Route path="/layouts" component={Layouts} />
         <Route path="/layouts/new" component={LayoutComposer} />
         <Route path="/layouts/:id/edit" component={LayoutComposer} />

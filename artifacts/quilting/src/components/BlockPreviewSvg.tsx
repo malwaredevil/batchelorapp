@@ -11,6 +11,7 @@ export type BlockSeamLine = {
 export function BlockPreviewSvg({
   cells,
   gridSize,
+  gridHeight,
   seams = [],
   size = 120,
   tileCount = 2,
@@ -18,12 +19,14 @@ export function BlockPreviewSvg({
 }: {
   cells: string[];
   gridSize: number;
+  /** Optional explicit row count for non-square grids (e.g. block templates). Defaults to a square derived from cells.length. */
+  gridHeight?: number;
   seams?: BlockSeamLine[];
   size?: number;
   tileCount?: number;
   fabricUrlMap?: Record<number, string>;
 }) {
-  const gridH = Math.max(1, Math.ceil(cells.length / gridSize));
+  const gridH = gridHeight ?? Math.max(1, Math.ceil(cells.length / gridSize));
   const cellPx = size / (gridSize * tileCount);
   const svgH = gridH * tileCount * cellPx;
   const tiles = Array.from({ length: tileCount * tileCount }, (_, t) => t);

@@ -5,6 +5,7 @@
  * Unified API specification (pottery + quilting + travels)
  * OpenAPI spec version: 0.1.0
  */
+import type { QuiltingBlockTemplateSeamLine } from './quiltingBlockTemplateSeamLine';
 
 export interface QuiltingUpdateBlockTemplateInput {
   /**
@@ -13,4 +14,26 @@ export interface QuiltingUpdateBlockTemplateInput {
      */
   name?: string;
   tags?: string[];
+  /**
+     * @minimum 1
+     * @maximum 20
+     */
+  gridW?: number;
+  /**
+     * @minimum 1
+     * @maximum 20
+     */
+  gridH?: number;
+  cells?: string[];
+  seams?: QuiltingBlockTemplateSeamLine[];
+  /**
+     * @minimum 1
+     * @maximum 120
+     */
+  blockSizeInches?: number | null;
+  /**
+     * @minimum 0.0625
+     * @maximum 1
+     */
+  seamAllowanceInches?: number | null;
 }

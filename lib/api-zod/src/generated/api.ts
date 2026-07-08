@@ -2520,11 +2520,32 @@ export const PatchBlockTemplateParams = zod.object({
 
 export const patchBlockTemplateBodyNameMax = 120;
 
+export const patchBlockTemplateBodyGridWMax = 20;
+
+export const patchBlockTemplateBodyGridHMax = 20;
+
+export const patchBlockTemplateBodyBlockSizeInchesMax = 120;
+
+export const patchBlockTemplateBodySeamAllowanceInchesMin = 0.0625;
+export const patchBlockTemplateBodySeamAllowanceInchesMax = 1;
+
 
 
 export const PatchBlockTemplateBody = zod.object({
   "name": zod.string().min(1).max(patchBlockTemplateBodyNameMax).optional(),
-  "tags": zod.array(zod.string()).optional()
+  "tags": zod.array(zod.string()).optional(),
+  "gridW": zod.number().min(1).max(patchBlockTemplateBodyGridWMax).optional(),
+  "gridH": zod.number().min(1).max(patchBlockTemplateBodyGridHMax).optional(),
+  "cells": zod.array(zod.string()).optional(),
+  "seams": zod.array(zod.object({
+  "axis": zod.enum(['h', 'v']),
+  "pos": zod.number(),
+  "cellIdx": zod.number(),
+  "clipStart": zod.number().nullish(),
+  "clipEnd": zod.number().nullish()
+})).optional(),
+  "blockSizeInches": zod.number().min(1).max(patchBlockTemplateBodyBlockSizeInchesMax).nullish(),
+  "seamAllowanceInches": zod.number().min(patchBlockTemplateBodySeamAllowanceInchesMin).max(patchBlockTemplateBodySeamAllowanceInchesMax).nullish()
 })
 
 export const PatchBlockTemplateResponse = zod.object({

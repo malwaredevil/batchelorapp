@@ -4143,8 +4143,8 @@ export const AGENTPHONE_ACTION_TYPES = new Set<string>([
   "update_trip_status",
 ]);
 
-const AGENTPHONE_ACTION_TOOLS = ACTION_TOOLS.filter((t) =>
-  t.type === "function" && AGENTPHONE_ACTION_TYPES.has(t.function.name),
+const AGENTPHONE_ACTION_TOOLS = ACTION_TOOLS.filter(
+  (t) => t.type === "function" && AGENTPHONE_ACTION_TYPES.has(t.function.name),
 );
 
 export interface AgentphoneChatMessage {
@@ -4187,8 +4187,7 @@ async function buildAgentphoneContext(): Promise<string> {
 
   const tripLines = trips.map((t) => {
     const packing =
-      (t.packingList as Array<{ item: string; packed: boolean }> | null) ??
-      [];
+      (t.packingList as Array<{ item: string; packed: boolean }> | null) ?? [];
     const packingText =
       packing.length > 0
         ? ` | packing: ${packing.map((p) => `${p.item}${p.packed ? " (packed)" : ""}`).join(", ")}`
@@ -4229,12 +4228,13 @@ export async function runAgentphoneTurn(params: {
       role: "system",
       content: `${AGENTPHONE_SYSTEM_PROMPT}\n\n${contextText}`,
     },
-    ...history
-      .slice(-10)
-      .map(
-        (m) =>
-          ({ role: m.role, content: m.content }) as OpenAI.Chat.Completions.ChatCompletionMessageParam,
-      ),
+    ...history.slice(-10).map(
+      (m) =>
+        ({
+          role: m.role,
+          content: m.content,
+        }) as OpenAI.Chat.Completions.ChatCompletionMessageParam,
+    ),
     { role: "user", content: inputText },
   ];
 

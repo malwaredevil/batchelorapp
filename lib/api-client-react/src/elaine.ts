@@ -583,6 +583,34 @@ export function useCreateElaineConversation(options?: {
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
+const renameElaineConversationFn = (
+  id: number,
+  title: string,
+): Promise<ConversationSummary> =>
+  customFetch<ConversationSummary>(`/api/elaine/conversations/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+
+export function useRenameElaineConversation(options?: {
+  mutation?: UseMutationOptions<
+    ConversationSummary,
+    unknown,
+    { id: number; title: string }
+  >;
+}): UseMutationResult<
+  ConversationSummary,
+  unknown,
+  { id: number; title: string }
+> {
+  const mutationFn: MutationFunction<
+    ConversationSummary,
+    { id: number; title: string }
+  > = ({ id, title }) => renameElaineConversationFn(id, title);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
 const deleteElaineConversationFn = (id: number): Promise<void> =>
   customFetch<void>(`/api/elaine/conversations/${id}`, { method: "DELETE" });
 

@@ -1,9 +1,17 @@
-import { useMemo, useState, useCallback, useDeferredValue } from "react";
+import {
+  useMemo,
+  useState,
+  useCallback,
+  useDeferredValue,
+  useRef,
+  useEffect,
+} from "react";
 import {
   ExternalLink,
   ImageIcon,
   Link2,
   MessageSquare,
+  Pencil,
   Plus,
   RefreshCw,
   Search,
@@ -20,6 +28,7 @@ import {
   useGetElaineDailyBrief,
   useListElaineConversations,
   useRegenerateElaineDailyBrief,
+  useRenameElaineConversation,
   type ConversationMessage,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -101,6 +110,9 @@ export default function Chat() {
   // preventing a fetch on every keystroke.
   const deferredSearch = useDeferredValue(searchQuery.trim() || undefined);
   const [loadingConvId, setLoadingConvId] = useState<number | null>(null);
+  const [editingConvId, setEditingConvId] = useState<number | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   const { data: conversations = [] } = useListElaineConversations({
     q: deferredSearch,
@@ -117,6 +129,40 @@ export default function Chat() {
       },
     },
   });
+  const renameConversation = useRenameElaineConversation({
+    mutation: {
+      onSuccess: () => {
+        void qc.invalidateQueries({ queryKey: getListElaineConversationsQueryKey() });
+      },
+    },
+  });
+
+  useEffect(() => {
+    if (editingConvId !== null) {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    }
+  }, [editingConvId]);
+
+  const startEditing = useCallback((id: number, currentTitle: string) => {
+    setEditingConvId(id);
+    setEditingTitle(currentTitle);
+  }, []);
+
+  const cancelEditing = useCallback(() => {
+    setEditingConvId(null);
+    setEditingTitle("");
+  }, []);
+
+  const commitEditing = useCallback(
+    (id: number) => {
+      const trimmed = editingTitle.trim();
+      setEditingConvId(null);
+      if (!trimmed) return;
+      renameConversation.mutate({ id, title: trimmed });
+    },
+    [editingTitle, renameConversation],
+  );
 
   // Daily morning brief
   const {
@@ -234,25 +280,52 @@ export default function Chat() {
             {conversations.map((conv) => {
               const isActive = chat.conversationId === conv.id;
               const isLoading = loadingConvId === conv.id;
+              const isEditing = editingConvId === conv.id;
               return (
                 <div
                   key={conv.id}
                   className={`group relative flex cursor-pointer items-start gap-2 px-3 py-2 transition-colors hover:bg-muted/60 ${
                     isActive ? "bg-muted" : ""
                   }`}
-                  onClick={() => void handleSelectConversation(conv.id)}
+                  onClick={() =>
+                    !isEditing && void handleSelectConversation(conv.id)
+                  }
                 >
                   <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   <div className="min-w-0 flex-1">
-                    <p
-                      className={`truncate text-xs font-medium leading-snug ${
-                        isActive
-                          ? "text-foreground"
-                          : "text-foreground/80"
-                      }`}
-                    >
-                      {isLoading ? "Loading…" : conv.title}
-                    </p>
+                    {isEditing ? (
+                      <input
+                        ref={renameInputRef}
+                        value={editingTitle}
+                        onChange={(e) => setEditingTitle(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        onBlur={() => commitEditing(conv.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            commitEditing(conv.id);
+                          } else if (e.key === "Escape") {
+                            e.preventDefault();
+                            cancelEditing();
+                          }
+                        }}
+                        className="w-full rounded border border-border bg-background px-1 py-0.5 text-xs font-medium leading-snug text-foreground outline-none focus:border-ring"
+                      />
+                    ) : (
+                      <p
+                        className={`truncate text-xs font-medium leading-snug ${
+                          isActive
+                            ? "text-foreground"
+                            : "text-foreground/80"
+                        }`}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          startEditing(conv.id, conv.title);
+                        }}
+                      >
+                        {isLoading ? "Loading…" : conv.title}
+                      </p>
+                    )}
                     {conv.preview && (
                       <p className="mt-0.5 truncate text-[10px] text-muted-foreground/70 leading-snug">
                         {conv.preview}
@@ -262,6 +335,19 @@ export default function Chat() {
                       {formatConversationDate(conv.updatedAt)}
                     </p>
                   </div>
+                  {!isEditing && (
+                    <button
+                      type="button"
+                      className="invisible ml-1 mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:visible group-hover:opacity-100"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        startEditing(conv.id, conv.title);
+                      }}
+                      title="Rename conversation"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="invisible ml-1 mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:visible group-hover:opacity-100"

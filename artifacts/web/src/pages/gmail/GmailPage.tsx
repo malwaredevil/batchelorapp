@@ -32,6 +32,7 @@ import { GmailSidebar, type LabelId } from "@/components/gmail/GmailSidebar";
 import { ThreadList, type LayoutMode } from "@/components/gmail/ThreadList";
 import { ThreadView } from "@/components/gmail/ThreadView";
 import { ComposeModal } from "@/components/gmail/ComposeModal";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -287,6 +288,20 @@ function GmailPage() {
 
   const { data: threadData, isLoading: threadLoading } =
     useThread(selectedThreadId);
+
+  usePageAssistantContext(
+    "hub-gmail",
+    connected
+      ? `On the Gmail page (a full webmail client for the user's own connected Gmail account, separate from the Travels app's Gmail auto-scan feature). Viewing the "${labelDisplayName(selectedLabel)}" label.` +
+          (activeSearch ? ` Search filter applied: "${activeSearch}".` : "") +
+          (threadListData?.threads
+            ? ` ${threadListData.threads.length} thread(s) loaded in the current page.`
+            : "") +
+          (selectedThreadId && threadData
+            ? ` A thread is open: "${threadData.messages[0]?.subject ?? "(no subject)"}" with ${threadData.messages.length} message(s).`
+            : "")
+      : `On the Gmail page. The user's Gmail account is not connected yet.`,
+  );
 
   // ── Mutations ──────────────────────────────────────────────────────────────
   const modify = useGmailModify();

@@ -20,12 +20,16 @@ import {
   travelsWishlist,
   travelsGoogleCalendarConnections,
   travelsConnectedCalendars,
+  travelsCardLayoutPreferences,
+  travelsTripCardCollapseState,
   potteryItems,
   fabrics,
   quiltPatterns,
   finishedQuilts,
+  phoneVerificationCodes,
 } from "@workspace/db";
 import { requireAuth } from "../middleware/auth";
+import { phoneVerifyLimiter } from "../middleware/rateLimit";
 import { logger } from "../lib/logger";
 import { callModel, callModelWithSubagent } from "../lib/ai-client";
 import {
@@ -46,7 +50,16 @@ import {
   generateItineraryForTrip,
   ItineraryActionError,
 } from "../routes/travels/ai";
-import { sendAssistantEmail, resendConfigured } from "../lib/email";
+import {
+  sendAssistantEmail,
+  sendTestEmail,
+  resendConfigured,
+} from "../lib/email";
+import {
+  sendSms,
+  SmsRegistrationPendingError,
+  SmsOptedOutError,
+} from "../lib/sms";
 import { webSearch } from "../lib/web-search";
 import { consultExperts } from "../lib/expert-consult";
 import {
@@ -73,7 +86,13 @@ import {
 } from "./quilting-actions";
 import multer from "multer";
 import { createClient } from "@supabase/supabase-js";
-import { randomUUID } from "node:crypto";
+import {
+  randomUUID,
+  randomBytes,
+  randomInt,
+  createHash,
+  timingSafeEqual,
+} from "node:crypto";
 import { env } from "../lib/env";
 import pdfParse from "pdf-parse";
 
@@ -327,6 +346,27 @@ const RemoveWishlistItemActionPayload = z.object({
   wishlistId: z.number().int().positive(),
 });
 
+// Wishlist entries are the closest thing this app has to a standalone
+// "destination" record (Travels' /destinations page is a read-only grouping
+// of trips by destination string, not an editable resource — see
+// destinations.ts). Destination lifecycle management maps onto: create via
+// add_wishlist/create_trip, update via this action or update_trip_details,
+// delete via remove_wishlist_item/cancel_trip.
+const UpdateWishlistItemActionPayload = z
+  .object({
+    wishlistId: z.number().int().positive(),
+    destination: z.string().min(1).max(200).optional(),
+    targetDate: z.string().max(20).nullable().optional(),
+    notes: z.string().max(2000).nullable().optional(),
+  })
+  .refine(
+    (payload) =>
+      payload.destination !== undefined ||
+      payload.targetDate !== undefined ||
+      payload.notes !== undefined,
+    { message: "At least one field to update must be provided" },
+  );
+
 const RemovePackingItemActionPayload = z.object({
   tripId: z.number().int().positive(),
   item: z.string().min(1).max(200),
@@ -412,6 +452,75 @@ const SendEmailActionPayload = z.object({
   body: z.string().min(1).max(10000),
 });
 
+// Hub account-settings actions. These act on the calling user's own account
+// only (no id in the payload) and mirror routes/auth.ts's
+// /auth/test-email, /auth/test-sms, /auth/phone/send-code, /auth/phone/verify
+// exactly, including their consent/format/rate-limit requirements.
+const SendTestEmailActionPayload = z.object({});
+
+const SendTestSmsActionPayload = z.object({});
+
+// Matches the E.164 validation in routes/auth.ts's phone verification route.
+const E164_RE = /^\+[1-9]\d{6,14}$/;
+const PHONE_CODE_EXPIRY_MS = 1000 * 60 * 10;
+const MAX_PHONE_CODE_ATTEMPTS = 5;
+
+const SendPhoneVerificationCodeActionPayload = z.object({
+  phoneNumber: z.string().regex(E164_RE, "Must be in E.164 format"),
+  consent: z.literal(true),
+});
+
+const VerifyPhoneCodeActionPayload = z.object({
+  code: z.string().regex(/^\d{6}$/, "Must be a 6-digit code"),
+});
+
+const GenerateTripShareLinkActionPayload = z.object({
+  tripId: z.number().int().positive(),
+});
+
+const RevokeTripShareLinkActionPayload = z.object({
+  tripId: z.number().int().positive(),
+});
+
+const DeleteTripPhotoActionPayload = z.object({
+  tripId: z.number().int().positive(),
+  photoId: z.number().int().positive(),
+});
+
+// Card ids must match the whitelists enforced server-side in
+// routes/travels/card-layout.ts (CARD_ORDER_IDS / COLLAPSE_CARD_IDS). Kept in
+// sync here since that route doesn't export them; unknown ids are silently
+// dropped by these executors, mirroring the route's own behavior.
+const CARD_ORDER_IDS = [
+  "reminders",
+  "itinerary",
+  "documents",
+  "packing-todo",
+  "photos",
+  "magnets",
+  "weather-nearby",
+] as const;
+
+const COLLAPSE_CARD_IDS = [
+  "reminders",
+  "itinerary",
+  "documents",
+  "packing",
+  "todo",
+  "photos",
+  "magnets",
+  "weather-nearby",
+] as const;
+
+const UpdateCardLayoutActionPayload = z.object({
+  cardOrder: z.array(z.string().min(1).max(50)).min(1).max(50),
+});
+
+const UpdateTripCardCollapseActionPayload = z.object({
+  tripId: z.number().int().positive(),
+  collapsedCards: z.array(z.string().min(1).max(50)).max(50),
+});
+
 const ActionBody = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("create_trip"),
@@ -444,6 +553,10 @@ const ActionBody = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("remove_wishlist_item"),
     payload: RemoveWishlistItemActionPayload,
+  }),
+  z.object({
+    type: z.literal("update_wishlist_item"),
+    payload: UpdateWishlistItemActionPayload,
   }),
   z.object({
     type: z.literal("remove_packing_item"),
@@ -498,6 +611,42 @@ const ActionBody = z.discriminatedUnion("type", [
     payload: RemoveItineraryActivityActionPayload,
   }),
   z.object({ type: z.literal("send_email"), payload: SendEmailActionPayload }),
+  z.object({
+    type: z.literal("send_test_email"),
+    payload: SendTestEmailActionPayload,
+  }),
+  z.object({
+    type: z.literal("send_test_sms"),
+    payload: SendTestSmsActionPayload,
+  }),
+  z.object({
+    type: z.literal("send_phone_verification_code"),
+    payload: SendPhoneVerificationCodeActionPayload,
+  }),
+  z.object({
+    type: z.literal("verify_phone_code"),
+    payload: VerifyPhoneCodeActionPayload,
+  }),
+  z.object({
+    type: z.literal("generate_trip_share_link"),
+    payload: GenerateTripShareLinkActionPayload,
+  }),
+  z.object({
+    type: z.literal("revoke_trip_share_link"),
+    payload: RevokeTripShareLinkActionPayload,
+  }),
+  z.object({
+    type: z.literal("delete_trip_photo"),
+    payload: DeleteTripPhotoActionPayload,
+  }),
+  z.object({
+    type: z.literal("update_card_layout"),
+    payload: UpdateCardLayoutActionPayload,
+  }),
+  z.object({
+    type: z.literal("update_trip_card_collapse"),
+    payload: UpdateTripCardCollapseActionPayload,
+  }),
   ...potteryActionSchemas,
   ...quiltingActionSchemas,
 ]);
@@ -578,6 +727,21 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
       return item
         ? `Remove "${item.destination}" from the wishlist`
         : `Remove this item from the wishlist`;
+    }
+    case "update_wishlist_item": {
+      const item = await getWishlistLabelInfo(action.payload.wishlistId);
+      const name = item ? `"${item.destination}"` : "this wishlist item";
+      const changes: string[] = [];
+      if (action.payload.destination !== undefined)
+        changes.push(`destination to "${action.payload.destination}"`);
+      if (action.payload.targetDate !== undefined)
+        changes.push(
+          action.payload.targetDate === null
+            ? `target date removed`
+            : `target date to ${action.payload.targetDate}`,
+        );
+      if (action.payload.notes !== undefined) changes.push(`notes`);
+      return `Update ${name}'s ${changes.join(", ")}`;
     }
     case "remove_packing_item":
       return `Remove "${action.payload.item}" from the packing list`;
@@ -668,6 +832,36 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
     }
     case "send_email":
       return `Email you "${action.payload.subject}"`;
+    case "send_test_email":
+      return `Send a test email to your account address`;
+    case "send_test_sms":
+      return `Send a test text message to your verified phone number`;
+    case "send_phone_verification_code":
+      return `Send a verification code by text to ${action.payload.phoneNumber}`;
+    case "verify_phone_code":
+      return `Verify your phone number with code ${action.payload.code}`;
+    case "generate_trip_share_link": {
+      const trip = await getTripLabelInfo(action.payload.tripId);
+      const name = trip ? `"${trip.title || trip.destination}"` : "this trip";
+      return `Generate a public share link for ${name}`;
+    }
+    case "revoke_trip_share_link": {
+      const trip = await getTripLabelInfo(action.payload.tripId);
+      const name = trip ? `"${trip.title || trip.destination}"` : "this trip";
+      return `Revoke ${name}'s share link (breaks any copy already shared)`;
+    }
+    case "delete_trip_photo": {
+      const trip = await getTripLabelInfo(action.payload.tripId);
+      const name = trip ? `"${trip.title || trip.destination}"` : "this trip";
+      return `Delete this photo from ${name}`;
+    }
+    case "update_card_layout":
+      return `Reorder your Trip Detail cards (${action.payload.cardOrder.join(", ")})`;
+    case "update_trip_card_collapse": {
+      const trip = await getTripLabelInfo(action.payload.tripId);
+      const name = trip ? `"${trip.title || trip.destination}"` : "this trip";
+      return `Update which cards are collapsed on ${name}'s page`;
+    }
     default:
       if (POTTERY_ACTION_TYPES.has(action.type as PotteryActionType)) {
         return buildPotteryActionLabel(
@@ -913,6 +1107,43 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
         result: { id: payload.wishlistId },
       },
     };
+  }) as ActionExecutor,
+
+  update_wishlist_item: (async (
+    payload: z.infer<typeof UpdateWishlistItemActionPayload>,
+    userId: number,
+  ) => {
+    const [existing] = await db
+      .select()
+      .from(travelsWishlist)
+      .where(
+        and(
+          eq(travelsWishlist.id, payload.wishlistId),
+          eq(travelsWishlist.userId, userId),
+        ),
+      );
+    if (!existing)
+      return { status: 404, body: { error: "Wishlist item not found" } };
+    let extraCoords: { lat?: number; lng?: number } = {};
+    if (payload.destination && payload.destination !== existing.destination) {
+      const coords = await geocodeDestination(payload.destination);
+      if (coords) extraCoords = coords;
+    }
+    const [row] = await db
+      .update(travelsWishlist)
+      .set({
+        ...(payload.destination !== undefined && {
+          destination: payload.destination,
+        }),
+        ...(payload.targetDate !== undefined && {
+          targetDate: payload.targetDate,
+        }),
+        ...(payload.notes !== undefined && { notes: payload.notes }),
+        ...extraCoords,
+      })
+      .where(eq(travelsWishlist.id, payload.wishlistId))
+      .returning();
+    return { status: 200, body: { type: "update_wishlist_item", result: row } };
   }) as ActionExecutor,
 
   remove_packing_item: (async (
@@ -1427,6 +1658,374 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
       },
     };
   }) as ActionExecutor,
+
+  // Hub account-settings actions below are strictly single-user — they act
+  // only on the calling user's own row/tokens, mirroring routes/auth.ts's
+  // /auth/test-email, /auth/test-sms, /auth/phone/send-code, and
+  // /auth/phone/verify exactly (including their error responses).
+  send_test_email: (async (
+    _payload: z.infer<typeof SendTestEmailActionPayload>,
+    userId: number,
+  ) => {
+    if (!resendConfigured()) {
+      return {
+        status: 503,
+        body: { error: "Email is not available right now." },
+      };
+    }
+    const [user] = await db
+      .select()
+      .from(appUsers)
+      .where(eq(appUsers.id, userId))
+      .limit(1);
+    if (!user) return { status: 401, body: { error: "Not authenticated" } };
+
+    try {
+      await sendTestEmail(user.email);
+      return {
+        status: 200,
+        body: { type: "send_test_email", result: { sentTo: user.email } },
+      };
+    } catch {
+      return {
+        status: 500,
+        body: { error: "Could not send the test email." },
+      };
+    }
+  }) as ActionExecutor,
+
+  send_test_sms: (async (
+    _payload: z.infer<typeof SendTestSmsActionPayload>,
+    userId: number,
+  ) => {
+    const [user] = await db
+      .select()
+      .from(appUsers)
+      .where(eq(appUsers.id, userId))
+      .limit(1);
+
+    if (!user || !user.phoneVerified || !user.phoneNumber) {
+      return {
+        status: 400,
+        body: {
+          error: "Verify a phone number first before sending a test SMS.",
+        },
+      };
+    }
+
+    try {
+      await sendSms(
+        user.phoneNumber,
+        "This is a test SMS from your Batchelor App account settings. If you received this, SMS delivery is working!",
+      );
+      return {
+        status: 200,
+        body: {
+          type: "send_test_sms",
+          result: { sentTo: user.phoneNumber },
+        },
+      };
+    } catch (err) {
+      if (err instanceof SmsRegistrationPendingError) {
+        return {
+          status: 503,
+          body: {
+            error:
+              "SMS sending isn't enabled yet — carrier (10DLC) registration is still pending. Your phone number is verified and ready; this will start working once registration completes.",
+          },
+        };
+      }
+      if (err instanceof SmsOptedOutError) {
+        return {
+          status: 409,
+          body: {
+            error:
+              "This phone number has opted out of texts (replied STOP). Reply START from that phone to resubscribe.",
+          },
+        };
+      }
+      return { status: 500, body: { error: "Could not send the test SMS." } };
+    }
+  }) as ActionExecutor,
+
+  send_phone_verification_code: (async (
+    payload: z.infer<typeof SendPhoneVerificationCodeActionPayload>,
+    userId: number,
+  ) => {
+    const phoneNumber = payload.phoneNumber.trim();
+    const code = randomInt(0, 1_000_000).toString().padStart(6, "0");
+    const codeHash = createHash("sha256").update(code).digest("hex");
+    const expiresAt = new Date(Date.now() + PHONE_CODE_EXPIRY_MS);
+
+    try {
+      await db.insert(phoneVerificationCodes).values({
+        userId,
+        phoneNumber,
+        codeHash,
+        expiresAt,
+      });
+      await db
+        .update(appUsers)
+        .set({ smsConsentAt: new Date() })
+        .where(eq(appUsers.id, userId));
+      await sendSms(
+        phoneNumber,
+        `Your Batchelor App verification code is ${code}. It expires in 10 minutes.`,
+      );
+      return {
+        status: 200,
+        body: {
+          type: "send_phone_verification_code",
+          result: { phoneNumber },
+        },
+      };
+    } catch (err) {
+      if (err instanceof SmsRegistrationPendingError) {
+        return {
+          status: 503,
+          body: {
+            error:
+              "SMS sending isn't enabled yet — carrier (10DLC) registration is still pending. Your consent has been recorded and will be used for that registration.",
+          },
+        };
+      }
+      if (err instanceof SmsOptedOutError) {
+        return {
+          status: 409,
+          body: {
+            error:
+              "This phone number has opted out of texts (replied STOP). Reply START from that phone to resubscribe before verifying it.",
+          },
+        };
+      }
+      return {
+        status: 500,
+        body: { error: "Could not send the verification code. Please try again." },
+      };
+    }
+  }) as ActionExecutor,
+
+  verify_phone_code: (async (
+    payload: z.infer<typeof VerifyPhoneCodeActionPayload>,
+    userId: number,
+  ) => {
+    const now = new Date();
+    const [record] = await db
+      .select()
+      .from(phoneVerificationCodes)
+      .where(
+        and(
+          eq(phoneVerificationCodes.userId, userId),
+          eq(phoneVerificationCodes.used, false),
+          sql`${phoneVerificationCodes.expiresAt} > ${now}`,
+        ),
+      )
+      .orderBy(desc(phoneVerificationCodes.createdAt))
+      .limit(1);
+
+    if (!record || record.attempts >= MAX_PHONE_CODE_ATTEMPTS) {
+      return {
+        status: 400,
+        body: { error: "This code is invalid or has expired. Request a new one." },
+      };
+    }
+
+    const providedHash = createHash("sha256")
+      .update(payload.code)
+      .digest("hex");
+    const matches =
+      providedHash.length === record.codeHash.length &&
+      timingSafeEqual(
+        Buffer.from(providedHash),
+        Buffer.from(record.codeHash),
+      );
+
+    if (!matches) {
+      const attempts = record.attempts + 1;
+      await db
+        .update(phoneVerificationCodes)
+        .set({ attempts, used: attempts >= MAX_PHONE_CODE_ATTEMPTS })
+        .where(eq(phoneVerificationCodes.id, record.id));
+      return {
+        status: 400,
+        body: { error: "This code is invalid or has expired. Request a new one." },
+      };
+    }
+
+    const [user] = await db.transaction(async (tx) => {
+      await tx
+        .update(phoneVerificationCodes)
+        .set({ used: true })
+        .where(eq(phoneVerificationCodes.id, record.id));
+      return tx
+        .update(appUsers)
+        .set({
+          phoneNumber: record.phoneNumber,
+          phoneVerified: true,
+          phoneVerifiedAt: now,
+        })
+        .where(eq(appUsers.id, userId))
+        .returning();
+    });
+
+    if (!user) return { status: 401, body: { error: "Not authenticated" } };
+
+    return {
+      status: 200,
+      body: {
+        type: "verify_phone_code",
+        result: { phoneNumber: user.phoneNumber },
+      },
+    };
+  }) as ActionExecutor,
+
+  // Share/photo actions below intentionally do NOT filter by userId — trips
+  // are fully household-shared (see threat_model.md "Household-sharing
+  // boundary"), matching the equivalent hand-written routes in
+  // routes/travels/share.ts and routes/travels/photos.ts.
+  generate_trip_share_link: (async (
+    payload: z.infer<typeof GenerateTripShareLinkActionPayload>,
+  ) => {
+    const [trip] = await db
+      .select({ id: travelsTrips.id, shareToken: travelsTrips.shareToken })
+      .from(travelsTrips)
+      .where(eq(travelsTrips.id, payload.tripId));
+    if (!trip) return { status: 404, body: { error: "Trip not found" } };
+
+    if (trip.shareToken) {
+      return {
+        status: 200,
+        body: {
+          type: "generate_trip_share_link",
+          result: { shareToken: trip.shareToken },
+        },
+      };
+    }
+
+    const token = randomBytes(16).toString("hex");
+    await db
+      .update(travelsTrips)
+      .set({ shareToken: token })
+      .where(eq(travelsTrips.id, payload.tripId));
+
+    return {
+      status: 200,
+      body: { type: "generate_trip_share_link", result: { shareToken: token } },
+    };
+  }) as ActionExecutor,
+
+  revoke_trip_share_link: (async (
+    payload: z.infer<typeof RevokeTripShareLinkActionPayload>,
+  ) => {
+    const [trip] = await db
+      .select({ id: travelsTrips.id })
+      .from(travelsTrips)
+      .where(eq(travelsTrips.id, payload.tripId));
+    if (!trip) return { status: 404, body: { error: "Trip not found" } };
+
+    await db
+      .update(travelsTrips)
+      .set({ shareToken: null })
+      .where(eq(travelsTrips.id, payload.tripId));
+
+    return {
+      status: 200,
+      body: { type: "revoke_trip_share_link", result: { id: payload.tripId } },
+    };
+  }) as ActionExecutor,
+
+  delete_trip_photo: (async (
+    payload: z.infer<typeof DeleteTripPhotoActionPayload>,
+  ) => {
+    const [row] = await db
+      .select()
+      .from(travelsTripPhotos)
+      .where(
+        and(
+          eq(travelsTripPhotos.id, payload.photoId),
+          eq(travelsTripPhotos.tripId, payload.tripId),
+        ),
+      );
+    if (!row) return { status: 404, body: { error: "Photo not found" } };
+
+    await deleteTripPhoto(row.storagePath).catch(() => {});
+    await db
+      .delete(travelsTripPhotos)
+      .where(eq(travelsTripPhotos.id, payload.photoId));
+
+    const [trip] = await db
+      .select({ iconPhotoId: travelsTrips.iconPhotoId })
+      .from(travelsTrips)
+      .where(eq(travelsTrips.id, payload.tripId));
+    if (trip?.iconPhotoId === payload.photoId) {
+      await db
+        .update(travelsTrips)
+        .set({ iconPhotoId: null })
+        .where(eq(travelsTrips.id, payload.tripId));
+    }
+
+    return {
+      status: 200,
+      body: { type: "delete_trip_photo", result: { id: payload.photoId } },
+    };
+  }) as ActionExecutor,
+
+  // Card layout / collapse preferences ARE personal (never household-shared —
+  // see threat_model.md), so these two stay scoped by the calling userId,
+  // matching routes/travels/card-layout.ts exactly.
+  update_card_layout: (async (
+    payload: z.infer<typeof UpdateCardLayoutActionPayload>,
+    userId: number,
+  ) => {
+    const cardOrder = payload.cardOrder.filter((id) =>
+      (CARD_ORDER_IDS as readonly string[]).includes(id),
+    );
+    await db
+      .insert(travelsCardLayoutPreferences)
+      .values({ userId, cardOrder, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: travelsCardLayoutPreferences.userId,
+        set: { cardOrder, updatedAt: new Date() },
+      });
+    return {
+      status: 200,
+      body: { type: "update_card_layout", result: { cardOrder } },
+    };
+  }) as ActionExecutor,
+
+  update_trip_card_collapse: (async (
+    payload: z.infer<typeof UpdateTripCardCollapseActionPayload>,
+    userId: number,
+  ) => {
+    const [trip] = await db
+      .select({ id: travelsTrips.id })
+      .from(travelsTrips)
+      .where(eq(travelsTrips.id, payload.tripId));
+    if (!trip) return { status: 404, body: { error: "Trip not found" } };
+
+    const collapsedCards = payload.collapsedCards.filter((id) =>
+      (COLLAPSE_CARD_IDS as readonly string[]).includes(id),
+    );
+    await db
+      .insert(travelsTripCardCollapseState)
+      .values({
+        userId,
+        tripId: payload.tripId,
+        collapsedCards,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [
+          travelsTripCardCollapseState.userId,
+          travelsTripCardCollapseState.tripId,
+        ],
+        set: { collapsedCards, updatedAt: new Date() },
+      });
+    return {
+      status: 200,
+      body: { type: "update_trip_card_collapse", result: { collapsedCards } },
+    };
+  }) as ActionExecutor,
 };
 
 const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
@@ -1568,6 +2167,24 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       parameters: {
         type: "object",
         properties: { wishlistId: { type: "integer" } },
+        required: ["wishlistId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_wishlist_item",
+      description:
+        "Propose editing an existing wishlist destination — rename it, change its target date, or update its notes. Only call this if the wishlist item's numeric id is visible on screen; never guess an id. Include only the field(s) that actually change; you must include at least one.",
+      parameters: {
+        type: "object",
+        properties: {
+          wishlistId: { type: "integer" },
+          destination: { type: "string" },
+          targetDate: { type: "string", description: "YYYY-MM-DD" },
+          notes: { type: "string" },
+        },
         required: ["wishlistId"],
       },
     },
@@ -1856,6 +2473,145 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "send_test_email",
+      description:
+        'Propose sending a one-off test email to the user\'s own registered account address, e.g. "send me a test email" or "check that email is working". Takes no parameters — always goes to their own account address, never a different one.',
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "send_test_sms",
+      description:
+        'Propose sending a one-off test text message to the user\'s own verified phone number, e.g. "text me a test message" or "check that SMS is working". Only works if the user already has a verified phone number on their account (see the Account settings page context) — if not, tell them to verify a phone number first instead of calling this. Takes no parameters.',
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "send_phone_verification_code",
+      description:
+        'Propose sending a 6-digit SMS verification code to a phone number the user wants to add/change on their account, e.g. "verify my number +12105551234". Only call this once the user has explicitly said they agree to receive SMS text messages (their reply must clearly indicate consent) — `consent` must be `true`, reflecting that agreement, never assume or default it. `phoneNumber` must be in E.164 format (e.g. "+12105551234"); ask the user for it in that format if they gave a local number without a country code.',
+      parameters: {
+        type: "object",
+        properties: {
+          phoneNumber: {
+            type: "string",
+            description: "Phone number in E.164 format, e.g. +12105551234",
+          },
+          consent: {
+            type: "boolean",
+            description:
+              "Must be true, and only true after the user has explicitly agreed to receive SMS messages",
+          },
+        },
+        required: ["phoneNumber", "consent"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "verify_phone_code",
+      description:
+        "Propose submitting the 6-digit verification code the user received by text to finish verifying their phone number, e.g. the user replies with a code after send_phone_verification_code was used. Only call this with a code the user actually typed/told you in this conversation — never guess or reuse an old code.",
+      parameters: {
+        type: "object",
+        properties: {
+          code: { type: "string", description: "The 6-digit code, digits only" },
+        },
+        required: ["code"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "generate_trip_share_link",
+      description:
+        'Propose generating a public, read-only share link for a trip (or returning the existing one if already generated), e.g. "make a link I can send to my parents" or "share this trip". The link exposes only basic itinerary info (title, destination, dates, status, notes, itinerary) to anyone who has it — no photos, documents, or private data. Only call this if the trip\'s numeric id is visible on screen; never guess an id. Mention in your visible reply that anyone with the link can view it.',
+      parameters: {
+        type: "object",
+        properties: { tripId: { type: "integer" } },
+        required: ["tripId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "revoke_trip_share_link",
+      description:
+        'Propose revoking (deleting) a trip\'s existing public share link, e.g. "revoke that share link" or "stop sharing this trip". This immediately breaks any copy of the link already sent out — anyone who has it loses access. Only call this if the trip\'s numeric id is visible on screen; never guess an id. Since this is destructive to the existing link, your visible reply must clearly say the old link will stop working.',
+      parameters: {
+        type: "object",
+        properties: { tripId: { type: "integer" } },
+        required: ["tripId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_trip_photo",
+      description:
+        'Propose permanently deleting one photo (memory photo or souvenir magnet photo) from a trip, e.g. "delete that photo" or "remove the second magnet photo". This also clears it as the trip\'s cover photo if it was set as one. Only call this if both the trip\'s numeric id AND the photo\'s numeric id are visible on screen (look for "photoId: <number>" next to the photo); never guess either id. Since this is destructive, your visible reply must clearly say the photo will be permanently deleted.',
+      parameters: {
+        type: "object",
+        properties: {
+          tripId: { type: "integer" },
+          photoId: { type: "integer" },
+        },
+        required: ["tripId", "photoId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_card_layout",
+      description:
+        'Propose reordering the Trip Detail page\'s cards (Reminders, Itinerary, Documents, Packing/To-do, Photos, Magnets, Weather & Nearby) for the CURRENT user only — this is a personal display preference, never shared with the rest of the household, and it applies across every trip they view. Only call this if the user explicitly describes a new order and you can see the current/available card ids on screen; never invent a card id. Provide the FULL new order (every card id, not just the ones that moved).',
+      parameters: {
+        type: "object",
+        properties: {
+          cardOrder: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "Full ordered list of card ids, e.g. [\"itinerary\", \"reminders\", \"documents\", \"packing-todo\", \"photos\", \"magnets\", \"weather-nearby\"]",
+          },
+        },
+        required: ["cardOrder"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_trip_card_collapse",
+      description:
+        'Propose collapsing or expanding specific cards on ONE trip\'s Trip Detail page for the CURRENT user only — this is a personal display preference, never shared with the rest of the household. Only call this if the trip\'s numeric id is visible on screen and the user named specific cards to collapse/expand; never guess. Provide the FULL set of card ids that should end up collapsed (not just the ones changing) — an empty array expands everything.',
+      parameters: {
+        type: "object",
+        properties: {
+          tripId: { type: "integer" },
+          collapsedCards: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "Full list of card ids that should be collapsed, e.g. [\"documents\", \"weather-nearby\"]",
+          },
+        },
+        required: ["tripId", "collapsedCards"],
+      },
+    },
+  },
   ...potteryActionTools,
   ...quiltingActionTools,
 ];
@@ -1905,7 +2661,7 @@ const NAVIGATE_ALLOWED_PATHS_BY_APP: Record<AppId, readonly string[]> = {
     "/categories",
     "/maintenance",
   ],
-  hub: ["/", "/account"],
+  hub: ["/", "/account", "/gmail"],
   elaine: ["/"],
 };
 
@@ -1916,7 +2672,7 @@ const NAVIGATE_PATH_RE_BY_APP: Record<AppId, RegExp> = {
   pottery: /^\/(piece\/\d+|add|compare|categories|maintenance|settings)?$/,
   quilting:
     /^\/(fabrics\/\d+|fabrics\/add|fabrics|patterns\/\d+|patterns\/add|patterns|quilts\/\d+|quilts\/add|quilts|compare|blocks\/\d+\/edit|blocks\/\d+\/cut-pattern|blocks\/\d+|blocks\/new|blocks|library\/blocks\/\d+\/edit|library\/blocks\/new|library\/blocks|layouts\/\d+\/edit|layouts\/\d+|layouts\/new|layouts|whole-quilt\/designer|whole-quilt|shopping|tools\/yardage|categories|maintenance)?$/,
-  hub: /^\/(account)?$/,
+  hub: /^\/(account|gmail)?$/,
   elaine: /^\/$/,
 };
 
@@ -2992,6 +3748,7 @@ Quilting app:
 Hub (app launcher):
 - Launcher ("/"): lets the household pick which app to open (Pottery, Quilting, Travels).
 - Account ("/account"): shared account/profile settings.
+- Gmail ("/gmail"): a full email client for the household's connected Gmail account — browse/search the inbox, read and compose messages, and apply labels/archive/trash, independent of the Travels app's travel-specific Gmail scanning feature.
 
 If the user asks "what is this page for", "what can I do here", or similar without more specific on-screen detail below, answer using this map (and the live on-screen state if present) rather than saying you don't know. If they ask about a different app than the one they're currently in, you can still answer from this map — you don't need to tell them to switch apps first, though you can suggest navigating there if it's the same app they're already in.
 
@@ -3011,6 +3768,12 @@ ITINERARY: Use add_itinerary_day for requests like "add a day trip to Kyoto on t
 
 CALENDAR: Each household member connects their own Google Calendar independently from the Settings page; you can never trigger that OAuth connection yourself — it requires the user to click a real "Connect" button that redirects their browser to Google. If the user asks to connect and you can see from on-screen context that it's not connected yet, ask if they'd like you to take them to Settings and use suggest_navigation for "/settings" — never claim you connected it. Once connected, use add_connected_calendar to add one of their own calendars to their Travel Calendar overlay, but only if you're on the Settings page and can see the connection is active plus the exact googleCalendarId in the on-screen calendar list — never guess one or pick one that isn't listed. Use disconnect_calendar to remove their Google Calendar connection entirely — only when it's shown as connected on screen, and make sure your visible reply asks permission first since this stops all future reminder syncing and removes every calendar they'd connected. Disconnecting or reconnecting only ever affects the current user, never anyone else in the household. Only the app owner can assign which calendar is the shared "Travel" calendar, and you can never do that on their behalf — direct them to the Settings page for that.
 
+WISHLIST & DESTINATIONS: The Destinations page ("/destinations") is a read-only view — it just groups existing trips by destination and has no separate create/edit/delete of its own. "Managing a destination" instead means managing the wishlist entry or trip that represents it: use add_wishlist to add a new destination the household wants to visit ("add Lisbon to the wishlist"), update_wishlist_item to rename it or change its target date/notes ("change that wishlist item to Porto instead", "push the target date back"), and remove_wishlist_item to take it off the wishlist entirely — only when the wishlist item's numeric id is visible on screen, never guessed. Once a destination has an actual trip planned, use create_trip (destination is required), update_trip_details to edit an existing trip's destination/dates/notes, and cancel_trip to delete a trip and everything attached to it. Use mark_wishlist_done when a wishlist destination has been visited or is no longer being considered as "someday", not "done" in the sense of a completed trip.
+
+SHARING & PHOTOS: Use generate_trip_share_link when asked to create/get a shareable link for a trip (returns the existing link if one already exists rather than making a new one) — anyone with the link can view basic trip info, so say so in your reply. Use revoke_trip_share_link to permanently break an existing share link; make clear in your reply that any copy already sent out will stop working. Use delete_trip_photo to permanently remove one photo (memory or magnet) from a trip — only when both the trip's and the photo's numeric ids are visible on screen, and always confirm in your visible reply since this can't be undone.
+
+DISPLAY PREFERENCES: Use update_card_layout when the user wants to reorder the cards on Trip Detail pages (Reminders, Itinerary, Documents, Packing/To-do, Photos, Magnets, Weather & Nearby) — this is personal to the requesting user only, applies to every trip they view, and needs the FULL new order, not just the cards that moved. Use update_trip_card_collapse to collapse/expand specific cards on ONE trip for the requesting user only, again personal and never shared with the household — provide the full set of card ids that should end up collapsed.
+
 ${
   appId === "travels"
     ? `MAGNET CHECK: If the user asks whether they already own a souvenir magnet, or wants to check a photo against their collection before buying a duplicate, you have no tool for this and can't see or analyze photos yourself in this text chat — tell them to tap the small camera icon next to the message box, which lets them snap or upload a photo and checks it against their whole collection right there in the chat (no need to navigate anywhere first). Never guess or fabricate a match result. This camera-based check is a Travels-only feature — it is not available in Pottery, Quilting, or the hub.\n\n`
@@ -3022,6 +3785,8 @@ POTTERY ITEMS: Use update_pottery_item to edit an existing piece (name, notes, q
 QUILTING ITEMS: Use update_fabric / delete_fabric, update_pattern / delete_pattern for editing or removing an existing fabric or pattern — only if its numeric id is visible on screen, never guessed, and be clear in your visible reply that a delete is permanent. You can't create a brand-new fabric or finished quilt from chat since both require an uploaded photo you have no way to attach — but use create_pattern to add a new quilt pattern record (name, designer, block size, difficulty, source, notes; no image) since a pattern's image is optional. Use delete_quilt to permanently remove a finished quilt and its photos — only with a visible quiltId, and say clearly it's permanent. Use create_shopping_item / update_shopping_item / delete_shopping_item to manage the fabric/supplies shopping list. Use create_quilting_category / delete_quilting_category to manage categories; never guess a category id for deletion. Use rename_quilting_category to rename one, and merge_quilting_categories to fold one category into another (destructive to the source category — say so clearly); never guess either category id. Use create_block / create_layout to add a new blank block template or quilt layout (metadata + an empty grid only — this does NOT design the block's pattern or place blocks into the layout, since chat-driven geometry editing isn't supported; tell the user to open the block/layout editor in the app to actually design it). Use delete_block / delete_layout to remove one, only with a visible id. Use bulk_reanalyze_quilting to re-run AI analysis on fabrics, patterns, or finished quilts — pass specific ids when visible on screen, or omit ids to run against everything of that type still needing analysis; mention this takes a while. Use calculate_yardage whenever the user asks how much backing or binding fabric they need for a given quilt size — never do this arithmetic yourself, always call the tool so the numbers are accurate; it's a read-only estimate, not a saved record.
 
 EMAIL: Whenever you've just given the user something substantial worth keeping — a list of recommendations, an itinerary summary, packing tips, etc. — offer to email it to them, e.g. "Want me to email you this list?" Only call send_email once they say yes; never call it unprompted or assume they want it. It always goes to their own registered account email, so never ask for an address and never offer to send it to anyone else. Write a short subject and a plain-text body (no markdown/HTML, blank line between paragraphs) — it gets formatted into a nice email automatically. You have no way to export a PDF or Word document, so don't offer that; email is the only export option available.
+
+ACCOUNT & NOTIFICATIONS: These only make sense on the shared Account settings page (hub-account context). Use send_test_email if the user wants to confirm email delivery is working — always their own account address. Use send_test_sms the same way for texts, but only if the page context shows they already have a verified phone number; if not, tell them to verify one first instead of calling it. Use send_phone_verification_code when the user wants to add or change their phone number — you must have their explicit, clearly-stated agreement to receive SMS messages before calling it (set consent to true only then), and the number must be in E.164 format (e.g. +12105551234); ask them to reformat a local number if needed. Use verify_phone_code once they tell you the 6-digit code they received by text — never invent or reuse a code from earlier in the conversation. None of these four actions are available outside the Account page, and none of them ever touch another household member's phone/email.
 
 WEB SEARCH: You have a real-time web_search tool, unlike a plain language model — use it proactively (no need to ask permission first) whenever a question depends on current information you can't be confident about from memory alone: opening hours, current prices, weather, visa/entry rules, local events, news, or anything else that changes over time. Don't use it for stable general knowledge or for things already visible in the on-screen state above. Call it as many times as needed for different sub-questions (e.g. rephrase or split into multiple focused searches for a broad question, so you get a fuller picture rather than one narrow result), then write your visible reply based on what it returns — never paste raw search output, and never fabricate a current fact instead of searching for it.
 
@@ -3726,12 +4491,34 @@ Keep replies concise and easy to read in a chat bubble.`;
   res.end();
 });
 
+// Action types that send a real SMS (real per-message cost + abuse surface),
+// same as the equivalent hand-written /auth routes — must share their rate
+// limiter so the assistant path can't bypass the REST route's protection.
+const SMS_RATE_LIMITED_ACTION_TYPES = new Set<ActionType>([
+  "send_test_sms",
+  "send_phone_verification_code",
+]);
+
+function runMiddleware(
+  middleware: (req: Request, res: Response, next: (err?: unknown) => void) => void,
+  req: Request,
+  res: Response,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    middleware(req, res, (err) => (err ? reject(err) : resolve()));
+  });
+}
+
 // Executes a write-action elAIne proposed in chat, only once the user has
 // explicitly confirmed it in the UI. Every write here is scoped to the
 // calling user the same way the equivalent hand-written routes are.
 router.post("/action", async (req, res) => {
   const userId = req.session.userId!;
   const action = ActionBody.parse(req.body);
+  if (SMS_RATE_LIMITED_ACTION_TYPES.has(action.type)) {
+    await runMiddleware(phoneVerifyLimiter, req, res);
+    if (res.headersSent) return; // limiter already sent a 429
+  }
   const executor = ACTION_EXECUTORS[action.type];
   const { status, body } = await executor(action.payload as never, userId);
   res.status(status).json(body);

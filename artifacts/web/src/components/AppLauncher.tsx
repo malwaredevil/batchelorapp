@@ -59,6 +59,7 @@ import {
   useGetStats,
   useGetTravelsStats,
 } from "@workspace/api-client-react";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 const base = import.meta.env.BASE_URL;
 
@@ -554,6 +555,11 @@ export function AppLauncher() {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, []);
+
+  usePageAssistantContext(
+    "hub-launcher",
+    `On the app launcher (the Batchelor hub home page) — lets the household pick which app to open: Pottery (${potteryStatsData?.totalItems ?? "?"} items), Quilting (${quiltingStatsData?.totalFabrics ?? "?"} fabrics), or Travels (${travelsStatsData?.totalTrips ?? "?"} trips). ${totalCount} widget(s) are shown on the dashboard.`,
+  );
 
   function navigate(href: string) {
     window.location.href = href;

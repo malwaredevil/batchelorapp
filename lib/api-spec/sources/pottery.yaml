@@ -394,7 +394,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  /pottery/items/bulk-reanalyze:
+  /pottery/bulk-reanalyze:
     post:
       operationId: bulkReanalyzePottery
       tags: [pottery]

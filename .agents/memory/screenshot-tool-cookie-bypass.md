@@ -25,3 +25,4 @@ screenshot({
 - After the redirect the browser lands at `DEST?screenshotToken=TOKEN`; `custom-fetch.ts` reads it from `window.location.search` at module load and attaches it as `X-Screenshot-Token` on every `customFetch` call.
 - Only works in dev — hard-gated by `NODE_ENV !== "production"` on both server (`tryScreenshotTokenAuth`) and client (`custom-fetch.ts`).
 - Images loaded via `<img src="...">` still fail (401) in the screenshot HTTP context — browser can't attach custom headers on image loads. This is expected and pre-existing for pottery/quilting; their data API calls succeed fine.
+- Google Maps embeds also throw `RefererNotAllowedMapError`/`gm_authFailure` under this tool, since the referrer is `http://localhost` and the Maps API key's allowed-referrer list only includes the real dev/prod domains. Expected, not a regression — verify maps via the real domain if it matters.

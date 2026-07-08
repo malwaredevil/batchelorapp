@@ -19,6 +19,15 @@ const SNIPPET_RADIUS = 40;
 const SNIPPET_MAX_LENGTH = 140;
 
 /**
+ * Case-insensitive substring check used to determine which field a search
+ * result actually matched on, so we know whether to show a highlighted
+ * snippet or a plain static subtitle.
+ */
+function matchesField(value: string | null | undefined, query: string): boolean {
+  return Boolean(value && value.toLowerCase().includes(query.toLowerCase()));
+}
+
+/**
  * Builds a short excerpt of `content` centered on the first case-insensitive
  * occurrence of `query`, so search results can show the matching text rather
  * than a generic label.
@@ -69,7 +78,12 @@ router.get("/search", requireAuth, async (req, res) => {
     conversationContentMatches,
   ] = await Promise.all([
     db
-      .select({ id: potteryItems.id, name: potteryItems.name, maker: potteryItems.maker })
+      .select({
+        id: potteryItems.id,
+        name: potteryItems.name,
+        maker: potteryItems.maker,
+        patternDescription: potteryItems.patternDescription,
+      })
       .from(potteryItems)
       .where(
         or(
@@ -81,15 +95,38 @@ router.get("/search", requireAuth, async (req, res) => {
       .limit(perSource),
 
     db
-      .select({ id: fabrics.id, name: fabrics.name, designer: fabrics.designer, lineName: fabrics.lineName })
+      .select({
+        id: fabrics.id,
+        name: fabrics.name,
+        designer: fabrics.designer,
+        lineName: fabrics.lineName,
+        notes: fabrics.notes,
+      })
       .from(fabrics)
-      .where(or(ilike(fabrics.name, pattern), ilike(fabrics.designer, pattern)))
+      .where(
+        or(
+          ilike(fabrics.name, pattern),
+          ilike(fabrics.designer, pattern),
+          ilike(fabrics.notes, pattern),
+        ),
+      )
       .limit(perSource),
 
     db
-      .select({ id: quiltPatterns.id, name: quiltPatterns.name, designer: quiltPatterns.designer })
+      .select({
+        id: quiltPatterns.id,
+        name: quiltPatterns.name,
+        designer: quiltPatterns.designer,
+        notes: quiltPatterns.notes,
+      })
       .from(quiltPatterns)
-      .where(or(ilike(quiltPatterns.name, pattern), ilike(quiltPatterns.designer, pattern)))
+      .where(
+        or(
+          ilike(quiltPatterns.name, pattern),
+          ilike(quiltPatterns.designer, pattern),
+          ilike(quiltPatterns.notes, pattern),
+        ),
+      )
       .limit(perSource),
 
     db
@@ -99,9 +136,20 @@ router.get("/search", requireAuth, async (req, res) => {
       .limit(perSource),
 
     db
-      .select({ id: travelsTrips.id, title: travelsTrips.title, destination: travelsTrips.destination })
+      .select({
+        id: travelsTrips.id,
+        title: travelsTrips.title,
+        destination: travelsTrips.destination,
+        notes: travelsTrips.notes,
+      })
       .from(travelsTrips)
-      .where(or(ilike(travelsTrips.title, pattern), ilike(travelsTrips.destination, pattern)))
+      .where(
+        or(
+          ilike(travelsTrips.title, pattern),
+          ilike(travelsTrips.destination, pattern),
+          ilike(travelsTrips.notes, pattern),
+        ),
+      )
       .limit(perSource),
 
     db
@@ -180,12 +228,17 @@ router.get("/search", requireAuth, async (req, res) => {
     groups.push({
       type: "travels_trip",
       label: "Trips",
-      results: tripResults.map((r) => ({
-        id: r.id,
-        title: r.title,
-        subtitle: r.destination,
-        url: `/travels/trips/${r.id}`,
-      })),
+      results: tripResults.map((r) => {
+        const matchedContent =
+          !matchesField(r.title, q) && !matchesField(r.destination, q) && matchesField(r.notes, q);
+        return {
+          id: r.id,
+          title: r.title,
+          subtitle: matchedContent ? buildMessageSnippet(r.notes ?? "", q) : r.destination,
+          matchedContent,
+          url: `/travels/trips/${r.id}`,
+        };
+      }),
     });
   }
 
@@ -220,12 +273,19 @@ router.get("/search", requireAuth, async (req, res) => {
     groups.push({
       type: "pottery",
       label: "Pottery",
-      results: potteryResults.map((r) => ({
-        id: r.id,
-        title: r.name,
-        subtitle: r.maker ?? undefined,
-        url: `/pottery/piece/${r.id}`,
-      })),
+      results: potteryResults.map((r) => {
+        const matchedContent =
+          !matchesField(r.name, q) && !matchesField(r.maker, q) && matchesField(r.patternDescription, q);
+        return {
+          id: r.id,
+          title: r.name,
+          subtitle: matchedContent
+            ? buildMessageSnippet(r.patternDescription ?? "", q)
+            : (r.maker ?? undefined),
+          matchedContent,
+          url: `/pottery/piece/${r.id}`,
+        };
+      }),
     });
   }
 
@@ -233,12 +293,21 @@ router.get("/search", requireAuth, async (req, res) => {
     groups.push({
       type: "quilting_fabric",
       label: "Fabrics",
-      results: fabricResults.map((r) => ({
-        id: r.id,
-        title: r.name,
-        subtitle: [r.designer, r.lineName].filter(Boolean).join(" · ") || undefined,
-        url: `/quilting/fabrics/${r.id}`,
-      })),
+      results: fabricResults.map((r) => {
+        const staticSubtitle = [r.designer, r.lineName].filter(Boolean).join(" · ") || undefined;
+        const matchedContent =
+          !matchesField(r.name, q) &&
+          !matchesField(r.designer, q) &&
+          !matchesField(r.lineName, q) &&
+          matchesField(r.notes, q);
+        return {
+          id: r.id,
+          title: r.name,
+          subtitle: matchedContent ? buildMessageSnippet(r.notes ?? "", q) : staticSubtitle,
+          matchedContent,
+          url: `/quilting/fabrics/${r.id}`,
+        };
+      }),
     });
   }
 
@@ -246,12 +315,17 @@ router.get("/search", requireAuth, async (req, res) => {
     groups.push({
       type: "quilting_pattern",
       label: "Patterns",
-      results: patternResults.map((r) => ({
-        id: r.id,
-        title: r.name,
-        subtitle: r.designer ?? undefined,
-        url: `/quilting/patterns/${r.id}`,
-      })),
+      results: patternResults.map((r) => {
+        const matchedContent =
+          !matchesField(r.name, q) && !matchesField(r.designer, q) && matchesField(r.notes, q);
+        return {
+          id: r.id,
+          title: r.name,
+          subtitle: matchedContent ? buildMessageSnippet(r.notes ?? "", q) : (r.designer ?? undefined),
+          matchedContent,
+          url: `/quilting/patterns/${r.id}`,
+        };
+      }),
     });
   }
 

@@ -2007,6 +2007,21 @@ const GetPollenForecastToolPayload = z.object({
   locationName: z.string().max(200),
 });
 
+const SHOW_DATA_CARD_TOOL_NAME = "show_data_card";
+
+const ShowDataCardToolPayload = z.object({
+  title: z.string().max(120).optional(),
+  rows: z
+    .array(
+      z.object({
+        label: z.string().min(1).max(80),
+        value: z.string().min(1).max(200),
+      }),
+    )
+    .min(1)
+    .max(20),
+});
+
 const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: "function",
@@ -2244,6 +2259,36 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           },
         },
         required: ["lat", "lng", "locationName"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: SHOW_DATA_CARD_TOOL_NAME,
+      description:
+        "Render a compact visual card of labeled facts/figures alongside your reply — e.g. a side-by-side comparison, a set of specs, a cost breakdown, or any other structured facts that are clearer as a small card than as prose. Applied immediately, no confirmation needed. Prefer a Markdown table in your reply text for anything with more than one comparable column of data (e.g. comparing 2+ options); use this only for a single flat list of label/value facts. Don't use it for plain narrative answers.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: {
+            type: "string",
+            description: "Optional short title for the card",
+          },
+          rows: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                label: { type: "string" },
+                value: { type: "string" },
+              },
+              required: ["label", "value"],
+            },
+            description: "1-20 label/value fact rows",
+          },
+        },
+        required: ["rows"],
       },
     },
   },
@@ -2931,6 +2976,14 @@ LIVE MAPS DATA: You also have five Google Maps-backed tools for real, current da
 
 FORMATTING: Your visible replies are rendered in a chat bubble with a markdown renderer. Use markdown naturally to make replies easier to read, but keep it light — this is a chat bubble, not a document. Good uses: **bold** for key terms or place names, bullet lists (- item) for 3+ items, numbered lists (1. step) for instructions, ## for a section heading only when the reply is genuinely multi-section. Do not use headers for short replies. Do not use markdown for a single sentence or two — plain prose is fine. Never use backtick code blocks. When you call a weather, places, air-quality, or pollen tool and it succeeds, a rich visual card is automatically shown below your reply — so in that case keep your reply text very short (1–2 sentences summarising the key point) rather than spelling out all the data again in text.
 
+TABLES: When comparing two or more options side by side (flights, hotels, products, trade-offs), use a GFM pipe table — a header row, a separator row of dashes, then one row per item — instead of prose or a bullet list. Keep it to a handful of columns and short cell text so it stays readable in a narrow chat bubble; for a single flat list of facts (not a comparison) use ${SHOW_DATA_CARD_TOOL_NAME} instead of a table.
+
+STRUCTURED FACT CARDS: Use ${SHOW_DATA_CARD_TOOL_NAME} to show a compact card of labeled facts (specs, a cost breakdown, quick reference numbers) alongside your reply, instead of listing them as prose or a bullet list. Don't use it for a side-by-side comparison of multiple options — that's a table's job (see TABLES above). This runs immediately with no confirmation needed.
+
+IMAGES: If web_search returns image results for the query, they're shown automatically as a small gallery below your reply — you don't need to (and shouldn't) embed or reference the image URLs yourself in your text. If you already know a genuinely useful, directly-relevant image URL from some other source (e.g. one already present in on-screen context), you may embed it inline with standard markdown image syntax ![alt text](url) — but never invent an image URL, and don't add images just to decorate a reply.
+
+CITATIONS: When you use web_search, cite sources plainly in your visible reply where it's natural to do so (e.g. "according to [Site Name]" or a short "(source: example.com)" note) rather than only relying on the separate source list appended after your answer — this makes it clear which specific claim came from where, especially if you searched more than once in the same turn.
+
 Keep replies concise and easy to read in a chat bubble.`;
 
   // Build the user turn content. PDFs are injected as text blocks (extracted
@@ -3155,6 +3208,22 @@ Keep replies concise and easy to read in a chat bubble.`;
         continue;
       }
 
+      if (name === SHOW_DATA_CARD_TOOL_NAME) {
+        try {
+          const parsed = ShowDataCardToolPayload.safeParse(JSON.parse(args));
+          if (parsed.success) {
+            sendEvent("widget", {
+              type: "data_card",
+              title: parsed.data.title,
+              rows: parsed.data.rows,
+            });
+          }
+        } catch {
+          // Malformed JSON from the model — drop it, keep the reply text.
+        }
+        continue;
+      }
+
       if (name === NAVIGATE_TOOL_NAME) {
         if (navigate) continue; // only surface the first navigate suggestion
         try {
@@ -3244,13 +3313,24 @@ Keep replies concise and easy to read in a chat bubble.`;
             if (!parsed.success) {
               resultText = "Invalid search query — ask the user to rephrase.";
             } else {
-              const { answer, citations } = await webSearch(parsed.data.query);
+              const { answer, citations, images } = await webSearch(
+                parsed.data.query,
+              );
               webSearchCitations.set(call.id, citations);
               resultText = answer
                 ? citations.length > 0
                   ? `${answer}\n\nSources:\n${citations.map((url, i) => `[${i + 1}] ${url}`).join("\n")}`
                   : answer
                 : "No results found for this search.";
+              if (images.length > 0) {
+                sendEvent("widget", {
+                  type: "image_card",
+                  images: images.map((img) => ({
+                    url: img.url,
+                    sourceUrl: img.sourceUrl,
+                  })),
+                });
+              }
             }
           } else if (call.name === CONSULT_EXPERTS_TOOL_NAME) {
             const parsed = ConsultExpertsToolPayload.safeParse(

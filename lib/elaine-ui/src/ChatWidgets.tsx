@@ -1,4 +1,4 @@
-import { MapPin, Star, Wind, Leaf, ArrowRight } from "lucide-react";
+import { MapPin, Star, Wind, Leaf, ArrowRight, Table2, Image as ImageIcon } from "lucide-react";
 
 // ── Widget type definitions ─────────────────────────────────────────────────
 
@@ -36,11 +36,23 @@ export interface PollenData {
   types: Array<{ displayName: string; category: string }>;
 }
 
+export interface DataCardRow {
+  label: string;
+  value: string;
+}
+
+export interface ChatWidgetImage {
+  url: string;
+  sourceUrl?: string;
+}
+
 export type ChatWidget =
   | { type: "weather"; locationName: string; days: WeatherDay[] }
   | { type: "places"; query: string; places: PlaceResult[] }
   | { type: "air_quality"; data: AirQualityData }
-  | { type: "pollen"; data: PollenData };
+  | { type: "pollen"; data: PollenData }
+  | { type: "data_card"; title?: string; rows: DataCardRow[] }
+  | { type: "image_card"; title?: string; images: ChatWidgetImage[] };
 
 // ── Weather condition → emoji mapping ──────────────────────────────────────
 
@@ -340,6 +352,85 @@ function PollenWidget({ data }: { data: PollenData }) {
   );
 }
 
+function DataCardWidget({ title, rows }: { title?: string; rows: DataCardRow[] }) {
+  return (
+    <div className="mt-2 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      {title && (
+        <div className="flex items-center gap-1.5 border-b border-border/60 bg-violet-50/60 px-3 py-2 dark:bg-violet-950/30">
+          <Table2 className="h-3.5 w-3.5 text-violet-600" />
+          <span className="text-xs font-semibold text-foreground">
+            {title}
+          </span>
+        </div>
+      )}
+      <div className="divide-y divide-border/50">
+        {rows.map((row, i) => (
+          <div
+            key={i}
+            className="flex items-start justify-between gap-3 px-3 py-2"
+          >
+            <span className="text-xs text-muted-foreground">{row.label}</span>
+            <span className="text-right text-xs font-semibold text-foreground">
+              {row.value}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ImageCardWidget({
+  title,
+  images,
+}: {
+  title?: string;
+  images: ChatWidgetImage[];
+}) {
+  if (images.length === 0) return null;
+  return (
+    <div className="mt-2 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      {title && (
+        <div className="flex items-center gap-1.5 border-b border-border/60 bg-fuchsia-50/60 px-3 py-2 dark:bg-fuchsia-950/30">
+          <ImageIcon className="h-3.5 w-3.5 text-fuchsia-600" />
+          <span className="text-xs font-semibold text-foreground">
+            {title}
+          </span>
+        </div>
+      )}
+      <div className="flex gap-2 overflow-x-auto p-2">
+        {images.slice(0, 4).map((img, i) =>
+          img.sourceUrl ? (
+            <a
+              key={i}
+              href={img.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="shrink-0"
+            >
+              <img
+                src={img.url}
+                alt=""
+                loading="lazy"
+                className="h-24 w-24 rounded-lg border border-border object-cover"
+              />
+            </a>
+          ) : (
+            <img
+              key={i}
+              src={img.url}
+              alt=""
+              loading="lazy"
+              className="h-24 w-24 shrink-0 rounded-lg border border-border object-cover"
+            />
+          ),
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main export ─────────────────────────────────────────────────────────────
 
 export function ChatWidget({ widget }: { widget: ChatWidget }) {
@@ -354,5 +445,9 @@ export function ChatWidget({ widget }: { widget: ChatWidget }) {
       return <AirQualityWidget data={widget.data} />;
     case "pollen":
       return <PollenWidget data={widget.data} />;
+    case "data_card":
+      return <DataCardWidget title={widget.title} rows={widget.rows} />;
+    case "image_card":
+      return <ImageCardWidget title={widget.title} images={widget.images} />;
   }
 }

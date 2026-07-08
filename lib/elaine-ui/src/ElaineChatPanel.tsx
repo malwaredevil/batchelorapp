@@ -185,11 +185,20 @@ export function ElaineChatPanel({
                 >
                   {msg.attachmentUrls && msg.attachmentUrls.length > 0 && (
                     <div className="mb-1.5 flex flex-wrap gap-1.5">
-                      {msg.attachmentUrls.map((url, j) => {
-                        const isPdf = /\.pdf([?#]|$)/i.test(url);
+                      {msg.attachmentUrls.map((ref, j) => {
+                        // Older stored messages may still be plain URL strings —
+                        // fall back to sniffing the URL when there's no `type`/`name`.
+                        const url = typeof ref === "string" ? ref : ref.url;
+                        const isPdf =
+                          typeof ref === "string"
+                            ? /\.pdf([?#]|$)/i.test(ref)
+                            : ref.type === "pdf";
                         if (isPdf) {
+                          const storedName = typeof ref === "string" ? undefined : ref.name;
                           const match = url.match(/\/([^/?#]+\.pdf)/i);
-                          const filename = match ? decodeURIComponent(match[1]) : "document.pdf";
+                          const filename =
+                            storedName ??
+                            (match ? decodeURIComponent(match[1]) : "document.pdf");
                           return (
                             <div
                               key={j}

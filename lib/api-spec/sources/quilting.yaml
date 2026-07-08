@@ -910,6 +910,118 @@ paths:
                 $ref: "#/components/schemas/Error"
 
   # ---------------------------------------------------------------------------
+  # Palette match tools
+  # ---------------------------------------------------------------------------
+
+  /tools/palette-match:
+    post:
+      operationId: paletteMatchFabrics
+      tags: [tools]
+      summary: Extract a colour palette from an inspiration image and find matching fabrics
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Extracted palette and matching fabrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaletteMatchFabricResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Could not extract a colour palette from the image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /tools/palette-match-patterns:
+    post:
+      operationId: paletteMatchPatterns
+      tags: [tools]
+      summary: Extract a colour palette from an inspiration image and find matching quilt patterns
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Extracted palette and matching quilt patterns
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaletteMatchPatternResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Could not extract a colour palette from the image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /tools/palette-match-quilts:
+    post:
+      operationId: paletteMatchQuilts
+      tags: [tools]
+      summary: Extract a colour palette from an inspiration image and find matching finished quilts
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Extracted palette and matching finished quilts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaletteMatchQuiltResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Could not extract a colour palette from the image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ---------------------------------------------------------------------------
   # Categories
   # ---------------------------------------------------------------------------
 
@@ -1538,6 +1650,8 @@ components:
           type: string
           enum: [light, dark]
           nullable: true
+        isOwner:
+          type: boolean
 
     UpdateAccountInput:
       type: object
@@ -1839,7 +1953,16 @@ components:
     QuiltPattern:
       type: object
       required:
-        [id, name, lockedFields, categories, images, hasEmbedding, createdAt]
+        [
+          id,
+          name,
+          dominantColors,
+          lockedFields,
+          categories,
+          images,
+          hasEmbedding,
+          createdAt,
+        ]
       properties:
         id:
           type: integer
@@ -1866,6 +1989,10 @@ components:
         acquiredAt:
           type: string
           nullable: true
+        dominantColors:
+          type: array
+          items:
+            type: string
         lockedFields:
           type: array
           items:
@@ -1975,6 +2102,7 @@ components:
         [
           id,
           name,
+          dominantColors,
           lockedFields,
           categories,
           images,
@@ -2004,6 +2132,10 @@ components:
         notes:
           type: string
           nullable: true
+        dominantColors:
+          type: array
+          items:
+            type: string
         lockedFields:
           type: array
           items:
@@ -2172,6 +2304,85 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/FabricMatchResult"
+
+    # Palette match tools
+    PaletteMatchFabricResult:
+      type: object
+      required: [score, matchedColors]
+      properties:
+        fabric:
+          $ref: "#/components/schemas/Fabric"
+        score:
+          type: number
+        matchedColors:
+          type: array
+          items:
+            type: string
+
+    PaletteMatchFabricResponse:
+      type: object
+      required: [extractedColors, matches]
+      properties:
+        extractedColors:
+          type: array
+          items:
+            type: string
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/PaletteMatchFabricResult"
+
+    PaletteMatchPatternResult:
+      type: object
+      required: [score, matchedColors]
+      properties:
+        pattern:
+          $ref: "#/components/schemas/QuiltPattern"
+        score:
+          type: number
+        matchedColors:
+          type: array
+          items:
+            type: string
+
+    PaletteMatchPatternResponse:
+      type: object
+      required: [extractedColors, matches]
+      properties:
+        extractedColors:
+          type: array
+          items:
+            type: string
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/PaletteMatchPatternResult"
+
+    PaletteMatchQuiltResult:
+      type: object
+      required: [score, matchedColors]
+      properties:
+        quilt:
+          $ref: "#/components/schemas/FinishedQuilt"
+        score:
+          type: number
+        matchedColors:
+          type: array
+          items:
+            type: string
+
+    PaletteMatchQuiltResponse:
+      type: object
+      required: [extractedColors, matches]
+      properties:
+        extractedColors:
+          type: array
+          items:
+            type: string
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/PaletteMatchQuiltResult"
 
     # Categories
     CreateCategoryInput:
@@ -2453,7 +2664,8 @@ components:
 
     QuiltLayout:
       type: object
-      required: [id, name, rows, cols, cells, categories, createdAt]
+      required:
+        [id, name, rows, cols, cells, categories, dominantColors, createdAt]
       properties:
         id:
           type: integer
@@ -2467,6 +2679,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LayoutCell"
+        dominantColors:
+          type: array
+          items:
+            type: string
+          description: Hex colours extracted from sashing/border/block cells, sorted by frequency
         sashingWidthInches:
           type: number
           nullable: true

@@ -15,6 +15,36 @@ import { requireAuth } from "../middleware/auth";
 
 const router: IRouter = Router();
 
+const SNIPPET_RADIUS = 40;
+const SNIPPET_MAX_LENGTH = 140;
+
+/**
+ * Builds a short excerpt of `content` centered on the first case-insensitive
+ * occurrence of `query`, so search results can show the matching text rather
+ * than a generic label.
+ */
+function buildMessageSnippet(content: string, query: string): string | undefined {
+  const normalizedContent = content.replace(/\s+/g, " ").trim();
+  if (!normalizedContent) return undefined;
+
+  const matchIndex = normalizedContent.toLowerCase().indexOf(query.toLowerCase());
+  if (matchIndex === -1) {
+    return normalizedContent.length > SNIPPET_MAX_LENGTH
+      ? `${normalizedContent.slice(0, SNIPPET_MAX_LENGTH).trimEnd()}…`
+      : normalizedContent;
+  }
+
+  const start = Math.max(0, matchIndex - SNIPPET_RADIUS);
+  const end = Math.min(
+    normalizedContent.length,
+    matchIndex + query.length + SNIPPET_RADIUS,
+  );
+
+  const prefix = start > 0 ? "…" : "";
+  const suffix = end < normalizedContent.length ? "…" : "";
+  return `${prefix}${normalizedContent.slice(start, end).trim()}${suffix}`;
+}
+
 router.get("/search", requireAuth, async (req, res) => {
   const q = String(req.query.q ?? "").trim();
   const limit = Math.min(Math.max(Number(req.query.limit ?? 24), 1), 50);
@@ -100,6 +130,7 @@ router.get("/search", requireAuth, async (req, res) => {
         id: elaineHistoryConversations.id,
         title: elaineHistoryConversations.title,
         updatedAt: elaineHistoryConversations.updatedAt,
+        messageContent: elaineHistoryMessages.content,
       })
       .from(elaineHistoryMessages)
       .innerJoin(
@@ -117,11 +148,26 @@ router.get("/search", requireAuth, async (req, res) => {
 
   const conversationResultMap = new Map<
     number,
-    { id: number; title: string; updatedAt: Date }
+    { id: number; title: string; updatedAt: Date; snippet?: string }
   >();
-  for (const r of [...conversationTitleMatches, ...conversationContentMatches]) {
-    if (!conversationResultMap.has(r.id)) {
-      conversationResultMap.set(r.id, r);
+  for (const r of conversationTitleMatches) {
+    conversationResultMap.set(r.id, {
+      id: r.id,
+      title: r.title,
+      updatedAt: r.updatedAt,
+    });
+  }
+  for (const r of conversationContentMatches) {
+    const existing = conversationResultMap.get(r.id);
+    if (existing) {
+      existing.snippet ??= buildMessageSnippet(r.messageContent, q);
+    } else {
+      conversationResultMap.set(r.id, {
+        id: r.id,
+        title: r.title,
+        updatedAt: r.updatedAt,
+        snippet: buildMessageSnippet(r.messageContent, q),
+      });
     }
   }
   const conversationResults = Array.from(conversationResultMap.values())
@@ -163,7 +209,8 @@ router.get("/search", requireAuth, async (req, res) => {
       results: conversationResults.map((r) => ({
         id: r.id,
         title: r.title,
-        subtitle: "Elaine conversation",
+        subtitle: r.snippet ?? "Elaine conversation",
+        matchedContent: Boolean(r.snippet),
         url: `/elaine/`,
       })),
     });

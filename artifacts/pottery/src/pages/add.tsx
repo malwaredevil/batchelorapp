@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 const LABEL_SUGGESTIONS = [
   "Front",
@@ -174,6 +175,11 @@ export default function AddPiece() {
   }
 
   const busy = upload.isPending;
+
+  usePageAssistantContext(
+    "pottery-add",
+    `Add a Piece page: form for cataloguing a new pottery piece. Primary photo ${file ? "selected" : "not yet selected (required before submit)"}, ${suppPhotos.length} additional photo(s) attached. Current field values — name: ${name.trim() || "(blank, will be AI-generated)"}, quantity: ${quantity}, dimensions: ${dimensions.trim() || "(blank, AI estimates from photo)"}, notes: ${notes.trim() || "(blank)"}, categories: ${selectedCategoryIds.length ? categories.filter((c) => selectedCategoryIds.includes(c.id)).map((c) => c.name).join(", ") : "none selected"}. Pattern, colours, shape and motifs are auto-detected from the photo after submit. Available categories (name=id): ${categories.map((c) => `${c.name}=${c.id}`).join(", ") || "none"}.`,
+  );
 
   // ---------------------------------------------------------------------------
   // Render

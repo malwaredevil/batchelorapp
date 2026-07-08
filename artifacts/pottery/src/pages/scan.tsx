@@ -15,6 +15,7 @@ import { VerdictPill, type Verdict } from "@/components/verdict";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 // ── Verdict helpers (same copy as compare.tsx) ───────────────────────────────
 
@@ -250,6 +251,17 @@ export default function Scan() {
     compare.reset();
     void startCamera(facing);
   };
+
+  usePageAssistantContext(
+    "pottery-scan",
+    permissionDenied
+      ? "Scan page: camera access was denied, cannot capture a photo."
+      : result
+        ? `Scan page: analysis complete. Summary: ${result.summary} Owns same pattern: ${result.ownsSamePattern}. Owns exact piece: ${result.ownsExactPiece}. ${result.matches.length} closest match(es): ${result.matches.map((m) => `itemId ${m.item.id} "${m.item.name}"`).join("; ") || "none"}.`
+        : compare.isPending
+          ? "Scan page: analyzing a just-captured photo against the collection…"
+          : `Scan page: live camera view for quickly checking a piece before buying it. ${captured ? "A photo has been captured and is ready to analyze." : "Waiting for a photo to be captured."}`,
+  );
 
   return (
     <div className="flex min-h-[calc(100vh-8rem)] flex-col">

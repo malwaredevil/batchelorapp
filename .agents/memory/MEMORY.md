@@ -53,3 +53,4 @@
 - [travels.ts trips/packing hooks fully migrated](travels-orval-disambiguation-guard.md) — the old shadow/guard-script setup is gone; consumers now use orval-generated `Travels*` hooks directly with `{data}`/`{id,data}` payload shapes.
 - [Screenshot tool async failure timing](screenshot-tool-async-failure-timing.md) — pixels captured early, console logs drained later; don't trust stale-looking pixels alone to falsify a fix for async callbacks (e.g. gm_authFailure).
 - [AgentPhone webhook registration](agentphone-webhook-registration.md) — register via `POST api.agentphone.ai/v1/webhooks` (not the marketing root domain) to get the signing secret; outbound SMS 403s until 10DLC registration is done account-side.
+- [API server dev workflow has no hot reload](api-server-no-hot-reload.md) — dev script is build-once-then-start; server code edits need a workflow restart before live testing, or you'll chase a phantom bug.

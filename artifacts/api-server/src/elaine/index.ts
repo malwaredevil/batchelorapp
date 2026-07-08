@@ -510,6 +510,12 @@ const POTTERY_ACTION_TYPES = new Set<string>([
   "delete_pottery_item",
   "create_pottery_category",
   "delete_pottery_category",
+  "lock_pottery_field",
+  "update_pottery_item_categories",
+  "delete_pottery_photo",
+  "promote_pottery_photo",
+  "merge_pottery_categories",
+  "bulk_reanalyze_pottery",
 ]);
 const QUILTING_ACTION_TYPES = new Set<string>([
   "update_fabric",
@@ -2914,11 +2920,13 @@ Travels app:
 Pottery app:
 - Collection ("/"): the full pottery collection grid/list, with search and filtering.
 - Add Piece ("/add"): upload photo(s) of a new pottery piece and let AI analyze/fill in its details.
-- Piece detail ("/piece/:id"): everything about one piece — photos, name, maker, style, shape, condition, origin, era, notes, glaze/surface AI analysis.
+- Piece detail ("/piece/:id"): everything about one piece — photos, name, maker, style, shape, condition, origin, era, notes, glaze/surface AI analysis, locked fields, and category assignment.
 - Compare ("/compare"): pick two or more pieces and compare their AI-derived attributes side by side.
-- Categories ("/categories"): manage the categories used to organize the collection.
+- Scan ("/scan"): AI visual search — snap or upload a photo to find matching/similar pieces already in the collection.
+- Stats ("/stats"): collection-wide statistics and breakdowns (counts by category, maker, style, etc.).
+- Categories ("/categories"): manage the categories used to organize the collection, including merging categories together.
 - Maintenance ("/maintenance"): bulk AI re-analysis and other collection upkeep tools.
-- Settings ("/settings"): account/profile settings.
+- Settings ("/settings"): account/profile settings, plus an "Export for insurance" action that downloads a PDF of every piece's photos and details for insurance/provenance records.
 
 Quilting app:
 - Home ("/"): overview/dashboard for the quilting collection.
@@ -2962,7 +2970,7 @@ ${
     : ""
 }DOCUMENTS: You can already see each uploaded document's parsed fields (confirmation numbers, dates, etc.) in the on-screen state above — answer questions about them directly instead of asking the user to open or re-read the file. If the user says a document's details look wrong, are missing, or asks you to "re-read"/"re-scan" a document, use rescan_document to re-run AI extraction on the original uploaded file; this only works for a document whose docId you can see on screen (look for "docId: <number>") and never touches fields the user has locked (shown with a lock icon in the app). This does not let you upload a new file — if there's no matching document on screen, tell the user to upload it from the trip's Documents section first. This applies to Travels trip documents only — Pottery and Quilting don't have an equivalent document-upload feature.
 
-POTTERY ITEMS: Use update_pottery_item to edit an existing piece (name, notes, quantity, style, shape, maker, condition, origin, era) — only include fields that actually change, and only if the piece's numeric id is visible on screen (look for "itemId: <number>"); never guess one. Use delete_pottery_item to permanently remove a piece and its photos — say clearly in your visible reply that this deletes the item, since it's destructive. Use create_pottery_category / delete_pottery_category to manage the categories used to organize the collection; never guess a category id for deletion.
+POTTERY ITEMS: Use update_pottery_item to edit an existing piece (name, notes, quantity, style, shape, maker, condition, origin, era) — only include fields that actually change, and only if the piece's numeric id is visible on screen (look for "itemId: <number>"); never guess one. This also works right after an upload if the user tells you details in chat instead of typing them into the form. Use delete_pottery_item to permanently remove a piece and its photos — say clearly in your visible reply that this deletes the item, since it's destructive. Use create_pottery_category / delete_pottery_category to manage the categories used to organize the collection; never guess a category id for deletion. Use update_pottery_item_categories to replace the full set of categories assigned to one piece (pass every category id that should end up assigned, not just the ones to add). Use merge_pottery_categories to fold one category into another (e.g. "merge Vases into Vessels") — this deletes the source category, so say so clearly since it's destructive; never guess either category id. Use lock_pottery_field to lock or unlock one AI-derived field (name, patternDescription, style, shape, maker, makerInfo, dimensions, dominantColors, motifs, aiDescription, glazeType) on a piece so future AI re-analysis will or won't overwrite it — only with a visible itemId. Use delete_pottery_photo to remove one supplemental photo from a piece, and promote_pottery_photo to make a supplemental photo the new primary photo (this re-runs AI analysis with the new primary image, subject to locked fields) — both need a visible itemId and imageId, never guessed. Use bulk_reanalyze_pottery to re-run AI analysis on several pieces at once; pass itemIds if specific ones are visible on screen, or omit it to run against every piece still missing AI analysis (capped at 20) — mention in your visible reply that this takes a while and calls AI per item.
 
 QUILTING ITEMS: Use update_fabric / delete_fabric, update_pattern / delete_pattern for editing or removing an existing fabric or pattern — only if its numeric id is visible on screen, never guessed, and be clear in your visible reply that a delete is permanent. Use create_shopping_item / update_shopping_item / delete_shopping_item to manage the fabric/supplies shopping list. Use create_quilting_category / delete_quilting_category to manage categories; never guess a category id for deletion.
 

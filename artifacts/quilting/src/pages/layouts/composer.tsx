@@ -45,11 +45,9 @@ import {
   getListLayoutsQueryKey,
   useCreateBlock,
   getListBlocksQueryKey,
-} from "@workspace/api-client-react";
-import {
   useListBlockTemplates,
-  type BlockTemplate,
-} from "@/lib/block-templates-api";
+  type QuiltingBlockTemplate,
+} from "@workspace/api-client-react";
 import { BlockPreviewSvg } from "@/components/BlockPreviewSvg";
 import { FabricPicker, buildFabricUrlMap } from "@/components/FabricPicker";
 import type { QuiltingCategory } from "@workspace/api-client-react";
@@ -1097,16 +1095,34 @@ export default function LayoutComposer() {
 
   const isSaving = createLayout.isPending || updateLayout.isPending;
 
-  function handleSpawnFromTemplate(tpl: BlockTemplate) {
+  function handleSpawnFromTemplate(tpl: QuiltingBlockTemplate) {
     if (spawnTemplateId !== null) return;
     setSpawnTemplateId(tpl.id);
     createBlockFromTemplate.mutate(
       {
         data: {
           name: tpl.name,
-          gridSize: tpl.gridW as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12,
+          gridSize: tpl.gridW as
+            | 1
+            | 2
+            | 3
+            | 4
+            | 5
+            | 6
+            | 7
+            | 8
+            | 9
+            | 10
+            | 11
+            | 12,
           cells: tpl.cells,
-          seams: tpl.seams,
+          seams: tpl.seams.map((s) => ({
+            axis: s.axis,
+            pos: s.pos,
+            cellIdx: s.cellIdx,
+            clipStart: s.clipStart ?? undefined,
+            clipEnd: s.clipEnd ?? undefined,
+          })),
           blockSizeInches: tpl.blockSizeInches ?? undefined,
           seamAllowanceInches: tpl.seamAllowanceInches ?? undefined,
         },
@@ -1796,7 +1812,7 @@ export default function LayoutComposer() {
                 <Library className="h-3.5 w-3.5" />
                 Library Templates
               </p>
-              {blockTemplates.map((tpl: BlockTemplate) => (
+              {blockTemplates.map((tpl: QuiltingBlockTemplate) => (
                 <button
                   key={tpl.id}
                   disabled={spawnTemplateId === tpl.id}
@@ -1808,7 +1824,7 @@ export default function LayoutComposer() {
                     <BlockPreviewSvg
                       cells={tpl.cells}
                       gridSize={tpl.gridW}
-                      seams={tpl.seams}
+                      seams={tpl.seams as BlockSeamLine[]}
                       size={40}
                     />
                   </div>
@@ -1820,7 +1836,9 @@ export default function LayoutComposer() {
                   </div>
                   <div className="shrink-0 text-primary">
                     {spawnTemplateId === tpl.id ? (
-                      <span className="text-xs text-muted-foreground">Adding…</span>
+                      <span className="text-xs text-muted-foreground">
+                        Adding…
+                      </span>
                     ) : (
                       <Plus className="h-4 w-4" />
                     )}

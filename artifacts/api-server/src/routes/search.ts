@@ -23,7 +23,10 @@ const SNIPPET_MAX_LENGTH = 140;
  * result actually matched on, so we know whether to show a highlighted
  * snippet or a plain static subtitle.
  */
-function matchesField(value: string | null | undefined, query: string): boolean {
+function matchesField(
+  value: string | null | undefined,
+  query: string,
+): boolean {
   return Boolean(value && value.toLowerCase().includes(query.toLowerCase()));
 }
 
@@ -32,11 +35,16 @@ function matchesField(value: string | null | undefined, query: string): boolean 
  * occurrence of `query`, so search results can show the matching text rather
  * than a generic label.
  */
-function buildMessageSnippet(content: string, query: string): string | undefined {
+function buildMessageSnippet(
+  content: string,
+  query: string,
+): string | undefined {
   const normalizedContent = content.replace(/\s+/g, " ").trim();
   if (!normalizedContent) return undefined;
 
-  const matchIndex = normalizedContent.toLowerCase().indexOf(query.toLowerCase());
+  const matchIndex = normalizedContent
+    .toLowerCase()
+    .indexOf(query.toLowerCase());
   if (matchIndex === -1) {
     return normalizedContent.length > SNIPPET_MAX_LENGTH
       ? `${normalizedContent.slice(0, SNIPPET_MAX_LENGTH).trimEnd()}…`
@@ -153,7 +161,11 @@ router.get("/search", requireAuth, async (req, res) => {
       .limit(perSource),
 
     db
-      .select({ id: travelsReminders.id, title: travelsReminders.title, tripId: travelsReminders.tripId })
+      .select({
+        id: travelsReminders.id,
+        title: travelsReminders.title,
+        tripId: travelsReminders.tripId,
+      })
       .from(travelsReminders)
       .where(ilike(travelsReminders.title, pattern))
       .limit(perSource),
@@ -230,11 +242,15 @@ router.get("/search", requireAuth, async (req, res) => {
       label: "Trips",
       results: tripResults.map((r) => {
         const matchedContent =
-          !matchesField(r.title, q) && !matchesField(r.destination, q) && matchesField(r.notes, q);
+          !matchesField(r.title, q) &&
+          !matchesField(r.destination, q) &&
+          matchesField(r.notes, q);
         return {
           id: r.id,
           title: r.title,
-          subtitle: matchedContent ? buildMessageSnippet(r.notes ?? "", q) : r.destination,
+          subtitle: matchedContent
+            ? buildMessageSnippet(r.notes ?? "", q)
+            : r.destination,
           matchedContent,
           url: `/travels/trips/${r.id}`,
         };
@@ -275,7 +291,9 @@ router.get("/search", requireAuth, async (req, res) => {
       label: "Pottery",
       results: potteryResults.map((r) => {
         const matchedContent =
-          !matchesField(r.name, q) && !matchesField(r.maker, q) && matchesField(r.patternDescription, q);
+          !matchesField(r.name, q) &&
+          !matchesField(r.maker, q) &&
+          matchesField(r.patternDescription, q);
         return {
           id: r.id,
           title: r.name,
@@ -294,7 +312,8 @@ router.get("/search", requireAuth, async (req, res) => {
       type: "quilting_fabric",
       label: "Fabrics",
       results: fabricResults.map((r) => {
-        const staticSubtitle = [r.designer, r.lineName].filter(Boolean).join(" · ") || undefined;
+        const staticSubtitle =
+          [r.designer, r.lineName].filter(Boolean).join(" · ") || undefined;
         const matchedContent =
           !matchesField(r.name, q) &&
           !matchesField(r.designer, q) &&
@@ -303,7 +322,9 @@ router.get("/search", requireAuth, async (req, res) => {
         return {
           id: r.id,
           title: r.name,
-          subtitle: matchedContent ? buildMessageSnippet(r.notes ?? "", q) : staticSubtitle,
+          subtitle: matchedContent
+            ? buildMessageSnippet(r.notes ?? "", q)
+            : staticSubtitle,
           matchedContent,
           url: `/quilting/fabrics/${r.id}`,
         };
@@ -317,11 +338,15 @@ router.get("/search", requireAuth, async (req, res) => {
       label: "Patterns",
       results: patternResults.map((r) => {
         const matchedContent =
-          !matchesField(r.name, q) && !matchesField(r.designer, q) && matchesField(r.notes, q);
+          !matchesField(r.name, q) &&
+          !matchesField(r.designer, q) &&
+          matchesField(r.notes, q);
         return {
           id: r.id,
           title: r.name,
-          subtitle: matchedContent ? buildMessageSnippet(r.notes ?? "", q) : (r.designer ?? undefined),
+          subtitle: matchedContent
+            ? buildMessageSnippet(r.notes ?? "", q)
+            : (r.designer ?? undefined),
           matchedContent,
           url: `/quilting/patterns/${r.id}`,
         };

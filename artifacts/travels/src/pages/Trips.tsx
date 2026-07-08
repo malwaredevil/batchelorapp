@@ -202,9 +202,9 @@ function ItineraryMergeDialog({
           )}
           {isTargetError && (
             <p className="text-sm text-destructive">
-              Couldn&apos;t load this trip&apos;s current itinerary. Try
-              closing and reopening this dialog before applying, so we don't
-              risk overwriting anything.
+              Couldn&apos;t load this trip&apos;s current itinerary. Try closing
+              and reopening this dialog before applying, so we don't risk
+              overwriting anything.
             </p>
           )}
 
@@ -723,8 +723,7 @@ function AiPlannerDialog({
         targetTripId={typeof applyTarget === "number" ? applyTarget : null}
         targetTripTitle={
           typeof applyTarget === "number"
-            ? (existingTrips.find((t) => t.id === applyTarget)?.title ??
-              "trip")
+            ? (existingTrips.find((t) => t.id === applyTarget)?.title ?? "trip")
             : ""
         }
         newItinerary={parseItinerary(scaffold?.["itinerary"])}

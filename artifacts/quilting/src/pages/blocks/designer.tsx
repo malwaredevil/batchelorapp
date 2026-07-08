@@ -110,9 +110,10 @@ import {
   useCreateBlockTemplate,
   useDeleteBlockTemplate,
   usePatchBlockTemplate,
-  type BlockTemplate,
-  type BlockTemplateSeam,
-} from "@/lib/block-templates-api";
+  getListBlockTemplatesQueryKey,
+  type QuiltingBlockTemplate,
+  type QuiltingBlockTemplateSeamLine,
+} from "@workspace/api-client-react";
 import { BlockPreviewSvg } from "@/components/BlockPreviewSvg";
 import {
   parseCell,
@@ -3403,6 +3404,10 @@ export default function BlockDesigner() {
   const isSaving = createBlock.isPending || updateBlock.isPending;
 
   // ── Block Library ──────────────────────────────────────────────────────────
+  const invalidateBlockTemplates = () =>
+    void queryClient.invalidateQueries({
+      queryKey: getListBlockTemplatesQueryKey(),
+    });
   const createTemplate = useCreateBlockTemplate();
   const deleteTemplate = useDeleteBlockTemplate();
   const { data: templates } = useListBlockTemplates();
@@ -3423,8 +3428,7 @@ export default function BlockDesigner() {
 
   const filteredTemplates = (templates ?? []).filter(
     (tpl) =>
-      libTagFilter.size === 0 ||
-      tpl.tags.some((tag) => libTagFilter.has(tag)),
+      libTagFilter.size === 0 || tpl.tags.some((tag) => libTagFilter.has(tag)),
   );
 
   function toggleLibTagFilter(tag: string) {
@@ -3459,17 +3463,20 @@ export default function BlockDesigner() {
       .filter(Boolean);
     createTemplate.mutate(
       {
-        name: templateName,
-        tags,
-        gridW,
-        gridH,
-        cells,
-        seams: seams as BlockTemplateSeam[],
-        blockSizeInches: blockSizeInches ?? null,
-        seamAllowanceInches: seamAllowanceInches ?? null,
+        data: {
+          name: templateName,
+          tags,
+          gridW,
+          gridH,
+          cells,
+          seams: seams as QuiltingBlockTemplateSeamLine[],
+          blockSizeInches: blockSizeInches ?? null,
+          seamAllowanceInches: seamAllowanceInches ?? null,
+        },
       },
       {
         onSuccess: () => {
+          invalidateBlockTemplates();
           setSaveToLibOpen(false);
           toast.success(`"${templateName}" saved to block library`);
         },
@@ -3478,22 +3485,21 @@ export default function BlockDesigner() {
     );
   }
 
-  function handleLoadTemplate(tpl: BlockTemplate) {
+  function handleLoadTemplate(tpl: QuiltingBlockTemplate) {
     if (
       isDirty &&
-      !confirm(
-        "This will replace your current unsaved design. Continue?",
-      )
+      !confirm("This will replace your current unsaved design. Continue?")
     ) {
       return;
     }
-    setCells(tpl.cells.length > 0 ? tpl.cells : makeEmptyCells(tpl.gridW, tpl.gridH));
+    setCells(
+      tpl.cells.length > 0 ? tpl.cells : makeEmptyCells(tpl.gridW, tpl.gridH),
+    );
     setGridW(tpl.gridW);
     setGridH(tpl.gridH);
     setSeams(tpl.seams as SeamLine[]);
-    if (tpl.blockSizeInches !== null)
-      setBlockSizeInches(tpl.blockSizeInches);
-    if (tpl.seamAllowanceInches !== null)
+    if (tpl.blockSizeInches != null) setBlockSizeInches(tpl.blockSizeInches);
+    if (tpl.seamAllowanceInches != null)
       setSeamAllowanceInches(tpl.seamAllowanceInches);
     setIsDirty(true);
     closeLibBrowser();
@@ -5655,7 +5661,9 @@ export default function BlockDesigner() {
       {/* ── Library browser dialog ───────────────────────────────────── */}
       <Dialog
         open={libBrowserOpen}
-        onOpenChange={(open) => (open ? setLibBrowserOpen(true) : closeLibBrowser())}
+        onOpenChange={(open) =>
+          open ? setLibBrowserOpen(true) : closeLibBrowser()
+        }
       >
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
@@ -5674,39 +5682,43 @@ export default function BlockDesigner() {
                 </p>
               </div>
             )}
-            {templates && templates.length > 0 && libraryTagOptions.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5 border-b border-border pb-3">
-                <Tag className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                {libraryTagOptions.map((tag) => {
-                  const selected = libTagFilter.has(tag);
-                  return (
+            {templates &&
+              templates.length > 0 &&
+              libraryTagOptions.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 border-b border-border pb-3">
+                  <Tag className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  {libraryTagOptions.map((tag) => {
+                    const selected = libTagFilter.has(tag);
+                    return (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => toggleLibTagFilter(tag)}
+                        className={cn(
+                          "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors",
+                          selected
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-card-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                        )}
+                      >
+                        {tag}
+                        {selected && (
+                          <XIcon className="h-2.5 w-2.5 opacity-60" />
+                        )}
+                      </button>
+                    );
+                  })}
+                  {libTagFilter.size > 0 && (
                     <button
-                      key={tag}
                       type="button"
-                      onClick={() => toggleLibTagFilter(tag)}
-                      className={cn(
-                        "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors",
-                        selected
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-card-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
-                      )}
+                      onClick={() => setLibTagFilter(new Set())}
+                      className="ml-1 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
                     >
-                      {tag}
-                      {selected && <XIcon className="h-2.5 w-2.5 opacity-60" />}
+                      Clear
                     </button>
-                  );
-                })}
-                {libTagFilter.size > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setLibTagFilter(new Set())}
-                    className="ml-1 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-            )}
+                  )}
+                </div>
+              )}
             {templates &&
               templates.length > 0 &&
               filteredTemplates.length === 0 && (
@@ -5716,7 +5728,7 @@ export default function BlockDesigner() {
               )}
             {filteredTemplates.length > 0 && (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 max-h-[380px] overflow-y-auto pr-1">
-                {filteredTemplates.map((tpl: BlockTemplate) => (
+                {filteredTemplates.map((tpl: QuiltingBlockTemplate) => (
                   <div
                     key={tpl.id}
                     className="group relative flex flex-col gap-2 rounded-lg border border-border p-3"
@@ -5726,7 +5738,7 @@ export default function BlockDesigner() {
                       <BlockPreviewSvg
                         cells={tpl.cells}
                         gridSize={tpl.gridW}
-                        seams={tpl.seams}
+                        seams={tpl.seams as SeamLine[]}
                         size={80}
                       />
                     </div>
@@ -5759,9 +5771,15 @@ export default function BlockDesigner() {
                                 .map((t) => t.trim())
                                 .filter(Boolean);
                               patchTemplate.mutate(
-                                { id: tpl.id, name: newName, tags: newTags },
                                 {
-                                  onSuccess: () => setEditTemplateId(null),
+                                  id: tpl.id,
+                                  data: { name: newName, tags: newTags },
+                                },
+                                {
+                                  onSuccess: () => {
+                                    invalidateBlockTemplates();
+                                    setEditTemplateId(null);
+                                  },
                                   onError: () =>
                                     toast.error("Failed to save changes"),
                                 },
@@ -5826,10 +5844,14 @@ export default function BlockDesigner() {
                           onClick={() => {
                             if (!confirm(`Delete template "${tpl.name}"?`))
                               return;
-                            deleteTemplate.mutate(tpl.id, {
-                              onError: () =>
-                                toast.error("Failed to delete template"),
-                            });
+                            deleteTemplate.mutate(
+                              { id: tpl.id },
+                              {
+                                onSuccess: invalidateBlockTemplates,
+                                onError: () =>
+                                  toast.error("Failed to delete template"),
+                              },
+                            );
                           }}
                           title="Delete template"
                         >

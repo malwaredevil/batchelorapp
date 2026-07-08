@@ -100,7 +100,9 @@ function VerdictDetails({ result }: { result: CompareResult }) {
   return (
     <div className="grid grid-cols-2 gap-2">
       <div className="rounded-xl border border-card-border bg-card p-3">
-        <p className="text-xs font-medium text-muted-foreground">Own pattern?</p>
+        <p className="text-xs font-medium text-muted-foreground">
+          Own pattern?
+        </p>
         <div className="mt-1">
           <VerdictPill verdict={result.ownsSamePattern} />
         </div>
@@ -260,7 +262,8 @@ export default function Scan() {
           <div>
             <p className="font-semibold">Camera access required</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Allow camera access in your browser settings, then reload the page.
+              Allow camera access in your browser settings, then reload the
+              page.
             </p>
           </div>
           <Button onClick={() => window.location.reload()} variant="outline">

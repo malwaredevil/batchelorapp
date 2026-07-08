@@ -58,7 +58,10 @@ router.get("/trips/:tripId/packing", async (req, res) => {
     .select()
     .from(travelsPackingItems)
     .where(eq(travelsPackingItems.listId, list.id))
-    .orderBy(asc(travelsPackingItems.sortOrder), asc(travelsPackingItems.createdAt));
+    .orderBy(
+      asc(travelsPackingItems.sortOrder),
+      asc(travelsPackingItems.createdAt),
+    );
   res.json({ ...list, items });
 });
 
@@ -183,7 +186,10 @@ router.delete("/trips/:tripId/packing/items/:itemId", async (req, res) => {
 // Insert multiple items at once (used by load-template and AI generate).
 
 const BulkCreateBody = z.object({
-  items: z.array(z.object({ text: z.string().min(1).max(500) })).min(1).max(100),
+  items: z
+    .array(z.object({ text: z.string().min(1).max(500) }))
+    .min(1)
+    .max(100),
 });
 
 router.post("/trips/:tripId/packing/items/bulk", async (req, res) => {
@@ -207,9 +213,7 @@ router.post("/trips/:tripId/packing/items/bulk", async (req, res) => {
     .orderBy(asc(travelsPackingItems.sortOrder));
 
   const nextOrder =
-    existing.length > 0
-      ? Math.max(...existing.map((r) => r.sortOrder)) + 1
-      : 0;
+    existing.length > 0 ? Math.max(...existing.map((r) => r.sortOrder)) + 1 : 0;
 
   const rows = body.items.map((item, i) => ({
     listId: list.id,
@@ -218,10 +222,7 @@ router.post("/trips/:tripId/packing/items/bulk", async (req, res) => {
     addedByUserId: userId,
   }));
 
-  const created = await db
-    .insert(travelsPackingItems)
-    .values(rows)
-    .returning();
+  const created = await db.insert(travelsPackingItems).values(rows).returning();
   res.status(201).json(created);
 });
 
@@ -324,7 +325,9 @@ Example format:
       if (Array.isArray(items)) {
         sendEvent("done", {
           items: items
-            .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+            .filter(
+              (s): s is string => typeof s === "string" && s.trim().length > 0,
+            )
             .map((s) => s.trim()),
         });
       } else {

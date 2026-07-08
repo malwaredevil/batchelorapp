@@ -216,8 +216,7 @@ export const elaineHistoryMessages = pgTable(
   ],
 ).enableRLS();
 
-export type ElaineHistoryMessageRow =
-  typeof elaineHistoryMessages.$inferSelect;
+export type ElaineHistoryMessageRow = typeof elaineHistoryMessages.$inferSelect;
 export type InsertElaineHistoryMessage =
   typeof elaineHistoryMessages.$inferInsert;
 

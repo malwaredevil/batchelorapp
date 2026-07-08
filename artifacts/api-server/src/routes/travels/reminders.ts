@@ -6,6 +6,7 @@ import {
   travelsTrips,
   travelsReminders,
   travelsReminderCalendarEvents,
+  appUsers,
 } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import {
@@ -28,6 +29,7 @@ const CreateReminderBody = z.object({
   description: z.string().nullable().optional(),
   dueDate: z.string().optional(),
   recipientEmails: z.array(z.email()).optional(),
+  smsRecipientUserIds: z.array(z.number().int()).optional(),
   syncToCalendar: z.boolean().optional(),
   alertDaysBefore: z.array(z.number().int().min(0)).min(1).optional(),
 });
@@ -38,9 +40,27 @@ const UpdateReminderBody = z.object({
   dueDate: z.string().nullable().optional(),
   done: z.boolean().optional(),
   recipientEmails: z.array(z.email()).optional(),
+  smsRecipientUserIds: z.array(z.number().int()).optional(),
   syncToCalendar: z.boolean().optional(),
   alertDaysBefore: z.array(z.number().int().min(0)).min(1).optional(),
 });
+
+// Only household members with a verified phone number can be selected as SMS
+// recipients — silently drops any id that isn't verified rather than
+// rejecting the whole request, since the set may include a user who
+// unverified their phone between selection and save.
+async function filterVerifiedPhoneUserIds(
+  userIds: number[],
+): Promise<number[]> {
+  if (userIds.length === 0) return [];
+  const rows = await db
+    .select({ id: appUsers.id })
+    .from(appUsers)
+    .where(
+      and(inArray(appUsers.id, userIds), eq(appUsers.phoneVerified, true)),
+    );
+  return rows.map((r) => r.id);
+}
 
 async function tripExists(tripId: number): Promise<boolean> {
   const [row] = await db
@@ -289,6 +309,9 @@ router.post("/trips/:id/reminders", async (req, res) => {
 
   const body = CreateReminderBody.parse(req.body);
   const syncToCalendar = body.syncToCalendar ?? true;
+  const smsRecipientUserIds = body.smsRecipientUserIds
+    ? await filterVerifiedPhoneUserIds(body.smsRecipientUserIds)
+    : [];
   const [row] = await db
     .insert(travelsReminders)
     .values({
@@ -299,6 +322,7 @@ router.post("/trips/:id/reminders", async (req, res) => {
       dueDate: body.dueDate ?? null,
       done: false,
       recipientEmails: body.recipientEmails ?? [],
+      smsRecipientUserIds,
       syncToCalendar,
       ...(body.alertDaysBefore !== undefined
         ? { alertDaysBefore: body.alertDaysBefore }
@@ -338,6 +362,10 @@ router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
   if (body.done !== undefined) updateData.done = body.done;
   if (body.recipientEmails !== undefined)
     updateData.recipientEmails = body.recipientEmails;
+  if (body.smsRecipientUserIds !== undefined)
+    updateData.smsRecipientUserIds = await filterVerifiedPhoneUserIds(
+      body.smsRecipientUserIds,
+    );
   if (body.syncToCalendar !== undefined)
     updateData.syncToCalendar = body.syncToCalendar;
   if (body.alertDaysBefore !== undefined)

@@ -1,8 +1,14 @@
 import { Router, type IRouter, type Request } from "express";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
-import { eq, and, gt, isNull } from "drizzle-orm";
-import { db, pool, appUsers, passwordResetTokens } from "@workspace/db";
+import { eq, and, gt, isNull, desc } from "drizzle-orm";
+import {
+  db,
+  pool,
+  appUsers,
+  passwordResetTokens,
+  phoneVerificationCodes,
+} from "@workspace/db";
 import {
   LoginBody,
   LoginResponse,
@@ -13,16 +19,24 @@ import {
   ChangePasswordBody,
   ForgotPasswordBody,
   ResetPasswordBody,
+  SendPhoneVerificationCodeBody,
+  VerifyPhoneCodeBody,
+  VerifyPhoneCodeResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middleware/auth";
-import { loginLimiter } from "../middleware/rateLimit";
+import { loginLimiter, phoneVerifyLimiter } from "../middleware/rateLimit";
 import { env } from "../lib/env";
 import {
   googleEnabled,
   createGoogleClient,
   GOOGLE_SCOPES,
 } from "../lib/google-oauth";
-import { sendPasswordResetEmail, resendConfigured } from "../lib/email";
+import {
+  sendPasswordResetEmail,
+  sendTestEmail,
+  resendConfigured,
+} from "../lib/email";
+import { sendSms } from "../lib/sms";
 import { runReminderAlerts } from "../lib/reminder-scheduler";
 
 const LOGIN_PATH = "/login";
@@ -151,6 +165,8 @@ router.get("/auth/me", requireAuth, async (req, res) => {
       displayName: user.displayName ?? null,
       themePreference: user.themePreference ?? null,
       isOwner: user.isOwner ?? false,
+      phoneNumber: user.phoneNumber ?? null,
+      phoneVerified: user.phoneVerified ?? false,
     }),
   );
 });
@@ -205,6 +221,8 @@ router.patch("/auth/me", requireAuth, async (req, res) => {
       displayName: user.displayName ?? null,
       themePreference: user.themePreference ?? null,
       isOwner: user.isOwner ?? false,
+      phoneNumber: user.phoneNumber ?? null,
+      phoneVerified: user.phoneVerified ?? false,
     }),
   );
 });
@@ -283,6 +301,217 @@ router.post("/auth/change-password", requireAuth, async (req, res) => {
   });
 
   res.status(204).end();
+});
+
+const PHONE_CODE_EXPIRY_MS = 1000 * 60 * 10;
+const MAX_PHONE_CODE_ATTEMPTS = 5;
+// E.164: leading +, 1-9 first digit, up to 15 digits total.
+const E164_RE = /^\+[1-9]\d{6,14}$/;
+
+router.post(
+  "/auth/phone/send-code",
+  requireAuth,
+  phoneVerifyLimiter,
+  async (req, res) => {
+    const parsed = SendPhoneVerificationCodeBody.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "A valid phone number is required." });
+      return;
+    }
+    if (parsed.data.consent !== true) {
+      res.status(400).json({
+        error:
+          "You must agree to receive SMS messages before we can text you a code.",
+      });
+      return;
+    }
+    const phoneNumber = parsed.data.phoneNumber.trim();
+    if (!E164_RE.test(phoneNumber)) {
+      res.status(400).json({
+        error: 'Phone number must be in E.164 format, e.g. "+12105551234".',
+      });
+      return;
+    }
+
+    const code = crypto.randomInt(0, 1_000_000).toString().padStart(6, "0");
+    const codeHash = crypto.createHash("sha256").update(code).digest("hex");
+    const expiresAt = new Date(Date.now() + PHONE_CODE_EXPIRY_MS);
+
+    try {
+      await db.insert(phoneVerificationCodes).values({
+        userId: req.session.userId!,
+        phoneNumber,
+        codeHash,
+        expiresAt,
+      });
+      // Record the opt-in timestamp on the account itself (not just the
+      // pending verification row) — this is the durable, carrier-facing
+      // evidence of consent for A2P 10DLC campaign registration.
+      await db
+        .update(appUsers)
+        .set({ smsConsentAt: new Date() })
+        .where(eq(appUsers.id, req.session.userId!));
+      await sendSms(
+        phoneNumber,
+        `Your Batchelor App verification code is ${code}. It expires in 10 minutes.`,
+      );
+      res.status(204).end();
+    } catch (err) {
+      req.log.error({ err }, "failed to send phone verification code");
+      res.status(500).json({
+        error: "Could not send the verification code. Please try again.",
+      });
+    }
+  },
+);
+
+router.post("/auth/phone/verify", requireAuth, async (req, res) => {
+  const parsed = VerifyPhoneCodeBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "A 6-digit code is required." });
+    return;
+  }
+
+  const userId = req.session.userId!;
+  const now = new Date();
+
+  const [record] = await db
+    .select()
+    .from(phoneVerificationCodes)
+    .where(
+      and(
+        eq(phoneVerificationCodes.userId, userId),
+        eq(phoneVerificationCodes.used, false),
+        gt(phoneVerificationCodes.expiresAt, now),
+      ),
+    )
+    .orderBy(desc(phoneVerificationCodes.createdAt))
+    .limit(1);
+
+  if (!record || record.attempts >= MAX_PHONE_CODE_ATTEMPTS) {
+    res.status(400).json({
+      error: "This code is invalid or has expired. Request a new one.",
+    });
+    return;
+  }
+
+  const providedHash = crypto
+    .createHash("sha256")
+    .update(parsed.data.code)
+    .digest("hex");
+
+  // Constant-time compare to avoid a timing side channel on the code digits.
+  const matches =
+    providedHash.length === record.codeHash.length &&
+    crypto.timingSafeEqual(
+      Buffer.from(providedHash),
+      Buffer.from(record.codeHash),
+    );
+
+  if (!matches) {
+    const attempts = record.attempts + 1;
+    await db
+      .update(phoneVerificationCodes)
+      .set({
+        attempts,
+        used: attempts >= MAX_PHONE_CODE_ATTEMPTS,
+      })
+      .where(eq(phoneVerificationCodes.id, record.id));
+    res.status(400).json({
+      error: "This code is invalid or has expired. Request a new one.",
+    });
+    return;
+  }
+
+  const [user] = await db.transaction(async (tx) => {
+    await tx
+      .update(phoneVerificationCodes)
+      .set({ used: true })
+      .where(eq(phoneVerificationCodes.id, record.id));
+    return tx
+      .update(appUsers)
+      .set({
+        phoneNumber: record.phoneNumber,
+        phoneVerified: true,
+        phoneVerifiedAt: now,
+      })
+      .where(eq(appUsers.id, userId))
+      .returning();
+  });
+
+  if (!user) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+
+  res.json(
+    VerifyPhoneCodeResponse.parse({
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName ?? null,
+      themePreference: user.themePreference ?? null,
+      isOwner: user.isOwner ?? false,
+      phoneNumber: user.phoneNumber ?? null,
+      phoneVerified: user.phoneVerified ?? false,
+    }),
+  );
+});
+
+router.post(
+  "/auth/test-sms",
+  requireAuth,
+  phoneVerifyLimiter,
+  async (req, res) => {
+    const [user] = await db
+      .select()
+      .from(appUsers)
+      .where(eq(appUsers.id, req.session.userId!))
+      .limit(1);
+
+    if (!user || !user.phoneVerified || !user.phoneNumber) {
+      res.status(400).json({
+        error: "Verify a phone number first before sending a test SMS.",
+      });
+      return;
+    }
+
+    try {
+      await sendSms(
+        user.phoneNumber,
+        "This is a test SMS from your Batchelor App account settings. If you received this, SMS delivery is working!",
+      );
+      res.status(204).end();
+    } catch (err) {
+      req.log.error({ err }, "failed to send test sms");
+      res.status(500).json({ error: "Could not send the test SMS." });
+    }
+  },
+);
+
+router.post("/auth/test-email", requireAuth, async (req, res) => {
+  if (!resendConfigured()) {
+    res.status(503).json({ error: "Email is not available right now." });
+    return;
+  }
+
+  const [user] = await db
+    .select()
+    .from(appUsers)
+    .where(eq(appUsers.id, req.session.userId!))
+    .limit(1);
+
+  if (!user) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+
+  try {
+    await sendTestEmail(user.email);
+    res.status(204).end();
+  } catch (err) {
+    req.log.error({ err }, "failed to send test email");
+    res.status(500).json({ error: "Could not send the test email." });
+  }
 });
 
 const THIRTY_MINUTES_MS = 1000 * 60 * 30;

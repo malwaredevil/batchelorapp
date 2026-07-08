@@ -2,8 +2,10 @@ import { pool } from "@workspace/db";
 import {
   sendReminderAlertEmail,
   resendConfigured,
+  alertLabel,
   type ReminderAlertType,
 } from "./email";
+import { sendReminderAlertSms, smsConfigured } from "./sms";
 import { pullReminderAlertDaysFromCalendar } from "../routes/travels/reminders";
 import { logger } from "./logger";
 
@@ -34,8 +36,13 @@ export function daysUntilDue(dueDate: string, now: Date = new Date()): number {
 }
 
 export async function runReminderAlerts(): Promise<void> {
-  if (!resendConfigured()) {
-    logger.debug("reminder-scheduler: Resend not configured, skipping");
+  const emailEnabled = resendConfigured();
+  const smsEnabled = smsConfigured();
+
+  if (!emailEnabled && !smsEnabled) {
+    logger.debug(
+      "reminder-scheduler: neither Resend nor AgentPhone configured, skipping",
+    );
     return;
   }
 
@@ -54,22 +61,25 @@ export async function runReminderAlerts(): Promise<void> {
       trip_destination: string;
       due_date: string;
       recipient_emails: string[];
+      sms_recipient_user_ids: number[];
       alert_days_before: number[];
     }>(
-      `SELECT r.id                 AS reminder_id,
+      `SELECT r.id                     AS reminder_id,
               r.user_id,
-              r.title              AS reminder_title,
-              t.title              AS trip_title,
-              t.destination        AS trip_destination,
-              r.due_date::text     AS due_date,
-              r.recipient_emails   AS recipient_emails,
-              r.alert_days_before  AS alert_days_before
+              r.title                  AS reminder_title,
+              t.title                  AS trip_title,
+              t.destination            AS trip_destination,
+              r.due_date::text         AS due_date,
+              r.recipient_emails       AS recipient_emails,
+              r.sms_recipient_user_ids AS sms_recipient_user_ids,
+              r.alert_days_before      AS alert_days_before
          FROM travels_reminders r
          JOIN travels_trips  t ON t.id  = r.trip_id
         WHERE r.done = false
           AND r.due_date >= CURRENT_DATE
           AND r.due_date <= CURRENT_DATE + 30
-          AND array_length(r.recipient_emails, 1) > 0`,
+          AND (array_length(r.recipient_emails, 1) > 0
+               OR array_length(r.sms_recipient_user_ids, 1) > 0)`,
     );
 
     for (const candidate of candidates) {
@@ -88,65 +98,158 @@ export async function runReminderAlerts(): Promise<void> {
         const type =
           alertTypeForDays(days) ?? (`${days}_day` as ReminderAlertType);
 
-        const { rows: alreadySent } = await client.query<{ id: number }>(
-          `SELECT id FROM travels_reminder_alert_log WHERE reminder_id = $1 AND alert_type = $2`,
-          [candidate.reminder_id, type],
-        );
-        if (alreadySent.length > 0) continue;
-
         const row = candidate;
-        const failures: { toEmail: string; err: unknown }[] = [];
-        let successCount = 0;
 
-        for (const toEmail of row.recipient_emails) {
-          try {
-            await sendReminderAlertEmail(
-              toEmail,
-              row.reminder_title,
-              row.trip_title,
-              row.trip_destination,
-              type,
-              row.due_date,
+        const { rows: alreadySentRows } = await client.query<{
+          channel: string;
+        }>(
+          `SELECT channel FROM travels_reminder_alert_log
+            WHERE reminder_id = $1 AND alert_type = $2`,
+          [row.reminder_id, type],
+        );
+        const alreadySent = new Set(alreadySentRows.map((r) => r.channel));
+
+        // --- Email channel ---
+        if (
+          emailEnabled &&
+          row.recipient_emails.length > 0 &&
+          !alreadySent.has("email")
+        ) {
+          const failures: { toEmail: string; err: unknown }[] = [];
+          let successCount = 0;
+
+          for (const toEmail of row.recipient_emails) {
+            try {
+              await sendReminderAlertEmail(
+                toEmail,
+                row.reminder_title,
+                row.trip_title,
+                row.trip_destination,
+                type,
+                row.due_date,
+              );
+              successCount++;
+            } catch (err) {
+              failures.push({ toEmail, err });
+              logger.error(
+                { err, reminderId: row.reminder_id, alertType: type, toEmail },
+                "reminder-scheduler: failed to send email alert to recipient",
+              );
+            }
+          }
+
+          // Only mark the alert as sent once every recipient has actually
+          // received it. If even one recipient failed (e.g. Resend rejecting
+          // an unverified address), leave the log row absent so the next run
+          // retries the whole reminder rather than silently dropping it.
+          if (failures.length === 0) {
+            await client.query(
+              `INSERT INTO travels_reminder_alert_log (reminder_id, user_id, alert_type, channel)
+               VALUES ($1, $2, $3, 'email')`,
+              [row.reminder_id, row.user_id, type],
             );
-            successCount++;
-          } catch (err) {
-            failures.push({ toEmail, err });
-            logger.error(
-              { err, reminderId: row.reminder_id, alertType: type, toEmail },
-              "reminder-scheduler: failed to send alert to recipient",
+
+            logger.info(
+              {
+                reminderId: row.reminder_id,
+                alertType: type,
+                recipientCount: successCount,
+              },
+              "reminder-scheduler: alert email(s) sent",
+            );
+          } else {
+            logger.warn(
+              {
+                reminderId: row.reminder_id,
+                alertType: type,
+                successCount,
+                failedRecipients: failures.map((f) => f.toEmail),
+              },
+              "reminder-scheduler: email alert not fully delivered, will retry next run",
             );
           }
         }
 
-        // Only mark the alert as sent once every recipient has actually
-        // received it. If even one recipient failed (e.g. Resend rejecting
-        // an unverified address), leave the log row absent so the next run
-        // retries the whole reminder rather than silently dropping it.
-        if (failures.length === 0) {
-          await client.query(
-            `INSERT INTO travels_reminder_alert_log (reminder_id, user_id, alert_type)
-             VALUES ($1, $2, $3)`,
-            [row.reminder_id, row.user_id, type],
+        // --- SMS channel ---
+        if (
+          smsEnabled &&
+          row.sms_recipient_user_ids.length > 0 &&
+          !alreadySent.has("sms")
+        ) {
+          const { rows: phoneRows } = await client.query<{
+            id: number;
+            phone_number: string;
+          }>(
+            `SELECT id, phone_number FROM app_users
+              WHERE id = ANY($1::int[]) AND phone_verified = true AND phone_number IS NOT NULL`,
+            [row.sms_recipient_user_ids],
           );
 
-          logger.info(
-            {
-              reminderId: row.reminder_id,
-              alertType: type,
-              recipientCount: successCount,
-            },
-            "reminder-scheduler: alert email(s) sent",
-          );
-        } else {
-          logger.warn(
-            {
-              reminderId: row.reminder_id,
-              alertType: type,
-              successCount,
-              failedRecipients: failures.map((f) => f.toEmail),
-            },
-            "reminder-scheduler: alert not fully delivered, will retry next run",
-          );
+          if (phoneRows.length > 0) {
+            const label = alertLabel(days);
+            const formatted = new Date(
+              `${row.due_date}T12:00:00Z`,
+            ).toLocaleDateString("en-GB", {
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            });
+
+            const failures: { userId: number; err: unknown }[] = [];
+            let successCount = 0;
+
+            for (const recipient of phoneRows) {
+              try {
+                await sendReminderAlertSms(
+                  recipient.phone_number,
+                  row.reminder_title,
+                  row.trip_title,
+                  row.trip_destination,
+                  label,
+                  formatted,
+                );
+                successCount++;
+              } catch (err) {
+                failures.push({ userId: recipient.id, err });
+                logger.error(
+                  {
+                    err,
+                    reminderId: row.reminder_id,
+                    alertType: type,
+                    userId: recipient.id,
+                  },
+                  "reminder-scheduler: failed to send sms alert to recipient",
+                );
+              }
+            }
+
+            if (failures.length === 0) {
+              await client.query(
+                `INSERT INTO travels_reminder_alert_log (reminder_id, user_id, alert_type, channel)
+                 VALUES ($1, $2, $3, 'sms')`,
+                [row.reminder_id, row.user_id, type],
+              );
+
+              logger.info(
+                {
+                  reminderId: row.reminder_id,
+                  alertType: type,
+                  recipientCount: successCount,
+                },
+                "reminder-scheduler: alert sms(s) sent",
+              );
+            } else {
+              logger.warn(
+                {
+                  reminderId: row.reminder_id,
+                  alertType: type,
+                  successCount,
+                  failedRecipients: failures.map((f) => f.userId),
+                },
+                "reminder-scheduler: sms alert not fully delivered, will retry next run",
+              );
+            }
+          }
         }
       }
     }

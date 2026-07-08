@@ -30,6 +30,10 @@ const SHARED_PATHS = new Set<string>([
   "/auth/forgot-password",
   "/auth/reset-password",
   "/auth/change-password",
+  "/auth/phone/send-code",
+  "/auth/phone/verify",
+  "/auth/test-sms",
+  "/auth/test-email",
 ]);
 
 const HTTP_METHODS = new Set<string>([

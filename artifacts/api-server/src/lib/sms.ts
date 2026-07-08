@@ -1,4 +1,6 @@
 import { ReplitConnectors } from "@replit/connectors-sdk";
+import { eq } from "drizzle-orm";
+import { db, appUsers } from "@workspace/db";
 import { logger } from "./logger";
 
 const connectors = new ReplitConnectors();
@@ -76,7 +78,43 @@ export class SmsRegistrationPendingError extends Error {
   }
 }
 
-export async function sendSms(toNumber: string, body: string): Promise<void> {
+// Thrown when the recipient number has opted out via STOP/STOPALL/
+// UNSUBSCRIBE/CANCEL/END/QUIT (see routes/agentphone.ts) and hasn't since
+// re-opted-in with START/UNSTOP/YES. A2P 10DLC compliance requires we send
+// nothing further to that number until they text back in.
+export class SmsOptedOutError extends Error {
+  constructor() {
+    super("This phone number has opted out of SMS messages");
+    this.name = "SmsOptedOutError";
+  }
+}
+
+// Single choke point for opted-out enforcement: every existing send path
+// (verification code, test SMS, reminder alerts) already goes through
+// sendSms, so checking here covers all of them without touching each call
+// site. `bypassOptOutCheck` exists ONLY for the two compliance-required
+// replies the webhook itself sends in response to STOP/HELP (a carrier-
+// mandated confirmation must go out even to an already-opted-out number) —
+// never pass it from anywhere else.
+export async function sendSms(
+  toNumber: string,
+  body: string,
+  options?: { bypassOptOutCheck?: boolean },
+): Promise<void> {
+  if (!options?.bypassOptOutCheck) {
+    const [recipient] = await db
+      .select({ smsOptedOutAt: appUsers.smsOptedOutAt })
+      .from(appUsers)
+      .where(eq(appUsers.phoneNumber, toNumber))
+      .limit(1);
+    if (recipient?.smsOptedOutAt) {
+      logger.info(
+        { toNumber },
+        "agentphone: skipping send to opted-out number",
+      );
+      throw new SmsOptedOutError();
+    }
+  }
   const from = await getFromNumber();
   const response = await connectors.proxy("agentphone", "/v1/messages", {
     method: "POST",

@@ -10,6 +10,7 @@
     "seed-travels": "tsx ./src/seed-travels-data.ts",
     "add-users": "tsx ./src/add-users.ts",
     "migrate-to-elaine": "tsx ./src/migrate-to-elaine.ts",
+    "check-travels-overlap": "tsx ./src/check-travels-export-overlap.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

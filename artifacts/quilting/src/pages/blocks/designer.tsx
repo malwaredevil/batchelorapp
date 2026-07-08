@@ -3529,7 +3529,7 @@ export default function BlockDesigner() {
 
   const isSaving = createBlock.isPending || updateBlock.isPending;
 
-  // ── Block Library ──────────────────────────────────────────────────────────
+  // ── Block Patterns ─────────────────────────────────────────────────────────
   const invalidateBlockTemplates = () =>
     void queryClient.invalidateQueries({
       queryKey: getListBlockTemplatesQueryKey(),
@@ -5775,7 +5775,7 @@ export default function BlockDesigner() {
       <Dialog open={saveToLibOpen} onOpenChange={setSaveToLibOpen}>
         <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
-            <DialogTitle>Save to Block Library</DialogTitle>
+            <DialogTitle>Save to Block Patterns</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-4 py-2">
             <div className="flex flex-col gap-1.5">
@@ -5834,7 +5834,7 @@ export default function BlockDesigner() {
       >
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
-            <DialogTitle>Block Library</DialogTitle>
+            <DialogTitle>Block Patterns</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-3 py-2">
             {(!templates || templates.length === 0) && (

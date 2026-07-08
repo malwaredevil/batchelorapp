@@ -112,7 +112,7 @@ function Routes() {
         <Route path="/blocks/:id/cut-pattern" component={CutPatternPage} />
         <Route path="/blocks/:id/edit" component={BlockDesigner} />
         <Route path="/blocks/:id" component={BlockDetail} />
-        {/* Block Library (reusable block templates) */}
+        {/* Block Patterns (reusable block templates) */}
         <Route path="/library/blocks" component={BlockLibrary} />
         <Route path="/library/blocks/new" component={BlockDesigner} />
         <Route path="/library/blocks/:id/edit" component={BlockDesigner} />

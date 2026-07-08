@@ -48,6 +48,17 @@ registerFeature({
   },
 });
 
+registerFeature({
+  id: "block-library",
+  nav: {
+    group: "collection",
+    href: "/library/blocks",
+    label: "Block Patterns",
+    icon: LibraryBig,
+    order: 40,
+  },
+});
+
 // ── Shopping ──────────────────────────────────────────────────────────────────
 
 registerFeature({
@@ -82,17 +93,6 @@ registerFeature({
     label: "Block Designer",
     icon: Grid2X2,
     order: 10,
-  },
-});
-
-registerFeature({
-  id: "block-library",
-  nav: {
-    group: "design",
-    href: "/library/blocks",
-    label: "Block Library",
-    icon: LibraryBig,
-    order: 15,
   },
 });
 

@@ -65,6 +65,17 @@ export async function sendReminderAlertSms(
   );
 }
 
+// Thrown when AgentPhone rejects a send because the workspace's A2P 10DLC
+// campaign registration is still pending. Distinguishing this from other
+// failures lets route handlers surface a clear, actionable message instead
+// of a generic "something went wrong".
+export class SmsRegistrationPendingError extends Error {
+  constructor() {
+    super("AgentPhone: outbound SMS is not enabled pending 10DLC registration");
+    this.name = "SmsRegistrationPendingError";
+  }
+}
+
 export async function sendSms(toNumber: string, body: string): Promise<void> {
   const from = await getFromNumber();
   const response = await connectors.proxy("agentphone", "/v1/messages", {
@@ -81,6 +92,9 @@ export async function sendSms(toNumber: string, body: string): Promise<void> {
       { status: response.status, text },
       "agentphone: failed to send sms",
     );
+    if (response.status === 403 && text.includes("10DLC")) {
+      throw new SmsRegistrationPendingError();
+    }
     throw new Error(`Failed to send SMS (status ${response.status})`);
   }
 }

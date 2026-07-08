@@ -36,7 +36,7 @@ import {
   sendTestEmail,
   resendConfigured,
 } from "../lib/email";
-import { sendSms } from "../lib/sms";
+import { sendSms, SmsRegistrationPendingError } from "../lib/sms";
 import { runReminderAlerts } from "../lib/reminder-scheduler";
 
 const LOGIN_PATH = "/login";
@@ -358,6 +358,13 @@ router.post(
       res.status(204).end();
     } catch (err) {
       req.log.error({ err }, "failed to send phone verification code");
+      if (err instanceof SmsRegistrationPendingError) {
+        res.status(503).json({
+          error:
+            "SMS sending isn't enabled yet — AgentPhone's carrier (10DLC) registration is still pending. Your consent has been recorded and will be used for that registration.",
+        });
+        return;
+      }
       res.status(500).json({
         error: "Could not send the verification code. Please try again.",
       });
@@ -483,6 +490,13 @@ router.post(
       res.status(204).end();
     } catch (err) {
       req.log.error({ err }, "failed to send test sms");
+      if (err instanceof SmsRegistrationPendingError) {
+        res.status(503).json({
+          error:
+            "SMS sending isn't enabled yet — AgentPhone's carrier (10DLC) registration is still pending. Your phone number is verified and ready; this will start working once registration completes.",
+        });
+        return;
+      }
       res.status(500).json({ error: "Could not send the test SMS." });
     }
   },

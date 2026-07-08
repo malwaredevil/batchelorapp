@@ -40,6 +40,17 @@ app.use(
 );
 
 app.use("/api/quilting/blocks/detect-seams", express.json({ limit: "5mb" }));
+// AgentPhone webhook signatures are HMAC'd over the raw request body, so the
+// exact bytes must be captured before body-parser reformats them as JSON.
+app.use(
+  "/api/agentphone/webhook",
+  express.json({
+    limit: "64kb",
+    verify: (req, _res, buf) => {
+      (req as Request & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+    },
+  }),
+);
 app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(cookieParser(env.sessionSecret));

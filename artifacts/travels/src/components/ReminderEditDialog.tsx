@@ -5,11 +5,17 @@ import {
   useDeleteReminder,
   useListTravelsAppUsers,
   useGetCalendarStatus,
+  useSendPhoneVerificationCode,
+  useVerifyPhoneCode,
+  useSendTestSms,
   getListRemindersQueryKey,
   getListAllRemindersQueryKey,
+  getListTravelsAppUsersQueryKey,
+  getGetCurrentUserQueryKey,
   type Reminder,
   type TravelsAppUser,
 } from "@workspace/api-client-react";
+import { useAuth } from "@/lib/auth";
 import {
   Dialog,
   DialogContent,
@@ -21,7 +27,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Trash2, Save, X, Mail, Pencil } from "lucide-react";
+import {
+  Trash2,
+  Save,
+  X,
+  Mail,
+  MessageSquareText,
+  Pencil,
+  Loader2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { RichTextEditor } from "./RichTextEditor";
 
@@ -39,6 +53,7 @@ export function ReminderEditDialog({
   initialMode = "view",
 }: ReminderEditDialogProps) {
   const qc = useQueryClient();
+  const { user } = useAuth();
   const { data: appUsers = [] } = useListTravelsAppUsers();
   const { data: calendarStatus } = useGetCalendarStatus();
   const travelCalendarConnected = !!calendarStatus?.connected;
@@ -49,9 +64,16 @@ export function ReminderEditDialog({
   const [dueDate, setDueDate] = useState("");
   const [recipients, setRecipients] = useState<string[]>([]);
   const [customEmail, setCustomEmail] = useState("");
+  const [smsRecipients, setSmsRecipients] = useState<number[]>([]);
   const [sync, setSync] = useState(true);
   const [alertDays, setAlertDays] = useState<number[]>([0]);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  const [showPhoneSetup, setShowPhoneSetup] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [phoneCode, setPhoneCode] = useState("");
+  const [phoneCodeSent, setPhoneCodeSent] = useState(false);
+  const [smsConsent, setSmsConsent] = useState(false);
 
   useEffect(() => {
     if (reminder && open) {
@@ -60,6 +82,7 @@ export function ReminderEditDialog({
       setDescription(reminder.description ?? "");
       setDueDate(reminder.dueDate ?? "");
       setRecipients(reminder.recipientEmails);
+      setSmsRecipients(reminder.smsRecipientUserIds ?? []);
       setSync(reminder.syncToCalendar);
       setAlertDays(
         reminder.alertDaysBefore && reminder.alertDaysBefore.length > 0
@@ -68,6 +91,11 @@ export function ReminderEditDialog({
       );
       setCustomEmail("");
       setConfirmingDelete(false);
+      setShowPhoneSetup(false);
+      setPhoneNumber("");
+      setPhoneCode("");
+      setPhoneCodeSent(false);
+      setSmsConsent(false);
     }
   }, [reminder, open]);
 
@@ -110,9 +138,77 @@ export function ReminderEditDialog({
     },
   });
 
+  const sendPhoneCode = useSendPhoneVerificationCode({
+    mutation: {
+      onSuccess: () => {
+        setPhoneCodeSent(true);
+        toast.success(`Verification code sent to ${phoneNumber}.`);
+      },
+      onError: () => toast.error("Could not send the verification code."),
+    },
+  });
+
+  const verifyPhoneCode = useVerifyPhoneCode({
+    mutation: {
+      onSuccess: async () => {
+        await qc.invalidateQueries({ queryKey: getGetCurrentUserQueryKey() });
+        await qc.invalidateQueries({
+          queryKey: getListTravelsAppUsersQueryKey(),
+        });
+        toast.success("Phone verified — a test text has been sent.");
+        if (user) {
+          setSmsRecipients((prev) =>
+            prev.includes(user.id) ? prev : [...prev, user.id],
+          );
+        }
+        setShowPhoneSetup(false);
+        setPhoneCodeSent(false);
+        setPhoneNumber("");
+        setPhoneCode("");
+      },
+      onError: () => toast.error("That code didn't work."),
+    },
+  });
+
+  const sendTestSms = useSendTestSms({
+    mutation: {
+      onError: () =>
+        toast.error("Phone verified, but the test text failed to send."),
+    },
+  });
+
+  function handleSendPhoneCode() {
+    const trimmed = phoneNumber.trim();
+    if (!trimmed) return;
+    if (!smsConsent) {
+      toast.error("Please check the box to agree to receive SMS messages.");
+      return;
+    }
+    sendPhoneCode.mutate({ data: { phoneNumber: trimmed, consent: true } });
+  }
+
+  function handleVerifyPhoneCode() {
+    if (phoneCode.trim().length !== 6) {
+      toast.error("Enter the 6-digit code.");
+      return;
+    }
+    verifyPhoneCode.mutate(
+      { data: { code: phoneCode.trim() } },
+      { onSuccess: () => sendTestSms.mutate() },
+    );
+  }
+
   function toggleRecipient(email: string) {
     setRecipients((prev) =>
       prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email],
+    );
+  }
+
+  function toggleSmsRecipient(userId: number) {
+    setSmsRecipients((prev) =>
+      prev.includes(userId)
+        ? prev.filter((id) => id !== userId)
+        : [...prev, userId],
     );
   }
 
@@ -140,6 +236,7 @@ export function ReminderEditDialog({
         description: description.trim() ? description : null,
         dueDate: dueDate || null,
         recipientEmails: recipients,
+        smsRecipientUserIds: smsRecipients,
         syncToCalendar: sync,
         alertDaysBefore: alertDays,
       },
@@ -223,6 +320,30 @@ export function ReminderEditDialog({
                       <Mail className="w-3 h-3" /> {email}
                     </span>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {(reminder.smsRecipientUserIds?.length ?? 0) > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-1.5">
+                  Texted to
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(reminder.smsRecipientUserIds ?? []).map((userId) => {
+                    const u = appUsers.find(
+                      (a: TravelsAppUser) => a.id === userId,
+                    );
+                    return (
+                      <span
+                        key={userId}
+                        className="inline-flex items-center gap-1 text-xs bg-muted rounded-full px-2.5 py-0.5"
+                      >
+                        <MessageSquareText className="w-3 h-3" />{" "}
+                        {u?.displayName ?? u?.email ?? `User ${userId}`}
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -334,6 +455,138 @@ export function ReminderEditDialog({
                       </button>
                     </span>
                   ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">
+                Text alerts to
+              </Label>
+              {appUsers.length > 0 && (
+                <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                  {appUsers.map((u: TravelsAppUser) => (
+                    <label
+                      key={u.id}
+                      className={`flex items-center gap-1.5 text-sm ${
+                        u.phoneVerified
+                          ? "cursor-pointer"
+                          : "cursor-not-allowed opacity-50"
+                      }`}
+                    >
+                      <Checkbox
+                        checked={smsRecipients.includes(u.id)}
+                        disabled={!u.phoneVerified}
+                        onCheckedChange={() => toggleSmsRecipient(u.id)}
+                      />
+                      {u.displayName ?? u.email}
+                      {!u.phoneVerified && (
+                        <span className="text-xs text-muted-foreground">
+                          (no verified phone)
+                        </span>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              {user && !user.phoneVerified && (
+                <div className="mt-2 rounded-lg border border-card-border bg-muted/40 p-3">
+                  {!showPhoneSetup ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowPhoneSetup(true)}
+                    >
+                      <MessageSquareText className="w-3.5 h-3.5 mr-1.5" />
+                      Verify your phone to enable SMS
+                    </Button>
+                  ) : !phoneCodeSent ? (
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">
+                        Your phone number
+                      </Label>
+                      <div className="flex gap-2">
+                        <Input
+                          type="tel"
+                          value={phoneNumber}
+                          onChange={(e) => setPhoneNumber(e.target.value)}
+                          placeholder="+12105551234"
+                          className="flex-1"
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={
+                            sendPhoneCode.isPending ||
+                            !phoneNumber.trim() ||
+                            !smsConsent
+                          }
+                          onClick={handleSendPhoneCode}
+                        >
+                          {sendPhoneCode.isPending ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            "Send code"
+                          )}
+                        </Button>
+                      </div>
+                      <div className="flex items-start gap-2 pt-1">
+                        <Checkbox
+                          id="reminder-sms-consent"
+                          checked={smsConsent}
+                          onCheckedChange={(checked) =>
+                            setSmsConsent(checked === true)
+                          }
+                          className="mt-0.5"
+                        />
+                        <Label
+                          htmlFor="reminder-sms-consent"
+                          className="text-xs font-normal leading-relaxed text-muted-foreground"
+                        >
+                          I agree to receive SMS text messages from Batchelor
+                          App at the phone number above, including verification
+                          codes and Travels trip reminders. Message and data
+                          rates may apply. Message frequency varies. Reply STOP
+                          to opt out at any time, or HELP for help.
+                        </Label>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">
+                        Enter the 6-digit code sent to {phoneNumber}
+                      </Label>
+                      <div className="flex gap-2">
+                        <Input
+                          inputMode="numeric"
+                          maxLength={6}
+                          value={phoneCode}
+                          onChange={(e) =>
+                            setPhoneCode(e.target.value.replace(/\D/g, ""))
+                          }
+                          placeholder="123456"
+                          className="flex-1"
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={
+                            verifyPhoneCode.isPending ||
+                            phoneCode.trim().length !== 6
+                          }
+                          onClick={handleVerifyPhoneCode}
+                        >
+                          {verifyPhoneCode.isPending ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            "Verify"
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

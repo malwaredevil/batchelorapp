@@ -990,4 +990,41 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE elaine_daily_briefs ENABLE ROW LEVEL SECURITY`,
   `CREATE UNIQUE INDEX IF NOT EXISTS elaine_daily_briefs_user_day_idx
      ON elaine_daily_briefs (user_id, (date_trunc('day', generated_at AT TIME ZONE 'UTC')))`,
+
+  // ── Phone numbers + SMS (AgentPhone integration) ───────────────────────────
+  // Per-user phone number for SMS reminders/notifications, verified via a
+  // one-time code sent through AgentPhone before it can be used to send.
+  `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS phone_number TEXT`,
+  `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS phone_verified BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS phone_verified_at TIMESTAMPTZ`,
+  // A2P 10DLC compliance: timestamp of the most recent explicit SMS opt-in
+  // consent checkbox submission, recorded by the send-code endpoint. Serves
+  // as evidence of opt-in for carrier campaign registration.
+  `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS sms_consent_at TIMESTAMPTZ`,
+
+  // Short-lived one-time codes for verifying a candidate phone number. The
+  // candidate number is stored on the row itself (not read from app_users)
+  // so a user can verify a NEW number before it overwrites their existing
+  // one — verification only commits to app_users once the code matches.
+  `CREATE TABLE IF NOT EXISTS phone_verification_codes (
+    id            SERIAL PRIMARY KEY,
+    user_id       INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+    phone_number  TEXT NOT NULL,
+    code_hash     TEXT NOT NULL,
+    attempts      INTEGER NOT NULL DEFAULT 0,
+    used          BOOLEAN NOT NULL DEFAULT false,
+    expires_at    TIMESTAMPTZ NOT NULL,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE phone_verification_codes ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS phone_verification_codes_user_id_idx ON phone_verification_codes (user_id)`,
+
+  // travels_reminders.sms_recipient_user_ids: app_users.id values (must have a
+  // verified phone number) who should also get an SMS alert for this
+  // reminder, alongside/instead of the email recipients above.
+  `ALTER TABLE travels_reminders ADD COLUMN IF NOT EXISTS sms_recipient_user_ids INTEGER[] NOT NULL DEFAULT '{}'`,
+  // Dedup log reused for both channels — 'email' (default, preserves
+  // existing rows) or 'sms'. A (reminder, user, alertType, channel) tuple is
+  // sent at most once.
+  `ALTER TABLE travels_reminder_alert_log ADD COLUMN IF NOT EXISTS channel TEXT NOT NULL DEFAULT 'email'`,
 ];

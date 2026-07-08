@@ -4,6 +4,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useChangePassword,
   useUpdateCurrentUser,
+  useSendPhoneVerificationCode,
+  useVerifyPhoneCode,
+  useSendTestSms,
+  useSendTestEmail,
   getGetCurrentUserQueryKey,
 } from "@workspace/api-client-react";
 import { toast } from "sonner";
@@ -11,11 +15,15 @@ import {
   ArrowLeft,
   KeyRound,
   Loader2,
+  Mail,
+  MessageSquareText,
   Moon,
+  ShieldCheck,
   Sun,
   User as UserIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AppLogo } from "@/components/app-logo";
@@ -55,6 +63,14 @@ function ProfileCard() {
     },
   });
 
+  const testEmail = useSendTestEmail({
+    mutation: {
+      onSuccess: () => toast.success(`Test email sent to ${user?.email}.`),
+      onError: (err: unknown) =>
+        toast.error(extractError(err, "Could not send the test email.")),
+    },
+  });
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     update.mutate({ data: { displayName: displayName.trim() || null } });
@@ -85,18 +101,220 @@ function ProfileCard() {
             data-testid="input-display-name"
           />
         </div>
-        <Button
-          type="submit"
-          className="w-full"
-          disabled={update.isPending}
-          data-testid="button-save-profile"
-        >
-          {update.isPending ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : null}
-          Save profile
-        </Button>
+        <div className="flex gap-3">
+          <Button
+            type="submit"
+            className="flex-1"
+            disabled={update.isPending}
+            data-testid="button-save-profile"
+          >
+            {update.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : null}
+            Save profile
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={testEmail.isPending}
+            onClick={() => testEmail.mutate()}
+            data-testid="button-send-test-email"
+          >
+            {testEmail.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Mail className="mr-2 h-4 w-4" />
+            )}
+            Send test email
+          </Button>
+        </div>
       </form>
+    </div>
+  );
+}
+
+function PhoneCard() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [code, setCode] = useState("");
+  const [codeSent, setCodeSent] = useState(false);
+  const [smsConsent, setSmsConsent] = useState(false);
+
+  const invalidateUser = () =>
+    queryClient.invalidateQueries({ queryKey: getGetCurrentUserQueryKey() });
+
+  const sendCode = useSendPhoneVerificationCode({
+    mutation: {
+      onSuccess: () => {
+        setCodeSent(true);
+        toast.success(`Verification code sent to ${phoneNumber}.`);
+      },
+      onError: (err: unknown) =>
+        toast.error(extractError(err, "Could not send the verification code.")),
+    },
+  });
+
+  const verifyCode = useVerifyPhoneCode({
+    mutation: {
+      onSuccess: async () => {
+        await invalidateUser();
+        toast.success("Phone number verified.");
+        setCodeSent(false);
+        setPhoneNumber("");
+        setCode("");
+      },
+      onError: (err: unknown) =>
+        toast.error(extractError(err, "That code didn't work.")),
+    },
+  });
+
+  const testSms = useSendTestSms({
+    mutation: {
+      onSuccess: () => toast.success("Test SMS sent — check your phone."),
+      onError: (err: unknown) =>
+        toast.error(extractError(err, "Could not send the test SMS.")),
+    },
+  });
+
+  function handleSendCode(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = phoneNumber.trim();
+    if (!trimmed) return;
+    if (!smsConsent) {
+      toast.error("Please check the box to agree to receive SMS messages.");
+      return;
+    }
+    sendCode.mutate({ data: { phoneNumber: trimmed, consent: true } });
+  }
+
+  function handleVerify(e: React.FormEvent) {
+    e.preventDefault();
+    if (code.trim().length !== 6) {
+      toast.error("Enter the 6-digit code.");
+      return;
+    }
+    verifyCode.mutate({ data: { code: code.trim() } });
+  }
+
+  return (
+    <div className="rounded-xl border border-card-border bg-card p-6 shadow-sm">
+      <div className="mb-1 flex items-center gap-2 font-semibold">
+        <MessageSquareText className="h-5 w-5" />
+        Phone &amp; SMS
+      </div>
+      <p className="mb-4 text-sm text-muted-foreground">
+        Verify a phone number to receive Travels reminders by text.
+      </p>
+
+      {user?.phoneVerified && user?.phoneNumber ? (
+        <div className="mb-4 flex items-center justify-between rounded-lg border border-card-border bg-muted/40 p-3">
+          <div className="flex items-center gap-2 text-sm">
+            <ShieldCheck className="h-4 w-4 text-green-600" />
+            <span className="font-medium">{user.phoneNumber}</span>
+            <span className="text-xs text-muted-foreground">Verified</span>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={testSms.isPending}
+            onClick={() => testSms.mutate()}
+            data-testid="button-send-test-sms"
+          >
+            {testSms.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : null}
+            Send test SMS
+          </Button>
+        </div>
+      ) : null}
+
+      {!codeSent ? (
+        <form onSubmit={handleSendCode} className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {user?.phoneVerified ? "Change phone number" : "Phone number"}
+            </Label>
+            <Input
+              type="tel"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              placeholder="+12105551234"
+              data-testid="input-phone-number"
+            />
+          </div>
+          <div className="flex items-start gap-2 rounded-lg border border-card-border bg-muted/30 p-3">
+            <Checkbox
+              id="sms-consent"
+              checked={smsConsent}
+              onCheckedChange={(checked) => setSmsConsent(checked === true)}
+              data-testid="checkbox-sms-consent"
+              className="mt-0.5"
+            />
+            <Label
+              htmlFor="sms-consent"
+              className="text-xs font-normal leading-relaxed text-muted-foreground"
+            >
+              I agree to receive SMS text messages from Batchelor App at the
+              phone number above, including verification codes and Travels trip
+              reminders. Message and data rates may apply. Message frequency
+              varies. Reply STOP to opt out at any time, or HELP for help.
+            </Label>
+          </div>
+          <Button
+            type="submit"
+            variant="secondary"
+            className="w-full"
+            disabled={sendCode.isPending || !phoneNumber.trim() || !smsConsent}
+            data-testid="button-send-phone-code"
+          >
+            {sendCode.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : null}
+            Send verification code
+          </Button>
+        </form>
+      ) : (
+        <form onSubmit={handleVerify} className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Enter the 6-digit code sent to {phoneNumber}
+            </Label>
+            <Input
+              inputMode="numeric"
+              maxLength={6}
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+              placeholder="123456"
+              data-testid="input-phone-code"
+            />
+          </div>
+          <div className="flex gap-3">
+            <Button
+              type="submit"
+              className="flex-1"
+              disabled={verifyCode.isPending || code.trim().length !== 6}
+              data-testid="button-verify-phone-code"
+            >
+              {verifyCode.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Verify
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setCodeSent(false);
+                setCode("");
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }
@@ -289,6 +507,7 @@ export default function Account() {
         </div>
         <div className="mx-auto w-full max-w-xl space-y-6">
           <ProfileCard />
+          <PhoneCard />
           <AppearanceCard />
           <PasswordCard />
           <ElaineSettingsCard subtitle="Your household's AI assistant across every app" />

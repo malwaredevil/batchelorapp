@@ -29,6 +29,8 @@ export interface AuthUser {
   displayName?: string | null;
   themePreference?: AuthUserThemePreference;
   isOwner?: boolean;
+  phoneNumber?: string | null;
+  phoneVerified?: boolean;
 }
 
 export interface Error {
@@ -59,6 +61,21 @@ export interface ForgotPasswordInput {
 export interface ResetPasswordInput {
   token: string;
   newPassword: string;
+}
+
+export interface SendPhoneCodeInput {
+  /** E.164 format, e.g. "+12105551234" */
+  phoneNumber: string;
+  /** Must be true. Explicit opt-in confirmation that the user agreed to receive SMS text messages (verification codes and Travels reminders) at this number. Required for A2P 10DLC compliance — requests without consent=true are rejected. */
+  consent: boolean;
+}
+
+export interface VerifyPhoneCodeInput {
+  /**
+     * @minLength 6
+     * @maxLength 6
+     */
+  code: string;
 }
 
 export interface ChangePasswordInput {

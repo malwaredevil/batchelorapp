@@ -29,6 +29,19 @@ export const appUsers = pgTable("app_users", {
   // allowed to assign/reassign which connected calendar is the shared
   // "Travel" calendar in the Travels app.
   isOwner: boolean("is_owner").notNull().default(false),
+  // Phone number for SMS reminders/notifications (AgentPhone), E.164 format
+  // (e.g. "+12105551234"). Only usable for sending once phoneVerified is
+  // true — set by completing the one-time-code flow in
+  // phoneVerificationCodes below.
+  phoneNumber: text("phone_number"),
+  phoneVerified: boolean("phone_verified").notNull().default(false),
+  phoneVerifiedAt: timestamp("phone_verified_at", { withTimezone: true }),
+  // A2P 10DLC compliance: timestamp of the most recent explicit opt-in
+  // consent checkbox submission (recorded when the user requests a
+  // verification code, alongside the phone number they consented for).
+  // Required evidence for carrier campaign registration — never inferred,
+  // only ever set by the send-code endpoint after `consent === true`.
+  smsConsentAt: timestamp("sms_consent_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -36,6 +49,29 @@ export const appUsers = pgTable("app_users", {
 
 export type AppUser = typeof appUsers.$inferSelect;
 export type InsertAppUser = typeof appUsers.$inferInsert;
+
+// One-time codes for verifying a candidate phone number before it is
+// committed to appUsers.phoneNumber. The candidate number lives on this row
+// (not read from app_users) so a user can verify a brand-new number without
+// it becoming "their" number until the code actually matches.
+export const phoneVerificationCodes = pgTable("phone_verification_codes", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => appUsers.id, { onDelete: "cascade" }),
+  phoneNumber: text("phone_number").notNull(),
+  codeHash: text("code_hash").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  used: boolean("used").notNull().default(false),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+}).enableRLS();
+
+export type PhoneVerificationCode = typeof phoneVerificationCodes.$inferSelect;
+export type InsertPhoneVerificationCode =
+  typeof phoneVerificationCodes.$inferInsert;
 
 // Superset of the two apps' definitions, matching the live table (7 columns):
 // integer FK to app_users, unique token hash, plus `used` and `used_at`.

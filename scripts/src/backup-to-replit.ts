@@ -562,10 +562,17 @@ async function copyTable(
       }
       return v;
     });
-    await dest.query(
-      `INSERT INTO ${opts.table} (${cols}) VALUES (${placeholders})`,
-      values,
-    );
+    try {
+      await dest.query(
+        `INSERT INTO ${opts.table} (${cols}) VALUES (${placeholders})`,
+        values,
+      );
+    } catch (err) {
+      console.error(
+        `[copyTable] failed on table="${opts.table}" row id=${row["id"] ?? "?"}`,
+      );
+      throw err;
+    }
   }
   return rows.length;
 }
@@ -1116,6 +1123,7 @@ async function main() {
       "created_at",
     ],
     orderBy: "id",
+    jsonbColumns: ["attachment_urls"],
   });
   await resetSequence(dest, "elaine_history_messages", "id");
 

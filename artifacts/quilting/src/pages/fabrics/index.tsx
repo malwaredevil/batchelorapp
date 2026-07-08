@@ -50,6 +50,7 @@ import { colorToHex, getCategoryPalette } from "@workspace/web-core";
 import { PreviewZoomModal } from "@/components/PreviewZoomModal";
 import { CategoryEditDialog } from "@/components/CategoryEditDialog";
 import { PaletteMatchModal } from "@/components/PaletteMatchModal";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 type SortOption = "newest" | "oldest" | "az" | "za";
 
@@ -465,6 +466,16 @@ export default function Fabrics() {
     setCategoryFilter(null);
     setColorFilter([]);
   }
+
+  usePageAssistantContext(
+    "quilting-fabrics",
+    isLoading
+      ? undefined
+      : `Fabrics page: ${fabrics?.length ?? 0} fabric(s) in the stash${hasFilter ? ` (${sorted?.length ?? 0} shown after filters)` : ""}. Print types: ${printTypes.join(", ") || "none"}. Categories: ${allCategories.map((c) => c.name).join(", ") || "none"}. Visible fabrics: ${(sorted ?? [])
+          .slice(0, 30)
+          .map((f) => `${f.name} (fabricId: ${f.id})`)
+          .join(", ") || "none"}.`,
+  );
 
   return (
     <div>

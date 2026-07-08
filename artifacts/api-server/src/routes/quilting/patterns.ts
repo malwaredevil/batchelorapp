@@ -405,8 +405,11 @@ router.post("/patterns/:id/reanalyze", aiLimiter, async (req, res) => {
   );
 });
 
-router.post("/patterns/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
-  const { ids } = BulkReanalyzePatternsBody.parse(req.body);
+/** Re-run AI analysis on a batch of patterns. Shared by the REST route and
+ * Elaine's bulk_reanalyze_quilting action. */
+export async function bulkReanalyzePatterns(
+  ids: number[],
+): Promise<{ succeeded: number[]; failed: number[] }> {
   const capped = [...new Set(ids)].slice(0, MAX_BULK_REANALYZE);
   const succeeded: number[] = [];
   const failed: number[] = [];
@@ -479,6 +482,12 @@ router.post("/patterns/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
     }
   }
 
+  return { succeeded, failed };
+}
+
+router.post("/patterns/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
+  const { ids } = BulkReanalyzePatternsBody.parse(req.body);
+  const { succeeded, failed } = await bulkReanalyzePatterns(ids);
   res.json(BulkReanalyzePatternsResponse.parse({ succeeded, failed }));
 });
 

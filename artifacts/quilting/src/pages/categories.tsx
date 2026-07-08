@@ -11,6 +11,7 @@ import {
   getListQuiltingCategoriesQueryKey,
 } from "@workspace/api-client-react";
 import type { QuiltingCategoryWithCount } from "@workspace/api-client-react";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 import { toast } from "sonner";
 import {
   Tag,
@@ -508,6 +509,16 @@ export default function Categories() {
   const [sort, setSort] = useState<SortKey>("count-desc");
 
   const { data: cats = [], isLoading } = useListQuiltingCategories();
+
+  usePageAssistantContext(
+    "quilting-categories",
+    isLoading
+      ? undefined
+      : `Categories page: ${cats.length} categor${cats.length === 1 ? "y" : "ies"} shared across fabrics/patterns/quilts/blocks/layouts. Visible: ${cats
+          .slice(0, 30)
+          .map((c: QuiltingCategoryWithCount) => `${c.name} (id: ${c.id}, ${c.count} item(s))`)
+          .join(", ") || "none"}. You have create/rename/delete/merge_category action tools.`,
+  );
 
   // Rotate palette suggestion whenever the list changes size (post-create / delete)
   useEffect(() => {

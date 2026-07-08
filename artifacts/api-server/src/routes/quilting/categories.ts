@@ -117,31 +117,42 @@ router.post("/categories", async (req, res) => {
   }
 });
 
-router.patch("/categories/:id", async (req, res) => {
-  const { id } = RenameCategoryParams.parse(req.params);
-  const body = RenameCategoryBody.parse(req.body);
-  const name = normalizeCategoryName(body.name);
+/** Rename a quilting category. Shared by the REST route and Elaine's
+ * rename_quilting_category action. */
+export async function renameQuiltingCategory(
+  id: number,
+  rawName: string,
+): Promise<{ status: number; error?: string; row?: { id: number } }> {
+  const name = normalizeCategoryName(rawName);
   try {
     const [updated] = await db
       .update(categories)
       .set({ name })
       .where(eq(categories.id, id))
       .returning({ id: categories.id });
-    if (!updated) {
-      res.status(404).json({ error: "Category not found." });
-      return;
-    }
-    const withCount = await fetchWithCount(id);
-    res.json(ListCategoriesResponseItem.parse(withCount));
+    if (!updated) return { status: 404, error: "Category not found." };
+    return { status: 200, row: updated };
   } catch (err) {
     if (isUniqueConstraintViolation(err)) {
-      res
-        .status(409)
-        .json({ error: "A category with that name already exists." });
-      return;
+      return {
+        status: 409,
+        error: "A category with that name already exists.",
+      };
     }
     throw err;
   }
+}
+
+router.patch("/categories/:id", async (req, res) => {
+  const { id } = RenameCategoryParams.parse(req.params);
+  const body = RenameCategoryBody.parse(req.body);
+  const result = await renameQuiltingCategory(id, body.name);
+  if (result.status !== 200) {
+    res.status(result.status).json({ error: result.error });
+    return;
+  }
+  const withCount = await fetchWithCount(id);
+  res.json(ListCategoriesResponseItem.parse(withCount));
 });
 
 router.put("/categories/:id/colors", async (req, res) => {
@@ -188,13 +199,15 @@ router.delete("/categories/:id", async (req, res) => {
   res.status(204).end();
 });
 
-router.post("/categories/:id/merge", async (req, res) => {
-  const { id } = DeleteCategoryParams.parse(req.params);
-  const { targetId } = MergeCategoryBody.parse(req.body);
-
+/** Merge one quilting category into another, reassigning entities then
+ * deleting the source. Shared by the REST route and Elaine's
+ * merge_quilting_categories action. */
+export async function mergeQuiltingCategories(
+  id: number,
+  targetId: number,
+): Promise<{ status: number; error?: string; merged?: number }> {
   if (id === targetId) {
-    res.status(400).json({ error: "Cannot merge a category into itself." });
-    return;
+    return { status: 400, error: "Cannot merge a category into itself." };
   }
 
   const [source, target] = await Promise.all([
@@ -211,8 +224,7 @@ router.post("/categories/:id/merge", async (req, res) => {
   ]);
 
   if (!source || !target) {
-    res.status(404).json({ error: "Category not found." });
-    return;
+    return { status: 404, error: "Category not found." };
   }
 
   const sourceAssignments = await db
@@ -238,7 +250,18 @@ router.post("/categories/:id/merge", async (req, res) => {
 
   await db.delete(categories).where(eq(categories.id, id));
 
-  res.json({ merged: sourceAssignments.length });
+  return { status: 200, merged: sourceAssignments.length };
+}
+
+router.post("/categories/:id/merge", async (req, res) => {
+  const { id } = DeleteCategoryParams.parse(req.params);
+  const { targetId } = MergeCategoryBody.parse(req.body);
+  const result = await mergeQuiltingCategories(id, targetId);
+  if (result.status !== 200) {
+    res.status(result.status).json({ error: result.error });
+    return;
+  }
+  res.json({ merged: result.merged });
 });
 
 export default router;

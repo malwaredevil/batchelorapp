@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { colorToHex } from "@workspace/web-core";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -203,6 +204,11 @@ function FabricRow({
 
 export default function YardageCalculator() {
   const { data: fabrics, isLoading } = useListFabrics();
+
+  usePageAssistantContext(
+    "quilting-yardage-calculator",
+    "Yardage Calculator page: interactive tool for computing backing/binding/block-cutting fabric yardage needed for a target quilt size. You have a calculate_yardage informational action tool that can run the same calculation from chat.",
+  );
 
   const [quiltWidth, setQuiltWidth] = useState("60");
   const [quiltHeight, setQuiltHeight] = useState("72");

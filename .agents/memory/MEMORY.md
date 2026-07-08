@@ -54,3 +54,4 @@
 - [Screenshot tool async failure timing](screenshot-tool-async-failure-timing.md) — pixels captured early, console logs drained later; don't trust stale-looking pixels alone to falsify a fix for async callbacks (e.g. gm_authFailure).
 - [AgentPhone webhook registration](agentphone-webhook-registration.md) — register via `POST api.agentphone.ai/v1/webhooks` (not the marketing root domain) to get the signing secret; outbound SMS 403s until 10DLC registration is done account-side.
 - [API server dev workflow has no hot reload](api-server-no-hot-reload.md) — dev script is build-once-then-start; server code edits need a workflow restart before live testing, or you'll chase a phantom bug.
+- [Verifying Elaine action/chat additions](elaine-action-verification-via-curl.md) — test new action tools via login+chat+action curl calls, not the UI; screenshot tool's path param doesn't do $VAR substitution.

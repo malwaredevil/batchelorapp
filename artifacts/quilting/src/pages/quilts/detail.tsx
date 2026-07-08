@@ -35,6 +35,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { TagSelector } from "@/components/tag-selector";
 import { PreviewZoomModal } from "@/components/PreviewZoomModal";
 import { downloadCollectionImage } from "@/lib/svg-export";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 type QuiltData = {
   id: number;
@@ -118,6 +119,13 @@ export default function QuiltDetail() {
 
   const { data: quilt, isLoading, isError } = useGetQuilt(quiltId);
   const { data: allCategories } = useListQuiltingCategories();
+
+  usePageAssistantContext(
+    "quilting-quilt-detail",
+    isLoading || !quilt
+      ? undefined
+      : `Quilt Detail page (quiltId: ${quilt.id}): "${quilt.name}"${quilt.recipient ? `, made for ${quilt.recipient}` : ""}${quilt.dateCompleted ? `, completed ${quilt.dateCompleted}` : ""}${quilt.sizeWidth && quilt.sizeHeight ? `, size ${quilt.sizeWidth}x${quilt.sizeHeight}"` : ""}.`,
+  );
 
   const deleteQuilt = useDeleteQuilt({
     mutation: {

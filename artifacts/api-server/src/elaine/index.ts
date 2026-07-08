@@ -1891,13 +1891,19 @@ const NAVIGATE_ALLOWED_PATHS_BY_APP: Record<AppId, readonly string[]> = {
     "/patterns/add",
     "/quilts",
     "/quilts/add",
+    "/compare",
     "/blocks",
     "/blocks/new",
+    "/library/blocks",
+    "/library/blocks/new",
     "/layouts",
     "/layouts/new",
+    "/whole-quilt",
     "/whole-quilt/designer",
     "/shopping",
+    "/tools/yardage",
     "/categories",
+    "/maintenance",
   ],
   hub: ["/", "/account"],
   elaine: ["/"],
@@ -1909,7 +1915,7 @@ const NAVIGATE_PATH_RE_BY_APP: Record<AppId, RegExp> = {
   travels: /^\/(trips\/\d+|trips|map|explore|wishlist|destinations|settings)?$/,
   pottery: /^\/(piece\/\d+|add|compare|categories|maintenance|settings)?$/,
   quilting:
-    /^\/(fabrics\/\d+|fabrics\/add|fabrics|patterns\/\d+|patterns\/add|patterns|quilts\/\d+|quilts\/add|quilts|blocks\/\d+\/edit|blocks\/\d+\/cut-pattern|blocks\/new|blocks|layouts\/new|layouts|whole-quilt\/designer|shopping|categories)?$/,
+    /^\/(fabrics\/\d+|fabrics\/add|fabrics|patterns\/\d+|patterns\/add|patterns|quilts\/\d+|quilts\/add|quilts|compare|blocks\/\d+\/edit|blocks\/\d+\/cut-pattern|blocks\/\d+|blocks\/new|blocks|library\/blocks\/\d+\/edit|library\/blocks\/new|library\/blocks|layouts\/\d+\/edit|layouts\/\d+|layouts\/new|layouts|whole-quilt\/designer|whole-quilt|shopping|tools\/yardage|categories|maintenance)?$/,
   hub: /^\/(account)?$/,
   elaine: /^\/$/,
 };
@@ -2026,6 +2032,15 @@ const ShowDataCardToolPayload = z.object({
     )
     .min(1)
     .max(20),
+});
+
+const CALCULATE_YARDAGE_TOOL_NAME = "calculate_yardage";
+
+const CalculateYardageToolPayload = z.object({
+  quiltWidthInches: z.number().positive().max(200),
+  quiltHeightInches: z.number().positive().max(200),
+  fabricWidthInches: z.number().positive().max(120).default(40),
+  bindingStripWidthInches: z.number().positive().max(12).default(2.5),
 });
 
 const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
@@ -2225,6 +2240,37 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           },
         },
         required: ["origin", "destination"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: CALCULATE_YARDAGE_TOOL_NAME,
+      description:
+        'Compute estimated fabric yardage for a finished quilt size — backing yardage (including piecing panels if the quilt is wider than the fabric bolt) and binding yardage. This is a read-only calculation, not a saved record; use it for questions like "how much backing fabric do I need for a 60x80 quilt?" or "how much binding for this?". Never estimate this arithmetic yourself — always call this tool so the numbers are accurate.',
+      parameters: {
+        type: "object",
+        properties: {
+          quiltWidthInches: {
+            type: "number",
+            description: "Finished quilt width in inches",
+          },
+          quiltHeightInches: {
+            type: "number",
+            description: "Finished quilt height in inches",
+          },
+          fabricWidthInches: {
+            type: "number",
+            description:
+              "Usable fabric bolt width in inches, defaults to 40 (standard quilting cotton WOF minus selvedge)",
+          },
+          bindingStripWidthInches: {
+            type: "number",
+            description: "Binding strip width in inches, defaults to 2.5",
+          },
+        },
+        required: ["quiltWidthInches", "quiltHeightInches"],
       },
     },
   },
@@ -2938,6 +2984,7 @@ Quilting app:
 - Block Patterns ("/library/blocks", "/library/blocks/new", "/library/blocks/:id/edit"): a library of reusable named block templates (classic quilt blocks like Ohio Star, Log Cabin, Half Square Triangle, plus any custom ones saved from the Block Designer) — browse, search, and open one in the designer to start a new block from it.
 - Layouts ("/layouts", "/layouts/new", "/layouts/:id", "/layouts/:id/edit"): plan how blocks/fabrics come together into a quilt layout.
 - Whole Quilt ("/whole-quilt", "/whole-quilt/designer"): design/browse whole-quilt layouts.
+- Yardage Calculator ("/tools/yardage"): an in-app calculator for backing/binding yardage — you also have a calculate_yardage tool that does this same math on request from anywhere in chat.
 - Shopping ("/shopping"): the fabric/supplies shopping list.
 - Categories ("/categories"): manage categories used to organize fabrics/patterns.
 - Maintenance ("/maintenance"): bulk AI re-analysis and other collection upkeep tools.
@@ -2972,7 +3019,7 @@ ${
 
 POTTERY ITEMS: Use update_pottery_item to edit an existing piece (name, notes, quantity, style, shape, maker, condition, origin, era) — only include fields that actually change, and only if the piece's numeric id is visible on screen (look for "itemId: <number>"); never guess one. This also works right after an upload if the user tells you details in chat instead of typing them into the form. Use delete_pottery_item to permanently remove a piece and its photos — say clearly in your visible reply that this deletes the item, since it's destructive. Use create_pottery_category / delete_pottery_category to manage the categories used to organize the collection; never guess a category id for deletion. Use update_pottery_item_categories to replace the full set of categories assigned to one piece (pass every category id that should end up assigned, not just the ones to add). Use merge_pottery_categories to fold one category into another (e.g. "merge Vases into Vessels") — this deletes the source category, so say so clearly since it's destructive; never guess either category id. Use lock_pottery_field to lock or unlock one AI-derived field (name, patternDescription, style, shape, maker, makerInfo, dimensions, dominantColors, motifs, aiDescription, glazeType) on a piece so future AI re-analysis will or won't overwrite it — only with a visible itemId. Use delete_pottery_photo to remove one supplemental photo from a piece, and promote_pottery_photo to make a supplemental photo the new primary photo (this re-runs AI analysis with the new primary image, subject to locked fields) — both need a visible itemId and imageId, never guessed. Use bulk_reanalyze_pottery to re-run AI analysis on several pieces at once; pass itemIds if specific ones are visible on screen, or omit it to run against every piece still missing AI analysis (capped at 20) — mention in your visible reply that this takes a while and calls AI per item.
 
-QUILTING ITEMS: Use update_fabric / delete_fabric, update_pattern / delete_pattern for editing or removing an existing fabric or pattern — only if its numeric id is visible on screen, never guessed, and be clear in your visible reply that a delete is permanent. Use create_shopping_item / update_shopping_item / delete_shopping_item to manage the fabric/supplies shopping list. Use create_quilting_category / delete_quilting_category to manage categories; never guess a category id for deletion.
+QUILTING ITEMS: Use update_fabric / delete_fabric, update_pattern / delete_pattern for editing or removing an existing fabric or pattern — only if its numeric id is visible on screen, never guessed, and be clear in your visible reply that a delete is permanent. You can't create a brand-new fabric or finished quilt from chat since both require an uploaded photo you have no way to attach — but use create_pattern to add a new quilt pattern record (name, designer, block size, difficulty, source, notes; no image) since a pattern's image is optional. Use delete_quilt to permanently remove a finished quilt and its photos — only with a visible quiltId, and say clearly it's permanent. Use create_shopping_item / update_shopping_item / delete_shopping_item to manage the fabric/supplies shopping list. Use create_quilting_category / delete_quilting_category to manage categories; never guess a category id for deletion. Use rename_quilting_category to rename one, and merge_quilting_categories to fold one category into another (destructive to the source category — say so clearly); never guess either category id. Use create_block / create_layout to add a new blank block template or quilt layout (metadata + an empty grid only — this does NOT design the block's pattern or place blocks into the layout, since chat-driven geometry editing isn't supported; tell the user to open the block/layout editor in the app to actually design it). Use delete_block / delete_layout to remove one, only with a visible id. Use bulk_reanalyze_quilting to re-run AI analysis on fabrics, patterns, or finished quilts — pass specific ids when visible on screen, or omit ids to run against everything of that type still needing analysis; mention this takes a while. Use calculate_yardage whenever the user asks how much backing or binding fabric they need for a given quilt size — never do this arithmetic yourself, always call the tool so the numbers are accurate; it's a read-only estimate, not a saved record.
 
 EMAIL: Whenever you've just given the user something substantial worth keeping — a list of recommendations, an itinerary summary, packing tips, etc. — offer to email it to them, e.g. "Want me to email you this list?" Only call send_email once they say yes; never call it unprompted or assume they want it. It always goes to their own registered account email, so never ask for an address and never offer to send it to anyone else. Write a short subject and a plain-text body (no markdown/HTML, blank line between paragraphs) — it gets formatted into a nice email automatically. You have no way to export a PDF or Word document, so don't offer that; email is the only export option available.
 
@@ -3170,6 +3217,7 @@ Keep replies concise and easy to read in a chat bubble.`;
       GET_ROUTE_INFO_TOOL_NAME,
       GET_AIR_QUALITY_TOOL_NAME,
       GET_POLLEN_FORECAST_TOOL_NAME,
+      CALCULATE_YARDAGE_TOOL_NAME,
     ]);
     const hardToolCalls: Array<{ id: string; name: string; args: string }> = [];
 
@@ -3285,6 +3333,7 @@ Keep replies concise and easy to read in a chat bubble.`;
       [GET_ROUTE_INFO_TOOL_NAME]: "checking travel times",
       [GET_AIR_QUALITY_TOOL_NAME]: "checking air quality",
       [GET_POLLEN_FORECAST_TOOL_NAME]: "checking pollen levels",
+      [CALCULATE_YARDAGE_TOOL_NAME]: "calculating yardage",
     };
     const statusMessage = [...distinctHardToolNames]
       .map((n) => STATUS_LABELS[n])
@@ -3508,6 +3557,70 @@ Keep replies concise and easy to read in a chat bubble.`;
               } else {
                 resultText = `No pollen data available for ${parsed.data.locationName}.`;
               }
+            }
+          } else if (call.name === CALCULATE_YARDAGE_TOOL_NAME) {
+            const parsed = CalculateYardageToolPayload.safeParse(
+              JSON.parse(call.args),
+            );
+            if (!parsed.success) {
+              resultText =
+                "Invalid quilt dimensions — ask the user to clarify.";
+            } else {
+              const {
+                quiltWidthInches: w,
+                quiltHeightInches: h,
+                fabricWidthInches: fabricWidth,
+                bindingStripWidthInches: bindingStripWidth,
+              } = parsed.data;
+
+              // Backing needs an ~8" overhang on each dimension for
+              // longarm/hand quilting, and must be pieced into panels if the
+              // quilt is wider than the fabric bolt.
+              const backingWidthNeeded = w + 8;
+              const backingHeightNeeded = h + 8;
+              const backingPanels = Math.max(
+                1,
+                Math.ceil(backingWidthNeeded / fabricWidth),
+              );
+              const backingLengthInches = backingHeightNeeded * backingPanels;
+              const backingYards =
+                Math.ceil((backingLengthInches / 36) * 8) / 8;
+
+              // Binding: perimeter plus ~15" slack for mitered corners and
+              // the join, cut into strips from the fabric bolt.
+              const bindingPerimeterInches = 2 * (w + h) + 15;
+              const bindingStrips = Math.max(
+                1,
+                Math.ceil(bindingPerimeterInches / fabricWidth),
+              );
+              const bindingYards =
+                Math.ceil(
+                  ((bindingStrips * bindingStripWidth) / 36) * 8,
+                ) / 8;
+
+              resultText =
+                `For a ${w}x${h}" finished quilt:\n` +
+                `Backing: ~${backingYards} yards` +
+                (backingPanels > 1
+                  ? ` (pieced from ${backingPanels} panels of ${fabricWidth}" fabric)`
+                  : "") +
+                `\n` +
+                `Binding: ~${bindingYards} yards (${bindingStrips} strip${bindingStrips === 1 ? "" : "s"} of ${bindingStripWidth}" fabric)\n` +
+                `These are estimates with standard overhang/slack allowances — round up when buying, and confirm exact yardage against the pattern if one is being followed.`;
+              sendEvent("widget", {
+                type: "data_card",
+                title: `Yardage estimate: ${w}x${h}"`,
+                rows: [
+                  {
+                    label: "Backing",
+                    value: `~${backingYards} yd${backingPanels > 1 ? ` (${backingPanels} panels)` : ""}`,
+                  },
+                  {
+                    label: "Binding",
+                    value: `~${bindingYards} yd (${bindingStrips} strips)`,
+                  },
+                ],
+              });
             }
           } else {
             resultText = "Unsupported tool.";

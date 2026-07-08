@@ -8,6 +8,7 @@ import {
 } from "react";
 import { useSearch, useLocation } from "wouter";
 import { useRegisterNavGuard } from "@/lib/nav-guard";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 import {
   ArrowLeft,
   Save,
@@ -347,6 +348,13 @@ export default function WholeQuiltDesigner() {
   const [name, setName] = useState(saved?.name ?? "My Quilt");
   const [quiltRows, setQuiltRows] = useState(urlRows ?? saved?.quiltRows ?? 4);
   const [quiltCols, setQuiltCols] = useState(urlCols ?? saved?.quiltCols ?? 4);
+
+  usePageAssistantContext(
+    "quilting-whole-quilt-designer",
+    `Whole-Quilt Designer page (${
+      isNewDesign ? "new design" : `editing design "${name}"`
+    }). This is a visual grid tool for laying out an entire quilt top block-by-block — it is saved locally in the browser (not synced to the server) and cannot be operated via chat. If the user wants to design or edit a whole-quilt layout here, tell them to use this page directly.`,
+  );
   const [blockGridSize, setBlockGridSize] = useState<
     2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12
   >(

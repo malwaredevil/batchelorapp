@@ -42,6 +42,7 @@ import { fmtInch } from "@/lib/cell-parser";
 import { BlockPreviewSvg } from "@/components/BlockPreviewSvg";
 import { PreviewZoomModal } from "@/components/PreviewZoomModal";
 import { cn } from "@/lib/utils";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 type SortKey = "date-desc" | "date-asc" | "name-asc" | "name-desc";
 
@@ -197,6 +198,13 @@ export default function BlockLibrary() {
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
   const { data: templateList, isLoading, isError } = useListBlockTemplates();
+
+  usePageAssistantContext(
+    "quilting-block-library",
+    isLoading
+      ? undefined
+      : `Block Library page: ${templateList?.length ?? 0} reusable block template(s) (used for cutting patterns / rotary-cutting instructions, distinct from the Block Designer's blocks). No chat action tools exist for creating/editing/deleting these templates yet.`,
+  );
 
   const [sortBy, setSortBy] = useState<SortKey>("name-asc");
   const [search, setSearch] = useState("");

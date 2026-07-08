@@ -48,6 +48,7 @@ import { downloadCollectionImage } from "@/lib/svg-export";
 import { PreviewZoomModal } from "@/components/PreviewZoomModal";
 import { CategoryEditDialog } from "@/components/CategoryEditDialog";
 import { PaletteMatchModal } from "@/components/PaletteMatchModal";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 import { cn } from "@/lib/utils";
 
 type SortOption = "newest" | "oldest" | "az" | "za";
@@ -447,6 +448,16 @@ export default function Quilts() {
     colorFilter.length > 0;
 
   const { data: stats } = useGetStats();
+
+  usePageAssistantContext(
+    "quilting-quilts",
+    isLoading
+      ? undefined
+      : `Quilts page: ${quilts?.length ?? 0} finished/in-progress quilt(s)${hasFilter ? ` (${sorted?.length ?? 0} shown after filters)` : ""}. Visible quilts: ${(sorted ?? [])
+          .slice(0, 30)
+          .map((q) => `${q.name} (quiltId: ${q.id})`)
+          .join(", ") || "none"}.`,
+  );
 
   return (
     <div>

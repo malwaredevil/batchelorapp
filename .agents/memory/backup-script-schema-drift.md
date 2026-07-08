@@ -38,6 +38,11 @@ appears in the printed row-count summary. If the source table has data and the
 DEST_SCHEMA is missing, the TRUNCATE inside `copyTable()` will throw `42P01`
 (relation not found) — that is the specific failure mode.
 
+This has recurred more than once (Travels tables/columns, then later a new
+feature's own tables + `app_users` columns) — treat "add any new table or
+`app_users` column to backup/restore scripts" as a standing checklist item for
+every feature that touches the schema, not a one-time fix.
+
 **Separate pitfall — `jsonbColumns` must list every JSONB column, not just the
 "interesting" ones.** `copyTable()` only `JSON.stringify()`s a value if its
 column name is in the `jsonbColumns` option; every JSONB column in a table's

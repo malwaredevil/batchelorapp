@@ -101,7 +101,10 @@ import {
   getGetBlockQueryKey,
   useListFabrics,
 } from "@workspace/api-client-react";
-import type { QuiltingCategory, QuiltingBlock } from "@workspace/api-client-react";
+import type {
+  QuiltingCategory,
+  QuiltingBlock,
+} from "@workspace/api-client-react";
 import { TagSelector } from "@/components/tag-selector";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
@@ -4037,9 +4040,7 @@ export default function BlockDesigner() {
       {templateMode && (
         <div className="flex shrink-0 items-center gap-2 border-b bg-muted/10 px-3 py-1.5">
           <Tag className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <Label className="shrink-0 text-xs text-muted-foreground">
-            Tags
-          </Label>
+          <Label className="shrink-0 text-xs text-muted-foreground">Tags</Label>
           <Input
             value={templateTagsInput}
             onChange={(e) => setTemplateTagsInput(e.target.value)}

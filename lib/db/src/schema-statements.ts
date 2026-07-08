@@ -1019,6 +1019,28 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE phone_verification_codes ENABLE ROW LEVEL SECURITY`,
   `CREATE INDEX IF NOT EXISTS phone_verification_codes_user_id_idx ON phone_verification_codes (user_id)`,
 
+  // A2P 10DLC compliance: set when this number replies STOP/STOPALL/
+  // UNSUBSCRIBE/CANCEL/END/QUIT via the AgentPhone webhook; cleared on
+  // START/UNSTOP/YES. Every outbound SMS send path must skip a set number.
+  `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS sms_opted_out_at TIMESTAMPTZ`,
+
+  // ── AgentPhone webhook (SMS/voice) — rolling conversation + dedup log ──────
+  `CREATE TABLE IF NOT EXISTS agentphone_conversations (
+    id           SERIAL PRIMARY KEY,
+    phone_number TEXT NOT NULL UNIQUE,
+    user_id      INTEGER NOT NULL,
+    messages     JSONB NOT NULL DEFAULT '[]'::jsonb,
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE agentphone_conversations ENABLE ROW LEVEL SECURITY`,
+  `CREATE TABLE IF NOT EXISTS agentphone_webhook_deliveries (
+    id          TEXT PRIMARY KEY,
+    received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE agentphone_webhook_deliveries ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS agentphone_webhook_deliveries_received_at_idx
+     ON agentphone_webhook_deliveries (received_at)`,
+
   // travels_reminders.sms_recipient_user_ids: app_users.id values (must have a
   // verified phone number) who should also get an SMS alert for this
   // reminder, alongside/instead of the email recipients above.

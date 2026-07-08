@@ -10,6 +10,7 @@ import {
   ShoppingCart,
   Wrench,
   Ruler,
+  LibraryBig,
 } from "lucide-react";
 
 // ── Collection ────────────────────────────────────────────────────────────────
@@ -81,6 +82,17 @@ registerFeature({
     label: "Block Designer",
     icon: Grid2X2,
     order: 10,
+  },
+});
+
+registerFeature({
+  id: "block-library",
+  nav: {
+    group: "design",
+    href: "/library/blocks",
+    label: "Block Library",
+    icon: LibraryBig,
+    order: 15,
   },
 });
 

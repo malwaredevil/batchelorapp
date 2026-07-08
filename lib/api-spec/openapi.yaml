@@ -2045,7 +2045,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/QuiltingStaleCount"
-  /quilting/quilting/block-templates:
+  /quilting/block-templates:
     get:
       tags:
         - Block Templates
@@ -2078,7 +2078,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/QuiltingBlockTemplate"
-  /quilting/quilting/block-templates/{id}:
+  /quilting/block-templates/{id}:
     parameters:
       - name: id
         in: path
@@ -4785,6 +4785,32 @@ components:
           type: array
           items:
             type: string
+        gridW:
+          type: integer
+          minimum: 1
+          maximum: 20
+        gridH:
+          type: integer
+          minimum: 1
+          maximum: 20
+        cells:
+          type: array
+          items:
+            type: string
+        seams:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuiltingBlockTemplateSeamLine"
+        blockSizeInches:
+          type: number
+          nullable: true
+          minimum: 1
+          maximum: 120
+        seamAllowanceInches:
+          type: number
+          nullable: true
+          minimum: 0.0625
+          maximum: 1
     TravelsTrip:
       type: object
       required:

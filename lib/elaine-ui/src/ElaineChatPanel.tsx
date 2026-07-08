@@ -11,9 +11,11 @@ import {
   Volume2,
   VolumeX,
   Settings2,
+  Play,
+  Square,
 } from "lucide-react";
 import { useVoiceInput } from "./useVoiceInput";
-import { useTTS } from "./useTTS";
+import { useTTS, DEFAULT_VOICE_PREVIEW_KEY } from "./useTTS";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import {
@@ -681,9 +683,27 @@ export function ElaineChatPanel({
                   onSelect={() => tts.setSelectedVoiceURI(null)}
                   className="justify-between"
                 >
-                  Default
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        tts.previewVoice(null);
+                      }}
+                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+                      title="Preview this voice"
+                    >
+                      {tts.previewingVoiceURI === DEFAULT_VOICE_PREVIEW_KEY ? (
+                        <Square className="h-3 w-3" />
+                      ) : (
+                        <Play className="h-3 w-3" />
+                      )}
+                    </button>
+                    Default
+                  </span>
                   {tts.selectedVoiceURI === null && (
-                    <Check className="h-3.5 w-3.5" />
+                    <Check className="h-3.5 w-3.5 shrink-0" />
                   )}
                 </DropdownMenuItem>
                 {tts.voices.map((v) => (
@@ -692,7 +712,25 @@ export function ElaineChatPanel({
                     onSelect={() => tts.setSelectedVoiceURI(v.voiceURI)}
                     className="justify-between"
                   >
-                    <span className="truncate">{v.name}</span>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          tts.previewVoice(v.voiceURI);
+                        }}
+                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+                        title="Preview this voice"
+                      >
+                        {tts.previewingVoiceURI === v.voiceURI ? (
+                          <Square className="h-3 w-3" />
+                        ) : (
+                          <Play className="h-3 w-3" />
+                        )}
+                      </button>
+                      <span className="truncate">{v.name}</span>
+                    </span>
                     {tts.selectedVoiceURI === v.voiceURI && (
                       <Check className="h-3.5 w-3.5 shrink-0" />
                     )}

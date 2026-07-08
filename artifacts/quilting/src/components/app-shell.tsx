@@ -10,7 +10,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
-import { AppSwitcher } from "@workspace/elaine-ui";
+import { AppSwitcher, SearchTrigger } from "@workspace/elaine-ui";
 import { InstallBanner } from "@workspace/web-core";
 import {
   useLogout,
@@ -227,6 +227,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                 );
               })}
             </nav>
+
+            <SearchTrigger />
 
             <Button
               variant="ghost"

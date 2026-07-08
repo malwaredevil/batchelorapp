@@ -389,6 +389,7 @@ router.post("/patterns/:id/reanalyze", aiLimiter, async (req, res) => {
         ? {}
         : { difficulty: analysis.difficulty }),
       ...(lockedFields.includes("notes") ? {} : { notes: analysis.notes }),
+      dominantColors: analysis.dominantColors,
     })
     .where(eq(quiltPatterns.id, id));
 
@@ -466,6 +467,7 @@ router.post("/patterns/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
             ? {}
             : { difficulty: analysis.difficulty }),
           ...(lockedFields.includes("notes") ? {} : { notes: analysis.notes }),
+          dominantColors: analysis.dominantColors,
         })
         .where(eq(quiltPatterns.id, id));
       succeeded.push(id);

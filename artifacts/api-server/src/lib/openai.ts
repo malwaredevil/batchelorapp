@@ -241,6 +241,7 @@ export interface PatternAnalysis {
   blockSize: string | null;
   difficulty: string | null;
   notes: string | null;
+  dominantColors: string[];
 }
 
 const PATTERN_ANALYSIS_PROMPT = `You are an expert quilt pattern cataloguer. You will be given a photo of a quilt pattern — it may be a block diagram, a finished quilt that showcases a pattern, or a pattern booklet.
@@ -256,6 +257,8 @@ Respond with STRICT JSON only, using exactly these keys:
 - "difficulty": the difficulty level — choose one of: beginner, intermediate, advanced — or null if you cannot assess.
 
 - "notes": 1-2 sentences describing the pattern's visual character and techniques required, or null.
+
+- "dominantColors": an array of 2–5 colour names chosen ONLY from this fixed palette: white, cream, ivory, beige, tan, brown, dark brown, gold, yellow, orange, red, burgundy, pink, lavender, purple, light blue, sky blue, blue, cobalt blue, navy, teal, turquoise, green, sage, olive, grey, charcoal, black. Pick the closest match for the colours shown in the photo (fabrics used, diagram swatches, etc.) — do not invent names outside this list. Empty array if no colours are discernible (e.g. a black-and-white diagram).
 
 Do not include any commentary outside the JSON.`;
 
@@ -342,6 +345,7 @@ export async function analyzePatternImage(
       ? (existing?.difficulty ?? null)
       : asString(raw.difficulty),
     notes: locked.has("notes") ? null : asString(raw.notes),
+    dominantColors: asStringArray(raw.dominantColors),
   };
 }
 
@@ -352,6 +356,7 @@ export async function analyzePatternImage(
 export interface QuiltAnalysis {
   name: string;
   notes: string | null;
+  dominantColors: string[];
 }
 
 const QUILT_ANALYSIS_PROMPT = `You are an expert quilter cataloguing a finished quilt from a photo.
@@ -361,6 +366,8 @@ Respond with STRICT JSON only, using exactly these keys:
 - "name": a concise, descriptive name for this quilt, e.g. "Blue Star Sampler", "Scrappy Log Cabin Throw", "Pink Baby Quilt". Keep it under 10 words.
 
 - "notes": 1-2 sentences describing the quilt's colour palette, pattern style, and approximate size if estimable, or null.
+
+- "dominantColors": an array of 2–5 colour names chosen ONLY from this fixed palette: white, cream, ivory, beige, tan, brown, dark brown, gold, yellow, orange, red, burgundy, pink, lavender, purple, light blue, sky blue, blue, cobalt blue, navy, teal, turquoise, green, sage, olive, grey, charcoal, black. Pick the closest match for the most prominent fabric colours in the quilt — do not invent names outside this list.
 
 Do not include any commentary outside the JSON.`;
 
@@ -415,6 +422,7 @@ export async function analyzeQuiltImage(
       ? (existing?.name ?? "Untitled quilt")
       : (asString(raw.name) ?? existing?.name ?? "Untitled quilt"),
     notes: locked.has("notes") ? null : asString(raw.notes),
+    dominantColors: asStringArray(raw.dominantColors),
   };
 }
 

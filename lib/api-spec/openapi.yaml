@@ -7,6 +7,176 @@ servers:
   - url: /api
     description: Base API path
 paths:
+  /elaine/daily-brief:
+    get:
+      operationId: getElaineDailyBrief
+      tags:
+        - elaine
+      summary: Get (or generate) today's personalised morning brief
+      description: Returns today's brief if already generated. On first call of the UTC day, generates a new one via OpenRouter (may take a few seconds). The brief is cached until midnight UTC.
+      responses:
+        "200":
+          description: Today's brief
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ElaineDailyBrief"
+        "401":
+          description: Unauthorized
+        "503":
+          description: Brief generation unavailable (AI service error)
+  /elaine/daily-brief/dismiss:
+    post:
+      operationId: dismissElaineDailyBrief
+      tags:
+        - elaine
+      summary: Mark today's brief as dismissed
+      responses:
+        "204":
+          description: Dismissed
+        "401":
+          description: Unauthorized
+  /elaine/daily-brief/regenerate:
+    post:
+      operationId: regenerateElaineDailyBrief
+      tags:
+        - elaine
+      summary: Delete today's brief and generate a fresh one
+      responses:
+        "200":
+          description: Fresh brief
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ElaineDailyBrief"
+        "401":
+          description: Unauthorized
+        "503":
+          description: Brief generation unavailable
+  /elaine/attachments:
+    post:
+      operationId: uploadElaineAttachment
+      tags:
+        - elaine
+      summary: Upload an image or PDF attachment for use in a chat message
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Attachment uploaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ElaineAttachmentUploadResult"
+        "400":
+          description: No file or unsupported type
+        "401":
+          description: Unauthorized
+  /elaine/conversations:
+    get:
+      operationId: listElaineConversations
+      tags:
+        - elaine
+      summary: List this user's named conversations, newest first
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Optional search query matched against conversation title and all message content
+      responses:
+        "200":
+          description: Conversation list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ElaineConversationSummary"
+        "401":
+          description: Unauthorized
+    post:
+      operationId: newElaineConversation
+      tags:
+        - elaine
+      summary: Create a new named conversation
+      responses:
+        "201":
+          description: Conversation created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ElaineConversationSummary"
+        "401":
+          description: Unauthorized
+  /elaine/conversations/{id}:
+    delete:
+      operationId: deleteElaineConversation
+      tags:
+        - elaine
+      summary: Delete a conversation and all its messages
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+  /elaine/conversations/{id}/messages:
+    get:
+      operationId: getElaineConversation
+      tags:
+        - elaine
+      summary: Load messages for a named conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - role
+                    - content
+                  properties:
+                    role:
+                      type: string
+                      enum: [user, assistant]
+                    content:
+                      type: string
+                    attachmentUrls:
+                      type: array
+                      items:
+                        type: string
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
   /healthz:
     get:
       operationId: healthCheck
@@ -1853,6 +2023,64 @@ paths:
           description: No image supplied or unsupported format
         "422":
           description: Could not extract a colour palette from the image
+  /quilting/tools/palette-match-patterns:
+    post:
+      operationId: paletteMatchPatterns
+      tags:
+        - tools
+      summary: Extract dominant colours from an image and find matching patterns
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - image
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Extracted palette and matching patterns
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuiltingPatternPaletteMatchResponse"
+        "400":
+          description: No image supplied or unsupported format
+        "422":
+          description: Could not extract a colour palette from the image
+  /quilting/tools/palette-match-quilts:
+    post:
+      operationId: paletteMatchQuilts
+      tags:
+        - tools
+      summary: Extract dominant colours from an image and find matching quilts
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - image
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Extracted palette and matching quilts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuiltingQuiltPaletteMatchResponse"
+        "400":
+          description: No image supplied or unsupported format
+        "422":
+          description: Could not extract a colour palette from the image
   /quilting/stats:
     get:
       operationId: getStats
@@ -3242,6 +3470,7 @@ components:
       required:
         - id
         - name
+        - dominantColors
         - lockedFields
         - categories
         - images
@@ -3273,6 +3502,10 @@ components:
         acquiredAt:
           type: string
           nullable: true
+        dominantColors:
+          type: array
+          items:
+            type: string
         lockedFields:
           type: array
           items:
@@ -3381,6 +3614,7 @@ components:
       required:
         - id
         - name
+        - dominantColors
         - lockedFields
         - categories
         - images
@@ -3409,6 +3643,10 @@ components:
         notes:
           type: string
           nullable: true
+        dominantColors:
+          type: array
+          items:
+            type: string
         lockedFields:
           type: array
           items:
@@ -3671,6 +3909,70 @@ components:
           items:
             $ref: "#/components/schemas/QuiltingPaletteMatchResult"
           description: Top-10 stash fabrics sorted by colour similarity
+    QuiltingPatternPaletteMatchResult:
+      type: object
+      required:
+        - pattern
+        - score
+        - matchedColors
+      properties:
+        pattern:
+          $ref: "#/components/schemas/QuiltingQuiltPattern"
+        score:
+          type: number
+          description: Jaccard similarity score (0–1)
+        matchedColors:
+          type: array
+          items:
+            type: string
+    QuiltingPatternPaletteMatchResponse:
+      type: object
+      required:
+        - extractedColors
+        - matches
+      properties:
+        extractedColors:
+          type: array
+          items:
+            type: string
+          description: 5–7 CSS colour names extracted from the image
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuiltingPatternPaletteMatchResult"
+          description: Top-10 patterns sorted by colour similarity
+    QuiltingQuiltPaletteMatchResult:
+      type: object
+      required:
+        - quilt
+        - score
+        - matchedColors
+      properties:
+        quilt:
+          $ref: "#/components/schemas/QuiltingFinishedQuilt"
+        score:
+          type: number
+          description: Jaccard similarity score (0–1)
+        matchedColors:
+          type: array
+          items:
+            type: string
+    QuiltingQuiltPaletteMatchResponse:
+      type: object
+      required:
+        - extractedColors
+        - matches
+      properties:
+        extractedColors:
+          type: array
+          items:
+            type: string
+          description: 5–7 CSS colour names extracted from the image
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuiltingQuiltPaletteMatchResult"
+          description: Top-10 quilts sorted by colour similarity
     QuiltingCollectionStats:
       type: object
       required:
@@ -4715,6 +5017,62 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TravelsPackingItem"
+    ElaineDailyBrief:
+      type: object
+      required:
+        - id
+        - content
+        - generatedAt
+        - dismissed
+      properties:
+        id:
+          type: integer
+        content:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+        dismissed:
+          type: boolean
+    ElaineConversationSummary:
+      type: object
+      required:
+        - id
+        - title
+        - createdAt
+        - updatedAt
+        - messageCount
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        messageCount:
+          type: integer
+        preview:
+          type: string
+          nullable: true
+    ElaineAttachmentUploadResult:
+      type: object
+      required:
+        - url
+        - type
+      properties:
+        url:
+          type: string
+        type:
+          type: string
+          enum: [image, pdf]
+        name:
+          type: string
+        extractedText:
+          type: string
   parameters:
     IdParam:
       name: id

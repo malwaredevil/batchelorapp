@@ -195,12 +195,14 @@ export const STATEMENTS: string[] = [
     notes            TEXT,
     image_path       TEXT,
     acquired_at      DATE,
+    dominant_colors  TEXT[] NOT NULL DEFAULT '{}',
     locked_fields    TEXT[] NOT NULL DEFAULT '{}',
     embedding        vector(1536),
     created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
   `ALTER TABLE quilting_patterns ENABLE ROW LEVEL SECURITY`,
   `ALTER TABLE quilting_patterns ADD COLUMN IF NOT EXISTS locked_fields TEXT[] NOT NULL DEFAULT '{}'`,
+  `ALTER TABLE quilting_patterns ADD COLUMN IF NOT EXISTS dominant_colors TEXT[] NOT NULL DEFAULT '{}'`,
   `CREATE INDEX IF NOT EXISTS quilting_patterns_embedding_idx
      ON quilting_patterns USING hnsw (embedding vector_cosine_ops)`,
 
@@ -213,11 +215,13 @@ export const STATEMENTS: string[] = [
     recipient      TEXT,
     notes          TEXT,
     image_path     TEXT NOT NULL,
+    dominant_colors TEXT[] NOT NULL DEFAULT '{}',
     locked_fields  TEXT[] NOT NULL DEFAULT '{}',
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
   `ALTER TABLE quilting_finished_quilts ENABLE ROW LEVEL SECURITY`,
   `ALTER TABLE quilting_finished_quilts ADD COLUMN IF NOT EXISTS locked_fields TEXT[] NOT NULL DEFAULT '{}'`,
+  `ALTER TABLE quilting_finished_quilts ADD COLUMN IF NOT EXISTS dominant_colors TEXT[] NOT NULL DEFAULT '{}'`,
 
   `CREATE TABLE IF NOT EXISTS quilting_fabric_links (
     quilt_id  INTEGER NOT NULL REFERENCES quilting_finished_quilts(id) ON DELETE CASCADE,
@@ -972,4 +976,18 @@ export const STATEMENTS: string[] = [
   )`,
   `ALTER TABLE elaine_history_messages ENABLE ROW LEVEL SECURITY`,
   `CREATE INDEX IF NOT EXISTS elaine_history_messages_conversation_id_idx ON elaine_history_messages (conversation_id)`,
+
+  // Daily morning brief — generated once per user per UTC day, cached until
+  // midnight. The unique functional index prevents duplicate generation even
+  // under concurrent requests; ON CONFLICT DO NOTHING is the safe insert path.
+  `CREATE TABLE IF NOT EXISTS elaine_daily_briefs (
+    id           SERIAL PRIMARY KEY,
+    user_id      INTEGER NOT NULL,
+    content      TEXT NOT NULL,
+    generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    dismissed    BOOLEAN NOT NULL DEFAULT FALSE
+  )`,
+  `ALTER TABLE elaine_daily_briefs ENABLE ROW LEVEL SECURITY`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS elaine_daily_briefs_user_day_idx
+     ON elaine_daily_briefs (user_id, (date_trunc('day', generated_at AT TIME ZONE 'UTC')))`,
 ];

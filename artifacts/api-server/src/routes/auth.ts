@@ -358,11 +358,9 @@ router.post(
       res.status(204).end();
     } catch (err) {
       req.log.error({ err }, "failed to send phone verification code");
-      res
-        .status(500)
-        .json({
-          error: "Could not send the verification code. Please try again.",
-        });
+      res.status(500).json({
+        error: "Could not send the verification code. Please try again.",
+      });
     }
   },
 );
@@ -391,11 +389,9 @@ router.post("/auth/phone/verify", requireAuth, async (req, res) => {
     .limit(1);
 
   if (!record || record.attempts >= MAX_PHONE_CODE_ATTEMPTS) {
-    res
-      .status(400)
-      .json({
-        error: "This code is invalid or has expired. Request a new one.",
-      });
+    res.status(400).json({
+      error: "This code is invalid or has expired. Request a new one.",
+    });
     return;
   }
 
@@ -421,11 +417,9 @@ router.post("/auth/phone/verify", requireAuth, async (req, res) => {
         used: attempts >= MAX_PHONE_CODE_ATTEMPTS,
       })
       .where(eq(phoneVerificationCodes.id, record.id));
-    res
-      .status(400)
-      .json({
-        error: "This code is invalid or has expired. Request a new one.",
-      });
+    res.status(400).json({
+      error: "This code is invalid or has expired. Request a new one.",
+    });
     return;
   }
 
@@ -475,11 +469,9 @@ router.post(
       .limit(1);
 
     if (!user || !user.phoneVerified || !user.phoneNumber) {
-      res
-        .status(400)
-        .json({
-          error: "Verify a phone number first before sending a test SMS.",
-        });
+      res.status(400).json({
+        error: "Verify a phone number first before sending a test SMS.",
+      });
       return;
     }
 

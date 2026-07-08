@@ -49,12 +49,16 @@ const UpdateReminderBody = z.object({
 // recipients — silently drops any id that isn't verified rather than
 // rejecting the whole request, since the set may include a user who
 // unverified their phone between selection and save.
-async function filterVerifiedPhoneUserIds(userIds: number[]): Promise<number[]> {
+async function filterVerifiedPhoneUserIds(
+  userIds: number[],
+): Promise<number[]> {
   if (userIds.length === 0) return [];
   const rows = await db
     .select({ id: appUsers.id })
     .from(appUsers)
-    .where(and(inArray(appUsers.id, userIds), eq(appUsers.phoneVerified, true)));
+    .where(
+      and(inArray(appUsers.id, userIds), eq(appUsers.phoneVerified, true)),
+    );
   return rows.map((r) => r.id);
 }
 

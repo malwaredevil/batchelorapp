@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { ExternalLink, Sparkles } from "lucide-react";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 const DEMO_TRIP_TITLE = "🧪 Google APIs Demo Trip";
 const DEMO_DESTINATION = "Paris, France";
@@ -337,6 +338,11 @@ export default function GoogleApisDemo() {
 
   const lat = demoTrip?.lat ?? DEMO_LAT;
   const lng = demoTrip?.lng ?? DEMO_LNG;
+
+  usePageAssistantContext(
+    "google-apis-demo",
+    `On the Google APIs demo page — a developer-facing showcase of every Google Maps Platform API enabled for this project (weather, air quality, pollen, nearby places, routes, static maps, street view, aerial view), demonstrated against ${demoTrip ? `the demo trip pinned at ${DEMO_DESTINATION}` : "sample coordinates in Paris (no demo trip created yet)"}. This is a dev/demo page, not a real trip-planning page.`,
+  );
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-6">

@@ -33,6 +33,7 @@ import {
   ElaineSettingsCard,
   GlobalConfigCard,
 } from "@workspace/elaine-ui";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 const base = import.meta.env.BASE_URL;
 
@@ -498,6 +499,13 @@ function PasswordCard() {
 }
 
 export default function Account() {
+  const { user } = useAuth();
+
+  usePageAssistantContext(
+    "hub-account",
+    `On the shared Account settings page (profile, phone/SMS, appearance, password, and Elaine assistant settings — shared across every app). Signed in as ${user?.email ?? "unknown"}${user?.phoneVerified ? `, with a verified phone number (${user.phoneNumber})` : ", with no verified phone number yet"}.`,
+  );
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background/80 px-6 py-4 backdrop-blur-md">

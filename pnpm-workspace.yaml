@@ -161,8 +161,10 @@ overrides:
   esbuild: "0.28.1"
   # Security overrides — force transitive deps to patched versions
   qs: ">=6.15.2"
-  # Pinned below 5.x: js-yaml@5 is ESM-only with no default export, which
-  # breaks orval's `import yaml from "js-yaml"` CJS-style interop.
-  js-yaml: ">=4.2.0 <5.0.0"
+  # Exact-pinned: js-yaml@5 is ESM-only with no default export, which breaks
+  # orval's `import yaml from "js-yaml"` CJS-style interop. A loose `>=` range
+  # previously let this drift onto 5.x silently and broke codegen — pin exact
+  # and bump deliberately after verifying orval still works with the new major.
+  js-yaml: "4.3.0"
   markdown-it: ">=14.2.0"
   "@babel/core": "^7.29.6"

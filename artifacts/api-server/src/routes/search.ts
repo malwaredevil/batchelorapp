@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { ilike, or } from "drizzle-orm";
+import { and, eq, ilike, or } from "drizzle-orm";
 import {
   db,
   potteryItems,
@@ -8,6 +8,8 @@ import {
   finishedQuilts,
   travelsTrips,
   travelsReminders,
+  elaineHistoryConversations,
+  elaineHistoryMessages,
 } from "@workspace/db";
 import { requireAuth } from "../middleware/auth";
 
@@ -24,6 +26,7 @@ router.get("/search", requireAuth, async (req, res) => {
 
   const pattern = `%${q}%`;
   const perSource = Math.max(4, Math.ceil(limit / 6));
+  const userId = req.session.userId!;
 
   const [
     potteryResults,
@@ -32,6 +35,8 @@ router.get("/search", requireAuth, async (req, res) => {
     quiltResults,
     tripResults,
     reminderResults,
+    conversationTitleMatches,
+    conversationContentMatches,
   ] = await Promise.all([
     db
       .select({ id: potteryItems.id, name: potteryItems.name, maker: potteryItems.maker })
@@ -74,7 +79,54 @@ router.get("/search", requireAuth, async (req, res) => {
       .from(travelsReminders)
       .where(ilike(travelsReminders.title, pattern))
       .limit(perSource),
+
+    db
+      .select({
+        id: elaineHistoryConversations.id,
+        title: elaineHistoryConversations.title,
+        updatedAt: elaineHistoryConversations.updatedAt,
+      })
+      .from(elaineHistoryConversations)
+      .where(
+        and(
+          eq(elaineHistoryConversations.userId, userId),
+          ilike(elaineHistoryConversations.title, pattern),
+        ),
+      )
+      .limit(perSource),
+
+    db
+      .select({
+        id: elaineHistoryConversations.id,
+        title: elaineHistoryConversations.title,
+        updatedAt: elaineHistoryConversations.updatedAt,
+      })
+      .from(elaineHistoryMessages)
+      .innerJoin(
+        elaineHistoryConversations,
+        eq(elaineHistoryMessages.conversationId, elaineHistoryConversations.id),
+      )
+      .where(
+        and(
+          eq(elaineHistoryConversations.userId, userId),
+          ilike(elaineHistoryMessages.content, pattern),
+        ),
+      )
+      .limit(perSource),
   ]);
+
+  const conversationResultMap = new Map<
+    number,
+    { id: number; title: string; updatedAt: Date }
+  >();
+  for (const r of [...conversationTitleMatches, ...conversationContentMatches]) {
+    if (!conversationResultMap.has(r.id)) {
+      conversationResultMap.set(r.id, r);
+    }
+  }
+  const conversationResults = Array.from(conversationResultMap.values())
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+    .slice(0, perSource);
 
   const groups = [];
 
@@ -100,6 +152,19 @@ router.get("/search", requireAuth, async (req, res) => {
         title: r.title,
         subtitle: "Trip reminder",
         url: `/travels/trips/${r.tripId}`,
+      })),
+    });
+  }
+
+  if (conversationResults.length > 0) {
+    groups.push({
+      type: "elaine_conversation",
+      label: "Conversations",
+      results: conversationResults.map((r) => ({
+        id: r.id,
+        title: r.title,
+        subtitle: "Elaine conversation",
+        url: `/elaine/`,
       })),
     });
   }

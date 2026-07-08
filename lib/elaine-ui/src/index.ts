@@ -12,3 +12,4 @@ export * from "./theme";
 export * from "./ChatWidgets";
 export * from "./MarkdownMessage";
 export * from "./useVoiceInput";
+export * from "./useTTS";

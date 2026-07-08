@@ -1,6 +1,18 @@
-import { useRef, useCallback, type ReactNode } from "react";
-import { Send, ArrowRight, Check, X, Paperclip, Loader2, FileText, Mic } from "lucide-react";
+import { useRef, useCallback, useEffect, type ReactNode } from "react";
+import {
+  Send,
+  ArrowRight,
+  Check,
+  X,
+  Paperclip,
+  Loader2,
+  FileText,
+  Mic,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 import { useVoiceInput } from "./useVoiceInput";
+import { useTTS } from "./useTTS";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { ElaineAvatar, ElaineName } from "./ElaineAvatar";
@@ -160,6 +172,37 @@ export function ElaineChatPanel({
       voice.start();
     }
   }, [voice, input]);
+
+  // ── Text-to-speech ──────────────────────────────────────────────────────
+  const tts = useTTS();
+
+  // Stop reading the instant a new message starts streaming in.
+  useEffect(() => {
+    if (isStreaming) tts.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStreaming]);
+
+  // Speak the latest assistant reply once it finishes streaming.
+  const wasStreamingRef = useRef(isStreaming);
+  useEffect(() => {
+    const wasStreaming = wasStreamingRef.current;
+    wasStreamingRef.current = isStreaming;
+    if (!wasStreaming || isStreaming || !tts.enabled) return;
+    const last = messages[messages.length - 1];
+    if (last?.role === "assistant") {
+      const { text } = parseMessageCitations(last.content);
+      tts.speak(text);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStreaming, messages, tts.enabled]);
+
+  const handleInputChange = useCallback(
+    (value: string) => {
+      setInput(value);
+      if (tts.isSpeaking) tts.stop();
+    },
+    [setInput, tts],
+  );
 
   return (
     <>
@@ -539,7 +582,7 @@ export function ElaineChatPanel({
           </Button>
           <Textarea
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => handleInputChange(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -569,6 +612,30 @@ export function ElaineChatPanel({
                 <span className="absolute inset-0 animate-ping rounded-xl bg-red-500/20" />
               )}
               <Mic className="h-4 w-4" />
+            </Button>
+          )}
+          {tts.isSupported && (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className={`h-[38px] w-[38px] shrink-0 rounded-xl transition-colors ${
+                tts.enabled
+                  ? "text-primary hover:text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={tts.toggle}
+              title={
+                tts.enabled
+                  ? "Turn off spoken replies"
+                  : "Turn on spoken replies"
+              }
+            >
+              {tts.enabled ? (
+                <Volume2 className="h-4 w-4" />
+              ) : (
+                <VolumeX className="h-4 w-4" />
+              )}
             </Button>
           )}
           <Button

@@ -39,6 +39,15 @@ import {
 import { toast } from "sonner";
 import { RichTextEditor } from "./RichTextEditor";
 
+function extractError(err: unknown, fallback: string): string {
+  if (typeof err === "object" && err !== null && "response" in err) {
+    const data = (err as { response?: { data?: { error?: string } } }).response
+      ?.data;
+    if (data?.error) return data.error;
+  }
+  return fallback;
+}
+
 interface ReminderEditDialogProps {
   reminder: Reminder | null;
   open: boolean;
@@ -144,7 +153,8 @@ export function ReminderEditDialog({
         setPhoneCodeSent(true);
         toast.success(`Verification code sent to ${phoneNumber}.`);
       },
-      onError: () => toast.error("Could not send the verification code."),
+      onError: (err: unknown) =>
+        toast.error(extractError(err, "Could not send the verification code.")),
     },
   });
 
@@ -166,14 +176,20 @@ export function ReminderEditDialog({
         setPhoneNumber("");
         setPhoneCode("");
       },
-      onError: () => toast.error("That code didn't work."),
+      onError: (err: unknown) =>
+        toast.error(extractError(err, "That code didn't work.")),
     },
   });
 
   const sendTestSms = useSendTestSms({
     mutation: {
-      onError: () =>
-        toast.error("Phone verified, but the test text failed to send."),
+      onError: (err: unknown) =>
+        toast.error(
+          extractError(
+            err,
+            "Phone verified, but the test text failed to send.",
+          ),
+        ),
     },
   });
 

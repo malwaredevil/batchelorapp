@@ -49,7 +49,11 @@ interface GitHubCommit {
 interface CombinedStatus {
   state: "success" | "failure" | "pending" | "error";
   total_count: number;
-  statuses: Array<{ context: string; state: string; description: string | null }>;
+  statuses: Array<{
+    context: string;
+    state: string;
+    description: string | null;
+  }>;
 }
 
 interface CheckRun {
@@ -74,7 +78,9 @@ async function githubGet<T>(path: string): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`GitHub API ${path} -> ${res.status} ${res.statusText}: ${body}`);
+    throw new Error(
+      `GitHub API ${path} -> ${res.status} ${res.statusText}: ${body}`,
+    );
   }
   return (await res.json()) as T;
 }
@@ -122,7 +128,9 @@ async function main(): Promise<void> {
   }
 
   const sha = latestCommit.sha;
-  console.log(`Latest commit on ${BRANCH}: ${sha.slice(0, 10)} — ${latestCommit.commit.message.split("\n")[0]}`);
+  console.log(
+    `Latest commit on ${BRANCH}: ${sha.slice(0, 10)} — ${latestCommit.commit.message.split("\n")[0]}`,
+  );
   console.log(latestCommit.html_url);
 
   let combined: CombinedStatus | null = null;
@@ -157,7 +165,11 @@ async function main(): Promise<void> {
 
   const incomplete = runs.filter((r) => r.status !== "completed");
   const failed = runs.filter(
-    (r) => r.status === "completed" && r.conclusion !== "success" && r.conclusion !== "neutral" && r.conclusion !== "skipped",
+    (r) =>
+      r.status === "completed" &&
+      r.conclusion !== "success" &&
+      r.conclusion !== "neutral" &&
+      r.conclusion !== "skipped",
   );
 
   if (incomplete.length > 0) {

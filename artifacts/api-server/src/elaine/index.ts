@@ -2355,19 +2355,27 @@ async function applyUnseenNudges(userId: number): Promise<ChatMessage[]> {
 // ---------------------------------------------------------------------------
 
 const ATTACHMENT_BUCKET = "elaine-attachments";
-const attachmentStorage = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
+const attachmentStorage = createClient(
+  env.supabaseUrl,
+  env.supabaseServiceRoleKey,
+  {
+    auth: { persistSession: false, autoRefreshToken: false },
+  },
+);
 
 let attachmentBucketReady: Promise<void> | null = null;
 async function ensureAttachmentBucket(): Promise<void> {
   if (!attachmentBucketReady) {
     attachmentBucketReady = (async () => {
-      const { data } = await attachmentStorage.storage.getBucket(ATTACHMENT_BUCKET);
+      const { data } =
+        await attachmentStorage.storage.getBucket(ATTACHMENT_BUCKET);
       if (!data) {
-        const { error } = await attachmentStorage.storage.createBucket(ATTACHMENT_BUCKET, {
-          public: false,
-        });
+        const { error } = await attachmentStorage.storage.createBucket(
+          ATTACHMENT_BUCKET,
+          {
+            public: false,
+          },
+        );
         if (error && !/already exists/i.test(error.message)) {
           attachmentBucketReady = null;
           throw error;
@@ -2404,76 +2412,81 @@ const attachmentUpload = multer({
 // Images are accepted for AI vision; PDFs have their text extracted server-side.
 // Files are stored in the PRIVATE elaine-attachments bucket; a 5-year signed URL
 // is returned so the client can display the file and pass it back on chat sends.
-router.post("/attachments", attachmentUpload.single("file"), async (req, res) => {
-  if (!req.file) {
-    res.status(400).json({ error: "No file provided" });
-    return;
-  }
-  const userId = req.session.userId!;
-  const isPdf = req.file.mimetype === "application/pdf";
-  const ext = isPdf
-    ? "pdf"
-    : req.file.mimetype === "image/jpeg"
-      ? "jpg"
-      : req.file.mimetype === "image/webp"
-        ? "webp"
-        : "png";
-  const storagePath = `${userId}/${randomUUID()}.${ext}`;
-
-  try {
-    await ensureAttachmentBucket();
-  } catch (err) {
-    req.log.error({ err }, "elaine attachment bucket init failed");
-    res.status(500).json({ error: "Storage unavailable" });
-    return;
-  }
-
-  const { error: uploadError } = await attachmentStorage.storage
-    .from(ATTACHMENT_BUCKET)
-    .upload(storagePath, req.file.buffer, {
-      contentType: req.file.mimetype,
-      upsert: false,
-    });
-
-  if (uploadError) {
-    req.log.error({ err: uploadError }, "elaine attachment upload failed");
-    res.status(500).json({ error: "Upload failed" });
-    return;
-  }
-
-  // 5-year signed URL (private bucket — no public URL available).
-  const FIVE_YEARS_SECS = 5 * 365 * 24 * 3600;
-  const { data: signedData, error: signError } = await attachmentStorage.storage
-    .from(ATTACHMENT_BUCKET)
-    .createSignedUrl(storagePath, FIVE_YEARS_SECS);
-
-  if (signError || !signedData) {
-    req.log.error({ err: signError }, "elaine attachment sign failed");
-    res.status(500).json({ error: "Could not generate file URL" });
-    return;
-  }
-
-  if (isPdf) {
-    // Extract text so the AI can read the document without vision tokens.
-    let extractedText: string | undefined;
-    try {
-      const parsed = await pdfParse(req.file.buffer);
-      const raw = parsed.text ?? "";
-      extractedText = raw.slice(0, 8000) || undefined;
-    } catch (err) {
-      req.log.warn({ err }, "elaine pdf text extraction failed (non-fatal)");
+router.post(
+  "/attachments",
+  attachmentUpload.single("file"),
+  async (req, res) => {
+    if (!req.file) {
+      res.status(400).json({ error: "No file provided" });
+      return;
     }
-    res.status(201).json({
-      url: signedData.signedUrl,
-      type: "pdf",
-      name: req.file.originalname ?? "document.pdf",
-      ...(extractedText !== undefined ? { extractedText } : {}),
-    });
-    return;
-  }
+    const userId = req.session.userId!;
+    const isPdf = req.file.mimetype === "application/pdf";
+    const ext = isPdf
+      ? "pdf"
+      : req.file.mimetype === "image/jpeg"
+        ? "jpg"
+        : req.file.mimetype === "image/webp"
+          ? "webp"
+          : "png";
+    const storagePath = `${userId}/${randomUUID()}.${ext}`;
 
-  res.status(201).json({ url: signedData.signedUrl, type: "image" });
-});
+    try {
+      await ensureAttachmentBucket();
+    } catch (err) {
+      req.log.error({ err }, "elaine attachment bucket init failed");
+      res.status(500).json({ error: "Storage unavailable" });
+      return;
+    }
+
+    const { error: uploadError } = await attachmentStorage.storage
+      .from(ATTACHMENT_BUCKET)
+      .upload(storagePath, req.file.buffer, {
+        contentType: req.file.mimetype,
+        upsert: false,
+      });
+
+    if (uploadError) {
+      req.log.error({ err: uploadError }, "elaine attachment upload failed");
+      res.status(500).json({ error: "Upload failed" });
+      return;
+    }
+
+    // 5-year signed URL (private bucket — no public URL available).
+    const FIVE_YEARS_SECS = 5 * 365 * 24 * 3600;
+    const { data: signedData, error: signError } =
+      await attachmentStorage.storage
+        .from(ATTACHMENT_BUCKET)
+        .createSignedUrl(storagePath, FIVE_YEARS_SECS);
+
+    if (signError || !signedData) {
+      req.log.error({ err: signError }, "elaine attachment sign failed");
+      res.status(500).json({ error: "Could not generate file URL" });
+      return;
+    }
+
+    if (isPdf) {
+      // Extract text so the AI can read the document without vision tokens.
+      let extractedText: string | undefined;
+      try {
+        const parsed = await pdfParse(req.file.buffer);
+        const raw = parsed.text ?? "";
+        extractedText = raw.slice(0, 8000) || undefined;
+      } catch (err) {
+        req.log.warn({ err }, "elaine pdf text extraction failed (non-fatal)");
+      }
+      res.status(201).json({
+        url: signedData.signedUrl,
+        type: "pdf",
+        name: req.file.originalname ?? "document.pdf",
+        ...(extractedText !== undefined ? { extractedText } : {}),
+      });
+      return;
+    }
+
+    res.status(201).json({ url: signedData.signedUrl, type: "image" });
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Named conversation CRUD
@@ -2924,7 +2937,9 @@ Keep replies concise and easy to read in a chat bubble.`;
   // are always text-only (URLs are stored in the DB but not re-sent to the model).
   const hasImages = attachmentUrls && attachmentUrls.length > 0;
   const hasPdfs = attachmentPdfs && attachmentPdfs.length > 0;
-  const userTurnContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] | string =
+  const userTurnContent:
+    | OpenAI.Chat.Completions.ChatCompletionContentPart[]
+    | string =
     hasImages || hasPdfs
       ? [
           ...(hasPdfs
@@ -2947,7 +2962,9 @@ Keep replies concise and easy to read in a chat bubble.`;
   // their original upload filename so the UI never has to fall back to the
   // random UUID storage path when rendering the chip.
   const allAttachmentUrls: AttachmentRef[] = [
-    ...(attachmentUrls ?? []).map((url): AttachmentRef => ({ url, type: "image" })),
+    ...(attachmentUrls ?? []).map(
+      (url): AttachmentRef => ({ url, type: "image" }),
+    ),
     ...(attachmentPdfs?.map(
       (p): AttachmentRef => ({ url: p.url, type: "pdf", name: p.name }),
     ) ?? []),
@@ -3443,7 +3460,9 @@ Keep replies concise and easy to read in a chat bubble.`;
     {
       role: "user",
       content: message,
-      ...(allAttachmentUrls.length > 0 ? { attachmentUrls: allAttachmentUrls } : {}),
+      ...(allAttachmentUrls.length > 0
+        ? { attachmentUrls: allAttachmentUrls }
+        : {}),
     },
     { role: "assistant", content },
   ];
@@ -3652,7 +3671,10 @@ async function generateDailyBriefContent(userId: number): Promise<string> {
 
   // 2. Overdue reminders
   const overdueReminders = await db
-    .select({ title: travelsReminders.title, dueDate: travelsReminders.dueDate })
+    .select({
+      title: travelsReminders.title,
+      dueDate: travelsReminders.dueDate,
+    })
     .from(travelsReminders)
     .where(
       and(

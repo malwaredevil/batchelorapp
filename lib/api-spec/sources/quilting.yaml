@@ -3024,7 +3024,8 @@ components:
 
     BlockTemplate:
       type: object
-      required: [id, name, tags, gridW, gridH, cells, seams, createdAt, updatedAt]
+      required:
+        [id, name, tags, gridW, gridH, cells, seams, createdAt, updatedAt]
       properties:
         id:
           type: integer

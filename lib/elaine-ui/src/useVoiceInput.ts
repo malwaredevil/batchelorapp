@@ -63,7 +63,9 @@ export interface VoiceInputState {
  *   const voice = useVoiceInput({ onTranscript: (text, isFinal) => ... });
  *   if (!voice.isSupported) { hide mic button }
  */
-export function useVoiceInput({ onTranscript }: UseVoiceInputOptions): VoiceInputState {
+export function useVoiceInput({
+  onTranscript,
+}: UseVoiceInputOptions): VoiceInputState {
   const isSupported =
     typeof window !== "undefined" &&
     !!(window.SpeechRecognition ?? window.webkitSpeechRecognition);

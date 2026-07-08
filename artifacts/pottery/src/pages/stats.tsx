@@ -267,7 +267,8 @@ export default function StatsPage() {
         sizeCounts.set("Unknown", (sizeCounts.get("Unknown") ?? 0) + qty);
       } else {
         const bucket =
-          SIZE_BUCKETS.find((b) => cm >= b.min && cm < b.max) ?? SIZE_BUCKETS[2];
+          SIZE_BUCKETS.find((b) => cm >= b.min && cm < b.max) ??
+          SIZE_BUCKETS[2];
         sizeCounts.set(bucket.label, (sizeCounts.get(bucket.label) ?? 0) + qty);
       }
     }
@@ -327,7 +328,9 @@ export default function StatsPage() {
       {/* Acquisition timeline */}
       {timelineData.length > 0 && (
         <section>
-          <h2 className="mb-3 text-base font-semibold">Pieces acquired by year</h2>
+          <h2 className="mb-3 text-base font-semibold">
+            Pieces acquired by year
+          </h2>
           <div className="rounded-xl border border-card-border bg-card p-4">
             <ResponsiveContainer width="100%" height={200}>
               <BarChart

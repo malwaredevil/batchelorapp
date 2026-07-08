@@ -110,9 +110,9 @@ export function useTTS(): TTSState {
   const [enabled, setEnabled] = useState<boolean>(readStoredEnabled);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [selectedVoiceURI, setSelectedVoiceURIState] = useState<
-    string | null
-  >(readStoredVoiceURI);
+  const [selectedVoiceURI, setSelectedVoiceURIState] = useState<string | null>(
+    readStoredVoiceURI,
+  );
   const [rate, setRateState] = useState<number>(readStoredRate);
   const [previewingVoiceURI, setPreviewingVoiceURI] = useState<string | null>(
     null,

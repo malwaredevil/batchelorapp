@@ -1,5 +1,13 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { Search, Clock, MapPin, Package, Scissors, MessageCircle, X } from "lucide-react";
+import {
+  Search,
+  Clock,
+  MapPin,
+  Package,
+  Scissors,
+  MessageCircle,
+  X,
+} from "lucide-react";
 
 const OPEN_EVENT = "batchelor:open-command-palette";
 
@@ -81,7 +89,10 @@ function loadRecent(): RecentItem[] {
 
 function saveRecent(item: RecentItem) {
   const existing = loadRecent().filter((r) => r.url !== item.url);
-  localStorage.setItem(RECENT_KEY, JSON.stringify([item, ...existing].slice(0, MAX_RECENT)));
+  localStorage.setItem(
+    RECENT_KEY,
+    JSON.stringify([item, ...existing].slice(0, MAX_RECENT)),
+  );
 }
 
 /**
@@ -113,13 +124,22 @@ function ResultIcon({ type }: { type: string }) {
     return <MapPin className="h-4 w-4 shrink-0" style={{ color: "#3b82f6" }} />;
   }
   if (type === "pottery") {
-    return <Package className="h-4 w-4 shrink-0" style={{ color: "#f97316" }} />;
+    return (
+      <Package className="h-4 w-4 shrink-0" style={{ color: "#f97316" }} />
+    );
   }
   if (type.startsWith("quilting")) {
-    return <Scissors className="h-4 w-4 shrink-0" style={{ color: "#a855f7" }} />;
+    return (
+      <Scissors className="h-4 w-4 shrink-0" style={{ color: "#a855f7" }} />
+    );
   }
   if (type === "elaine_conversation") {
-    return <MessageCircle className="h-4 w-4 shrink-0" style={{ color: "#10b981" }} />;
+    return (
+      <MessageCircle
+        className="h-4 w-4 shrink-0"
+        style={{ color: "#10b981" }}
+      />
+    );
   }
   return <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />;
 }
@@ -139,7 +159,9 @@ export function CommandPalette() {
 
   const allItems = useMemo<FlatItem[]>(() => {
     if (hasQuery) {
-      return groups.flatMap((g) => g.results.map((r) => ({ ...r, type: g.type })));
+      return groups.flatMap((g) =>
+        g.results.map((r) => ({ ...r, type: g.type })),
+      );
     }
     return recent.map((r) => ({ ...r, id: 0 }));
   }, [groups, recent, hasQuery]);
@@ -204,7 +226,10 @@ export function CommandPalette() {
   useEffect(() => {
     if (!open) return;
     function onPointerDown(e: PointerEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
         closePalette();
       }
     }
@@ -224,7 +249,9 @@ export function CommandPalette() {
     setLoading(true);
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=24`);
+        const res = await fetch(
+          `/api/search?q=${encodeURIComponent(q)}&limit=24`,
+        );
         if (res.ok) {
           const data = (await res.json()) as { groups: SearchGroup[] };
           setGroups(data.groups ?? []);
@@ -311,9 +338,7 @@ export function CommandPalette() {
             aria-label="Search"
           />
           {loading ? (
-            <div
-              className="h-4 w-4 shrink-0 rounded-full border-2 border-t-transparent border-muted-foreground animate-spin"
-            />
+            <div className="h-4 w-4 shrink-0 rounded-full border-2 border-t-transparent border-muted-foreground animate-spin" />
           ) : (
             <button
               onClick={closePalette}
@@ -360,7 +385,9 @@ export function CommandPalette() {
                       >
                         <ResultIcon type={group.type} />
                         <span className="flex-1 min-w-0">
-                          <span className="block truncate font-medium">{result.title}</span>
+                          <span className="block truncate font-medium">
+                            {result.title}
+                          </span>
                           {result.subtitle && (
                             <span className="block truncate text-xs text-muted-foreground">
                               {result.matchedContent
@@ -394,7 +421,9 @@ export function CommandPalette() {
                 >
                   <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <span className="flex-1 min-w-0">
-                    <span className="block truncate font-medium">{item.title}</span>
+                    <span className="block truncate font-medium">
+                      {item.title}
+                    </span>
                     {item.subtitle && (
                       <span className="block truncate text-xs text-muted-foreground">
                         {item.subtitle}
@@ -415,15 +444,21 @@ export function CommandPalette() {
         {/* Footer */}
         <div className="flex items-center gap-4 px-4 py-2 border-t border-border text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 bg-muted rounded font-mono text-xs">↑↓</kbd>
+            <kbd className="px-1.5 py-0.5 bg-muted rounded font-mono text-xs">
+              ↑↓
+            </kbd>
             navigate
           </span>
           <span className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 bg-muted rounded font-mono text-xs">↵</kbd>
+            <kbd className="px-1.5 py-0.5 bg-muted rounded font-mono text-xs">
+              ↵
+            </kbd>
             open
           </span>
           <span className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 bg-muted rounded font-mono text-xs">esc</kbd>
+            <kbd className="px-1.5 py-0.5 bg-muted rounded font-mono text-xs">
+              esc
+            </kbd>
             close
           </span>
           <span className="ml-auto opacity-60">Batchelor Search</span>

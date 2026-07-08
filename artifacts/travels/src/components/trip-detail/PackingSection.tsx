@@ -321,7 +321,9 @@ export function PackingSection({ tripId }: PackingSectionProps) {
       {
         onSuccess: () => {
           invalidate();
-          toast.success(`Added ${toAdd.length} item${toAdd.length !== 1 ? "s" : ""}`);
+          toast.success(
+            `Added ${toAdd.length} item${toAdd.length !== 1 ? "s" : ""}`,
+          );
           setShowGenerateDialog(false);
           setGeneratedItems([]);
         },
@@ -343,7 +345,9 @@ export function PackingSection({ tripId }: PackingSectionProps) {
       },
       {
         onSuccess: () => {
-          void qc.invalidateQueries({ queryKey: getListPackingTemplatesQueryKey() });
+          void qc.invalidateQueries({
+            queryKey: getListPackingTemplatesQueryKey(),
+          });
           toast.success("Template saved");
           setShowSaveTemplateDialog(false);
           setTemplateName("");
@@ -371,13 +375,18 @@ export function PackingSection({ tripId }: PackingSectionProps) {
 
   const handleDeleteTemplate = (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
-    deleteTemplate.mutate({ templateId: id }, {
-      onSuccess: () => {
-        void qc.invalidateQueries({ queryKey: getListPackingTemplatesQueryKey() });
-        toast.success("Template deleted");
+    deleteTemplate.mutate(
+      { templateId: id },
+      {
+        onSuccess: () => {
+          void qc.invalidateQueries({
+            queryKey: getListPackingTemplatesQueryKey(),
+          });
+          toast.success("Template deleted");
+        },
+        onError: () => toast.error("Failed to delete template"),
       },
-      onError: () => toast.error("Failed to delete template"),
-    });
+    );
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -400,7 +409,8 @@ export function PackingSection({ tripId }: PackingSectionProps) {
               {packed} of {items.length} packed
             </span>
             <span>
-              {items.length > 0 ? Math.round((packed / items.length) * 100) : 0}%
+              {items.length > 0 ? Math.round((packed / items.length) * 100) : 0}
+              %
             </span>
           </div>
           <div className="h-1.5 bg-muted rounded-full overflow-hidden">
@@ -450,9 +460,7 @@ export function PackingSection({ tripId }: PackingSectionProps) {
               Load template
             </DropdownMenuItem>
             {items.length > 0 && (
-              <DropdownMenuItem
-                onClick={() => setShowSaveTemplateDialog(true)}
-              >
+              <DropdownMenuItem onClick={() => setShowSaveTemplateDialog(true)}>
                 <BookMarked className="w-4 h-4 mr-2" />
                 Save as template
               </DropdownMenuItem>
@@ -602,10 +610,7 @@ export function PackingSection({ tripId }: PackingSectionProps) {
       </Dialog>
 
       {/* Load template dialog */}
-      <Dialog
-        open={showTemplatesDialog}
-        onOpenChange={setShowTemplatesDialog}
-      >
+      <Dialog open={showTemplatesDialog} onOpenChange={setShowTemplatesDialog}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Load Template</DialogTitle>

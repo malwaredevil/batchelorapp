@@ -26,7 +26,12 @@ const CreateTemplateSchema = z.object({
     .max(MAX_NAME_LEN)
     .transform((s: string) => s.trim()),
   tags: z
-    .array(z.string().max(MAX_TAG_LEN).transform((s: string) => s.trim()))
+    .array(
+      z
+        .string()
+        .max(MAX_TAG_LEN)
+        .transform((s: string) => s.trim()),
+    )
     .max(MAX_TAGS)
     .optional()
     .default([]),
@@ -46,7 +51,12 @@ const PatchTemplateSchema = z.object({
     .transform((s: string) => s.trim())
     .optional(),
   tags: z
-    .array(z.string().max(MAX_TAG_LEN).transform((s: string) => s.trim()))
+    .array(
+      z
+        .string()
+        .max(MAX_TAG_LEN)
+        .transform((s: string) => s.trim()),
+    )
     .max(MAX_TAGS)
     .optional(),
 });

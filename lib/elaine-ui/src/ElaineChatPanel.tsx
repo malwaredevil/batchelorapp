@@ -1,4 +1,10 @@
-import { useRef, useCallback, useEffect, useState, type ReactNode } from "react";
+import {
+  useRef,
+  useCallback,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   Send,
   ArrowRight,
@@ -250,11 +256,14 @@ export function ElaineChatPanel({
                             ? /\.pdf([?#]|$)/i.test(ref)
                             : ref.type === "pdf";
                         if (isPdf) {
-                          const storedName = typeof ref === "string" ? undefined : ref.name;
+                          const storedName =
+                            typeof ref === "string" ? undefined : ref.name;
                           const match = url.match(/\/([^/?#]+\.pdf)/i);
                           const filename =
                             storedName ??
-                            (match ? decodeURIComponent(match[1]) : "document.pdf");
+                            (match
+                              ? decodeURIComponent(match[1])
+                              : "document.pdf");
                           return (
                             <a
                               key={j}
@@ -265,7 +274,9 @@ export function ElaineChatPanel({
                               title={`Open ${filename}`}
                             >
                               <FileText className="h-4 w-4 shrink-0" />
-                              <span className="max-w-[140px] truncate text-xs">{filename}</span>
+                              <span className="max-w-[140px] truncate text-xs">
+                                {filename}
+                              </span>
                             </a>
                           );
                         }
@@ -538,7 +549,10 @@ export function ElaineChatPanel({
             <div
               key={a.previewUrl}
               className="relative h-14 shrink-0 rounded-lg overflow-hidden border border-border/50"
-              style={{ width: a.fileType === "pdf" ? "auto" : "3.5rem", minWidth: "3.5rem" }}
+              style={{
+                width: a.fileType === "pdf" ? "auto" : "3.5rem",
+                minWidth: "3.5rem",
+              }}
             >
               {a.fileType === "pdf" ? (
                 <div className="flex h-14 items-center gap-1.5 rounded-lg bg-muted px-2">
@@ -778,7 +792,8 @@ export function ElaineChatPanel({
             className="h-[38px] w-[38px] shrink-0 rounded-xl p-0"
             onClick={() => void handleSend()}
             disabled={
-              (!input.trim() && pendingAttachments.every((a) => !a.uploadedUrl)) ||
+              (!input.trim() &&
+                pendingAttachments.every((a) => !a.uploadedUrl)) ||
               isStreaming ||
               hasUploadingAttachments
             }

@@ -118,10 +118,7 @@ export function useElaineChat({
   }
 
   /** Load a specific named conversation into the chat panel. */
-  function handleLoadConversation(
-    id: number,
-    msgs: ConversationMessage[],
-  ) {
+  function handleLoadConversation(id: number, msgs: ConversationMessage[]) {
     setConversationId(id);
     setPendingAttachments([]);
     setPendingNavigate(null);
@@ -241,7 +238,10 @@ export function useElaineChat({
     setStreamingContent("");
     setStatusMessage("");
     const optimisticAttachmentRefs = [
-      ...imageAttachments.map((a) => ({ url: a.uploadedUrl!, type: "image" as const })),
+      ...imageAttachments.map((a) => ({
+        url: a.uploadedUrl!,
+        type: "image" as const,
+      })),
       ...pdfAttachments.map((a) => ({
         url: a.uploadedUrl!,
         type: "pdf" as const,

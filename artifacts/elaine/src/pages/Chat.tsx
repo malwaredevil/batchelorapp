@@ -125,14 +125,18 @@ export default function Chat() {
     mutation: {
       onSuccess: () => {
         // Invalidate both the unfiltered list and any active search result.
-        void qc.invalidateQueries({ queryKey: getListElaineConversationsQueryKey() });
+        void qc.invalidateQueries({
+          queryKey: getListElaineConversationsQueryKey(),
+        });
       },
     },
   });
   const renameConversation = useRenameElaineConversation({
     mutation: {
       onSuccess: () => {
-        void qc.invalidateQueries({ queryKey: getListElaineConversationsQueryKey() });
+        void qc.invalidateQueries({
+          queryKey: getListElaineConversationsQueryKey(),
+        });
       },
     },
   });
@@ -165,10 +169,7 @@ export default function Chat() {
   );
 
   // Daily morning brief
-  const {
-    data: brief,
-    isLoading: briefLoading,
-  } = useGetElaineDailyBrief();
+  const { data: brief, isLoading: briefLoading } = useGetElaineDailyBrief();
   const dismissBrief = useDismissElaineDailyBrief({
     mutation: {
       onSuccess: () => {
@@ -314,9 +315,7 @@ export default function Chat() {
                     ) : (
                       <p
                         className={`truncate text-xs font-medium leading-snug ${
-                          isActive
-                            ? "text-foreground"
-                            : "text-foreground/80"
+                          isActive ? "text-foreground" : "text-foreground/80"
                         }`}
                         onDoubleClick={(e) => {
                           e.stopPropagation();

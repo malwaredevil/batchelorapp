@@ -179,8 +179,6 @@ function MapPanel({
     if (!map || isLoading || !mapReady) return;
 
     let markers: google.maps.marker.AdvancedMarkerElement[] = [];
-    let arcs: google.maps.Polyline[] = [];
-    let animInterval: ReturnType<typeof setInterval> | null = null;
     let dataLayer: google.maps.Data | null = null;
     let infoWindow: google.maps.InfoWindow | null = null;
     let heatmapLayer: { setMap: (m: google.maps.Map | null) => void } | null =
@@ -347,68 +345,6 @@ function MapPanel({
           markers.push(marker);
         });
 
-      // ── Animated geodesic arcs between consecutive completed/booked trips ────
-      // Sort completed AND booked trips with coords chronologically, then
-      // connect each adjacent pair with an animated dashed polyline.
-      const completedWithCoords = trips
-        .filter(
-          (t) =>
-            (t.status === "completed" || t.status === "booked") &&
-            t.lat != null &&
-            t.lng != null &&
-            t.startDate,
-        )
-        .sort(
-          (a, b) =>
-            new Date(a.startDate!).getTime() - new Date(b.startDate!).getTime(),
-        );
-
-      if (completedWithCoords.length > 1) {
-        const arrowSymbol: google.maps.Symbol = {
-          path: google.maps.SymbolPath.FORWARD_OPEN_ARROW,
-          strokeOpacity: 0.85,
-          scale: 3,
-          strokeColor: "#2563eb",
-        };
-        for (let i = 0; i < completedWithCoords.length - 1; i++) {
-          const t1 = completedWithCoords[i]!;
-          const t2 = completedWithCoords[i + 1]!;
-          // Skip same-location consecutive trips (arc would collapse to a dot)
-          if (t1.lat === t2.lat && t1.lng === t2.lng) continue;
-          const arc = new google.maps.Polyline({
-            path: [
-              { lat: t1.lat!, lng: t1.lng! },
-              { lat: t2.lat!, lng: t2.lng! },
-            ],
-            geodesic: true,
-            strokeColor: "#2563eb",
-            strokeOpacity: 0,
-            strokeWeight: 2,
-            icons: [{ icon: arrowSymbol, offset: "0%", repeat: "20px" }],
-            map,
-          });
-          arcs.push(arc);
-        }
-
-        // Animate: cycle the icon offset to make the dashes flow
-        if (arcs.length > 0) {
-          let count = 0;
-          animInterval = setInterval(() => {
-            count = (count + 1) % 200;
-            const pct = `${(count / 2).toFixed(1)}%`;
-            arcs.forEach((arc) => {
-              const icons = arc.get("icons") as
-                | google.maps.IconSequence[]
-                | undefined;
-              if (icons && icons[0]) {
-                icons[0].offset = pct;
-                arc.set("icons", icons);
-              }
-            });
-          }, 30);
-        }
-      }
-
       // ── HeatmapLayer — density of completed/booked destinations ──────────────
       // Loaded asynchronously so it doesn't block marker rendering. Each visited
       // location contributes one data point per trip, so repeat-visit cities
@@ -479,9 +415,6 @@ function MapPanel({
       return () => {
         heatmapCancelled = true;
         heatmapLayer?.setMap(null);
-        if (animInterval != null) clearInterval(animInterval);
-        arcs.forEach((a) => a.setMap(null));
-        arcs = [];
         dataLayer?.setMap(null);
         markers.forEach((m) => (m.map = null));
         markers = [];
@@ -495,8 +428,6 @@ function MapPanel({
       );
       return () => {
         heatmapLayer?.setMap(null);
-        if (animInterval != null) clearInterval(animInterval);
-        arcs.forEach((a) => a.setMap(null));
         dataLayer?.setMap(null);
         markers.forEach((m) => (m.map = null));
         infoWindow?.close();

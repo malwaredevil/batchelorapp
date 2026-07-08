@@ -31,4 +31,9 @@ export const env = {
   // if both are somehow set there (see routes/dev-screenshot-login.ts).
   screenshotAuthToken: optional("SCREENSHOT_AUTH_TOKEN"),
   agentLoginEmail: optional("AGENT_LOGIN_EMAIL"),
+  // Shared secret from AgentPhone's webhook configuration screen, used to
+  // verify the HMAC signature on inbound `/api/agentphone/webhook` requests.
+  // Optional at the env layer so the rest of the app boots fine without it —
+  // the webhook route itself returns 503 until this is set.
+  agentphoneWebhookSecret: optional("AGENTPHONE_WEBHOOK_SECRET"),
 };

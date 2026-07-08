@@ -36,7 +36,11 @@ import {
   sendTestEmail,
   resendConfigured,
 } from "../lib/email";
-import { sendSms, SmsRegistrationPendingError } from "../lib/sms";
+import {
+  sendSms,
+  SmsRegistrationPendingError,
+  SmsOptedOutError,
+} from "../lib/sms";
 import { runReminderAlerts } from "../lib/reminder-scheduler";
 
 const LOGIN_PATH = "/login";
@@ -365,6 +369,13 @@ router.post(
         });
         return;
       }
+      if (err instanceof SmsOptedOutError) {
+        res.status(409).json({
+          error:
+            "This phone number has opted out of texts (replied STOP). Reply START from that phone to resubscribe before verifying it.",
+        });
+        return;
+      }
       res.status(500).json({
         error: "Could not send the verification code. Please try again.",
       });
@@ -494,6 +505,13 @@ router.post(
         res.status(503).json({
           error:
             "SMS sending isn't enabled yet — AgentPhone's carrier (10DLC) registration is still pending. Your phone number is verified and ready; this will start working once registration completes.",
+        });
+        return;
+      }
+      if (err instanceof SmsOptedOutError) {
+        res.status(409).json({
+          error:
+            "This phone number has opted out of texts (replied STOP). Reply START from that phone to resubscribe.",
         });
         return;
       }

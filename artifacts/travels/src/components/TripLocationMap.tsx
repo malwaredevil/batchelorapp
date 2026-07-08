@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { MapPlaceResult } from "@workspace/api-client-react";
-import { loadGoogleMaps, onGoogleMapsAuthFailure } from "@/lib/google-maps-loader";
+import {
+  loadGoogleMaps,
+  onGoogleMapsAuthFailure,
+} from "@/lib/google-maps-loader";
 
 const AUTH_FAILURE_MESSAGE =
   "Map is currently unavailable (the Google Maps API key isn't authorized for this domain).";

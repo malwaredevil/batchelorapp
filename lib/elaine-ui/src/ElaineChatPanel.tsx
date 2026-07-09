@@ -653,7 +653,7 @@ export function ElaineChatPanel({
         </div>
       )}
 
-      <div className="shrink-0 border-t border-border/60 bg-background/80 px-3 py-2.5 backdrop-blur-sm">
+      <div className="shrink-0 border-t border-border/60 bg-background/80 px-3 py-2 backdrop-blur-sm">
         {/* Hidden file input for paperclip */}
         <input
           ref={fileInputRef}
@@ -666,32 +666,8 @@ export function ElaineChatPanel({
             if (file) void handleAddAttachment(file);
           }}
         />
+        {/* Row 1: textarea + send */}
         <div className="flex items-end gap-2">
-          {composerLeftSlot}
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-[38px] w-[38px] shrink-0 rounded-xl"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isStreaming || pendingAttachments.length >= 5}
-            title="Attach an image"
-          >
-            <Paperclip className="h-4 w-4" />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-[38px] w-[38px] shrink-0 rounded-xl"
-            onClick={() => void handleScreenshot()}
-            disabled={isStreaming || isCapturing || pendingAttachments.length >= 5}
-            title="Screenshot this page"
-          >
-            {isCapturing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Camera className="h-4 w-4" />
-            )}
-          </Button>
           <Textarea
             value={input}
             onChange={(e) => handleInputChange(e.target.value)}
@@ -706,12 +682,54 @@ export function ElaineChatPanel({
             rows={1}
             disabled={isStreaming}
           />
+          <Button
+            size="sm"
+            className="h-[38px] w-[38px] shrink-0 rounded-xl p-0"
+            onClick={() => void handleSend()}
+            disabled={
+              (!input.trim() &&
+                pendingAttachments.every((a) => !a.uploadedUrl)) ||
+              isStreaming ||
+              hasUploadingAttachments
+            }
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        </div>
+        {/* Row 2: utility icons */}
+        <div className="flex items-center gap-0.5 pt-1">
+          {composerLeftSlot}
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground hover:text-foreground"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isStreaming || pendingAttachments.length >= 5}
+            title="Attach an image"
+          >
+            <Paperclip className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground hover:text-foreground"
+            onClick={() => void handleScreenshot()}
+            disabled={isStreaming || isCapturing || pendingAttachments.length >= 5}
+            title="Screenshot this page"
+          >
+            {isCapturing ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Camera className="h-3.5 w-3.5" />
+            )}
+          </Button>
+          <div className="flex-1" />
           {voice.isSupported && (
             <Button
               type="button"
               size="icon"
               variant="ghost"
-              className={`relative h-[38px] w-[38px] shrink-0 rounded-xl transition-colors ${
+              className={`relative h-8 w-8 shrink-0 rounded-lg transition-colors ${
                 voice.isListening
                   ? "text-red-500 hover:text-red-600"
                   : "text-muted-foreground hover:text-foreground"
@@ -721,9 +739,9 @@ export function ElaineChatPanel({
               title={voice.isListening ? "Stop recording" : "Voice input"}
             >
               {voice.isListening && (
-                <span className="absolute inset-0 animate-ping rounded-xl bg-red-500/20" />
+                <span className="absolute inset-0 animate-ping rounded-lg bg-red-500/20" />
               )}
-              <Mic className="h-4 w-4" />
+              <Mic className="h-3.5 w-3.5" />
             </Button>
           )}
           {tts.isSupported && (
@@ -731,7 +749,7 @@ export function ElaineChatPanel({
               type="button"
               size="icon"
               variant="ghost"
-              className={`h-[38px] w-[38px] shrink-0 rounded-xl transition-colors ${
+              className={`h-8 w-8 shrink-0 rounded-lg transition-colors ${
                 tts.enabled
                   ? "text-primary hover:text-primary"
                   : "text-muted-foreground hover:text-foreground"
@@ -744,9 +762,9 @@ export function ElaineChatPanel({
               }
             >
               {tts.enabled ? (
-                <Volume2 className="h-4 w-4" />
+                <Volume2 className="h-3.5 w-3.5" />
               ) : (
-                <VolumeX className="h-4 w-4" />
+                <VolumeX className="h-3.5 w-3.5" />
               )}
             </Button>
           )}
@@ -757,10 +775,10 @@ export function ElaineChatPanel({
                   type="button"
                   size="icon"
                   variant="ghost"
-                  className="h-[38px] w-[38px] shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
+                  className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground hover:text-foreground"
                   title="Voice and speed"
                 >
-                  <Settings2 className="h-4 w-4" />
+                  <Settings2 className="h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
@@ -861,19 +879,6 @@ export function ElaineChatPanel({
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-          <Button
-            size="sm"
-            className="h-[38px] w-[38px] shrink-0 rounded-xl p-0"
-            onClick={() => void handleSend()}
-            disabled={
-              (!input.trim() &&
-                pendingAttachments.every((a) => !a.uploadedUrl)) ||
-              isStreaming ||
-              hasUploadingAttachments
-            }
-          >
-            <Send className="h-4 w-4" />
-          </Button>
         </div>
       </div>
 

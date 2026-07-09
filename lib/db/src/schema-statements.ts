@@ -1080,6 +1080,23 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS agentphone_webhook_deliveries_received_at_idx
      ON agentphone_webhook_deliveries (received_at)`,
 
+  // ── Elaine inbound email (Resend) ───────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS elaine_email_conversations (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER NOT NULL UNIQUE,
+    messages        JSONB NOT NULL DEFAULT '[]'::jsonb,
+    last_message_id TEXT,
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE elaine_email_conversations ENABLE ROW LEVEL SECURITY`,
+  `CREATE TABLE IF NOT EXISTS elaine_email_webhook_deliveries (
+    id          TEXT PRIMARY KEY,
+    received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE elaine_email_webhook_deliveries ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS elaine_email_webhook_deliveries_received_at_idx
+     ON elaine_email_webhook_deliveries (received_at)`,
+
   // travels_reminders.sms_recipient_user_ids: app_users.id values (must have a
   // verified phone number) who should also get an SMS alert for this
   // reminder, alongside/instead of the email recipients above.

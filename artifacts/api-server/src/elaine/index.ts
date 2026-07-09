@@ -6355,4 +6355,129 @@ export async function runAgentphoneTurn(params: {
   return { replyText, history: updatedHistory };
 }
 
+// ---------------------------------------------------------------------------
+// Elaine inbound-email bridge — used by routes/elaine-email.ts. Reuses the
+// exact same restricted, non-destructive tool allowlist as the AgentPhone
+// SMS/voice bridge above (AGENTPHONE_ACTION_TYPES / AGENTPHONE_ACTION_TOOLS):
+// no delete_*, no trip/wishlist creation, no email/itinerary-gen/calendar-
+// connect tools, no on-screen state context. Runs in auto_run mode always —
+// there's no confirmation UI over email, so every allowed action executes
+// immediately and the reply reports what happened.
+// ---------------------------------------------------------------------------
+
+export interface ElaineEmailChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+const ELAINE_EMAIL_SYSTEM_PROMPT =
+  "You are Elaine, the Batchelor household's assistant, replying by email rather than the app's chat widget. Keep replies concise and in plain text (no markdown syntax like ** or #, since this is sent as plain email text) — a short paragraph or two is usually enough. You can help with trip reminders, packing lists, and moving a trip between stages (e.g. wishlist/planning/booked), using only the tools available to you here. Only act on a trip or reminder you can see listed in the context below; never invent a tripId or reminderId — if you can't find what the user means, ask them to clarify or say to use the app instead. If asked to do anything outside what your tools support here (creating or deleting a trip, wishlist items, connecting a calendar, sending email on their behalf, generating an itinerary, editing itinerary days), say you can only help with reminders, packing lists, and trip status by email, and that they should use the app for anything else. There is no confirmation step over email — any action you call runs immediately — so always briefly confirm in your reply what you actually did (or that it failed). Sign off naturally as Elaine; do not repeat a greeting like 'Hi' if the message is a quick reply.";
+
+// Runs one restricted, non-streaming Elaine turn for an inbound email from a
+// known household member. Mirrors runAgentphoneTurn's shape/behavior exactly
+// (same tool allowlist, same auto-run semantics) but with an email-appropriate
+// system prompt and slightly longer context/history budget since email has
+// no character-count pressure.
+export async function runElaineEmailTurn(params: {
+  userId: number;
+  inputText: string;
+  history: ElaineEmailChatMessage[];
+}): Promise<{ replyText: string; history: ElaineEmailChatMessage[] }> {
+  const { userId, inputText, history } = params;
+  const config = await getElaineGlobalConfig();
+  const contextText = await buildAgentphoneContext();
+
+  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    {
+      role: "system",
+      content: `${ELAINE_EMAIL_SYSTEM_PROMPT}\n\n${contextText}`,
+    },
+    ...history.slice(-10).map(
+      (m) =>
+        ({
+          role: m.role,
+          content: m.content,
+        }) as OpenAI.Chat.Completions.ChatCompletionMessageParam,
+    ),
+    { role: "user", content: inputText },
+  ];
+
+  let replyText = "";
+  const MAX_ROUNDS = 3;
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    const completion = await callModel(config.chatModel, (client, model) =>
+      client.chat.completions.create({
+        model,
+        max_tokens: 500,
+        messages,
+        tools: AGENTPHONE_ACTION_TOOLS,
+      }),
+    );
+    const message = completion.choices[0]?.message;
+    if (!message) break;
+    replyText = (message.content ?? "").trim();
+    const toolCalls = message.tool_calls ?? [];
+    if (toolCalls.length === 0) break;
+
+    messages.push({
+      role: "assistant",
+      content: message.content ?? null,
+      tool_calls: toolCalls,
+    });
+
+    for (const call of toolCalls) {
+      if (call.type !== "function") continue;
+      const name = call.function.name;
+      let resultText = "That action isn't available over email.";
+      if (AGENTPHONE_ACTION_TYPES.has(name)) {
+        try {
+          const finalAction = await tryBuildAction(
+            name,
+            call.function.arguments,
+          );
+          if (finalAction) {
+            const executor = ACTION_EXECUTORS[finalAction.type as ActionType];
+            const { status, body } = await executor(
+              finalAction.payload as never,
+              userId,
+            );
+            resultText =
+              status < 400
+                ? `Done: ${finalAction.label}.`
+                : `Failed (${status}): ${JSON.stringify(body)}`;
+          } else {
+            resultText =
+              "Couldn't understand that request clearly enough to act — ask the user to clarify.";
+          }
+        } catch (err) {
+          logger.error(
+            { err, name },
+            "Elaine email restricted action execution failed",
+          );
+          resultText =
+            "That action failed on our end — tell the user to try again or use the app.";
+        }
+      }
+      messages.push({
+        role: "tool",
+        tool_call_id: call.id,
+        content: resultText,
+      });
+    }
+  }
+
+  if (!replyText) {
+    replyText =
+      "Sorry, I couldn't process that — please try again or use the app.";
+  }
+
+  const updatedHistory: ElaineEmailChatMessage[] = [
+    ...history,
+    { role: "user" as const, content: inputText },
+    { role: "assistant" as const, content: replyText },
+  ].slice(-20);
+
+  return { replyText, history: updatedHistory };
+}
+
 export default router;

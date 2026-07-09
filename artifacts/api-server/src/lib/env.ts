@@ -41,5 +41,15 @@ export const env = {
   // Optional at the env layer so the rest of the app boots fine without it —
   // the webhook route itself returns 503 until this is set.
   agentphoneWebhookSecret: optional("AGENTPHONE_WEBHOOK_SECRET"),
+  // Resend inbound-email webhook signing secret for
+  // `/api/elaine/email-webhook`. Two separate webhooks were provisioned in
+  // Resend (one per environment domain), so the secret to verify against is
+  // chosen by NODE_ENV — never mix them up, since a dev-signed payload will
+  // fail verification against the prod secret and vice versa.
+  resendWebhookSecret: optional(
+    process.env.NODE_ENV === "production"
+      ? "RESEND_WEBHOOK_SECRET_PROD"
+      : "RESEND_WEBHOOK_SECRET_DEV",
+  ),
   sentryDsn: optional("SENTRY_DSN"),
 };

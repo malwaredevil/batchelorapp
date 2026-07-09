@@ -519,6 +519,20 @@ CREATE TABLE IF NOT EXISTS elaine_memory (
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Elaine inbound email (Resend webhook)
+CREATE TABLE IF NOT EXISTS elaine_email_conversations (
+  id               SERIAL PRIMARY KEY,
+  user_id          INTEGER NOT NULL UNIQUE,
+  messages         JSONB NOT NULL DEFAULT '[]'::jsonb,
+  last_message_id  TEXT,
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS elaine_email_webhook_deliveries (
+  id           TEXT PRIMARY KEY,
+  received_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS elaine_global_config (
   id                    INTEGER PRIMARY KEY DEFAULT 1,
   chat_model            TEXT NOT NULL DEFAULT 'google/gemini-2.5-flash',
@@ -1295,6 +1309,20 @@ async function main() {
     jsonbColumns: ["messages"],
   });
   await resetSequence(dest, "elaine_conversations", "id");
+
+  summary["elaine_email_conversations"] = await copyTable(source, dest, {
+    table: "elaine_email_conversations",
+    columns: ["id", "user_id", "messages", "last_message_id", "updated_at"],
+    orderBy: "id",
+    jsonbColumns: ["messages"],
+  });
+  await resetSequence(dest, "elaine_email_conversations", "id");
+
+  summary["elaine_email_webhook_deliveries"] = await copyTable(source, dest, {
+    table: "elaine_email_webhook_deliveries",
+    columns: ["id", "received_at"],
+    orderBy: "received_at",
+  });
 
   summary["elaine_settings"] = await copyTable(source, dest, {
     table: "elaine_settings",

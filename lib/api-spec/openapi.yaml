@@ -274,15 +274,41 @@ paths:
       tags:
         - pottery
       summary: List pottery
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: Text search across name, pattern description, style, shape, maker, and motifs
+          schema:
+            type: string
+        - name: categoryId
+          in: query
+          required: false
+          description: Filter to items that belong to this category ID
+          schema:
+            type: integer
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 60
       responses:
         "200":
-          description: Collection list
+          description: Paginated collection list
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/PotteryPotteryItem"
+                $ref: "#/components/schemas/PotteryPotteryListResponse"
     post:
       operationId: createPottery
       tags:
@@ -779,15 +805,34 @@ paths:
       tags:
         - fabrics
       summary: List all fabrics
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
       responses:
         "200":
           description: Fabric list
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/QuiltingFabric"
+                $ref: "#/components/schemas/QuiltingFabricsListResponse"
     post:
       operationId: createFabric
       tags:
@@ -895,6 +940,44 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/QuiltingFabric"
+  /quilting/fabrics/{id}/pairings:
+    get:
+      operationId: getFabricPairings
+      tags:
+        - fabrics
+      summary: Get up to 4 stash fabrics that pair well with this one (embedding similarity)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Array of pairing suggestions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QuiltingFabric"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /quilting/fabrics/used-ids:
+    get:
+      operationId: getUsedFabricIds
+      tags:
+        - fabrics
+      summary: Get IDs of fabrics linked to at least one finished quilt
+      responses:
+        "200":
+          description: Array of used fabric IDs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: integer
   /quilting/fabrics/bulk-reanalyze:
     post:
       operationId: bulkReanalyzeFabrics
@@ -985,15 +1068,34 @@ paths:
       tags:
         - patterns
       summary: List all quilt patterns
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
       responses:
         "200":
           description: Pattern list
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/QuiltingQuiltPattern"
+                $ref: "#/components/schemas/QuiltingPatternsListResponse"
     post:
       operationId: createPattern
       tags:
@@ -1233,15 +1335,34 @@ paths:
       tags:
         - quilts
       summary: List all finished quilts
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
       responses:
         "200":
           description: Quilt list
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/QuiltingFinishedQuilt"
+                $ref: "#/components/schemas/QuiltingQuiltsListResponse"
     post:
       operationId: createQuilt
       tags:
@@ -2998,6 +3119,25 @@ components:
             - "null"
         position:
           type: integer
+    PotteryPotteryListResponse:
+      type: object
+      required:
+        - items
+        - total
+        - page
+        - pageSize
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PotteryPotteryItem"
+        total:
+          type: integer
+          description: Total number of items matching the query (before pagination)
+        page:
+          type: integer
+        pageSize:
+          type: integer
     PotteryPotteryItem:
       type: object
       required:
@@ -3285,6 +3425,60 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PotteryColorCount"
+    QuiltingFabricsListResponse:
+      type: object
+      required:
+        - items
+        - total
+        - page
+        - pageSize
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuiltingFabric"
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    QuiltingPatternsListResponse:
+      type: object
+      required:
+        - items
+        - total
+        - page
+        - pageSize
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuiltingQuiltPattern"
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    QuiltingQuiltsListResponse:
+      type: object
+      required:
+        - items
+        - total
+        - page
+        - pageSize
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuiltingFinishedQuilt"
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
     QuiltingCategory:
       type: object
       required:
@@ -3710,6 +3904,11 @@ components:
           type: array
           items:
             type: string
+        completionPercentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: WIP completion 0–100. 0 = not started, 100 = finished.
         categories:
           type: array
           items:
@@ -3800,6 +3999,11 @@ components:
           type: array
           items:
             type: integer
+        completionPercentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+          nullable: true
     QuiltingBulkReanalyzeInput:
       type: object
       required:

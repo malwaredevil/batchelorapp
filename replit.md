@@ -81,6 +81,27 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
   - Only once all stages pass: (re)publish.
   - Stage 4 — post-publish Sentry check (after publishing): Wait ~5 minutes for production traffic, then check Sentry for new issues introduced by the release. Look for errors on the routes/features that changed. If new issues appear, fix them before considering the release stable. Sentry emails are the passive signal; this step is the active one.
 
+## Secrets checklist (for moving to a Team Workspace, or any new environment)
+
+Names only — values must be re-entered manually in the new environment's Secrets tab, never copied through chat/code:
+
+- `DATABASE_URL` — must point to Supabase, not the new workspace's built-in DB
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — shared OAuth client
+- `GOOGLE_MAPS_API_KEY`, `VITE_GOOGLE_MAPS_API_KEY`
+- `GOOGLE_WALLET_ISSUER_ID`, `GOOGLE_WALLET_SERVICE_ACCOUNT_JSON`
+- `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_POOLER_HOST`
+- `SESSION_SECRET`
+- `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `JINA_API_KEY`, `VOYAGE_API_KEY` (all required, not optional — see below)
+- `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_REMINDER_FROM_EMAIL`
+- `SENTRY_DSN`
+- `GITHUB_PAT`
+- `AGENTPHONE_API_KEY`, `AGENTPHONE_WEBHOOK_SECRET`
+- `SCREENSHOT_AUTH_TOKEN` (dev-only cookie-free login bypass)
+- `AGENT_LOGIN_EMAIL`, `AGENT_LOGIN_PASSWORD` (dev-only test login fallback)
+- `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` — these back the Replit built-in DB used for backups; a new workspace provisions its own automatically, but re-run `pnpm --filter @workspace/scripts run backup-to-replit` after moving to repopulate it from Supabase
+
+Secrets are per-Repl/per-workspace and do not carry over automatically on a move — this list must be manually re-entered.
+
 ## Gotchas
 
 - `DATABASE_URL` is claimed by Replit's built-in DB — must be manually overridden in the Secrets tab to point at Supabase

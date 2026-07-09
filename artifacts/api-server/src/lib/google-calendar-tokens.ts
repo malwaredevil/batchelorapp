@@ -34,6 +34,8 @@ export interface TravelCalendarConnection {
   primaryColor: string;
 }
 
+export type HallmarkCalendarConnection = TravelCalendarConnection;
+
 /**
  * Returns the single row (if any) marked as the shared "Travel" calendar —
  * every app_user's Travel Calendar requests are proxied through this row's
@@ -58,6 +60,44 @@ export async function getTravelCalendarConnection(): Promise<TravelCalendarConne
       ),
     )
     .where(eq(travelsConnectedCalendars.isTravelCalendar, true))
+    .limit(1);
+  if (!row) return null;
+  return {
+    connectedCalendarId: row.id,
+    userId: row.userId,
+    googleEmail: row.googleEmail,
+    googleCalendarId: row.googleCalendarId,
+    summary: row.summary,
+    primaryColor: row.primaryColor,
+  };
+}
+
+/**
+ * Returns the single row (if any) marked as the shared "Hallmark" calendar —
+ * mirrors getTravelCalendarConnection(). Ornaments' Hallmark event writes
+ * are proxied through this row's owning user's Google token, regardless of
+ * who is asking, so any household member can add/edit a Hallmark event and
+ * have it mirrored to the shared calendar.
+ */
+export async function getHallmarkCalendarConnection(): Promise<HallmarkCalendarConnection | null> {
+  const [row] = await db
+    .select({
+      id: travelsConnectedCalendars.id,
+      userId: travelsConnectedCalendars.userId,
+      googleCalendarId: travelsConnectedCalendars.googleCalendarId,
+      summary: travelsConnectedCalendars.summary,
+      primaryColor: travelsConnectedCalendars.primaryColor,
+      googleEmail: travelsGoogleCalendarConnections.googleEmail,
+    })
+    .from(travelsConnectedCalendars)
+    .innerJoin(
+      travelsGoogleCalendarConnections,
+      eq(
+        travelsGoogleCalendarConnections.userId,
+        travelsConnectedCalendars.userId,
+      ),
+    )
+    .where(eq(travelsConnectedCalendars.isHallmarkCalendar, true))
     .limit(1);
   if (!row) return null;
   return {

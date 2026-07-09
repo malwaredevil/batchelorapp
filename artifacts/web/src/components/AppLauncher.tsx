@@ -31,6 +31,7 @@ import {
   Sparkle,
 } from "lucide-react";
 import { AppSwitcher } from "@workspace/elaine-ui";
+import { useListOrnamentsHallmarkEvents } from "@workspace/api-client-react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -112,12 +113,13 @@ const ORNAMENTS_QUICK_LINKS = [
 
 /**
  * Hallmark's annual Keepsake Ornament Premiere ("Open House") event.
- * Dates are set by Hallmark each year; update this when the next year's
- * dates are announced.
+ * This hardcoded fallback is only used until the real event data (synced
+ * from the shared Hallmark Google Calendar / entered in-app) loads from
+ * the ornaments-hallmark-events API — see useNextHallmarkEvent().
  */
 const HALLMARK_OPEN_HOUSE = {
   start: new Date("2026-07-11T00:00:00"),
-  end: new Date("2026-07-12T23:59:59"),
+  end: new Date("2026-07-19T23:59:59"),
 };
 
 const ELAINE_QUICK_LINKS = [
@@ -451,19 +453,39 @@ function AppHeroCard({
   );
 }
 
-// ── Ornaments card extra: Hallmark Open House countdown ──────────────────────
+// ── Ornaments card extra: next Hallmark event countdown ─────────────────────
+// Pulls from the household-shared ornaments_hallmark_events table (editable
+// in the Ornaments app, best-effort synced to the shared Hallmark Google
+// Calendar). Falls back to the hardcoded HALLMARK_OPEN_HOUSE constant only
+// if no events have been entered yet or the request hasn't resolved.
 function HallmarkOpenHouseCountdown() {
+  const { data: events } = useListOrnamentsHallmarkEvents();
   const now = Date.now();
-  const { start, end } = HALLMARK_OPEN_HOUSE;
-  const isLive = now >= start.getTime() && now <= end.getTime();
+
+  const upcoming = (events ?? [])
+    .map((e) => ({
+      title: e.title,
+      start: new Date(`${e.startDate}T00:00:00`),
+      end: new Date(`${e.endDate}T23:59:59`),
+    }))
+    .filter((e) => e.end.getTime() >= now)
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+
+  const next = upcoming[0] ?? {
+    title: "Hallmark's Open House",
+    start: HALLMARK_OPEN_HOUSE.start,
+    end: HALLMARK_OPEN_HOUSE.end,
+  };
+
+  const isLive = now >= next.start.getTime() && now <= next.end.getTime();
   const daysAway = isLive
     ? 0
-    : Math.max(0, Math.ceil((start.getTime() - now) / 86_400_000));
+    : Math.max(0, Math.ceil((next.start.getTime() - now) / 86_400_000));
 
-  const dateRangeLabel = `${start.toLocaleDateString("en-US", {
+  const dateRangeLabel = `${next.start.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
-  })} – ${end.toLocaleDateString("en-US", {
+  })} – ${next.end.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -475,9 +497,7 @@ function HallmarkOpenHouseCountdown() {
         <Sparkle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-semibold truncate">
-          Hallmark's Open House
-        </div>
+        <div className="text-sm font-semibold truncate">{next.title}</div>
         <div className="text-[10px] text-muted-foreground">
           {dateRangeLabel}
         </div>

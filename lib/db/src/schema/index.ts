@@ -6,3 +6,4 @@ export * from "./elaine";
 export * from "./gmail";
 export * from "./agentphone";
 export * from "./ornaments";
+export * from "./elaine-email";

@@ -190,6 +190,75 @@ export async function sendAssistantEmail(
   }
 }
 
+// Sends Elaine's reply to an inbound household email (elaine@app.batchelor.app).
+// Threaded via In-Reply-To/References when we have the inbound Message-ID, so
+// mail clients group it with the original thread. `body` is plain text
+// composed by the restricted email-turn — same escaping/paragraph treatment
+// as sendAssistantEmail.
+export async function sendElaineEmailReply(
+  toEmail: string,
+  subject: string,
+  body: string,
+  inReplyToMessageId?: string | null,
+): Promise<string | undefined> {
+  const from = ELAINE_FROM_EMAIL;
+
+  const paragraphsHtml = body
+    .split(/\n{2,}/)
+    .map(
+      (p) =>
+        `<p style="margin: 0 0 16px; font-size: 14px; color: #333; white-space: pre-line;">${escapeHtml(p.trim())}</p>`,
+    )
+    .join("");
+
+  const headers = inReplyToMessageId
+    ? {
+        "In-Reply-To": inReplyToMessageId,
+        References: inReplyToMessageId,
+      }
+    : undefined;
+
+  const { data, error } = await getResend().emails.send({
+    from,
+    to: toEmail,
+    subject: subject.startsWith("Re:") ? subject : `Re: ${subject}`,
+    headers,
+    html: `
+<!DOCTYPE html>
+<html>
+  <head><meta charset="utf-8" /></head>
+  <body style="font-family: sans-serif; background: #f9f9f9; padding: 40px 0; margin: 0;">
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td align="center">
+          <table width="560" cellpadding="0" cellspacing="0"
+            style="background: #ffffff; border-radius: 8px; padding: 40px;
+                   box-shadow: 0 1px 4px rgba(0,0,0,0.08);">
+            <tr>
+              <td>
+                ${paragraphsHtml}
+                <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+                <p style="margin: 0; font-size: 11px; color: #bbb;">
+                  Elaine, your Batchelor household assistant
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`,
+    text: `${body}\n\n— Elaine`,
+  });
+
+  if (error) {
+    logger.error({ err: error }, "resend elaine email reply send failed");
+    throw new Error(`Failed to send email reply: ${error.message}`);
+  }
+  return data?.id;
+}
+
 // Simple connectivity-check email used by the account settings "Send test
 // email" button. Uses the same sender as password-reset emails since that's
 // the one guaranteed to be configured whenever resendConfigured() is true.

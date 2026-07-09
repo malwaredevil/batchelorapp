@@ -12,7 +12,8 @@
  *   Pottery: pottery_categories, pottery_items (WITHOUT embedding/visual_embedding),
  *            pottery_images, pottery_item_categories
  *   Ornaments: ornaments_categories, ornaments_items (WITHOUT embedding/visual_embedding),
- *              ornaments_images, ornaments_item_categories, ornaments_barcode_cache
+ *              ornaments_images, ornaments_item_categories, ornaments_barcode_cache,
+ *              ornaments_hallmark_events
  *   Quilting: quilting_categories, quilting_fabrics (WITHOUT embedding/visual_embedding),
  *             quilting_patterns (WITHOUT embedding/visual_embedding),
  *             quilting_finished_quilts, quilting_fabric_links, quilting_pattern_links,
@@ -203,6 +204,18 @@ CREATE TABLE IF NOT EXISTS ornaments_barcode_cache (
   description          TEXT,
   image_url            TEXT,
   created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS ornaments_hallmark_events (
+  id               SERIAL PRIMARY KEY,
+  user_id          INTEGER,
+  title            TEXT NOT NULL,
+  description      TEXT,
+  start_date       DATE NOT NULL,
+  end_date         DATE NOT NULL,
+  google_event_id  TEXT,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Quilting
@@ -504,6 +517,20 @@ CREATE TABLE IF NOT EXISTS elaine_memory (
   content             TEXT NOT NULL,
   created_by_user_id  INTEGER NOT NULL,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Elaine inbound email (Resend webhook)
+CREATE TABLE IF NOT EXISTS elaine_email_conversations (
+  id               SERIAL PRIMARY KEY,
+  user_id          INTEGER NOT NULL UNIQUE,
+  messages         JSONB NOT NULL DEFAULT '[]'::jsonb,
+  last_message_id  TEXT,
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS elaine_email_webhook_deliveries (
+  id           TEXT PRIMARY KEY,
+  received_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS elaine_global_config (
@@ -897,6 +924,23 @@ async function main() {
     orderBy: "barcode",
   });
 
+  summary["ornaments_hallmark_events"] = await copyTable(source, dest, {
+    table: "ornaments_hallmark_events",
+    columns: [
+      "id",
+      "user_id",
+      "title",
+      "description",
+      "start_date",
+      "end_date",
+      "google_event_id",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ornaments_hallmark_events", "id");
+
   // ── Quilting ──────────────────────────────────────────────────────────────
   summary["quilting_categories"] = await copyTable(source, dest, {
     table: "quilting_categories",
@@ -1265,6 +1309,20 @@ async function main() {
     jsonbColumns: ["messages"],
   });
   await resetSequence(dest, "elaine_conversations", "id");
+
+  summary["elaine_email_conversations"] = await copyTable(source, dest, {
+    table: "elaine_email_conversations",
+    columns: ["id", "user_id", "messages", "last_message_id", "updated_at"],
+    orderBy: "id",
+    jsonbColumns: ["messages"],
+  });
+  await resetSequence(dest, "elaine_email_conversations", "id");
+
+  summary["elaine_email_webhook_deliveries"] = await copyTable(source, dest, {
+    table: "elaine_email_webhook_deliveries",
+    columns: ["id", "received_at"],
+    orderBy: "received_at",
+  });
 
   summary["elaine_settings"] = await copyTable(source, dest, {
     table: "elaine_settings",

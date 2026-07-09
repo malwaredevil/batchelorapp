@@ -30,6 +30,10 @@ import type {
   ForgotPasswordInput,
   HealthStatus,
   ImportPatternFromUrlBody,
+  ListFabricsParams,
+  ListPatternsParams,
+  ListPotteryParams,
+  ListQuiltsParams,
   LoginInput,
   MergeQuiltingCategory200,
   PaletteMatchFabricsBody,
@@ -46,6 +50,7 @@ import type {
   PotteryPotteryImage,
   PotteryPotteryImageUpdate,
   PotteryPotteryItem,
+  PotteryPotteryListResponse,
   PotteryPotteryUpdate,
   PotteryPrimaryImageSelection,
   PotteryStragglers,
@@ -70,14 +75,17 @@ import type {
   QuiltingEntityImage,
   QuiltingExtractBlocksResult,
   QuiltingFabric,
+  QuiltingFabricsListResponse,
   QuiltingFinishedQuilt,
   QuiltingImportedPatternInfo,
   QuiltingMergeCategoryInput,
   QuiltingPaletteMatchFabricResponse,
   QuiltingPaletteMatchPatternResponse,
   QuiltingPaletteMatchQuiltResponse,
+  QuiltingPatternsListResponse,
   QuiltingQuiltLayout,
   QuiltingQuiltPattern,
+  QuiltingQuiltsListResponse,
   QuiltingRenameCategoryInput,
   QuiltingShoppingItem,
   QuiltingShoppingStats,
@@ -1071,20 +1079,27 @@ export const useChangePassword = <TError = ErrorType<Error>,
       return useMutation(getChangePasswordMutationOptions(options));
     }
 
-export const getListPotteryUrl = () => {
+export const getListPotteryUrl = (params?: ListPotteryParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/pottery/items`
+  return stringifiedParams.length > 0 ? `/api/pottery/items?${stringifiedParams}` : `/api/pottery/items`
 }
 
 /**
  * @summary List pottery
  */
-export const listPottery = async ( options?: RequestInit): Promise<PotteryPotteryItem[]> => {
+export const listPottery = async (params?: ListPotteryParams, options?: RequestInit): Promise<PotteryPotteryListResponse> => {
 
-  return customFetch<PotteryPotteryItem[]>(getListPotteryUrl(),
+  return customFetch<PotteryPotteryListResponse>(getListPotteryUrl(params),
   {
     ...options,
     method: 'GET'
@@ -1097,23 +1112,23 @@ export const listPottery = async ( options?: RequestInit): Promise<PotteryPotter
 
 
 
-export const getListPotteryQueryKey = () => {
+export const getListPotteryQueryKey = (params?: ListPotteryParams,) => {
     return [
-    `/api/pottery/items`
+    `/api/pottery/items`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getListPotteryQueryOptions = <TData = Awaited<ReturnType<typeof listPottery>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPottery>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListPotteryQueryOptions = <TData = Awaited<ReturnType<typeof listPottery>>, TError = ErrorType<unknown>>(params?: ListPotteryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPottery>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListPotteryQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getListPotteryQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPottery>>> = ({ signal }) => listPottery({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPottery>>> = ({ signal }) => listPottery(params, { signal, ...requestOptions });
 
 
 
@@ -1131,11 +1146,11 @@ export type ListPotteryQueryError = ErrorType<unknown>
  */
 
 export function useListPottery<TData = Awaited<ReturnType<typeof listPottery>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPottery>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: ListPotteryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPottery>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getListPotteryQueryOptions(options)
+  const queryOptions = getListPotteryQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -2595,20 +2610,27 @@ export function useGetCollectionStats<TData = Awaited<ReturnType<typeof getColle
 
 
 
-export const getListFabricsUrl = () => {
+export const getListFabricsUrl = (params?: ListFabricsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/quilting/fabrics`
+  return stringifiedParams.length > 0 ? `/api/quilting/fabrics?${stringifiedParams}` : `/api/quilting/fabrics`
 }
 
 /**
  * @summary List all fabrics
  */
-export const listFabrics = async ( options?: RequestInit): Promise<QuiltingFabric[]> => {
+export const listFabrics = async (params?: ListFabricsParams, options?: RequestInit): Promise<QuiltingFabricsListResponse> => {
 
-  return customFetch<QuiltingFabric[]>(getListFabricsUrl(),
+  return customFetch<QuiltingFabricsListResponse>(getListFabricsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -2621,23 +2643,23 @@ export const listFabrics = async ( options?: RequestInit): Promise<QuiltingFabri
 
 
 
-export const getListFabricsQueryKey = () => {
+export const getListFabricsQueryKey = (params?: ListFabricsParams,) => {
     return [
-    `/api/quilting/fabrics`
+    `/api/quilting/fabrics`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getListFabricsQueryOptions = <TData = Awaited<ReturnType<typeof listFabrics>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFabrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListFabricsQueryOptions = <TData = Awaited<ReturnType<typeof listFabrics>>, TError = ErrorType<unknown>>(params?: ListFabricsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFabrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListFabricsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getListFabricsQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listFabrics>>> = ({ signal }) => listFabrics({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listFabrics>>> = ({ signal }) => listFabrics(params, { signal, ...requestOptions });
 
 
 
@@ -2655,11 +2677,11 @@ export type ListFabricsQueryError = ErrorType<unknown>
  */
 
 export function useListFabrics<TData = Awaited<ReturnType<typeof listFabrics>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFabrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: ListFabricsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFabrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getListFabricsQueryOptions(options)
+  const queryOptions = getListFabricsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -3153,6 +3175,160 @@ export const useReanalyzeFabric = <TError = ErrorType<unknown>,
       return useMutation(getReanalyzeFabricMutationOptions(options));
     }
 
+export const getGetFabricPairingsUrl = (id: number,) => {
+
+
+
+
+  return `/api/quilting/fabrics/${id}/pairings`
+}
+
+/**
+ * @summary Get up to 4 stash fabrics that pair well with this one (embedding similarity)
+ */
+export const getFabricPairings = async (id: number, options?: RequestInit): Promise<QuiltingFabric[]> => {
+
+  return customFetch<QuiltingFabric[]>(getGetFabricPairingsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFabricPairingsQueryKey = (id: number,) => {
+    return [
+    `/api/quilting/fabrics/${id}/pairings`
+    ] as const;
+    }
+
+
+export const getGetFabricPairingsQueryOptions = <TData = Awaited<ReturnType<typeof getFabricPairings>>, TError = ErrorType<Error>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFabricPairings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFabricPairingsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFabricPairings>>> = ({ signal }) => getFabricPairings(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFabricPairings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFabricPairingsQueryResult = NonNullable<Awaited<ReturnType<typeof getFabricPairings>>>
+export type GetFabricPairingsQueryError = ErrorType<Error>
+
+
+/**
+ * @summary Get up to 4 stash fabrics that pair well with this one (embedding similarity)
+ */
+
+export function useGetFabricPairings<TData = Awaited<ReturnType<typeof getFabricPairings>>, TError = ErrorType<Error>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFabricPairings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFabricPairingsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetUsedFabricIdsUrl = () => {
+
+
+
+
+  return `/api/quilting/fabrics/used-ids`
+}
+
+/**
+ * @summary Get IDs of fabrics linked to at least one finished quilt
+ */
+export const getUsedFabricIds = async ( options?: RequestInit): Promise<number[]> => {
+
+  return customFetch<number[]>(getGetUsedFabricIdsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetUsedFabricIdsQueryKey = () => {
+    return [
+    `/api/quilting/fabrics/used-ids`
+    ] as const;
+    }
+
+
+export const getGetUsedFabricIdsQueryOptions = <TData = Awaited<ReturnType<typeof getUsedFabricIds>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUsedFabricIds>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetUsedFabricIdsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getUsedFabricIds>>> = ({ signal }) => getUsedFabricIds({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getUsedFabricIds>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetUsedFabricIdsQueryResult = NonNullable<Awaited<ReturnType<typeof getUsedFabricIds>>>
+export type GetUsedFabricIdsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get IDs of fabrics linked to at least one finished quilt
+ */
+
+export function useGetUsedFabricIds<TData = Awaited<ReturnType<typeof getUsedFabricIds>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUsedFabricIds>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetUsedFabricIdsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
 export const getBulkReanalyzeFabricsUrl = () => {
 
 
@@ -3529,20 +3705,27 @@ export const useDeleteFabricImage = <TError = ErrorType<unknown>,
       return useMutation(getDeleteFabricImageMutationOptions(options));
     }
 
-export const getListPatternsUrl = () => {
+export const getListPatternsUrl = (params?: ListPatternsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/quilting/patterns`
+  return stringifiedParams.length > 0 ? `/api/quilting/patterns?${stringifiedParams}` : `/api/quilting/patterns`
 }
 
 /**
  * @summary List all quilt patterns
  */
-export const listPatterns = async ( options?: RequestInit): Promise<QuiltingQuiltPattern[]> => {
+export const listPatterns = async (params?: ListPatternsParams, options?: RequestInit): Promise<QuiltingPatternsListResponse> => {
 
-  return customFetch<QuiltingQuiltPattern[]>(getListPatternsUrl(),
+  return customFetch<QuiltingPatternsListResponse>(getListPatternsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -3555,23 +3738,23 @@ export const listPatterns = async ( options?: RequestInit): Promise<QuiltingQuil
 
 
 
-export const getListPatternsQueryKey = () => {
+export const getListPatternsQueryKey = (params?: ListPatternsParams,) => {
     return [
-    `/api/quilting/patterns`
+    `/api/quilting/patterns`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getListPatternsQueryOptions = <TData = Awaited<ReturnType<typeof listPatterns>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPatterns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListPatternsQueryOptions = <TData = Awaited<ReturnType<typeof listPatterns>>, TError = ErrorType<unknown>>(params?: ListPatternsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPatterns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListPatternsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getListPatternsQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPatterns>>> = ({ signal }) => listPatterns({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPatterns>>> = ({ signal }) => listPatterns(params, { signal, ...requestOptions });
 
 
 
@@ -3589,11 +3772,11 @@ export type ListPatternsQueryError = ErrorType<unknown>
  */
 
 export function useListPatterns<TData = Awaited<ReturnType<typeof listPatterns>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPatterns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: ListPatternsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPatterns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getListPatternsQueryOptions(options)
+  const queryOptions = getListPatternsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -4588,20 +4771,27 @@ export const useDeletePatternImage = <TError = ErrorType<unknown>,
       return useMutation(getDeletePatternImageMutationOptions(options));
     }
 
-export const getListQuiltsUrl = () => {
+export const getListQuiltsUrl = (params?: ListQuiltsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/quilting/quilts`
+  return stringifiedParams.length > 0 ? `/api/quilting/quilts?${stringifiedParams}` : `/api/quilting/quilts`
 }
 
 /**
  * @summary List all finished quilts
  */
-export const listQuilts = async ( options?: RequestInit): Promise<QuiltingFinishedQuilt[]> => {
+export const listQuilts = async (params?: ListQuiltsParams, options?: RequestInit): Promise<QuiltingQuiltsListResponse> => {
 
-  return customFetch<QuiltingFinishedQuilt[]>(getListQuiltsUrl(),
+  return customFetch<QuiltingQuiltsListResponse>(getListQuiltsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -4614,23 +4804,23 @@ export const listQuilts = async ( options?: RequestInit): Promise<QuiltingFinish
 
 
 
-export const getListQuiltsQueryKey = () => {
+export const getListQuiltsQueryKey = (params?: ListQuiltsParams,) => {
     return [
-    `/api/quilting/quilts`
+    `/api/quilting/quilts`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getListQuiltsQueryOptions = <TData = Awaited<ReturnType<typeof listQuilts>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listQuilts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListQuiltsQueryOptions = <TData = Awaited<ReturnType<typeof listQuilts>>, TError = ErrorType<unknown>>(params?: ListQuiltsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listQuilts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListQuiltsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getListQuiltsQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listQuilts>>> = ({ signal }) => listQuilts({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listQuilts>>> = ({ signal }) => listQuilts(params, { signal, ...requestOptions });
 
 
 
@@ -4648,11 +4838,11 @@ export type ListQuiltsQueryError = ErrorType<unknown>
  */
 
 export function useListQuilts<TData = Awaited<ReturnType<typeof listQuilts>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listQuilts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: ListQuiltsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listQuilts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getListQuiltsQueryOptions(options)
+  const queryOptions = getListQuiltsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

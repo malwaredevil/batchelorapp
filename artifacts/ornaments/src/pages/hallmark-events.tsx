@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -77,6 +77,17 @@ function EventFormDialog({
       endDate: event?.endDate ?? "",
     },
   });
+
+  useEffect(() => {
+    if (!open) return;
+    form.reset({
+      title: event?.title ?? "",
+      description: event?.description ?? "",
+      startDate: event?.startDate ?? "",
+      endDate: event?.endDate ?? "",
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, event]);
 
   const onSubmit = async (values: EventFormValues) => {
     try {

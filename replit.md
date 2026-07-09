@@ -71,7 +71,7 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
 - When the user has queued multiple feature requests, don't silently barrel from one to the next. If a step needs something from the user (a manual action, a confirmation, a choice), stop and ask a simple yes/no or short question via user_query before proceeding — don't let the queue push past unanswered questions.
 - Pre-publish checklist — run this automatically every time before creating a checkpoint (or immediately after), without waiting to be asked. Gated in stages; do not move to the next stage until the current one passes:
   - Stage 1 — review:
-    1. UI browsing / screenshots: always use the SCREENSHOT_AUTH_TOKEN cookie-free bypass via `/api/dev/screenshot-login?token=$SCREENSHOT_AUTH_TOKEN&next=<path>` — always allowed, no need to ask permission first. This works around the Secure+SameSite=None cookie drop on the internal HTTP preview. Fallback: `runTest()` interactive login or curl with `AGENT_LOGIN_EMAIL`/`AGENT_LOGIN_PASSWORD` against `https://$REPLIT_DEV_DOMAIN`.
+    1. UI browsing / screenshots: always use the DEV_SCREENSHOT_TOKEN cookie-free bypass via `/api/dev/screenshot-login?token=<DEV_SCREENSHOT_TOKEN literal value>&next=<path>` — always allowed, no need to ask permission first. This works around the Secure+SameSite=None cookie drop on the internal HTTP preview. Must stay a plain (non-secret) env var so the agent can read its literal value — see `.agents/memory/screenshot-tool-cookie-bypass.md`. Fallback: `runTest()` interactive login or curl with `AGENT_LOGIN_EMAIL`/`AGENT_LOGIN_PASSWORD` against `https://$REPLIT_DEV_DOMAIN`.
     2. Deep end-to-end code review of everything added/changed (verify it works as intended, not just that it typechecks). Diff Replit vs GitHub if unsure what changed.
     3. Full E2E UI/UX testing of new/changed features using the screenshot-login path above. If unsure of scope, diff Replit vs GitHub to see exactly what changed.
     4. Codegen drift check: run `pnpm --filter @workspace/api-spec run codegen` and check for a working-tree diff (`git status --porcelain`). If anything changed, the generated API types/hooks were stale — commit the regenerated output before proceeding. This mirrors the `codegen-drift` job in `.github/workflows/ci.yml`; do not publish with a dirty diff here even if GitHub CI hasn't run yet.
@@ -96,7 +96,7 @@ Names only — values must be re-entered manually in the new environment's Secre
 - `SENTRY_DSN`
 - `GITHUB_PAT`
 - `AGENTPHONE_API_KEY`, `AGENTPHONE_WEBHOOK_SECRET`
-- `SCREENSHOT_AUTH_TOKEN` (dev-only cookie-free login bypass)
+- `DEV_SCREENSHOT_TOKEN` (dev-only cookie-free login bypass — must be a plain env var, never a Replit secret, so the agent can read its literal value)
 - `AGENT_LOGIN_EMAIL`, `AGENT_LOGIN_PASSWORD` (dev-only test login fallback)
 - `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` — these back the Replit built-in DB used for backups; a new workspace provisions its own automatically, but re-run `pnpm --filter @workspace/scripts run backup-to-replit` after moving to repopulate it from Supabase
 

@@ -1,6 +1,15 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
-import { and, count, desc, eq, getTableColumns, ilike, inArray, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  getTableColumns,
+  ilike,
+  inArray,
+  sql,
+} from "drizzle-orm";
 import {
   db,
   fabrics,
@@ -145,7 +154,10 @@ router.use(requireAuth);
 router.get("/fabrics", async (req, res) => {
   const q = typeof req.query.q === "string" ? req.query.q.trim() : undefined;
   const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
-  const pageSize = Math.min(500, Math.max(1, parseInt(String(req.query.pageSize ?? "50"), 10) || 50));
+  const pageSize = Math.min(
+    500,
+    Math.max(1, parseInt(String(req.query.pageSize ?? "50"), 10) || 50),
+  );
   const offset = (page - 1) * pageSize;
 
   const where = q ? ilike(fabrics.name, `%${q}%`) : undefined;
@@ -212,7 +224,10 @@ router.get("/fabrics/:id/pairings", async (req, res) => {
       order by embedding <=> ${vec}::vector
       limit 20
     `);
-    textRanked = rows.rows.map((r) => ({ id: Number(r.id), similarity: Number(r.similarity) }));
+    textRanked = rows.rows.map((r) => ({
+      id: Number(r.id),
+      similarity: Number(r.similarity),
+    }));
   }
 
   // Cosine similarity search on visual embedding
@@ -226,7 +241,10 @@ router.get("/fabrics/:id/pairings", async (req, res) => {
       order by visual_embedding <=> ${vec}::vector
       limit 20
     `);
-    visualRanked = rows.rows.map((r) => ({ id: Number(r.id), similarity: Number(r.similarity) }));
+    visualRanked = rows.rows.map((r) => ({
+      id: Number(r.id),
+      similarity: Number(r.similarity),
+    }));
   }
 
   // Reciprocal Rank Fusion (k=60) to merge the two ranked lists
@@ -249,10 +267,19 @@ router.get("/fabrics/:id/pairings", async (req, res) => {
     return;
   }
 
-  const { embedding: _emb, visualEmbedding: _vemb, ...cols } = getTableColumns(fabrics);
-  const rows = await db.select(cols).from(fabrics).where(inArray(fabrics.id, topIds));
+  const {
+    embedding: _emb,
+    visualEmbedding: _vemb,
+    ...cols
+  } = getTableColumns(fabrics);
+  const rows = await db
+    .select(cols)
+    .from(fabrics)
+    .where(inArray(fabrics.id, topIds));
   const serialized = await Promise.all(
-    rows.map((r) => serializeFabric(r as Omit<FabricRow, "embedding" | "visualEmbedding">)),
+    rows.map((r) =>
+      serializeFabric(r as Omit<FabricRow, "embedding" | "visualEmbedding">),
+    ),
   );
 
   // Return in the same order as topIds

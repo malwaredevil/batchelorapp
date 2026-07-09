@@ -75,10 +75,32 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
     2. Deep end-to-end code review of everything added/changed (verify it works as intended, not just that it typechecks). Diff Replit vs GitHub if unsure what changed.
     3. Full E2E UI/UX testing of new/changed features using the screenshot-login path above. If unsure of scope, diff Replit vs GitHub to see exactly what changed.
     4. Codegen drift check: run `pnpm --filter @workspace/api-spec run codegen` and check for a working-tree diff (`git status --porcelain`). If anything changed, the generated API types/hooks were stale — commit the regenerated output before proceeding. This mirrors the `codegen-drift` job in `.github/workflows/ci.yml`; do not publish with a dirty diff here even if GitHub CI hasn't run yet.
-    5. GitHub CI confirmation: run `pnpm --filter @workspace/scripts run check-ci-status` (requires `GITHUB_PAT`). It fetches the latest commit on `main` and its GitHub Actions check-run/status results, then exits non-zero with a clear warning if CI is missing, still pending, or failing for that commit. A local pass on stages 1-4 does NOT substitute for this — GitHub sync can lag or a push can silently fail, so this is the only step that confirms CI has actually run against the exact commit being published. Treat a non-zero exit as a hard stop: resolve it (wait for CI, fix the failure, or fix the sync) before moving on, don't just note it and continue.
+    5. GitHub CI confirmation: run `pnpm --filter @workspace/scripts run check-ci-status` (requires `GITHUB_PAT`). It fetches the latest commit on `main` and its GitHub Actions check-run/status results, then exits non-zero with a clear warning if CI is missing, still pending, or failing for that commit. A local pass on stages 1-4 does NOT substitute for this — GitHub sync can lag or a push can silently fail, so this is the only step that confirms CI has actually run against the exact commit being published. Treat a non-zero exit as a hard stop: resolve it (wait for CI, fix the failure, or fix the sync) before moving on, don't just note it and continue. This includes **CodeQL** (security analysis) and **Dependabot** alerts — both are now active on the public repo and must also pass/be resolved before publishing.
   - Stage 2 — DB safety (only after stage 1 passes): 6. Confirm the change cannot harm the shared production Supabase DB (pottery + quilting also live there) — no `drizzle-kit push --force`, additive-only migrations only.
   - Stage 3 — backup + sync (only after stage 2 passes): 7. Run the Supabase → Replit built-in DB backup (`pnpm --filter @workspace/scripts run backup-to-replit`). 8. Sync GitHub repo + Issues (close completed ones), and address any workflow validation findings (e.g. CodeQL) both in Replit and in the GitHub repo. Repeat stages 1-3 until Replit and GitHub are in sync with all checks passing on the latest state.
   - Only once all stages pass: (re)publish.
+  - Stage 4 — post-publish Sentry check (after publishing): Wait ~5 minutes for production traffic, then check Sentry for new issues introduced by the release. Look for errors on the routes/features that changed. If new issues appear, fix them before considering the release stable. Sentry emails are the passive signal; this step is the active one.
+
+## Secrets checklist (for moving to a Team Workspace, or any new environment)
+
+Names only — values must be re-entered manually in the new environment's Secrets tab, never copied through chat/code:
+
+- `DATABASE_URL` — must point to Supabase, not the new workspace's built-in DB
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — shared OAuth client
+- `GOOGLE_MAPS_API_KEY`, `VITE_GOOGLE_MAPS_API_KEY`
+- `GOOGLE_WALLET_ISSUER_ID`, `GOOGLE_WALLET_SERVICE_ACCOUNT_JSON`
+- `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_POOLER_HOST`
+- `SESSION_SECRET`
+- `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `JINA_API_KEY`, `VOYAGE_API_KEY` (all required, not optional — see below)
+- `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_REMINDER_FROM_EMAIL`
+- `SENTRY_DSN`
+- `GITHUB_PAT`
+- `AGENTPHONE_API_KEY`, `AGENTPHONE_WEBHOOK_SECRET`
+- `SCREENSHOT_AUTH_TOKEN` (dev-only cookie-free login bypass)
+- `AGENT_LOGIN_EMAIL`, `AGENT_LOGIN_PASSWORD` (dev-only test login fallback)
+- `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` — these back the Replit built-in DB used for backups; a new workspace provisions its own automatically, but re-run `pnpm --filter @workspace/scripts run backup-to-replit` after moving to repopulate it from Supabase
+
+Secrets are per-Repl/per-workspace and do not carry over automatically on a move — this list must be manually re-entered.
 
 ## Gotchas
 

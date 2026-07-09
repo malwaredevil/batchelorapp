@@ -3305,6 +3305,34 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   },
 ];
 
+const QUERY_HOUSEHOLD_TOOL_NAME = "query_household_data";
+
+const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  {
+    type: "function",
+    function: {
+      name: QUERY_HOUSEHOLD_TOOL_NAME,
+      description:
+        "Look up live counts and recent items from the household's pottery collection, quilting stash, and travel plans — use this when the user asks summary questions like 'how many pieces do I have', 'what's in my quilting stash', 'how many trips am I planning', etc. Returns real numbers and recent record names directly from the database. Do not estimate or guess counts — always call this instead.",
+      parameters: {
+        type: "object",
+        properties: {
+          include: {
+            type: "array",
+            items: {
+              type: "string",
+              enum: ["pottery", "quilting", "travels"],
+            },
+            description:
+              "Which apps to include. Omit to include all three.",
+          },
+        },
+        required: [],
+      },
+    },
+  },
+];
+
 const ACTION_TOOL_NAMES = new Set<string>(
   ACTION_TOOLS.map(
     (t) =>
@@ -4121,6 +4149,7 @@ Keep replies concise and easy to read in a chat bubble.`;
                 ...(serverTools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[]),
                 ...ACTION_TOOLS,
                 ...SOFT_TOOLS,
+                ...SOFT_TOOLS_EXTRA,
               ],
               messages,
               max_tokens: elaineConfig.maxResponseTokens,
@@ -4188,6 +4217,7 @@ Keep replies concise and easy to read in a chat bubble.`;
       GET_AIR_QUALITY_TOOL_NAME,
       GET_POLLEN_FORECAST_TOOL_NAME,
       CALCULATE_YARDAGE_TOOL_NAME,
+      QUERY_HOUSEHOLD_TOOL_NAME,
     ]);
     const hardToolCalls: Array<{ id: string; name: string; args: string }> = [];
 
@@ -4592,6 +4622,87 @@ Keep replies concise and easy to read in a chat bubble.`;
                 ],
               });
             }
+          } else if (call.name === QUERY_HOUSEHOLD_TOOL_NAME) {
+            const parsed = z
+              .object({ include: z.array(z.string()).optional() })
+              .safeParse(JSON.parse(call.args || "{}"));
+            const include = parsed.success
+              ? (parsed.data.include ?? ["pottery", "quilting", "travels"])
+              : ["pottery", "quilting", "travels"];
+            const parts: string[] = [];
+
+            if (include.includes("pottery")) {
+              const [row] = await db
+                .select({ total: count() })
+                .from(potteryItems);
+              const recent = await db
+                .select({ name: potteryItems.name })
+                .from(potteryItems)
+                .orderBy(desc(potteryItems.createdAt))
+                .limit(3);
+              parts.push(
+                `Pottery collection: ${row?.total ?? 0} pieces total.` +
+                  (recent.length > 0
+                    ? ` Recently added: ${recent.map((r) => r.name).join(", ")}.`
+                    : ""),
+              );
+            }
+
+            if (include.includes("quilting")) {
+              const [fabRow] = await db
+                .select({ total: count() })
+                .from(fabrics);
+              const [patRow] = await db
+                .select({ total: count() })
+                .from(quiltPatterns);
+              const [quiltRow] = await db
+                .select({ total: count() })
+                .from(finishedQuilts);
+              parts.push(
+                `Quilting stash: ${fabRow?.total ?? 0} fabrics, ${patRow?.total ?? 0} patterns, ${quiltRow?.total ?? 0} finished quilts.`,
+              );
+            }
+
+            if (include.includes("travels")) {
+              const [wishRow] = await db
+                .select({ total: count() })
+                .from(travelsWishlist);
+              const [activeRow] = await db
+                .select({ total: count() })
+                .from(travelsTrips)
+                .where(
+                  inArray(travelsTrips.status, [
+                    "planning",
+                    "booked",
+                    "in_progress",
+                  ] as string[]),
+                );
+              const nextTrip = await db
+                .select({
+                  title: travelsTrips.title,
+                  destination: travelsTrips.destination,
+                })
+                .from(travelsTrips)
+                .where(
+                  inArray(travelsTrips.status, [
+                    "planning",
+                    "booked",
+                  ] as string[]),
+                )
+                .orderBy(desc(travelsTrips.startDate))
+                .limit(1);
+              parts.push(
+                `Travels: ${activeRow?.total ?? 0} active trips, ${wishRow?.total ?? 0} on the wishlist.` +
+                  (nextTrip.length > 0
+                    ? ` Next up: ${nextTrip[0].title} to ${nextTrip[0].destination}.`
+                    : ""),
+              );
+            }
+
+            resultText =
+              parts.length > 0
+                ? parts.join("\n")
+                : "No household data found.";
           } else {
             resultText = "Unsupported tool.";
           }

@@ -29,10 +29,12 @@ import {
   useDeletePackingTemplate,
   getGetPackingListQueryKey,
   getListPackingTemplatesQueryKey,
+  getWeatherForecast,
   type TravelsPackingItem as PackingItem,
   type TravelsPackingTemplate as PackingTemplate,
+  type DailyWeather,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -61,11 +63,62 @@ import {
   ChevronDown,
   Loader2,
   GripVertical,
+  Cloud,
 } from "lucide-react";
 import { toast } from "sonner";
 
 interface PackingSectionProps {
   tripId: number;
+  lat?: number;
+  lng?: number;
+  forecast?: DailyWeather[];
+}
+
+function getWeatherPackingSuggestions(forecast: DailyWeather[]): string[] {
+  if (forecast.length === 0) return [];
+  const suggestions = new Set<string>();
+  const minTemp = Math.min(...forecast.map((d) => d.minTempC ?? 20));
+  const maxTemp = Math.max(...forecast.map((d) => d.maxTempC ?? 20));
+  const maxPrecip = Math.max(
+    ...forecast.map((d) => d.precipitationChancePercent ?? 0),
+  );
+  const tempSwing = maxTemp - minTemp;
+
+  if (minTemp < 5) {
+    suggestions.add("Heavy winter coat");
+    suggestions.add("Thermal underlayer");
+    suggestions.add("Gloves");
+    suggestions.add("Warm hat");
+    suggestions.add("Scarf");
+    suggestions.add("Thick socks");
+  } else if (minTemp < 12) {
+    suggestions.add("Warm jacket or fleece");
+    suggestions.add("Long trousers");
+    suggestions.add("Jumper / sweater");
+  } else if (minTemp < 18) {
+    suggestions.add("Light jacket");
+    suggestions.add("Mix of t-shirts and long sleeves");
+  }
+
+  if (maxTemp > 25) {
+    suggestions.add("Sunscreen (SPF 30+)");
+    suggestions.add("Sunglasses");
+    suggestions.add("Sun hat");
+    suggestions.add("Light breathable clothing");
+    suggestions.add("Shorts");
+  }
+
+  if (maxPrecip > 40) {
+    suggestions.add("Rain jacket / waterproof");
+    suggestions.add("Compact umbrella");
+    suggestions.add("Waterproof shoes or boot covers");
+  }
+
+  if (tempSwing > 12) {
+    suggestions.add("Layering pieces (shirt → mid-layer → outer)");
+  }
+
+  return Array.from(suggestions);
 }
 
 // ── Sortable item row ─────────────────────────────────────────────────────────
@@ -92,11 +145,32 @@ function SortableItem({ item, onToggle, onDelete }: SortableItemProps) {
     opacity: isDragging ? 0.5 : 1,
   };
 
+  // Touch swipe: right = toggle packed, left = delete
+  const touchStartX = useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current == null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    touchStartX.current = null;
+    if (Math.abs(dx) < 60) return; // threshold
+    if (dx > 0) {
+      onToggle(item); // right swipe → toggle packed
+    } else {
+      onDelete(item.id); // left swipe → delete
+    }
+  };
+
   return (
     <div
       ref={setNodeRef}
       style={style}
       className="flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-muted/50 transition-colors group"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
       {/* drag handle */}
       <button
@@ -142,7 +216,14 @@ function SortableItem({ item, onToggle, onDelete }: SortableItemProps) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function PackingSection({ tripId }: PackingSectionProps) {
+export function PackingSection({ tripId, lat, lng, forecast: forecastProp }: PackingSectionProps) {
+  const { data: weatherData } = useQuery({
+    queryKey: ["weather", lat, lng],
+    queryFn: () => getWeatherForecast(lat!, lng!),
+    enabled: lat != null && lng != null,
+    staleTime: 10 * 60 * 1000,
+  });
+  const forecast = forecastProp ?? weatherData?.forecast;
   const qc = useQueryClient();
   const { data, isLoading } = useGetPackingList(tripId);
   const createItem = useCreatePackingItem();
@@ -162,6 +243,9 @@ export function PackingSection({ tripId }: PackingSectionProps) {
   const [showSaveTemplateDialog, setShowSaveTemplateDialog] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [showTemplatesDialog, setShowTemplatesDialog] = useState(false);
+  const [showWeatherDialog, setShowWeatherDialog] = useState(false);
+  const [weatherSuggestions, setWeatherSuggestions] = useState<string[]>([]);
+  const [addingWeatherItems, setAddingWeatherItems] = useState(false);
   // Optimistic ordered list for DnD — null means use server order
   const [localOrder, setLocalOrder] = useState<PackingItem[] | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -454,6 +538,18 @@ export function PackingSection({ tripId }: PackingSectionProps) {
               <Sparkles className="w-4 h-4 mr-2 text-primary" />
               AI suggestions
             </DropdownMenuItem>
+            {forecast && forecast.length > 0 && (
+              <DropdownMenuItem
+                onClick={() => {
+                  const s = getWeatherPackingSuggestions(forecast);
+                  setWeatherSuggestions(s);
+                  setShowWeatherDialog(true);
+                }}
+              >
+                <Cloud className="w-4 h-4 mr-2 text-sky-500" />
+                Weather layers
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setShowTemplatesDialog(true)}>
               <BookOpen className="w-4 h-4 mr-2" />
@@ -559,6 +655,75 @@ export function PackingSection({ tripId }: PackingSectionProps) {
               }
             >
               {bulkCreate.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Plus className="w-4 h-4 mr-2" />
+              )}
+              Add all to list
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Weather packing suggestions dialog */}
+      <Dialog open={showWeatherDialog} onOpenChange={setShowWeatherDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Cloud className="w-4 h-4 text-sky-500" />
+              Weather Layers
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <p className="text-xs text-muted-foreground">
+              Suggested items based on the forecast for this trip:
+            </p>
+            {weatherSuggestions.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No suggestions for this forecast.
+              </p>
+            ) : (
+              <div className="space-y-1.5 max-h-56 overflow-y-auto">
+                {weatherSuggestions.map((s, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 py-1 px-2 rounded text-sm"
+                  >
+                    <Cloud className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                    <span>{s}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowWeatherDialog(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                if (weatherSuggestions.length === 0) return;
+                setAddingWeatherItems(true);
+                try {
+                  await bulkCreate.mutateAsync({
+                    id: tripId,
+                    data: { items: weatherSuggestions.map((text) => ({ text })) },
+                  });
+                  invalidate();
+                  setShowWeatherDialog(false);
+                  toast.success("Weather items added to packing list");
+                } catch {
+                  toast.error("Failed to add weather items");
+                } finally {
+                  setAddingWeatherItems(false);
+                }
+              }}
+              disabled={weatherSuggestions.length === 0 || addingWeatherItems}
+            >
+              {addingWeatherItems ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               ) : (
                 <Plus className="w-4 h-4 mr-2" />

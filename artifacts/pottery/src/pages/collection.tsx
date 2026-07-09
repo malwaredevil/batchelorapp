@@ -23,6 +23,7 @@ import {
   RefreshCw,
   MoreVertical,
   ExternalLink,
+  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -204,6 +205,7 @@ function PieceCard({
   onColorFilter: (color: string) => void;
   activeColor: string | null;
 }) {
+  const [imgLoaded, setImgLoaded] = useState(false);
   return (
     <div className="relative group">
       {/* Selection checkbox */}
@@ -286,6 +288,8 @@ function PieceCard({
             src={item.imageUrl}
             alt={item.name}
             loading="lazy"
+            onLoad={() => setImgLoaded(true)}
+            style={{ filter: imgLoaded ? "none" : "blur(8px)", transition: "filter 0.4s ease" }}
             className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
           />
         </div>
@@ -620,6 +624,7 @@ export default function Collection() {
   >(new Set());
   const [filterColor, setFilterColor] = useState<string | null>(null);
   const [sort, setSort] = useState<SortKey>("added-desc");
+  const [groupByMaker, setGroupByMaker] = useState(false);
 
   // On mount: read ?cat=ID, ?color=..., and ?search=... query params so
   // external links (e.g. from Elaine cross-app navigation) can pre-filter the
@@ -819,6 +824,21 @@ export default function Collection() {
     [data, selectedIds],
   );
 
+  const makerGroups = useMemo(() => {
+    if (!groupByMaker) return null;
+    const groups = new Map<string, PotteryItem[]>();
+    for (const item of filtered) {
+      const key = item.maker || "Unknown maker";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(item);
+    }
+    return [...groups.entries()].sort(([a], [b]) => {
+      if (a === "Unknown maker") return 1;
+      if (b === "Unknown maker") return -1;
+      return a.localeCompare(b);
+    });
+  }, [groupByMaker, filtered]);
+
   usePageAssistantContext(
     "pottery-collection",
     isLoading
@@ -944,6 +964,18 @@ export default function Collection() {
                 </button>
               )}
             </div>
+
+            {/* Group by Maker toggle */}
+            <Button
+              variant={groupByMaker ? "secondary" : "outline"}
+              size="icon"
+              title={groupByMaker ? "Ungroup" : "Group by maker"}
+              onClick={() => setGroupByMaker((g) => !g)}
+              className="shrink-0"
+              data-testid="button-group-by-maker"
+            >
+              <Users className="h-4 w-4" />
+            </Button>
 
             {/* Sort dropdown */}
             <div className="relative">
@@ -1150,6 +1182,33 @@ export default function Collection() {
               >
                 Clear filters
               </button>
+            </div>
+          ) : makerGroups ? (
+            <div className="space-y-6">
+              {makerGroups.map(([maker, items]) => (
+                <div key={maker}>
+                  <div className="mb-3 flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-foreground">{maker}</h3>
+                    <span className="text-xs text-muted-foreground">{items.length} piece{items.length !== 1 ? "s" : ""}</span>
+                    <div className="flex-1 border-t border-card-border" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                    {items.map((item) => (
+                      <PieceCard
+                        key={item.id}
+                        item={item}
+                        selecting={compareMode || bulkMode}
+                        selected={bulkMode ? bulkSelectedIds.has(item.id) : selectedIds.includes(item.id)}
+                        onToggleSelect={bulkMode ? toggleBulkSelect : toggleSelect}
+                        onQuickEdit={setQuickEditItem}
+                        onReanalyze={handleReanalyze}
+                        onColorFilter={(c) => setFilterColor(filterColor === c ? null : c)}
+                        activeColor={filterColor}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">

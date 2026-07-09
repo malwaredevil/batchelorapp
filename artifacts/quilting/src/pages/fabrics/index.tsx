@@ -108,6 +108,7 @@ function FabricCard({
 }) {
   const [, navigate] = useLocation();
   const [zoomOpen, setZoomOpen] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
   return (
     <>
       <div
@@ -135,6 +136,8 @@ function FabricCard({
             <img
               src={fabric.imageUrl}
               alt={fabric.name}
+              onLoad={() => setImgLoaded(true)}
+              style={{ filter: imgLoaded ? "none" : "blur(8px)", transition: "filter 0.4s ease" }}
               className="h-full w-full object-cover transition-transform group-hover:scale-105"
             />
             <button

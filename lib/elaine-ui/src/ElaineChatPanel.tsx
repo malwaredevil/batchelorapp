@@ -19,7 +19,12 @@ import {
   Settings2,
   Play,
   Square,
+  Sun,
 } from "lucide-react";
+import {
+  useGetElaineDailyBrief,
+  useDismissElaineDailyBrief,
+} from "@workspace/api-client-react";
 import { useVoiceInput } from "./useVoiceInput";
 import { useTTS, DEFAULT_VOICE_PREVIEW_KEY } from "./useTTS";
 import { Button } from "./ui/button";
@@ -223,9 +228,32 @@ export function ElaineChatPanel({
     [setInput, tts],
   );
 
+  // Morning brief — shown as dismissible banner when the widget opens
+  const { data: brief, refetch: refetchBrief } = useGetElaineDailyBrief();
+  const dismissBrief = useDismissElaineDailyBrief({
+    mutation: { onSuccess: () => void refetchBrief() },
+  });
+  const showBrief =
+    brief != null && !brief.dismissed && brief.content.length > 0;
+
   return (
     <>
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+        {showBrief && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 px-3.5 py-3 text-sm text-foreground leading-relaxed relative">
+            <div className="flex items-start gap-2">
+              <Sun className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              <p className="flex-1 whitespace-pre-wrap">{brief.content}</p>
+              <button
+                onClick={() => dismissBrief.mutate()}
+                className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Dismiss"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
         {messages.length === 0 &&
           !isStreaming &&
           (emptyState ?? (

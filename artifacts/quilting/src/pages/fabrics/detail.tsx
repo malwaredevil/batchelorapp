@@ -26,9 +26,11 @@ import {
   useUpdateFabric,
   useReanalyzeFabric,
   useListQuiltingCategories,
+  useGetFabricPairings,
   getListFabricsQueryKey,
   getGetFabricQueryKey,
   type QuiltingCategory,
+  type QuiltingFabric,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { TagSelector } from "@/components/tag-selector";
@@ -100,6 +102,62 @@ function LockButton({
     >
       {locked ? <Lock className="h-3 w-3" /> : <LockOpen className="h-3 w-3" />}
     </button>
+  );
+}
+
+function FabricPairings({ fabricId }: { fabricId: number }) {
+  const [, navigate] = useLocation();
+  const { data: pairings, isLoading } = useGetFabricPairings(fabricId);
+
+  if (isLoading) {
+    return (
+      <section className="rounded-xl border border-card-border bg-card p-4">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Pairs well with
+        </p>
+        <div className="grid grid-cols-4 gap-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="aspect-square rounded-lg" />
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  if (!pairings || pairings.length === 0) return null;
+
+  return (
+    <section className="rounded-xl border border-card-border bg-card p-4">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        Pairs well with
+      </p>
+      <div className="grid grid-cols-4 gap-2">
+        {pairings.map((fabric: QuiltingFabric) => (
+          <button
+            key={fabric.id}
+            onClick={() => navigate(`/fabrics/${fabric.id}`)}
+            className="group flex flex-col items-center gap-1 rounded-lg p-1 hover:bg-muted/50 transition-colors text-left"
+          >
+            <div className="aspect-square w-full overflow-hidden rounded-lg bg-muted">
+              {fabric.imageUrl ? (
+                <img
+                  src={fabric.imageUrl}
+                  alt={fabric.name}
+                  className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-200"
+                />
+              ) : (
+                <div className="h-full w-full flex items-center justify-center">
+                  <Tag className="h-5 w-5 text-muted-foreground/40" />
+                </div>
+              )}
+            </div>
+            <p className="w-full truncate text-center text-xs text-muted-foreground leading-tight">
+              {fabric.name}
+            </p>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -913,6 +971,9 @@ export default function FabricDetail() {
               </p>
             </section>
           )}
+
+          {/* Pairings — fabrics that pair well */}
+          <FabricPairings fabricId={f.id} />
 
           {/* Notes */}
           <section className="rounded-xl border border-card-border bg-card p-4">

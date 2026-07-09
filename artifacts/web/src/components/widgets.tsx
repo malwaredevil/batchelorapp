@@ -157,7 +157,8 @@ export function ShoppingListWidget() {
 
 // ── Live: Random pottery piece ───────────────────────────────────────────────
 export function RandomPieceWidget() {
-  const { data } = useListPottery({});
+  const { data: _pList } = useListPottery({});
+  const data = _pList?.items;
   const [idx, setIdx] = useState(0);
   const piece = data && data.length > 0 ? data[idx % data.length] : null;
 
@@ -716,7 +717,8 @@ export function InspirationWidget() {
 
 // ── Static: Photo of the Day ──────────────────────────────────────────────────
 export function PhotoOfDayWidget() {
-  const { data } = useListPottery({});
+  const { data: _pList2 } = useListPottery({});
+  const data = _pList2?.items;
   const piece =
     data && data.length > 0
       ? data[Math.floor(Math.random() * data.length)]

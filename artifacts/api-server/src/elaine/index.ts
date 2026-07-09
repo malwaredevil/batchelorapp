@@ -159,6 +159,9 @@ const ChatBody = z.object({
   conversationId: z.number().int().positive().optional(),
   // Signed Supabase Storage URLs for images the user attached (max 5, 5 MB each).
   attachmentUrls: z.array(z.string()).max(5).optional(),
+  // Auto-captured screenshot of the current page — included in model context
+  // for visual awareness but NOT persisted in conversation history.
+  pageScreenshotUrl: z.string().url().max(2000).optional(),
   // PDF attachments: signed URL + original filename + already-extracted text.
   attachmentPdfs: z
     .array(
@@ -3931,6 +3934,7 @@ router.post("/chat", async (req, res) => {
     conversationId,
     attachmentUrls,
     attachmentPdfs,
+    pageScreenshotUrl,
   } = ChatBody.parse(req.body);
 
   const [user] = await db
@@ -4135,10 +4139,11 @@ Keep replies concise and easy to read in a chat bubble.`;
   // are always text-only (URLs are stored in the DB but not re-sent to the model).
   const hasImages = attachmentUrls && attachmentUrls.length > 0;
   const hasPdfs = attachmentPdfs && attachmentPdfs.length > 0;
+  const hasPageScreenshot = !!pageScreenshotUrl;
   const userTurnContent:
     | OpenAI.Chat.Completions.ChatCompletionContentPart[]
     | string =
-    hasImages || hasPdfs
+    hasImages || hasPdfs || hasPageScreenshot
       ? [
           ...(hasPdfs
             ? attachmentPdfs!.map((pdf) => ({
@@ -4152,6 +4157,16 @@ Keep replies concise and easy to read in a chat bubble.`;
                 type: "image_url" as const,
                 image_url: { url },
               }))
+            : []),
+          // Auto-captured page screenshot — included for visual context only,
+          // not persisted in conversation history.
+          ...(hasPageScreenshot
+            ? [
+                {
+                  type: "image_url" as const,
+                  image_url: { url: pageScreenshotUrl! },
+                },
+              ]
             : []),
         ]
       : message;

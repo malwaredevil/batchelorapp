@@ -323,7 +323,8 @@ export default function Quilts() {
   });
   const [page, setPage] = useState(1);
   const queryClient = useQueryClient();
-  const { data: quilts, isLoading, isError } = useListQuilts();
+  const { data: quiltsData, isLoading, isError } = useListQuilts({ pageSize: 200 });
+  const quilts = quiltsData?.items ?? [];
   const [categoryEditItem, setCategoryEditItem] = useState<QuiltSummary | null>(
     null,
   );

@@ -329,25 +329,11 @@ export interface QuiltingCategory {
   textColor?: string | null;
 }
 
-export type QuiltingCategoryWithCount = QuiltingCategory & {
-  count: number;
-};
-
 export interface QuiltingEntityImage {
   id: number;
   url: string;
   label?: string | null;
   position: number;
-}
-
-export interface QuiltingAddImageInput {
-  image: Blob;
-  label?: string;
-}
-
-export interface QuiltingUpdateImageInput {
-  label?: string | null;
-  position?: number;
 }
 
 export interface QuiltingFabric {
@@ -375,6 +361,93 @@ export interface QuiltingFabric {
   imageUrl: string;
   hasEmbedding: boolean;
   createdAt: string;
+}
+
+export interface QuiltingFabricsListResponse {
+  items: QuiltingFabric[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface QuiltingQuiltPattern {
+  id: number;
+  name: string;
+  designer?: string | null;
+  blockSize?: string | null;
+  difficulty?: string | null;
+  sourceType?: string | null;
+  sourceReference?: string | null;
+  notes?: string | null;
+  acquiredAt?: string | null;
+  dominantColors: string[];
+  lockedFields: string[];
+  categories: QuiltingCategory[];
+  images: QuiltingEntityImage[];
+  imageUrl?: string | null;
+  hasEmbedding: boolean;
+  createdAt: string;
+}
+
+export interface QuiltingPatternsListResponse {
+  items: QuiltingQuiltPattern[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface QuiltingQuiltFabricSummary {
+  id: number;
+  name: string;
+  colorway?: string | null;
+  imageUrl: string;
+  dominantColors: string[];
+}
+
+export interface QuiltingFinishedQuilt {
+  id: number;
+  name: string;
+  dateCompleted?: string | null;
+  sizeWidth?: number | null;
+  sizeHeight?: number | null;
+  recipient?: string | null;
+  notes?: string | null;
+  dominantColors: string[];
+  lockedFields: string[];
+  /**
+     * WIP completion 0–100. 0 = not started, 100 = finished.
+     * @minimum 0
+     * @maximum 100
+     */
+  completionPercentage?: number;
+  categories: QuiltingCategory[];
+  images: QuiltingEntityImage[];
+  imageUrl: string;
+  linkedFabricIds: number[];
+  linkedPatternIds: number[];
+  linkedFabrics: QuiltingQuiltFabricSummary[];
+  createdAt: string;
+}
+
+export interface QuiltingQuiltsListResponse {
+  items: QuiltingFinishedQuilt[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export type QuiltingCategoryWithCount = QuiltingCategory & {
+  count: number;
+};
+
+export interface QuiltingAddImageInput {
+  image: Blob;
+  label?: string;
+}
+
+export interface QuiltingUpdateImageInput {
+  label?: string | null;
+  position?: number;
 }
 
 export interface QuiltingCreateFabricInput {
@@ -415,25 +488,6 @@ export interface QuiltingUpdateFabricInput {
   categories?: string[];
 }
 
-export interface QuiltingQuiltPattern {
-  id: number;
-  name: string;
-  designer?: string | null;
-  blockSize?: string | null;
-  difficulty?: string | null;
-  sourceType?: string | null;
-  sourceReference?: string | null;
-  notes?: string | null;
-  acquiredAt?: string | null;
-  dominantColors: string[];
-  lockedFields: string[];
-  categories: QuiltingCategory[];
-  images: QuiltingEntityImage[];
-  imageUrl?: string | null;
-  hasEmbedding: boolean;
-  createdAt: string;
-}
-
 export interface QuiltingCreatePatternInput {
   image?: Blob;
   name: string;
@@ -459,39 +513,6 @@ export interface QuiltingUpdatePatternInput {
   lockedFields?: string[];
   /** @maxItems 50 */
   categories?: string[];
-}
-
-export interface QuiltingQuiltFabricSummary {
-  id: number;
-  name: string;
-  colorway?: string | null;
-  imageUrl: string;
-  dominantColors: string[];
-}
-
-export interface QuiltingFinishedQuilt {
-  id: number;
-  name: string;
-  dateCompleted?: string | null;
-  sizeWidth?: number | null;
-  sizeHeight?: number | null;
-  recipient?: string | null;
-  notes?: string | null;
-  dominantColors: string[];
-  lockedFields: string[];
-  /**
-     * WIP completion 0–100. 0 = not started, 100 = finished.
-     * @minimum 0
-     * @maximum 100
-     */
-  completionPercentage?: number;
-  categories: QuiltingCategory[];
-  images: QuiltingEntityImage[];
-  imageUrl: string;
-  linkedFabricIds: number[];
-  linkedPatternIds: number[];
-  linkedFabrics: QuiltingQuiltFabricSummary[];
-  createdAt: string;
 }
 
 export interface QuiltingCreateQuiltInput {
@@ -1448,6 +1469,45 @@ pageSize?: number;
 
 export type DeletePotteryUnusedCategories200 = {
   deleted: number;
+};
+
+export type ListFabricsParams = {
+q?: string;
+/**
+ * @minimum 1
+ */
+page?: number;
+/**
+ * @minimum 1
+ * @maximum 500
+ */
+pageSize?: number;
+};
+
+export type ListPatternsParams = {
+q?: string;
+/**
+ * @minimum 1
+ */
+page?: number;
+/**
+ * @minimum 1
+ * @maximum 500
+ */
+pageSize?: number;
+};
+
+export type ListQuiltsParams = {
+q?: string;
+/**
+ * @minimum 1
+ */
+page?: number;
+/**
+ * @minimum 1
+ * @maximum 500
+ */
+pageSize?: number;
 };
 
 export type CompareFabricBody = {

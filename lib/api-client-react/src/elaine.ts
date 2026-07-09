@@ -272,6 +272,8 @@ export async function streamElaineMessage(
     attachmentUrls?: string[];
     /** PDF attachments: signed URL + original filename + extracted text. */
     attachmentPdfs?: Array<{ url: string; name: string; extractedText?: string }>;
+    /** Auto-captured page screenshot URL — sent to model for visual context but not persisted. */
+    pageScreenshotUrl?: string;
   },
   callbacks: AssistantChatStreamCallbacks = {},
   signal?: AbortSignal,

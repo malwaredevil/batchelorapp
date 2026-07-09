@@ -672,7 +672,21 @@ export const GetCollectionStatsResponse = zod.object({
 /**
  * @summary List all fabrics
  */
-export const ListFabricsResponseItem = zod.object({
+export const listFabricsQueryPageDefault = 1;
+
+export const listFabricsQueryPageSizeDefault = 50;
+export const listFabricsQueryPageSizeMax = 500;
+
+
+
+export const ListFabricsQueryParams = zod.object({
+  "q": zod.coerce.string().optional(),
+  "page": zod.coerce.number().min(1).default(listFabricsQueryPageDefault),
+  "pageSize": zod.coerce.number().min(1).max(listFabricsQueryPageSizeMax).default(listFabricsQueryPageSizeDefault)
+})
+
+export const ListFabricsResponse = zod.object({
+  "items": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "lineName": zod.string().nullish(),
@@ -707,8 +721,11 @@ export const ListFabricsResponseItem = zod.object({
   "imageUrl": zod.string(),
   "hasEmbedding": zod.boolean(),
   "createdAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number()
 })
-export const ListFabricsResponse = zod.array(ListFabricsResponseItem)
 
 
 /**
@@ -1029,7 +1046,21 @@ export const DeleteFabricImageParams = zod.object({
 /**
  * @summary List all quilt patterns
  */
-export const ListPatternsResponseItem = zod.object({
+export const listPatternsQueryPageDefault = 1;
+
+export const listPatternsQueryPageSizeDefault = 50;
+export const listPatternsQueryPageSizeMax = 500;
+
+
+
+export const ListPatternsQueryParams = zod.object({
+  "q": zod.coerce.string().optional(),
+  "page": zod.coerce.number().min(1).default(listPatternsQueryPageDefault),
+  "pageSize": zod.coerce.number().min(1).max(listPatternsQueryPageSizeMax).default(listPatternsQueryPageSizeDefault)
+})
+
+export const ListPatternsResponse = zod.object({
+  "items": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "designer": zod.string().nullish(),
@@ -1056,8 +1087,11 @@ export const ListPatternsResponseItem = zod.object({
   "imageUrl": zod.string().nullish(),
   "hasEmbedding": zod.boolean(),
   "createdAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number()
 })
-export const ListPatternsResponse = zod.array(ListPatternsResponseItem)
 
 
 /**
@@ -1346,12 +1380,26 @@ export const DeletePatternImageParams = zod.object({
 /**
  * @summary List all finished quilts
  */
-export const listQuiltsResponseCompletionPercentageMin = 0;
-export const listQuiltsResponseCompletionPercentageMax = 100;
+export const listQuiltsQueryPageDefault = 1;
+
+export const listQuiltsQueryPageSizeDefault = 50;
+export const listQuiltsQueryPageSizeMax = 500;
 
 
 
-export const ListQuiltsResponseItem = zod.object({
+export const ListQuiltsQueryParams = zod.object({
+  "q": zod.coerce.string().optional(),
+  "page": zod.coerce.number().min(1).default(listQuiltsQueryPageDefault),
+  "pageSize": zod.coerce.number().min(1).max(listQuiltsQueryPageSizeMax).default(listQuiltsQueryPageSizeDefault)
+})
+
+export const listQuiltsResponseItemsItemCompletionPercentageMin = 0;
+export const listQuiltsResponseItemsItemCompletionPercentageMax = 100;
+
+
+
+export const ListQuiltsResponse = zod.object({
+  "items": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "dateCompleted": zod.string().nullish(),
@@ -1361,7 +1409,7 @@ export const ListQuiltsResponseItem = zod.object({
   "notes": zod.string().nullish(),
   "dominantColors": zod.array(zod.string()),
   "lockedFields": zod.array(zod.string()),
-  "completionPercentage": zod.number().min(listQuiltsResponseCompletionPercentageMin).max(listQuiltsResponseCompletionPercentageMax).optional().describe('WIP completion 0–100. 0 = not started, 100 = finished.'),
+  "completionPercentage": zod.number().min(listQuiltsResponseItemsItemCompletionPercentageMin).max(listQuiltsResponseItemsItemCompletionPercentageMax).optional().describe('WIP completion 0–100. 0 = not started, 100 = finished.'),
   "categories": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -1385,8 +1433,11 @@ export const ListQuiltsResponseItem = zod.object({
   "dominantColors": zod.array(zod.string())
 })),
   "createdAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number()
 })
-export const ListQuiltsResponse = zod.array(ListQuiltsResponseItem)
 
 
 /**

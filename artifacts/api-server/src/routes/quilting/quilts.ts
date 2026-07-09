@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, ilike, inArray, sql } from "drizzle-orm";
 import {
   db,
   finishedQuilts,
@@ -177,13 +177,29 @@ router.use(requireAuth);
 // List
 // ---------------------------------------------------------------------------
 
-router.get("/quilts", async (_req, res) => {
+router.get("/quilts", async (req, res) => {
+  const q = typeof req.query.q === "string" ? req.query.q.trim() : undefined;
+  const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
+  const pageSize = Math.min(500, Math.max(1, parseInt(String(req.query.pageSize ?? "50"), 10) || 50));
+  const offset = (page - 1) * pageSize;
+
+  const where = q ? ilike(finishedQuilts.name, `%${q}%`) : undefined;
+
+  const [{ value: total }] = await db
+    .select({ value: count() })
+    .from(finishedQuilts)
+    .where(where);
+
   const rows = await db
     .select()
     .from(finishedQuilts)
-    .orderBy(desc(finishedQuilts.createdAt));
+    .where(where)
+    .orderBy(desc(finishedQuilts.createdAt))
+    .limit(pageSize)
+    .offset(offset);
+
   const items = await serializeQuilts(rows);
-  res.json(ListQuiltsResponse.parse(items));
+  res.json(ListQuiltsResponse.parse({ items, total, page, pageSize }));
 });
 
 // ---------------------------------------------------------------------------

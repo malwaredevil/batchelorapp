@@ -42,6 +42,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { TagSelector } from "@/components/tag-selector";
 import { PreviewZoomModal } from "@/components/PreviewZoomModal";
 import { downloadCollectionImage } from "@/lib/svg-export";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 type PatternData = {
   id: number;
@@ -128,6 +129,13 @@ export default function PatternDetail() {
 
   const { data: pattern, isLoading, isError } = useGetPattern(patternId);
   const { data: allCategories } = useListQuiltingCategories();
+
+  usePageAssistantContext(
+    "quilting-pattern-detail",
+    isLoading || !pattern
+      ? undefined
+      : `Pattern Detail page (patternId: ${pattern.id}): "${pattern.name}"${pattern.designer ? ` by ${pattern.designer}` : ""}. Block size: ${pattern.blockSize ?? "unknown"}. Difficulty: ${pattern.difficulty ?? "unknown"}. Source: ${pattern.sourceType ?? "unknown"}.`,
+  );
 
   const deletePattern = useDeletePattern({
     mutation: {

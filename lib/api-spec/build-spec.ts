@@ -189,6 +189,10 @@ function remapTravelsPath(p: string): string {
   return "/travels" + p;
 }
 
+function remapOrnamentsPath(p: string): string {
+  return "/ornaments" + p;
+}
+
 // ---------------------------------------------------------------------------
 // Build
 // ---------------------------------------------------------------------------
@@ -201,6 +205,7 @@ function main(): void {
   const pottery = loadSpec("pottery.yaml");
   const quilting = loadSpec("quilting.yaml");
   const travels = loadSpec("travels.yaml");
+  const ornaments = loadSpec("ornaments.yaml");
 
   const potterySchemas: Record<string, Json> = (pottery.components?.schemas ??
     {}) as Json;
@@ -208,6 +213,8 @@ function main(): void {
     {}) as Json;
   const travelsSchemas: Record<string, Json> = (travels.components?.schemas ??
     {}) as Json;
+  const ornamentsSchemas: Record<string, Json> = (ornaments.components
+    ?.schemas ?? {}) as Json;
 
   // ----- Shared schema set: transitive closure of refs from quilting shared paths
   const sharedSchemaNames = new Set<string>();
@@ -242,16 +249,25 @@ function main(): void {
     }
   }
 
+  const ornamentsSchemaRename = new Map<string, string>();
+  for (const name of Object.keys(ornamentsSchemas)) {
+    if (!sharedSchemaNames.has(name)) {
+      ornamentsSchemaRename.set(name, "Ornaments" + name);
+    }
+  }
+
   // ----- OperationId collision detection
   const sharedOpIds = collectSharedOpIds(quilting.paths as Json);
   const potteryFeatureOps = collectFeatureOpIds(pottery.paths as Json);
   const quiltingFeatureOps = collectFeatureOpIds(quilting.paths as Json);
   const travelsFeatureOps = collectFeatureOpIds(travels.paths as Json);
+  const ornamentsFeatureOps = collectFeatureOpIds(ornaments.paths as Json);
 
   const allOtherOps = new Set([
     ...sharedOpIds,
     ...quiltingFeatureOps,
     ...travelsFeatureOps,
+    ...ornamentsFeatureOps,
   ]);
   const potteryOpRename = new Map<string, string>();
   for (const op of potteryFeatureOps) {
@@ -264,6 +280,7 @@ function main(): void {
     ...sharedOpIds,
     ...potteryFeatureOps,
     ...travelsFeatureOps,
+    ...ornamentsFeatureOps,
   ]);
   const quiltingOpRename = new Map<string, string>();
   for (const op of quiltingFeatureOps) {
@@ -276,11 +293,25 @@ function main(): void {
     ...sharedOpIds,
     ...potteryFeatureOps,
     ...quiltingFeatureOps,
+    ...ornamentsFeatureOps,
   ]);
   const travelsOpRename = new Map<string, string>();
   for (const op of travelsFeatureOps) {
     if (allOtherOpsForTravels.has(op)) {
       travelsOpRename.set(op, renameOpId(op, "travels"));
+    }
+  }
+
+  const allOtherOpsForOrnaments = new Set([
+    ...sharedOpIds,
+    ...potteryFeatureOps,
+    ...quiltingFeatureOps,
+    ...travelsFeatureOps,
+  ]);
+  const ornamentsOpRename = new Map<string, string>();
+  for (const op of ornamentsFeatureOps) {
+    if (allOtherOpsForOrnaments.has(op)) {
+      ornamentsOpRename.set(op, renameOpId(op, "ornaments"));
     }
   }
 
@@ -290,7 +321,8 @@ function main(): void {
     info: {
       title: "Api",
       version: "0.1.0",
-      description: "Unified API specification (pottery + quilting + travels)",
+      description:
+        "Unified API specification (pottery + quilting + travels + ornaments)",
     },
     servers: [{ url: "/api", description: "Base API path" }],
     paths: {},
@@ -355,6 +387,21 @@ function main(): void {
     outPaths[newPath] = cloned;
   }
 
+  // Ornaments feature paths
+  for (const [p, item] of Object.entries(
+    ornaments.paths as Record<string, Json>,
+  )) {
+    if (SHARED_PATHS.has(p)) continue;
+    const newPath = remapOrnamentsPath(p);
+    const cloned = deepClone(item);
+    rewriteSchemaRefs(cloned, ornamentsSchemaRename);
+    applyOpIdRenames(cloned, ornamentsOpRename);
+    if (outPaths[newPath] !== undefined) {
+      throw new Error(`Duplicate path key after ornaments remap: ${newPath}`);
+    }
+    outPaths[newPath] = cloned;
+  }
+
   // ----- Components: schemas
   const outSchemas: Record<string, Json> = {};
 
@@ -402,6 +449,18 @@ function main(): void {
     outSchemas[newName] = cloned;
   }
 
+  // Ornaments non-shared schemas, prefixed + internal refs rewritten
+  for (const [name, schema] of Object.entries(ornamentsSchemas)) {
+    if (sharedSchemaNames.has(name)) continue;
+    const newName = ornamentsSchemaRename.get(name)!;
+    const cloned = deepClone(schema);
+    rewriteSchemaRefs(cloned, ornamentsSchemaRename);
+    if (outSchemas[newName] !== undefined) {
+      throw new Error(`Duplicate schema key: ${newName}`);
+    }
+    outSchemas[newName] = cloned;
+  }
+
   out.components.schemas = outSchemas;
 
   // ----- Components: parameters
@@ -411,6 +470,8 @@ function main(): void {
   const potteryParameters: Record<string, Json> = (pottery.components
     ?.parameters ?? {}) as Json;
   const travelsParameters: Record<string, Json> = (travels.components
+    ?.parameters ?? {}) as Json;
+  const ornamentsParameters: Record<string, Json> = (ornaments.components
     ?.parameters ?? {}) as Json;
 
   for (const [name, param] of Object.entries(quiltingParameters)) {
@@ -426,6 +487,13 @@ function main(): void {
   for (const [name, param] of Object.entries(travelsParameters)) {
     if (outParameters[name] !== undefined) {
       outParameters["Travels" + name] = deepClone(param);
+    } else {
+      outParameters[name] = deepClone(param);
+    }
+  }
+  for (const [name, param] of Object.entries(ornamentsParameters)) {
+    if (outParameters[name] !== undefined) {
+      outParameters["Ornaments" + name] = deepClone(param);
     } else {
       outParameters[name] = deepClone(param);
     }

@@ -167,16 +167,26 @@ const IN_PROCESS_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
  * both paths safely idempotent together.
  */
 export function startNudgeScheduler(): void {
-  computeAndStoreNudges().catch((err: unknown) =>
-    logger.error({ err }, "travels-nudges: initial run failed"),
-  );
+  const run = async (): Promise<void> => {
+    const t0 = Date.now();
+    logger.info("travels-nudges: run starting");
+    try {
+      await computeAndStoreNudges();
+      logger.info(
+        { durationMs: Date.now() - t0 },
+        "travels-nudges: run complete",
+      );
+    } catch (err) {
+      logger.error(
+        { err, durationMs: Date.now() - t0 },
+        "travels-nudges: run failed",
+      );
+    }
+  };
 
-  const interval = setInterval(() => {
-    computeAndStoreNudges().catch((err: unknown) =>
-      logger.error({ err }, "travels-nudges: scheduled run failed"),
-    );
-  }, IN_PROCESS_INTERVAL_MS);
+  void run();
 
+  const interval = setInterval(() => void run(), IN_PROCESS_INTERVAL_MS);
   interval.unref();
 
   logger.info("travels-nudges: started (in-process fallback, runs hourly)");

@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod/v4";
 import { db, travelsTrips } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
+import { aiLimiter } from "../../middleware/rateLimit";
 import type OpenAI from "openai";
 import {
   callModel,
@@ -244,8 +245,8 @@ If dates are unspecified, create 5 days labelled Day 1, Day 2, etc. Return ONLY 
   return newItinerary;
 }
 
-router.post("/trips/:id/itinerary", async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+router.post("/trips/:id/itinerary", aiLimiter, async (req, res) => {
+  const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
@@ -271,7 +272,7 @@ router.post("/trips/:id/itinerary", async (req, res) => {
   }
 });
 
-router.post("/explore", async (req, res) => {
+router.post("/explore", aiLimiter, async (req, res) => {
   const body = ExploreBody.parse(req.body);
   const { destination } = body;
 
@@ -356,7 +357,7 @@ Include 6-8 highlights. Return ONLY valid JSON, no extra text.`,
   res.json({ destination, lat, lng, overview, distanceKm, mapsUrl, timezone });
 });
 
-router.post("/highlights/suggest", async (req, res) => {
+router.post("/highlights/suggest", aiLimiter, async (req, res) => {
   const { destination } = SuggestBody.parse(req.body);
   const suggestModels = await getModels();
   const raw = await callModel(
@@ -431,8 +432,8 @@ type ChatMessage = { role: "user" | "assistant"; content: string };
 
 const ChatBody = z.object({ message: z.string().min(1).max(2000) });
 
-router.post("/trips/:id/chat", async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+router.post("/trips/:id/chat", aiLimiter, async (req, res) => {
+  const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
@@ -526,7 +527,7 @@ const PlanTripBody = z.object({
   travellerCount: z.number().int().min(1).max(20).optional(),
 });
 
-router.post("/trips/plan", async (req, res) => {
+router.post("/trips/plan", aiLimiter, async (req, res) => {
   const parse = PlanTripBody.safeParse(req.body);
   if (!parse.success) {
     res.status(400).json({ error: "Invalid request" });

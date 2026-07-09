@@ -1069,4 +1069,81 @@ export const STATEMENTS: string[] = [
      ON travels_doc_chunks (trip_document_id)`,
   `CREATE INDEX IF NOT EXISTS travels_doc_chunks_embedding_idx
      ON travels_doc_chunks USING hnsw (embedding vector_cosine_ops)`,
+
+  // ── Ornaments app ────────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS ornaments_items (
+    id                     SERIAL PRIMARY KEY,
+    user_id                INTEGER REFERENCES app_users(id),
+    name                   TEXT NOT NULL,
+    brand                  TEXT NOT NULL DEFAULT 'Hallmark',
+    series_or_collection   TEXT,
+    year                   INTEGER,
+    barcode_value          TEXT,
+    quantity               INTEGER NOT NULL DEFAULT 1,
+    notes                  TEXT,
+    dimensions             TEXT,
+    condition              TEXT,
+    origin                 TEXT,
+    acquired_at            DATE,
+    ai_description         TEXT,
+    dominant_colors        TEXT[] NOT NULL DEFAULT '{}',
+    motifs                 TEXT[] NOT NULL DEFAULT '{}',
+    image_path             TEXT NOT NULL,
+    locked_fields          TEXT[] NOT NULL DEFAULT '{}',
+    book_value             NUMERIC(10,2),
+    book_value_source      TEXT,
+    book_value_updated_at  TIMESTAMPTZ,
+    embedding              vector(1536),
+    visual_embedding       vector(1024),
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE TABLE IF NOT EXISTS ornaments_categories (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER REFERENCES app_users(id),
+    name        TEXT NOT NULL,
+    bg_color    TEXT,
+    text_color  TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE TABLE IF NOT EXISTS ornaments_item_categories (
+    item_id     INTEGER NOT NULL REFERENCES ornaments_items(id) ON DELETE CASCADE,
+    category_id INTEGER NOT NULL REFERENCES ornaments_categories(id) ON DELETE CASCADE,
+    PRIMARY KEY (item_id, category_id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS ornaments_images (
+    id           SERIAL PRIMARY KEY,
+    item_id      INTEGER NOT NULL REFERENCES ornaments_items(id) ON DELETE CASCADE,
+    storage_path TEXT NOT NULL,
+    label        TEXT,
+    position     INTEGER NOT NULL DEFAULT 0,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE TABLE IF NOT EXISTS ornaments_barcode_cache (
+    barcode              TEXT PRIMARY KEY,
+    found                INTEGER NOT NULL DEFAULT 0,
+    name                 TEXT,
+    brand                TEXT,
+    series_or_collection TEXT,
+    year                 INTEGER,
+    description          TEXT,
+    image_url            TEXT,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS ornaments_embedding_idx
+     ON ornaments_items USING hnsw (embedding vector_cosine_ops)`,
+  `CREATE INDEX IF NOT EXISTS ornaments_visual_embedding_idx
+     ON ornaments_items USING hnsw (visual_embedding vector_cosine_ops)`,
+  `CREATE INDEX IF NOT EXISTS ornaments_items_user_id_idx
+     ON ornaments_items (user_id)`,
+  `CREATE INDEX IF NOT EXISTS ornaments_items_series_idx
+     ON ornaments_items (series_or_collection)`,
+  `CREATE INDEX IF NOT EXISTS ornaments_item_categories_category_id_idx
+     ON ornaments_item_categories (category_id)`,
+  `CREATE INDEX IF NOT EXISTS ornaments_images_item_idx
+     ON ornaments_images (item_id)`,
+  `ALTER TABLE ornaments_items ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE ornaments_categories ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE ornaments_item_categories ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE ornaments_images ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE ornaments_barcode_cache ENABLE ROW LEVEL SECURITY`,
 ];

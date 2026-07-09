@@ -23,6 +23,7 @@ export type ElaineAppId =
   | "travels"
   | "pottery"
   | "quilting"
+  | "ornaments"
   | "hub"
   | "elaine";
 

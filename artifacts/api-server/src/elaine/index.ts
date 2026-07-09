@@ -27,10 +27,11 @@ import {
   fabrics,
   quiltPatterns,
   finishedQuilts,
+  ornamentsItems,
   phoneVerificationCodes,
 } from "@workspace/db";
 import { requireAuth } from "../middleware/auth";
-import { phoneVerifyLimiter } from "../middleware/rateLimit";
+import { phoneVerifyLimiter, aiLimiter } from "../middleware/rateLimit";
 import { logger } from "../lib/logger";
 import { callModel, callModelWithSubagent } from "../lib/ai-client";
 import { embedText } from "../lib/openai";
@@ -88,6 +89,13 @@ import {
   quiltingActionTools,
   type QuiltingActionType,
 } from "./quilting-actions";
+import {
+  ornamentActionSchemas,
+  ornamentActionExecutors,
+  buildOrnamentActionLabel,
+  ornamentActionTools,
+  type OrnamentActionType,
+} from "./ornaments-actions";
 import multer from "multer";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -143,7 +151,14 @@ function normalizeAttachmentRefs(raw: unknown): AttachmentRef[] {
   });
 }
 
-const APP_IDS = ["travels", "pottery", "quilting", "hub", "elaine"] as const;
+const APP_IDS = [
+  "travels",
+  "pottery",
+  "quilting",
+  "ornaments",
+  "hub",
+  "elaine",
+] as const;
 type AppId = (typeof APP_IDS)[number];
 
 const ChatBody = z.object({
@@ -693,6 +708,7 @@ const ActionBody = z.discriminatedUnion("type", [
   }),
   ...potteryActionSchemas,
   ...quiltingActionSchemas,
+  ...ornamentActionSchemas,
 ]);
 
 type PendingAction = z.infer<typeof ActionBody>;
@@ -720,6 +736,18 @@ const QUILTING_ACTION_TYPES = new Set<string>([
   "delete_shopping_item",
   "create_quilting_category",
   "delete_quilting_category",
+]);
+const ORNAMENT_ACTION_TYPES = new Set<string>([
+  "update_ornament_item",
+  "delete_ornament_item",
+  "create_ornament_category",
+  "delete_ornament_category",
+  "lock_ornament_field",
+  "update_ornament_item_categories",
+  "delete_ornament_photo",
+  "promote_ornament_photo",
+  "merge_ornament_categories",
+  "bulk_reanalyze_ornaments",
 ]);
 
 async function buildActionLabel(action: PendingAction): Promise<string> {
@@ -931,6 +959,11 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
           action as { type: QuiltingActionType; payload: unknown },
         );
       }
+      if (ORNAMENT_ACTION_TYPES.has(action.type as OrnamentActionType)) {
+        return buildOrnamentActionLabel(
+          action as { type: OrnamentActionType; payload: unknown },
+        );
+      }
       return "Perform this action";
   }
 }
@@ -946,7 +979,7 @@ type ActionExecutor = (
 
 type TravelActionType = Exclude<
   ActionType,
-  PotteryActionType | QuiltingActionType
+  PotteryActionType | QuiltingActionType | OrnamentActionType
 >;
 
 const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
@@ -2185,6 +2218,7 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
   ...TRAVEL_ACTION_EXECUTORS,
   ...potteryActionExecutors,
   ...quiltingActionExecutors,
+  ...ornamentActionExecutors,
 };
 
 // ---------------------------------------------------------------------------
@@ -2842,6 +2876,7 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   },
   ...potteryActionTools,
   ...quiltingActionTools,
+  ...ornamentActionTools,
 ];
 
 const NAVIGATE_TOOL_NAME = "suggest_navigation";
@@ -2889,6 +2924,15 @@ const NAVIGATE_ALLOWED_PATHS_BY_APP: Record<AppId, readonly string[]> = {
     "/categories",
     "/maintenance",
   ],
+  ornaments: [
+    "/",
+    "/add",
+    "/scan",
+    "/stats",
+    "/categories",
+    "/maintenance",
+    "/settings",
+  ],
   hub: ["/", "/account", "/gmail"],
   elaine: ["/"],
 };
@@ -2900,6 +2944,8 @@ const NAVIGATE_PATH_RE_BY_APP: Record<AppId, RegExp> = {
   pottery: /^\/(piece\/\d+|add|compare|categories|maintenance|settings)?$/,
   quilting:
     /^\/(fabrics\/\d+|fabrics\/add|fabrics|patterns\/\d+|patterns\/add|patterns|quilts\/\d+|quilts\/add|quilts|compare|blocks\/\d+\/edit|blocks\/\d+\/cut-pattern|blocks\/\d+|blocks\/new|blocks|library\/blocks\/\d+\/edit|library\/blocks\/new|library\/blocks|layouts\/\d+\/edit|layouts\/\d+|layouts\/new|layouts|whole-quilt\/designer|whole-quilt|shopping|tools\/yardage|categories|maintenance)?$/,
+  ornaments:
+    /^\/(ornament\/\d+|add|scan|stats|categories|maintenance|settings)?$/,
   hub: /^\/(account|gmail)?$/,
   elaine: /^\/$/,
 };
@@ -2909,7 +2955,7 @@ const NAVIGATE_PATH_RE_BY_APP: Record<AppId, RegExp> = {
 // The client detects these prefixes and uses window.location.href instead of
 // the SPA router so the correct React bundle loads.
 const CROSS_APP_NAVIGATE_RE =
-  /^\/(pottery|quilting|travels|elaine)(\/[^?#]*)?(\?[a-zA-Z0-9=+%._~!$&'()*+,;:-]*)?\/?$/;
+  /^\/(pottery|quilting|travels|ornaments|elaine)(\/[^?#]*)?(\?[a-zA-Z0-9=+%._~!$&'()*+,;:-]*)?\/?$/;
 
 function navigatePayloadSchemaFor(appId: AppId) {
   return z.object({
@@ -3476,7 +3522,7 @@ const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: QUERY_HOUSEHOLD_TOOL_NAME,
       description:
-        "Look up live counts and recent items from the household's pottery collection, quilting stash, and travel plans — use this when the user asks summary questions like 'how many pieces do I have', 'what's in my quilting stash', 'how many trips am I planning', etc. Returns real numbers and recent record names directly from the database. Do not estimate or guess counts — always call this instead.",
+        "Look up live counts and recent items from the household's pottery collection, quilting stash, ornaments collection, and travel plans — use this when the user asks summary questions like 'how many pieces do I have', 'what's in my quilting stash', 'how many ornaments do I have', 'how many trips am I planning', etc. Returns real numbers and recent record names directly from the database. Do not estimate or guess counts — always call this instead.",
       parameters: {
         type: "object",
         properties: {
@@ -3484,9 +3530,9 @@ const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
             type: "array",
             items: {
               type: "string",
-              enum: ["pottery", "quilting", "travels"],
+              enum: ["pottery", "quilting", "ornaments", "travels"],
             },
-            description: "Which apps to include. Omit to include all three.",
+            description: "Which apps to include. Omit to include all four.",
           },
         },
         required: [],
@@ -4199,11 +4245,12 @@ router.post("/chat", async (req, res) => {
     travels: "Travels",
     pottery: "Pottery",
     quilting: "Quilting",
+    ornaments: "Ornaments",
     hub: "the Batchelor hub (app launcher)",
     elaine: "her own dedicated space (the Elaine app)",
   };
 
-  const systemPrompt = `You are Elaine, a warm, personable AI assistant built into the Batchelor app — a household account shared across a Pottery collection app, a Quilting collection app, and a Travel-planning app, plus a hub/launcher page and your own dedicated Elaine app. You are one continuous assistant: the same conversation and memory follow the user across all of these apps, even though each app has its own pages and tools. You are talking with ${userName}, who is currently using you from ${CURRENT_APP_LABEL[appId]}.
+  const systemPrompt = `You are Elaine, a warm, personable AI assistant built into the Batchelor app — a household account shared across a Pottery collection app, a Quilting collection app, a Christmas Ornaments collection app, and a Travel-planning app, plus a hub/launcher page and your own dedicated Elaine app. You are one continuous assistant: the same conversation and memory follow the user across all of these apps, even though each app has its own pages and tools. You are talking with ${userName}, who is currently using you from ${CURRENT_APP_LABEL[appId]}.
 
 PERSONALITY: You're conversational, upbeat, and genuinely helpful — like a knowledgeable friend, not a generic corporate assistant. You can be a little playful. You still give concrete, accurate, step-by-step help when asked.
 
@@ -4247,8 +4294,18 @@ Quilting app:
 - Categories ("/categories"): manage categories used to organize fabrics/patterns.
 - Maintenance ("/maintenance"): bulk AI re-analysis and other collection upkeep tools.
 
+Ornaments app:
+- Collection ("/"): the full Christmas ornaments collection grid/list, with search and filtering.
+- Add Ornament ("/add"): upload a photo of a new ornament and let AI analyze/fill in its details (name, series/collection, year, brand, etc.).
+- Ornament detail ("/ornament/:id"): everything about one ornament — photos, name, series/collection, year, brand, condition, origin, dimensions, notes, AI description/motifs/colors, locked fields, category assignment, and book value.
+- Scan ("/scan"): barcode/photo scan to look up or find an ornament (UPC barcode lookup + AI visual match).
+- Stats ("/stats"): collection-wide statistics — totals, quantities, book value, and breakdowns by series/collection.
+- Categories ("/categories"): manage the categories used to organize the collection, including merging categories together.
+- Maintenance ("/maintenance"): bulk AI re-analysis and other collection upkeep tools.
+- Settings ("/settings"): account/profile settings.
+
 Hub (app launcher):
-- Launcher ("/"): lets the household pick which app to open (Pottery, Quilting, Travels).
+- Launcher ("/"): lets the household pick which app to open (Pottery, Quilting, Ornaments, Travels).
 - Account ("/account"): shared account/profile settings.
 - Gmail ("/gmail"): a full email client for the household's connected Gmail account — browse/search the inbox, read and compose messages, and apply labels/archive/trash, independent of the Travels app's travel-specific Gmail scanning feature.
 
@@ -4285,6 +4342,8 @@ ${
 POTTERY ITEMS: Use update_pottery_item to edit an existing piece (name, notes, quantity, style, shape, maker, condition, origin, era) — only include fields that actually change, and only if the piece's numeric id is visible on screen (look for "itemId: <number>"); never guess one. This also works right after an upload if the user tells you details in chat instead of typing them into the form. Use delete_pottery_item to permanently remove a piece and its photos — say clearly in your visible reply that this deletes the item, since it's destructive. Use create_pottery_category / delete_pottery_category to manage the categories used to organize the collection; never guess a category id for deletion. Use update_pottery_item_categories to replace the full set of categories assigned to one piece (pass every category id that should end up assigned, not just the ones to add). Use merge_pottery_categories to fold one category into another (e.g. "merge Vases into Vessels") — this deletes the source category, so say so clearly since it's destructive; never guess either category id. Use lock_pottery_field to lock or unlock one AI-derived field (name, patternDescription, style, shape, maker, makerInfo, dimensions, dominantColors, motifs, aiDescription, glazeType) on a piece so future AI re-analysis will or won't overwrite it — only with a visible itemId. Use delete_pottery_photo to remove one supplemental photo from a piece, and promote_pottery_photo to make a supplemental photo the new primary photo (this re-runs AI analysis with the new primary image, subject to locked fields) — both need a visible itemId and imageId, never guessed. Use bulk_reanalyze_pottery to re-run AI analysis on several pieces at once; pass itemIds if specific ones are visible on screen, or omit it to run against every piece still missing AI analysis (capped at 20) — mention in your visible reply that this takes a while and calls AI per item.
 
 QUILTING ITEMS: Use update_fabric / delete_fabric, update_pattern / delete_pattern for editing or removing an existing fabric or pattern — only if its numeric id is visible on screen, never guessed, and be clear in your visible reply that a delete is permanent. You can't create a brand-new fabric or finished quilt from chat since both require an uploaded photo you have no way to attach — but use create_pattern to add a new quilt pattern record (name, designer, block size, difficulty, source, notes; no image) since a pattern's image is optional. Use delete_quilt to permanently remove a finished quilt and its photos — only with a visible quiltId, and say clearly it's permanent. Use create_shopping_item / update_shopping_item / delete_shopping_item to manage the fabric/supplies shopping list. Use create_quilting_category / delete_quilting_category to manage categories; never guess a category id for deletion. Use rename_quilting_category to rename one, and merge_quilting_categories to fold one category into another (destructive to the source category — say so clearly); never guess either category id. Use create_block / create_layout to add a new blank block template or quilt layout (metadata + an empty grid only — this does NOT design the block's pattern or place blocks into the layout, since chat-driven geometry editing isn't supported; tell the user to open the block/layout editor in the app to actually design it). Use delete_block / delete_layout to remove one, only with a visible id. Use bulk_reanalyze_quilting to re-run AI analysis on fabrics, patterns, or finished quilts — pass specific ids when visible on screen, or omit ids to run against everything of that type still needing analysis; mention this takes a while. Use calculate_yardage whenever the user asks how much backing or binding fabric they need for a given quilt size — never do this arithmetic yourself, always call the tool so the numbers are accurate; it's a read-only estimate, not a saved record.
+
+ORNAMENTS ITEMS: Use update_ornament_item to edit an existing ornament (name, notes, quantity, series/collection, year, brand, condition, origin, dimensions) — only include fields that actually change, and only if the ornament's numeric id is visible on screen (look for "itemId: <number>"); never guess one. This also works right after an upload if the user tells you details in chat instead of typing them into the form. Use delete_ornament_item to permanently remove an ornament and its photos — say clearly in your visible reply that this deletes the item, since it's destructive. Use create_ornament_category / delete_ornament_category to manage the categories used to organize the collection; never guess a category id for deletion. Use update_ornament_item_categories to replace the full set of categories assigned to one ornament (pass every category id that should end up assigned, not just the ones to add). Use merge_ornament_categories to fold one category into another — this deletes the source category, so say so clearly since it's destructive; never guess either category id. Use lock_ornament_field to lock or unlock one AI-derived field (name, seriesOrCollection, year, dimensions, dominantColors, motifs, aiDescription, barcodeValue) on an ornament so future AI re-analysis will or won't overwrite it — only with a visible itemId. Use delete_ornament_photo to remove one supplemental photo from an ornament, and promote_ornament_photo to make a supplemental photo the new primary photo (this re-runs AI analysis with the new primary image, subject to locked fields) — both need a visible itemId and imageId, never guessed. Use bulk_reanalyze_ornaments to re-run AI analysis on several ornaments at once; pass itemIds if specific ones are visible on screen, or omit it to run against every ornament still missing AI analysis (capped at 20) — mention in your visible reply that this takes a while and calls AI per item.
 
 EMAIL: Whenever you've just given the user something substantial worth keeping — a list of recommendations, an itinerary summary, packing tips, etc. — offer to email it to them, e.g. "Want me to email you this list?" Only call send_email once they say yes; never call it unprompted or assume they want it. It always goes to their own registered account email, so never ask for an address and never offer to send it to anyone else. Write a short subject and a plain-text body (no markdown/HTML, blank line between paragraphs) — it gets formatted into a nice email automatically. You have no way to export a PDF or Word document, so don't offer that; email is the only export option available.
 
@@ -5083,8 +5142,13 @@ Keep replies concise and easy to read in a chat bubble.`;
               .object({ include: z.array(z.string()).optional() })
               .safeParse(JSON.parse(call.args || "{}"));
             const include = parsed.success
-              ? (parsed.data.include ?? ["pottery", "quilting", "travels"])
-              : ["pottery", "quilting", "travels"];
+              ? (parsed.data.include ?? [
+                  "pottery",
+                  "quilting",
+                  "ornaments",
+                  "travels",
+                ])
+              : ["pottery", "quilting", "ornaments", "travels"];
             const parts: string[] = [];
 
             if (include.includes("pottery")) {
@@ -5116,6 +5180,23 @@ Keep replies concise and easy to read in a chat bubble.`;
                 .from(finishedQuilts);
               parts.push(
                 `Quilting stash: ${fabRow?.total ?? 0} fabrics, ${patRow?.total ?? 0} patterns, ${quiltRow?.total ?? 0} finished quilts.`,
+              );
+            }
+
+            if (include.includes("ornaments")) {
+              const [ornRow] = await db
+                .select({ total: count() })
+                .from(ornamentsItems);
+              const ornRecent = await db
+                .select({ name: ornamentsItems.name })
+                .from(ornamentsItems)
+                .orderBy(desc(ornamentsItems.createdAt))
+                .limit(3);
+              parts.push(
+                `Ornaments collection: ${ornRow?.total ?? 0} ornaments total.` +
+                  (ornRecent.length > 0
+                    ? ` Recently added: ${ornRecent.map((r) => r.name).join(", ")}.`
+                    : ""),
               );
             }
 
@@ -5644,6 +5725,7 @@ async function generateDailyBriefContent(userId: number): Promise<string> {
     newFabricItems,
     newPatternItems,
     newQuiltItems,
+    newOrnamentItems,
     newTripItems,
     newWishlistItems,
   ] = await Promise.all([
@@ -5681,6 +5763,15 @@ async function generateDailyBriefContent(userId: number): Promise<string> {
         and(
           sql`${finishedQuilts.createdAt} >= ${yesterdayIso}`,
           sql`${finishedQuilts.createdAt} < ${todayIso}`,
+        ),
+      ),
+    db
+      .select({ name: ornamentsItems.name })
+      .from(ornamentsItems)
+      .where(
+        and(
+          sql`${ornamentsItems.createdAt} >= ${yesterdayIso}`,
+          sql`${ornamentsItems.createdAt} < ${todayIso}`,
         ),
       ),
     db
@@ -5723,6 +5814,10 @@ async function generateDailyBriefContent(userId: number): Promise<string> {
     activityParts.push(
       `${newQuiltItems.length} quilt${newQuiltItems.length > 1 ? "s" : ""} finished: ${newQuiltItems.map((q) => q.name).join(", ")}`,
     );
+  if (newOrnamentItems.length > 0)
+    activityParts.push(
+      `${newOrnamentItems.length} new ornament${newOrnamentItems.length > 1 ? "s" : ""}: ${newOrnamentItems.map((o) => o.name).join(", ")}`,
+    );
   if (newTripItems.length > 0)
     activityParts.push(
       `${newTripItems.length} new trip${newTripItems.length > 1 ? "s" : ""} added: ${newTripItems.map((t) => `${t.title} to ${t.destination}`).join(", ")}`,
@@ -5762,7 +5857,7 @@ async function generateDailyBriefContent(userId: number): Promise<string> {
 }
 
 // GET /daily-brief — return today's brief (generate on first call of the day).
-router.get("/daily-brief", async (req, res) => {
+router.get("/daily-brief", aiLimiter, async (req, res) => {
   const userId = req.session.userId!;
   const startOfTodayUtc = new Date();
   startOfTodayUtc.setUTCHours(0, 0, 0, 0);

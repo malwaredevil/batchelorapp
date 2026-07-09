@@ -330,12 +330,6 @@ router.post(
       return;
     }
     const phoneNumber = parsed.data.phoneNumber.trim();
-    if (!E164_RE.test(phoneNumber)) {
-      res.status(400).json({
-        error: 'Phone number must be in E.164 format, e.g. "+12105551234".',
-      });
-      return;
-    }
 
     const code = crypto.randomInt(0, 1_000_000).toString().padStart(6, "0");
     const codeHash = crypto.createHash("sha256").update(code).digest("hex");
@@ -644,11 +638,6 @@ router.post("/auth/reset-password", async (req, res) => {
   }
 
   const { token, newPassword } = parsed.data;
-
-  if (newPassword.length < 8) {
-    res.status(400).json({ error: "Password must be at least 8 characters." });
-    return;
-  }
 
   const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
   const now = new Date();

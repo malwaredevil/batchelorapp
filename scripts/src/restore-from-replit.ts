@@ -223,6 +223,84 @@ async function main() {
     columns: ["item_id", "category_id"],
   });
 
+  // ── Ornaments ─────────────────────────────────────────────────────────────
+  await dest.query("TRUNCATE ornaments_item_categories CASCADE");
+  await dest.query("TRUNCATE ornaments_images CASCADE");
+  await dest.query("TRUNCATE ornaments_items CASCADE");
+  await dest.query("TRUNCATE ornaments_categories CASCADE");
+  await dest.query("TRUNCATE ornaments_barcode_cache CASCADE");
+
+  await copyTable(source, dest, {
+    table: "ornaments_categories",
+    columns: ["id", "name", "bg_color", "text_color", "created_at"],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ornaments_categories", "id");
+
+  await copyTable(source, dest, {
+    table: "ornaments_items",
+    columns: [
+      "id",
+      "name",
+      "brand",
+      "series_or_collection",
+      "year",
+      "barcode_value",
+      "quantity",
+      "notes",
+      "dimensions",
+      "condition",
+      "origin",
+      "acquired_at",
+      "ai_description",
+      "dominant_colors",
+      "motifs",
+      "image_path",
+      "locked_fields",
+      "book_value",
+      "book_value_source",
+      "book_value_updated_at",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ornaments_items", "id");
+
+  await copyTable(source, dest, {
+    table: "ornaments_images",
+    columns: [
+      "id",
+      "item_id",
+      "storage_path",
+      "label",
+      "position",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ornaments_images", "id");
+
+  await copyTable(source, dest, {
+    table: "ornaments_item_categories",
+    columns: ["item_id", "category_id"],
+  });
+
+  await copyTable(source, dest, {
+    table: "ornaments_barcode_cache",
+    columns: [
+      "barcode",
+      "found",
+      "name",
+      "brand",
+      "series_or_collection",
+      "year",
+      "description",
+      "image_url",
+      "created_at",
+    ],
+    orderBy: "barcode",
+  });
+
   // ── Quilting ──────────────────────────────────────────────────────────────
   await dest.query(
     "TRUNCATE quilting_entity_categories, quilting_fabric_links, quilting_pattern_links, quilting_images, quilting_blocks, quilting_block_templates, quilting_layouts, quilting_shopping_items CASCADE",

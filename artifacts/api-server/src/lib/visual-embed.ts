@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import { env } from "./env";
 import { getThresholds } from "./ai-client";
+import { withRetry } from "./retry";
 
 export const VISUAL_EMBEDDING_DIMENSIONS = 1024;
 
@@ -103,18 +104,23 @@ async function _jinaClassify(
     input = { image: imageInput };
   }
 
-  const response = await fetch("https://api.jina.ai/v1/classify", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${env.jinaApiKey}`,
-    },
-    body: JSON.stringify({
-      model: "jina-clip-v2",
-      input: [input],
-      labels,
-    }),
-  });
+  const response = await withRetry(
+    () =>
+      fetch("https://api.jina.ai/v1/classify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${env.jinaApiKey}`,
+        },
+        body: JSON.stringify({
+          model: "jina-clip-v2",
+          input: [input],
+          labels,
+        }),
+        signal: AbortSignal.timeout(15_000),
+      }),
+    { label: "jina-classify" },
+  );
 
   if (!response.ok) {
     const text = await response.text();
@@ -165,17 +171,22 @@ export async function generateVisualEmbedding(
     input = { image: imageInput };
   }
 
-  const response = await fetch("https://api.jina.ai/v1/embeddings", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${env.jinaApiKey}`,
-    },
-    body: JSON.stringify({
-      model: "jina-clip-v2",
-      input: [input],
-    }),
-  });
+  const response = await withRetry(
+    () =>
+      fetch("https://api.jina.ai/v1/embeddings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${env.jinaApiKey}`,
+        },
+        body: JSON.stringify({
+          model: "jina-clip-v2",
+          input: [input],
+        }),
+        signal: AbortSignal.timeout(15_000),
+      }),
+    { label: "jina-embeddings" },
+  );
 
   if (!response.ok) {
     const text = await response.text();

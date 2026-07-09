@@ -43,6 +43,7 @@ import {
   useGetStats,
   useUpdateFabric,
   useListQuiltingCategories,
+  useGetUsedFabricIds,
 } from "@workspace/api-client-react";
 import type { QuiltingCategory } from "@workspace/api-client-react";
 import { downloadCollectionImage } from "@/lib/svg-export";
@@ -301,10 +302,12 @@ export default function Fabrics() {
   const [sort, setSort] = useState<SortOption>("newest");
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [stashBustMode, setStashBustMode] = useState(false);
   const queryClient = useQueryClient();
   const { pendingItems } = useBulkAdd();
   const uploadingItems = pendingItems.filter((i) => i.status === "uploading");
   const { data: fabrics, isLoading, isError } = useListFabrics();
+  const { data: usedFabricIds } = useGetUsedFabricIds({ query: { enabled: stashBustMode, queryKey: ["quilting", "fabrics", "used-ids"] } });
   const { data: stats } = useGetStats();
   const [categoryEditItem, setCategoryEditItem] =
     useState<FabricSummary | null>(null);
@@ -440,7 +443,10 @@ export default function Fabrics() {
         const matchesColor =
           colorFilter.length === 0 ||
           colorFilter.every((c) => (f.dominantColors ?? []).includes(c));
-        return matchesSearch && matchesType && matchesCat && matchesColor;
+        const matchesStash =
+          !stashBustMode ||
+          !(usedFabricIds ?? []).includes(f.id);
+        return matchesSearch && matchesType && matchesCat && matchesColor && matchesStash;
       })
     : null;
 
@@ -458,13 +464,15 @@ export default function Fabrics() {
     search.trim().length > 0 ||
     printTypeFilter !== null ||
     categoryFilter !== null ||
-    colorFilter.length > 0;
+    colorFilter.length > 0 ||
+    stashBustMode;
 
   function clearFilters() {
     setSearch("");
     setPrintTypeFilter(null);
     setCategoryFilter(null);
     setColorFilter([]);
+    setStashBustMode(false);
   }
 
   usePageAssistantContext(
@@ -641,6 +649,18 @@ export default function Fabrics() {
                 </button>
               )}
             </div>
+            <button
+              onClick={() => setStashBustMode((v) => !v)}
+              title={stashBustMode ? "Stash Bust Mode: ON — showing unused fabrics only. Click to turn off." : "Stash Bust Mode: OFF — click to show only fabrics not yet used in a quilt."}
+              className={`inline-flex h-9 items-center gap-1.5 rounded-md border px-2.5 text-sm font-medium transition-colors shrink-0 ${
+                stashBustMode
+                  ? "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                  : "border-input bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              }`}
+            >
+              <Scissors className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Stash Bust</span>
+            </button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button

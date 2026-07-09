@@ -4,6 +4,7 @@ import {
   serial,
   integer,
   real,
+  smallint,
   text,
   date,
   timestamp,
@@ -166,6 +167,7 @@ export const finishedQuilts = pgTable("quilting_finished_quilts", {
     .array()
     .notNull()
     .default(sql`'{}'::text[]`),
+  completionPercentage: smallint("completion_percentage").default(0),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

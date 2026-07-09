@@ -7,6 +7,7 @@ import {
   entityCategories,
   quiltingCategories as categories,
   quiltingImages,
+  quiltFabricLinks,
   type FabricRow,
 } from "@workspace/db";
 import {
@@ -150,6 +151,17 @@ router.get("/fabrics", async (_req, res) => {
     rows as Array<Omit<FabricRow, "embedding" | "visualEmbedding">>,
   );
   res.json(ListFabricsResponse.parse(items));
+});
+
+// ---------------------------------------------------------------------------
+// Used fabric IDs (must appear before /:id to avoid being caught by that param)
+// ---------------------------------------------------------------------------
+
+router.get("/fabrics/used-ids", async (_req, res) => {
+  const rows = await db
+    .selectDistinct({ fabricId: quiltFabricLinks.fabricId })
+    .from(quiltFabricLinks);
+  res.json(rows.map((r) => r.fabricId));
 });
 
 // ---------------------------------------------------------------------------

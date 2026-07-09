@@ -238,7 +238,13 @@ function SuggestionsTab({
   onView: (messageId: string) => void;
 }) {
   const qc = useQueryClient();
-  const { data: suggestions = [], isLoading } = useGetGmailSuggestions();
+  const { data: suggestions = [], isLoading } = useGetGmailSuggestions({
+    query: {
+      queryKey: getGetGmailSuggestionsQueryKey(),
+      refetchInterval: 30_000,
+      refetchIntervalInBackground: false,
+    },
+  });
   const dismiss = useDismissGmailSuggestion();
   const link = useLinkGmailMessage();
   const [selectedTrip, setSelectedTrip] = useState<Record<number, string>>({});
@@ -428,11 +434,24 @@ function InboxBrowserTab({
   const [pageIndex, setPageIndex] = useState(0);
   const pageToken = pageHistory[pageIndex];
   const [showIgnored, setShowIgnored] = useState(false);
-  const { data, isLoading, isFetching } = useGetGmailInbox({
-    q: committedQuery || undefined,
-    pageToken,
-    maxResults: pageSize,
-  });
+  const { data, isLoading, isFetching } = useGetGmailInbox(
+    {
+      q: committedQuery || undefined,
+      pageToken,
+      maxResults: pageSize,
+    },
+    {
+      query: {
+        queryKey: getGetGmailInboxQueryKey({
+          q: committedQuery || undefined,
+          pageToken,
+          maxResults: pageSize,
+        }),
+        refetchInterval: 30_000,
+        refetchIntervalInBackground: false,
+      },
+    },
+  );
   const link = useLinkGmailMessage();
   const ignore = useIgnoreGmailMessage();
   const reconsider = useReconsiderGmailMessage();

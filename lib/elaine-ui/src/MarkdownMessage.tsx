@@ -2,7 +2,8 @@ import { type ReactNode } from "react";
 
 /** Lightweight markdown renderer covering the subset Elaine uses:
  *  bold, italic, inline code, headers (h1-h3), bullet lists, numbered lists,
- *  horizontal rules, and paragraphs. No external dependencies needed. */
+ *  horizontal rules, pipe tables, inline images, and paragraphs. No external
+ *  dependencies needed. */
 
 type Token =
   | { kind: "h1" | "h2" | "h3"; text: string }
@@ -10,20 +11,65 @@ type Token =
   | { kind: "ordered"; text: string; n: number }
   | { kind: "hr" }
   | { kind: "blank" }
+  | { kind: "table"; header: string[]; rows: string[][] }
   | { kind: "text"; text: string };
+
+/** Matches a GFM-style pipe table row, e.g. "| a | b |" or "a | b". */
+function parseTableRow(line: string): string[] | null {
+  const trimmed = line.trim();
+  if (!trimmed.includes("|")) return null;
+  const stripped = trimmed.replace(/^\|/, "").replace(/\|$/, "");
+  const cells = stripped.split("|").map((c) => c.trim());
+  return cells.length > 0 ? cells : null;
+}
+
+/** Matches a table separator row, e.g. "| --- | :---: |" or "---|---". */
+function isTableSeparatorRow(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed.includes("-")) return false;
+  const stripped = trimmed.replace(/^\|/, "").replace(/\|$/, "");
+  const cells = stripped.split("|").map((c) => c.trim());
+  return cells.length > 0 && cells.every((c) => /^:?-+:?$/.test(c) && c !== "");
+}
 
 function tokenize(markdown: string): Token[] {
   const lines = markdown.split("\n");
   const tokens: Token[] = [];
-  for (const raw of lines) {
-    const line = raw;
-    const trimmed = line.trim();
+  let i = 0;
+  while (i < lines.length) {
+    const raw = lines[i]!;
+    const trimmed = raw.trim();
+
+    // Pipe table: a row containing "|" immediately followed by a valid
+    // separator row (--- / :---: etc), then zero or more data rows.
+    if (
+      trimmed.includes("|") &&
+      i + 1 < lines.length &&
+      isTableSeparatorRow(lines[i + 1]!)
+    ) {
+      const header = parseTableRow(trimmed);
+      if (header) {
+        i += 2; // skip header + separator
+        const rows: string[][] = [];
+        while (i < lines.length && lines[i]!.trim().includes("|")) {
+          const row = parseTableRow(lines[i]!);
+          if (!row) break;
+          rows.push(row);
+          i++;
+        }
+        tokens.push({ kind: "table", header, rows });
+        continue;
+      }
+    }
+
     if (trimmed === "" || trimmed === "\r") {
       tokens.push({ kind: "blank" });
+      i++;
       continue;
     }
     if (/^---+$/.test(trimmed) || /^\*\*\*+$/.test(trimmed)) {
       tokens.push({ kind: "hr" });
+      i++;
       continue;
     }
     const hm = trimmed.match(/^(#{1,3})\s+(.+)$/);
@@ -33,28 +79,35 @@ function tokenize(markdown: string): Token[] {
         kind: level === 1 ? "h1" : level === 2 ? "h2" : "h3",
         text: hm[2]!,
       });
+      i++;
       continue;
     }
     const bm = trimmed.match(/^[-*•]\s+(.+)$/);
     if (bm) {
       tokens.push({ kind: "bullet", text: bm[1]! });
+      i++;
       continue;
     }
     const om = trimmed.match(/^(\d+)\.\s+(.+)$/);
     if (om) {
       tokens.push({ kind: "ordered", text: om[2]!, n: parseInt(om[1]!, 10) });
+      i++;
       continue;
     }
     tokens.push({ kind: "text", text: trimmed });
+    i++;
   }
   return tokens;
 }
 
-/** Renders inline markdown: **bold**, *italic*, `code`, and [link](url). */
+/** Renders inline markdown: **bold**, *italic*, `code`, [link](url), and
+ *  ![alt](url) inline images. Image syntax is checked before link syntax
+ *  since it's a superset (leading "!") of the same bracket/paren shape. */
 function InlineMarkdown({ text }: { text: string }): ReactNode {
   const parts: ReactNode[] = [];
-  // Combined regex for bold, italic, inline code, links
-  const re = /(\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`|\[([^\]]+)\]\(([^)]+)\))/g;
+  // Combined regex for bold, italic, inline code, images, links
+  const re =
+    /(\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`|!\[([^\]]*)\]\(([^)]+)\)|\[([^\]]+)\]\(([^)]+)\))/g;
   let last = 0;
   let match: RegExpExecArray | null;
   let key = 0;
@@ -83,17 +136,28 @@ function InlineMarkdown({ text }: { text: string }): ReactNode {
           {match[4]}
         </code>,
       );
-    } else if (match[5] !== undefined && match[6] !== undefined) {
+    } else if (match[6] !== undefined) {
+      // ![alt](url) — inline image
+      parts.push(
+        <img
+          key={key++}
+          src={match[6]}
+          alt={match[5] ?? ""}
+          loading="lazy"
+          className="my-1 block max-h-64 max-w-full rounded-lg border border-border object-contain"
+        />,
+      );
+    } else if (match[7] !== undefined && match[8] !== undefined) {
       parts.push(
         <a
           key={key++}
-          href={match[6]}
+          href={match[8]}
           target="_blank"
           rel="noopener noreferrer"
           className="underline decoration-primary/60 hover:text-primary"
           onClick={(e) => e.stopPropagation()}
         >
-          {match[5]}
+          {match[7]}
         </a>,
       );
     }
@@ -154,6 +218,43 @@ function buildNodes(tokens: Token[]): ReactNode[] {
           ))}
         </ol>,
       );
+      continue;
+    }
+
+    if (t.kind === "table") {
+      nodes.push(
+        <div key={key++} className="my-2 overflow-x-auto">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-border">
+                {t.header.map((cell, j) => (
+                  <th
+                    key={j}
+                    className="px-2 py-1.5 text-left font-semibold text-foreground"
+                  >
+                    <InlineMarkdown text={cell} />
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {t.rows.map((row, j) => (
+                <tr key={j} className="border-b border-border/40 last:border-0">
+                  {row.map((cell, k) => (
+                    <td
+                      key={k}
+                      className="px-2 py-1.5 align-top text-foreground/90"
+                    >
+                      <InlineMarkdown text={cell} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
+      );
+      i++;
       continue;
     }
 

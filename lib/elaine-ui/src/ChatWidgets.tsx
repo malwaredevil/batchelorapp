@@ -1,4 +1,4 @@
-import { MapPin, Star, Wind, Leaf, ArrowRight, Table2, Image as ImageIcon } from "lucide-react";
+import { MapPin, Star, Wind, Leaf, ArrowRight, Table2, Image as ImageIcon, ExternalLink } from "lucide-react";
 
 // ── Widget type definitions ─────────────────────────────────────────────────
 
@@ -62,6 +62,33 @@ export interface TripCardData {
   countdownDays?: number;
 }
 
+export interface PotteryItemData {
+  itemId?: number;
+  name: string;
+  imageUrl?: string;
+  maker?: string;
+  style?: string;
+  aiDescription?: string;
+  dominantColors?: string[];
+}
+
+export interface FabricSwatchData {
+  fabricId?: number;
+  name: string;
+  manufacturer?: string;
+  designer?: string;
+  dominantColors?: string[];
+  imageUrl?: string;
+  aiDescription?: string;
+}
+
+export interface DestinationCardData {
+  name: string;
+  country?: string;
+  highlights?: string[];
+  mapsUrl: string;
+}
+
 export type ChatWidget =
   | { type: "weather"; locationName: string; days: WeatherDay[] }
   | { type: "places"; query: string; places: PlaceResult[] }
@@ -70,7 +97,10 @@ export type ChatWidget =
   | { type: "data_card"; title?: string; rows: DataCardRow[] }
   | { type: "image_card"; title?: string; images: ChatWidgetImage[] }
   | { type: "exchange_rate"; from: string; to: ExchangeRateResult[]; lastUpdated: string }
-  | { type: "trip_card"; trip: TripCardData };
+  | { type: "trip_card"; trip: TripCardData }
+  | { type: "pottery_item"; item: PotteryItemData }
+  | { type: "fabric_swatch"; swatch: FabricSwatchData }
+  | { type: "destination_card"; card: DestinationCardData };
 
 // ── Weather condition → emoji mapping ──────────────────────────────────────
 
@@ -540,6 +570,140 @@ function TripCardWidget({ trip }: { trip: TripCardData }) {
   );
 }
 
+// ── Pottery Item Widget ──────────────────────────────────────────────────────
+
+function PotteryItemWidget({ item }: { item: PotteryItemData }) {
+  return (
+    <div className="mt-2 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      <div className="flex items-center gap-1.5 border-b border-border/60 bg-amber-50/60 px-3 py-2 dark:bg-amber-950/30">
+        <span className="text-base">🏺</span>
+        <span className="text-xs font-semibold text-foreground">Pottery Collection</span>
+      </div>
+      <div className="flex gap-3 p-3">
+        {item.imageUrl && (
+          <img
+            src={item.imageUrl}
+            alt={item.name}
+            className="h-20 w-20 shrink-0 rounded-lg border border-border object-cover"
+          />
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-foreground">{item.name}</p>
+          {item.maker && (
+            <p className="text-xs text-muted-foreground">by {item.maker}</p>
+          )}
+          {item.style && (
+            <p className="text-xs text-muted-foreground">{item.style}</p>
+          )}
+          {item.aiDescription && (
+            <p className="mt-1 text-xs text-foreground/80 line-clamp-2">{item.aiDescription}</p>
+          )}
+          {item.dominantColors && item.dominantColors.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {item.dominantColors.slice(0, 5).map((c) => (
+                <span
+                  key={c}
+                  className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] text-muted-foreground"
+                >
+                  {c}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Fabric Swatch Widget ─────────────────────────────────────────────────────
+
+function FabricSwatchWidget({ swatch }: { swatch: FabricSwatchData }) {
+  return (
+    <div className="mt-2 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      <div className="flex items-center gap-1.5 border-b border-border/60 bg-purple-50/60 px-3 py-2 dark:bg-purple-950/30">
+        <span className="text-base">🧵</span>
+        <span className="text-xs font-semibold text-foreground">Fabric Swatch</span>
+      </div>
+      <div className="flex gap-3 p-3">
+        {swatch.imageUrl && (
+          <img
+            src={swatch.imageUrl}
+            alt={swatch.name}
+            className="h-20 w-20 shrink-0 rounded-lg border border-border object-cover"
+          />
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-foreground">{swatch.name}</p>
+          {swatch.designer && (
+            <p className="text-xs text-muted-foreground">Designer: {swatch.designer}</p>
+          )}
+          {swatch.manufacturer && (
+            <p className="text-xs text-muted-foreground">{swatch.manufacturer}</p>
+          )}
+          {swatch.aiDescription && (
+            <p className="mt-1 text-xs text-foreground/80 line-clamp-2">{swatch.aiDescription}</p>
+          )}
+          {swatch.dominantColors && swatch.dominantColors.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {swatch.dominantColors.slice(0, 6).map((c) => (
+                <span
+                  key={c}
+                  className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] text-muted-foreground"
+                >
+                  {c}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Destination Card Widget ──────────────────────────────────────────────────
+
+function DestinationCardWidget({ card }: { card: DestinationCardData }) {
+  return (
+    <div className="mt-2 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      <div className="flex items-center gap-1.5 border-b border-border/60 bg-sky-50/60 px-3 py-2 dark:bg-sky-950/30">
+        <MapPin className="h-3.5 w-3.5 text-sky-600" />
+        <span className="text-xs font-semibold text-foreground">Destination</span>
+      </div>
+      <div className="p-3">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold text-foreground">{card.name}</p>
+            {card.country && (
+              <p className="text-xs text-muted-foreground">{card.country}</p>
+            )}
+          </div>
+          <a
+            href={card.mapsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted"
+          >
+            <ExternalLink className="h-3 w-3" />
+            Maps
+          </a>
+        </div>
+        {card.highlights && card.highlights.length > 0 && (
+          <ul className="mt-2 space-y-0.5">
+            {card.highlights.slice(0, 5).map((h, i) => (
+              <li key={i} className="flex items-start gap-1.5 text-xs text-foreground/80">
+                <span className="mt-0.5 text-sky-500">•</span>
+                {h}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main export ─────────────────────────────────────────────────────────────
 
 export function ChatWidget({ widget }: { widget: ChatWidget }) {
@@ -562,5 +726,11 @@ export function ChatWidget({ widget }: { widget: ChatWidget }) {
       return <ExchangeRateWidget from={widget.from} to={widget.to} lastUpdated={widget.lastUpdated} />;
     case "trip_card":
       return <TripCardWidget trip={widget.trip} />;
+    case "pottery_item":
+      return <PotteryItemWidget item={widget.item} />;
+    case "fabric_swatch":
+      return <FabricSwatchWidget swatch={widget.swatch} />;
+    case "destination_card":
+      return <DestinationCardWidget card={widget.card} />;
   }
 }

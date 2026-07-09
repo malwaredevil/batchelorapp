@@ -15,6 +15,7 @@ import {
   elaineDailyBriefs,
   travelsTrips,
   travelsTripDocuments,
+  travelsDocChunks,
   travelsTripPhotos,
   travelsReminders,
   travelsWishlist,
@@ -32,6 +33,7 @@ import { requireAuth } from "../middleware/auth";
 import { phoneVerifyLimiter } from "../middleware/rateLimit";
 import { logger } from "../lib/logger";
 import { callModel, callModelWithSubagent } from "../lib/ai-client";
+import { embedText } from "../lib/openai";
 import {
   getElaineGlobalConfig,
   invalidateElaineGlobalConfigCache,
@@ -3023,6 +3025,26 @@ const SearchTripDocumentsToolPayload = z.object({
   tripId: z.number().int().positive().optional(),
 });
 
+const SHOW_POTTERY_ITEM_TOOL_NAME = "show_pottery_item";
+
+const ShowPotteryItemToolPayload = z.object({
+  itemId: z.number().int().positive(),
+});
+
+const SHOW_FABRIC_SWATCH_TOOL_NAME = "show_fabric_swatch";
+
+const ShowFabricSwatchToolPayload = z.object({
+  fabricId: z.number().int().positive(),
+});
+
+const SHOW_DESTINATION_CARD_TOOL_NAME = "show_destination_card";
+
+const ShowDestinationCardToolPayload = z.object({
+  name: z.string().min(1).max(200),
+  country: z.string().max(100).optional(),
+  highlights: z.array(z.string().max(200)).max(5).optional(),
+});
+
 const GET_EXCHANGE_RATE_TOOL_NAME = "get_exchange_rate";
 
 const GetExchangeRateToolPayload = z.object({
@@ -3456,6 +3478,69 @@ const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           },
         },
         required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: SHOW_POTTERY_ITEM_TOOL_NAME,
+      description:
+        "Render a rich visual pottery-item card for a specific piece from the collection — showing its photo, maker, style, AI description, and dominant colours. Use whenever the user asks about a specific pottery piece by name or ID, or when discussing a particular item. Fetch the itemId from query_household_data or from context in the conversation.",
+      parameters: {
+        type: "object",
+        properties: {
+          itemId: {
+            type: "number",
+            description: "ID of the pottery item to display",
+          },
+        },
+        required: ["itemId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: SHOW_FABRIC_SWATCH_TOOL_NAME,
+      description:
+        "Render a fabric swatch card for a specific fabric from the quilting stash — showing its photo, designer, manufacturer, dominant colours, and AI description. Use when the user asks about a specific fabric by name or ID.",
+      parameters: {
+        type: "object",
+        properties: {
+          fabricId: {
+            type: "number",
+            description: "ID of the fabric to display",
+          },
+        },
+        required: ["fabricId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: SHOW_DESTINATION_CARD_TOOL_NAME,
+      description:
+        "Render a destination card — showing the place name, country, bullet-point highlights, and a Google Maps link. Use whenever the user asks about a travel destination, wishlist entry, or trip location so they can get a quick visual summary with a one-click map link. Populate highlights with the 3–5 most useful or interesting facts you know about the destination.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: {
+            type: "string",
+            description: "Destination name (city, region, or landmark)",
+          },
+          country: {
+            type: "string",
+            description: "Country name (optional)",
+          },
+          highlights: {
+            type: "array",
+            items: { type: "string" },
+            description: "3–5 short highlight sentences about the destination",
+          },
+        },
+        required: ["name"],
       },
     },
   },
@@ -4770,48 +4855,90 @@ Keep replies concise and easy to read in a chat bubble.`;
               resultText = "Invalid search — ask the user to rephrase.";
             } else {
               const { query, tripId } = parsed.data;
-              const q = query.toLowerCase();
-              // Fetch recent documents (up to 50), optionally filtered by trip
-              const rows = await db
+
+              // --- Semantic search via doc_chunks pgvector ---
+              // Embed the query, find the top-k closest chunks, then hydrate
+              // the parent document rows. Falls back to keyword search if no
+              // chunks exist yet (documents uploaded before this feature).
+              let semanticDocIds: number[] = [];
+              try {
+                const qEmbedding = await embedText(query);
+                const embStr = `[${qEmbedding.join(",")}]`;
+                const chunkRows = await db.execute(sql`
+                  SELECT dc.trip_document_id, MIN(dc.embedding <=> ${embStr}::vector) AS dist
+                  FROM travels_doc_chunks dc
+                  JOIN travels_trip_documents d ON d.id = dc.trip_document_id
+                  WHERE ${tripId != null ? sql`d.trip_id = ${tripId}` : sql`TRUE`}
+                  GROUP BY dc.trip_document_id
+                  ORDER BY dist ASC
+                  LIMIT 8
+                `);
+                semanticDocIds = (chunkRows.rows as { trip_document_id: number }[])
+                  .map((r) => r.trip_document_id);
+              } catch {
+                // fallback to keyword below
+              }
+
+              // Fetch matching documents (semantic hits first, then keyword fallback)
+              const docFilter =
+                semanticDocIds.length > 0
+                  ? and(
+                      tripId != null
+                        ? eq(travelsTripDocuments.tripId, tripId)
+                        : undefined,
+                      inArray(travelsTripDocuments.id, semanticDocIds),
+                    )
+                  : tripId != null
+                  ? eq(travelsTripDocuments.tripId, tripId)
+                  : undefined;
+
+              let rows = await db
                 .select({
                   id: travelsTripDocuments.id,
                   tripId: travelsTripDocuments.tripId,
                   title: travelsTripDocuments.title,
                   documentType: travelsTripDocuments.documentType,
                   extractedData: travelsTripDocuments.extractedData,
+                  rawText: travelsTripDocuments.rawText,
                 })
                 .from(travelsTripDocuments)
-                .where(
-                  tripId != null
-                    ? eq(travelsTripDocuments.tripId, tripId)
-                    : sql`1=1`,
-                )
-                .limit(50);
+                .where(docFilter)
+                .limit(semanticDocIds.length > 0 ? 8 : 50);
 
-              // Score each doc by how well it matches the query
-              const scored = rows
-                .map((row) => {
-                  const haystack = [
-                    row.title ?? "",
-                    row.documentType ?? "",
-                    JSON.stringify(row.extractedData ?? ""),
-                  ]
-                    .join(" ")
-                    .toLowerCase();
-                  // Simple keyword match: count how many query words appear
-                  const words = q.split(/\s+/).filter(Boolean);
-                  const hits = words.filter((w) => haystack.includes(w)).length;
-                  return { row, hits };
-                })
-                .filter((s) => s.hits > 0)
-                .sort((a, b) => b.hits - a.hits)
-                .slice(0, 5);
+              // If semantic found nothing, fall back to keyword scoring
+              if (semanticDocIds.length === 0) {
+                const q = query.toLowerCase();
+                const scored = rows
+                  .map((row) => {
+                    const haystack = [
+                      row.title ?? "",
+                      row.documentType ?? "",
+                      JSON.stringify(row.extractedData ?? ""),
+                    ]
+                      .join(" ")
+                      .toLowerCase();
+                    const words = q.split(/\s+/).filter(Boolean);
+                    const hits = words.filter((w) => haystack.includes(w)).length;
+                    return { row, hits };
+                  })
+                  .filter((s) => s.hits > 0)
+                  .sort((a, b) => b.hits - a.hits)
+                  .slice(0, 5);
+                rows = scored.map((s) => s.row);
+              } else {
+                // Preserve semantic ranking order
+                const idxMap = new Map(semanticDocIds.map((id, i) => [id, i]));
+                rows.sort(
+                  (a, b) => (idxMap.get(a.id) ?? 99) - (idxMap.get(b.id) ?? 99),
+                );
+                rows = rows.slice(0, 5);
+              }
 
-              if (scored.length === 0) {
+              if (rows.length === 0) {
                 resultText = `No uploaded trip documents match "${query}".`;
               } else {
-                resultText = scored
-                  .map(({ row }) => {
+                resultText = rows
+                  .map((row) => {
                     const parts = [
                       `Document: ${row.title ?? row.documentType ?? "untitled"} (trip #${row.tripId})`,
                     ];
@@ -4830,6 +4957,11 @@ Keep replies concise and easy to read in a chat bubble.`;
                         .map(([k, v]) => `  ${k}: ${String(v)}`)
                         .join("\n");
                       if (fields) parts.push("Extracted fields:\n" + fields);
+                    }
+                    // Include a snippet of raw text if available for richer context
+                    if (row.rawText) {
+                      const snippet = row.rawText.slice(0, 600).replace(/\s+/g, " ");
+                      parts.push(`Raw text excerpt: ${snippet}…`);
                     }
                     return parts.join("\n");
                   })
@@ -4963,6 +5095,132 @@ Keep replies concise and easy to read in a chat bubble.`;
 
             resultText =
               parts.length > 0 ? parts.join("\n") : "No household data found.";
+          } else if (call.name === SHOW_POTTERY_ITEM_TOOL_NAME) {
+            const parsed = ShowPotteryItemToolPayload.safeParse(
+              JSON.parse(call.args),
+            );
+            if (!parsed.success) {
+              resultText = "Invalid pottery item ID.";
+            } else {
+              const [row] = await db
+                .select({
+                  id: potteryItems.id,
+                  name: potteryItems.name,
+                  maker: potteryItems.maker,
+                  style: potteryItems.style,
+                  imagePath: potteryItems.imagePath,
+                  aiDescription: potteryItems.aiDescription,
+                  dominantColors: potteryItems.dominantColors,
+                })
+                .from(potteryItems)
+                .where(eq(potteryItems.id, parsed.data.itemId));
+              if (!row) {
+                resultText = `Pottery item #${parsed.data.itemId} not found.`;
+              } else {
+                let imageUrl: string | undefined;
+                try {
+                  const ONE_HOUR = 3600;
+                  const sc = createClient(
+                    env.supabaseUrl,
+                    env.supabaseServiceRoleKey,
+                    { auth: { persistSession: false, autoRefreshToken: false } },
+                  );
+                  const { data } = await sc.storage
+                    .from("pottery")
+                    .createSignedUrl(row.imagePath, ONE_HOUR);
+                  imageUrl = data?.signedUrl ?? undefined;
+                } catch {
+                  // non-fatal — widget shows without image
+                }
+                sendEvent("widget", {
+                  type: "pottery_item",
+                  item: {
+                    itemId: row.id,
+                    name: row.name,
+                    maker: row.maker ?? undefined,
+                    style: row.style ?? undefined,
+                    aiDescription: row.aiDescription ?? undefined,
+                    dominantColors:
+                      row.dominantColors.length > 0
+                        ? row.dominantColors
+                        : undefined,
+                    imageUrl,
+                  },
+                });
+                resultText = `Pottery item card displayed for "${row.name}".`;
+              }
+            }
+          } else if (call.name === SHOW_FABRIC_SWATCH_TOOL_NAME) {
+            const parsed = ShowFabricSwatchToolPayload.safeParse(
+              JSON.parse(call.args),
+            );
+            if (!parsed.success) {
+              resultText = "Invalid fabric ID.";
+            } else {
+              const [row] = await db
+                .select({
+                  id: fabrics.id,
+                  name: fabrics.name,
+                  manufacturer: fabrics.manufacturer,
+                  designer: fabrics.designer,
+                  imagePath: fabrics.imagePath,
+                  aiDescription: fabrics.aiDescription,
+                  dominantColors: fabrics.dominantColors,
+                })
+                .from(fabrics)
+                .where(eq(fabrics.id, parsed.data.fabricId));
+              if (!row) {
+                resultText = `Fabric #${parsed.data.fabricId} not found.`;
+              } else {
+                let imageUrl: string | undefined;
+                try {
+                  const ONE_HOUR = 3600;
+                  const sc = createClient(
+                    env.supabaseUrl,
+                    env.supabaseServiceRoleKey,
+                    { auth: { persistSession: false, autoRefreshToken: false } },
+                  );
+                  const { data } = await sc.storage
+                    .from("quilting")
+                    .createSignedUrl(row.imagePath, ONE_HOUR);
+                  imageUrl = data?.signedUrl ?? undefined;
+                } catch {
+                  // non-fatal
+                }
+                sendEvent("widget", {
+                  type: "fabric_swatch",
+                  swatch: {
+                    fabricId: row.id,
+                    name: row.name,
+                    manufacturer: row.manufacturer ?? undefined,
+                    designer: row.designer ?? undefined,
+                    aiDescription: row.aiDescription ?? undefined,
+                    dominantColors:
+                      row.dominantColors.length > 0
+                        ? row.dominantColors
+                        : undefined,
+                    imageUrl,
+                  },
+                });
+                resultText = `Fabric swatch card displayed for "${row.name}".`;
+              }
+            }
+          } else if (call.name === SHOW_DESTINATION_CARD_TOOL_NAME) {
+            const parsed = ShowDestinationCardToolPayload.safeParse(
+              JSON.parse(call.args),
+            );
+            if (!parsed.success) {
+              resultText = "Invalid destination data.";
+            } else {
+              const { name, country, highlights } = parsed.data;
+              const query = country ? `${name}, ${country}` : name;
+              const mapsUrl = `https://www.google.com/maps/search/${encodeURIComponent(query)}`;
+              sendEvent("widget", {
+                type: "destination_card",
+                card: { name, country, highlights, mapsUrl },
+              });
+              resultText = `Destination card displayed for "${name}".`;
+            }
           } else {
             resultText = "Unsupported tool.";
           }

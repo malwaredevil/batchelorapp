@@ -714,7 +714,9 @@ export function ElaineChatPanel({
             variant="ghost"
             className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground hover:text-foreground"
             onClick={() => void handleScreenshot()}
-            disabled={isStreaming || isCapturing || pendingAttachments.length >= 5}
+            disabled={
+              isStreaming || isCapturing || pendingAttachments.length >= 5
+            }
             title="Screenshot this page"
           >
             {isCapturing ? (

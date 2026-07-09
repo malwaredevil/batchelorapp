@@ -170,6 +170,7 @@ import {
   Leaf,
   AlertCircle,
   Rows2,
+  StickyNote,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -345,6 +346,7 @@ const DEFAULT_CARD_ORDER = [
   "reminders",
   "itinerary",
   "documents",
+  "notes",
   "packing-todo",
   "photos",
   "magnets",
@@ -2059,6 +2061,32 @@ function DayCard({
   );
 }
 
+// ─── Trip Notes Card ──────────────────────────────────────────────────────────
+
+function TripNotesCard({
+  value,
+  onSave,
+}: {
+  value: string;
+  onSave: (v: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+  return (
+    <Textarea
+      className="min-h-[140px] resize-y text-sm leading-relaxed placeholder:text-muted-foreground/50"
+      placeholder="Jot down anything — links, ideas, things to remember…"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        if (draft !== value) onSave(draft);
+      }}
+    />
+  );
+}
+
 // ─── Todo List ────────────────────────────────────────────────────────────────
 
 function TodoList({
@@ -3240,6 +3268,7 @@ export default function TripDetail({ id }: { id: number }) {
       : `Viewing trip "${trip.title}" to ${trip.destination} (tripId: ${trip.id}, status: ${trip.status}${
           trip.startDate ? `, starts ${trip.startDate}` : ""
         }${trip.endDate ? `, ends ${trip.endDate}` : ""}). ` +
+          (trip.notes ? `Trip notes: "${trip.notes}". ` : "") +
           `To-do list has ${todoList.length} item(s). ` +
           (documents.length > 0
             ? `Documents attached to this trip (use these already-parsed fields to answer questions like confirmation numbers, hotel names, or flight/check-in times — never ask the user to re-upload or open the file):\n${documentsSummary}`
@@ -3646,13 +3675,6 @@ export default function TripDetail({ id }: { id: number }) {
             label="Accommodation area"
             value={trip.accommodationArea ?? ""}
             onSave={(v) => saveField({ accommodationArea: v || undefined })}
-          />
-
-          <InlineTextareaField
-            label="Notes"
-            value={trip.notes ?? ""}
-            onSave={(v) => saveField({ notes: v || undefined })}
-            className="col-span-2 sm:col-span-3 pt-2 border-t border-border/50"
           />
 
           <InlineField
@@ -4223,6 +4245,31 @@ export default function TripDetail({ id }: { id: number }) {
                                 )}
                               </CardContent>
                             </Card>
+                          </div>
+                        </CardShell>
+                      );
+
+                    case "notes":
+                      return (
+                        <CardShell
+                          title="Notes"
+                          icon={<StickyNote className="w-4 h-4" />}
+                          collapsed={collapsedCards.has("notes")}
+                          onToggleCollapse={() => toggleCardCollapse("notes")}
+                          dragHandleListeners={dragHandleListeners}
+                          dragHandleAttributes={dragHandleAttributes}
+                        >
+                          <div className="space-y-3">
+                            <h2 className="font-serif text-xl text-foreground flex items-center gap-2">
+                              <StickyNote className="w-5 h-5" />
+                              Notes
+                            </h2>
+                            <TripNotesCard
+                              value={trip.notes ?? ""}
+                              onSave={(v) =>
+                                saveField({ notes: v || undefined })
+                              }
+                            />
                           </div>
                         </CardShell>
                       );

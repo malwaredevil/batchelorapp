@@ -792,7 +792,10 @@ function tripReadinessScore(trip: {
 
 function ReadinessPips({ score }: { score: number }) {
   return (
-    <span className="flex items-center gap-0.5" title={`Trip readiness: ${score}/5`}>
+    <span
+      className="flex items-center gap-0.5"
+      title={`Trip readiness: ${score}/5`}
+    >
       {Array.from({ length: 5 }).map((_, i) => (
         <span
           key={i}
@@ -1254,7 +1257,9 @@ export default function Trips() {
                           )}
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
-                          {READINESS_STATUSES.includes(trip.status as TripStatus) && (
+                          {READINESS_STATUSES.includes(
+                            trip.status as TripStatus,
+                          ) && (
                             <ReadinessPips score={tripReadinessScore(trip)} />
                           )}
                           <span

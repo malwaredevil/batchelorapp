@@ -626,7 +626,7 @@ export const potteryActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
       function: {
         name: "lock_pottery_field",
         description:
-          "Propose locking or unlocking one AI-derived field on a pottery item so future AI re-analysis will (locked) or won't (unlocked) overwrite it, e.g. \"lock the maker on this piece\" or \"unlock the style field\". Only call this if the item's numeric id is visible on screen; never guess an id.",
+          'Propose locking or unlocking one AI-derived field on a pottery item so future AI re-analysis will (locked) or won\'t (unlocked) overwrite it, e.g. "lock the maker on this piece" or "unlock the style field". Only call this if the item\'s numeric id is visible on screen; never guess an id.',
         parameters: {
           type: "object",
           properties: {
@@ -675,7 +675,7 @@ export const potteryActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
       function: {
         name: "promote_pottery_photo",
         description:
-          'Propose making a supplemental photo the new primary photo for a pottery item (e.g. "use that second photo as the main one instead"). This swaps the images and re-runs AI analysis using the new primary photo, so it can change the item\'s AI-derived fields (subject to any locked fields). Only call this if both the item\'s numeric id and the photo\'s numeric image id are visible on screen; never guess either.',
+          "Propose making a supplemental photo the new primary photo for a pottery item (e.g. \"use that second photo as the main one instead\"). This swaps the images and re-runs AI analysis using the new primary photo, so it can change the item's AI-derived fields (subject to any locked fields). Only call this if both the item's numeric id and the photo's numeric image id are visible on screen; never guess either.",
         parameters: {
           type: "object",
           properties: {

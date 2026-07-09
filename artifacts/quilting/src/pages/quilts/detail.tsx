@@ -515,7 +515,9 @@ export default function QuiltDetail() {
                   <div>
                     <label className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
                       <span>WIP Progress</span>
-                      <span className="font-medium text-foreground">{d.completionPercentage}%</span>
+                      <span className="font-medium text-foreground">
+                        {d.completionPercentage}%
+                      </span>
                     </label>
                     <input
                       type="range"
@@ -523,7 +525,9 @@ export default function QuiltDetail() {
                       max={100}
                       step={5}
                       value={d.completionPercentage}
-                      onChange={(e) => set("completionPercentage", parseInt(e.target.value))}
+                      onChange={(e) =>
+                        set("completionPercentage", parseInt(e.target.value))
+                      }
                       className="w-full accent-primary h-2 cursor-pointer"
                     />
                     <div className="flex justify-between text-[10px] text-muted-foreground/60 mt-0.5">
@@ -572,8 +576,12 @@ export default function QuiltDetail() {
                 {!q.dateCompleted && (q.completionPercentage ?? 0) > 0 && (
                   <div>
                     <div className="flex justify-between mb-1">
-                      <span className="text-muted-foreground">WIP Progress</span>
-                      <span className="font-medium">{q.completionPercentage ?? 0}%</span>
+                      <span className="text-muted-foreground">
+                        WIP Progress
+                      </span>
+                      <span className="font-medium">
+                        {q.completionPercentage ?? 0}%
+                      </span>
                     </div>
                     <div className="h-2 rounded-full bg-muted overflow-hidden">
                       <div

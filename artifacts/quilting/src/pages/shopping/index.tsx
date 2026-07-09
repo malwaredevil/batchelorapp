@@ -378,13 +378,15 @@ export default function Shopping() {
     "quilting-shopping",
     isLoading
       ? undefined
-      : `Shopping List page: ${items?.length ?? 0} item(s). Visible items: ${(items ?? [])
-          .slice(0, 30)
-          .map(
-            (i: { id: number; name: string; status: string }) =>
-              `${i.name} (id: ${i.id}, status: ${i.status})`,
-          )
-          .join(", ") || "none"}.`,
+      : `Shopping List page: ${items?.length ?? 0} item(s). Visible items: ${
+          (items ?? [])
+            .slice(0, 30)
+            .map(
+              (i: { id: number; name: string; status: string }) =>
+                `${i.name} (id: ${i.id}, status: ${i.status})`,
+            )
+            .join(", ") || "none"
+        }.`,
   );
 
   const filtered =

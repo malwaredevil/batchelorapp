@@ -29,9 +29,7 @@ function isTableSeparatorRow(line: string): boolean {
   if (!trimmed.includes("-")) return false;
   const stripped = trimmed.replace(/^\|/, "").replace(/\|$/, "");
   const cells = stripped.split("|").map((c) => c.trim());
-  return (
-    cells.length > 0 && cells.every((c) => /^:?-+:?$/.test(c) && c !== "")
-  );
+  return cells.length > 0 && cells.every((c) => /^:?-+:?$/.test(c) && c !== "");
 }
 
 function tokenize(markdown: string): Token[] {
@@ -243,7 +241,10 @@ function buildNodes(tokens: Token[]): ReactNode[] {
               {t.rows.map((row, j) => (
                 <tr key={j} className="border-b border-border/40 last:border-0">
                   {row.map((cell, k) => (
-                    <td key={k} className="px-2 py-1.5 align-top text-foreground/90">
+                    <td
+                      key={k}
+                      className="px-2 py-1.5 align-top text-foreground/90"
+                    >
                       <InlineMarkdown text={cell} />
                     </td>
                   ))}

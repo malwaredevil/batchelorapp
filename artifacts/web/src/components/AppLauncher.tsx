@@ -625,7 +625,9 @@ export function AppLauncher() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => { window.location.href = "/travels/travel-calendar"; }}
+              onClick={() => {
+                window.location.href = "/travels/travel-calendar";
+              }}
               aria-label="Travel Calendar"
               title="Travel Calendar"
               className="text-muted-foreground hover:text-foreground"

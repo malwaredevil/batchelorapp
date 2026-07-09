@@ -14,7 +14,10 @@ import {
 } from "@workspace/db";
 import { bulkReanalyzeFabrics } from "../routes/quilting/fabrics";
 import { bulkReanalyzePatterns } from "../routes/quilting/patterns";
-import { bulkReanalyzeQuilts, deleteQuiltById } from "../routes/quilting/quilts";
+import {
+  bulkReanalyzeQuilts,
+  deleteQuiltById,
+} from "../routes/quilting/quilts";
 import {
   renameQuiltingCategory,
   mergeQuiltingCategories,
@@ -789,9 +792,9 @@ export const quiltingActionExecutors: Record<
     let ids = payload.ids;
     if (!ids || ids.length === 0) {
       if (payload.entityType === "fabric") {
-        ids = (
-          await db.select({ id: fabrics.id }).from(fabrics)
-        ).map((r) => r.id);
+        ids = (await db.select({ id: fabrics.id }).from(fabrics)).map(
+          (r) => r.id,
+        );
       } else if (payload.entityType === "pattern") {
         ids = (
           await db.select({ id: quiltPatterns.id }).from(quiltPatterns)
@@ -899,7 +902,9 @@ export async function buildQuiltingActionLabel(action: {
       return `Create the quilt pattern "${payload.name}"`;
     }
     case "delete_quilt": {
-      const payload = action.payload as z.infer<typeof DeleteQuiltActionPayload>;
+      const payload = action.payload as z.infer<
+        typeof DeleteQuiltActionPayload
+      >;
       const quilt = await getQuiltLabelInfo(payload.quiltId);
       const name = quilt?.name ? `"${quilt.name}"` : "this quilt";
       return `Delete ${name} from your finished quilts`;
@@ -931,7 +936,9 @@ export async function buildQuiltingActionLabel(action: {
       return `Create a blank ${payload.gridSize}x${payload.gridSize} block template named "${payload.name}"`;
     }
     case "delete_block": {
-      const payload = action.payload as z.infer<typeof DeleteBlockActionPayload>;
+      const payload = action.payload as z.infer<
+        typeof DeleteBlockActionPayload
+      >;
       const block = await getBlockLabelInfo(payload.blockId);
       const name = block ? `"${block.name}"` : "this block";
       return `Delete the block ${name}`;
@@ -1193,7 +1200,7 @@ export const quiltingActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
       function: {
         name: "create_block",
         description:
-          'Propose creating a new blank block template (metadata + empty grid only — this does NOT design the block\'s pattern/geometry). Grid size must be one of the app\'s supported sizes (1-12). E.g. "create a new 4x4 block called Pinwheel Base" creates an empty 4x4 grid the user can then design in the block editor.',
+          "Propose creating a new blank block template (metadata + empty grid only — this does NOT design the block's pattern/geometry). Grid size must be one of the app's supported sizes (1-12). E.g. \"create a new 4x4 block called Pinwheel Base\" creates an empty 4x4 grid the user can then design in the block editor.",
         parameters: {
           type: "object",
           properties: {

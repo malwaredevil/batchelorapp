@@ -3063,6 +3063,18 @@ const ShowTripCardToolPayload = z.object({
   countdownDays: z.number().int().optional(),
 });
 
+const SUGGEST_CLOTHING_LAYERS_TOOL_NAME = "suggest_clothing_layers";
+
+const SuggestClothingLayersPayload = z.object({
+  destination: z.string().min(1).max(200),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  activities: z.array(z.string()).max(10).optional(),
+  climate: z
+    .enum(["hot", "cold", "tropical", "temperate", "desert", "variable"])
+    .optional(),
+});
+
 const CALCULATE_YARDAGE_TOOL_NAME = "calculate_yardage";
 
 const CalculateYardageToolPayload = z.object({
@@ -3514,6 +3526,51 @@ const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           },
         },
         required: ["fabricId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: SUGGEST_CLOTHING_LAYERS_TOOL_NAME,
+      description:
+        "Generate a practical layered clothing recommendation for a trip — base layers, mid layers, outer layers, activity-specific gear, and accessories. Call this when the user asks what to pack (clothing-wise), how to dress for a destination, or what to wear on a trip. Always call this instead of guessing clothing advice.",
+      parameters: {
+        type: "object",
+        properties: {
+          destination: {
+            type: "string",
+            description: "Trip destination (city, country, or region)",
+          },
+          startDate: {
+            type: "string",
+            description: "Trip start date (YYYY-MM-DD)",
+          },
+          endDate: {
+            type: "string",
+            description: "Trip end date (YYYY-MM-DD)",
+          },
+          activities: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "Planned activities, e.g. ['hiking', 'beach', 'formal dinner', 'city walking']",
+          },
+          climate: {
+            type: "string",
+            enum: [
+              "hot",
+              "cold",
+              "tropical",
+              "temperate",
+              "desert",
+              "variable",
+            ],
+            description:
+              "Expected climate (optional; inferred from destination if omitted)",
+          },
+        },
+        required: ["destination"],
       },
     },
   },
@@ -4873,8 +4930,9 @@ Keep replies concise and easy to read in a chat bubble.`;
                   ORDER BY dist ASC
                   LIMIT 8
                 `);
-                semanticDocIds = (chunkRows.rows as { trip_document_id: number }[])
-                  .map((r) => r.trip_document_id);
+                semanticDocIds = (
+                  chunkRows.rows as { trip_document_id: number }[]
+                ).map((r) => r.trip_document_id);
               } catch {
                 // fallback to keyword below
               }
@@ -4889,8 +4947,8 @@ Keep replies concise and easy to read in a chat bubble.`;
                       inArray(travelsTripDocuments.id, semanticDocIds),
                     )
                   : tripId != null
-                  ? eq(travelsTripDocuments.tripId, tripId)
-                  : undefined;
+                    ? eq(travelsTripDocuments.tripId, tripId)
+                    : undefined;
 
               let rows = await db
                 .select({
@@ -4918,7 +4976,9 @@ Keep replies concise and easy to read in a chat bubble.`;
                       .join(" ")
                       .toLowerCase();
                     const words = q.split(/\s+/).filter(Boolean);
-                    const hits = words.filter((w) => haystack.includes(w)).length;
+                    const hits = words.filter((w) =>
+                      haystack.includes(w),
+                    ).length;
                     return { row, hits };
                   })
                   .filter((s) => s.hits > 0)
@@ -4960,7 +5020,9 @@ Keep replies concise and easy to read in a chat bubble.`;
                     }
                     // Include a snippet of raw text if available for richer context
                     if (row.rawText) {
-                      const snippet = row.rawText.slice(0, 600).replace(/\s+/g, " ");
+                      const snippet = row.rawText
+                        .slice(0, 600)
+                        .replace(/\s+/g, " ");
                       parts.push(`Raw text excerpt: ${snippet}…`);
                     }
                     return parts.join("\n");
@@ -5123,7 +5185,9 @@ Keep replies concise and easy to read in a chat bubble.`;
                   const sc = createClient(
                     env.supabaseUrl,
                     env.supabaseServiceRoleKey,
-                    { auth: { persistSession: false, autoRefreshToken: false } },
+                    {
+                      auth: { persistSession: false, autoRefreshToken: false },
+                    },
                   );
                   const { data } = await sc.storage
                     .from("pottery")
@@ -5178,7 +5242,9 @@ Keep replies concise and easy to read in a chat bubble.`;
                   const sc = createClient(
                     env.supabaseUrl,
                     env.supabaseServiceRoleKey,
-                    { auth: { persistSession: false, autoRefreshToken: false } },
+                    {
+                      auth: { persistSession: false, autoRefreshToken: false },
+                    },
                   );
                   const { data } = await sc.storage
                     .from("quilting")
@@ -5220,6 +5286,48 @@ Keep replies concise and easy to read in a chat bubble.`;
                 card: { name, country, highlights, mapsUrl },
               });
               resultText = `Destination card displayed for "${name}".`;
+            }
+          } else if (call.name === SUGGEST_CLOTHING_LAYERS_TOOL_NAME) {
+            const parsed = SuggestClothingLayersPayload.safeParse(
+              JSON.parse(call.args),
+            );
+            if (!parsed.success) {
+              resultText = "Invalid parameters for clothing suggestion.";
+            } else {
+              const { destination, startDate, endDate, activities, climate } =
+                parsed.data;
+              const dateRange = startDate
+                ? `${startDate}${endDate ? ` to ${endDate}` : ""}`
+                : "unspecified dates";
+              const actStr = activities?.length
+                ? `Activities: ${activities.join(", ")}.`
+                : "";
+              const climateStr = climate ? `Expected climate: ${climate}.` : "";
+              const clothingConfig = await getElaineGlobalConfig();
+              const advice = await callModel(
+                clothingConfig.chatModel,
+                async (client, model) => {
+                  const completion = await client.chat.completions.create({
+                    model,
+                    max_tokens: 600,
+                    messages: [
+                      {
+                        role: "system",
+                        content:
+                          "You are a practical travel-packing expert. Give concise, specific clothing layer recommendations. No generic advice — tailor everything to the destination and dates. Use short bullet points under each heading. Keep the total response under 300 words.",
+                      },
+                      {
+                        role: "user",
+                        content: `Layered clothing recommendations for a trip to ${destination} (${dateRange}). ${climateStr} ${actStr}\n\nOrganise as:\n**Base layers** (moisture management)\n**Mid layers** (insulation)\n**Outer layers** (weather protection)\n**Activity-specific** (if applicable)\n**Accessories**`,
+                      },
+                    ],
+                  });
+                  return completion;
+                },
+              );
+              resultText =
+                advice.choices[0]?.message.content ??
+                "Unable to generate clothing suggestions right now.";
             }
           } else {
             resultText = "Unsupported tool.";

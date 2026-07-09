@@ -214,6 +214,22 @@ export function Layout({ children }: { children: ReactNode }) {
 
             <SearchTrigger />
 
+            <Link href="/travel-calendar">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "h-9 w-9",
+                  isActive(location, "/travel-calendar")
+                    ? "text-primary bg-primary/10"
+                    : "text-muted-foreground",
+                )}
+                title="Travel Calendar"
+              >
+                <CalendarDays className="h-4 w-4" />
+              </Button>
+            </Link>
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button

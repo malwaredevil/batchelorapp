@@ -302,15 +302,34 @@ paths:
       operationId: listFabrics
       tags: [fabrics]
       summary: List all fabrics
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
       responses:
         "200":
           description: Fabric list
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Fabric"
+                $ref: "#/components/schemas/FabricsListResponse"
 
     post:
       operationId: createFabric
@@ -419,6 +438,44 @@ paths:
               schema:
                 $ref: "#/components/schemas/Fabric"
 
+  /fabrics/{id}/pairings:
+    get:
+      operationId: getFabricPairings
+      tags: [fabrics]
+      summary: Get up to 4 stash fabrics that pair well with this one (embedding similarity)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Array of pairing suggestions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Fabric"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /fabrics/used-ids:
+    get:
+      operationId: getUsedFabricIds
+      tags: [fabrics]
+      summary: Get IDs of fabrics linked to at least one finished quilt
+      responses:
+        "200":
+          description: Array of used fabric IDs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: integer
+
   /fabrics/bulk-reanalyze:
     post:
       operationId: bulkReanalyzeFabrics
@@ -512,15 +569,34 @@ paths:
       operationId: listPatterns
       tags: [patterns]
       summary: List all quilt patterns
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
       responses:
         "200":
           description: Pattern list
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/QuiltPattern"
+                $ref: "#/components/schemas/PatternsListResponse"
 
     post:
       operationId: createPattern
@@ -764,15 +840,34 @@ paths:
       operationId: listQuilts
       tags: [quilts]
       summary: List all finished quilts
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
       responses:
         "200":
           description: Quilt list
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/FinishedQuilt"
+                $ref: "#/components/schemas/QuiltsListResponse"
 
     post:
       operationId: createQuilt
@@ -1704,6 +1799,51 @@ components:
         type: integer
 
   schemas:
+    FabricsListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Fabric"
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    PatternsListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuiltPattern"
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    QuiltsListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/FinishedQuilt"
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
     # Shared
     Error:
       type: object
@@ -2253,6 +2393,11 @@ components:
           type: array
           items:
             type: string
+        completionPercentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: WIP completion 0–100. 0 = not started, 100 = finished.
         categories:
           type: array
           items:
@@ -2343,6 +2488,11 @@ components:
           type: array
           items:
             type: integer
+        completionPercentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+          nullable: true
 
     # Bulk reanalyze
     BulkReanalyzeInput:

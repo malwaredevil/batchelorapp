@@ -142,7 +142,10 @@ router.use(requireAuth);
 router.get("/patterns", async (req, res) => {
   const q = typeof req.query.q === "string" ? req.query.q.trim() : undefined;
   const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
-  const pageSize = Math.min(500, Math.max(1, parseInt(String(req.query.pageSize ?? "50"), 10) || 50));
+  const pageSize = Math.min(
+    500,
+    Math.max(1, parseInt(String(req.query.pageSize ?? "50"), 10) || 50),
+  );
   const offset = (page - 1) * pageSize;
 
   const where = q ? ilike(quiltPatterns.name, `%${q}%`) : undefined;

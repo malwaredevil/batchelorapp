@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import {
   PlusCircle,
@@ -19,6 +19,8 @@ import {
   Tag,
   Camera,
   Sparkles,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useBulkAdd } from "@/contexts/bulk-add-context";
 import { Button } from "@/components/ui/button";
@@ -306,6 +308,11 @@ export default function Fabrics() {
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [stashBustMode, setStashBustMode] = useState(false);
+  const [pageSize, setPageSize] = useState<number>(() => {
+    const s = localStorage.getItem("quilting-fabrics-page-size");
+    return s ? parseInt(s, 10) : 20;
+  });
+  const [page, setPage] = useState(1);
   const queryClient = useQueryClient();
   const { pendingItems } = useBulkAdd();
   const uploadingItems = pendingItems.filter((i) => i.status === "uploading");
@@ -462,6 +469,11 @@ export default function Fabrics() {
         return sort === "oldest" ? ta - tb : tb - ta;
       })
     : null;
+
+  const totalPages = !sorted || pageSize === 0 ? 1 : Math.max(1, Math.ceil(sorted.length / pageSize));
+  const paged = sorted ? (pageSize === 0 ? sorted : sorted.slice((page - 1) * pageSize, page * pageSize)) : null;
+
+  useEffect(() => { setPage(1); }, [search, printTypeFilter, categoryFilter, colorFilter, stashBustMode, sort]);
 
   const hasFilter =
     search.trim().length > 0 ||
@@ -691,6 +703,19 @@ export default function Fabrics() {
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
+            {/* Page size selector */}
+            <div className="flex items-center gap-0.5">
+              {([20, 50, 100, 0] as const).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => { localStorage.setItem("quilting-fabrics-page-size", String(n)); setPageSize(n); setPage(1); }}
+                  className={`px-2 py-1 text-xs rounded border transition-colors ${pageSize === n ? "bg-primary text-primary-foreground border-primary" : "border-input bg-background text-muted-foreground hover:bg-accent"}`}
+                >
+                  {n === 0 ? "All" : n}
+                </button>
+              ))}
+            </div>
           </div>
 
           {usedColors.length > 0 && (
@@ -857,8 +882,8 @@ export default function Fabrics() {
               </div>
             </div>
           ))}
-          {sorted &&
-            sorted.map((fabric) => (
+          {paged &&
+            paged.map((fabric) => (
               <FabricCard
                 key={fabric.id}
                 fabric={fabric as FabricSummary}
@@ -886,6 +911,17 @@ export default function Fabrics() {
                 }
               />
             ))}
+        </div>
+      )}
+      {totalPages > 1 && (
+        <div className="mt-6 flex items-center justify-center gap-2">
+          <Button variant="outline" size="icon" className="h-8 w-8" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm text-muted-foreground">Page {page} of {totalPages}</span>
+          <Button variant="outline" size="icon" className="h-8 w-8" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
       )}
       <CategoryEditDialog

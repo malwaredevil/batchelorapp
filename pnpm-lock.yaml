@@ -1611,6 +1611,9 @@ importers:
       clsx:
         specifier: 'catalog:'
         version: 2.1.1
+      html2canvas:
+        specifier: ^1.4.1
+        version: 1.4.1
       lucide-react:
         specifier: 'catalog:'
         version: 0.545.0(react@19.1.0)

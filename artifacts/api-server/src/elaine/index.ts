@@ -2993,6 +2993,31 @@ const ShowDataCardToolPayload = z.object({
     .max(20),
 });
 
+const SEARCH_TRIP_DOCUMENTS_TOOL_NAME = "search_trip_documents";
+
+const SearchTripDocumentsToolPayload = z.object({
+  query: z.string().min(1).max(200),
+  tripId: z.number().int().positive().optional(),
+});
+
+const GET_EXCHANGE_RATE_TOOL_NAME = "get_exchange_rate";
+
+const GetExchangeRateToolPayload = z.object({
+  from: z.string().length(3).toUpperCase(),
+  to: z.array(z.string().length(3).toUpperCase()).min(1).max(6),
+});
+
+const SHOW_TRIP_CARD_TOOL_NAME = "show_trip_card";
+
+const ShowTripCardToolPayload = z.object({
+  name: z.string().min(1).max(200),
+  destination: z.string().max(200).optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  status: z.string().optional(),
+  countdownDays: z.number().int().optional(),
+});
+
 const CALCULATE_YARDAGE_TOOL_NAME = "calculate_yardage";
 
 const CalculateYardageToolPayload = z.object({
@@ -3308,6 +3333,71 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
 const QUERY_HOUSEHOLD_TOOL_NAME = "query_household_data";
 
 const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  {
+    type: "function",
+    function: {
+      name: SEARCH_TRIP_DOCUMENTS_TOOL_NAME,
+      description:
+        "Search across all uploaded travel documents (flight tickets, hotel confirmations, visas, itineraries, etc.) for information that matches a query — use this when the user asks 'what does my hotel confirmation say', 'when is my flight', 'what's my booking reference', 'do I have a document for X', etc. Optionally restrict to a specific tripId when you know which trip is being discussed. Returns matching document titles, types, and their key extracted fields.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "What to search for, e.g. 'check-in time', 'confirmation number', 'hotel name'",
+          },
+          tripId: {
+            type: "number",
+            description: "Optional trip ID to restrict search to a single trip",
+          },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: GET_EXCHANGE_RATE_TOOL_NAME,
+      description:
+        "Get live currency exchange rates — use this whenever the user asks about converting money, exchange rates, or 'how much is X in Y currency'. Never guess exchange rates; always call this tool for accurate, up-to-date rates. Provide 1–6 target currency codes.",
+      parameters: {
+        type: "object",
+        properties: {
+          from: {
+            type: "string",
+            description: "Base currency code (e.g. 'USD', 'GBP', 'EUR')",
+          },
+          to: {
+            type: "array",
+            items: { type: "string" },
+            description: "Target currency codes (e.g. ['EUR', 'JPY', 'AUD']). Max 6.",
+          },
+        },
+        required: ["from", "to"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: SHOW_TRIP_CARD_TOOL_NAME,
+      description:
+        "Render a compact visual trip card alongside your reply — showing the trip name, destination, dates, status, and a countdown. Use whenever discussing a specific trip so the user can see a summary at a glance. Calculate countdownDays from today to the start date (negative = past, 0 = today, positive = future).",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Trip name" },
+          destination: { type: "string", description: "Destination (optional)" },
+          startDate: { type: "string", description: "Start date, e.g. 'Jan 15, 2026' (optional)" },
+          endDate: { type: "string", description: "End date (optional)" },
+          status: { type: "string", description: "One of: planning, confirmed, ongoing, completed, cancelled (optional)" },
+          countdownDays: { type: "number", description: "Days until trip start from today (negative if past, optional)" },
+        },
+        required: ["name"],
+      },
+    },
+  },
   {
     type: "function",
     function: {
@@ -4621,6 +4711,116 @@ Keep replies concise and easy to read in a chat bubble.`;
                   },
                 ],
               });
+            }
+          } else if (call.name === SEARCH_TRIP_DOCUMENTS_TOOL_NAME) {
+            const parsed = SearchTripDocumentsToolPayload.safeParse(
+              JSON.parse(call.args),
+            );
+            if (!parsed.success) {
+              resultText = "Invalid search — ask the user to rephrase.";
+            } else {
+              const { query, tripId } = parsed.data;
+              const q = query.toLowerCase();
+              // Fetch recent documents (up to 50), optionally filtered by trip
+              const rows = await db
+                .select({
+                  id: travelsTripDocuments.id,
+                  tripId: travelsTripDocuments.tripId,
+                  title: travelsTripDocuments.title,
+                  documentType: travelsTripDocuments.documentType,
+                  extractedData: travelsTripDocuments.extractedData,
+                })
+                .from(travelsTripDocuments)
+                .where(
+                  tripId != null
+                    ? eq(travelsTripDocuments.tripId, tripId)
+                    : sql`1=1`,
+                )
+                .limit(50);
+
+              // Score each doc by how well it matches the query
+              const scored = rows
+                .map((row) => {
+                  const haystack = [
+                    row.title ?? "",
+                    row.documentType ?? "",
+                    JSON.stringify(row.extractedData ?? ""),
+                  ]
+                    .join(" ")
+                    .toLowerCase();
+                  // Simple keyword match: count how many query words appear
+                  const words = q.split(/\s+/).filter(Boolean);
+                  const hits = words.filter((w) => haystack.includes(w)).length;
+                  return { row, hits };
+                })
+                .filter((s) => s.hits > 0)
+                .sort((a, b) => b.hits - a.hits)
+                .slice(0, 5);
+
+              if (scored.length === 0) {
+                resultText = `No uploaded trip documents match "${query}".`;
+              } else {
+                resultText = scored
+                  .map(({ row }) => {
+                    const parts = [
+                      `Document: ${row.title ?? row.documentType ?? "untitled"} (trip #${row.tripId})`,
+                    ];
+                    if (row.documentType)
+                      parts.push(`Type: ${row.documentType.replace(/_/g, " ")}`);
+                    if (row.extractedData && typeof row.extractedData === "object") {
+                      const fields = Object.entries(row.extractedData as Record<string, unknown>)
+                        .filter(([, v]) => v != null && v !== "")
+                        .map(([k, v]) => `  ${k}: ${String(v)}`)
+                        .join("\n");
+                      if (fields) parts.push("Extracted fields:\n" + fields);
+                    }
+                    return parts.join("\n");
+                  })
+                  .join("\n\n---\n\n");
+              }
+            }
+          } else if (call.name === GET_EXCHANGE_RATE_TOOL_NAME) {
+            const parsed = GetExchangeRateToolPayload.safeParse(
+              JSON.parse(call.args),
+            );
+            if (!parsed.success) {
+              resultText = "Invalid currency — ask the user to clarify.";
+            } else {
+              const { from, to } = parsed.data;
+              try {
+                const url = `https://api.frankfurter.app/latest?from=${from}&to=${to.join(",")}`;
+                const resp = await fetch(url);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const json = (await resp.json()) as {
+                  date: string;
+                  rates: Record<string, number>;
+                };
+                const rates = to.map((code) => ({
+                  code,
+                  rate: json.rates[code] ?? 0,
+                }));
+                resultText =
+                  `Exchange rates from ${from} (as of ${json.date}):\n` +
+                  rates.map((r) => `1 ${from} = ${r.rate.toFixed(4)} ${r.code}`).join("\n");
+                sendEvent("widget", {
+                  type: "exchange_rate",
+                  from,
+                  to: rates,
+                  lastUpdated: json.date,
+                });
+              } catch {
+                resultText = `Couldn't fetch exchange rates for ${from} right now — tell the user to try again.`;
+              }
+            }
+          } else if (call.name === SHOW_TRIP_CARD_TOOL_NAME) {
+            const parsed = ShowTripCardToolPayload.safeParse(
+              JSON.parse(call.args),
+            );
+            if (!parsed.success) {
+              resultText = "Invalid trip data — skipping card.";
+            } else {
+              sendEvent("widget", { type: "trip_card", trip: parsed.data });
+              resultText = "Trip card displayed.";
             }
           } else if (call.name === QUERY_HOUSEHOLD_TOOL_NAME) {
             const parsed = z

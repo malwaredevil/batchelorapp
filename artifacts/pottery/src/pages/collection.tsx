@@ -24,6 +24,8 @@ import {
   MoreVertical,
   ExternalLink,
   Users,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -625,6 +627,11 @@ export default function Collection() {
   const [filterColor, setFilterColor] = useState<string | null>(null);
   const [sort, setSort] = useState<SortKey>("added-desc");
   const [groupByMaker, setGroupByMaker] = useState(false);
+  const [pageSize, setPageSize] = useState<number>(() => {
+    const s = localStorage.getItem("pottery-page-size");
+    return s ? parseInt(s, 10) : 20;
+  });
+  const [page, setPage] = useState(1);
 
   // On mount: read ?cat=ID, ?color=..., and ?search=... query params so
   // external links (e.g. from Elaine cross-app navigation) can pre-filter the
@@ -818,6 +825,11 @@ export default function Collection() {
 
     return sortItems(result, sort);
   }, [data, filterCategoryIds, filterColor, search, sort]);
+
+  const totalPages = pageSize === 0 ? 1 : Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paged = pageSize === 0 ? filtered : filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  useEffect(() => { setPage(1); }, [filtered.length, sort]);
 
   const selectedItems = useMemo(
     () => (data ?? []).filter((item) => selectedIds.includes(item.id)),
@@ -1036,6 +1048,19 @@ export default function Collection() {
                 </>
               )}
             </div>
+            {/* Page size selector */}
+            <div className="flex items-center gap-0.5">
+              {([20, 50, 100, 0] as const).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => { const v = n; localStorage.setItem("pottery-page-size", String(v)); setPageSize(v); setPage(1); }}
+                  className={`px-2 py-1 text-xs rounded border transition-colors ${pageSize === n ? "bg-primary text-primary-foreground border-primary" : "border-input bg-background text-muted-foreground hover:bg-accent"}`}
+                >
+                  {n === 0 ? "All" : n}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Color filter circles — shown only when the collection has colour data */}
@@ -1212,7 +1237,7 @@ export default function Collection() {
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {filtered.map((item) => (
+              {paged.map((item) => (
                 <PieceCard
                   key={item.id}
                   item={item}
@@ -1231,6 +1256,20 @@ export default function Collection() {
                   activeColor={filterColor}
                 />
               ))}
+            </div>
+          )}
+          {/* Pagination controls */}
+          {!groupByMaker && totalPages > 1 && (
+            <div className="mt-6 flex items-center justify-center gap-2">
+              <Button variant="outline" size="icon" className="h-8 w-8" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Page {page} of {totalPages}
+              </span>
+              <Button variant="outline" size="icon" className="h-8 w-8" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
           )}
         </>

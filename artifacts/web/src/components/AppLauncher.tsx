@@ -25,6 +25,7 @@ import {
   MessageCircle,
   SlidersHorizontal,
   Mail,
+  CalendarDays,
 } from "lucide-react";
 import { AppSwitcher } from "@workspace/elaine-ui";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -619,6 +620,17 @@ export function AppLauncher() {
               className="text-muted-foreground hover:text-foreground"
             >
               <Mail className="w-5 h-5" />
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => { window.location.href = "/travels/travel-calendar"; }}
+              aria-label="Travel Calendar"
+              title="Travel Calendar"
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <CalendarDays className="w-5 h-5" />
             </Button>
 
             <DropdownMenu>

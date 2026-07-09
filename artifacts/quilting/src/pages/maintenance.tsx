@@ -30,6 +30,7 @@ import {
   getGetStaleCountQueryKey,
 } from "@workspace/api-client-react";
 import type { ComponentType } from "react";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 type RunStatus = "queued" | "processing" | "done" | "error";
 
@@ -539,8 +540,8 @@ function ReanalyzePanel({
 // ---------------------------------------------------------------------------
 
 function FabricsPanel() {
-  const { data, isLoading, isError } = useListFabrics();
-  const items = data?.map((f) => ({
+  const { data: fabricsData, isLoading, isError } = useListFabrics({ pageSize: 200 });
+  const items = fabricsData?.items?.map((f) => ({
     id: f.id,
     name: f.name,
     imageUrl: f.imageUrl,
@@ -562,8 +563,8 @@ function FabricsPanel() {
 }
 
 function PatternsPanel() {
-  const { data, isLoading, isError } = useListPatterns();
-  const items = data?.map((p) => ({
+  const { data: patternsData, isLoading, isError } = useListPatterns({ pageSize: 200 });
+  const items = patternsData?.items?.map((p) => ({
     id: p.id,
     name: p.name,
     imageUrl: p.imageUrl,
@@ -587,8 +588,8 @@ function PatternsPanel() {
 }
 
 function QuiltsPanel() {
-  const { data, isLoading, isError } = useListQuilts();
-  const items = data?.map((q) => ({
+  const { data: quiltsData, isLoading, isError } = useListQuilts({ pageSize: 200 });
+  const items = quiltsData?.items?.map((q) => ({
     id: q.id,
     name: q.name,
     imageUrl: q.imageUrl,
@@ -613,6 +614,11 @@ function QuiltsPanel() {
 // ---------------------------------------------------------------------------
 
 export default function Maintenance() {
+  usePageAssistantContext(
+    "quilting-maintenance",
+    "Maintenance page: housekeeping tools to find and bulk re-analyze fabrics/patterns/quilts that are missing AI embeddings (stale search results). You have bulk_reanalyze_quilting action tools for all three entity types.",
+  );
+
   return (
     <div className="mx-auto max-w-4xl">
       <h1 className="text-2xl font-bold tracking-tight">Maintenance</h1>

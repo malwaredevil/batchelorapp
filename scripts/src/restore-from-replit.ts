@@ -229,6 +229,7 @@ async function main() {
   await dest.query("TRUNCATE ornaments_items CASCADE");
   await dest.query("TRUNCATE ornaments_categories CASCADE");
   await dest.query("TRUNCATE ornaments_barcode_cache CASCADE");
+  await dest.query("TRUNCATE ornaments_hallmark_events CASCADE");
 
   await copyTable(source, dest, {
     table: "ornaments_categories",
@@ -300,6 +301,23 @@ async function main() {
     ],
     orderBy: "barcode",
   });
+
+  await copyTable(source, dest, {
+    table: "ornaments_hallmark_events",
+    columns: [
+      "id",
+      "user_id",
+      "title",
+      "description",
+      "start_date",
+      "end_date",
+      "google_event_id",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ornaments_hallmark_events", "id");
 
   // ── Quilting ──────────────────────────────────────────────────────────────
   await dest.query(

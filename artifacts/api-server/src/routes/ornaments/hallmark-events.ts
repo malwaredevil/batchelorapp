@@ -11,76 +11,12 @@ import { asc, eq } from "drizzle-orm";
 import { z } from "zod/v4";
 import { db, ornamentsHallmarkEvents } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
-import {
-  getHallmarkCalendarConnection,
-  getValidAccessToken,
-} from "../../lib/google-calendar-tokens";
-import {
-  createCalendarEvent,
-  updateCalendarEvent,
-  deleteCalendarEvent,
-} from "../../lib/google-calendar";
+import { syncHallmarkEventToGoogle as syncToGoogle } from "../../lib/ornaments/hallmark-calendar-sync";
+import { scanForHallmarkEvents } from "../../lib/ornaments/hallmark-events-scan";
 import { logger } from "../../lib/logger";
 
 const router: IRouter = Router();
 router.use(requireAuth);
-
-async function syncToGoogle(
-  action: "create" | "update" | "delete",
-  event: { title: string; description: string | null; startDate: string; endDate: string; googleEventId: string | null },
-): Promise<string | null> {
-  const calendar = await getHallmarkCalendarConnection();
-  if (!calendar) return event.googleEventId;
-
-  const accessToken = await getValidAccessToken(calendar.userId);
-  if (!accessToken) return event.googleEventId;
-
-  try {
-    if (action === "delete") {
-      if (event.googleEventId) {
-        await deleteCalendarEvent(
-          accessToken,
-          calendar.googleCalendarId,
-          event.googleEventId,
-        );
-      }
-      return null;
-    }
-
-    const input = {
-      title: event.title,
-      description: event.description,
-      location: null,
-      allDay: true,
-      start: event.startDate,
-      end: event.endDate,
-      colorId: null,
-    };
-
-    if (action === "update" && event.googleEventId) {
-      const updated = await updateCalendarEvent(
-        accessToken,
-        calendar.googleCalendarId,
-        event.googleEventId,
-        input,
-      );
-      return updated.id;
-    }
-
-    const created = await createCalendarEvent(
-      accessToken,
-      calendar.googleCalendarId,
-      input,
-    );
-    return created.id;
-  } catch (err) {
-    logger.error(
-      { err, action },
-      "hallmark-events: best-effort Google Calendar sync failed",
-    );
-    return event.googleEventId;
-  }
-}
 
 router.get("/hallmark-events", async (_req, res) => {
   const rows = await db
@@ -88,6 +24,14 @@ router.get("/hallmark-events", async (_req, res) => {
     .from(ornamentsHallmarkEvents)
     .orderBy(asc(ornamentsHallmarkEvents.startDate));
   res.json(rows);
+});
+
+// Manual trigger for the AI auto-discovery scan (mirrors the "Scan now"
+// pattern used by travels-calendar-scan). Best-effort — the scanner itself
+// never throws, so this always returns a summary rather than a 5xx.
+router.post("/hallmark-events/scan-now", async (_req, res) => {
+  const result = await scanForHallmarkEvents();
+  res.json(result);
 });
 
 const EventBody = z.object({

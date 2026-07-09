@@ -5,6 +5,7 @@ import {
   db,
   travelsTrips,
   travelsTripDocuments,
+  travelsDocChunks,
   travelsGmailScanDecisions,
 } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
@@ -17,6 +18,46 @@ import {
   extractFromImage,
   extractFromPdf,
 } from "../../lib/travel-document-extraction";
+import { embedText } from "../../lib/openai";
+import { logger } from "../../lib/logger";
+
+const CHUNK_SIZE = 500;
+const CHUNK_OVERLAP = 100;
+
+function chunkText(text: string): string[] {
+  const chunks: string[] = [];
+  let start = 0;
+  const clean = text.replace(/\s+/g, " ").trim();
+  while (start < clean.length) {
+    chunks.push(clean.slice(start, start + CHUNK_SIZE));
+    start += CHUNK_SIZE - CHUNK_OVERLAP;
+  }
+  return chunks.filter((c) => c.trim().length > 20);
+}
+
+async function indexDocumentChunks(
+  docId: number,
+  rawText: string,
+): Promise<void> {
+  const chunks = chunkText(rawText);
+  if (chunks.length === 0) return;
+  try {
+    await db
+      .delete(travelsDocChunks)
+      .where(eq(travelsDocChunks.tripDocumentId, docId));
+    for (let i = 0; i < chunks.length; i++) {
+      const embedding = await embedText(chunks[i]!);
+      await db.insert(travelsDocChunks).values({
+        tripDocumentId: docId,
+        chunkIndex: i,
+        content: chunks[i]!,
+        embedding,
+      });
+    }
+  } catch (err) {
+    logger.warn({ err, docId }, "doc chunk indexing failed (non-fatal)");
+  }
+}
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -330,11 +371,25 @@ router.post("/trips/:id/documents", upload.single("file"), async (req, res) => {
   const storagePath = await uploadDocument(buffer, mimetype, originalname);
 
   let extractedData: Record<string, unknown> = {};
+  let rawText: string | null = null;
   try {
     if (isPdf) {
+      try {
+        const pdfParse = await import("pdf-parse");
+        const parsed = await pdfParse.default(buffer);
+        rawText = parsed.text.slice(0, 20000) || null;
+      } catch {
+        // non-fatal
+      }
       extractedData = await extractFromPdf(buffer);
     } else {
       extractedData = await extractFromImage(buffer, mimetype);
+      // For images, synthesize a text blob from the extracted structured data
+      // so semantic search still covers image-based documents.
+      const parts = Object.entries(extractedData)
+        .filter(([, v]) => v != null && v !== "")
+        .map(([k, v]) => `${k}: ${String(v)}`);
+      if (parts.length > 0) rawText = parts.join("\n");
     }
   } catch (err) {
     req.log.warn({ err }, "OCR extraction failed — storing without data");
@@ -356,6 +411,7 @@ router.post("/trips/:id/documents", upload.single("file"), async (req, res) => {
       documentType: (extractedData.documentType as string | undefined) ?? null,
       originalFilename: originalname,
       extractedData,
+      rawText,
     })
     .returning();
 
@@ -363,6 +419,11 @@ router.post("/trips/:id/documents", upload.single("file"), async (req, res) => {
     await syncItineraryFromDocument(tripId, doc!.id, extractedData);
   } catch (err) {
     req.log.warn({ err }, "Failed to sync itinerary from document");
+  }
+
+  // Fire-and-forget: chunk + embed rawText for semantic search (issue #99)
+  if (rawText && doc) {
+    indexDocumentChunks(doc.id, rawText).catch(() => {});
   }
 
   res.status(201).json(doc);

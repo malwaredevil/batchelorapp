@@ -72,6 +72,7 @@ export const travelsTripDocuments = pgTable(
       .default(sql`'{}'::text[]`),
     gmailMessageId: text("gmail_message_id"),
     iconOverride: text("icon_override"),
+    rawText: text("raw_text"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -85,6 +86,29 @@ export const travelsTripDocuments = pgTable(
 export type TravelsTripDocumentRow = typeof travelsTripDocuments.$inferSelect;
 export type InsertTravelsTripDocument =
   typeof travelsTripDocuments.$inferInsert;
+
+export const travelsDocChunks = pgTable(
+  "travels_doc_chunks",
+  {
+    id: serial("id").primaryKey(),
+    tripDocumentId: integer("trip_document_id").notNull(),
+    chunkIndex: integer("chunk_index").notNull(),
+    content: text("content").notNull(),
+    embedding: vector("embedding", { dimensions: 1536 }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("travels_doc_chunks_doc_id_idx").on(table.tripDocumentId),
+    index("travels_doc_chunks_embedding_idx").using(
+      "hnsw",
+      table.embedding.op("vector_cosine_ops"),
+    ),
+  ],
+).enableRLS();
+
+export type TravelsDocChunkRow = typeof travelsDocChunks.$inferSelect;
 
 export const travelsTripPhotos = pgTable(
   "travels_trip_photos",

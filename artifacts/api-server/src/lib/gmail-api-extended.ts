@@ -132,7 +132,10 @@ export async function getLabelDetail(
   accessToken: string,
   labelId: string,
 ): Promise<GmailLabel> {
-  return gmailGet<GmailLabel>(accessToken, `/users/me/labels/${labelId}`);
+  return gmailGet<GmailLabel>(
+    accessToken,
+    `/users/me/labels/${encodeURIComponent(labelId)}`,
+  );
 }
 
 // ── Thread list ───────────────────────────────────────────────────────────────
@@ -286,7 +289,10 @@ export async function getFullThread(
     id: string;
     historyId: string;
     messages: (GmailMessage & { labelIds?: string[]; snippet?: string })[];
-  }>(accessToken, `/users/me/threads/${threadId}?format=full`);
+  }>(
+    accessToken,
+    `/users/me/threads/${encodeURIComponent(threadId)}?format=full`,
+  );
 
   return {
     id: data.id,
@@ -321,7 +327,7 @@ export async function getThreadSummary(
       messages: (GmailMessage & { labelIds?: string[]; snippet?: string })[];
     }>(
       accessToken,
-      `/users/me/threads/${threadId}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=To`,
+      `/users/me/threads/${encodeURIComponent(threadId)}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=To`,
     );
 
     const msgs = data.messages ?? [];
@@ -453,21 +459,32 @@ export async function updateDraft(
 ): Promise<{ id: string; message: { id: string; threadId: string } }> {
   const msg: Record<string, string> = { raw };
   if (threadId) msg.threadId = threadId;
-  return gmailPut(accessToken, `/users/me/drafts/${draftId}`, { message: msg });
+  return gmailPut(
+    accessToken,
+    `/users/me/drafts/${encodeURIComponent(draftId)}`,
+    { message: msg },
+  );
 }
 
 export async function sendDraft(
   accessToken: string,
   draftId: string,
 ): Promise<{ id: string; threadId: string }> {
-  return gmailPost(accessToken, `/users/me/drafts/${draftId}/send`, {});
+  return gmailPost(
+    accessToken,
+    `/users/me/drafts/${encodeURIComponent(draftId)}/send`,
+    {},
+  );
 }
 
 export async function deleteDraft(
   accessToken: string,
   draftId: string,
 ): Promise<void> {
-  return gmailDelete(accessToken, `/users/me/drafts/${draftId}`);
+  return gmailDelete(
+    accessToken,
+    `/users/me/drafts/${encodeURIComponent(draftId)}`,
+  );
 }
 
 export interface DraftSummary {
@@ -501,17 +518,22 @@ export async function modifyMessage(
   addLabelIds: string[],
   removeLabelIds: string[],
 ): Promise<void> {
-  await gmailPost(accessToken, `/users/me/messages/${messageId}/modify`, {
-    addLabelIds,
-    removeLabelIds,
-  });
+  await gmailPost(
+    accessToken,
+    `/users/me/messages/${encodeURIComponent(messageId)}/modify`,
+    { addLabelIds, removeLabelIds },
+  );
 }
 
 export async function trashMessage(
   accessToken: string,
   messageId: string,
 ): Promise<void> {
-  await gmailPost(accessToken, `/users/me/messages/${messageId}/trash`, {});
+  await gmailPost(
+    accessToken,
+    `/users/me/messages/${encodeURIComponent(messageId)}/trash`,
+    {},
+  );
 }
 
 export async function modifyThread(
@@ -520,24 +542,33 @@ export async function modifyThread(
   addLabelIds: string[],
   removeLabelIds: string[],
 ): Promise<void> {
-  await gmailPost(accessToken, `/users/me/threads/${threadId}/modify`, {
-    addLabelIds,
-    removeLabelIds,
-  });
+  await gmailPost(
+    accessToken,
+    `/users/me/threads/${encodeURIComponent(threadId)}/modify`,
+    { addLabelIds, removeLabelIds },
+  );
 }
 
 export async function trashThread(
   accessToken: string,
   threadId: string,
 ): Promise<void> {
-  await gmailPost(accessToken, `/users/me/threads/${threadId}/trash`, {});
+  await gmailPost(
+    accessToken,
+    `/users/me/threads/${encodeURIComponent(threadId)}/trash`,
+    {},
+  );
 }
 
 export async function untrashMessage(
   accessToken: string,
   messageId: string,
 ): Promise<void> {
-  await gmailPost(accessToken, `/users/me/messages/${messageId}/untrash`, {});
+  await gmailPost(
+    accessToken,
+    `/users/me/messages/${encodeURIComponent(messageId)}/untrash`,
+    {},
+  );
 }
 
 // Concurrency-limited batch helper for thread summaries (same 429-prevention

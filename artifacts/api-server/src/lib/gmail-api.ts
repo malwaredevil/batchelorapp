@@ -76,7 +76,7 @@ export async function getMessage(
 ): Promise<GmailMessage> {
   return gmailApiJson<GmailMessage>(
     accessToken,
-    `/users/me/messages/${messageId}?format=full`,
+    `/users/me/messages/${encodeURIComponent(messageId)}?format=full`,
   );
 }
 
@@ -127,7 +127,7 @@ export async function getMessageSummary(
   params.append("metadataHeaders", "Date");
   const msg = await gmailApiJson<GmailMessage>(
     accessToken,
-    `/users/me/messages/${messageId}?${params.toString()}`,
+    `/users/me/messages/${encodeURIComponent(messageId)}?${params.toString()}`,
   );
   const dateHeader = findHeader(msg.payload, "Date");
   const date = dateHeader
@@ -152,7 +152,7 @@ export async function getAttachment(
 ): Promise<Buffer> {
   const data = await gmailApiJson<{ data: string; size: number }>(
     accessToken,
-    `/users/me/messages/${messageId}/attachments/${attachmentId}`,
+    `/users/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`,
   );
   // Gmail uses URL-safe base64 without padding.
   return Buffer.from(data.data, "base64url");

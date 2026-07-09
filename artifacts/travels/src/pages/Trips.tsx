@@ -770,6 +770,50 @@ const STATUS_COLORS: Record<TripStatus, string> = {
   completed: "bg-red-50    text-red-700    border-red-200",
 };
 
+const READINESS_STATUSES: TripStatus[] = ["planning", "booked", "active"];
+
+function tripReadinessScore(trip: {
+  startDate?: string | null;
+  accommodationName?: string | null;
+  notes?: string | null;
+  todoList?: unknown;
+  itinerary?: unknown;
+}): number {
+  let score = 0;
+  if (trip.startDate) score++;
+  if (trip.accommodationName) score++;
+  if (trip.notes && (trip.notes as string).trim().length > 0) score++;
+  const todos = trip.todoList as Array<unknown> | null | undefined;
+  if (Array.isArray(todos) && todos.length > 0) score++;
+  const itin = trip.itinerary as { days?: Array<unknown> } | null | undefined;
+  if (itin && Array.isArray(itin.days) && itin.days.length > 0) score++;
+  return score;
+}
+
+function ReadinessPips({ score }: { score: number }) {
+  return (
+    <span
+      className="flex items-center gap-0.5"
+      title={`Trip readiness: ${score}/5`}
+    >
+      {Array.from({ length: 5 }).map((_, i) => (
+        <span
+          key={i}
+          className={`w-2 h-2 rounded-full transition-colors ${
+            i < score
+              ? score >= 4
+                ? "bg-emerald-500"
+                : score >= 2
+                  ? "bg-amber-400"
+                  : "bg-red-400"
+              : "bg-muted-foreground/20"
+          }`}
+        />
+      ))}
+    </span>
+  );
+}
+
 function CreateTripDialog({
   open,
   onOpenChange,
@@ -1213,6 +1257,11 @@ export default function Trips() {
                           )}
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
+                          {READINESS_STATUSES.includes(
+                            trip.status as TripStatus,
+                          ) && (
+                            <ReadinessPips score={tripReadinessScore(trip)} />
+                          )}
                           <span
                             className={`text-xs px-2 py-0.5 rounded-full border font-medium ${STATUS_COLORS[trip.status]}`}
                           >

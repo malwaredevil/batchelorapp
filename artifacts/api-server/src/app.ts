@@ -76,6 +76,19 @@ app.use(
     },
   }),
 );
+// Resend inbound-email webhook signatures are HMAC'd over the raw request
+// body (Svix format), so the exact bytes must be captured before body-parser
+// reformats them as JSON. Limit is higher than AgentPhone's since email
+// bodies (subject/text/html/headers) run larger than SMS/voice payloads.
+app.use(
+  "/api/elaine/email-webhook",
+  express.json({
+    limit: "2mb",
+    verify: (req, _res, buf) => {
+      (req as Request & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+    },
+  }),
+);
 app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(cookieParser(env.sessionSecret));

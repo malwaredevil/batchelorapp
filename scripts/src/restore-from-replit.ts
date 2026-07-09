@@ -229,6 +229,7 @@ async function main() {
   await dest.query("TRUNCATE ornaments_items CASCADE");
   await dest.query("TRUNCATE ornaments_categories CASCADE");
   await dest.query("TRUNCATE ornaments_barcode_cache CASCADE");
+  await dest.query("TRUNCATE ornaments_hallmark_events CASCADE");
 
   await copyTable(source, dest, {
     table: "ornaments_categories",
@@ -300,6 +301,23 @@ async function main() {
     ],
     orderBy: "barcode",
   });
+
+  await copyTable(source, dest, {
+    table: "ornaments_hallmark_events",
+    columns: [
+      "id",
+      "user_id",
+      "title",
+      "description",
+      "start_date",
+      "end_date",
+      "google_event_id",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ornaments_hallmark_events", "id");
 
   // ── Quilting ──────────────────────────────────────────────────────────────
   await dest.query(
@@ -494,7 +512,7 @@ async function main() {
 
   // ── Travels ───────────────────────────────────────────────────────────────
   await dest.query(
-    "TRUNCATE travels_calendar_trip_suggestions, travels_custom_document_types, travels_trip_card_collapse_state, travels_card_layout_preferences, travels_gmail_scan_decisions, travels_gmail_connections, elaine_history_messages, elaine_history_conversations, elaine_global_config, elaine_nudges, elaine_memory, elaine_settings, elaine_conversations, travels_reminder_calendar_events, travels_connected_calendars, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_trip_photos, travels_trip_documents CASCADE",
+    "TRUNCATE travels_calendar_trip_suggestions, travels_custom_document_types, travels_trip_card_collapse_state, travels_card_layout_preferences, travels_gmail_scan_decisions, travels_gmail_connections, elaine_history_messages, elaine_history_conversations, elaine_global_config, elaine_nudges, elaine_memory, elaine_settings, elaine_email_webhook_deliveries, elaine_email_conversations, elaine_conversations, travels_reminder_calendar_events, travels_connected_calendars, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_trip_photos, travels_trip_documents CASCADE",
   );
   await dest.query("TRUNCATE travels_trips CASCADE");
 
@@ -662,6 +680,19 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "elaine_conversations", "id");
+
+  await copyTable(source, dest, {
+    table: "elaine_email_conversations",
+    columns: ["id", "user_id", "messages", "last_message_id", "updated_at"],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "elaine_email_conversations", "id");
+
+  await copyTable(source, dest, {
+    table: "elaine_email_webhook_deliveries",
+    columns: ["id", "received_at"],
+    orderBy: "received_at",
+  });
 
   await copyTable(source, dest, {
     table: "elaine_settings",

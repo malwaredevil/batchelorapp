@@ -11,6 +11,7 @@ import elaineRouter from "../elaine";
 import gmailRouter from "./gmail";
 import searchRouter from "./search";
 import agentphoneRouter from "./agentphone";
+import elaineEmailRouter from "./elaine-email";
 
 const router: IRouter = Router();
 
@@ -23,6 +24,11 @@ router.use("/quilting", quiltingRouter);
 router.use("/ornaments", ornamentsRouter);
 router.use("/travels", travelsRouter);
 router.use("/gmail", gmailRouter);
+// Must be mounted before elaineRouter: elaineRouter applies a blanket
+// requireAuth middleware to every /elaine/* path, which would otherwise
+// swallow this unauthenticated (signature-gated) webhook route before it's
+// ever reached.
+router.use("/elaine", elaineEmailRouter);
 router.use("/elaine", elaineRouter);
 router.use("/agentphone", agentphoneRouter);
 router.use(hubRouter);

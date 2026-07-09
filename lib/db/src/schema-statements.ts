@@ -707,6 +707,34 @@ export const STATEMENTS: string[] = [
     WHERE rce.calendar_id = ''
       AND cc.user_id = rce.user_id`,
 
+  // --- Ornaments: shared Hallmark events calendar -------------------------
+  // is_hallmark_calendar: mirrors is_travel_calendar — exactly one row
+  // system-wide may be designated the shared "Hallmark" calendar (owner-only
+  // assignment). Events created/edited on ornaments_hallmark_events are
+  // best-effort pushed to this calendar via the same connected user's token.
+  `ALTER TABLE travels_connected_calendars ADD COLUMN IF NOT EXISTS is_hallmark_calendar BOOLEAN NOT NULL DEFAULT false`,
+
+  // ornaments_hallmark_events: the app's own source of truth for major
+  // Hallmark collector events (Keepsake Ornament Premiere / Open House,
+  // etc). Household-shared like all other ornaments data — any authenticated
+  // user may create/edit/delete. google_event_id links to a mirrored event
+  // on the designated shared Hallmark calendar (nullable — a row may exist
+  // locally without ever having synced, e.g. calendar not yet designated).
+  `CREATE TABLE IF NOT EXISTS ornaments_hallmark_events (
+    id               SERIAL PRIMARY KEY,
+    user_id          INTEGER,
+    title            TEXT NOT NULL,
+    description      TEXT,
+    start_date       DATE NOT NULL,
+    end_date         DATE NOT NULL,
+    google_event_id  TEXT,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE ornaments_hallmark_events ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS ornaments_hallmark_events_start_date_idx
+     ON ornaments_hallmark_events (start_date)`,
+
   // --- Gmail travel-document scanning -------------------------------------
   // Per-user IANA timezone, used to render dates/times extracted from
   // scanned Gmail travel documents (and elsewhere in Travels).

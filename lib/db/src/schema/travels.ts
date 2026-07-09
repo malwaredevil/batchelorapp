@@ -314,6 +314,12 @@ export const travelsConnectedCalendars = pgTable(
     source: text("source").notNull().default("picked"),
     primaryColor: text("primary_color").notNull().default("#4285f4"),
     isTravelCalendar: boolean("is_travel_calendar").notNull().default(false),
+    // Mirrors isTravelCalendar: exactly one row system-wide may be the
+    // shared "Hallmark" calendar used by the Ornaments app's event
+    // countdown/calendar feature. Owner-only assignment, same pattern.
+    isHallmarkCalendar: boolean("is_hallmark_calendar")
+      .notNull()
+      .default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

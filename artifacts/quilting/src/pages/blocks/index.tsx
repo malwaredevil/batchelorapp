@@ -713,10 +713,15 @@ export default function Blocks() {
     "quilting-blocks",
     isLoading
       ? undefined
-      : `Block Designer list page: ${blockList?.length ?? 0} saved block(s). Visible blocks: ${(blockList ?? [])
-          .slice(0, 30)
-          .map((b: { id: number; name: string }) => `${b.name} (blockId: ${b.id})`)
-          .join(", ") || "none"}. You have create_block / delete_block action tools — but they only create/remove a blank grid template with metadata, they cannot design the block's actual pattern; direct the user to the designer here for that.`,
+      : `Block Designer list page: ${blockList?.length ?? 0} saved block(s). Visible blocks: ${
+          (blockList ?? [])
+            .slice(0, 30)
+            .map(
+              (b: { id: number; name: string }) =>
+                `${b.name} (blockId: ${b.id})`,
+            )
+            .join(", ") || "none"
+        }. You have create_block / delete_block action tools — but they only create/remove a blank grid template with metadata, they cannot design the block's actual pattern; direct the user to the designer here for that.`,
   );
 
   const fabricUrlMap = useMemo(

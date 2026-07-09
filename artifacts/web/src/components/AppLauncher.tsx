@@ -25,6 +25,7 @@ import {
   MessageCircle,
   SlidersHorizontal,
   Mail,
+  CalendarDays,
 } from "lucide-react";
 import { AppSwitcher } from "@workspace/elaine-ui";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -59,6 +60,7 @@ import {
   useGetStats,
   useGetTravelsStats,
 } from "@workspace/api-client-react";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 const base = import.meta.env.BASE_URL;
 
@@ -555,6 +557,11 @@ export function AppLauncher() {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
+  usePageAssistantContext(
+    "hub-launcher",
+    `On the app launcher (the Batchelor hub home page) — lets the household pick which app to open: Pottery (${potteryStatsData?.totalItems ?? "?"} items), Quilting (${quiltingStatsData?.totalFabrics ?? "?"} fabrics), or Travels (${travelsStatsData?.totalTrips ?? "?"} trips). ${totalCount} widget(s) are shown on the dashboard.`,
+  );
+
   function navigate(href: string) {
     window.location.href = href;
   }
@@ -613,6 +620,19 @@ export function AppLauncher() {
               className="text-muted-foreground hover:text-foreground"
             >
               <Mail className="w-5 h-5" />
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                window.location.href = "/travels/travel-calendar";
+              }}
+              aria-label="Travel Calendar"
+              title="Travel Calendar"
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <CalendarDays className="w-5 h-5" />
             </Button>
 
             <DropdownMenu>

@@ -8,6 +8,7 @@ import {
 } from "react";
 import { useLocation, useParams } from "wouter";
 import { useRegisterNavGuard } from "@/lib/nav-guard";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 import {
   ArrowLeft,
   Save,
@@ -2520,6 +2521,13 @@ export default function BlockDesigner() {
     ? loadingExistingTemplate
     : loadingExistingBlock;
 
+  usePageAssistantContext(
+    "quilting-block-designer",
+    `Block Designer page (${templateMode ? "block library template" : "block"} ${
+      isNew ? "creation" : `edit, id ${blockId}`
+    }). This is a visual pixel-grid drawing tool for designing a quilt block's fabric layout, cell-by-cell — it cannot be operated via chat. If the user wants to design or edit a block's actual pattern/geometry here, tell them to use this page directly; you can create/delete blocks by name+size via tools, but you cannot draw or edit their grid content.`,
+  );
+
   const [name, setName] = useState("Untitled block");
   const [templateTagsInput, setTemplateTagsInput] = useState("");
   const [blockSizeInches, setBlockSizeInches] = useState<number | null>(null);
@@ -2799,7 +2807,8 @@ export default function BlockDesigner() {
     [gridW, gridH],
   );
 
-  const { data: fabricsList } = useListFabrics();
+  const { data: fabricsData } = useListFabrics({ pageSize: 200 });
+  const fabricsList = fabricsData?.items;
   const fabricUrlMap = useMemo(
     () => buildFabricUrlMap(fabricsList ?? []),
     [fabricsList],

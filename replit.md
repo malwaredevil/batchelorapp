@@ -79,6 +79,7 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
   - Stage 2 — DB safety (only after stage 1 passes): 6. Confirm the change cannot harm the shared production Supabase DB (pottery + quilting also live there) — no `drizzle-kit push --force`, additive-only migrations only.
   - Stage 3 — backup + sync (only after stage 2 passes): 7. Run the Supabase → Replit built-in DB backup (`pnpm --filter @workspace/scripts run backup-to-replit`). 8. Sync GitHub repo + Issues (close completed ones), and address any workflow validation findings (e.g. CodeQL) both in Replit and in the GitHub repo. Repeat stages 1-3 until Replit and GitHub are in sync with all checks passing on the latest state.
   - Only once all stages pass: (re)publish.
+  - Stage 4 — post-publish Sentry check (after publishing): Wait ~5 minutes for production traffic, then check Sentry for new issues introduced by the release. Look for errors on the routes/features that changed. If new issues appear, fix them before considering the release stable. Sentry emails are the passive signal; this step is the active one.
 
 ## Gotchas
 

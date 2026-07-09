@@ -47,7 +47,9 @@ export default function ForgotPassword() {
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary mb-4">
             <Mail className="h-6 w-6" />
           </div>
-          <h1 className="text-3xl font-serif font-bold text-foreground">Reset Password</h1>
+          <h1 className="text-3xl font-serif font-bold text-foreground">
+            Reset Password
+          </h1>
           <p className="mt-2 text-muted-foreground">
             We'll send you a link to reset your password.
           </p>
@@ -57,7 +59,8 @@ export default function ForgotPassword() {
           {submitted ? (
             <div className="text-center">
               <p className="mb-6 text-sm text-card-foreground">
-                Check your email for a reset link. If you don't see it, be sure to check your spam folder.
+                Check your email for a reset link. If you don't see it, be sure
+                to check your spam folder.
               </p>
               <Button
                 variant="outline"
@@ -69,7 +72,10 @@ export default function ForgotPassword() {
             </div>
           ) : (
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <form
+                onSubmit={form.handleSubmit(onSubmit)}
+                className="space-y-4"
+              >
                 <FormField
                   control={form.control}
                   name="email"
@@ -105,7 +111,11 @@ export default function ForgotPassword() {
         </div>
 
         <div className="mt-6 text-center">
-          <Button variant="link" asChild className="text-muted-foreground hover:text-foreground">
+          <Button
+            variant="link"
+            asChild
+            className="text-muted-foreground hover:text-foreground"
+          >
             <a href="/login" className="flex items-center gap-2">
               <ArrowLeft className="h-4 w-4" />
               Back to Sign In

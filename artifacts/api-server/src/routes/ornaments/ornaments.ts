@@ -129,9 +129,7 @@ router.get("/items", async (req, res) => {
     );
   }
   if (seriesOrCollection) {
-    conditions.push(
-      eq(ornamentsItems.seriesOrCollection, seriesOrCollection),
-    );
+    conditions.push(eq(ornamentsItems.seriesOrCollection, seriesOrCollection));
   }
   if (year !== undefined) {
     conditions.push(eq(ornamentsItems.year, year));
@@ -729,49 +727,45 @@ router.post("/items/:id/lookup-barcode", async (req, res) => {
 // hookedonhallmark.com, saves the result, and returns the updated item.
 // ---------------------------------------------------------------------------
 
-router.post(
-  "/items/:id/lookup-book-value",
-  aiLimiter,
-  async (req, res) => {
-    const { id } = LookupOrnamentBookValueParams.parse(req.params);
+router.post("/items/:id/lookup-book-value", aiLimiter, async (req, res) => {
+  const { id } = LookupOrnamentBookValueParams.parse(req.params);
 
-    const [item] = await db
-      .select(itemColumns)
-      .from(ornamentsItems)
-      .where(eq(ornamentsItems.id, id))
-      .limit(1);
-    if (!item) {
-      res.status(404).json({ error: "Ornament not found." });
-      return;
-    }
+  const [item] = await db
+    .select(itemColumns)
+    .from(ornamentsItems)
+    .where(eq(ornamentsItems.id, id))
+    .limit(1);
+  if (!item) {
+    res.status(404).json({ error: "Ornament not found." });
+    return;
+  }
 
-    const result = await lookupBookValue({
-      name: item.name,
-      seriesOrCollection: item.seriesOrCollection,
-      year: item.year,
+  const result = await lookupBookValue({
+    name: item.name,
+    seriesOrCollection: item.seriesOrCollection,
+    year: item.year,
+  });
+
+  if (!result) {
+    res.status(422).json({
+      error:
+        "Could not find a book value for this ornament on hallmarkornaments.com or hookedonhallmark.com.",
     });
+    return;
+  }
 
-    if (!result) {
-      res.status(422).json({
-        error:
-          "Could not find a book value for this ornament on hallmarkornaments.com or hookedonhallmark.com.",
-      });
-      return;
-    }
+  const [updated] = await db
+    .update(ornamentsItems)
+    .set({
+      bookValue: String(result.value),
+      bookValueSource: result.source,
+      bookValueUpdatedAt: new Date(),
+    })
+    .where(eq(ornamentsItems.id, id))
+    .returning(itemColumns);
 
-    const [updated] = await db
-      .update(ornamentsItems)
-      .set({
-        bookValue: String(result.value),
-        bookValueSource: result.source,
-        bookValueUpdatedAt: new Date(),
-      })
-      .where(eq(ornamentsItems.id, id))
-      .returning(itemColumns);
-
-    res.json(LookupOrnamentBookValueResponse.parse(await serializeItem(updated)));
-  },
-);
+  res.json(LookupOrnamentBookValueResponse.parse(await serializeItem(updated)));
+});
 
 // ---------------------------------------------------------------------------
 // Shared AI analysis pipeline — used by both reanalyze and set-primary-image
@@ -852,7 +846,12 @@ export async function runItemAnalysis(id: number): Promise<unknown> {
   // Re-run category auto-matching (union-only — never removes existing assignments).
   const normalizeQ = (s: string) => s.replace(/[″\u201C\u201D]/g, '"');
   const analysisText = normalizeQ(
-    [merged.name, merged.seriesOrCollection, merged.dimensions, ...merged.motifs]
+    [
+      merged.name,
+      merged.seriesOrCollection,
+      merged.dimensions,
+      ...merged.motifs,
+    ]
       .filter(Boolean)
       .join(" ")
       .toLowerCase(),

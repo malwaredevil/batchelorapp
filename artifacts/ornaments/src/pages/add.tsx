@@ -4,7 +4,11 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Loader2, ArrowLeft, Camera, Box, Info } from "lucide-react";
-import { useCreateOrnament, getListOrnamentsQueryKey, getGetOrnamentStatsQueryKey } from "@workspace/api-client-react";
+import {
+  useCreateOrnament,
+  getListOrnamentsQueryKey,
+  getGetOrnamentStatsQueryKey,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -47,7 +51,7 @@ export default function AddOrnament() {
   const [_, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const createOrnament = useCreateOrnament();
-  
+
   // Try to load prefilled data from scanner
   const prefillJson = sessionStorage.getItem("ornaments-add-prefill");
   const prefill = prefillJson ? JSON.parse(prefillJson) : null;
@@ -70,7 +74,7 @@ export default function AddOrnament() {
       dimensions: "",
       condition: "Excellent",
       origin: "",
-      acquiredAt: new Date().toISOString().split('T')[0],
+      acquiredAt: new Date().toISOString().split("T")[0],
       categories: [],
       image: null,
     },
@@ -87,20 +91,22 @@ export default function AddOrnament() {
       formData.append("name", values.name);
       formData.append("brand", values.brand);
       formData.append("quantity", String(values.quantity));
-      
-      if (values.seriesOrCollection) formData.append("seriesOrCollection", values.seriesOrCollection);
+
+      if (values.seriesOrCollection)
+        formData.append("seriesOrCollection", values.seriesOrCollection);
       if (values.year) formData.append("year", values.year);
-      if (values.barcodeValue) formData.append("barcodeValue", values.barcodeValue);
+      if (values.barcodeValue)
+        formData.append("barcodeValue", values.barcodeValue);
       if (values.notes) formData.append("notes", values.notes);
       if (values.dimensions) formData.append("dimensions", values.dimensions);
       if (values.condition) formData.append("condition", values.condition);
       if (values.origin) formData.append("origin", values.origin);
       if (values.acquiredAt) formData.append("acquiredAt", values.acquiredAt);
-      
+
       if (values.categories.length > 0) {
         formData.append("categories", values.categories.join(","));
       }
-      
+
       if (values.image instanceof File || values.image instanceof Blob) {
         formData.append("image", values.image);
       } else {
@@ -109,10 +115,12 @@ export default function AddOrnament() {
 
       // @ts-ignore - FormData bypasses type checks in orval but works
       const result = await createOrnament.mutateAsync({ data: formData });
-      
+
       queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: getGetOrnamentStatsQueryKey() });
-      
+      queryClient.invalidateQueries({
+        queryKey: getGetOrnamentStatsQueryKey(),
+      });
+
       toast.success("Ornament added!");
       setLocation(`/ornament/${result.id}`);
     } catch (err: any) {
@@ -123,30 +131,43 @@ export default function AddOrnament() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => setLocation("/")} className="-ml-2 shrink-0">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setLocation("/")}
+          className="-ml-2 shrink-0"
+        >
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
-          <h1 className="text-3xl font-serif font-bold text-foreground tracking-tight">Add Ornament</h1>
-          <p className="text-muted-foreground mt-1">Catalog a new piece for your collection</p>
+          <h1 className="text-3xl font-serif font-bold text-foreground tracking-tight">
+            Add Ornament
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Catalog a new piece for your collection
+          </p>
         </div>
       </div>
 
       {prefill && prefill.name && (
         <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 flex gap-3 text-primary">
           <Info className="h-5 w-5 shrink-0 mt-0.5" />
-          <p className="text-sm">Found a match for barcode <b>{prefill.barcodeValue}</b>. Details have been pre-filled.</p>
+          <p className="text-sm">
+            Found a match for barcode <b>{prefill.barcodeValue}</b>. Details
+            have been pre-filled.
+          </p>
         </div>
       )}
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-          
           <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-8">
             <div className="space-y-4">
               <div>
                 <Label className="text-base font-serif font-bold">Photo</Label>
-                <p className="text-sm text-muted-foreground mb-3">Clear, well-lit photos work best for AI analysis.</p>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Clear, well-lit photos work best for AI analysis.
+                </p>
               </div>
               <FormField
                 control={form.control}
@@ -154,9 +175,9 @@ export default function AddOrnament() {
                 render={({ field }) => (
                   <FormItem>
                     <FormControl>
-                      <ImagePicker 
-                        value={field.value} 
-                        onChange={field.onChange} 
+                      <ImagePicker
+                        value={field.value}
+                        onChange={field.onChange}
                         className="w-full max-w-[240px] mx-auto md:mx-0"
                       />
                     </FormControl>
@@ -169,9 +190,11 @@ export default function AddOrnament() {
             <div className="space-y-6 bg-card border border-card-border p-6 rounded-xl shadow-sm">
               <div className="flex items-center gap-2 mb-2 pb-2 border-b border-border">
                 <Box className="h-4 w-4 text-primary" />
-                <h3 className="font-serif font-bold text-lg">Essential Details</h3>
+                <h3 className="font-serif font-bold text-lg">
+                  Essential Details
+                </h3>
               </div>
-              
+
               <FormField
                 control={form.control}
                 name="name"
@@ -179,7 +202,11 @@ export default function AddOrnament() {
                   <FormItem>
                     <FormLabel>Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. Star Trek Millennium Falcon" className="text-lg bg-background" {...field} />
+                      <Input
+                        placeholder="e.g. Star Trek Millennium Falcon"
+                        className="text-lg bg-background"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -194,7 +221,11 @@ export default function AddOrnament() {
                     <FormItem>
                       <FormLabel>Brand</FormLabel>
                       <FormControl>
-                        <Input placeholder="Hallmark" className="bg-background" {...field} />
+                        <Input
+                          placeholder="Hallmark"
+                          className="bg-background"
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -207,7 +238,13 @@ export default function AddOrnament() {
                     <FormItem>
                       <FormLabel>Release Year</FormLabel>
                       <FormControl>
-                        <Input type="number" placeholder="YYYY" className="bg-background" {...field} value={field.value || ''} />
+                        <Input
+                          type="number"
+                          placeholder="YYYY"
+                          className="bg-background"
+                          {...field}
+                          value={field.value || ""}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -223,7 +260,12 @@ export default function AddOrnament() {
                     <FormItem>
                       <FormLabel>Series / Collection</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g. Star Wars, Nostalgic Houses" className="bg-background" {...field} value={field.value || ''} />
+                        <Input
+                          placeholder="e.g. Star Wars, Nostalgic Houses"
+                          className="bg-background"
+                          {...field}
+                          value={field.value || ""}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -236,7 +278,12 @@ export default function AddOrnament() {
                     <FormItem>
                       <FormLabel>Quantity</FormLabel>
                       <FormControl>
-                        <Input type="number" min="1" className="bg-background" {...field} />
+                        <Input
+                          type="number"
+                          min="1"
+                          className="bg-background"
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -251,7 +298,10 @@ export default function AddOrnament() {
                   <FormItem>
                     <FormLabel>Categories</FormLabel>
                     <FormControl>
-                      <CategorySelector value={field.value} onChange={field.onChange} />
+                      <CategorySelector
+                        value={field.value}
+                        onChange={field.onChange}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -261,8 +311,10 @@ export default function AddOrnament() {
           </div>
 
           <div className="space-y-6 bg-card border border-card-border p-6 rounded-xl shadow-sm">
-            <h3 className="font-serif font-bold text-lg mb-2 pb-2 border-b border-border">Additional Info</h3>
-            
+            <h3 className="font-serif font-bold text-lg mb-2 pb-2 border-b border-border">
+              Additional Info
+            </h3>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
@@ -271,7 +323,12 @@ export default function AddOrnament() {
                   <FormItem>
                     <FormLabel>Condition</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. Excellent, Missing Box" className="bg-background" {...field} value={field.value || ''} />
+                      <Input
+                        placeholder="e.g. Excellent, Missing Box"
+                        className="bg-background"
+                        {...field}
+                        value={field.value || ""}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -284,7 +341,11 @@ export default function AddOrnament() {
                   <FormItem>
                     <FormLabel>UPC / Barcode</FormLabel>
                     <FormControl>
-                      <Input className="bg-background font-mono text-sm" {...field} value={field.value || ''} />
+                      <Input
+                        className="bg-background font-mono text-sm"
+                        {...field}
+                        value={field.value || ""}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -300,7 +361,12 @@ export default function AddOrnament() {
                   <FormItem>
                     <FormLabel>Date Acquired</FormLabel>
                     <FormControl>
-                      <Input type="date" className="bg-background" {...field} value={field.value || ''} />
+                      <Input
+                        type="date"
+                        className="bg-background"
+                        {...field}
+                        value={field.value || ""}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -313,7 +379,12 @@ export default function AddOrnament() {
                   <FormItem>
                     <FormLabel>Source / Origin</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. Gift from Mom, Antique Store" className="bg-background" {...field} value={field.value || ''} />
+                      <Input
+                        placeholder="e.g. Gift from Mom, Antique Store"
+                        className="bg-background"
+                        {...field}
+                        value={field.value || ""}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -328,11 +399,11 @@ export default function AddOrnament() {
                 <FormItem>
                   <FormLabel>Notes</FormLabel>
                   <FormControl>
-                    <Textarea 
-                      placeholder="Special memories, signing events, etc." 
-                      className="bg-background min-h-[100px] resize-y" 
-                      {...field} 
-                      value={field.value || ''} 
+                    <Textarea
+                      placeholder="Special memories, signing events, etc."
+                      className="bg-background min-h-[100px] resize-y"
+                      {...field}
+                      value={field.value || ""}
                     />
                   </FormControl>
                   <FormMessage />
@@ -342,11 +413,23 @@ export default function AddOrnament() {
           </div>
 
           <div className="flex justify-end gap-3 sticky bottom-4 p-4 bg-background/80 backdrop-blur-md border border-border rounded-xl shadow-lg z-10">
-            <Button type="button" variant="outline" onClick={() => setLocation("/")}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setLocation("/")}
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={createOrnament.isPending} className="px-8 font-medium">
-              {createOrnament.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Save Ornament"}
+            <Button
+              type="submit"
+              disabled={createOrnament.isPending}
+              className="px-8 font-medium"
+            >
+              {createOrnament.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                "Save Ornament"
+              )}
             </Button>
           </div>
         </form>

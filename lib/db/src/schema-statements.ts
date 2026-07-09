@@ -332,6 +332,7 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS quilting_patterns_user_id_idx ON quilting_patterns (user_id)`,
   `ALTER TABLE quilting_finished_quilts ADD COLUMN IF NOT EXISTS user_id integer REFERENCES app_users(id)`,
   `CREATE INDEX IF NOT EXISTS quilting_finished_quilts_user_id_idx ON quilting_finished_quilts (user_id)`,
+  `ALTER TABLE quilting_finished_quilts ADD COLUMN IF NOT EXISTS completion_percentage SMALLINT NOT NULL DEFAULT 0`,
   `ALTER TABLE quilting_blocks ADD COLUMN IF NOT EXISTS user_id integer REFERENCES app_users(id)`,
   `CREATE INDEX IF NOT EXISTS quilting_blocks_user_id_idx ON quilting_blocks (user_id)`,
   `ALTER TABLE quilting_layouts ADD COLUMN IF NOT EXISTS user_id integer REFERENCES app_users(id)`,
@@ -1049,4 +1050,23 @@ export const STATEMENTS: string[] = [
   // existing rows) or 'sms'. A (reminder, user, alertType, channel) tuple is
   // sent at most once.
   `ALTER TABLE travels_reminder_alert_log ADD COLUMN IF NOT EXISTS channel TEXT NOT NULL DEFAULT 'email'`,
+
+  // ── Document RAG (issue #99) ────────────────────────────────────────────────
+  // Store the raw extracted text from PDFs/images so we can chunk + embed it.
+  `ALTER TABLE travels_trip_documents ADD COLUMN IF NOT EXISTS raw_text TEXT`,
+  // One chunk per ~500-char passage with ~100-char overlap; each gets a
+  // 1536-dim text embedding for semantic search.
+  `CREATE TABLE IF NOT EXISTS travels_doc_chunks (
+    id                  SERIAL PRIMARY KEY,
+    trip_document_id    INTEGER NOT NULL REFERENCES travels_trip_documents(id) ON DELETE CASCADE,
+    chunk_index         INTEGER NOT NULL,
+    content             TEXT NOT NULL,
+    embedding           vector(1536),
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_doc_chunks ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travels_doc_chunks_doc_id_idx
+     ON travels_doc_chunks (trip_document_id)`,
+  `CREATE INDEX IF NOT EXISTS travels_doc_chunks_embedding_idx
+     ON travels_doc_chunks USING hnsw (embedding vector_cosine_ops)`,
 ];

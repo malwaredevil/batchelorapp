@@ -135,7 +135,10 @@ function QuiltCard({
               src={quilt.imageUrl}
               alt={quilt.name}
               onLoad={() => setImgLoaded(true)}
-              style={{ filter: imgLoaded ? "none" : "blur(8px)", transition: "filter 0.4s ease" }}
+              style={{
+                filter: imgLoaded ? "none" : "blur(8px)",
+                transition: "filter 0.4s ease",
+              }}
               className="h-full w-full object-cover transition-transform group-hover:scale-105"
             />
             <button
@@ -323,7 +326,11 @@ export default function Quilts() {
   });
   const [page, setPage] = useState(1);
   const queryClient = useQueryClient();
-  const { data: quiltsData, isLoading, isError } = useListQuilts({ pageSize: 200 });
+  const {
+    data: quiltsData,
+    isLoading,
+    isError,
+  } = useListQuilts({ pageSize: 200 });
   const quilts = quiltsData?.items ?? [];
   const [categoryEditItem, setCategoryEditItem] = useState<QuiltSummary | null>(
     null,
@@ -470,10 +477,19 @@ export default function Quilts() {
       })
     : null;
 
-  const totalPages = !sorted || pageSize === 0 ? 1 : Math.max(1, Math.ceil(sorted.length / pageSize));
-  const paged = sorted ? (pageSize === 0 ? sorted : sorted.slice((page - 1) * pageSize, page * pageSize)) : null;
+  const totalPages =
+    !sorted || pageSize === 0
+      ? 1
+      : Math.max(1, Math.ceil(sorted.length / pageSize));
+  const paged = sorted
+    ? pageSize === 0
+      ? sorted
+      : sorted.slice((page - 1) * pageSize, page * pageSize)
+    : null;
 
-  useEffect(() => { setPage(1); }, [search, recipientFilter, categoryFilter, colorFilter, sort]);
+  useEffect(() => {
+    setPage(1);
+  }, [search, recipientFilter, categoryFilter, colorFilter, sort]);
 
   const hasFilter =
     search.trim().length > 0 ||
@@ -487,10 +503,12 @@ export default function Quilts() {
     "quilting-quilts",
     isLoading
       ? undefined
-      : `Quilts page: ${quilts?.length ?? 0} finished/in-progress quilt(s)${hasFilter ? ` (${sorted?.length ?? 0} shown after filters)` : ""}. Visible quilts: ${(sorted ?? [])
-          .slice(0, 30)
-          .map((q) => `${q.name} (quiltId: ${q.id})`)
-          .join(", ") || "none"}.`,
+      : `Quilts page: ${quilts?.length ?? 0} finished/in-progress quilt(s)${hasFilter ? ` (${sorted?.length ?? 0} shown after filters)` : ""}. Visible quilts: ${
+          (sorted ?? [])
+            .slice(0, 30)
+            .map((q) => `${q.name} (quiltId: ${q.id})`)
+            .join(", ") || "none"
+        }.`,
   );
 
   return (
@@ -675,7 +693,14 @@ export default function Quilts() {
                 <button
                   key={n}
                   type="button"
-                  onClick={() => { localStorage.setItem("quilting-quilts-page-size", String(n)); setPageSize(n); setPage(1); }}
+                  onClick={() => {
+                    localStorage.setItem(
+                      "quilting-quilts-page-size",
+                      String(n),
+                    );
+                    setPageSize(n);
+                    setPage(1);
+                  }}
                   className={`px-2 py-1 text-xs rounded border transition-colors ${pageSize === n ? "bg-primary text-primary-foreground border-primary" : "border-input bg-background text-muted-foreground hover:bg-accent"}`}
                 >
                   {n === 0 ? "All" : n}
@@ -857,11 +882,25 @@ export default function Quilts() {
       )}
       {totalPages > 1 && (
         <div className="mt-6 flex items-center justify-center gap-2">
-          <Button variant="outline" size="icon" className="h-8 w-8" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => p - 1)}
+          >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <span className="text-sm text-muted-foreground">Page {page} of {totalPages}</span>
-          <Button variant="outline" size="icon" className="h-8 w-8" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+          <span className="text-sm text-muted-foreground">
+            Page {page} of {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => p + 1)}
+          >
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>

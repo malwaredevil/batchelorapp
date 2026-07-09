@@ -133,7 +133,7 @@ export async function applyLabelsToMessage(
   labelIds: string[],
 ): Promise<void> {
   const res = await fetch(
-    `${GMAIL_API_BASE}/users/me/messages/${messageId}/modify`,
+    `${GMAIL_API_BASE}/users/me/messages/${encodeURIComponent(messageId)}/modify`,
     {
       method: "POST",
       headers: {

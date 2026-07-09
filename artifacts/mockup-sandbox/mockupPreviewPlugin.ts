@@ -39,16 +39,29 @@ export function mockupPreviewPlugin(): Plugin {
       .every((segment) => !segment.startsWith("_"));
   }
 
+  // Defense-in-depth: even though these paths come from a filesystem glob
+  // scoped to MOCKUPS_DIR (not from any HTTP request), reject anything that
+  // isn't a plain relative posix path before it's ever embedded in the
+  // generated source module, so a stray/oddly-named file on disk can never
+  // produce a generated import() specifier with unexpected characters.
+  const SAFE_RELATIVE_PATH_RE = /^[\w./-]+$/;
+
   async function discoverComponents(): Promise<Array<DiscoveredComponent>> {
     const files = await glob(`${MOCKUPS_DIR}/**/*.tsx`, {
       cwd: root,
       ignore: ["**/_*/**", "**/_*.tsx"],
     });
 
-    return files.map((f) => ({
-      globKey: "./" + f.slice("src/".length),
-      importPath: path.posix.relative("src/.generated", f),
-    }));
+    return files
+      .map((f) => ({
+        globKey: "./" + f.slice("src/".length),
+        importPath: path.posix.relative("src/.generated", f),
+      }))
+      .filter(
+        (c) =>
+          SAFE_RELATIVE_PATH_RE.test(c.globKey) &&
+          SAFE_RELATIVE_PATH_RE.test(c.importPath),
+      );
   }
 
   function generateSource(components: Array<DiscoveredComponent>): string {

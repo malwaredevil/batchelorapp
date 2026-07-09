@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import DOMPurify from "dompurify";
 import {
   useUpdateReminder,
   useDeleteReminder,
@@ -314,7 +315,9 @@ export function ReminderEditDialog({
             {reminder.description ? (
               <div
                 className="text-sm text-foreground prose prose-sm max-w-none [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1"
-                dangerouslySetInnerHTML={{ __html: reminder.description }}
+                dangerouslySetInnerHTML={{
+                  __html: DOMPurify.sanitize(reminder.description),
+                }}
               />
             ) : (
               <p className="text-sm text-muted-foreground italic">

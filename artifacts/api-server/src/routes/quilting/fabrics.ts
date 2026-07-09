@@ -165,6 +165,86 @@ router.get("/fabrics/used-ids", async (_req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Fabric pairings — find 4 stash fabrics that pair well by embedding similarity
+// ---------------------------------------------------------------------------
+
+router.get("/fabrics/:id/pairings", async (req, res) => {
+  const { id } = GetFabricParams.parse(req.params);
+
+  // Load the target fabric's embeddings
+  const [target] = await db
+    .select()
+    .from(fabrics)
+    .where(eq(fabrics.id, id))
+    .limit(1);
+
+  if (!target) {
+    res.status(404).json({ error: "Fabric not found." });
+    return;
+  }
+
+  type RankedRow = { id: number; similarity: number };
+
+  // Cosine similarity search on text embedding
+  let textRanked: RankedRow[] = [];
+  if (target.embedding) {
+    const vec = `[${(target.embedding as number[]).join(",")}]`;
+    const rows = await db.execute<RankedRow>(sql`
+      select id, 1 - (embedding <=> ${vec}::vector) as similarity
+      from quilting_fabrics
+      where embedding is not null and id != ${id}
+      order by embedding <=> ${vec}::vector
+      limit 20
+    `);
+    textRanked = rows.rows.map((r) => ({ id: Number(r.id), similarity: Number(r.similarity) }));
+  }
+
+  // Cosine similarity search on visual embedding
+  let visualRanked: RankedRow[] = [];
+  if (target.visualEmbedding) {
+    const vec = `[${(target.visualEmbedding as number[]).join(",")}]`;
+    const rows = await db.execute<RankedRow>(sql`
+      select id, 1 - (visual_embedding <=> ${vec}::vector) as similarity
+      from quilting_fabrics
+      where visual_embedding is not null and id != ${id}
+      order by visual_embedding <=> ${vec}::vector
+      limit 20
+    `);
+    visualRanked = rows.rows.map((r) => ({ id: Number(r.id), similarity: Number(r.similarity) }));
+  }
+
+  // Reciprocal Rank Fusion (k=60) to merge the two ranked lists
+  const scores = new Map<number, number>();
+  textRanked.forEach(({ id: fid }, rank) => {
+    scores.set(fid, (scores.get(fid) ?? 0) + 1 / (60 + rank + 1));
+  });
+  visualRanked.forEach(({ id: fid }, rank) => {
+    scores.set(fid, (scores.get(fid) ?? 0) + 1 / (60 + rank + 1));
+  });
+
+  // Pick the top 4 by RRF score
+  const topIds = [...scores.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([fid]) => fid);
+
+  if (topIds.length === 0) {
+    res.json([]);
+    return;
+  }
+
+  const { embedding: _emb, visualEmbedding: _vemb, ...cols } = getTableColumns(fabrics);
+  const rows = await db.select(cols).from(fabrics).where(inArray(fabrics.id, topIds));
+  const serialized = await Promise.all(
+    rows.map((r) => serializeFabric(r as Omit<FabricRow, "embedding" | "visualEmbedding">)),
+  );
+
+  // Return in the same order as topIds
+  const byId = new Map(serialized.map((f) => [f.id, f]));
+  res.json(topIds.map((fid) => byId.get(fid)).filter(Boolean));
+});
+
+// ---------------------------------------------------------------------------
 // Get one
 // ---------------------------------------------------------------------------
 

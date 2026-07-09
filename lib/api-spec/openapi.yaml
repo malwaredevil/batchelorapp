@@ -895,6 +895,29 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/QuiltingFabric"
+  /quilting/fabrics/{id}/pairings:
+    get:
+      operationId: getFabricPairings
+      tags:
+        - fabrics
+      summary: Get up to 4 stash fabrics that pair well with this one (embedding similarity)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Array of pairing suggestions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QuiltingFabric"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /quilting/fabrics/used-ids:
     get:
       operationId: getUsedFabricIds

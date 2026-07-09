@@ -887,6 +887,52 @@ export const ReanalyzeFabricResponse = zod.object({
 
 
 /**
+ * @summary Get up to 4 stash fabrics that pair well with this one (embedding similarity)
+ */
+export const GetFabricPairingsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetFabricPairingsResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "lineName": zod.string().nullish(),
+  "designer": zod.string().nullish(),
+  "manufacturer": zod.string().nullish(),
+  "colorway": zod.string().nullish(),
+  "printType": zod.string().nullish(),
+  "fiberContent": zod.string().nullish(),
+  "widthInches": zod.number().nullish(),
+  "quantity": zod.number(),
+  "quantityUnit": zod.string(),
+  "sku": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "aiDescription": zod.string().nullish(),
+  "dominantColors": zod.array(zod.string()),
+  "motifs": zod.array(zod.string()),
+  "styleDescriptors": zod.array(zod.string()),
+  "acquiredAt": zod.string().nullish(),
+  "lockedFields": zod.array(zod.string()),
+  "categories": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "bgColor": zod.string().nullish(),
+  "textColor": zod.string().nullish()
+})),
+  "images": zod.array(zod.object({
+  "id": zod.number(),
+  "url": zod.string(),
+  "label": zod.string().nullish(),
+  "position": zod.number()
+})),
+  "imageUrl": zod.string(),
+  "hasEmbedding": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+export const GetFabricPairingsResponse = zod.array(GetFabricPairingsResponseItem)
+
+
+/**
  * @summary Get IDs of fabrics linked to at least one finished quilt
  */
 export const GetUsedFabricIdsResponseItem = zod.number()

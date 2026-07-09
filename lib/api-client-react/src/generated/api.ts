@@ -3153,6 +3153,83 @@ export const useReanalyzeFabric = <TError = ErrorType<unknown>,
       return useMutation(getReanalyzeFabricMutationOptions(options));
     }
 
+export const getGetFabricPairingsUrl = (id: number,) => {
+
+
+
+
+  return `/api/quilting/fabrics/${id}/pairings`
+}
+
+/**
+ * @summary Get up to 4 stash fabrics that pair well with this one (embedding similarity)
+ */
+export const getFabricPairings = async (id: number, options?: RequestInit): Promise<QuiltingFabric[]> => {
+
+  return customFetch<QuiltingFabric[]>(getGetFabricPairingsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFabricPairingsQueryKey = (id: number,) => {
+    return [
+    `/api/quilting/fabrics/${id}/pairings`
+    ] as const;
+    }
+
+
+export const getGetFabricPairingsQueryOptions = <TData = Awaited<ReturnType<typeof getFabricPairings>>, TError = ErrorType<Error>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFabricPairings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFabricPairingsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFabricPairings>>> = ({ signal }) => getFabricPairings(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFabricPairings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFabricPairingsQueryResult = NonNullable<Awaited<ReturnType<typeof getFabricPairings>>>
+export type GetFabricPairingsQueryError = ErrorType<Error>
+
+
+/**
+ * @summary Get up to 4 stash fabrics that pair well with this one (embedding similarity)
+ */
+
+export function useGetFabricPairings<TData = Awaited<ReturnType<typeof getFabricPairings>>, TError = ErrorType<Error>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFabricPairings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFabricPairingsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
 export const getGetUsedFabricIdsUrl = () => {
 
 

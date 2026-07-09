@@ -4297,7 +4297,11 @@ export default function TripDetail({ id }: { id: number }) {
                                 </h2>
                                 <Card className="border-border/50">
                                   <CardContent className="py-4">
-                                    <PackingSection tripId={id} />
+                                    <PackingSection
+                                      tripId={id}
+                                      lat={trip.lat ?? undefined}
+                                      lng={trip.lng ?? undefined}
+                                    />
                                   </CardContent>
                                 </Card>
                               </div>

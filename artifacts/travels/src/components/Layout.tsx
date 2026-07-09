@@ -1,6 +1,13 @@
 import { type ReactNode, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { LogOut, ChevronDown, Settings, Compass, CalendarDays, Menu } from "lucide-react";
+import {
+  LogOut,
+  ChevronDown,
+  Settings,
+  Compass,
+  CalendarDays,
+  Menu,
+} from "lucide-react";
 import { AppSwitcher, SearchTrigger } from "@workspace/elaine-ui";
 import {
   useLogout,

@@ -802,7 +802,7 @@ components:
           type:
             - string
             - "null"
-          description: 'Which site the value came from: hallmarkornaments.com or hookedonhallmark.com'
+          description: "Which site the value came from: hallmarkornaments.com or hookedonhallmark.com"
         bookValueUpdatedAt:
           type:
             - string

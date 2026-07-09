@@ -334,6 +334,11 @@ router.patch("/quilts/:id", async (req, res) => {
   if (body.notes !== undefined)
     updates.notes = body.notes?.slice(0, MAX_NOTES) ?? null;
   if (body.lockedFields !== undefined) updates.lockedFields = body.lockedFields;
+  if (body.completionPercentage !== undefined)
+    updates.completionPercentage = Math.max(
+      0,
+      Math.min(100, Math.round(body.completionPercentage ?? 0)),
+    );
 
   if (Object.keys(updates).length > 0) {
     await db

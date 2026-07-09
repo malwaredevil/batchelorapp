@@ -3153,6 +3153,83 @@ export const useReanalyzeFabric = <TError = ErrorType<unknown>,
       return useMutation(getReanalyzeFabricMutationOptions(options));
     }
 
+export const getGetUsedFabricIdsUrl = () => {
+
+
+
+
+  return `/api/quilting/fabrics/used-ids`
+}
+
+/**
+ * @summary Get IDs of fabrics linked to at least one finished quilt
+ */
+export const getUsedFabricIds = async ( options?: RequestInit): Promise<number[]> => {
+
+  return customFetch<number[]>(getGetUsedFabricIdsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetUsedFabricIdsQueryKey = () => {
+    return [
+    `/api/quilting/fabrics/used-ids`
+    ] as const;
+    }
+
+
+export const getGetUsedFabricIdsQueryOptions = <TData = Awaited<ReturnType<typeof getUsedFabricIds>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUsedFabricIds>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetUsedFabricIdsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getUsedFabricIds>>> = ({ signal }) => getUsedFabricIds({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getUsedFabricIds>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetUsedFabricIdsQueryResult = NonNullable<Awaited<ReturnType<typeof getUsedFabricIds>>>
+export type GetUsedFabricIdsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get IDs of fabrics linked to at least one finished quilt
+ */
+
+export function useGetUsedFabricIds<TData = Awaited<ReturnType<typeof getUsedFabricIds>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUsedFabricIds>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetUsedFabricIdsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
 export const getBulkReanalyzeFabricsUrl = () => {
 
 

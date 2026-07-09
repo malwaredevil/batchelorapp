@@ -69,6 +69,7 @@ type QuiltSummary = {
   sizeHeight?: number | null;
   recipient?: string | null;
   dominantColors?: string[];
+  completionPercentage?: number | null;
   categories: Array<{
     id: number;
     name: string;
@@ -148,11 +149,28 @@ function QuiltCard({
             <p className="truncate text-sm font-semibold text-foreground">
               {quilt.name}
             </p>
-            {quilt.dateCompleted && (
+            {quilt.dateCompleted ? (
               <p className="truncate text-xs text-muted-foreground">
                 {quilt.dateCompleted}
               </p>
-            )}
+            ) : (quilt.completionPercentage ?? 0) > 0 ? (
+              <div className="mt-1">
+                <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${quilt.completionPercentage ?? 0}%`,
+                      backgroundColor:
+                        (quilt.completionPercentage ?? 0) >= 80
+                          ? "#10b981"
+                          : (quilt.completionPercentage ?? 0) >= 40
+                            ? "#f59e0b"
+                            : "#f87171",
+                    }}
+                  />
+                </div>
+              </div>
+            ) : null}
             <div className="mt-1.5 flex flex-wrap gap-1">
               {quilt.recipient && (
                 <button

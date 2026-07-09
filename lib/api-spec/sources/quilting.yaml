@@ -419,6 +419,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/Fabric"
 
+  /fabrics/used-ids:
+    get:
+      operationId: getUsedFabricIds
+      tags: [fabrics]
+      summary: Get IDs of fabrics linked to at least one finished quilt
+      responses:
+        "200":
+          description: Array of used fabric IDs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: integer
+
   /fabrics/bulk-reanalyze:
     post:
       operationId: bulkReanalyzeFabrics
@@ -2253,6 +2268,11 @@ components:
           type: array
           items:
             type: string
+        completionPercentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: WIP completion 0–100. 0 = not started, 100 = finished.
         categories:
           type: array
           items:
@@ -2343,6 +2363,11 @@ components:
           type: array
           items:
             type: integer
+        completionPercentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+          nullable: true
 
     # Bulk reanalyze
     BulkReanalyzeInput:

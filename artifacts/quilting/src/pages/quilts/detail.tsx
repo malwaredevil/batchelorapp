@@ -46,6 +46,7 @@ type QuiltData = {
   recipient?: string | null;
   notes?: string | null;
   lockedFields: string[];
+  completionPercentage?: number | null;
   categories: Array<{
     id: number;
     name: string;
@@ -115,6 +116,7 @@ export default function QuiltDetail() {
     sizeHeight: "",
     recipient: "",
     notes: "",
+    completionPercentage: 0,
   });
 
   const { data: quilt, isLoading, isError } = useGetQuilt(quiltId);
@@ -172,6 +174,7 @@ export default function QuiltDetail() {
       sizeHeight: q.sizeHeight != null ? String(q.sizeHeight) : "",
       recipient: q.recipient ?? "",
       notes: q.notes ?? "",
+      completionPercentage: q.completionPercentage ?? 0,
     });
     setSelectedCategoryIds(q.categories.map((c) => c.id));
     setIsEditing(true);
@@ -193,6 +196,7 @@ export default function QuiltDetail() {
         recipient: draft.recipient || null,
         notes: draft.notes || null,
         categories: categoryNames,
+        completionPercentage: draft.completionPercentage,
       },
     });
   }
@@ -286,7 +290,7 @@ export default function QuiltDetail() {
   const q = quilt as unknown as QuiltData;
   const lockedFields = q.lockedFields ?? [];
   const d = draft;
-  const set = (k: keyof typeof draft, v: string) =>
+  const set = (k: keyof typeof draft, v: string | number) =>
     setDraft((prev) => ({ ...prev, [k]: v }));
 
   return (
@@ -507,6 +511,27 @@ export default function QuiltDetail() {
                     placeholder="2024-06-01"
                   />
                 </div>
+                {!d.dateCompleted && (
+                  <div>
+                    <label className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+                      <span>WIP Progress</span>
+                      <span className="font-medium text-foreground">{d.completionPercentage}%</span>
+                    </label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={5}
+                      value={d.completionPercentage}
+                      onChange={(e) => set("completionPercentage", parseInt(e.target.value))}
+                      className="w-full accent-primary h-2 cursor-pointer"
+                    />
+                    <div className="flex justify-between text-[10px] text-muted-foreground/60 mt-0.5">
+                      <span>Not started</span>
+                      <span>Done</span>
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="mb-1 block text-xs text-muted-foreground">
@@ -544,6 +569,28 @@ export default function QuiltDetail() {
               </div>
             ) : (
               <div className="space-y-2 text-sm">
+                {!q.dateCompleted && (q.completionPercentage ?? 0) > 0 && (
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-muted-foreground">WIP Progress</span>
+                      <span className="font-medium">{q.completionPercentage ?? 0}%</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${q.completionPercentage ?? 0}%`,
+                          backgroundColor:
+                            (q.completionPercentage ?? 0) >= 80
+                              ? "#10b981"
+                              : (q.completionPercentage ?? 0) >= 40
+                                ? "#f59e0b"
+                                : "#f87171",
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
                 {q.dateCompleted && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Completed</span>

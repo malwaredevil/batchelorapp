@@ -887,6 +887,13 @@ export const ReanalyzeFabricResponse = zod.object({
 
 
 /**
+ * @summary Get IDs of fabrics linked to at least one finished quilt
+ */
+export const GetUsedFabricIdsResponseItem = zod.number()
+export const GetUsedFabricIdsResponse = zod.array(GetUsedFabricIdsResponseItem)
+
+
+/**
  * @summary Re-run AI analysis on multiple fabrics
  */
 export const bulkReanalyzeFabricsBodyIdsMax = 50;
@@ -1275,6 +1282,11 @@ export const DeletePatternImageParams = zod.object({
 /**
  * @summary List all finished quilts
  */
+export const listQuiltsResponseCompletionPercentageMin = 0;
+export const listQuiltsResponseCompletionPercentageMax = 100;
+
+
+
 export const ListQuiltsResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -1285,6 +1297,7 @@ export const ListQuiltsResponseItem = zod.object({
   "notes": zod.string().nullish(),
   "dominantColors": zod.array(zod.string()),
   "lockedFields": zod.array(zod.string()),
+  "completionPercentage": zod.number().min(listQuiltsResponseCompletionPercentageMin).max(listQuiltsResponseCompletionPercentageMax).optional().describe('WIP completion 0–100. 0 = not started, 100 = finished.'),
   "categories": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -1336,6 +1349,11 @@ export const GetQuiltParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const getQuiltResponseCompletionPercentageMin = 0;
+export const getQuiltResponseCompletionPercentageMax = 100;
+
+
+
 export const GetQuiltResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -1346,6 +1364,7 @@ export const GetQuiltResponse = zod.object({
   "notes": zod.string().nullish(),
   "dominantColors": zod.array(zod.string()),
   "lockedFields": zod.array(zod.string()),
+  "completionPercentage": zod.number().min(getQuiltResponseCompletionPercentageMin).max(getQuiltResponseCompletionPercentageMax).optional().describe('WIP completion 0–100. 0 = not started, 100 = finished.'),
   "categories": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -1383,6 +1402,9 @@ export const updateQuiltBodyCategoriesItemMax = 100;
 
 export const updateQuiltBodyCategoriesMax = 50;
 
+export const updateQuiltBodyCompletionPercentageMin = 0;
+export const updateQuiltBodyCompletionPercentageMax = 100;
+
 
 
 export const UpdateQuiltBody = zod.object({
@@ -1395,8 +1417,14 @@ export const UpdateQuiltBody = zod.object({
   "lockedFields": zod.array(zod.string()).optional(),
   "categories": zod.array(zod.string().max(updateQuiltBodyCategoriesItemMax)).max(updateQuiltBodyCategoriesMax).optional(),
   "linkedFabricIds": zod.array(zod.number()).optional(),
-  "linkedPatternIds": zod.array(zod.number()).optional()
+  "linkedPatternIds": zod.array(zod.number()).optional(),
+  "completionPercentage": zod.number().min(updateQuiltBodyCompletionPercentageMin).max(updateQuiltBodyCompletionPercentageMax).nullish()
 })
+
+export const updateQuiltResponseCompletionPercentageMin = 0;
+export const updateQuiltResponseCompletionPercentageMax = 100;
+
+
 
 export const UpdateQuiltResponse = zod.object({
   "id": zod.number(),
@@ -1408,6 +1436,7 @@ export const UpdateQuiltResponse = zod.object({
   "notes": zod.string().nullish(),
   "dominantColors": zod.array(zod.string()),
   "lockedFields": zod.array(zod.string()),
+  "completionPercentage": zod.number().min(updateQuiltResponseCompletionPercentageMin).max(updateQuiltResponseCompletionPercentageMax).optional().describe('WIP completion 0–100. 0 = not started, 100 = finished.'),
   "categories": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -1457,6 +1486,11 @@ export const ReanalyzeQuiltParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const reanalyzeQuiltResponseCompletionPercentageMin = 0;
+export const reanalyzeQuiltResponseCompletionPercentageMax = 100;
+
+
+
 export const ReanalyzeQuiltResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -1467,6 +1501,7 @@ export const ReanalyzeQuiltResponse = zod.object({
   "notes": zod.string().nullish(),
   "dominantColors": zod.array(zod.string()),
   "lockedFields": zod.array(zod.string()),
+  "completionPercentage": zod.number().min(reanalyzeQuiltResponseCompletionPercentageMin).max(reanalyzeQuiltResponseCompletionPercentageMax).optional().describe('WIP completion 0–100. 0 = not started, 100 = finished.'),
   "categories": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -1721,6 +1756,11 @@ export const PaletteMatchQuiltsBody = zod.object({
   "image": zod.instanceof(File)
 })
 
+export const paletteMatchQuiltsResponseMatchesItemQuiltCompletionPercentageMin = 0;
+export const paletteMatchQuiltsResponseMatchesItemQuiltCompletionPercentageMax = 100;
+
+
+
 export const PaletteMatchQuiltsResponse = zod.object({
   "extractedColors": zod.array(zod.string()),
   "matches": zod.array(zod.object({
@@ -1734,6 +1774,7 @@ export const PaletteMatchQuiltsResponse = zod.object({
   "notes": zod.string().nullish(),
   "dominantColors": zod.array(zod.string()),
   "lockedFields": zod.array(zod.string()),
+  "completionPercentage": zod.number().min(paletteMatchQuiltsResponseMatchesItemQuiltCompletionPercentageMin).max(paletteMatchQuiltsResponseMatchesItemQuiltCompletionPercentageMax).optional().describe('WIP completion 0–100. 0 = not started, 100 = finished.'),
   "categories": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),

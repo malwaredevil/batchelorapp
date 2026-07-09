@@ -18,4 +18,9 @@ export interface QuiltingUpdateQuiltInput {
   categories?: string[];
   linkedFabricIds?: number[];
   linkedPatternIds?: number[];
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  completionPercentage?: number | null;
 }

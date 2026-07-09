@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, ilike, inArray, sql } from "drizzle-orm";
 import {
   db,
   finishedQuilts,
@@ -177,13 +177,29 @@ router.use(requireAuth);
 // List
 // ---------------------------------------------------------------------------
 
-router.get("/quilts", async (_req, res) => {
+router.get("/quilts", async (req, res) => {
+  const q = typeof req.query.q === "string" ? req.query.q.trim() : undefined;
+  const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
+  const pageSize = Math.min(500, Math.max(1, parseInt(String(req.query.pageSize ?? "50"), 10) || 50));
+  const offset = (page - 1) * pageSize;
+
+  const where = q ? ilike(finishedQuilts.name, `%${q}%`) : undefined;
+
+  const [{ value: total }] = await db
+    .select({ value: count() })
+    .from(finishedQuilts)
+    .where(where);
+
   const rows = await db
     .select()
     .from(finishedQuilts)
-    .orderBy(desc(finishedQuilts.createdAt));
+    .where(where)
+    .orderBy(desc(finishedQuilts.createdAt))
+    .limit(pageSize)
+    .offset(offset);
+
   const items = await serializeQuilts(rows);
-  res.json(ListQuiltsResponse.parse(items));
+  res.json(ListQuiltsResponse.parse({ items, total, page, pageSize }));
 });
 
 // ---------------------------------------------------------------------------
@@ -334,6 +350,11 @@ router.patch("/quilts/:id", async (req, res) => {
   if (body.notes !== undefined)
     updates.notes = body.notes?.slice(0, MAX_NOTES) ?? null;
   if (body.lockedFields !== undefined) updates.lockedFields = body.lockedFields;
+  if (body.completionPercentage !== undefined)
+    updates.completionPercentage = Math.max(
+      0,
+      Math.min(100, Math.round(body.completionPercentage ?? 0)),
+    );
 
   if (Object.keys(updates).length > 0) {
     await db
@@ -466,8 +487,11 @@ router.post("/quilts/:id/reanalyze", aiLimiter, async (req, res) => {
   res.json(ReanalyzeQuiltResponse.parse(await serializeQuilt(updated)));
 });
 
-router.post("/quilts/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
-  const { ids } = BulkReanalyzeQuiltsBody.parse(req.body);
+/** Re-run AI analysis on a batch of finished quilts. Shared by the REST
+ * route and Elaine's bulk_reanalyze_quilting action. */
+export async function bulkReanalyzeQuilts(
+  ids: number[],
+): Promise<{ succeeded: number[]; failed: number[] }> {
   const capped = [...new Set(ids)].slice(0, MAX_BULK_REANALYZE);
   const succeeded: number[] = [];
   const failed: number[] = [];
@@ -528,6 +552,12 @@ router.post("/quilts/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
     }
   }
 
+  return { succeeded, failed };
+}
+
+router.post("/quilts/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
+  const { ids } = BulkReanalyzeQuiltsBody.parse(req.body);
+  const { succeeded, failed } = await bulkReanalyzeQuilts(ids);
   res.json(BulkReanalyzeQuiltsResponse.parse({ succeeded, failed }));
 });
 
@@ -537,15 +567,23 @@ router.post("/quilts/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
 
 router.delete("/quilts/:id", async (req, res) => {
   const { id } = DeleteQuiltParams.parse(req.params);
+  const deleted = await deleteQuiltById(id);
+  if (!deleted) {
+    res.status(404).json({ error: "Quilt not found." });
+    return;
+  }
+  res.status(204).end();
+});
+
+/** Delete a finished quilt and its photo(s). Shared by the REST route and
+ * Elaine's delete_quilt action. Returns false if the quilt doesn't exist. */
+export async function deleteQuiltById(id: number): Promise<boolean> {
   const [row] = await db
     .select({ imagePath: finishedQuilts.imagePath })
     .from(finishedQuilts)
     .where(eq(finishedQuilts.id, id))
     .limit(1);
-  if (!row) {
-    res.status(404).json({ error: "Quilt not found." });
-    return;
-  }
+  if (!row) return false;
 
   const supplementalImages = await db
     .select({ storagePath: quiltingImages.storagePath })
@@ -557,8 +595,8 @@ router.delete("/quilts/:id", async (req, res) => {
     deleteImage(row.imagePath),
     ...supplementalImages.map((img) => deleteImage(img.storagePath)),
   ]);
-  res.status(204).end();
-});
+  return true;
+}
 
 // ---------------------------------------------------------------------------
 // Primary image

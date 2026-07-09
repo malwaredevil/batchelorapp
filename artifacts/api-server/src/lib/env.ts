@@ -29,7 +29,12 @@ export const env = {
   // account (AGENT_LOGIN_EMAIL) without a browser-driven form submission, so
   // it can capture authenticated screenshots. Never usable in production even
   // if both are somehow set there (see routes/dev-screenshot-login.ts).
-  screenshotAuthToken: optional("SCREENSHOT_AUTH_TOKEN"),
+  // NOTE: intentionally a plain (non-secret) env var, not a Replit secret —
+  // the agent must be able to read its literal value to construct screenshot
+  // tool URLs, which the secrets store never allows. This is low-risk: the
+  // route is hard-gated to non-production and can only ever authenticate as
+  // the single fixed AGENT_LOGIN_EMAIL account.
+  screenshotAuthToken: optional("DEV_SCREENSHOT_TOKEN"),
   agentLoginEmail: optional("AGENT_LOGIN_EMAIL"),
   // Shared secret from AgentPhone's webhook configuration screen, used to
   // verify the HMAC signature on inbound `/api/agentphone/webhook` requests.

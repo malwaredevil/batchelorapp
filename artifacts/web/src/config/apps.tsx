@@ -126,6 +126,20 @@ export const APPS: AppEntry[] = [
     cta: "Open Travels",
   },
   {
+    id: "ornaments",
+    name: "Ornaments",
+    href: `${base}ornaments/`,
+    image: `${base}images/ornaments-collection.png`,
+    updated: "Updated 3d ago",
+    stats: [
+      { value: "0", label: "Total" },
+      { value: "0", label: "Quantity" },
+      { value: "$0", label: "Book Value" },
+    ],
+    description:
+      "Your Hallmark ornament collection — track series, quantities, and book value.",
+  },
+  {
     id: "elaine",
     name: "Elaine",
     href: `${base}elaine/`,

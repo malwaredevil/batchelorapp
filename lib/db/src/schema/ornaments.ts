@@ -141,5 +141,4 @@ export type OrnamentItemCategoryRow =
   typeof ornamentsItemCategories.$inferSelect;
 export type OrnamentImageRow = typeof ornamentsImages.$inferSelect;
 export type InsertOrnamentImage = typeof ornamentsImages.$inferInsert;
-export type OrnamentBarcodeCacheRow =
-  typeof ornamentsBarcodeCache.$inferSelect;
+export type OrnamentBarcodeCacheRow = typeof ornamentsBarcodeCache.$inferSelect;

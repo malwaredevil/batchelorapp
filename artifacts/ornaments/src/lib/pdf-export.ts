@@ -26,7 +26,10 @@ function escHtml(s: string): string {
 
 function formatCurrency(amount: number | null | undefined): string {
   if (amount == null) return "—";
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(amount);
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(amount);
 }
 
 /** Fetch one image as a data URL (uses session credentials). */
@@ -84,7 +87,7 @@ function buildPageContainer(
   totalPages: number,
   exportDate: string,
   totalItems: number,
-  totalEstimate: number
+  totalEstimate: number,
 ): HTMLDivElement {
   const container = document.createElement("div");
   container.style.cssText = [
@@ -148,7 +151,10 @@ function buildPageContainer(
         .join(`<span style="color:#ddd;margin:0 5px;">·</span>`);
 
       // Clean up the break hack above so it looks nice
-      const cleanFields = fields.replace(/<span style="color:#ddd;margin:0 5px;">·<\/span><br\/>/g, "<br/>");
+      const cleanFields = fields.replace(
+        /<span style="color:#ddd;margin:0 5px;">·<\/span><br\/>/g,
+        "<br/>",
+      );
 
       return `
         <tr>
@@ -198,7 +204,10 @@ export async function generateInsurancePdf(
   const exportDate = formatDate(new Date().toISOString());
 
   // Calculate totals
-  const totalEstimate = items.reduce((sum, item) => sum + (item.bookValue || 0), 0);
+  const totalEstimate = items.reduce(
+    (sum, item) => sum + (item.bookValue || 0),
+    0,
+  );
 
   // Phase 1: fetch images
   onProgress(`Loading images… 0 / ${items.length}`);
@@ -228,7 +237,7 @@ export async function generateInsurancePdf(
       totalPages,
       exportDate,
       items.length,
-      totalEstimate
+      totalEstimate,
     );
     document.body.appendChild(container);
 
@@ -262,7 +271,7 @@ export async function generateInsurancePdf(
   }
 
   onProgress("Saving PDF…");
-  
+
   if (items.length === 1) {
     pdf.save(`ornament-${items[0].id}-insurance.pdf`);
   } else {

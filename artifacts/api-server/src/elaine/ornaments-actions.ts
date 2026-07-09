@@ -207,8 +207,7 @@ export const ornamentActionExecutors: Record<
       updates.seriesOrCollection = payload.seriesOrCollection;
     if (payload.year !== undefined) updates.year = payload.year;
     if (payload.brand !== undefined) updates.brand = payload.brand;
-    if (payload.condition !== undefined)
-      updates.condition = payload.condition;
+    if (payload.condition !== undefined) updates.condition = payload.condition;
     if (payload.origin !== undefined) updates.origin = payload.origin;
     if (payload.dimensions !== undefined)
       updates.dimensions = payload.dimensions;

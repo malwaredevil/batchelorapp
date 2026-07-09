@@ -299,7 +299,9 @@ function useApps(): AppEntry[] {
       id: "ornaments",
       name: "Batchelor Ornaments",
       subtitle:
-        ornamentsCount != null ? `${ornamentsCount} ornaments` : "Ornament Collection",
+        ornamentsCount != null
+          ? `${ornamentsCount} ornaments`
+          : "Ornament Collection",
       href: "/ornaments/",
       Logo: OrnamentsLogo,
     },

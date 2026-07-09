@@ -216,7 +216,12 @@ function SortableItem({ item, onToggle, onDelete }: SortableItemProps) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function PackingSection({ tripId, lat, lng, forecast: forecastProp }: PackingSectionProps) {
+export function PackingSection({
+  tripId,
+  lat,
+  lng,
+  forecast: forecastProp,
+}: PackingSectionProps) {
   const { data: weatherData } = useQuery({
     queryKey: ["weather", lat, lng],
     queryFn: () => getWeatherForecast(lat!, lng!),
@@ -710,7 +715,9 @@ export function PackingSection({ tripId, lat, lng, forecast: forecastProp }: Pac
                 try {
                   await bulkCreate.mutateAsync({
                     id: tripId,
-                    data: { items: weatherSuggestions.map((text) => ({ text })) },
+                    data: {
+                      items: weatherSuggestions.map((text) => ({ text })),
+                    },
                   });
                   invalidate();
                   setShowWeatherDialog(false);

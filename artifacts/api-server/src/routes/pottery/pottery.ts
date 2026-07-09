@@ -155,14 +155,17 @@ router.get("/items", async (req, res) => {
     const itemIdsForCategory = catRows.map((r) => r.itemId);
     if (itemIdsForCategory.length === 0) {
       // No items in this category — short-circuit.
-      res.json(ListPotteryResponse.parse({ items: [], total: 0, page, pageSize }));
+      res.json(
+        ListPotteryResponse.parse({ items: [], total: 0, page, pageSize }),
+      );
       return;
     }
     conditions.push(inArray(potteryItems.id, itemIdsForCategory));
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where = conditions.length > 0 ? and(...(conditions as [any, ...any[]])) : undefined;
+  const where =
+    conditions.length > 0 ? and(...(conditions as [any, ...any[]])) : undefined;
 
   // Total count for pagination metadata.
   const [{ value: total }] = await db

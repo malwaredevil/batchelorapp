@@ -315,10 +315,7 @@ export function startGmailScanScheduler(): void {
     logger.info("gmail-scan: run starting");
     try {
       await scanAllGmailConnections();
-      logger.info(
-        { durationMs: Date.now() - t0 },
-        "gmail-scan: run complete",
-      );
+      logger.info({ durationMs: Date.now() - t0 }, "gmail-scan: run complete");
     } catch (err) {
       logger.error(
         { err, durationMs: Date.now() - t0 },

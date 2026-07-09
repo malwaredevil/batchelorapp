@@ -18,11 +18,11 @@ import {
   type AssistantAction,
   type ExecutedAssistantAction,
   type ElaineAppId,
-  type ChatWidget,
   type ConversationMessage,
   type ElaineAttachmentUploadResult,
 } from "@workspace/api-client-react";
 import { ElaineName } from "./ElaineAvatar";
+import { type ChatWidget } from "./ChatWidgets";
 import { useElainePageContextReader } from "./ElainePageContext";
 
 export interface PendingAttachment {

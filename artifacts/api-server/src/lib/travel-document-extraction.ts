@@ -3,6 +3,8 @@
 // (lib/gmail-scan.ts) so both paths extract identical structured fields from
 // a photo/PDF/attachment.
 import type OpenAI from "openai";
+import jsQR from "jsqr";
+import sharp from "sharp";
 import {
   callModelWithAdvisor,
   callFusion,
@@ -10,6 +12,34 @@ import {
   getFeatures,
   getThresholds,
 } from "./ai-client";
+
+// Best-effort QR decode for uploaded document images. This is purely
+// supplementary to the AI vision extraction below — it never blocks or
+// replaces it. Two cases where it earns its keep:
+//   1. Exact confirmation-number/reference values instead of an OCR guess
+//      (barcodes have no character-transposition risk).
+//   2. QR codes that encode a URL with no corresponding visible text (e.g.
+//      "add to wallet" / check-in links), which vision-only extraction can
+//      never recover since there's nothing to read.
+// Deliberately image-only (no PDF rasterization) to keep this a lightweight
+// add-on rather than a new extraction pipeline; most PDFs already carry a
+// text layer that pdf-parse reads directly.
+async function decodeQrFromImage(buffer: Buffer): Promise<string | null> {
+  try {
+    const { data, info } = await sharp(buffer)
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const code = jsQR(
+      new Uint8ClampedArray(data.buffer, data.byteOffset, data.length),
+      info.width,
+      info.height,
+    );
+    return code?.data || null;
+  } catch {
+    return null;
+  }
+}
 
 // Escalation guidance for the openrouter:advisor server tool: extraction
 // mistakes here (wrong date, missed return leg) directly corrupt a trip's
@@ -158,10 +188,15 @@ export async function extractFromImage(
 ): Promise<Record<string, unknown>> {
   const b64 = buffer.toString("base64");
   const dataUrl = `data:${mimeType};base64,${b64}`;
-  const [models, thresholds] = await Promise.all([
+  const [models, thresholds, qrText] = await Promise.all([
     getModels(),
     getThresholds(),
+    decodeQrFromImage(buffer),
   ]);
+
+  const qrBlock = qrText
+    ? `\n\nA QR code was detected on this document and decoded to the following raw value. If it clearly contains a confirmation/reference number, URL, or other structured value, prefer it over an OCR guess for the corresponding field (it's exact, not a visual read) — but only use it where it genuinely matches one of the schema fields below; if it's an unrelated tracking/security code, ignore it:\nDecoded QR value: ${qrText}`
+    : "";
 
   const promptText = `You are extracting structured information from a travel document (ticket, confirmation, rental agreement, boarding pass, hotel voucher, etc).
 
@@ -169,7 +204,7 @@ If any date, time, or field is genuinely ambiguous or hard to read, consult the 
 
 Today's date is ${new Date().toISOString().slice(0, 10)}. Use this only to sanity-check plausibility (travel dates are usually in the near future) — always trust the exact year, month, and day printed on the document itself over any assumption.
 
-${DATE_RULES}
+${DATE_RULES}${qrBlock}
 
 Return a JSON object with these fields (include only the ones that are present in the document):
 ${RESPONSE_SCHEMA_BLOCK}

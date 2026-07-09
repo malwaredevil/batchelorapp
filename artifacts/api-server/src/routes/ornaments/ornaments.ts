@@ -280,7 +280,9 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
   const brandField = clampField(req.body?.brand, MAX_TEXT);
   const conditionField = clampField(req.body?.condition, MAX_TEXT);
   const originField = clampField(req.body?.origin, MAX_TEXT);
-  const barcodeField = clampField(req.body?.barcodeValue, MAX_TEXT);
+  const barcodeField =
+    clampField(req.body?.barcodeValue, MAX_TEXT) ??
+    clampField(analysis.upc, MAX_TEXT);
   const quantityField = Math.max(
     1,
     parseInt(req.body?.quantity ?? "1", 10) || 1,
@@ -837,6 +839,7 @@ export async function runItemAnalysis(id: number): Promise<unknown> {
       analysis.aiDescription,
       item.aiDescription,
     ),
+    barcodeValue: keep("barcodeValue", analysis.upc, item.barcodeValue),
     embedding,
   };
 

@@ -91,14 +91,21 @@ async function extractValueFromText(
 }
 
 /**
- * Tries each site in order, returning the first plausible extracted value.
- * Never throws for ordinary "not found" outcomes — callers should treat a
- * null return as "no value could be determined" (422 at the route layer).
+ * Checks every site and returns the HIGHEST plausible extracted value, not
+ * just the first one found. Hallmark secondary-market sites frequently quote
+ * different figures for the same ornament, and the household's own manual
+ * process (see replit.md / user instructions) is to check both
+ * hookedonhallmark.com and hallmarkornaments.com and take the higher of the
+ * two — so this mirrors that process rather than short-circuiting on the
+ * first hit. Never throws for ordinary "not found" outcomes — callers should
+ * treat a null return as "no value could be determined" (422 at the route
+ * layer).
  */
 export async function lookupBookValue(
   input: BookValueLookupInput,
 ): Promise<BookValueResult | null> {
   const query = buildQuery(input);
+  const found: BookValueResult[] = [];
 
   for (const site of SITES) {
     let pageText: string;
@@ -118,9 +125,10 @@ export async function lookupBookValue(
 
     const value = await extractValueFromText(pageText, input);
     if (value !== null && value > 0) {
-      return { value, source: site.source };
+      found.push({ value, source: site.source });
     }
   }
 
-  return null;
+  if (found.length === 0) return null;
+  return found.reduce((max, r) => (r.value > max.value ? r : max));
 }

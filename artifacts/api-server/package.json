@@ -13,7 +13,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@opentelemetry/instrumentation": "^0.220.0",
     "@replit/connectors-sdk": "latest",
+    "@sentry/node": "^10.64.0",
     "@supabase/supabase-js": "^2.108.1",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",

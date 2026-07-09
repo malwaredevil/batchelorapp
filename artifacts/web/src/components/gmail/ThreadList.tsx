@@ -425,6 +425,10 @@ interface ThreadListProps {
   onLayoutChange: (mode: LayoutMode) => void;
   resultSizeEstimate: number | null;
   pageStart: number;
+  /** Collapses non-essential toolbar controls into an overflow menu so icons
+   * don't jumble when this list is squeezed into a narrow/short split pane
+   * on mobile. */
+  compact?: boolean;
 }
 
 export function ThreadList({
@@ -452,6 +456,7 @@ export function ThreadList({
   onLayoutChange,
   resultSizeEstimate,
   pageStart,
+  compact = false,
 }: ThreadListProps) {
   // ── Selection state ──────────────────────────────────────────────────────
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
@@ -646,6 +651,59 @@ export function ThreadList({
             <span className="text-xs text-muted-foreground px-1.5 whitespace-nowrap">
               {checkedCount} selected
             </span>
+          ) : compact ? (
+            /* Compact mode (narrow split pane on mobile): collapse count/sort
+             * and pagination into a single overflow menu so the row never
+             * has to fit more than a couple of icon buttons side by side. */
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground"
+                  aria-label="More options"
+                  title="More options"
+                >
+                  <ChevronDown className="w-4 h-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                  {countLabel}
+                </div>
+                <DropdownMenuItem
+                  onClick={() => handleSortChange("newest")}
+                  className={cn(
+                    "gap-2",
+                    sortOrder === "newest" && "text-primary font-medium",
+                  )}
+                >
+                  Newest to oldest
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handleSortChange("oldest")}
+                  className={cn(
+                    "gap-2",
+                    sortOrder === "oldest" && "text-primary font-medium",
+                  )}
+                >
+                  Oldest to newest
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!canPrevPage}
+                  onClick={onPrevPage}
+                  className="gap-2"
+                >
+                  <ChevronLeft className="w-4 h-4 flex-shrink-0" /> Previous
+                  page
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!nextPageToken}
+                  onClick={onNextPage}
+                  className="gap-2"
+                >
+                  <ChevronRight className="w-4 h-4 flex-shrink-0" /> Next page
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : (
             /* Count with sort dropdown */
             <DropdownMenu>
@@ -677,22 +735,26 @@ export function ThreadList({
             </DropdownMenu>
           )}
 
-          <button
-            disabled={!canPrevPage}
-            onClick={onPrevPage}
-            className="p-1.5 rounded hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            aria-label="Previous page"
-          >
-            <ChevronLeft className="w-4 h-4 text-muted-foreground" />
-          </button>
-          <button
-            disabled={!nextPageToken}
-            onClick={onNextPage}
-            className="p-1.5 rounded hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            aria-label="Next page"
-          >
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
-          </button>
+          {!compact && (
+            <>
+              <button
+                disabled={!canPrevPage}
+                onClick={onPrevPage}
+                className="p-1.5 rounded hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                aria-label="Previous page"
+              >
+                <ChevronLeft className="w-4 h-4 text-muted-foreground" />
+              </button>
+              <button
+                disabled={!nextPageToken}
+                onClick={onNextPage}
+                className="p-1.5 rounded hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                aria-label="Next page"
+              >
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </>
+          )}
 
           <LayoutToggle
             layoutMode={layoutMode}

@@ -32,6 +32,7 @@ import { GmailSidebar, type LabelId } from "@/components/gmail/GmailSidebar";
 import { ThreadList, type LayoutMode } from "@/components/gmail/ThreadList";
 import { ThreadView } from "@/components/gmail/ThreadView";
 import { ComposeModal } from "@/components/gmail/ComposeModal";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -109,22 +110,63 @@ function ResizeDivider({
     [direction, onResize],
   );
 
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      setActive(true);
+      const touch = e.touches[0];
+      if (!touch) return;
+      let last = direction === "vertical" ? touch.clientX : touch.clientY;
+
+      function onMove(ev: TouchEvent) {
+        const t = ev.touches[0];
+        if (!t) return;
+        // Prevent the page from scrolling while dragging the divider.
+        ev.preventDefault();
+        const pos = direction === "vertical" ? t.clientX : t.clientY;
+        onResize(pos - last);
+        last = pos;
+      }
+      function onEnd() {
+        setActive(false);
+        window.removeEventListener("touchmove", onMove);
+        window.removeEventListener("touchend", onEnd);
+        window.removeEventListener("touchcancel", onEnd);
+      }
+      window.addEventListener("touchmove", onMove, { passive: false });
+      window.addEventListener("touchend", onEnd);
+      window.addEventListener("touchcancel", onEnd);
+    },
+    [direction, onResize],
+  );
+
   const isVertical = direction === "vertical";
 
   return (
     <div
       onMouseDown={handleMouseDown}
+      onTouchStart={handleTouchStart}
       className={cn(
-        "flex-shrink-0 flex items-center justify-center select-none transition-colors group",
-        "bg-border/50 hover:bg-primary/30",
+        "relative flex-shrink-0 flex items-center justify-center select-none transition-colors group touch-none",
+        "bg-border/50 hover:bg-primary/30 active:bg-primary/50",
         active && "bg-primary/50",
-        isVertical ? "w-1.5 cursor-col-resize" : "h-1.5 cursor-row-resize",
+        // Wider hit target on touch/mobile so the divider is easy to grab with a finger,
+        // while staying visually thin on desktop via the inner bar below.
+        isVertical
+          ? "w-3 sm:w-1.5 cursor-col-resize"
+          : "h-3 sm:h-1.5 cursor-row-resize",
       )}
     >
+      {/* visible bar */}
+      <div
+        className={cn(
+          "bg-border/70 rounded-full",
+          isVertical ? "w-0.5 h-8" : "h-0.5 w-8",
+        )}
+      />
       {/* grip dots */}
       <div
         className={cn(
-          "flex gap-px opacity-0 group-hover:opacity-60 transition-opacity",
+          "absolute flex gap-px opacity-0 group-hover:opacity-60 transition-opacity",
           isVertical ? "flex-col" : "flex-row",
         )}
       >
@@ -229,31 +271,60 @@ function GmailPage() {
     localStorage.setItem("gmail-layout-mode", mode);
   }
 
-  const handleVerticalResize = useCallback((delta: number) => {
-    if (!contentRef.current) return;
-    const pct = (delta / contentRef.current.offsetWidth) * 100;
-    setSplitSize((prev) => {
-      const next = {
-        ...prev,
-        vertical: Math.min(75, Math.max(20, prev.vertical + pct)),
-      };
-      localStorage.setItem("gmail-split-size", JSON.stringify(next));
-      return next;
-    });
+  // ── Mobile detection ───────────────────────────────────────────────────────
+  // Drives a compact split toolbar so icons don't jumble on narrow screens.
+  const [isMobile, setIsMobile] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 767px)").matches,
+  );
+
+  useEffect(() => {
+    const mql = window.matchMedia("(max-width: 767px)");
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
   }, []);
 
-  const handleHorizontalResize = useCallback((delta: number) => {
-    if (!contentRef.current) return;
-    const pct = (delta / contentRef.current.offsetHeight) * 100;
-    setSplitSize((prev) => {
-      const next = {
-        ...prev,
-        horizontal: Math.min(75, Math.max(20, prev.horizontal + pct)),
-      };
-      localStorage.setItem("gmail-split-size", JSON.stringify(next));
-      return next;
-    });
-  }, []);
+  // On mobile, keep the list pane from shrinking below a usable width/height
+  // so its toolbar always has room, and cap how large it can grow.
+  const splitMin = isMobile ? 45 : 20;
+  const splitMax = isMobile ? 65 : 75;
+
+  const handleVerticalResize = useCallback(
+    (delta: number) => {
+      if (!contentRef.current) return;
+      const pct = (delta / contentRef.current.offsetWidth) * 100;
+      setSplitSize((prev) => {
+        const next = {
+          ...prev,
+          vertical: Math.min(splitMax, Math.max(splitMin, prev.vertical + pct)),
+        };
+        localStorage.setItem("gmail-split-size", JSON.stringify(next));
+        return next;
+      });
+    },
+    [splitMin, splitMax],
+  );
+
+  const handleHorizontalResize = useCallback(
+    (delta: number) => {
+      if (!contentRef.current) return;
+      const pct = (delta / contentRef.current.offsetHeight) * 100;
+      setSplitSize((prev) => {
+        const next = {
+          ...prev,
+          horizontal: Math.min(
+            splitMax,
+            Math.max(splitMin, prev.horizontal + pct),
+          ),
+        };
+        localStorage.setItem("gmail-split-size", JSON.stringify(next));
+        return next;
+      });
+    },
+    [splitMin, splitMax],
+  );
 
   // ── State ──────────────────────────────────────────────────────────────────
   const [selectedLabel, setSelectedLabel] = useState<LabelId>("INBOX");
@@ -287,6 +358,20 @@ function GmailPage() {
 
   const { data: threadData, isLoading: threadLoading } =
     useThread(selectedThreadId);
+
+  usePageAssistantContext(
+    "hub-gmail",
+    connected
+      ? `On the Gmail page (a full webmail client for the user's own connected Gmail account, separate from the Travels app's Gmail auto-scan feature). Viewing the "${labelDisplayName(selectedLabel)}" label.` +
+          (activeSearch ? ` Search filter applied: "${activeSearch}".` : "") +
+          (threadListData?.threads
+            ? ` ${threadListData.threads.length} thread(s) loaded in the current page.`
+            : "") +
+          (selectedThreadId && threadData
+            ? ` A thread is open: "${threadData.messages[0]?.subject ?? "(no subject)"}" with ${threadData.messages.length} message(s). threadId: ${selectedThreadId}`
+            : "")
+      : `On the Gmail page. The user's Gmail account is not connected yet.`,
+  );
 
   // ── Mutations ──────────────────────────────────────────────────────────────
   const modify = useGmailModify();
@@ -638,7 +723,24 @@ function GmailPage() {
             </div>
 
             {/* Content area */}
-            <div ref={contentRef} className="flex-1 min-h-0 overflow-hidden">
+            <div
+              ref={contentRef}
+              className="relative flex-1 min-h-0 overflow-hidden"
+            >
+              {/* Always-reachable close-split button. Rendered above both split
+                  panes so it can never get squeezed out or clipped by a narrow
+                  pane's own toolbar on mobile. */}
+              {isSplit && (
+                <button
+                  onClick={() => handleLayoutChange("none")}
+                  title="Close split view"
+                  aria-label="Close split view"
+                  className="absolute top-2 right-2 z-20 p-2 rounded-full bg-background/95 border border-border shadow-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+
               {/* ── No split ── */}
               {layoutMode === "none" && (
                 <div className="relative h-full">
@@ -661,7 +763,7 @@ function GmailPage() {
                     style={{ width: `${splitSize.vertical}%` }}
                     className="flex-shrink-0 overflow-hidden min-w-0"
                   >
-                    <ThreadList {...threadListSharedProps} />
+                    <ThreadList {...threadListSharedProps} compact={isMobile} />
                   </div>
                   <ResizeDivider
                     direction="vertical"
@@ -684,7 +786,7 @@ function GmailPage() {
                     style={{ height: `${splitSize.horizontal}%` }}
                     className="flex-shrink-0 overflow-hidden min-h-0"
                   >
-                    <ThreadList {...threadListSharedProps} />
+                    <ThreadList {...threadListSharedProps} compact={isMobile} />
                   </div>
                   <ResizeDivider
                     direction="horizontal"

@@ -62,6 +62,7 @@ import {
   useUpdatePotteryImage,
   useDeletePotteryImage,
 } from "@workspace/api-client-react";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -760,7 +761,8 @@ export default function PieceDetail() {
     },
   });
   const { data: allCategories = [] } = useListCategories();
-  const { data: allItems = [] } = useListPottery();
+  const { data: _listData } = useListPottery({ pageSize: 200 });
+  const allItems = _listData?.items ?? [];
 
   const fieldSuggestions = useMemo(() => {
     const unique = (fn: (i: PotteryItem) => string | null | undefined) => {
@@ -887,6 +889,13 @@ export default function PieceDetail() {
       },
     });
   }
+
+  usePageAssistantContext(
+    "pottery-detail",
+    isLoading || !item
+      ? undefined
+      : `Pottery Piece Detail page: viewing piece "${item.name}" (itemId: ${item.id})${editing ? " — currently in edit mode with unsaved field changes" : ""}. ${item.maker ? `Maker: ${item.maker}. ` : ""}${item.style ? `Style: ${item.style}. ` : ""}${item.shape ? `Shape: ${item.shape}. ` : ""}${item.dimensions ? `Dimensions: ${item.dimensions}. ` : ""}Quantity: ${item.quantity ?? 1}. ${item.categories.length ? `Categories: ${item.categories.map((c) => c.name).join(", ")} (categoryIds: ${item.categories.map((c) => c.id).join(", ")}). ` : "Uncategorized. "}${item.dominantColors.length ? `Colors: ${item.dominantColors.join(", ")}. ` : ""}${item.motifs.length ? `Motifs: ${item.motifs.join(", ")}. ` : ""}${item.patternDescription ? `Pattern: ${item.patternDescription}. ` : ""}Photos: ${1 + item.images.length} (1 primary + ${item.images.length} supplemental, imageIds: ${item.images.map((im) => im.id).join(", ") || "none"}). ${item.lockedFields?.length ? `Locked fields (AI won't overwrite): ${item.lockedFields.join(", ")}. ` : "No fields are locked. "}Available categories to assign (name=id): ${allCategories.map((c) => `${c.name}=${c.id}`).join(", ") || "none"}.`,
+  );
 
   // ---------------------------------------------------------------------------
   // Loading / error

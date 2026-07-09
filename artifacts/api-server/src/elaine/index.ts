@@ -30,7 +30,7 @@ import {
   phoneVerificationCodes,
 } from "@workspace/db";
 import { requireAuth } from "../middleware/auth";
-import { phoneVerifyLimiter } from "../middleware/rateLimit";
+import { phoneVerifyLimiter, aiLimiter } from "../middleware/rateLimit";
 import { logger } from "../lib/logger";
 import { callModel, callModelWithSubagent } from "../lib/ai-client";
 import { embedText } from "../lib/openai";
@@ -5762,7 +5762,7 @@ async function generateDailyBriefContent(userId: number): Promise<string> {
 }
 
 // GET /daily-brief — return today's brief (generate on first call of the day).
-router.get("/daily-brief", async (req, res) => {
+router.get("/daily-brief", aiLimiter, async (req, res) => {
   const userId = req.session.userId!;
   const startOfTodayUtc = new Date();
   startOfTodayUtc.setUTCHours(0, 0, 0, 0);

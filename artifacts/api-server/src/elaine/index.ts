@@ -172,8 +172,8 @@ const ChatBody = z.object({
   // suggestions stay scoped to real paths in that app. Defaults to "hub"
   // since Elaine is one continuous conversation shown everywhere.
   appId: z.enum(APP_IDS).default("hub"),
-  // Named conversation to continue. Omit to auto-create a new one.
-  conversationId: z.number().int().positive().optional(),
+  // Named conversation to continue. Omit or send null to auto-create a new one.
+  conversationId: z.number().int().positive().nullable().optional(),
   // Signed Supabase Storage URLs for images the user attached (max 5, 5 MB each).
   attachmentUrls: z.array(z.string()).max(5).optional(),
   // Auto-captured screenshot of the current page — included in model context

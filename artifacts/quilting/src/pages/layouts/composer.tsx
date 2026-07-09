@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Link, useLocation, useParams } from "wouter";
 import { useRegisterNavGuard } from "@/lib/nav-guard";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 import {
   ArrowLeft,
   Save,
@@ -784,7 +785,8 @@ export default function LayoutComposer() {
     layoutId ?? 0,
   );
   const { data: blockList } = useListBlocks();
-  const { data: fabricsList, isLoading: fabricsLoading } = useListFabrics();
+  const { data: fabricsData, isLoading: fabricsLoading } = useListFabrics({ pageSize: 200 });
+  const fabricsList = fabricsData?.items;
   const { data: blockTemplates } = useListBlockTemplates();
   const createBlockFromTemplate = useCreateBlock();
   const [spawnTemplateId, setSpawnTemplateId] = useState<number | null>(null);
@@ -798,6 +800,13 @@ export default function LayoutComposer() {
 
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<Set<number>>(
     new Set(),
+  );
+
+  usePageAssistantContext(
+    "quilting-layout-composer",
+    `Layout Composer page (layout ${
+      isNew ? "creation" : `edit, id ${layoutId}`
+    }). This is a visual grid tool for arranging blocks into a quilt layout, cell-by-cell, plus sashing/border/cornerstone options — it cannot be operated via chat. If the user wants to design or edit a layout's actual grid content here, tell them to use this page directly; you can create/delete layouts by name+size via tools, but you cannot arrange blocks or edit the grid content.`,
   );
 
   // Sashing

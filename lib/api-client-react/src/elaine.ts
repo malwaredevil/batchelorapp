@@ -134,6 +134,16 @@ export interface PlaceResult {
   websiteUri: string | null;
 }
 
+export interface DataCardRow {
+  label: string;
+  value: string;
+}
+
+export interface ChatWidgetImage {
+  url: string;
+  sourceUrl?: string;
+}
+
 export type ChatWidget =
   | { type: "weather"; locationName: string; days: WeatherDay[] }
   | {
@@ -158,6 +168,16 @@ export type ChatWidget =
         locationName: string;
         types: Array<{ displayName: string; category: string }>;
       };
+    }
+  | {
+      type: "data_card";
+      title?: string;
+      rows: DataCardRow[];
+    }
+  | {
+      type: "image_card";
+      title?: string;
+      images: ChatWidgetImage[];
     };
 
 export interface AssistantChatResponse {
@@ -252,6 +272,8 @@ export async function streamElaineMessage(
     attachmentUrls?: string[];
     /** PDF attachments: signed URL + original filename + extracted text. */
     attachmentPdfs?: Array<{ url: string; name: string; extractedText?: string }>;
+    /** Auto-captured page screenshot URL — sent to model for visual context but not persisted. */
+    pageScreenshotUrl?: string;
   },
   callbacks: AssistantChatStreamCallbacks = {},
   signal?: AbortSignal,

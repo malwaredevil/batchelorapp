@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Loader2, Plus, CalendarHeart, Pencil, Trash2 } from "lucide-react";
+import { Loader2, Plus, CalendarHeart, Pencil, Trash2, ExternalLink } from "lucide-react";
 import {
   useListOrnamentsHallmarkEvents,
   useCreateOrnamentsHallmarkEvent,
@@ -48,6 +48,12 @@ const eventSchema = z
   });
 
 type EventFormValues = z.infer<typeof eventSchema>;
+
+const HALLMARK_CALENDAR_ID =
+  "0faf14204f8ea1b90c6df3acda964358070d92197cb405179516c71ad5f1fc5f@group.calendar.google.com";
+const HALLMARK_CALENDAR_URL = `https://calendar.google.com/calendar/u/0?cid=${encodeURIComponent(
+  HALLMARK_CALENDAR_ID,
+)}`;
 
 function EventFormDialog({
   open,
@@ -213,10 +219,18 @@ export default function HallmarkEvents() {
             Track Open House and other Hallmark Keepsake dates for the whole household
           </p>
         </div>
-        <Button onClick={openCreate} className="gap-2 shrink-0">
-          <Plus className="h-4 w-4" />
-          Add event
-        </Button>
+        <div className="flex gap-2 shrink-0">
+          <Button variant="outline" asChild className="gap-2">
+            <a href={HALLMARK_CALENDAR_URL} target="_blank" rel="noopener noreferrer">
+              <ExternalLink className="h-4 w-4" />
+              Open calendar
+            </a>
+          </Button>
+          <Button onClick={openCreate} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Add event
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (

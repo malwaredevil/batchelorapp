@@ -19,6 +19,12 @@ export interface QuiltingFinishedQuilt {
   notes?: string | null;
   dominantColors: string[];
   lockedFields: string[];
+  /**
+     * WIP completion 0–100. 0 = not started, 100 = finished.
+     * @minimum 0
+     * @maximum 100
+     */
+  completionPercentage?: number;
   categories: QuiltingCategory[];
   images: QuiltingEntityImage[];
   imageUrl: string;

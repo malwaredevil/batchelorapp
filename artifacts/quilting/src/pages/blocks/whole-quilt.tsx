@@ -479,7 +479,8 @@ export default function WholeQuiltDesigner() {
   const [dragPanelId, setDragPanelId] = useState<PanelId | null>(null);
   const [dragOverId, setDragOverId] = useState<PanelId | null>(null);
 
-  const { data: fabricsList } = useListFabrics();
+  const { data: fabricsData } = useListFabrics({ pageSize: 200 });
+  const fabricsList = fabricsData?.items;
   const fabricUrlMap = useMemo(
     () => buildFabricUrlMap(fabricsList ?? []),
     [fabricsList],

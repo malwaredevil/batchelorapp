@@ -2807,7 +2807,8 @@ export default function BlockDesigner() {
     [gridW, gridH],
   );
 
-  const { data: fabricsList } = useListFabrics();
+  const { data: fabricsData } = useListFabrics({ pageSize: 200 });
+  const fabricsList = fabricsData?.items;
   const fabricUrlMap = useMemo(
     () => buildFabricUrlMap(fabricsList ?? []),
     [fabricsList],

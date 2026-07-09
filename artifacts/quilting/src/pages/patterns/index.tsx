@@ -329,7 +329,8 @@ export default function Patterns() {
   });
   const [page, setPage] = useState(1);
   const queryClient = useQueryClient();
-  const { data: patterns, isLoading, isError } = useListPatterns();
+  const { data: patternsData, isLoading, isError } = useListPatterns({ pageSize: 200 });
+  const patterns = patternsData?.items ?? [];
   const [categoryEditItem, setCategoryEditItem] =
     useState<PatternSummary | null>(null);
   const { data: categoryApiList } = useListQuiltingCategories();

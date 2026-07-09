@@ -66,7 +66,8 @@ export default function BlockDetail() {
     isError,
   } = useGetBlock(Number.isFinite(blockId) ? blockId : 0);
 
-  const { data: fabrics = [] } = useListFabrics();
+  const { data: fabricsData } = useListFabrics({ pageSize: 200 });
+  const fabrics = fabricsData?.items ?? [];
   const { data: allCategories } = useListQuiltingCategories();
   const numMap = buildFabricUrlMap(
     fabrics as Parameters<typeof buildFabricUrlMap>[0],

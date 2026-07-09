@@ -203,7 +203,8 @@ function FabricRow({
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function YardageCalculator() {
-  const { data: fabrics, isLoading } = useListFabrics();
+  const { data: fabricsData, isLoading } = useListFabrics({ pageSize: 200 });
+  const fabrics = fabricsData?.items;
 
   usePageAssistantContext(
     "quilting-yardage-calculator",

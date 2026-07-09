@@ -821,7 +821,8 @@ export default function Layouts() {
   const { data: layoutList, isLoading, isError } = useListLayouts();
   const { data: blockList } = useListBlocks();
   const { data: allCategories } = useListQuiltingCategories();
-  const { data: fabricsList } = useListFabrics();
+  const { data: fabricsData } = useListFabrics({ pageSize: 200 });
+  const fabricsList = fabricsData?.items;
   const { data: stats } = useGetStats();
 
   usePageAssistantContext(

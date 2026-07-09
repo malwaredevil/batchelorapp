@@ -749,7 +749,8 @@ export default function CutPatternPage() {
   const blockId = Number(id);
 
   const { data: block, isLoading } = useGetBlock(blockId);
-  const { data: fabricsList } = useListFabrics();
+  const { data: fabricsData } = useListFabrics({ pageSize: 200 });
+  const fabricsList = fabricsData?.items;
 
   usePageAssistantContext(
     "quilting-cut-pattern",

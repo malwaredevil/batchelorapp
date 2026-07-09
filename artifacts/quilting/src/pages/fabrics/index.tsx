@@ -316,7 +316,8 @@ export default function Fabrics() {
   const queryClient = useQueryClient();
   const { pendingItems } = useBulkAdd();
   const uploadingItems = pendingItems.filter((i) => i.status === "uploading");
-  const { data: fabrics, isLoading, isError } = useListFabrics();
+  const { data: fabricsData, isLoading, isError } = useListFabrics({ pageSize: 200 });
+  const fabrics = fabricsData?.items ?? [];
   const { data: usedFabricIds } = useGetUsedFabricIds({ query: { enabled: stashBustMode, queryKey: ["quilting", "fabrics", "used-ids"] } });
   const { data: stats } = useGetStats();
   const [categoryEditItem, setCategoryEditItem] =

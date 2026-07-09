@@ -302,15 +302,34 @@ paths:
       operationId: listFabrics
       tags: [fabrics]
       summary: List all fabrics
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
       responses:
         "200":
           description: Fabric list
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Fabric"
+                $ref: "#/components/schemas/FabricsListResponse"
 
     post:
       operationId: createFabric
@@ -550,15 +569,34 @@ paths:
       operationId: listPatterns
       tags: [patterns]
       summary: List all quilt patterns
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
       responses:
         "200":
           description: Pattern list
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/QuiltPattern"
+                $ref: "#/components/schemas/PatternsListResponse"
 
     post:
       operationId: createPattern
@@ -802,15 +840,34 @@ paths:
       operationId: listQuilts
       tags: [quilts]
       summary: List all finished quilts
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
       responses:
         "200":
           description: Quilt list
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/FinishedQuilt"
+                $ref: "#/components/schemas/QuiltsListResponse"
 
     post:
       operationId: createQuilt
@@ -1742,6 +1799,51 @@ components:
         type: integer
 
   schemas:
+    FabricsListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Fabric"
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    PatternsListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuiltPattern"
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    QuiltsListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/FinishedQuilt"
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
     # Shared
     Error:
       type: object

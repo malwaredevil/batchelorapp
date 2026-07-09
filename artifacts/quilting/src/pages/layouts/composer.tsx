@@ -785,7 +785,8 @@ export default function LayoutComposer() {
     layoutId ?? 0,
   );
   const { data: blockList } = useListBlocks();
-  const { data: fabricsList, isLoading: fabricsLoading } = useListFabrics();
+  const { data: fabricsData, isLoading: fabricsLoading } = useListFabrics({ pageSize: 200 });
+  const fabricsList = fabricsData?.items;
   const { data: blockTemplates } = useListBlockTemplates();
   const createBlockFromTemplate = useCreateBlock();
   const [spawnTemplateId, setSpawnTemplateId] = useState<number | null>(null);

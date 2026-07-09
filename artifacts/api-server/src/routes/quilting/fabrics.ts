@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
-import { and, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, getTableColumns, ilike, inArray, sql } from "drizzle-orm";
 import {
   db,
   fabrics,
@@ -142,15 +142,31 @@ router.use(requireAuth);
 // List
 // ---------------------------------------------------------------------------
 
-router.get("/fabrics", async (_req, res) => {
+router.get("/fabrics", async (req, res) => {
+  const q = typeof req.query.q === "string" ? req.query.q.trim() : undefined;
+  const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
+  const pageSize = Math.min(500, Math.max(1, parseInt(String(req.query.pageSize ?? "50"), 10) || 50));
+  const offset = (page - 1) * pageSize;
+
+  const where = q ? ilike(fabrics.name, `%${q}%`) : undefined;
+
+  const [{ value: total }] = await db
+    .select({ value: count() })
+    .from(fabrics)
+    .where(where);
+
   const rows = await db
     .select(fabricColumns)
     .from(fabrics)
-    .orderBy(desc(fabrics.createdAt));
+    .where(where)
+    .orderBy(desc(fabrics.createdAt))
+    .limit(pageSize)
+    .offset(offset);
+
   const items = await serializeFabrics(
     rows as Array<Omit<FabricRow, "embedding" | "visualEmbedding">>,
   );
-  res.json(ListFabricsResponse.parse(items));
+  res.json(ListFabricsResponse.parse({ items, total, page, pageSize }));
 });
 
 // ---------------------------------------------------------------------------

@@ -2,7 +2,8 @@ import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider, ProtectedRoute } from "@/lib/auth";
+import { AuthProvider, ProtectedRoute, useAuth } from "@/lib/auth";
+import { useRealtimeInvalidation } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
 import { queryClient } from "@/lib/query-client";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -25,6 +26,10 @@ import TripShare from "@/pages/TripShare";
 import NotFound from "@/pages/not-found";
 
 function Router() {
+  const { user } = useAuth();
+  // Only subscribe once authenticated — the SSE endpoint requires a session.
+  useRealtimeInvalidation(!!user);
+
   return (
     <Switch>
       <Route path="/privacy" component={PrivacyPolicy} />

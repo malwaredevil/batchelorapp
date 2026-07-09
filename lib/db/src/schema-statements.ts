@@ -1201,4 +1201,59 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE ornaments_item_categories ENABLE ROW LEVEL SECURITY`,
   `ALTER TABLE ornaments_images ENABLE ROW LEVEL SECURITY`,
   `ALTER TABLE ornaments_barcode_cache ENABLE ROW LEVEL SECURITY`,
+
+  // ── Realtime replication (issue #128) ───────────────────────────────────────
+  // Adds the household-shared collection tables to Supabase's built-in
+  // `supabase_realtime` publication so the api-server's Realtime relay
+  // (server-side only, service-role key, never exposed to the browser) can
+  // receive postgres_changes events and re-broadcast lightweight
+  // invalidation signals over the existing authenticated SSE endpoint. Wrapped
+  // in an existence check because `ALTER PUBLICATION ... ADD TABLE` errors if
+  // the table is already a member — this must stay idempotent like every
+  // other statement here.
+  `DO $$
+   BEGIN
+     IF NOT EXISTS (
+       SELECT 1 FROM pg_publication_tables
+       WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'pottery_items'
+     ) THEN
+       ALTER PUBLICATION supabase_realtime ADD TABLE pottery_items;
+     END IF;
+   END $$`,
+  `DO $$
+   BEGIN
+     IF NOT EXISTS (
+       SELECT 1 FROM pg_publication_tables
+       WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'quilting_fabrics'
+     ) THEN
+       ALTER PUBLICATION supabase_realtime ADD TABLE quilting_fabrics;
+     END IF;
+   END $$`,
+  `DO $$
+   BEGIN
+     IF NOT EXISTS (
+       SELECT 1 FROM pg_publication_tables
+       WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'quilting_patterns'
+     ) THEN
+       ALTER PUBLICATION supabase_realtime ADD TABLE quilting_patterns;
+     END IF;
+   END $$`,
+  `DO $$
+   BEGIN
+     IF NOT EXISTS (
+       SELECT 1 FROM pg_publication_tables
+       WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'quilting_finished_quilts'
+     ) THEN
+       ALTER PUBLICATION supabase_realtime ADD TABLE quilting_finished_quilts;
+     END IF;
+   END $$`,
+  `DO $$
+   BEGIN
+     IF NOT EXISTS (
+       SELECT 1 FROM pg_publication_tables
+       WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'travels_trips'
+     ) THEN
+       ALTER PUBLICATION supabase_realtime ADD TABLE travels_trips;
+     END IF;
+   END $$`,
 ];

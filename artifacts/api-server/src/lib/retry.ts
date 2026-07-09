@@ -70,7 +70,10 @@ export async function withRetry<T>(
         throw err;
       }
       const jitter = Math.random() * 200;
-      const waitMs = Math.min(baseDelayMs * 2 ** (attempt - 1) + jitter, maxDelayMs);
+      const waitMs = Math.min(
+        baseDelayMs * 2 ** (attempt - 1) + jitter,
+        maxDelayMs,
+      );
       logger.warn(
         { label, attempt, nextAttemptInMs: Math.round(waitMs) },
         "retry: transient failure, retrying",

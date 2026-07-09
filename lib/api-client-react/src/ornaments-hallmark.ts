@@ -30,7 +30,7 @@ export interface OrnamentsHallmarkEventInput {
   endDate: string;
 }
 
-const BASE = "/ornaments/hallmark-events";
+const BASE = "/api/ornaments/hallmark-events";
 
 export function useListOrnamentsHallmarkEvents(
   options?: Partial<UseQueryOptions<OrnamentsHallmarkEvent[]>>,

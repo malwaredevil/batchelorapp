@@ -56,6 +56,7 @@ import {
   getListLayoutsQueryKey,
 } from "@workspace/api-client-react";
 import type { QuiltingCategory } from "@workspace/api-client-react";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 import { buildFabricUrlMap } from "@/components/FabricPicker";
 import { PreviewZoomModal } from "@/components/PreviewZoomModal";
 import { CategoryEditDialog } from "@/components/CategoryEditDialog";
@@ -820,8 +821,20 @@ export default function Layouts() {
   const { data: layoutList, isLoading, isError } = useListLayouts();
   const { data: blockList } = useListBlocks();
   const { data: allCategories } = useListQuiltingCategories();
-  const { data: fabricsList } = useListFabrics();
+  const { data: fabricsData } = useListFabrics({ pageSize: 200 });
+  const fabricsList = fabricsData?.items;
   const { data: stats } = useGetStats();
+
+  usePageAssistantContext(
+    "quilting-layouts",
+    isLoading
+      ? undefined
+      : `Layout Designer list page: ${layoutList?.length ?? 0} saved layout(s). Visible layouts: ${(layoutList ?? [])
+          .slice(0, 30)
+          .map((l: { id: number; name: string }) => `${l.name} (layoutId: ${l.id})`)
+          .join(", ") || "none"}. You have create_layout / delete_layout action tools — but they only create/remove a blank grid layout with metadata, they cannot design the actual block arrangement; direct the user to the designer here for that.`,
+  );
+
   const fabricUrlMap = useMemo(
     () => buildFabricUrlMap(fabricsList ?? []),
     [fabricsList],

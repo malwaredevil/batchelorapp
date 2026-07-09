@@ -139,7 +139,10 @@ function FabricCard({
               src={fabric.imageUrl}
               alt={fabric.name}
               onLoad={() => setImgLoaded(true)}
-              style={{ filter: imgLoaded ? "none" : "blur(8px)", transition: "filter 0.4s ease" }}
+              style={{
+                filter: imgLoaded ? "none" : "blur(8px)",
+                transition: "filter 0.4s ease",
+              }}
               className="h-full w-full object-cover transition-transform group-hover:scale-105"
             />
             <button
@@ -316,9 +319,18 @@ export default function Fabrics() {
   const queryClient = useQueryClient();
   const { pendingItems } = useBulkAdd();
   const uploadingItems = pendingItems.filter((i) => i.status === "uploading");
-  const { data: fabricsData, isLoading, isError } = useListFabrics({ pageSize: 200 });
+  const {
+    data: fabricsData,
+    isLoading,
+    isError,
+  } = useListFabrics({ pageSize: 200 });
   const fabrics = fabricsData?.items ?? [];
-  const { data: usedFabricIds } = useGetUsedFabricIds({ query: { enabled: stashBustMode, queryKey: ["quilting", "fabrics", "used-ids"] } });
+  const { data: usedFabricIds } = useGetUsedFabricIds({
+    query: {
+      enabled: stashBustMode,
+      queryKey: ["quilting", "fabrics", "used-ids"],
+    },
+  });
   const { data: stats } = useGetStats();
   const [categoryEditItem, setCategoryEditItem] =
     useState<FabricSummary | null>(null);
@@ -455,9 +467,14 @@ export default function Fabrics() {
           colorFilter.length === 0 ||
           colorFilter.every((c) => (f.dominantColors ?? []).includes(c));
         const matchesStash =
-          !stashBustMode ||
-          !(usedFabricIds ?? []).includes(f.id);
-        return matchesSearch && matchesType && matchesCat && matchesColor && matchesStash;
+          !stashBustMode || !(usedFabricIds ?? []).includes(f.id);
+        return (
+          matchesSearch &&
+          matchesType &&
+          matchesCat &&
+          matchesColor &&
+          matchesStash
+        );
       })
     : null;
 
@@ -471,10 +488,26 @@ export default function Fabrics() {
       })
     : null;
 
-  const totalPages = !sorted || pageSize === 0 ? 1 : Math.max(1, Math.ceil(sorted.length / pageSize));
-  const paged = sorted ? (pageSize === 0 ? sorted : sorted.slice((page - 1) * pageSize, page * pageSize)) : null;
+  const totalPages =
+    !sorted || pageSize === 0
+      ? 1
+      : Math.max(1, Math.ceil(sorted.length / pageSize));
+  const paged = sorted
+    ? pageSize === 0
+      ? sorted
+      : sorted.slice((page - 1) * pageSize, page * pageSize)
+    : null;
 
-  useEffect(() => { setPage(1); }, [search, printTypeFilter, categoryFilter, colorFilter, stashBustMode, sort]);
+  useEffect(() => {
+    setPage(1);
+  }, [
+    search,
+    printTypeFilter,
+    categoryFilter,
+    colorFilter,
+    stashBustMode,
+    sort,
+  ]);
 
   const hasFilter =
     search.trim().length > 0 ||
@@ -495,10 +528,12 @@ export default function Fabrics() {
     "quilting-fabrics",
     isLoading
       ? undefined
-      : `Fabrics page: ${fabrics?.length ?? 0} fabric(s) in the stash${hasFilter ? ` (${sorted?.length ?? 0} shown after filters)` : ""}. Print types: ${printTypes.join(", ") || "none"}. Categories: ${allCategories.map((c) => c.name).join(", ") || "none"}. Visible fabrics: ${(sorted ?? [])
-          .slice(0, 30)
-          .map((f) => `${f.name} (fabricId: ${f.id})`)
-          .join(", ") || "none"}.`,
+      : `Fabrics page: ${fabrics?.length ?? 0} fabric(s) in the stash${hasFilter ? ` (${sorted?.length ?? 0} shown after filters)` : ""}. Print types: ${printTypes.join(", ") || "none"}. Categories: ${allCategories.map((c) => c.name).join(", ") || "none"}. Visible fabrics: ${
+          (sorted ?? [])
+            .slice(0, 30)
+            .map((f) => `${f.name} (fabricId: ${f.id})`)
+            .join(", ") || "none"
+        }.`,
   );
 
   return (
@@ -667,7 +702,11 @@ export default function Fabrics() {
             </div>
             <button
               onClick={() => setStashBustMode((v) => !v)}
-              title={stashBustMode ? "Stash Bust Mode: ON — showing unused fabrics only. Click to turn off." : "Stash Bust Mode: OFF — click to show only fabrics not yet used in a quilt."}
+              title={
+                stashBustMode
+                  ? "Stash Bust Mode: ON — showing unused fabrics only. Click to turn off."
+                  : "Stash Bust Mode: OFF — click to show only fabrics not yet used in a quilt."
+              }
               className={`inline-flex h-9 items-center gap-1.5 rounded-md border px-2.5 text-sm font-medium transition-colors shrink-0 ${
                 stashBustMode
                   ? "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100"
@@ -710,7 +749,14 @@ export default function Fabrics() {
                 <button
                   key={n}
                   type="button"
-                  onClick={() => { localStorage.setItem("quilting-fabrics-page-size", String(n)); setPageSize(n); setPage(1); }}
+                  onClick={() => {
+                    localStorage.setItem(
+                      "quilting-fabrics-page-size",
+                      String(n),
+                    );
+                    setPageSize(n);
+                    setPage(1);
+                  }}
                   className={`px-2 py-1 text-xs rounded border transition-colors ${pageSize === n ? "bg-primary text-primary-foreground border-primary" : "border-input bg-background text-muted-foreground hover:bg-accent"}`}
                 >
                   {n === 0 ? "All" : n}
@@ -916,11 +962,25 @@ export default function Fabrics() {
       )}
       {totalPages > 1 && (
         <div className="mt-6 flex items-center justify-center gap-2">
-          <Button variant="outline" size="icon" className="h-8 w-8" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => p - 1)}
+          >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <span className="text-sm text-muted-foreground">Page {page} of {totalPages}</span>
-          <Button variant="outline" size="icon" className="h-8 w-8" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+          <span className="text-sm text-muted-foreground">
+            Page {page} of {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => p + 1)}
+          >
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>

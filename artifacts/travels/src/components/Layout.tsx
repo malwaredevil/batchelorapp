@@ -1,20 +1,6 @@
 import { type ReactNode, useState } from "react";
 import { Link, useLocation } from "wouter";
-import {
-  Home,
-  Globe,
-  Plane,
-  Compass,
-  Star,
-  LogOut,
-  ChevronDown,
-  MapPin,
-  Settings,
-  CalendarDays,
-  Mail,
-  Menu,
-  Sparkles,
-} from "lucide-react";
+import { LogOut, ChevronDown, Settings, Compass, CalendarDays, Menu } from "lucide-react";
 import { AppSwitcher, SearchTrigger } from "@workspace/elaine-ui";
 import {
   useLogout,
@@ -42,49 +28,13 @@ import {
 import { useAuth } from "@/lib/auth";
 import { InstallBanner } from "@workspace/web-core";
 import { AssistantWidget } from "@/components/assistant/AssistantWidget";
-
-type NavItem = { href: string; label: string; icon: typeof Home };
-
-const PRIMARY_NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "Home", icon: Home },
-  { href: "/trips", label: "Trips", icon: Plane },
-];
-
-const DISCOVER_NAV_ITEMS: NavItem[] = [
-  { href: "/destinations", label: "Places", icon: MapPin },
-  { href: "/map", label: "Map", icon: Globe },
-  { href: "/explore", label: "Explore", icon: Compass },
-  { href: "/wishlist", label: "Wishlist", icon: Star },
-];
-
-const PLAN_NAV_ITEMS: NavItem[] = [
-  { href: "/travel-calendar", label: "Travel Calendar", icon: CalendarDays },
-  { href: "/gmail", label: "Gmail", icon: Mail },
-];
-
-const ACCOUNT_NAV_ITEMS: NavItem[] = [
-  { href: "/google-apis", label: "Google APIs", icon: Sparkles },
-  { href: "/settings", label: "Settings", icon: Settings },
-];
-
-const ALL_NAV_ITEMS: NavItem[] = [
-  ...PRIMARY_NAV_ITEMS,
-  ...DISCOVER_NAV_ITEMS,
-  ...PLAN_NAV_ITEMS,
-  ...ACCOUNT_NAV_ITEMS,
-];
-
-// Curated subset shown directly in the mobile bottom nav; everything else lives in "More".
-const MOBILE_PRIMARY_ITEMS: NavItem[] = [
-  { href: "/", label: "Home", icon: Home },
-  { href: "/trips", label: "Trips", icon: Plane },
-  { href: "/travel-calendar", label: "Calendar", icon: CalendarDays },
-  { href: "/gmail", label: "Gmail", icon: Mail },
-];
-
-const MOBILE_MORE_ITEMS: NavItem[] = ALL_NAV_ITEMS.filter(
-  (item) => !MOBILE_PRIMARY_ITEMS.some((p) => p.href === item.href),
-);
+import "@/features";
+import {
+  getNavItemsByGroup,
+  getMobilePrimaryItems,
+  getMobileMoreItems,
+  type NavEntry,
+} from "@/features/registry";
 
 function isActive(current: string, href: string) {
   if (href === "/") return current === "/";
@@ -98,8 +48,8 @@ function NavGroupMenu({
   location,
 }: {
   label: string;
-  icon: typeof Home;
-  items: NavItem[];
+  icon: typeof Compass;
+  items: NavEntry[];
   location: string;
 }) {
   const groupActive = items.some((item) => isActive(location, item.href));
@@ -168,7 +118,11 @@ export function Layout({ children }: { children: ReactNode }) {
     return <>{children}</>;
   }
 
-  const moreActive = MOBILE_MORE_ITEMS.some((item) =>
+  const groups = getNavItemsByGroup();
+  const mobilePrimaryItems = getMobilePrimaryItems();
+  const mobileMoreItems = getMobileMoreItems();
+
+  const moreActive = mobileMoreItems.some((item) =>
     isActive(location, item.href),
   );
 
@@ -180,7 +134,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
           <div className="flex items-center gap-1">
             <nav className="mr-1 hidden items-center gap-1 md:flex">
-              {PRIMARY_NAV_ITEMS.map((item) => {
+              {groups.primary.map((item) => {
                 const active = isActive(location, item.href);
                 return (
                   <Link
@@ -201,13 +155,13 @@ export function Layout({ children }: { children: ReactNode }) {
               <NavGroupMenu
                 label="Discover"
                 icon={Compass}
-                items={DISCOVER_NAV_ITEMS}
+                items={groups.discover}
                 location={location}
               />
               <NavGroupMenu
                 label="Plan"
                 icon={CalendarDays}
-                items={PLAN_NAV_ITEMS}
+                items={groups.plan}
                 location={location}
               />
             </nav>
@@ -253,7 +207,7 @@ export function Layout({ children }: { children: ReactNode }) {
         {/* Mobile bottom nav */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-card-border bg-background/90 backdrop-blur">
           <div className="flex items-center justify-around py-2">
-            {MOBILE_PRIMARY_ITEMS.map((item) => {
+            {mobilePrimaryItems.map((item) => {
               const active = isActive(location, item.href);
               return (
                 <Link
@@ -292,7 +246,7 @@ export function Layout({ children }: { children: ReactNode }) {
               <SheetTitle>More</SheetTitle>
             </SheetHeader>
             <div className="mt-4 grid grid-cols-3 gap-3">
-              {MOBILE_MORE_ITEMS.map((item) => {
+              {mobileMoreItems.map((item) => {
                 const active = isActive(location, item.href);
                 return (
                   <SheetClose asChild key={item.href}>

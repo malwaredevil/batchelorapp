@@ -11,10 +11,7 @@ import {
 import { env } from "../lib/env";
 import { logger } from "../lib/logger";
 import { sendElaineEmailReply } from "../lib/email";
-import {
-  runElaineEmailTurn,
-  type ElaineEmailChatMessage,
-} from "../elaine";
+import { runElaineEmailTurn, type ElaineEmailChatMessage } from "../elaine";
 
 // ---------------------------------------------------------------------------
 // Resend inbound-email webhook for elaine@app.batchelor.app. Mirrors the
@@ -150,7 +147,10 @@ router.post("/email-webhook", async (req: Request, res: Response) => {
   }
 
   if (!(await claimDelivery(deliveryId))) {
-    logger.warn({ deliveryId }, "elaine-email: duplicate webhook delivery rejected");
+    logger.warn(
+      { deliveryId },
+      "elaine-email: duplicate webhook delivery rejected",
+    );
     res.status(200).json({ ok: true, duplicate: true });
     return;
   }
@@ -168,7 +168,10 @@ router.post("/email-webhook", async (req: Request, res: Response) => {
   };
 
   const eventType = typeof body?.type === "string" ? body.type : "";
-  logger.info({ deliveryId, eventType }, "elaine-email: webhook delivery received");
+  logger.info(
+    { deliveryId, eventType },
+    "elaine-email: webhook delivery received",
+  );
 
   // Only inbound-email events carry a message to act on; other Resend
   // webhook event types (delivery/bounce/etc. on outbound sends) are no-ops.
@@ -198,14 +201,18 @@ router.post("/email-webhook", async (req: Request, res: Response) => {
   if (!user) {
     // Unrecognized sender: never process or reply. No indication given back
     // to the sender either way (avoids account-enumeration via email).
-    logger.info({ deliveryId }, "elaine-email: sender not recognized, ignoring");
+    logger.info(
+      { deliveryId },
+      "elaine-email: sender not recognized, ignoring",
+    );
     res.status(200).json({ ok: true });
     return;
   }
 
   const bodyText = typeof data.text === "string" ? data.text : "";
   const cleanedText = stripQuotedText(bodyText).slice(0, 8000);
-  const subject = typeof data.subject === "string" ? data.subject : "Message from you";
+  const subject =
+    typeof data.subject === "string" ? data.subject : "Message from you";
   const inboundMessageId =
     typeof data.message_id === "string" ? data.message_id : undefined;
 

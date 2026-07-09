@@ -15,16 +15,25 @@ import { callModel, getModels } from "./ai-client";
  * only ever go to OpenRouter's API.
  */
 
+export interface WebSearchImage {
+  url: string;
+  sourceUrl?: string;
+}
+
 export interface WebSearchResult {
   answer: string;
   citations: string[];
+  images: WebSearchImage[];
 }
 
 const SEARCH_TIMEOUT_MS = 15_000;
+// Perplexity caps return_images results well above this; we only ever want
+// a small, chat-bubble-sized preview, not a gallery.
+const MAX_IMAGES = 4;
 
 export async function webSearch(query: string): Promise<WebSearchResult> {
   const trimmed = query.trim().slice(0, 500);
-  if (!trimmed) return { answer: "", citations: [] };
+  if (!trimmed) return { answer: "", citations: [], images: [] };
 
   const models = await getModels();
   const raw = await callModel(models.research, async (client, model) => {
@@ -40,6 +49,11 @@ export async function webSearch(query: string): Promise<WebSearchResult> {
           { role: "user", content: trimmed },
         ],
         max_tokens: 600,
+        // `return_images` is a Perplexity-specific request extension (not
+        // part of the OpenAI chat-completions schema), passed through
+        // OpenRouter to the underlying Sonar model. Cast to bypass the SDK's
+        // strict param typing, mirroring the `citations` response cast below.
+        ...({ return_images: true } as Record<string, unknown>),
       },
       { timeout: SEARCH_TIMEOUT_MS },
     );
@@ -52,5 +66,24 @@ export async function webSearch(query: string): Promise<WebSearchResult> {
       )
     : [];
 
-  return { answer, citations };
+  // Best-effort: only present when Perplexity actually returns image results
+  // for this query (not guaranteed), each shaped like
+  // { image_url, origin_url, height, width }.
+  const rawImages = (raw as { images?: unknown }).images;
+  const images: WebSearchImage[] = Array.isArray(rawImages)
+    ? rawImages
+        .filter(
+          (img): img is { image_url?: unknown; origin_url?: unknown } =>
+            typeof img === "object" && img !== null,
+        )
+        .map((img) => ({
+          url: typeof img.image_url === "string" ? img.image_url : "",
+          sourceUrl:
+            typeof img.origin_url === "string" ? img.origin_url : undefined,
+        }))
+        .filter((img) => img.url.length > 0)
+        .slice(0, MAX_IMAGES)
+    : [];
+
+  return { answer, citations, images };
 }

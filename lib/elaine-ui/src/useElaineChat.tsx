@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -83,6 +83,48 @@ export function useElaineChat({
   const [pendingAttachments, setPendingAttachments] = useState<
     PendingAttachment[]
   >([]);
+
+  // Background screenshot — captured silently when chat becomes active.
+  // Sent with every outgoing message for visual page context but never shown
+  // in the UI or persisted in conversation history on the server.
+  const bgScreenshotUrlRef = useRef<string | null>(null);
+  const bgCapturingRef = useRef(false);
+
+  const captureBgScreenshot = useCallback(async () => {
+    if (bgCapturingRef.current) return;
+    bgCapturingRef.current = true;
+    try {
+      const { default: html2canvas } = await import("html2canvas");
+      const canvas = await html2canvas(document.body, {
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        scale: 0.5,
+        x: window.scrollX,
+        y: window.scrollY,
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, "image/jpeg", 0.7),
+      );
+      if (!blob) return;
+      const file = new File([blob], "page-context.jpg", { type: "image/jpeg" });
+      const result = await uploadElaineAttachment(file);
+      bgScreenshotUrlRef.current = result.url;
+    } catch {
+      // silently ignore — screenshot is optional context
+    } finally {
+      bgCapturingRef.current = false;
+    }
+  }, []);
+
+  // Capture a fresh screenshot whenever the chat becomes active.
+  useEffect(() => {
+    if (active) {
+      void captureBgScreenshot();
+    }
+  }, [active, captureBgScreenshot]);
 
   const { data: settings } = useGetElaineSettings();
   const updateSettings = useUpdateElaineSettings();
@@ -261,6 +303,10 @@ export function useElaineChat({
     const pendingWidgets: ChatWidget[] = [];
 
     try {
+      const pageScreenshotUrl = bgScreenshotUrlRef.current ?? undefined;
+      // Refresh screenshot in the background for the next message.
+      void captureBgScreenshot();
+
       const result = await streamElaineMessage(
         {
           message: trimmed,
@@ -271,6 +317,7 @@ export function useElaineChat({
             ? { attachmentUrls: uploadedAttachmentUrls }
             : {}),
           ...(uploadedPdfs.length > 0 ? { attachmentPdfs: uploadedPdfs } : {}),
+          ...(pageScreenshotUrl ? { pageScreenshotUrl } : {}),
         },
         {
           onDelta: (text) => {

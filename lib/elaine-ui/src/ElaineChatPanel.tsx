@@ -19,7 +19,13 @@ import {
   Settings2,
   Play,
   Square,
+  Sun,
+  Camera,
 } from "lucide-react";
+import {
+  useGetElaineDailyBrief,
+  useDismissElaineDailyBrief,
+} from "@workspace/api-client-react";
 import { useVoiceInput } from "./useVoiceInput";
 import { useTTS, DEFAULT_VOICE_PREVIEW_KEY } from "./useTTS";
 import { Button } from "./ui/button";
@@ -159,6 +165,37 @@ export function ElaineChatPanel({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
+
+  const handleScreenshot = useCallback(async () => {
+    if (isCapturing || isStreaming) return;
+    setIsCapturing(true);
+    try {
+      const { default: html2canvas } = await import("html2canvas");
+      const canvas = await html2canvas(document.body, {
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        scale: window.devicePixelRatio > 1 ? 1 : 1,
+        windowWidth: document.documentElement.scrollWidth,
+        windowHeight: document.documentElement.scrollHeight,
+        x: window.scrollX,
+        y: window.scrollY,
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const file = new File([blob], "screenshot.png", { type: "image/png" });
+        void handleAddAttachment(file);
+        setInput((prev) => prev || "What do you see on this page?");
+      }, "image/png");
+    } catch {
+      // silently ignore capture errors
+    } finally {
+      setIsCapturing(false);
+    }
+  }, [isCapturing, isStreaming, handleAddAttachment, setInput]);
 
   const hasUploadingAttachments = pendingAttachments.some((a) => a.uploading);
 
@@ -223,9 +260,32 @@ export function ElaineChatPanel({
     [setInput, tts],
   );
 
+  // Morning brief — shown as dismissible banner when the widget opens
+  const { data: brief, refetch: refetchBrief } = useGetElaineDailyBrief();
+  const dismissBrief = useDismissElaineDailyBrief({
+    mutation: { onSuccess: () => void refetchBrief() },
+  });
+  const showBrief =
+    brief != null && !brief.dismissed && brief.content.length > 0;
+
   return (
     <>
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+        {showBrief && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 px-3.5 py-3 text-sm text-foreground leading-relaxed relative">
+            <div className="flex items-start gap-2">
+              <Sun className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              <p className="flex-1 whitespace-pre-wrap">{brief.content}</p>
+              <button
+                onClick={() => dismissBrief.mutate()}
+                className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Dismiss"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
         {messages.length === 0 &&
           !isStreaming &&
           (emptyState ?? (
@@ -593,7 +653,7 @@ export function ElaineChatPanel({
         </div>
       )}
 
-      <div className="shrink-0 border-t border-border/60 bg-background/80 px-3 py-2.5 backdrop-blur-sm">
+      <div className="shrink-0 border-t border-border/60 bg-background/80 px-3 py-2 backdrop-blur-sm">
         {/* Hidden file input for paperclip */}
         <input
           ref={fileInputRef}
@@ -606,18 +666,8 @@ export function ElaineChatPanel({
             if (file) void handleAddAttachment(file);
           }}
         />
+        {/* Row 1: textarea + send */}
         <div className="flex items-end gap-2">
-          {composerLeftSlot}
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-[38px] w-[38px] shrink-0 rounded-xl"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isStreaming || pendingAttachments.length >= 5}
-            title="Attach an image"
-          >
-            <Paperclip className="h-4 w-4" />
-          </Button>
           <Textarea
             value={input}
             onChange={(e) => handleInputChange(e.target.value)}
@@ -632,12 +682,54 @@ export function ElaineChatPanel({
             rows={1}
             disabled={isStreaming}
           />
+          <Button
+            size="sm"
+            className="h-[38px] w-[38px] shrink-0 rounded-xl p-0"
+            onClick={() => void handleSend()}
+            disabled={
+              (!input.trim() &&
+                pendingAttachments.every((a) => !a.uploadedUrl)) ||
+              isStreaming ||
+              hasUploadingAttachments
+            }
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        </div>
+        {/* Row 2: utility icons */}
+        <div className="flex items-center gap-0.5 pt-1">
+          {composerLeftSlot}
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground hover:text-foreground"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isStreaming || pendingAttachments.length >= 5}
+            title="Attach an image"
+          >
+            <Paperclip className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground hover:text-foreground"
+            onClick={() => void handleScreenshot()}
+            disabled={isStreaming || isCapturing || pendingAttachments.length >= 5}
+            title="Screenshot this page"
+          >
+            {isCapturing ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Camera className="h-3.5 w-3.5" />
+            )}
+          </Button>
+          <div className="flex-1" />
           {voice.isSupported && (
             <Button
               type="button"
               size="icon"
               variant="ghost"
-              className={`relative h-[38px] w-[38px] shrink-0 rounded-xl transition-colors ${
+              className={`relative h-8 w-8 shrink-0 rounded-lg transition-colors ${
                 voice.isListening
                   ? "text-red-500 hover:text-red-600"
                   : "text-muted-foreground hover:text-foreground"
@@ -647,9 +739,9 @@ export function ElaineChatPanel({
               title={voice.isListening ? "Stop recording" : "Voice input"}
             >
               {voice.isListening && (
-                <span className="absolute inset-0 animate-ping rounded-xl bg-red-500/20" />
+                <span className="absolute inset-0 animate-ping rounded-lg bg-red-500/20" />
               )}
-              <Mic className="h-4 w-4" />
+              <Mic className="h-3.5 w-3.5" />
             </Button>
           )}
           {tts.isSupported && (
@@ -657,7 +749,7 @@ export function ElaineChatPanel({
               type="button"
               size="icon"
               variant="ghost"
-              className={`h-[38px] w-[38px] shrink-0 rounded-xl transition-colors ${
+              className={`h-8 w-8 shrink-0 rounded-lg transition-colors ${
                 tts.enabled
                   ? "text-primary hover:text-primary"
                   : "text-muted-foreground hover:text-foreground"
@@ -670,9 +762,9 @@ export function ElaineChatPanel({
               }
             >
               {tts.enabled ? (
-                <Volume2 className="h-4 w-4" />
+                <Volume2 className="h-3.5 w-3.5" />
               ) : (
-                <VolumeX className="h-4 w-4" />
+                <VolumeX className="h-3.5 w-3.5" />
               )}
             </Button>
           )}
@@ -683,10 +775,10 @@ export function ElaineChatPanel({
                   type="button"
                   size="icon"
                   variant="ghost"
-                  className="h-[38px] w-[38px] shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
+                  className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground hover:text-foreground"
                   title="Voice and speed"
                 >
-                  <Settings2 className="h-4 w-4" />
+                  <Settings2 className="h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
@@ -787,19 +879,6 @@ export function ElaineChatPanel({
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-          <Button
-            size="sm"
-            className="h-[38px] w-[38px] shrink-0 rounded-xl p-0"
-            onClick={() => void handleSend()}
-            disabled={
-              (!input.trim() &&
-                pendingAttachments.every((a) => !a.uploadedUrl)) ||
-              isStreaming ||
-              hasUploadingAttachments
-            }
-          >
-            <Send className="h-4 w-4" />
-          </Button>
         </div>
       </div>
 

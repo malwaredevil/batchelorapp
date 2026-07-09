@@ -291,7 +291,10 @@ function PieceCard({
             alt={item.name}
             loading="lazy"
             onLoad={() => setImgLoaded(true)}
-            style={{ filter: imgLoaded ? "none" : "blur(8px)", transition: "filter 0.4s ease" }}
+            style={{
+              filter: imgLoaded ? "none" : "blur(8px)",
+              transition: "filter 0.4s ease",
+            }}
             className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
           />
         </div>
@@ -617,7 +620,11 @@ function sortItems(items: PotteryItem[], key: SortKey): PotteryItem[] {
 export default function Collection() {
   const [, navigate] = useLocation();
   const locationSearch = useSearch();
-  const { data: listData, isLoading, isError } = useListPottery({ pageSize: 200 });
+  const {
+    data: listData,
+    isLoading,
+    isError,
+  } = useListPottery({ pageSize: 200 });
   const data = listData?.items;
   const { data: allCategories = [] } = useListCategories();
 
@@ -827,10 +834,16 @@ export default function Collection() {
     return sortItems(result, sort);
   }, [data, filterCategoryIds, filterColor, search, sort]);
 
-  const totalPages = pageSize === 0 ? 1 : Math.max(1, Math.ceil(filtered.length / pageSize));
-  const paged = pageSize === 0 ? filtered : filtered.slice((page - 1) * pageSize, page * pageSize);
+  const totalPages =
+    pageSize === 0 ? 1 : Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paged =
+    pageSize === 0
+      ? filtered
+      : filtered.slice((page - 1) * pageSize, page * pageSize);
 
-  useEffect(() => { setPage(1); }, [filtered.length, sort]);
+  useEffect(() => {
+    setPage(1);
+  }, [filtered.length, sort]);
 
   const selectedItems = useMemo(
     () => (data ?? []).filter((item) => selectedIds.includes(item.id)),
@@ -866,7 +879,9 @@ export default function Collection() {
             (item) =>
               `itemId: ${item.id} — "${item.name}"${item.maker ? `, maker: ${item.maker}` : ""}${item.style ? `, style: ${item.style}` : ""}${item.shape ? `, shape: ${item.shape}` : ""}${(item.quantity ?? 1) > 1 ? `, qty: ${item.quantity}` : ""}${item.categories.length ? `, categories: ${item.categories.map((c) => c.name).join(", ")} (categoryIds: ${item.categories.map((c) => c.id).join(", ")})` : ""}`,
           )
-          .join("; ")}${filtered.length > 40 ? "; (list truncated, more pieces exist)" : ""}. Available category ids for filtering/assignment: ${usedCategories.map((c) => `${c.name}=${c.id}`).join(", ") || "none"}.`,
+          .join(
+            "; ",
+          )}${filtered.length > 40 ? "; (list truncated, more pieces exist)" : ""}. Available category ids for filtering/assignment: ${usedCategories.map((c) => `${c.name}=${c.id}`).join(", ") || "none"}.`,
   );
 
   return (
@@ -1055,7 +1070,12 @@ export default function Collection() {
                 <button
                   key={n}
                   type="button"
-                  onClick={() => { const v = n; localStorage.setItem("pottery-page-size", String(v)); setPageSize(v); setPage(1); }}
+                  onClick={() => {
+                    const v = n;
+                    localStorage.setItem("pottery-page-size", String(v));
+                    setPageSize(v);
+                    setPage(1);
+                  }}
                   className={`px-2 py-1 text-xs rounded border transition-colors ${pageSize === n ? "bg-primary text-primary-foreground border-primary" : "border-input bg-background text-muted-foreground hover:bg-accent"}`}
                 >
                   {n === 0 ? "All" : n}
@@ -1214,8 +1234,12 @@ export default function Collection() {
               {makerGroups.map(([maker, items]) => (
                 <div key={maker}>
                   <div className="mb-3 flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-foreground">{maker}</h3>
-                    <span className="text-xs text-muted-foreground">{items.length} piece{items.length !== 1 ? "s" : ""}</span>
+                    <h3 className="text-sm font-semibold text-foreground">
+                      {maker}
+                    </h3>
+                    <span className="text-xs text-muted-foreground">
+                      {items.length} piece{items.length !== 1 ? "s" : ""}
+                    </span>
                     <div className="flex-1 border-t border-card-border" />
                   </div>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -1224,11 +1248,19 @@ export default function Collection() {
                         key={item.id}
                         item={item}
                         selecting={compareMode || bulkMode}
-                        selected={bulkMode ? bulkSelectedIds.has(item.id) : selectedIds.includes(item.id)}
-                        onToggleSelect={bulkMode ? toggleBulkSelect : toggleSelect}
+                        selected={
+                          bulkMode
+                            ? bulkSelectedIds.has(item.id)
+                            : selectedIds.includes(item.id)
+                        }
+                        onToggleSelect={
+                          bulkMode ? toggleBulkSelect : toggleSelect
+                        }
                         onQuickEdit={setQuickEditItem}
                         onReanalyze={handleReanalyze}
-                        onColorFilter={(c) => setFilterColor(filterColor === c ? null : c)}
+                        onColorFilter={(c) =>
+                          setFilterColor(filterColor === c ? null : c)
+                        }
                         activeColor={filterColor}
                       />
                     ))}
@@ -1262,13 +1294,25 @@ export default function Collection() {
           {/* Pagination controls */}
           {!groupByMaker && totalPages > 1 && (
             <div className="mt-6 flex items-center justify-center gap-2">
-              <Button variant="outline" size="icon" className="h-8 w-8" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => p - 1)}
+              >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               <span className="text-sm text-muted-foreground">
                 Page {page} of {totalPages}
               </span>
-              <Button variant="outline" size="icon" className="h-8 w-8" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+              >
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>

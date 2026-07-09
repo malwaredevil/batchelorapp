@@ -40,6 +40,8 @@ import { listOpenRouterModels } from "../lib/openrouter-models";
 import { deleteTripPhoto } from "../lib/travels/storage";
 import { deleteDocument } from "../lib/travels-storage";
 import { getValidAccessToken } from "../lib/google-calendar-tokens";
+import { getValidAppGmailAccessToken } from "../lib/app-gmail-tokens";
+import { modifyThread, trashThread } from "../lib/gmail-api-extended";
 import { rescanTripDocument } from "../routes/travels/documents";
 import {
   getReminderSyncTarget,
@@ -474,6 +476,31 @@ const VerifyPhoneCodeActionPayload = z.object({
   code: z.string().regex(/^\d{6}$/, "Must be a 6-digit code"),
 });
 
+// Hub Gmail actions — operate on the calling user's own Gmail connection only.
+// threadId must come from the page context (never guessed by the model).
+const GmailArchiveActionPayload = z.object({
+  threadId: z.string().min(1).max(200),
+  subject: z.string().max(500).optional(),
+});
+
+const GmailTrashActionPayload = z.object({
+  threadId: z.string().min(1).max(200),
+  subject: z.string().max(500).optional(),
+});
+
+// Hub Elaine-settings action — updates the calling user's own per-user Elaine
+// preferences (enabled, chatWindowSize). actionConfirmationMode is handled by
+// the separate set_action_confirmation_mode soft tool and is not included here.
+const UpdateElaineSettingsActionPayload = z
+  .object({
+    enabled: z.boolean().optional(),
+    chatWindowSize: z.enum(CHAT_WINDOW_SIZES).optional(),
+  })
+  .refine(
+    (v) => v.enabled !== undefined || v.chatWindowSize !== undefined,
+    { message: "At least one setting must be provided" },
+  );
+
 const GenerateTripShareLinkActionPayload = z.object({
   tripId: z.number().int().positive(),
 });
@@ -626,6 +653,18 @@ const ActionBody = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("verify_phone_code"),
     payload: VerifyPhoneCodeActionPayload,
+  }),
+  z.object({
+    type: z.literal("gmail_archive"),
+    payload: GmailArchiveActionPayload,
+  }),
+  z.object({
+    type: z.literal("gmail_trash"),
+    payload: GmailTrashActionPayload,
+  }),
+  z.object({
+    type: z.literal("update_elaine_settings"),
+    payload: UpdateElaineSettingsActionPayload,
   }),
   z.object({
     type: z.literal("generate_trip_share_link"),
@@ -840,6 +879,18 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
       return `Send a verification code by text to ${action.payload.phoneNumber}`;
     case "verify_phone_code":
       return `Verify your phone number with code ${action.payload.code}`;
+    case "gmail_archive":
+      return `Archive this thread${action.payload.subject ? ` "${action.payload.subject}"` : ""} (removes it from Inbox)`;
+    case "gmail_trash":
+      return `Move this thread${action.payload.subject ? ` "${action.payload.subject}"` : ""} to Trash`;
+    case "update_elaine_settings": {
+      const changes: string[] = [];
+      if (action.payload.enabled !== undefined)
+        changes.push(action.payload.enabled ? "enable Elaine" : "disable Elaine");
+      if (action.payload.chatWindowSize !== undefined)
+        changes.push(`set chat window to "${action.payload.chatWindowSize}"`);
+      return changes.join(" and ");
+    }
     case "generate_trip_share_link": {
       const trip = await getTripLabelInfo(action.payload.tripId);
       const name = trip ? `"${trip.title || trip.destination}"` : "this trip";
@@ -1879,6 +1930,88 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
     };
   }) as ActionExecutor,
 
+  // Hub Gmail actions — strictly single-user, mirroring routes/gmail.ts's
+  // modify/trash endpoints. Token lookup uses the calling user's own Gmail
+  // connection; a missing connection is a 401, not a 404.
+  gmail_archive: (async (
+    payload: z.infer<typeof GmailArchiveActionPayload>,
+    userId: number,
+  ) => {
+    const token = await getValidAppGmailAccessToken(userId);
+    if (!token) {
+      return {
+        status: 401,
+        body: { error: "Gmail account not connected. Connect it from the Account settings page." },
+      };
+    }
+    try {
+      await modifyThread(token, payload.threadId, [], ["INBOX"]);
+      return {
+        status: 200,
+        body: { type: "gmail_archive", result: { threadId: payload.threadId } },
+      };
+    } catch {
+      return { status: 502, body: { error: "Could not archive the thread." } };
+    }
+  }) as ActionExecutor,
+
+  gmail_trash: (async (
+    payload: z.infer<typeof GmailTrashActionPayload>,
+    userId: number,
+  ) => {
+    const token = await getValidAppGmailAccessToken(userId);
+    if (!token) {
+      return {
+        status: 401,
+        body: { error: "Gmail account not connected. Connect it from the Account settings page." },
+      };
+    }
+    try {
+      await trashThread(token, payload.threadId);
+      return {
+        status: 200,
+        body: { type: "gmail_trash", result: { threadId: payload.threadId } },
+      };
+    } catch {
+      return { status: 502, body: { error: "Could not move the thread to Trash." } };
+    }
+  }) as ActionExecutor,
+
+  // Hub Elaine-settings action — strictly single-user; always scoped to the
+  // calling userId. Does NOT touch actionConfirmationMode (that's the separate
+  // set_action_confirmation_mode soft tool).
+  update_elaine_settings: (async (
+    payload: z.infer<typeof UpdateElaineSettingsActionPayload>,
+    userId: number,
+  ) => {
+    const [existing] = await db
+      .select()
+      .from(elaineSettings)
+      .where(eq(elaineSettings.userId, userId));
+    const enabled = payload.enabled ?? existing?.enabled ?? true;
+    const chatWindowSize =
+      (payload.chatWindowSize as ChatWindowSize | undefined) ??
+      (existing?.chatWindowSize as ChatWindowSize | undefined) ??
+      "compact";
+    const actionConfirmationMode =
+      (existing?.actionConfirmationMode as ActionConfirmationMode | undefined) ??
+      "one_by_one";
+    await db
+      .insert(elaineSettings)
+      .values({ userId, enabled, actionConfirmationMode, chatWindowSize })
+      .onConflictDoUpdate({
+        target: elaineSettings.userId,
+        set: { enabled, chatWindowSize, updatedAt: new Date() },
+      });
+    return {
+      status: 200,
+      body: {
+        type: "update_elaine_settings",
+        result: { enabled, chatWindowSize },
+      },
+    };
+  }) as ActionExecutor,
+
   // Share/photo actions below intentionally do NOT filter by userId — trips
   // are fully household-shared (see threat_model.md "Household-sharing
   // boundary"), matching the equivalent hand-written routes in
@@ -2609,6 +2742,76 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           },
         },
         required: ["tripId", "collapsedCards"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "gmail_archive",
+      description:
+        "Propose archiving the currently-open Gmail thread on the Hub /gmail page — removes it from the Inbox so it no longer appears there, but it is NOT deleted and is still searchable in All Mail. Only call this when the user explicitly asks to archive or 'get out of inbox' and a thread is open (look for 'threadId: <value>' in the page context). Never guess a threadId. Only available on the Hub Gmail page; never call it from Travels, Pottery, Quilting, or the Elaine app.",
+      parameters: {
+        type: "object",
+        properties: {
+          threadId: {
+            type: "string",
+            description:
+              "The threadId of the open thread, exactly as shown in the page context ('threadId: <value>'). Never invent or guess this value.",
+          },
+          subject: {
+            type: "string",
+            description: "Subject line of the thread, for the confirmation card label.",
+          },
+        },
+        required: ["threadId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "gmail_trash",
+      description:
+        "Propose moving the currently-open Gmail thread on the Hub /gmail page to Trash. Google permanently deletes trashed messages after 30 days (the user can restore them before then). Only call this when the user explicitly asks to trash or delete the thread and a thread is open (look for 'threadId: <value>' in the page context). Your visible reply must clearly state that the thread will be permanently deleted after 30 days if not restored. Never guess a threadId. Only available on the Hub Gmail page.",
+      parameters: {
+        type: "object",
+        properties: {
+          threadId: {
+            type: "string",
+            description:
+              "The threadId of the open thread, exactly as shown in the page context. Never invent or guess this value.",
+          },
+          subject: {
+            type: "string",
+            description: "Subject line of the thread, for the confirmation card label.",
+          },
+        },
+        required: ["threadId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_elaine_settings",
+      description:
+        "Propose updating Elaine's own per-user settings — whether she is enabled (on/off) and/or the chat widget's desktop window size (compact / comfortable / large). These are personal to the requesting user only, never shared with the household. Only call this from the Account settings page when the user explicitly asks to change one of these specific settings. For confirmation-mode changes (one-by-one / all-at-once / auto-run), use set_action_confirmation_mode instead — do not use this tool for that. This tool never touches password, display name, phone, or theme.",
+      parameters: {
+        type: "object",
+        properties: {
+          enabled: {
+            type: "boolean",
+            description:
+              "Set to false to disable Elaine entirely for this user, or true to re-enable. Only set this if the user explicitly asked to turn Elaine on or off.",
+          },
+          chatWindowSize: {
+            type: "string",
+            enum: ["compact", "comfortable", "large"],
+            description:
+              "Desktop popup size for the chat widget (compact is the default). Only set this if the user explicitly asked to change the window size.",
+          },
+        },
       },
     },
   },
@@ -3786,7 +3989,9 @@ QUILTING ITEMS: Use update_fabric / delete_fabric, update_pattern / delete_patte
 
 EMAIL: Whenever you've just given the user something substantial worth keeping — a list of recommendations, an itinerary summary, packing tips, etc. — offer to email it to them, e.g. "Want me to email you this list?" Only call send_email once they say yes; never call it unprompted or assume they want it. It always goes to their own registered account email, so never ask for an address and never offer to send it to anyone else. Write a short subject and a plain-text body (no markdown/HTML, blank line between paragraphs) — it gets formatted into a nice email automatically. You have no way to export a PDF or Word document, so don't offer that; email is the only export option available.
 
-ACCOUNT & NOTIFICATIONS: These only make sense on the shared Account settings page (hub-account context). Use send_test_email if the user wants to confirm email delivery is working — always their own account address. Use send_test_sms the same way for texts, but only if the page context shows they already have a verified phone number; if not, tell them to verify one first instead of calling it. Use send_phone_verification_code when the user wants to add or change their phone number — you must have their explicit, clearly-stated agreement to receive SMS messages before calling it (set consent to true only then), and the number must be in E.164 format (e.g. +12105551234); ask them to reformat a local number if needed. Use verify_phone_code once they tell you the 6-digit code they received by text — never invent or reuse a code from earlier in the conversation. None of these four actions are available outside the Account page, and none of them ever touch another household member's phone/email.
+ACCOUNT & NOTIFICATIONS: These only make sense on the shared Account settings page (hub-account context). Use send_test_email if the user wants to confirm email delivery is working — always their own account address. Use send_test_sms the same way for texts, but only if the page context shows they already have a verified phone number; if not, tell them to verify one first instead of calling it. Use send_phone_verification_code when the user wants to add or change their phone number — you must have their explicit, clearly-stated agreement to receive SMS messages before calling it (set consent to true only then), and the number must be in E.164 format (e.g. +12105551234); ask them to reformat a local number if needed. Use verify_phone_code once they tell you the 6-digit code they received by text — never invent or reuse a code from earlier in the conversation. None of these four actions are available outside the Account page, and none of them ever touch another household member's phone/email. Use update_elaine_settings when the user explicitly asks to toggle Elaine on/off or change the chat window size (compact / comfortable / large) — this is also only appropriate on the Account page, never in other apps. For confirmation-mode changes, use set_action_confirmation_mode instead.
+
+GMAIL (HUB): Use gmail_archive to archive the currently-open thread on the Hub /gmail page (removes it from Inbox, still searchable in All Mail — not deleted). Use gmail_trash to move the open thread to Trash (Google permanently deletes it after 30 days; your visible reply must say so clearly). Both require a threadId that is visible in the page context (shown as "threadId: <value>" when a thread is open) — never guess or invent one. If no thread is open when the user asks, tell them to open the thread they want to act on first. These two tools are only valid on the Hub /gmail page; they are not available in the Travels Gmail scanning feature or anywhere else.
 
 WEB SEARCH: You have a real-time web_search tool, unlike a plain language model — use it proactively (no need to ask permission first) whenever a question depends on current information you can't be confident about from memory alone: opening hours, current prices, weather, visa/entry rules, local events, news, or anything else that changes over time. Don't use it for stable general knowledge or for things already visible in the on-screen state above. Call it as many times as needed for different sub-questions (e.g. rephrase or split into multiple focused searches for a broad question, so you get a fuller picture rather than one narrow result), then write your visible reply based on what it returns — never paste raw search output, and never fabricate a current fact instead of searching for it.
 

@@ -298,7 +298,7 @@ function GmailPage() {
             ? ` ${threadListData.threads.length} thread(s) loaded in the current page.`
             : "") +
           (selectedThreadId && threadData
-            ? ` A thread is open: "${threadData.messages[0]?.subject ?? "(no subject)"}" with ${threadData.messages.length} message(s).`
+            ? ` A thread is open: "${threadData.messages[0]?.subject ?? "(no subject)"}" with ${threadData.messages.length} message(s). threadId: ${selectedThreadId}`
             : "")
       : `On the Gmail page. The user's Gmail account is not connected yet.`,
   );

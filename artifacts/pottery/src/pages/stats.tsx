@@ -221,7 +221,8 @@ function parseDimensionCm(dim: string | null | undefined): number | null {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function StatsPage() {
-  const { data: items, isLoading: itemsLoading } = useListPottery();
+  const { data: listData, isLoading: itemsLoading } = useListPottery({ pageSize: 200 });
+  const items = listData?.items;
   const { data: stats, isLoading: statsLoading } = useGetCollectionStats();
 
   const isLoading = itemsLoading || statsLoading;

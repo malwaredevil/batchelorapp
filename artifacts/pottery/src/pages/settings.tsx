@@ -340,7 +340,8 @@ function InsuranceExportButton({
 }
 
 export default function Settings() {
-  const { data: items } = useListPottery();
+  const { data: listData } = useListPottery({ pageSize: 200 });
+  const items = listData?.items;
 
   usePageAssistantContext(
     "pottery-settings",

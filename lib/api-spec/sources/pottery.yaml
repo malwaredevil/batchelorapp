@@ -166,15 +166,41 @@ paths:
       operationId: listPottery
       tags: [pottery]
       summary: List pottery
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: Text search across name, pattern description, style, shape, maker, and motifs
+          schema:
+            type: string
+        - name: categoryId
+          in: query
+          required: false
+          description: Filter to items that belong to this category ID
+          schema:
+            type: integer
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 60
       responses:
         "200":
-          description: Collection list
+          description: Paginated collection list
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/PotteryItem"
+                $ref: "#/components/schemas/PotteryListResponse"
     post:
       operationId: createPottery
       tags: [pottery]
@@ -806,6 +832,25 @@ components:
         label:
           type: ["string", "null"]
         position:
+          type: integer
+    PotteryListResponse:
+      type: object
+      required:
+        - items
+        - total
+        - page
+        - pageSize
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PotteryItem"
+        total:
+          type: integer
+          description: Total number of items matching the query (before pagination)
+        page:
+          type: integer
+        pageSize:
           type: integer
     PotteryItem:
       type: object

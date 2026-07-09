@@ -271,16 +271,26 @@ const IN_PROCESS_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
  * paths safely idempotent, so running them alongside each other is safe.
  */
 export function startReminderScheduler(): void {
-  runReminderAlerts().catch((err: unknown) =>
-    logger.error({ err }, "reminder-scheduler: initial run failed"),
-  );
+  const run = async (): Promise<void> => {
+    const t0 = Date.now();
+    logger.info("reminder-scheduler: run starting");
+    try {
+      await runReminderAlerts();
+      logger.info(
+        { durationMs: Date.now() - t0 },
+        "reminder-scheduler: run complete",
+      );
+    } catch (err) {
+      logger.error(
+        { err, durationMs: Date.now() - t0 },
+        "reminder-scheduler: run failed",
+      );
+    }
+  };
 
-  const interval = setInterval(() => {
-    runReminderAlerts().catch((err: unknown) =>
-      logger.error({ err }, "reminder-scheduler: scheduled run failed"),
-    );
-  }, IN_PROCESS_INTERVAL_MS);
+  void run();
 
+  const interval = setInterval(() => void run(), IN_PROCESS_INTERVAL_MS);
   interval.unref();
 
   logger.info("reminder-scheduler: started (in-process fallback, runs hourly)");

@@ -96,6 +96,7 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import { env } from "../lib/env";
+import { withRetry } from "../lib/retry";
 import pdfParse from "pdf-parse";
 
 const router: IRouter = Router();
@@ -4451,6 +4452,8 @@ Keep replies concise and easy to read in a chat bubble.`;
 
     await Promise.all(
       hardToolCalls.map(async (call) => {
+        const _toolT0 = Date.now();
+        let _toolOk = false;
         let resultText: string;
         try {
           if (call.name === WEB_SEARCH_TOOL_NAME) {
@@ -4789,7 +4792,10 @@ Keep replies concise and easy to read in a chat bubble.`;
               const { from, to } = parsed.data;
               try {
                 const url = `https://api.frankfurter.app/latest?from=${from}&to=${to.join(",")}`;
-                const resp = await fetch(url);
+                const resp = await withRetry(
+                  () => fetch(url, { signal: AbortSignal.timeout(8_000) }),
+                  { label: "frankfurter-exchange-rate" },
+                );
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 const json = (await resp.json()) as {
                   date: string;
@@ -4906,6 +4912,7 @@ Keep replies concise and easy to read in a chat bubble.`;
           } else {
             resultText = "Unsupported tool.";
           }
+          _toolOk = true;
         } catch (err) {
           req.log.error(
             { err, tool: call.name },
@@ -4914,6 +4921,10 @@ Keep replies concise and easy to read in a chat bubble.`;
           resultText =
             "That lookup failed — tell the user you couldn't get that information right now.";
         }
+        req.log.info(
+          { tool: call.name, durationMs: Date.now() - _toolT0, success: _toolOk },
+          "elaine: tool-call",
+        );
         messages.push({
           role: "tool",
           tool_call_id: call.id,

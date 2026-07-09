@@ -11,6 +11,8 @@
  *            agentphone_webhook_deliveries
  *   Pottery: pottery_categories, pottery_items (WITHOUT embedding/visual_embedding),
  *            pottery_images, pottery_item_categories
+ *   Ornaments: ornaments_categories, ornaments_items (WITHOUT embedding/visual_embedding),
+ *              ornaments_images, ornaments_item_categories, ornaments_barcode_cache
  *   Quilting: quilting_categories, quilting_fabrics (WITHOUT embedding/visual_embedding),
  *             quilting_patterns (WITHOUT embedding/visual_embedding),
  *             quilting_finished_quilts, quilting_fabric_links, quilting_pattern_links,
@@ -141,6 +143,66 @@ CREATE TABLE IF NOT EXISTS pottery_item_categories (
   item_id     INTEGER NOT NULL REFERENCES pottery_items(id)      ON DELETE CASCADE,
   category_id INTEGER NOT NULL REFERENCES pottery_categories(id) ON DELETE CASCADE,
   PRIMARY KEY (item_id, category_id)
+);
+
+-- Ornaments
+CREATE TABLE IF NOT EXISTS ornaments_categories (
+  id         SERIAL PRIMARY KEY,
+  name       TEXT NOT NULL,
+  bg_color   TEXT,
+  text_color TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS ornaments_items (
+  id                    SERIAL PRIMARY KEY,
+  name                  TEXT NOT NULL,
+  brand                 TEXT NOT NULL DEFAULT 'Hallmark',
+  series_or_collection  TEXT,
+  year                  INTEGER,
+  barcode_value         TEXT,
+  quantity              INTEGER NOT NULL DEFAULT 1,
+  notes                 TEXT,
+  dimensions            TEXT,
+  condition             TEXT,
+  origin                TEXT,
+  acquired_at           DATE,
+  ai_description        TEXT,
+  dominant_colors       TEXT[] NOT NULL DEFAULT '{}',
+  motifs                TEXT[] NOT NULL DEFAULT '{}',
+  image_path            TEXT NOT NULL,
+  locked_fields         TEXT[] NOT NULL DEFAULT '{}',
+  book_value            NUMERIC(10, 2),
+  book_value_source     TEXT,
+  book_value_updated_at TIMESTAMPTZ,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS ornaments_images (
+  id           SERIAL PRIMARY KEY,
+  item_id      INTEGER NOT NULL REFERENCES ornaments_items(id) ON DELETE CASCADE,
+  storage_path TEXT NOT NULL,
+  label        TEXT,
+  position     INTEGER NOT NULL DEFAULT 0,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS ornaments_item_categories (
+  item_id     INTEGER NOT NULL REFERENCES ornaments_items(id)      ON DELETE CASCADE,
+  category_id INTEGER NOT NULL REFERENCES ornaments_categories(id) ON DELETE CASCADE,
+  PRIMARY KEY (item_id, category_id)
+);
+
+CREATE TABLE IF NOT EXISTS ornaments_barcode_cache (
+  barcode              TEXT PRIMARY KEY,
+  found                INTEGER NOT NULL DEFAULT 0,
+  name                 TEXT,
+  brand                TEXT,
+  series_or_collection TEXT,
+  year                 INTEGER,
+  description          TEXT,
+  image_url            TEXT,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Quilting
@@ -761,6 +823,78 @@ async function main() {
   summary["pottery_item_categories"] = await copyTable(source, dest, {
     table: "pottery_item_categories",
     columns: ["item_id", "category_id"],
+  });
+
+  // ── Ornaments ─────────────────────────────────────────────────────────────
+  summary["ornaments_categories"] = await copyTable(source, dest, {
+    table: "ornaments_categories",
+    columns: ["id", "name", "bg_color", "text_color", "created_at"],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ornaments_categories", "id");
+
+  summary["ornaments_items"] = await copyTable(source, dest, {
+    table: "ornaments_items",
+    columns: [
+      "id",
+      "name",
+      "brand",
+      "series_or_collection",
+      "year",
+      "barcode_value",
+      "quantity",
+      "notes",
+      "dimensions",
+      "condition",
+      "origin",
+      "acquired_at",
+      "ai_description",
+      "dominant_colors",
+      "motifs",
+      "image_path",
+      "locked_fields",
+      "book_value",
+      "book_value_source",
+      "book_value_updated_at",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ornaments_items", "id");
+
+  summary["ornaments_images"] = await copyTable(source, dest, {
+    table: "ornaments_images",
+    columns: [
+      "id",
+      "item_id",
+      "storage_path",
+      "label",
+      "position",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ornaments_images", "id");
+
+  summary["ornaments_item_categories"] = await copyTable(source, dest, {
+    table: "ornaments_item_categories",
+    columns: ["item_id", "category_id"],
+  });
+
+  summary["ornaments_barcode_cache"] = await copyTable(source, dest, {
+    table: "ornaments_barcode_cache",
+    columns: [
+      "barcode",
+      "found",
+      "name",
+      "brand",
+      "series_or_collection",
+      "year",
+      "description",
+      "image_url",
+      "created_at",
+    ],
+    orderBy: "barcode",
   });
 
   // ── Quilting ──────────────────────────────────────────────────────────────

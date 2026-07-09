@@ -119,11 +119,40 @@ export function useElaineChat({
     }
   }, []);
 
-  // Capture a fresh screenshot whenever the chat becomes active.
+  // Capture a fresh screenshot whenever the chat becomes active, and keep it
+  // current while the panel is open: re-capture on scroll (debounced 1.5 s so
+  // it doesn't thrash during fast scrolling) and on any URL change (SPA
+  // navigation via history.pushState / popstate).
   useEffect(() => {
-    if (active) {
-      void captureBgScreenshot();
-    }
+    if (!active) return;
+
+    void captureBgScreenshot();
+
+    let scrollTimer: ReturnType<typeof setTimeout> | null = null;
+    const onScroll = () => {
+      if (scrollTimer) clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(() => void captureBgScreenshot(), 1500);
+    };
+
+    const onNavigate = () => void captureBgScreenshot();
+
+    // Patch pushState once so SPA navigations trigger the handler.
+    const origPush = history.pushState.bind(history);
+    history.pushState = (...args) => {
+      origPush(...args);
+      onNavigate();
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("popstate", onNavigate);
+
+    return () => {
+      if (scrollTimer) clearTimeout(scrollTimer);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("popstate", onNavigate);
+      // Restore the original pushState when the panel closes.
+      history.pushState = origPush;
+    };
   }, [active, captureBgScreenshot]);
 
   const { data: settings } = useGetElaineSettings();

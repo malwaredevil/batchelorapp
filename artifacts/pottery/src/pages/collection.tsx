@@ -23,6 +23,9 @@ import {
   RefreshCw,
   MoreVertical,
   ExternalLink,
+  Users,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +41,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { QuickEditSheet } from "@/components/quick-edit-sheet";
 import { colorToHex } from "@/lib/colors";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 // ---------------------------------------------------------------------------
 // Collection compare modal
@@ -203,6 +207,7 @@ function PieceCard({
   onColorFilter: (color: string) => void;
   activeColor: string | null;
 }) {
+  const [imgLoaded, setImgLoaded] = useState(false);
   return (
     <div className="relative group">
       {/* Selection checkbox */}
@@ -285,6 +290,8 @@ function PieceCard({
             src={item.imageUrl}
             alt={item.name}
             loading="lazy"
+            onLoad={() => setImgLoaded(true)}
+            style={{ filter: imgLoaded ? "none" : "blur(8px)", transition: "filter 0.4s ease" }}
             className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
           />
         </div>
@@ -610,7 +617,8 @@ function sortItems(items: PotteryItem[], key: SortKey): PotteryItem[] {
 export default function Collection() {
   const [, navigate] = useLocation();
   const locationSearch = useSearch();
-  const { data, isLoading, isError } = useListPottery();
+  const { data: listData, isLoading, isError } = useListPottery({ pageSize: 200 });
+  const data = listData?.items;
   const { data: allCategories = [] } = useListCategories();
 
   const [search, setSearch] = useState("");
@@ -619,6 +627,12 @@ export default function Collection() {
   >(new Set());
   const [filterColor, setFilterColor] = useState<string | null>(null);
   const [sort, setSort] = useState<SortKey>("added-desc");
+  const [groupByMaker, setGroupByMaker] = useState(false);
+  const [pageSize, setPageSize] = useState<number>(() => {
+    const s = localStorage.getItem("pottery-page-size");
+    return s ? parseInt(s, 10) : 20;
+  });
+  const [page, setPage] = useState(1);
 
   // On mount: read ?cat=ID, ?color=..., and ?search=... query params so
   // external links (e.g. from Elaine cross-app navigation) can pre-filter the
@@ -813,9 +827,46 @@ export default function Collection() {
     return sortItems(result, sort);
   }, [data, filterCategoryIds, filterColor, search, sort]);
 
+  const totalPages = pageSize === 0 ? 1 : Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paged = pageSize === 0 ? filtered : filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  useEffect(() => { setPage(1); }, [filtered.length, sort]);
+
   const selectedItems = useMemo(
     () => (data ?? []).filter((item) => selectedIds.includes(item.id)),
     [data, selectedIds],
+  );
+
+  const makerGroups = useMemo(() => {
+    if (!groupByMaker) return null;
+    const groups = new Map<string, PotteryItem[]>();
+    for (const item of filtered) {
+      const key = item.maker || "Unknown maker";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(item);
+    }
+    return [...groups.entries()].sort(([a], [b]) => {
+      if (a === "Unknown maker") return 1;
+      if (b === "Unknown maker") return -1;
+      return a.localeCompare(b);
+    });
+  }, [groupByMaker, filtered]);
+
+  usePageAssistantContext(
+    "pottery-collection",
+    isLoading
+      ? undefined
+      : `Pottery Collection page: browsing the household's pottery collection (${data?.length ?? 0} unique piece(s), ${usedCategories.length} categor(y/ies) in use). ${
+          filtered.length !== (data?.length ?? 0)
+            ? `Currently filtered to ${filtered.length} piece(s)${search.trim() ? ` matching search "${search.trim()}"` : ""}. `
+            : ""
+        }Visible pieces (itemId: name — key details): ${filtered
+          .slice(0, 40)
+          .map(
+            (item) =>
+              `itemId: ${item.id} — "${item.name}"${item.maker ? `, maker: ${item.maker}` : ""}${item.style ? `, style: ${item.style}` : ""}${item.shape ? `, shape: ${item.shape}` : ""}${(item.quantity ?? 1) > 1 ? `, qty: ${item.quantity}` : ""}${item.categories.length ? `, categories: ${item.categories.map((c) => c.name).join(", ")} (categoryIds: ${item.categories.map((c) => c.id).join(", ")})` : ""}`,
+          )
+          .join("; ")}${filtered.length > 40 ? "; (list truncated, more pieces exist)" : ""}. Available category ids for filtering/assignment: ${usedCategories.map((c) => `${c.name}=${c.id}`).join(", ") || "none"}.`,
   );
 
   return (
@@ -927,6 +978,18 @@ export default function Collection() {
               )}
             </div>
 
+            {/* Group by Maker toggle */}
+            <Button
+              variant={groupByMaker ? "secondary" : "outline"}
+              size="icon"
+              title={groupByMaker ? "Ungroup" : "Group by maker"}
+              onClick={() => setGroupByMaker((g) => !g)}
+              className="shrink-0"
+              data-testid="button-group-by-maker"
+            >
+              <Users className="h-4 w-4" />
+            </Button>
+
             {/* Sort dropdown */}
             <div className="relative">
               <Button
@@ -985,6 +1048,19 @@ export default function Collection() {
                   </div>
                 </>
               )}
+            </div>
+            {/* Page size selector */}
+            <div className="flex items-center gap-0.5">
+              {([20, 50, 100, 0] as const).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => { const v = n; localStorage.setItem("pottery-page-size", String(v)); setPageSize(v); setPage(1); }}
+                  className={`px-2 py-1 text-xs rounded border transition-colors ${pageSize === n ? "bg-primary text-primary-foreground border-primary" : "border-input bg-background text-muted-foreground hover:bg-accent"}`}
+                >
+                  {n === 0 ? "All" : n}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -1133,9 +1209,36 @@ export default function Collection() {
                 Clear filters
               </button>
             </div>
+          ) : makerGroups ? (
+            <div className="space-y-6">
+              {makerGroups.map(([maker, items]) => (
+                <div key={maker}>
+                  <div className="mb-3 flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-foreground">{maker}</h3>
+                    <span className="text-xs text-muted-foreground">{items.length} piece{items.length !== 1 ? "s" : ""}</span>
+                    <div className="flex-1 border-t border-card-border" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                    {items.map((item) => (
+                      <PieceCard
+                        key={item.id}
+                        item={item}
+                        selecting={compareMode || bulkMode}
+                        selected={bulkMode ? bulkSelectedIds.has(item.id) : selectedIds.includes(item.id)}
+                        onToggleSelect={bulkMode ? toggleBulkSelect : toggleSelect}
+                        onQuickEdit={setQuickEditItem}
+                        onReanalyze={handleReanalyze}
+                        onColorFilter={(c) => setFilterColor(filterColor === c ? null : c)}
+                        activeColor={filterColor}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {filtered.map((item) => (
+              {paged.map((item) => (
                 <PieceCard
                   key={item.id}
                   item={item}
@@ -1154,6 +1257,20 @@ export default function Collection() {
                   activeColor={filterColor}
                 />
               ))}
+            </div>
+          )}
+          {/* Pagination controls */}
+          {!groupByMaker && totalPages > 1 && (
+            <div className="mt-6 flex items-center justify-center gap-2">
+              <Button variant="outline" size="icon" className="h-8 w-8" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Page {page} of {totalPages}
+              </span>
+              <Button variant="outline" size="icon" className="h-8 w-8" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
           )}
         </>

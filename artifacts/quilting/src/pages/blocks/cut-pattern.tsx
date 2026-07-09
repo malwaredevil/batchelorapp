@@ -1,6 +1,7 @@
 import { useParams, useLocation } from "wouter";
 import { useMemo } from "react";
 import { useGetBlock, useListFabrics } from "@workspace/api-client-react";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 import { ArrowLeft, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -748,7 +749,15 @@ export default function CutPatternPage() {
   const blockId = Number(id);
 
   const { data: block, isLoading } = useGetBlock(blockId);
-  const { data: fabricsList } = useListFabrics();
+  const { data: fabricsData } = useListFabrics({ pageSize: 200 });
+  const fabricsList = fabricsData?.items;
+
+  usePageAssistantContext(
+    "quilting-cut-pattern",
+    isLoading || !block
+      ? undefined
+      : `Cut Pattern page for block "${block.name}" (id ${block.id}): a printable cutting diagram and fabric-requirements sheet derived from the block's grid. Informational/printable only, no chat-editable content here.`,
+  );
 
   const fabricColorMap = useMemo<Record<string, string>>(() => {
     const map: Record<string, string> = {};

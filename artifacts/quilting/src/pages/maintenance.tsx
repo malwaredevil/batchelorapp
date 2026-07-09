@@ -540,7 +540,11 @@ function ReanalyzePanel({
 // ---------------------------------------------------------------------------
 
 function FabricsPanel() {
-  const { data: fabricsData, isLoading, isError } = useListFabrics({ pageSize: 200 });
+  const {
+    data: fabricsData,
+    isLoading,
+    isError,
+  } = useListFabrics({ pageSize: 200 });
   const items = fabricsData?.items?.map((f) => ({
     id: f.id,
     name: f.name,
@@ -563,7 +567,11 @@ function FabricsPanel() {
 }
 
 function PatternsPanel() {
-  const { data: patternsData, isLoading, isError } = useListPatterns({ pageSize: 200 });
+  const {
+    data: patternsData,
+    isLoading,
+    isError,
+  } = useListPatterns({ pageSize: 200 });
   const items = patternsData?.items?.map((p) => ({
     id: p.id,
     name: p.name,
@@ -588,7 +596,11 @@ function PatternsPanel() {
 }
 
 function QuiltsPanel() {
-  const { data: quiltsData, isLoading, isError } = useListQuilts({ pageSize: 200 });
+  const {
+    data: quiltsData,
+    isLoading,
+    isError,
+  } = useListQuilts({ pageSize: 200 });
   const items = quiltsData?.items?.map((q) => ({
     id: q.id,
     name: q.name,

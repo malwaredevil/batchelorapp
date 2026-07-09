@@ -18,11 +18,11 @@ import {
   type AssistantAction,
   type ExecutedAssistantAction,
   type ElaineAppId,
-  type ChatWidget,
   type ConversationMessage,
   type ElaineAttachmentUploadResult,
 } from "@workspace/api-client-react";
 import { ElaineName } from "./ElaineAvatar";
+import { type ChatWidget } from "./ChatWidgets";
 import { useElainePageContextReader } from "./ElainePageContext";
 
 export interface PendingAttachment {
@@ -326,7 +326,7 @@ export function useElaineChat({
           },
           onAction: (action) => setPendingActions((prev) => [...prev, action]),
           onStatus: (msg) => setStatusMessage(msg),
-          onWidget: (widget) => pendingWidgets.push(widget),
+          onWidget: (widget) => pendingWidgets.push(widget as ChatWidget),
           onDone: (res) => {
             setMessages(res.messages);
             // attach widgets to the last assistant message index

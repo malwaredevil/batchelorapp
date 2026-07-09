@@ -829,10 +829,15 @@ export default function Layouts() {
     "quilting-layouts",
     isLoading
       ? undefined
-      : `Layout Designer list page: ${layoutList?.length ?? 0} saved layout(s). Visible layouts: ${(layoutList ?? [])
-          .slice(0, 30)
-          .map((l: { id: number; name: string }) => `${l.name} (layoutId: ${l.id})`)
-          .join(", ") || "none"}. You have create_layout / delete_layout action tools — but they only create/remove a blank grid layout with metadata, they cannot design the actual block arrangement; direct the user to the designer here for that.`,
+      : `Layout Designer list page: ${layoutList?.length ?? 0} saved layout(s). Visible layouts: ${
+          (layoutList ?? [])
+            .slice(0, 30)
+            .map(
+              (l: { id: number; name: string }) =>
+                `${l.name} (layoutId: ${l.id})`,
+            )
+            .join(", ") || "none"
+        }. You have create_layout / delete_layout action tools — but they only create/remove a blank grid layout with metadata, they cannot design the actual block arrangement; direct the user to the designer here for that.`,
   );
 
   const fabricUrlMap = useMemo(

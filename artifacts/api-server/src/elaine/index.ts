@@ -500,10 +500,9 @@ const UpdateElaineSettingsActionPayload = z
     enabled: z.boolean().optional(),
     chatWindowSize: z.enum(CHAT_WINDOW_SIZES).optional(),
   })
-  .refine(
-    (v) => v.enabled !== undefined || v.chatWindowSize !== undefined,
-    { message: "At least one setting must be provided" },
-  );
+  .refine((v) => v.enabled !== undefined || v.chatWindowSize !== undefined, {
+    message: "At least one setting must be provided",
+  });
 
 const GenerateTripShareLinkActionPayload = z.object({
   tripId: z.number().int().positive(),
@@ -890,7 +889,9 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
     case "update_elaine_settings": {
       const changes: string[] = [];
       if (action.payload.enabled !== undefined)
-        changes.push(action.payload.enabled ? "enable Elaine" : "disable Elaine");
+        changes.push(
+          action.payload.enabled ? "enable Elaine" : "disable Elaine",
+        );
       if (action.payload.chatWindowSize !== undefined)
         changes.push(`set chat window to "${action.payload.chatWindowSize}"`);
       return changes.join(" and ");
@@ -1855,7 +1856,9 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
       }
       return {
         status: 500,
-        body: { error: "Could not send the verification code. Please try again." },
+        body: {
+          error: "Could not send the verification code. Please try again.",
+        },
       };
     }
   }) as ActionExecutor,
@@ -1881,7 +1884,9 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
     if (!record || record.attempts >= MAX_PHONE_CODE_ATTEMPTS) {
       return {
         status: 400,
-        body: { error: "This code is invalid or has expired. Request a new one." },
+        body: {
+          error: "This code is invalid or has expired. Request a new one.",
+        },
       };
     }
 
@@ -1890,10 +1895,7 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
       .digest("hex");
     const matches =
       providedHash.length === record.codeHash.length &&
-      timingSafeEqual(
-        Buffer.from(providedHash),
-        Buffer.from(record.codeHash),
-      );
+      timingSafeEqual(Buffer.from(providedHash), Buffer.from(record.codeHash));
 
     if (!matches) {
       const attempts = record.attempts + 1;
@@ -1903,7 +1905,9 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
         .where(eq(phoneVerificationCodes.id, record.id));
       return {
         status: 400,
-        body: { error: "This code is invalid or has expired. Request a new one." },
+        body: {
+          error: "This code is invalid or has expired. Request a new one.",
+        },
       };
     }
 
@@ -1945,7 +1949,10 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
     if (!token) {
       return {
         status: 401,
-        body: { error: "Gmail account not connected. Connect it from the Account settings page." },
+        body: {
+          error:
+            "Gmail account not connected. Connect it from the Account settings page.",
+        },
       };
     }
     try {
@@ -1967,7 +1974,10 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
     if (!token) {
       return {
         status: 401,
-        body: { error: "Gmail account not connected. Connect it from the Account settings page." },
+        body: {
+          error:
+            "Gmail account not connected. Connect it from the Account settings page.",
+        },
       };
     }
     try {
@@ -1977,7 +1987,10 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
         body: { type: "gmail_trash", result: { threadId: payload.threadId } },
       };
     } catch {
-      return { status: 502, body: { error: "Could not move the thread to Trash." } };
+      return {
+        status: 502,
+        body: { error: "Could not move the thread to Trash." },
+      };
     }
   }) as ActionExecutor,
 
@@ -1998,8 +2011,9 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
       (existing?.chatWindowSize as ChatWindowSize | undefined) ??
       "compact";
     const actionConfirmationMode =
-      (existing?.actionConfirmationMode as ActionConfirmationMode | undefined) ??
-      "one_by_one";
+      (existing?.actionConfirmationMode as
+        | ActionConfirmationMode
+        | undefined) ?? "one_by_one";
     await db
       .insert(elaineSettings)
       .values({ userId, enabled, actionConfirmationMode, chatWindowSize })
@@ -2660,7 +2674,10 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       parameters: {
         type: "object",
         properties: {
-          code: { type: "string", description: "The 6-digit code, digits only" },
+          code: {
+            type: "string",
+            description: "The 6-digit code, digits only",
+          },
         },
         required: ["code"],
       },
@@ -2713,7 +2730,7 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "update_card_layout",
       description:
-        'Propose reordering the Trip Detail page\'s cards (Reminders, Itinerary, Documents, Packing/To-do, Photos, Magnets, Weather & Nearby) for the CURRENT user only — this is a personal display preference, never shared with the rest of the household, and it applies across every trip they view. Only call this if the user explicitly describes a new order and you can see the current/available card ids on screen; never invent a card id. Provide the FULL new order (every card id, not just the ones that moved).',
+        "Propose reordering the Trip Detail page's cards (Reminders, Itinerary, Documents, Packing/To-do, Photos, Magnets, Weather & Nearby) for the CURRENT user only — this is a personal display preference, never shared with the rest of the household, and it applies across every trip they view. Only call this if the user explicitly describes a new order and you can see the current/available card ids on screen; never invent a card id. Provide the FULL new order (every card id, not just the ones that moved).",
       parameters: {
         type: "object",
         properties: {
@@ -2721,7 +2738,7 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
             type: "array",
             items: { type: "string" },
             description:
-              "Full ordered list of card ids, e.g. [\"itinerary\", \"reminders\", \"documents\", \"packing-todo\", \"photos\", \"magnets\", \"weather-nearby\"]",
+              'Full ordered list of card ids, e.g. ["itinerary", "reminders", "documents", "packing-todo", "photos", "magnets", "weather-nearby"]',
           },
         },
         required: ["cardOrder"],
@@ -2733,7 +2750,7 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "update_trip_card_collapse",
       description:
-        'Propose collapsing or expanding specific cards on ONE trip\'s Trip Detail page for the CURRENT user only — this is a personal display preference, never shared with the rest of the household. Only call this if the trip\'s numeric id is visible on screen and the user named specific cards to collapse/expand; never guess. Provide the FULL set of card ids that should end up collapsed (not just the ones changing) — an empty array expands everything.',
+        "Propose collapsing or expanding specific cards on ONE trip's Trip Detail page for the CURRENT user only — this is a personal display preference, never shared with the rest of the household. Only call this if the trip's numeric id is visible on screen and the user named specific cards to collapse/expand; never guess. Provide the FULL set of card ids that should end up collapsed (not just the ones changing) — an empty array expands everything.",
       parameters: {
         type: "object",
         properties: {
@@ -2742,7 +2759,7 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
             type: "array",
             items: { type: "string" },
             description:
-              "Full list of card ids that should be collapsed, e.g. [\"documents\", \"weather-nearby\"]",
+              'Full list of card ids that should be collapsed, e.g. ["documents", "weather-nearby"]',
           },
         },
         required: ["tripId", "collapsedCards"],
@@ -2765,7 +2782,8 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           },
           subject: {
             type: "string",
-            description: "Subject line of the thread, for the confirmation card label.",
+            description:
+              "Subject line of the thread, for the confirmation card label.",
           },
         },
         required: ["threadId"],
@@ -2788,7 +2806,8 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           },
           subject: {
             type: "string",
-            description: "Subject line of the thread, for the confirmation card label.",
+            description:
+              "Subject line of the thread, for the confirmation card label.",
           },
         },
         required: ["threadId"],
@@ -3348,7 +3367,8 @@ const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
         properties: {
           query: {
             type: "string",
-            description: "What to search for, e.g. 'check-in time', 'confirmation number', 'hotel name'",
+            description:
+              "What to search for, e.g. 'check-in time', 'confirmation number', 'hotel name'",
           },
           tripId: {
             type: "number",
@@ -3375,7 +3395,8 @@ const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           to: {
             type: "array",
             items: { type: "string" },
-            description: "Target currency codes (e.g. ['EUR', 'JPY', 'AUD']). Max 6.",
+            description:
+              "Target currency codes (e.g. ['EUR', 'JPY', 'AUD']). Max 6.",
           },
         },
         required: ["from", "to"],
@@ -3392,11 +3413,25 @@ const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
         type: "object",
         properties: {
           name: { type: "string", description: "Trip name" },
-          destination: { type: "string", description: "Destination (optional)" },
-          startDate: { type: "string", description: "Start date, e.g. 'Jan 15, 2026' (optional)" },
+          destination: {
+            type: "string",
+            description: "Destination (optional)",
+          },
+          startDate: {
+            type: "string",
+            description: "Start date, e.g. 'Jan 15, 2026' (optional)",
+          },
           endDate: { type: "string", description: "End date (optional)" },
-          status: { type: "string", description: "One of: planning, confirmed, ongoing, completed, cancelled (optional)" },
-          countdownDays: { type: "number", description: "Days until trip start from today (negative if past, optional)" },
+          status: {
+            type: "string",
+            description:
+              "One of: planning, confirmed, ongoing, completed, cancelled (optional)",
+          },
+          countdownDays: {
+            type: "number",
+            description:
+              "Days until trip start from today (negative if past, optional)",
+          },
         },
         required: ["name"],
       },
@@ -3417,8 +3452,7 @@ const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
               type: "string",
               enum: ["pottery", "quilting", "travels"],
             },
-            description:
-              "Which apps to include. Omit to include all three.",
+            description: "Which apps to include. Omit to include all three.",
           },
         },
         required: [],
@@ -4702,9 +4736,7 @@ Keep replies concise and easy to read in a chat bubble.`;
                 Math.ceil(bindingPerimeterInches / fabricWidth),
               );
               const bindingYards =
-                Math.ceil(
-                  ((bindingStrips * bindingStripWidth) / 36) * 8,
-                ) / 8;
+                Math.ceil(((bindingStrips * bindingStripWidth) / 36) * 8) / 8;
 
               resultText =
                 `For a ${w}x${h}" finished quilt:\n` +
@@ -4784,9 +4816,16 @@ Keep replies concise and easy to read in a chat bubble.`;
                       `Document: ${row.title ?? row.documentType ?? "untitled"} (trip #${row.tripId})`,
                     ];
                     if (row.documentType)
-                      parts.push(`Type: ${row.documentType.replace(/_/g, " ")}`);
-                    if (row.extractedData && typeof row.extractedData === "object") {
-                      const fields = Object.entries(row.extractedData as Record<string, unknown>)
+                      parts.push(
+                        `Type: ${row.documentType.replace(/_/g, " ")}`,
+                      );
+                    if (
+                      row.extractedData &&
+                      typeof row.extractedData === "object"
+                    ) {
+                      const fields = Object.entries(
+                        row.extractedData as Record<string, unknown>,
+                      )
                         .filter(([, v]) => v != null && v !== "")
                         .map(([k, v]) => `  ${k}: ${String(v)}`)
                         .join("\n");
@@ -4822,7 +4861,9 @@ Keep replies concise and easy to read in a chat bubble.`;
                 }));
                 resultText =
                   `Exchange rates from ${from} (as of ${json.date}):\n` +
-                  rates.map((r) => `1 ${from} = ${r.rate.toFixed(4)} ${r.code}`).join("\n");
+                  rates
+                    .map((r) => `1 ${from} = ${r.rate.toFixed(4)} ${r.code}`)
+                    .join("\n");
                 sendEvent("widget", {
                   type: "exchange_rate",
                   from,
@@ -4921,9 +4962,7 @@ Keep replies concise and easy to read in a chat bubble.`;
             }
 
             resultText =
-              parts.length > 0
-                ? parts.join("\n")
-                : "No household data found.";
+              parts.length > 0 ? parts.join("\n") : "No household data found.";
           } else {
             resultText = "Unsupported tool.";
           }
@@ -4937,7 +4976,11 @@ Keep replies concise and easy to read in a chat bubble.`;
             "That lookup failed — tell the user you couldn't get that information right now.";
         }
         req.log.info(
-          { tool: call.name, durationMs: Date.now() - _toolT0, success: _toolOk },
+          {
+            tool: call.name,
+            durationMs: Date.now() - _toolT0,
+            success: _toolOk,
+          },
           "elaine: tool-call",
         );
         messages.push({
@@ -5042,7 +5085,11 @@ const SMS_RATE_LIMITED_ACTION_TYPES = new Set<ActionType>([
 ]);
 
 function runMiddleware(
-  middleware: (req: Request, res: Response, next: (err?: unknown) => void) => void,
+  middleware: (
+    req: Request,
+    res: Response,
+    next: (err?: unknown) => void,
+  ) => void,
   req: Request,
   res: Response,
 ): Promise<void> {

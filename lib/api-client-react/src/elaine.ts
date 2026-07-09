@@ -144,6 +144,22 @@ export interface ChatWidgetImage {
   sourceUrl?: string;
 }
 
+export interface ExchangeRateResult {
+  code: string;
+  name?: string;
+  rate: number;
+}
+
+export interface TripCardData {
+  tripId?: number;
+  name: string;
+  destination?: string;
+  startDate?: string;
+  endDate?: string;
+  status?: string;
+  countdownDays?: number;
+}
+
 export type ChatWidget =
   | { type: "weather"; locationName: string; days: WeatherDay[] }
   | {
@@ -178,7 +194,9 @@ export type ChatWidget =
       type: "image_card";
       title?: string;
       images: ChatWidgetImage[];
-    };
+    }
+  | { type: "exchange_rate"; from: string; to: ExchangeRateResult[]; lastUpdated: string }
+  | { type: "trip_card"; trip: TripCardData };
 
 export interface AssistantChatResponse {
   role: "assistant";

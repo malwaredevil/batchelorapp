@@ -415,7 +415,13 @@ export function useElaineChat({
     // a full page load because they belong to a different React bundle.
     // Using wouter's navigate() for these would just render a 404 within the
     // current SPA instead of loading the correct app.
-    const CROSS_SPA_PREFIXES = ["/pottery", "/quilting", "/travels", "/elaine"];
+    const CROSS_SPA_PREFIXES = [
+      "/pottery",
+      "/quilting",
+      "/ornaments",
+      "/travels",
+      "/elaine",
+    ];
     const isCrossSpa = CROSS_SPA_PREFIXES.some(
       (prefix) =>
         path === prefix ||

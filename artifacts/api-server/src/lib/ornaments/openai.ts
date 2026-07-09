@@ -11,6 +11,7 @@ export interface OrnamentAnalysis {
   dominantColors: string[];
   motifs: string[];
   aiDescription: string | null;
+  upc: string | null;
 }
 
 const ANALYSIS_PROMPT = `You are an expert Hallmark Keepsake ornament collector and cataloguer. You will be given one or more photos of the same Christmas ornament — box, tag, and/or the ornament itself.
@@ -23,6 +24,7 @@ Respond with STRICT JSON only, using exactly these keys:
 - "dominantColors": an array of 2-5 colour names describing the ornament, chosen from common colour names (e.g. red, gold, green, silver, white, blue).
 - "motifs": an array of key recurring decorative elements or characters depicted (e.g. "Snoopy", "snowman", "holly").
 - "aiDescription": 2-4 sentences describing the ornament as if writing a collector's catalogue entry.
+- "upc": if a UPC/EAN barcode is visible anywhere in the photos (typically printed on the box, a sticker, or a tag), read the barcode digits underneath it and return them as a string of only digits (usually 12-13 digits). If no barcode is visible, or the digits are not clearly legible, return null. Never guess or fabricate digits.
 
 Do not include any commentary outside the JSON.`;
 
@@ -69,6 +71,13 @@ export async function analyzeOrnamentImage(
         ? parseInt(yearRaw.trim(), 10)
         : null;
 
+  const upcRaw = asString(parsed?.["upc"]);
+  const upcDigits = upcRaw ? upcRaw.replace(/\D/g, "") : null;
+  const upc =
+    upcDigits && upcDigits.length >= 8 && upcDigits.length <= 14
+      ? upcDigits
+      : null;
+
   return {
     name: asString(parsed?.["name"]) ?? "Untitled ornament",
     seriesOrCollection: asString(parsed?.["seriesOrCollection"]),
@@ -77,6 +86,7 @@ export async function analyzeOrnamentImage(
     dominantColors: asStringArray(parsed?.["dominantColors"]),
     motifs: asStringArray(parsed?.["motifs"]),
     aiDescription: asString(parsed?.["aiDescription"]),
+    upc,
   };
 }
 

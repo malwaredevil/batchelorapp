@@ -41,7 +41,10 @@ function GoogleIcon({ className }: { className?: string }) {
 // being used as an open redirect.
 function sanitizeReturnTo(value: string | null): string | null {
   if (!value) return null;
-  if (!value.startsWith("/") || value.startsWith("//")) return null;
+  // Reject anything that isn't a single-leading-slash relative path.
+  // Browsers treat a leading "//" OR a leading "/\" (mixed slash/backslash)
+  // as a protocol-relative URL, so both must be blocked, not just "//".
+  if (!/^\/[^/\\]/.test(value)) return null;
   return value;
 }
 

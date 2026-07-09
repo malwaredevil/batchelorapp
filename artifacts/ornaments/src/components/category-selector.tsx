@@ -24,18 +24,24 @@ interface CategorySelectorProps {
   className?: string;
 }
 
-export function CategorySelector({ value = [], onChange, className }: CategorySelectorProps) {
+export function CategorySelector({
+  value = [],
+  onChange,
+  className,
+}: CategorySelectorProps) {
   const { data: categories = [], isLoading } = useListOrnamentCategories();
   const [open, setOpen] = useState(false);
 
   const selectedCategories = useMemo(() => {
-    return value.map(id => categories.find(c => c.id === id)).filter(Boolean) as typeof categories;
+    return value
+      .map((id) => categories.find((c) => c.id === id))
+      .filter(Boolean) as typeof categories;
   }, [value, categories]);
 
   const toggleCategory = (id: number) => {
     const isSelected = value.includes(id);
     if (isSelected) {
-      onChange(value.filter(v => v !== id));
+      onChange(value.filter((v) => v !== id));
     } else {
       onChange([...value, id]);
     }
@@ -58,14 +64,14 @@ export function CategorySelector({ value = [], onChange, className }: CategorySe
                 </span>
               )}
               {selectedCategories.map((cat) => (
-                <Badge 
-                  key={cat.id} 
+                <Badge
+                  key={cat.id}
                   variant="secondary"
                   className="rounded-md font-normal px-2 py-0.5 border"
                   style={{
                     backgroundColor: cat.bgColor || "#f3f4f6",
                     color: cat.textColor || "#374151",
-                    borderColor: cat.bgColor || "#e5e7eb"
+                    borderColor: cat.bgColor || "#e5e7eb",
                   }}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -84,7 +90,9 @@ export function CategorySelector({ value = [], onChange, className }: CategorySe
           <Command>
             <CommandInput placeholder="Search categories..." />
             <CommandList>
-              <CommandEmpty>{isLoading ? "Loading..." : "No category found."}</CommandEmpty>
+              <CommandEmpty>
+                {isLoading ? "Loading..." : "No category found."}
+              </CommandEmpty>
               <CommandGroup>
                 {categories.map((cat) => (
                   <CommandItem
@@ -96,15 +104,15 @@ export function CategorySelector({ value = [], onChange, className }: CategorySe
                     <Check
                       className={cn(
                         "mr-2 h-4 w-4",
-                        value.includes(cat.id) ? "opacity-100" : "opacity-0"
+                        value.includes(cat.id) ? "opacity-100" : "opacity-0",
                       )}
                     />
-                    <div 
+                    <div
                       className="px-2 py-0.5 rounded-md text-sm border"
                       style={{
                         backgroundColor: cat.bgColor || "#f3f4f6",
                         color: cat.textColor || "#374151",
-                        borderColor: cat.bgColor || "#e5e7eb"
+                        borderColor: cat.bgColor || "#e5e7eb",
                       }}
                     >
                       {cat.name}

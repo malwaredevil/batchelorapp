@@ -1,12 +1,7 @@
 import { useGetOrnamentStats } from "@workspace/api-client-react";
 import { Loader2, TrendingUp, Hash, BookOpen } from "lucide-react";
 import { usePageAssistantContext } from "@/lib/assistant-context";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   BarChart,
   Bar,
@@ -18,7 +13,11 @@ import {
 } from "recharts";
 
 function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(amount);
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(amount);
 }
 
 export default function StatsPage() {
@@ -47,19 +46,28 @@ export default function StatsPage() {
 
   const seriesData = stats.bySeriesOrCollection
     .slice()
-    .sort((a: typeof stats.bySeriesOrCollection[number], b: typeof stats.bySeriesOrCollection[number]) => b.totalValue - a.totalValue)
+    .sort(
+      (
+        a: (typeof stats.bySeriesOrCollection)[number],
+        b: (typeof stats.bySeriesOrCollection)[number],
+      ) => b.totalValue - a.totalValue,
+    )
     .slice(0, 10)
-    .map((s: typeof stats.bySeriesOrCollection[number]) => ({
+    .map((s: (typeof stats.bySeriesOrCollection)[number]) => ({
       name: s.seriesOrCollection || "Uncategorized",
       value: s.totalValue,
-      count: s.count
+      count: s.count,
     }));
 
   return (
     <div className="mx-auto max-w-4xl space-y-8">
       <div>
-        <h1 className="text-3xl font-serif font-bold text-foreground">Collection Stats</h1>
-        <p className="text-muted-foreground mt-1">Overview of your Hallmark Keepsake ornaments</p>
+        <h1 className="text-3xl font-serif font-bold text-foreground">
+          Collection Stats
+        </h1>
+        <p className="text-muted-foreground mt-1">
+          Overview of your Hallmark Keepsake ornaments
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -115,7 +123,10 @@ export default function StatsPage() {
               {stats.itemsWithBookValue.toLocaleString()}
             </div>
             <p className="text-sm text-muted-foreground mt-1">
-              {Math.round((stats.itemsWithBookValue / stats.totalItems) * 100) || 0}% of unique collection
+              {Math.round(
+                (stats.itemsWithBookValue / stats.totalItems) * 100,
+              ) || 0}
+              % of unique collection
             </p>
           </CardContent>
         </Card>
@@ -129,29 +140,45 @@ export default function StatsPage() {
           <CardContent>
             <div className="h-[350px] w-full mt-4">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={seriesData} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                  <XAxis 
-                    dataKey="name" 
-                    tick={{ fontSize: 12 }} 
-                    axisLine={false} 
+                <BarChart
+                  data={seriesData}
+                  margin={{ top: 10, right: 10, left: 10, bottom: 20 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    vertical={false}
+                    stroke="hsl(var(--border))"
+                  />
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fontSize: 12 }}
+                    axisLine={false}
                     tickLine={false}
-                    tickFormatter={(value) => value.length > 15 ? value.substring(0, 15) + '...' : value}
+                    tickFormatter={(value) =>
+                      value.length > 15 ? value.substring(0, 15) + "..." : value
+                    }
                   />
-                  <YAxis 
-                    tickFormatter={(value) => `$${value}`} 
-                    axisLine={false} 
+                  <YAxis
+                    tickFormatter={(value) => `$${value}`}
+                    axisLine={false}
                     tickLine={false}
-                    tick={{ fontSize: 12 }} 
+                    tick={{ fontSize: 12 }}
                   />
-                  <RechartsTooltip 
-                    cursor={{ fill: 'hsl(var(--muted))' }}
-                    contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }}
-                    formatter={(value: number) => [formatCurrency(value), "Value"]}
+                  <RechartsTooltip
+                    cursor={{ fill: "hsl(var(--muted))" }}
+                    contentStyle={{
+                      borderRadius: "8px",
+                      border: "1px solid hsl(var(--border))",
+                      background: "hsl(var(--card))",
+                    }}
+                    formatter={(value: number) => [
+                      formatCurrency(value),
+                      "Value",
+                    ]}
                   />
-                  <Bar 
-                    dataKey="value" 
-                    fill="hsl(var(--primary))" 
+                  <Bar
+                    dataKey="value"
+                    fill="hsl(var(--primary))"
                     radius={[4, 4, 0, 0]}
                     maxBarSize={50}
                   />

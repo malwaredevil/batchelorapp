@@ -66,8 +66,12 @@ export default function ResetPassword() {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4">
         <div className="text-center">
-          <h1 className="mb-2 text-2xl font-serif font-bold text-foreground">Invalid Link</h1>
-          <p className="mb-6 text-muted-foreground">The password reset link is invalid or expired.</p>
+          <h1 className="mb-2 text-2xl font-serif font-bold text-foreground">
+            Invalid Link
+          </h1>
+          <p className="mb-6 text-muted-foreground">
+            The password reset link is invalid or expired.
+          </p>
           <Button onClick={() => setLocation("/forgot-password")}>
             Request New Link
           </Button>
@@ -83,7 +87,9 @@ export default function ResetPassword() {
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary mb-4">
             <KeyRound className="h-6 w-6" />
           </div>
-          <h1 className="text-3xl font-serif font-bold text-foreground">Set New Password</h1>
+          <h1 className="text-3xl font-serif font-bold text-foreground">
+            Set New Password
+          </h1>
           <p className="mt-2 text-muted-foreground">
             Please enter your new password below.
           </p>

@@ -81,9 +81,13 @@ export function InsuranceExportButton({
         <FileDown className="h-5 w-5 shrink-0 text-muted-foreground" />
       )}
       <div className="flex-1 text-left">
-        <p className="font-medium font-serif tracking-wide">Export for insurance</p>
+        <p className="font-medium font-serif tracking-wide">
+          Export for insurance
+        </p>
         <p className="text-sm text-muted-foreground">
-          {generating ? progress : "Download a PDF with photos of every ornament"}
+          {generating
+            ? progress
+            : "Download a PDF with photos of every ornament"}
         </p>
       </div>
     </Button>
@@ -102,8 +106,12 @@ export default function Settings() {
   return (
     <div className="mx-auto max-w-xl">
       <div className="mb-8">
-        <h1 className="text-3xl font-serif font-bold text-foreground">Settings</h1>
-        <p className="text-muted-foreground mt-1">Manage your collection preferences</p>
+        <h1 className="text-3xl font-serif font-bold text-foreground">
+          Settings
+        </h1>
+        <p className="text-muted-foreground mt-1">
+          Manage your collection preferences
+        </p>
       </div>
 
       <ul className="mt-6 divide-y divide-card-border rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
@@ -115,7 +123,9 @@ export default function Settings() {
             >
               <item.icon className="h-5 w-5 shrink-0 text-muted-foreground group-hover:text-primary transition-colors" />
               <div className="flex-1">
-                <p className="font-medium font-serif tracking-wide">{item.label}</p>
+                <p className="font-medium font-serif tracking-wide">
+                  {item.label}
+                </p>
                 <p className="text-sm text-muted-foreground">
                   {item.description}
                 </p>

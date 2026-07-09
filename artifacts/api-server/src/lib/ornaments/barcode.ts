@@ -53,10 +53,10 @@ async function fetchFromUpcItemDb(
     if (process.env.UPCITEMDB_KEY_TYPE)
       headers["key_type"] = process.env.UPCITEMDB_KEY_TYPE;
 
-    const resp = await fetch(
-      `${baseUrl}?upc=${encodeURIComponent(barcode)}`,
-      { headers, signal: controller.signal },
-    );
+    const resp = await fetch(`${baseUrl}?upc=${encodeURIComponent(barcode)}`, {
+      headers,
+      signal: controller.signal,
+    });
     if (!resp.ok) {
       throw new Error(`UPCitemdb HTTP ${resp.status}`);
     }

@@ -1,7 +1,19 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link } from "wouter";
-import { useListOrnaments, useListOrnamentCategories } from "@workspace/api-client-react";
-import { Search, Plus, Filter, LayoutGrid, List as ListIcon, X, SlidersHorizontal, Image as ImageIcon } from "lucide-react";
+import {
+  useListOrnaments,
+  useListOrnamentCategories,
+} from "@workspace/api-client-react";
+import {
+  Search,
+  Plus,
+  Filter,
+  LayoutGrid,
+  List as ListIcon,
+  X,
+  SlidersHorizontal,
+  Image as ImageIcon,
+} from "lucide-react";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,49 +45,70 @@ export default function Collection() {
   // Use the React Query hook
   // The hook accepts params for pagination/filtering. Adjust to what api actually accepts.
   // Assuming it accepts q, categoryId, etc or we do local filtering.
-  // We'll fetch a large page and do local filtering for instant feel, 
-  // or just pass params to hook. 
+  // We'll fetch a large page and do local filtering for instant feel,
+  // or just pass params to hook.
   // Let's pass params to hook to be safe, assuming Orval typings for ListOrnamentsParams.
   const queryParams: any = { pageSize: 500 };
   if (debouncedSearch) queryParams.q = debouncedSearch;
   if (selectedCat) queryParams.categoryId = selectedCat;
-  
+
   const { data, isLoading } = useListOrnaments(queryParams);
   const items = data?.items || [];
-  
+
   const { data: categories } = useListOrnamentCategories();
 
   // Local sorting
   const sortedItems = useMemo(() => {
     const copy = [...items];
     switch (sort) {
-      case "newest": return copy.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      case "oldest": return copy.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-      case "year-desc": return copy.sort((a, b) => (b.year || 0) - (a.year || 0));
-      case "year-asc": return copy.sort((a, b) => (a.year || 0) - (b.year || 0));
-      case "name-asc": return copy.sort((a, b) => a.name.localeCompare(b.name));
-      case "name-desc": return copy.sort((a, b) => b.name.localeCompare(a.name));
-      case "value-desc": return copy.sort((a, b) => (b.bookValue || 0) - (a.bookValue || 0));
-      default: return copy;
+      case "newest":
+        return copy.sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        );
+      case "oldest":
+        return copy.sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        );
+      case "year-desc":
+        return copy.sort((a, b) => (b.year || 0) - (a.year || 0));
+      case "year-asc":
+        return copy.sort((a, b) => (a.year || 0) - (b.year || 0));
+      case "name-asc":
+        return copy.sort((a, b) => a.name.localeCompare(b.name));
+      case "name-desc":
+        return copy.sort((a, b) => b.name.localeCompare(a.name));
+      case "value-desc":
+        return copy.sort((a, b) => (b.bookValue || 0) - (a.bookValue || 0));
+      default:
+        return copy;
     }
   }, [items, sort]);
 
   usePageAssistantContext(
     "ornaments-collection",
-    `Main collection page showing ${items.length} ornaments. Search: "${debouncedSearch}". Category filter: ${selectedCat || 'none'}.`,
+    `Main collection page showing ${items.length} ornaments. Search: "${debouncedSearch}". Category filter: ${selectedCat || "none"}.`,
   );
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-serif font-bold tracking-tight text-foreground">My Collection</h1>
+          <h1 className="text-4xl font-serif font-bold tracking-tight text-foreground">
+            My Collection
+          </h1>
           <p className="text-muted-foreground mt-1">
-            {isLoading ? "Loading ornaments..." : `${data?.total || 0} hallmark keepsake${data?.total !== 1 ? 's' : ''}`}
+            {isLoading
+              ? "Loading ornaments..."
+              : `${data?.total || 0} hallmark keepsake${data?.total !== 1 ? "s" : ""}`}
           </p>
         </div>
         <div className="flex gap-2">
-          <Button asChild className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 shadow-md">
+          <Button
+            asChild
+            className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 shadow-md"
+          >
             <Link href="/add">
               <Plus className="mr-2 h-4 w-4" /> Add Ornament
             </Link>
@@ -86,14 +119,14 @@ export default function Collection() {
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search by name, series, or brand..." 
+          <Input
+            placeholder="Search by name, series, or brand..."
             className="pl-9 bg-card border-card-border shadow-sm h-10"
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={(e) => setSearch(e.target.value)}
           />
           {search && (
-            <button 
+            <button
               onClick={() => setSearch("")}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
             >
@@ -101,11 +134,14 @@ export default function Collection() {
             </button>
           )}
         </div>
-        
+
         <div className="flex gap-2 items-center">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="h-10 bg-card border-card-border shadow-sm gap-2">
+              <Button
+                variant="outline"
+                className="h-10 bg-card border-card-border shadow-sm gap-2"
+              >
                 <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
                 <span className="hidden sm:inline">Sort</span>
               </Button>
@@ -114,19 +150,34 @@ export default function Collection() {
               <DropdownMenuLabel>Sort by</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuRadioGroup value={sort} onValueChange={setSort}>
-                <DropdownMenuRadioItem value="newest">Recently Added</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="oldest">Oldest First</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="year-desc">Release Year (New to Old)</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="year-asc">Release Year (Old to New)</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="name-asc">Name (A-Z)</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="value-desc">Highest Value</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="newest">
+                  Recently Added
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="oldest">
+                  Oldest First
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="year-desc">
+                  Release Year (New to Old)
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="year-asc">
+                  Release Year (Old to New)
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="name-asc">
+                  Name (A-Z)
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="value-desc">
+                  Highest Value
+                </DropdownMenuRadioItem>
               </DropdownMenuRadioGroup>
             </DropdownMenuContent>
           </DropdownMenu>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="h-10 bg-card border-card-border shadow-sm gap-2 relative">
+              <Button
+                variant="outline"
+                className="h-10 bg-card border-card-border shadow-sm gap-2 relative"
+              >
                 <Filter className="h-4 w-4 text-muted-foreground" />
                 <span className="hidden sm:inline">Category</span>
                 {selectedCat && (
@@ -134,33 +185,54 @@ export default function Collection() {
                 )}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48 max-h-[300px] overflow-y-auto">
+            <DropdownMenuContent
+              align="end"
+              className="w-48 max-h-[300px] overflow-y-auto"
+            >
               <DropdownMenuLabel>Filter by category</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem 
+              <DropdownMenuItem
                 onClick={() => setSelectedCat(null)}
                 className={selectedCat === null ? "bg-muted" : ""}
               >
                 All Categories
               </DropdownMenuItem>
-              {categories?.map(cat => (
-                <DropdownMenuItem 
-                  key={cat.id} 
+              {categories?.map((cat) => (
+                <DropdownMenuItem
+                  key={cat.id}
                   onClick={() => setSelectedCat(cat.id)}
-                  className={selectedCat === cat.id ? "bg-muted font-medium" : ""}
+                  className={
+                    selectedCat === cat.id ? "bg-muted font-medium" : ""
+                  }
                 >
-                  <div className="w-2 h-2 rounded-full mr-2" style={{ backgroundColor: cat.bgColor || "#ccc" }} />
+                  <div
+                    className="w-2 h-2 rounded-full mr-2"
+                    style={{ backgroundColor: cat.bgColor || "#ccc" }}
+                  />
                   {cat.name}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)} className="bg-card border border-card-border rounded-md p-1 shadow-sm shrink-0">
-            <ToggleGroupItem value="grid" aria-label="Grid view" className="h-8 px-2">
+          <ToggleGroup
+            type="single"
+            value={viewMode}
+            onValueChange={(v) => v && setViewMode(v as any)}
+            className="bg-card border border-card-border rounded-md p-1 shadow-sm shrink-0"
+          >
+            <ToggleGroupItem
+              value="grid"
+              aria-label="Grid view"
+              className="h-8 px-2"
+            >
               <LayoutGrid className="h-4 w-4" />
             </ToggleGroupItem>
-            <ToggleGroupItem value="list" aria-label="List view" className="h-8 px-2">
+            <ToggleGroupItem
+              value="list"
+              aria-label="List view"
+              className="h-8 px-2"
+            >
               <ListIcon className="h-4 w-4" />
             </ToggleGroupItem>
           </ToggleGroup>
@@ -170,11 +242,19 @@ export default function Collection() {
       {/* Grid View */}
       {viewMode === "grid" && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-          {sortedItems.map(item => (
-            <Link key={item.id} href={`/ornament/${item.id}`} className="group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl">
+          {sortedItems.map((item) => (
+            <Link
+              key={item.id}
+              href={`/ornament/${item.id}`}
+              className="group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl"
+            >
               <div className="relative aspect-square overflow-hidden rounded-xl bg-muted border border-border group-hover:border-primary/50 transition-colors shadow-sm mb-3">
                 {item.imageUrl ? (
-                  <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out" />
+                  <img
+                    src={item.imageUrl}
+                    alt={item.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
+                  />
                 ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground bg-secondary/30">
                     <ImageIcon className="h-8 w-8 mb-2 opacity-20" />
@@ -187,13 +267,19 @@ export default function Collection() {
                 )}
               </div>
               <div>
-                <h3 className="font-serif font-bold text-foreground leading-tight line-clamp-1 group-hover:text-primary transition-colors">{item.name}</h3>
+                <h3 className="font-serif font-bold text-foreground leading-tight line-clamp-1 group-hover:text-primary transition-colors">
+                  {item.name}
+                </h3>
                 <div className="flex items-center text-xs text-muted-foreground mt-1 gap-2">
-                  <span className="font-medium text-foreground/70">{item.brand}</span>
+                  <span className="font-medium text-foreground/70">
+                    {item.brand}
+                  </span>
                   {item.year && <span>• {item.year}</span>}
                 </div>
                 {item.seriesOrCollection && (
-                  <p className="text-xs text-muted-foreground mt-0.5 italic line-clamp-1">{item.seriesOrCollection}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 italic line-clamp-1">
+                    {item.seriesOrCollection}
+                  </p>
                 )}
               </div>
             </Link>
@@ -204,11 +290,19 @@ export default function Collection() {
       {/* List View */}
       {viewMode === "list" && (
         <div className="flex flex-col gap-3">
-          {sortedItems.map(item => (
-            <Link key={item.id} href={`/ornament/${item.id}`} className="group flex gap-4 p-3 bg-card border border-card-border rounded-xl hover:border-primary/50 transition-colors shadow-sm items-center">
+          {sortedItems.map((item) => (
+            <Link
+              key={item.id}
+              href={`/ornament/${item.id}`}
+              className="group flex gap-4 p-3 bg-card border border-card-border rounded-xl hover:border-primary/50 transition-colors shadow-sm items-center"
+            >
               <div className="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 overflow-hidden rounded-lg bg-muted border border-border">
                 {item.imageUrl ? (
-                  <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                  <img
+                    src={item.imageUrl}
+                    alt={item.name}
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-muted-foreground bg-secondary/30">
                     <ImageIcon className="h-5 w-5 opacity-30" />
@@ -216,15 +310,23 @@ export default function Collection() {
                 )}
               </div>
               <div className="flex-1 min-w-0 py-1">
-                <h3 className="font-serif font-bold text-foreground text-lg leading-tight truncate group-hover:text-primary transition-colors">{item.name}</h3>
+                <h3 className="font-serif font-bold text-foreground text-lg leading-tight truncate group-hover:text-primary transition-colors">
+                  {item.name}
+                </h3>
                 <div className="flex flex-wrap items-center text-sm text-muted-foreground mt-1 gap-x-3 gap-y-1">
-                  <span className="font-medium text-foreground/80">{item.brand}</span>
+                  <span className="font-medium text-foreground/80">
+                    {item.brand}
+                  </span>
                   {item.year && <span>{item.year}</span>}
                   {item.seriesOrCollection && (
-                    <span className="italic truncate max-w-[200px]">{item.seriesOrCollection}</span>
+                    <span className="italic truncate max-w-[200px]">
+                      {item.seriesOrCollection}
+                    </span>
                   )}
                   {item.quantity > 1 && (
-                    <span className="bg-muted px-1.5 rounded text-xs">Qty: {item.quantity}</span>
+                    <span className="bg-muted px-1.5 rounded text-xs">
+                      Qty: {item.quantity}
+                    </span>
                   )}
                 </div>
               </div>
@@ -245,15 +347,19 @@ export default function Collection() {
           <div className="h-16 w-16 bg-muted rounded-full flex items-center justify-center mb-4">
             <ImageIcon className="h-8 w-8 text-muted-foreground opacity-50" />
           </div>
-          <h2 className="text-xl font-serif font-bold text-foreground">No ornaments found</h2>
+          <h2 className="text-xl font-serif font-bold text-foreground">
+            No ornaments found
+          </h2>
           <p className="text-muted-foreground mt-2 max-w-md">
-            {search || selectedCat 
-              ? "Try adjusting your search or filters to find what you're looking for." 
+            {search || selectedCat
+              ? "Try adjusting your search or filters to find what you're looking for."
               : "Your collection is empty. Start by adding your first hallmark keepsake."}
           </p>
           {!search && !selectedCat && (
             <Button asChild className="mt-6 bg-primary text-primary-foreground">
-              <Link href="/add"><Plus className="mr-2 h-4 w-4" /> Add Ornament</Link>
+              <Link href="/add">
+                <Plus className="mr-2 h-4 w-4" /> Add Ornament
+              </Link>
             </Button>
           )}
         </div>

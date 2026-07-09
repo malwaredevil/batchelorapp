@@ -4,7 +4,10 @@ import { requireAuth } from "../../middleware/auth";
 import { aiLimiter } from "../../middleware/rateLimit";
 import { logger } from "../../lib/logger";
 import { callModel, getModels } from "../../lib/ai-client";
-import { fetchPageText, isSafeFetchBlockedError } from "../../lib/ssrf-safe-fetch";
+import {
+  fetchPageText,
+  isSafeFetchBlockedError,
+} from "../../lib/ssrf-safe-fetch";
 
 const router: IRouter = Router();
 router.use(requireAuth);

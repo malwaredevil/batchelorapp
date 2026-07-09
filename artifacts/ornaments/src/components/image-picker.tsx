@@ -17,7 +17,7 @@ export function ImagePicker({ value, onChange, className }: ImagePickerProps) {
       setPreview(null);
       return;
     }
-    
+
     if (typeof value === "string") {
       setPreview(value);
       return;
@@ -67,10 +67,10 @@ export function ImagePicker({ value, onChange, className }: ImagePickerProps) {
 
       {preview ? (
         <div className="relative w-full aspect-square rounded-xl overflow-hidden border border-border bg-muted">
-          <img 
-            src={preview} 
-            alt="Preview" 
-            className="w-full h-full object-cover" 
+          <img
+            src={preview}
+            alt="Preview"
+            className="w-full h-full object-cover"
           />
           <button
             type="button"

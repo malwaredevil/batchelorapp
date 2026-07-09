@@ -47,5 +47,9 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+.agents/
 attached_assets/
 .canvas/
+
+# Security-sensitive docs (keep local only)
+threat_model.md

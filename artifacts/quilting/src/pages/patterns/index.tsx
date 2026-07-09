@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import {
   PlusCircle,
@@ -18,6 +18,8 @@ import {
   ZoomIn,
   Tag,
   Sparkles,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,6 +51,7 @@ import { PreviewZoomModal } from "@/components/PreviewZoomModal";
 import { CategoryEditDialog } from "@/components/CategoryEditDialog";
 import { PaletteMatchModal } from "@/components/PaletteMatchModal";
 import { cn } from "@/lib/utils";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 type SortOption = "newest" | "oldest" | "az" | "za";
 
@@ -320,8 +323,14 @@ export default function Patterns() {
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [paletteMatchOpen, setPaletteMatchOpen] = useState(false);
+  const [pageSize, setPageSize] = useState<number>(() => {
+    const s = localStorage.getItem("quilting-patterns-page-size");
+    return s ? parseInt(s, 10) : 20;
+  });
+  const [page, setPage] = useState(1);
   const queryClient = useQueryClient();
-  const { data: patterns, isLoading, isError } = useListPatterns();
+  const { data: patternsData, isLoading, isError } = useListPatterns({ pageSize: 200 });
+  const patterns = patternsData?.items ?? [];
   const [categoryEditItem, setCategoryEditItem] =
     useState<PatternSummary | null>(null);
   const { data: categoryApiList } = useListQuiltingCategories();
@@ -485,6 +494,11 @@ export default function Patterns() {
       })
     : null;
 
+  const totalPages = !sorted || pageSize === 0 ? 1 : Math.max(1, Math.ceil(sorted.length / pageSize));
+  const paged = sorted ? (pageSize === 0 ? sorted : sorted.slice((page - 1) * pageSize, page * pageSize)) : null;
+
+  useEffect(() => { setPage(1); }, [search, difficultyFilter, sourceTypeFilter, categoryFilter, colorFilter, sort]);
+
   const hasFilter =
     search.trim().length > 0 ||
     difficultyFilter !== null ||
@@ -493,6 +507,16 @@ export default function Patterns() {
     colorFilter.length > 0;
 
   const { data: stats } = useGetStats();
+
+  usePageAssistantContext(
+    "quilting-patterns",
+    isLoading
+      ? undefined
+      : `Patterns page: ${patterns?.length ?? 0} pattern(s) saved${hasFilter ? ` (${sorted?.length ?? 0} shown after filters)` : ""}. Visible patterns: ${(sorted ?? [])
+          .slice(0, 30)
+          .map((p) => `${p.name} (patternId: ${p.id})`)
+          .join(", ") || "none"}.`,
+  );
 
   return (
     <div>
@@ -670,6 +694,19 @@ export default function Patterns() {
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
+            {/* Page size selector */}
+            <div className="flex items-center gap-0.5">
+              {([20, 50, 100, 0] as const).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => { localStorage.setItem("quilting-patterns-page-size", String(n)); setPageSize(n); setPage(1); }}
+                  className={`px-2 py-1 text-xs rounded border transition-colors ${pageSize === n ? "bg-primary text-primary-foreground border-primary" : "border-input bg-background text-muted-foreground hover:bg-accent"}`}
+                >
+                  {n === 0 ? "All" : n}
+                </button>
+              ))}
+            </div>
           </div>
 
           {usedColors.length > 0 && (
@@ -827,9 +864,9 @@ export default function Patterns() {
         </div>
       )}
 
-      {sorted && sorted.length > 0 && (
+      {paged && paged.length > 0 && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          {sorted.map((pattern) => (
+          {paged.map((pattern) => (
             <PatternCard
               key={pattern.id}
               pattern={pattern}
@@ -857,6 +894,17 @@ export default function Patterns() {
               onEditCategories={() => setCategoryEditItem(pattern)}
             />
           ))}
+        </div>
+      )}
+      {totalPages > 1 && (
+        <div className="mt-6 flex items-center justify-center gap-2">
+          <Button variant="outline" size="icon" className="h-8 w-8" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm text-muted-foreground">Page {page} of {totalPages}</span>
+          <Button variant="outline" size="icon" className="h-8 w-8" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
       )}
       <CategoryEditDialog

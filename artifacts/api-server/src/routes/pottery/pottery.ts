@@ -3,9 +3,12 @@ import multer from "multer";
 import {
   and,
   asc,
+  count,
   desc,
   eq,
   getTableColumns,
+  ilike,
+  inArray,
   isNull,
   notInArray,
   or,
@@ -22,6 +25,7 @@ import {
 
 import {
   ListPotteryResponse,
+  ListPotteryQueryParams,
   GetPotteryParams,
   GetPotteryResponse,
   UpdatePotteryParams,
@@ -116,15 +120,70 @@ router.use(requireAuth);
 // Collection
 // ---------------------------------------------------------------------------
 
-router.get("/items", async (_req, res) => {
+router.get("/items", async (req, res) => {
   // Pottery is a shared household collection — every authenticated user sees
   // every piece, regardless of who originally added it.
+  const parsed = ListPotteryQueryParams.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid query parameters." });
+    return;
+  }
+  const { q, categoryId, page, pageSize } = parsed.data;
+
+  // Build WHERE conditions for server-side filtering.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const conditions: any[] = [];
+  if (q && q.trim()) {
+    const term = `%${q.trim().toLowerCase()}%`;
+    conditions.push(
+      or(
+        ilike(potteryItems.name, term),
+        ilike(potteryItems.patternDescription, term),
+        ilike(potteryItems.style, term),
+        ilike(potteryItems.shape, term),
+        ilike(potteryItems.maker, term),
+      ),
+    );
+  }
+
+  // Category filter: join to itemCategories to filter by categoryId.
+  if (categoryId !== undefined) {
+    const catRows = await db
+      .select({ itemId: itemCategories.itemId })
+      .from(itemCategories)
+      .where(eq(itemCategories.categoryId, categoryId));
+    const itemIdsForCategory = catRows.map((r) => r.itemId);
+    if (itemIdsForCategory.length === 0) {
+      // No items in this category — short-circuit.
+      res.json(
+        ListPotteryResponse.parse({ items: [], total: 0, page, pageSize }),
+      );
+      return;
+    }
+    conditions.push(inArray(potteryItems.id, itemIdsForCategory));
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const where =
+    conditions.length > 0 ? and(...(conditions as [any, ...any[]])) : undefined;
+
+  // Total count for pagination metadata.
+  const [{ value: total }] = await db
+    .select({ value: count() })
+    .from(potteryItems)
+    .where(where);
+
+  const offset = (page - 1) * pageSize;
   const rows = await db
     .select(itemColumns)
     .from(potteryItems)
-    .orderBy(desc(potteryItems.createdAt));
+    .where(where)
+    .orderBy(desc(potteryItems.createdAt))
+    .limit(pageSize)
+    .offset(offset);
+
   const items = await serializeItems(rows);
-  res.json(ListPotteryResponse.parse(items));
+  res.json(ListPotteryResponse.parse({ items, total, page, pageSize }));
 });
 
 // Stragglers: pieces that need re-analysis — either missing a similarity
@@ -733,7 +792,7 @@ async function syncDuplicateCategory(
 // Shared AI analysis pipeline — used by both reanalyze and set-primary-image
 // ---------------------------------------------------------------------------
 
-async function runItemAnalysis(id: number): Promise<unknown> {
+export async function runItemAnalysis(id: number): Promise<unknown> {
   const [item] = await db
     .select(itemColumns)
     .from(potteryItems)
@@ -920,10 +979,11 @@ router.post("/items/:id/reanalyze", aiLimiter, async (req, res) => {
 // Bulk re-analyze with AI
 // ---------------------------------------------------------------------------
 
-const MAX_BULK_REANALYZE = 20;
+export const MAX_BULK_REANALYZE = 20;
 
-router.post("/items/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
-  const { ids } = BulkReanalyzePotteryBody.parse(req.body);
+export async function bulkReanalyzePotteryItems(
+  ids: number[],
+): Promise<{ succeeded: number[]; failed: number[] }> {
   const capped = [...new Set(ids)].slice(0, MAX_BULK_REANALYZE);
   const succeeded: number[] = [];
   const failed: number[] = [];
@@ -944,32 +1004,37 @@ router.post("/items/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
     }
   }
 
-  res.json({ succeeded, failed });
+  return { succeeded, failed };
+}
+
+router.post("/items/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
+  const { ids } = BulkReanalyzePotteryBody.parse(req.body);
+  res.json(await bulkReanalyzePotteryItems(ids));
 });
 
 // ---------------------------------------------------------------------------
 // Set primary image: swap a supplemental image to primary, then re-analyse
 // ---------------------------------------------------------------------------
 
-router.post("/items/:id/set-primary-image", aiLimiter, async (req, res) => {
-  const { id } = GetPotteryParams.parse(req.params);
-
-  const imageId = Number(req.body?.imageId);
-  if (!Number.isInteger(imageId) || imageId <= 0) {
-    res.status(400).json({ error: "imageId must be a positive integer." });
-    return;
-  }
-
+/**
+ * Swap a supplemental image to become the item's primary image, then
+ * re-run AI analysis with the new primary in place. Shared by the
+ * set-primary-image route and Elaine's promote_pottery_photo action.
+ */
+export async function promotePotteryImageToPrimary(
+  id: number,
+  imageId: number,
+): Promise<unknown> {
   // Fetch item to get the current primary path
   const [item] = await db
     .select(itemColumns)
     .from(potteryItems)
     .where(eq(potteryItems.id, id))
     .limit(1);
-  if (!item) {
-    res.status(404).json({ error: "Pottery piece not found." });
-    return;
-  }
+  if (!item)
+    throw Object.assign(new Error("Pottery piece not found."), {
+      status: 404,
+    });
 
   // Fetch the supplemental image to be promoted
   const [suppImage] = await db
@@ -977,10 +1042,8 @@ router.post("/items/:id/set-primary-image", aiLimiter, async (req, res) => {
     .from(potteryImages)
     .where(eq(potteryImages.id, imageId))
     .limit(1);
-  if (!suppImage || suppImage.itemId !== id) {
-    res.status(404).json({ error: "Image not found." });
-    return;
-  }
+  if (!suppImage || suppImage.itemId !== id)
+    throw Object.assign(new Error("Image not found."), { status: 404 });
 
   // Swap: supplemental row takes the old primary path, item gets the supplemental path
   const oldPrimaryPath = item.imagePath;
@@ -997,8 +1060,20 @@ router.post("/items/:id/set-primary-image", aiLimiter, async (req, res) => {
     .where(eq(potteryItems.id, id));
 
   // Re-analyse with the new primary image in place
+  return runItemAnalysis(id);
+}
+
+router.post("/items/:id/set-primary-image", aiLimiter, async (req, res) => {
+  const { id } = GetPotteryParams.parse(req.params);
+
+  const imageId = Number(req.body?.imageId);
+  if (!Number.isInteger(imageId) || imageId <= 0) {
+    res.status(400).json({ error: "imageId must be a positive integer." });
+    return;
+  }
+
   try {
-    res.json(await runItemAnalysis(id));
+    res.json(await promotePotteryImageToPrimary(id, imageId));
   } catch (err: unknown) {
     const status = (err as { status?: number }).status ?? 500;
     const message = err instanceof Error ? err.message : "Unknown error.";

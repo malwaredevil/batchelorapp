@@ -46,13 +46,31 @@ export interface ChatWidgetImage {
   sourceUrl?: string;
 }
 
+export interface ExchangeRateResult {
+  code: string;
+  name?: string;
+  rate: number;
+}
+
+export interface TripCardData {
+  tripId?: number;
+  name: string;
+  destination?: string;
+  startDate?: string;
+  endDate?: string;
+  status?: string;
+  countdownDays?: number;
+}
+
 export type ChatWidget =
   | { type: "weather"; locationName: string; days: WeatherDay[] }
   | { type: "places"; query: string; places: PlaceResult[] }
   | { type: "air_quality"; data: AirQualityData }
   | { type: "pollen"; data: PollenData }
   | { type: "data_card"; title?: string; rows: DataCardRow[] }
-  | { type: "image_card"; title?: string; images: ChatWidgetImage[] };
+  | { type: "image_card"; title?: string; images: ChatWidgetImage[] }
+  | { type: "exchange_rate"; from: string; to: ExchangeRateResult[]; lastUpdated: string }
+  | { type: "trip_card"; trip: TripCardData };
 
 // ── Weather condition → emoji mapping ──────────────────────────────────────
 
@@ -431,6 +449,97 @@ function ImageCardWidget({
   );
 }
 
+// ── Exchange Rate Widget ─────────────────────────────────────────────────────
+
+function ExchangeRateWidget({
+  from,
+  to,
+  lastUpdated,
+}: {
+  from: string;
+  to: ExchangeRateResult[];
+  lastUpdated: string;
+}) {
+  const flag = (code: string) => {
+    const offset = 127397;
+    return [...code.toUpperCase()].map((c) => String.fromCodePoint(c.charCodeAt(0) + offset)).join("");
+  };
+  return (
+    <div className="mt-2 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      <div className="flex items-center gap-1.5 border-b border-border/60 bg-emerald-50/60 px-3 py-2 dark:bg-emerald-950/30">
+        <span className="text-base">{flag(from)}</span>
+        <span className="text-xs font-semibold text-foreground">Exchange Rates from {from}</span>
+        <span className="ml-auto text-[10px] text-muted-foreground">{lastUpdated}</span>
+      </div>
+      <div className="divide-y divide-border/60">
+        {to.map((r) => (
+          <div key={r.code} className="flex items-center px-3 py-2">
+            <span className="mr-2 text-base">{flag(r.code)}</span>
+            <span className="flex-1 text-sm font-medium text-foreground">
+              {r.name ?? r.code}
+            </span>
+            <span className="text-sm font-semibold text-foreground">
+              1 {from} = {r.rate.toFixed(4)} {r.code}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Trip Card Widget ─────────────────────────────────────────────────────────
+
+function TripCardWidget({ trip }: { trip: TripCardData }) {
+  const statusColors: Record<string, string> = {
+    planning: "bg-blue-100 text-blue-700",
+    confirmed: "bg-green-100 text-green-700",
+    ongoing: "bg-amber-100 text-amber-700",
+    completed: "bg-slate-100 text-slate-600",
+    cancelled: "bg-red-100 text-red-600",
+  };
+  const statusColor = trip.status ? (statusColors[trip.status.toLowerCase()] ?? "bg-muted text-muted-foreground") : "";
+  const countdownText =
+    trip.countdownDays != null
+      ? trip.countdownDays < 0
+        ? `${Math.abs(trip.countdownDays)}d ago`
+        : trip.countdownDays === 0
+        ? "Today!"
+        : `${trip.countdownDays}d away`
+      : null;
+
+  return (
+    <div className="mt-2 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      <div className="flex items-start gap-2 px-3 py-3">
+        <span className="mt-0.5 text-2xl">✈️</span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-foreground">{trip.name}</p>
+          {trip.destination && (
+            <p className="text-xs text-muted-foreground">{trip.destination}</p>
+          )}
+          {(trip.startDate || trip.endDate) && (
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {trip.startDate ?? ""}
+              {trip.startDate && trip.endDate ? " – " : ""}
+              {trip.endDate ?? ""}
+            </p>
+          )}
+        </div>
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          {trip.status && (
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${statusColor}`}>
+              {trip.status}
+            </span>
+          )}
+          {countdownText && (
+            <span className="text-xs font-semibold text-primary">{countdownText}</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main export ─────────────────────────────────────────────────────────────
 
 export function ChatWidget({ widget }: { widget: ChatWidget }) {
@@ -449,5 +558,9 @@ export function ChatWidget({ widget }: { widget: ChatWidget }) {
       return <DataCardWidget title={widget.title} rows={widget.rows} />;
     case "image_card":
       return <ImageCardWidget title={widget.title} images={widget.images} />;
+    case "exchange_rate":
+      return <ExchangeRateWidget from={widget.from} to={widget.to} lastUpdated={widget.lastUpdated} />;
+    case "trip_card":
+      return <TripCardWidget trip={widget.trip} />;
   }
 }

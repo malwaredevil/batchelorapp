@@ -514,6 +514,25 @@ export async function trashMessage(
   await gmailPost(accessToken, `/users/me/messages/${messageId}/trash`, {});
 }
 
+export async function modifyThread(
+  accessToken: string,
+  threadId: string,
+  addLabelIds: string[],
+  removeLabelIds: string[],
+): Promise<void> {
+  await gmailPost(accessToken, `/users/me/threads/${threadId}/modify`, {
+    addLabelIds,
+    removeLabelIds,
+  });
+}
+
+export async function trashThread(
+  accessToken: string,
+  threadId: string,
+): Promise<void> {
+  await gmailPost(accessToken, `/users/me/threads/${threadId}/trash`, {});
+}
+
 export async function untrashMessage(
   accessToken: string,
   messageId: string,

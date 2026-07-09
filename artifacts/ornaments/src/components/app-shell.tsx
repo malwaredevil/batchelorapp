@@ -1,6 +1,6 @@
 import { type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { LogOut, Settings, ChevronDown, Sparkles } from "lucide-react";
+import { LogOut, Settings, ChevronDown } from "lucide-react";
 import { AppSwitcher, SearchTrigger } from "@workspace/elaine-ui";
 import { InstallBanner } from "@workspace/web-core";
 import {
@@ -27,11 +27,11 @@ function isActive(current: string, href: string) {
 export function AppShell({ children }: { children: ReactNode }) {
   const [location, navigate] = useLocation();
   const groups = getNavItemsByGroup();
-  const mainNav = groups.main.filter(n => n.href !== "/settings");
+  const mainNav = groups.main;
   const settingsNav = groups.settings;
 
   const isSettingsActive = (current: string) =>
-    current === "/settings" || settingsNav.some(
+    settingsNav.some(
       (s) => current === s.href || current.startsWith(s.href + "/"),
     );
   const queryClient = useQueryClient();
@@ -52,7 +52,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-40 border-b border-card-border bg-card/85 backdrop-blur-md">
+      <header className="sticky top-0 z-40 border-b border-card-border bg-background/85 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
           <AppSwitcher currentAppId="ornaments" />
 
@@ -94,20 +94,13 @@ export function AppShell({ children }: { children: ReactNode }) {
                     <ChevronDown className="h-3.5 w-3.5 opacity-70" />
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48 bg-card border-card-border shadow-md rounded-xl">
-                  <DropdownMenuItem
-                    onClick={() => navigate("/settings")}
-                    className={cn("flex items-center gap-2 cursor-pointer font-serif tracking-wide", isActive(location, "/settings") && "text-primary")}
-                  >
-                    <Settings className="h-4 w-4" />
-                    Overview
-                  </DropdownMenuItem>
+                <DropdownMenuContent align="end" className="w-44">
                   {settingsNav.map((item) => (
                     <DropdownMenuItem
                       key={item.href}
                       onClick={() => navigate(item.href)}
                       className={cn(
-                        "flex items-center gap-2 cursor-pointer font-serif tracking-wide",
+                        "flex items-center gap-2 cursor-pointer",
                         isActive(location, item.href) && "text-primary",
                       )}
                       data-testid={`navlink-${item.label.toLowerCase()}`}
@@ -129,7 +122,6 @@ export function AppShell({ children }: { children: ReactNode }) {
               disabled={logout.isPending}
               title="Sign out"
               data-testid="button-logout"
-              className="text-muted-foreground hover:text-foreground hover:bg-muted"
             >
               <LogOut className="h-4 w-4" />
             </Button>
@@ -143,7 +135,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </main>
 
       {/* Mobile bottom nav */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-card-border bg-card/95 backdrop-blur-md md:hidden pb-safe">
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-card-border bg-background/95 backdrop-blur md:hidden">
         <div className="mx-auto flex max-w-md items-stretch justify-around px-2 py-1.5">
           {mainNav.map((item) => {
             const active = isActive(location, item.href);
@@ -163,7 +155,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     active && "scale-110 transition-transform",
                   )}
                 />
-                <span className="font-serif italic tracking-wide">{item.label}</span>
+                {item.label}
               </Link>
             );
           })}
@@ -185,7 +177,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   "scale-110 transition-transform",
               )}
             />
-            <span className="font-serif italic tracking-wide">Settings</span>
+            Settings
           </Link>
         </div>
       </nav>

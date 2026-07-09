@@ -147,7 +147,7 @@ function buildPageContainer(
     .map((item, i) => {
       const imgSrc = imageDataUrls[i];
       const imgTag = imgSrc
-        ? `<img src="${imgSrc}" style="width:80px;height:80px;object-fit:cover;border-radius:5px;border:1px solid #ddd;display:block;" />`
+        ? `<img src="${escHtml(imgSrc)}" style="width:80px;height:80px;object-fit:cover;border-radius:5px;border:1px solid #ddd;display:block;" />`
         : `<div style="width:80px;height:80px;border-radius:5px;background:#f3f4f6;border:1px solid #ddd;display:flex;align-items:center;justify-content:center;font-size:9px;color:#9ca3af;text-align:center;">No image</div>`;
 
       const fields = [

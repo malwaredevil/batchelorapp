@@ -156,6 +156,8 @@ export function useThreadList(
     queryFn: () =>
       apiFetch<ThreadListResponse>(`/threads?${queryParams.toString()}`),
     staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
     enabled,
   });
 }

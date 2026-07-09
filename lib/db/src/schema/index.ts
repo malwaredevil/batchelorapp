@@ -5,3 +5,4 @@ export * from "./travels";
 export * from "./elaine";
 export * from "./gmail";
 export * from "./agentphone";
+export * from "./ornaments";

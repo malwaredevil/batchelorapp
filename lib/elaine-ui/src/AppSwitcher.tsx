@@ -5,6 +5,7 @@ import {
   useGetCollectionStats,
   useGetStats,
   useGetTravelsStats,
+  useGetOrnamentStats,
 } from "@workspace/api-client-react";
 import {
   DropdownMenu,
@@ -19,6 +20,7 @@ export type AppId =
   | "pottery"
   | "quilting"
   | "travels"
+  | "ornaments"
   | "elaine"
   | "gmail";
 
@@ -178,6 +180,34 @@ function TravelsLogo({ className }: { className?: string }) {
   );
 }
 
+function OrnamentsLogo({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 100 100"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect width="100" height="100" rx="22" fill="#1B3A5C" />
+      <rect x="44" y="16" width="12" height="10" rx="3" fill="#F0E8D8" />
+      <circle
+        cx="50"
+        cy="58"
+        r="26"
+        stroke="#F0E8D8"
+        strokeWidth="3.5"
+        fill="none"
+      />
+      <path
+        d="M32 46 L68 46"
+        stroke="#F0E8D8"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function ElaineLogo({ className }: { className?: string }) {
   return <ElaineAvatar className={className} size={32} />;
 }
@@ -226,11 +256,13 @@ interface AppEntry {
 function useApps(): AppEntry[] {
   const { data: potteryStats } = useGetCollectionStats();
   const { data: quiltingStats } = useGetStats();
+  const { data: ornamentsStats } = useGetOrnamentStats();
   const { data: travelsStats } = useGetTravelsStats();
 
   const potteryCount = potteryStats?.totalItems;
   const fabricCount = quiltingStats?.totalFabrics;
   const tripCount = travelsStats?.totalTrips;
+  const ornamentsCount = ornamentsStats?.totalItems;
 
   return [
     {
@@ -262,6 +294,14 @@ function useApps(): AppEntry[] {
       subtitle: tripCount != null ? `${tripCount} trips` : "Travel Journal",
       href: "/travels/",
       Logo: TravelsLogo,
+    },
+    {
+      id: "ornaments",
+      name: "Batchelor Ornaments",
+      subtitle:
+        ornamentsCount != null ? `${ornamentsCount} ornaments` : "Ornament Collection",
+      href: "/ornaments/",
+      Logo: OrnamentsLogo,
     },
     {
       id: "elaine",

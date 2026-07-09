@@ -31,6 +31,7 @@ import {
   type WholequiltDesign,
 } from "@/lib/whole-quilt-storage";
 import { downloadSvgAsJpeg } from "@/lib/svg-export";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 type SortOption = "newest" | "oldest" | "az" | "za";
 
@@ -148,6 +149,11 @@ export default function WholeQuiltList() {
   const [designs, setDesigns] = useState<WholequiltDesign[]>([]);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortOption>("newest");
+
+  usePageAssistantContext(
+    "quilting-whole-quilt-designs",
+    `Whole-Quilt Designer list page: ${designs.length} saved whole-quilt design(s), stored locally in the browser (not in the shared household database). No chat action tools exist for these designs.`,
+  );
 
   // Load designs (migrating from legacy single-design format if needed)
   useEffect(() => {

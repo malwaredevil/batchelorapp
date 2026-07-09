@@ -21,6 +21,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { TagSelector } from "@/components/tag-selector";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 export default function AddPattern() {
   const [, navigate] = useLocation();
@@ -39,6 +40,11 @@ export default function AddPattern() {
   const [fields, setFields] = useState<Record<string, string>>({});
 
   const { data: allCategories } = useListQuiltingCategories();
+
+  usePageAssistantContext(
+    "quilting-patterns-add",
+    "Add Pattern page: a form to add a new quilt pattern (name, designer, block size, difficulty, source, notes) either by uploading a photo/URL import or filling fields manually — a pattern's photo is optional. You have a create_pattern action tool for this that can create a pattern record from chat without a photo, but cannot run the URL-import or photo-analysis flows.",
+  );
 
   const create = useCreatePattern({
     mutation: {

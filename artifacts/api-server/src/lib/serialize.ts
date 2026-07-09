@@ -119,6 +119,7 @@ export interface SerializedQuilt {
   notes: string | null;
   dominantColors: string[];
   lockedFields: string[];
+  completionPercentage: number;
   categories: CategoryResult[];
   images: ImageResult[];
   imageUrl: string;
@@ -452,6 +453,7 @@ function toQuilt(
     notes: row.notes,
     dominantColors: row.dominantColors ?? [],
     lockedFields: row.lockedFields ?? [],
+    completionPercentage: row.completionPercentage ?? 0,
     categories: cats,
     images: imgs,
     imageUrl: `/api/quilting/quilts/${row.id}/image`,

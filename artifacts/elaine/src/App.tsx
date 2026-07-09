@@ -13,6 +13,7 @@ import {
 } from "@workspace/elaine-ui";
 import { Header } from "@/components/Header";
 import { InstallBanner } from "@workspace/web-core";
+import "@/features";
 import Chat from "@/pages/Chat";
 import Settings from "@/pages/Settings";
 import NotFound from "@/pages/not-found";

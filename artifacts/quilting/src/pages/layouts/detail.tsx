@@ -31,6 +31,7 @@ import { LayoutPreviewSvg } from "@/components/LayoutPreviewSvg";
 import { PreviewZoomModal } from "@/components/PreviewZoomModal";
 import { TagSelector } from "@/components/tag-selector";
 import type { QuiltingCategory } from "@workspace/api-client-react";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 type LayoutCellData = { blockId: number | null; rotation: 0 | 90 | 180 | 270 };
 
@@ -69,6 +70,13 @@ export default function LayoutDetail() {
     isLoading,
     isError,
   } = useGetLayout(Number.isFinite(layoutId) ? layoutId : 0);
+
+  usePageAssistantContext(
+    "quilting-layout-detail",
+    isLoading || !layout
+      ? undefined
+      : `Layout Detail page (layoutId: ${layout.id}): "${layout.name}", ${layout.rows}x${layout.cols} grid.`,
+  );
 
   const { data: allBlocks = [] } = useListBlocks();
   const { data: fabrics = [] } = useListFabrics();

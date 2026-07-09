@@ -33,6 +33,7 @@ import {
   ElaineSettingsCard,
   GlobalConfigCard,
 } from "@workspace/elaine-ui";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 const base = import.meta.env.BASE_URL;
 
@@ -204,7 +205,16 @@ function PhoneCard() {
         Phone &amp; SMS
       </div>
       <p className="mb-4 text-sm text-muted-foreground">
-        Verify a phone number to receive Travels reminders by text.
+        Verify a phone number to receive Travels reminders by text. See our{" "}
+        <a
+          href={`${base}travels/privacy`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-foreground"
+        >
+          Privacy Policy
+        </a>{" "}
+        for details on how your phone number is used.
       </p>
 
       {user?.phoneVerified && user?.phoneNumber ? (
@@ -259,7 +269,17 @@ function PhoneCard() {
               I agree to receive SMS text messages from Batchelor App at the
               phone number above, including verification codes and Travels trip
               reminders. Message and data rates may apply. Message frequency
-              varies. Reply STOP to opt out at any time, or HELP for help.
+              varies. Reply STOP to opt out at any time, or HELP for help. See
+              our{" "}
+              <a
+                href={`${base}travels/privacy`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-foreground"
+              >
+                Privacy Policy
+              </a>
+              .
             </Label>
           </div>
           <Button
@@ -479,6 +499,13 @@ function PasswordCard() {
 }
 
 export default function Account() {
+  const { user } = useAuth();
+
+  usePageAssistantContext(
+    "hub-account",
+    `On the shared Account settings page (profile, phone/SMS, appearance, password, and Elaine assistant settings — shared across every app). Signed in as ${user?.email ?? "unknown"}${user?.phoneVerified ? `, with a verified phone number (${user.phoneNumber})` : ", with no verified phone number yet"}.`,
+  );
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background/80 px-6 py-4 backdrop-blur-md">

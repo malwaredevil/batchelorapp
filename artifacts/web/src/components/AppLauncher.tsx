@@ -26,6 +26,9 @@ import {
   SlidersHorizontal,
   Mail,
   CalendarDays,
+  Gift,
+  Tag,
+  Sparkle,
 } from "lucide-react";
 import { AppSwitcher } from "@workspace/elaine-ui";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -59,6 +62,7 @@ import {
   useListPotteryCategories,
   useGetStats,
   useGetTravelsStats,
+  useGetOrnamentStats,
 } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 
@@ -99,6 +103,22 @@ const TRAVELS_QUICK_LINKS = [
   { label: "Trips", icon: Layers, href: `${base}travels/trips` },
   { label: "Explore", icon: Rss, href: `${base}travels/explore` },
 ];
+
+const ORNAMENTS_QUICK_LINKS = [
+  { label: "Collection", icon: Gift, href: `${base}ornaments/` },
+  { label: "Categories", icon: Tag, href: `${base}ornaments/categories` },
+  { label: "Stats", icon: Activity, href: `${base}ornaments/stats` },
+];
+
+/**
+ * Hallmark's annual Keepsake Ornament Premiere ("Open House") event.
+ * Dates are set by Hallmark each year; update this when the next year's
+ * dates are announced.
+ */
+const HALLMARK_OPEN_HOUSE = {
+  start: new Date("2026-07-11T00:00:00"),
+  end: new Date("2026-07-12T23:59:59"),
+};
 
 const ELAINE_QUICK_LINKS = [
   { label: "Chat", icon: MessageCircle, href: `${base}elaine/` },
@@ -300,6 +320,7 @@ function AppHeroCard({
   accentIconColor,
   expanded,
   onToggle,
+  extraBlock,
 }: {
   app: {
     id: string;
@@ -321,6 +342,8 @@ function AppHeroCard({
   accentIconColor: string;
   expanded: boolean;
   onToggle: () => void;
+  /** Optional extra block rendered below the stats row (e.g. a countdown). */
+  extraBlock?: React.ReactNode;
 }) {
   return (
     <a
@@ -367,6 +390,7 @@ function AppHeroCard({
               </div>
             ))}
           </div>
+          {extraBlock}
         </CardContent>
 
         {/* Accordion toggle */}
@@ -427,6 +451,51 @@ function AppHeroCard({
   );
 }
 
+// ── Ornaments card extra: Hallmark Open House countdown ──────────────────────
+function HallmarkOpenHouseCountdown() {
+  const now = Date.now();
+  const { start, end } = HALLMARK_OPEN_HOUSE;
+  const isLive = now >= start.getTime() && now <= end.getTime();
+  const daysAway = isLive
+    ? 0
+    : Math.max(0, Math.ceil((start.getTime() - now) / 86_400_000));
+
+  const dateRangeLabel = `${start.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  })} – ${end.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })}`;
+
+  return (
+    <div className="mt-3 flex items-center gap-3 rounded-lg bg-rose-50 dark:bg-rose-900/20 p-3">
+      <div className="w-10 h-10 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center flex-shrink-0">
+        <Sparkle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-semibold truncate">
+          Hallmark's Open House
+        </div>
+        <div className="text-[10px] text-muted-foreground">
+          {dateRangeLabel}
+        </div>
+      </div>
+      <div className="text-center flex-shrink-0">
+        <div className="text-2xl font-bold text-rose-600 dark:text-rose-400 tabular-nums leading-none">
+          {isLive ? "Live" : daysAway}
+        </div>
+        {!isLive && (
+          <div className="text-[9px] text-muted-foreground uppercase tracking-wide">
+            days
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 export function AppLauncher() {
   const { isDark, toggleTheme } = useTheme();
@@ -458,6 +527,7 @@ export function AppLauncher() {
   const [potteryExpanded, setPotteryExpanded] = useState(false);
   const [quiltingExpanded, setQuiltingExpanded] = useState(false);
   const [travelsExpanded, setTravelsExpanded] = useState(false);
+  const [ornamentsExpanded, setOrnamentsExpanded] = useState(false);
   const [elaineExpanded, setElaineExpanded] = useState(false);
 
   // Live stats
@@ -465,6 +535,7 @@ export function AppLauncher() {
   const { data: potteryCategoriesData } = useListPotteryCategories();
   const { data: quiltingStatsData } = useGetStats();
   const { data: travelsStatsData } = useGetTravelsStats();
+  const { data: ornamentsStatsData } = useGetOrnamentStats();
 
   function liveStats(appId: string): { value: string; label: string }[] {
     if (appId === "pottery") {
@@ -539,6 +610,31 @@ export function AppLauncher() {
               ? String(travelsStatsData.upcomingTrips)
               : "—",
           label: "Upcoming",
+        },
+      ];
+    }
+    if (appId === "ornaments") {
+      return [
+        {
+          value:
+            ornamentsStatsData?.totalItems != null
+              ? String(ornamentsStatsData.totalItems)
+              : "—",
+          label: "Total",
+        },
+        {
+          value:
+            ornamentsStatsData?.totalQuantity != null
+              ? String(ornamentsStatsData.totalQuantity)
+              : "—",
+          label: "Quantity",
+        },
+        {
+          value:
+            ornamentsStatsData?.totalBookValue != null
+              ? `$${Math.round(ornamentsStatsData.totalBookValue)}`
+              : "—",
+          label: "Book Value",
         },
       ];
     }
@@ -852,6 +948,17 @@ export function AppLauncher() {
               accentIconColor="text-sky-600 dark:text-sky-400"
               expanded={travelsExpanded}
               onToggle={() => setTravelsExpanded((e) => !e)}
+            />
+            <AppHeroCard
+              app={APPS.find((a) => a.id === "ornaments")!}
+              stats={liveStats("ornaments")}
+              quickLinks={ORNAMENTS_QUICK_LINKS}
+              accentBorderColor="border-rose-200/60 dark:border-rose-800/40"
+              accentSectionBg="bg-rose-50/60 dark:bg-rose-900/10"
+              accentIconColor="text-rose-600 dark:text-rose-400"
+              expanded={ornamentsExpanded}
+              onToggle={() => setOrnamentsExpanded((e) => !e)}
+              extraBlock={<HallmarkOpenHouseCountdown />}
             />
             <AppHeroCard
               app={APPS.find((a) => a.id === "elaine")!}

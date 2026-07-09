@@ -6,6 +6,7 @@
  * the original RRF ordering is preserved unchanged.
  */
 import { env } from "./env";
+import { withRetry } from "./retry";
 
 const VOYAGE_RERANK_URL = "https://api.voyageai.com/v1/rerank";
 // rerank-2.5 is Voyage's current generalist model: better retrieval quality
@@ -44,21 +45,25 @@ export async function rerankCandidates(
   }
 
   try {
-    const response = await fetch(VOYAGE_RERANK_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${env.voyageApiKey}`,
-      },
-      body: JSON.stringify({
-        model: RERANK_MODEL,
-        query,
-        documents: documents.map((d) => d.text),
-        top_k: Math.min(topK, documents.length),
-        return_documents: false,
-      }),
-      signal: AbortSignal.timeout(10_000),
-    });
+    const response = await withRetry(
+      () =>
+        fetch(VOYAGE_RERANK_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${env.voyageApiKey}`,
+          },
+          body: JSON.stringify({
+            model: RERANK_MODEL,
+            query,
+            documents: documents.map((d) => d.text),
+            top_k: Math.min(topK, documents.length),
+            return_documents: false,
+          }),
+          signal: AbortSignal.timeout(10_000),
+        }),
+      { label: "voyage-rerank" },
+    );
 
     if (!response.ok) {
       return originalOrder;

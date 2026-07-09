@@ -13,6 +13,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { TagSelector } from "@/components/tag-selector";
+import { usePageAssistantContext } from "@/lib/assistant-context";
 
 export default function AddQuilt() {
   const [, navigate] = useLocation();
@@ -23,6 +24,11 @@ export default function AddQuilt() {
   const [selectedCatIds, setSelectedCatIds] = useState<number[]>([]);
 
   const { data: allCategories } = useListQuiltingCategories();
+
+  usePageAssistantContext(
+    "quilting-quilts-add",
+    "Add Quilt page: a form to add a new finished/in-progress quilt to the collection with a required photo (for AI cataloguing) plus optional name/size/recipient/notes/categories. This is a photo-upload form — you cannot submit it on the user's behalf from chat.",
+  );
 
   const create = useCreateQuilt({
     mutation: {

@@ -1,12 +1,13 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
-import { and, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, getTableColumns, ilike, inArray, sql } from "drizzle-orm";
 import {
   db,
   fabrics,
   entityCategories,
   quiltingCategories as categories,
   quiltingImages,
+  quiltFabricLinks,
   type FabricRow,
 } from "@workspace/db";
 import {
@@ -141,15 +142,122 @@ router.use(requireAuth);
 // List
 // ---------------------------------------------------------------------------
 
-router.get("/fabrics", async (_req, res) => {
+router.get("/fabrics", async (req, res) => {
+  const q = typeof req.query.q === "string" ? req.query.q.trim() : undefined;
+  const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
+  const pageSize = Math.min(500, Math.max(1, parseInt(String(req.query.pageSize ?? "50"), 10) || 50));
+  const offset = (page - 1) * pageSize;
+
+  const where = q ? ilike(fabrics.name, `%${q}%`) : undefined;
+
+  const [{ value: total }] = await db
+    .select({ value: count() })
+    .from(fabrics)
+    .where(where);
+
   const rows = await db
     .select(fabricColumns)
     .from(fabrics)
-    .orderBy(desc(fabrics.createdAt));
+    .where(where)
+    .orderBy(desc(fabrics.createdAt))
+    .limit(pageSize)
+    .offset(offset);
+
   const items = await serializeFabrics(
     rows as Array<Omit<FabricRow, "embedding" | "visualEmbedding">>,
   );
-  res.json(ListFabricsResponse.parse(items));
+  res.json(ListFabricsResponse.parse({ items, total, page, pageSize }));
+});
+
+// ---------------------------------------------------------------------------
+// Used fabric IDs (must appear before /:id to avoid being caught by that param)
+// ---------------------------------------------------------------------------
+
+router.get("/fabrics/used-ids", async (_req, res) => {
+  const rows = await db
+    .selectDistinct({ fabricId: quiltFabricLinks.fabricId })
+    .from(quiltFabricLinks);
+  res.json(rows.map((r) => r.fabricId));
+});
+
+// ---------------------------------------------------------------------------
+// Fabric pairings — find 4 stash fabrics that pair well by embedding similarity
+// ---------------------------------------------------------------------------
+
+router.get("/fabrics/:id/pairings", async (req, res) => {
+  const { id } = GetFabricParams.parse(req.params);
+
+  // Load the target fabric's embeddings
+  const [target] = await db
+    .select()
+    .from(fabrics)
+    .where(eq(fabrics.id, id))
+    .limit(1);
+
+  if (!target) {
+    res.status(404).json({ error: "Fabric not found." });
+    return;
+  }
+
+  type RankedRow = { id: number; similarity: number };
+
+  // Cosine similarity search on text embedding
+  let textRanked: RankedRow[] = [];
+  if (target.embedding) {
+    const vec = `[${(target.embedding as number[]).join(",")}]`;
+    const rows = await db.execute<RankedRow>(sql`
+      select id, 1 - (embedding <=> ${vec}::vector) as similarity
+      from quilting_fabrics
+      where embedding is not null and id != ${id}
+      order by embedding <=> ${vec}::vector
+      limit 20
+    `);
+    textRanked = rows.rows.map((r) => ({ id: Number(r.id), similarity: Number(r.similarity) }));
+  }
+
+  // Cosine similarity search on visual embedding
+  let visualRanked: RankedRow[] = [];
+  if (target.visualEmbedding) {
+    const vec = `[${(target.visualEmbedding as number[]).join(",")}]`;
+    const rows = await db.execute<RankedRow>(sql`
+      select id, 1 - (visual_embedding <=> ${vec}::vector) as similarity
+      from quilting_fabrics
+      where visual_embedding is not null and id != ${id}
+      order by visual_embedding <=> ${vec}::vector
+      limit 20
+    `);
+    visualRanked = rows.rows.map((r) => ({ id: Number(r.id), similarity: Number(r.similarity) }));
+  }
+
+  // Reciprocal Rank Fusion (k=60) to merge the two ranked lists
+  const scores = new Map<number, number>();
+  textRanked.forEach(({ id: fid }, rank) => {
+    scores.set(fid, (scores.get(fid) ?? 0) + 1 / (60 + rank + 1));
+  });
+  visualRanked.forEach(({ id: fid }, rank) => {
+    scores.set(fid, (scores.get(fid) ?? 0) + 1 / (60 + rank + 1));
+  });
+
+  // Pick the top 4 by RRF score
+  const topIds = [...scores.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([fid]) => fid);
+
+  if (topIds.length === 0) {
+    res.json([]);
+    return;
+  }
+
+  const { embedding: _emb, visualEmbedding: _vemb, ...cols } = getTableColumns(fabrics);
+  const rows = await db.select(cols).from(fabrics).where(inArray(fabrics.id, topIds));
+  const serialized = await Promise.all(
+    rows.map((r) => serializeFabric(r as Omit<FabricRow, "embedding" | "visualEmbedding">)),
+  );
+
+  // Return in the same order as topIds
+  const byId = new Map(serialized.map((f) => [f.id, f]));
+  res.json(topIds.map((fid) => byId.get(fid)).filter(Boolean));
 });
 
 // ---------------------------------------------------------------------------
@@ -523,8 +631,11 @@ router.post("/fabrics/:id/reanalyze", aiLimiter, async (req, res) => {
 
 const MAX_BULK_REANALYZE = 20;
 
-router.post("/fabrics/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
-  const { ids } = BulkReanalyzeFabricsBody.parse(req.body);
+/** Re-run AI analysis on a batch of fabrics. Shared by the REST route and
+ * Elaine's bulk_reanalyze_quilting action. */
+export async function bulkReanalyzeFabrics(
+  ids: number[],
+): Promise<{ succeeded: number[]; failed: number[] }> {
   const capped = [...new Set(ids)].slice(0, MAX_BULK_REANALYZE);
   const succeeded: number[] = [];
   const failed: number[] = [];
@@ -632,6 +743,12 @@ router.post("/fabrics/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
     }
   }
 
+  return { succeeded, failed };
+}
+
+router.post("/fabrics/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
+  const { ids } = BulkReanalyzeFabricsBody.parse(req.body);
+  const { succeeded, failed } = await bulkReanalyzeFabrics(ids);
   res.json(BulkReanalyzeFabricsResponse.parse({ succeeded, failed }));
 });
 

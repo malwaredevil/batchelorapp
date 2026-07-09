@@ -159,6 +159,10 @@ overrides:
   # drizzle-kit uses esbuild internally on an older version that's vulnerable, this overrides it
   "@esbuild-kit/esm-loader": "npm:tsx@^4.21.0"
   esbuild: "0.28.1"
+  # Force a single drizzle-orm instance — multiple versions (from @opentelemetry
+  # peer dep chains) cause TS2345 errors because their SQL<unknown> types are
+  # nominally different despite being identical at runtime.
+  drizzle-orm: "0.45.2"
   # Security overrides — force transitive deps to patched versions
   qs: ">=6.15.2"
   # Exact-pinned: js-yaml@5 is ESM-only with no default export, which breaks

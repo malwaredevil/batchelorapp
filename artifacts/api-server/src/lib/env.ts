@@ -36,4 +36,5 @@ export const env = {
   // Optional at the env layer so the rest of the app boots fine without it —
   // the webhook route itself returns 503 until this is set.
   agentphoneWebhookSecret: optional("AGENTPHONE_WEBHOOK_SECRET"),
+  sentryDsn: optional("SENTRY_DSN"),
 };

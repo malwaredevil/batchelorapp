@@ -146,7 +146,8 @@ function ProgressBar({ done, total }: { done: number; total: number }) {
 // ---------------------------------------------------------------------------
 export default function Maintenance() {
   const queryClient = useQueryClient();
-  const { data, isLoading } = useListPottery();
+  const { data: listData, isLoading } = useListPottery({ pageSize: 200 });
+  const data = listData?.items;
   const { data: stragglerData, isLoading: stragglersLoading } =
     useGetStragglers();
 

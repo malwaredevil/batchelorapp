@@ -617,7 +617,8 @@ function sortItems(items: PotteryItem[], key: SortKey): PotteryItem[] {
 export default function Collection() {
   const [, navigate] = useLocation();
   const locationSearch = useSearch();
-  const { data, isLoading, isError } = useListPottery();
+  const { data: listData, isLoading, isError } = useListPottery({ pageSize: 200 });
+  const data = listData?.items;
   const { data: allCategories = [] } = useListCategories();
 
   const [search, setSearch] = useState("");

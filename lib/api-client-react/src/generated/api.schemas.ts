@@ -199,6 +199,14 @@ export interface PotteryPotteryItem {
   createdAt: string;
 }
 
+export interface PotteryPotteryListResponse {
+  items: PotteryPotteryItem[];
+  /** Total number of items matching the query (before pagination) */
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export interface PotteryPotteryUpdate {
   /** @minLength 1 */
   name?: string;
@@ -1417,6 +1425,26 @@ export interface TravelsLoadTemplateResult {
   added: number;
   items: TravelsPackingItem[];
 }
+
+export type ListPotteryParams = {
+/**
+ * Text search across name, pattern description, style, shape, maker, and motifs
+ */
+q?: string;
+/**
+ * Filter to items that belong to this category ID
+ */
+categoryId?: number;
+/**
+ * @minimum 1
+ */
+page?: number;
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+pageSize?: number;
+};
 
 export type DeletePotteryUnusedCategories200 = {
   deleted: number;

@@ -12,6 +12,9 @@ import { logger } from "./lib/logger";
 import { env } from "./lib/env";
 import { sessionMiddleware } from "./lib/session";
 import { csrfGuard } from "./middleware/csrf";
+import { recordResponseStatus } from "./lib/error-tracker";
+
+const SLOW_REQUEST_THRESHOLD_MS = 2_000;
 
 const app: Express = express();
 
@@ -38,6 +41,23 @@ app.use(
     },
   }),
 );
+
+// Slow-request detection: log a warn when any request takes more than 2 s.
+// Must be mounted AFTER pinoHttp so req.log is available.
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const t0 = Date.now();
+  res.on("finish", () => {
+    const ms = Date.now() - t0;
+    recordResponseStatus(res.statusCode);
+    if (ms >= SLOW_REQUEST_THRESHOLD_MS) {
+      req.log.warn(
+        { durationMs: ms, method: req.method, path: req.path },
+        "slow-request",
+      );
+    }
+  });
+  next();
+});
 
 app.use("/api/quilting/blocks/detect-seams", express.json({ limit: "5mb" }));
 // AgentPhone webhook signatures are HMAC'd over the raw request body, so the

@@ -1,3 +1,4 @@
+- [Pottery list endpoint is now paginated](pottery-list-pagination.md) — GET /pottery/items returns {items,total,page,pageSize}; all callers must use data?.items; call with pageSize:200 to fetch full collection for client-side ops.
 - [Ad-hoc Supabase access from dev](supabase-adhoc-access.md) — sandbox env is empty & direct Postgres is DNS-blocked; for one-off DB writes use the Supabase REST API from a bash-invoked Node script.
 - [Sharing code across artifacts](shared-code-extraction.md) — cross-artifact shared code must be a lib/\* package (leaf apps can't import each other); dedup via thin re-export adapters to preserve import surfaces.
 - [Hybrid AI retrieval](hybrid-ai-retrieval.md) — compare endpoints fuse text+visual embeddings (RRF k=60) then Voyage rerank; perMatch is keyed by sequential index, and visual_embedding must only be overwritten when non-null.

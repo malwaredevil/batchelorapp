@@ -30,6 +30,7 @@ import type {
   ForgotPasswordInput,
   HealthStatus,
   ImportPatternFromUrlBody,
+  ListPotteryParams,
   LoginInput,
   MergeQuiltingCategory200,
   PaletteMatchFabricsBody,
@@ -46,6 +47,7 @@ import type {
   PotteryPotteryImage,
   PotteryPotteryImageUpdate,
   PotteryPotteryItem,
+  PotteryPotteryListResponse,
   PotteryPotteryUpdate,
   PotteryPrimaryImageSelection,
   PotteryStragglers,
@@ -1071,20 +1073,27 @@ export const useChangePassword = <TError = ErrorType<Error>,
       return useMutation(getChangePasswordMutationOptions(options));
     }
 
-export const getListPotteryUrl = () => {
+export const getListPotteryUrl = (params?: ListPotteryParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/pottery/items`
+  return stringifiedParams.length > 0 ? `/api/pottery/items?${stringifiedParams}` : `/api/pottery/items`
 }
 
 /**
  * @summary List pottery
  */
-export const listPottery = async ( options?: RequestInit): Promise<PotteryPotteryItem[]> => {
+export const listPottery = async (params?: ListPotteryParams, options?: RequestInit): Promise<PotteryPotteryListResponse> => {
 
-  return customFetch<PotteryPotteryItem[]>(getListPotteryUrl(),
+  return customFetch<PotteryPotteryListResponse>(getListPotteryUrl(params),
   {
     ...options,
     method: 'GET'
@@ -1097,23 +1106,23 @@ export const listPottery = async ( options?: RequestInit): Promise<PotteryPotter
 
 
 
-export const getListPotteryQueryKey = () => {
+export const getListPotteryQueryKey = (params?: ListPotteryParams,) => {
     return [
-    `/api/pottery/items`
+    `/api/pottery/items`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getListPotteryQueryOptions = <TData = Awaited<ReturnType<typeof listPottery>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPottery>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListPotteryQueryOptions = <TData = Awaited<ReturnType<typeof listPottery>>, TError = ErrorType<unknown>>(params?: ListPotteryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPottery>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListPotteryQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getListPotteryQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPottery>>> = ({ signal }) => listPottery({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPottery>>> = ({ signal }) => listPottery(params, { signal, ...requestOptions });
 
 
 
@@ -1131,11 +1140,11 @@ export type ListPotteryQueryError = ErrorType<unknown>
  */
 
 export function useListPottery<TData = Awaited<ReturnType<typeof listPottery>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPottery>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: ListPotteryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPottery>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getListPotteryQueryOptions(options)
+  const queryOptions = getListPotteryQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

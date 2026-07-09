@@ -761,7 +761,8 @@ export default function PieceDetail() {
     },
   });
   const { data: allCategories = [] } = useListCategories();
-  const { data: allItems = [] } = useListPottery();
+  const { data: _listData } = useListPottery({ pageSize: 200 });
+  const allItems = _listData?.items ?? [];
 
   const fieldSuggestions = useMemo(() => {
     const unique = (fn: (i: PotteryItem) => string | null | undefined) => {

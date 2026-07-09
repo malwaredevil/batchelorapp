@@ -5,6 +5,7 @@ import { startReminderScheduler } from "./lib/reminder-scheduler";
 import { startNudgeScheduler } from "./lib/travels-nudges";
 import { startCalendarTripScanScheduler } from "./lib/travels-calendar-scan";
 import { startGmailScanScheduler } from "./lib/gmail-scan";
+import { startErrorRateSummary } from "./lib/error-tracker";
 
 const rawPort = process.env["PORT"];
 
@@ -20,35 +21,46 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-runStartupMigration()
-  .then(() => {
-    app.listen(port, (err) => {
-      if (err) {
-        logger.error({ err }, "Error listening on port");
-        process.exit(1);
-      }
+function startListening(): void {
+  const server = app.listen(port, (err) => {
+    if (err) {
+      logger.error({ err }, "Error listening on port");
+      process.exit(1);
+    }
 
-      logger.info({ port }, "Server listening");
-      startReminderScheduler();
-      startNudgeScheduler();
-      startCalendarTripScanScheduler();
-      startGmailScanScheduler();
+    logger.info({ port }, "Server listening");
+    startReminderScheduler();
+    startNudgeScheduler();
+    startCalendarTripScanScheduler();
+    startGmailScanScheduler();
+    startErrorRateSummary();
+  });
+
+  function shutdown(signal: string): void {
+    logger.info({ signal }, "shutdown: draining open connections...");
+    server.close(() => {
+      logger.info("shutdown: server closed, exiting cleanly");
+      process.exit(0);
     });
-  })
+    // Force exit if connections don't drain within 15 s.
+    setTimeout(() => {
+      logger.warn(
+        "shutdown: force-exit after 15 s drain timeout (connections still open)",
+      );
+      process.exit(0);
+    }, 15_000).unref();
+  }
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
+}
+
+runStartupMigration()
+  .then(startListening)
   .catch((err) => {
     logger.error(
       { err },
       "Startup migration threw unexpectedly — starting server anyway",
     );
-    app.listen(port, (err2) => {
-      if (err2) {
-        logger.error({ err: err2 }, "Error listening on port");
-        process.exit(1);
-      }
-      logger.info({ port }, "Server listening");
-      startReminderScheduler();
-      startNudgeScheduler();
-      startCalendarTripScanScheduler();
-      startGmailScanScheduler();
-    });
+    startListening();
   });

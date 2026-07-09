@@ -3,9 +3,12 @@ import multer from "multer";
 import {
   and,
   asc,
+  count,
   desc,
   eq,
   getTableColumns,
+  ilike,
+  inArray,
   isNull,
   notInArray,
   or,
@@ -22,6 +25,7 @@ import {
 
 import {
   ListPotteryResponse,
+  ListPotteryQueryParams,
   GetPotteryParams,
   GetPotteryResponse,
   UpdatePotteryParams,
@@ -116,15 +120,67 @@ router.use(requireAuth);
 // Collection
 // ---------------------------------------------------------------------------
 
-router.get("/items", async (_req, res) => {
+router.get("/items", async (req, res) => {
   // Pottery is a shared household collection — every authenticated user sees
   // every piece, regardless of who originally added it.
+  const parsed = ListPotteryQueryParams.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid query parameters." });
+    return;
+  }
+  const { q, categoryId, page, pageSize } = parsed.data;
+
+  // Build WHERE conditions for server-side filtering.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const conditions: any[] = [];
+  if (q && q.trim()) {
+    const term = `%${q.trim().toLowerCase()}%`;
+    conditions.push(
+      or(
+        ilike(potteryItems.name, term),
+        ilike(potteryItems.patternDescription, term),
+        ilike(potteryItems.style, term),
+        ilike(potteryItems.shape, term),
+        ilike(potteryItems.maker, term),
+      ),
+    );
+  }
+
+  // Category filter: join to itemCategories to filter by categoryId.
+  if (categoryId !== undefined) {
+    const catRows = await db
+      .select({ itemId: itemCategories.itemId })
+      .from(itemCategories)
+      .where(eq(itemCategories.categoryId, categoryId));
+    const itemIdsForCategory = catRows.map((r) => r.itemId);
+    if (itemIdsForCategory.length === 0) {
+      // No items in this category — short-circuit.
+      res.json(ListPotteryResponse.parse({ items: [], total: 0, page, pageSize }));
+      return;
+    }
+    conditions.push(inArray(potteryItems.id, itemIdsForCategory));
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const where = conditions.length > 0 ? and(...(conditions as [any, ...any[]])) : undefined;
+
+  // Total count for pagination metadata.
+  const [{ value: total }] = await db
+    .select({ value: count() })
+    .from(potteryItems)
+    .where(where);
+
+  const offset = (page - 1) * pageSize;
   const rows = await db
     .select(itemColumns)
     .from(potteryItems)
-    .orderBy(desc(potteryItems.createdAt));
+    .where(where)
+    .orderBy(desc(potteryItems.createdAt))
+    .limit(pageSize)
+    .offset(offset);
+
   const items = await serializeItems(rows);
-  res.json(ListPotteryResponse.parse(items));
+  res.json(ListPotteryResponse.parse({ items, total, page, pageSize }));
 });
 
 // Stragglers: pieces that need re-analysis — either missing a similarity

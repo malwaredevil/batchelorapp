@@ -250,16 +250,26 @@ const SCAN_INTERVAL_MS = 24 * 60 * 60 * 1000; // 1 day
  * manual "Scan now" button.
  */
 export function startCalendarTripScanScheduler(): void {
-  scanCalendarForTripSuggestions().catch((err: unknown) =>
-    logger.error({ err }, "travels-calendar-scan: initial run failed"),
-  );
+  const run = async (): Promise<void> => {
+    const t0 = Date.now();
+    logger.info("travels-calendar-scan: run starting");
+    try {
+      await scanCalendarForTripSuggestions();
+      logger.info(
+        { durationMs: Date.now() - t0 },
+        "travels-calendar-scan: run complete",
+      );
+    } catch (err) {
+      logger.error(
+        { err, durationMs: Date.now() - t0 },
+        "travels-calendar-scan: run failed",
+      );
+    }
+  };
 
-  const interval = setInterval(() => {
-    scanCalendarForTripSuggestions().catch((err: unknown) =>
-      logger.error({ err }, "travels-calendar-scan: scheduled run failed"),
-    );
-  }, SCAN_INTERVAL_MS);
+  void run();
 
+  const interval = setInterval(() => void run(), SCAN_INTERVAL_MS);
   interval.unref();
 
   logger.info(

@@ -138,10 +138,25 @@ export const ChangePasswordBody = zod.object({
 /**
  * @summary List pottery
  */
+export const listPotteryQueryPageDefault = 1;
+
+export const listPotteryQueryPageSizeDefault = 60;
+export const listPotteryQueryPageSizeMax = 200;
 
 
 
-export const ListPotteryResponseItem = zod.object({
+export const ListPotteryQueryParams = zod.object({
+  "q": zod.coerce.string().optional().describe('Text search across name, pattern description, style, shape, maker, and motifs'),
+  "categoryId": zod.coerce.number().optional().describe('Filter to items that belong to this category ID'),
+  "page": zod.coerce.number().min(1).default(listPotteryQueryPageDefault),
+  "pageSize": zod.coerce.number().min(1).max(listPotteryQueryPageSizeMax).default(listPotteryQueryPageSizeDefault)
+})
+
+
+
+
+export const ListPotteryResponse = zod.object({
+  "items": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "quantity": zod.number().min(1),
@@ -176,8 +191,11 @@ export const ListPotteryResponseItem = zod.object({
 })),
   "imageUrl": zod.string(),
   "createdAt": zod.coerce.date()
+})),
+  "total": zod.number().describe('Total number of items matching the query (before pagination)'),
+  "page": zod.number(),
+  "pageSize": zod.number()
 })
-export const ListPotteryResponse = zod.array(ListPotteryResponseItem)
 
 
 /**

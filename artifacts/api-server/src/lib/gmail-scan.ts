@@ -310,16 +310,26 @@ const SCAN_INTERVAL_MS = 6 * 60 * 60 * 1000; // every 6 hours
  * this safely idempotent alongside the manual "Scan now" button.
  */
 export function startGmailScanScheduler(): void {
-  scanAllGmailConnections().catch((err: unknown) =>
-    logger.error({ err }, "gmail-scan: initial run failed"),
-  );
+  const run = async (): Promise<void> => {
+    const t0 = Date.now();
+    logger.info("gmail-scan: run starting");
+    try {
+      await scanAllGmailConnections();
+      logger.info(
+        { durationMs: Date.now() - t0 },
+        "gmail-scan: run complete",
+      );
+    } catch (err) {
+      logger.error(
+        { err, durationMs: Date.now() - t0 },
+        "gmail-scan: run failed",
+      );
+    }
+  };
 
-  const interval = setInterval(() => {
-    scanAllGmailConnections().catch((err: unknown) =>
-      logger.error({ err }, "gmail-scan: scheduled run failed"),
-    );
-  }, SCAN_INTERVAL_MS);
+  void run();
 
+  const interval = setInterval(() => void run(), SCAN_INTERVAL_MS);
   interval.unref();
 
   logger.info("gmail-scan: started (in-process fallback, runs every 6h)");

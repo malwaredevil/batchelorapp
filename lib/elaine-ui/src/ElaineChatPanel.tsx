@@ -20,7 +20,6 @@ import {
   Play,
   Square,
   Sun,
-  Camera,
 } from "lucide-react";
 import {
   useGetElaineDailyBrief,
@@ -165,37 +164,6 @@ export function ElaineChatPanel({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
-  const [isCapturing, setIsCapturing] = useState(false);
-
-  const handleScreenshot = useCallback(async () => {
-    if (isCapturing || isStreaming) return;
-    setIsCapturing(true);
-    try {
-      const { default: html2canvas } = await import("html2canvas");
-      const canvas = await html2canvas(document.body, {
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
-        scale: window.devicePixelRatio > 1 ? 1 : 1,
-        windowWidth: document.documentElement.scrollWidth,
-        windowHeight: document.documentElement.scrollHeight,
-        x: window.scrollX,
-        y: window.scrollY,
-        width: window.innerWidth,
-        height: window.innerHeight,
-      });
-      canvas.toBlob((blob) => {
-        if (!blob) return;
-        const file = new File([blob], "screenshot.png", { type: "image/png" });
-        void handleAddAttachment(file);
-        setInput((prev) => prev || "What do you see on this page?");
-      }, "image/png");
-    } catch {
-      // silently ignore capture errors
-    } finally {
-      setIsCapturing(false);
-    }
-  }, [isCapturing, isStreaming, handleAddAttachment, setInput]);
 
   const hasUploadingAttachments = pendingAttachments.some((a) => a.uploading);
 
@@ -708,22 +676,6 @@ export function ElaineChatPanel({
             title="Attach an image"
           >
             <Paperclip className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground hover:text-foreground"
-            onClick={() => void handleScreenshot()}
-            disabled={
-              isStreaming || isCapturing || pendingAttachments.length >= 5
-            }
-            title="Screenshot this page"
-          >
-            {isCapturing ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Camera className="h-3.5 w-3.5" />
-            )}
           </Button>
           <div className="flex-1" />
           {voice.isSupported && (

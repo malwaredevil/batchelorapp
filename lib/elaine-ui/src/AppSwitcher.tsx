@@ -188,7 +188,7 @@ function OrnamentsLogo({ className }: { className?: string }) {
       className={className}
       aria-hidden="true"
     >
-      <rect width="100" height="100" rx="22" fill="#7C3F2E" />
+      <rect width="100" height="100" rx="22" fill="#1B3A5C" />
       <rect x="44" y="16" width="12" height="10" rx="3" fill="#F0E8D8" />
       <circle
         cx="50"

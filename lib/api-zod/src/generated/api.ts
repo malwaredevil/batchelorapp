@@ -138,10 +138,25 @@ export const ChangePasswordBody = zod.object({
 /**
  * @summary List pottery
  */
+export const listPotteryQueryPageDefault = 1;
+
+export const listPotteryQueryPageSizeDefault = 60;
+export const listPotteryQueryPageSizeMax = 200;
 
 
 
-export const ListPotteryResponseItem = zod.object({
+export const ListPotteryQueryParams = zod.object({
+  "q": zod.coerce.string().optional().describe('Text search across name, pattern description, style, shape, maker, and motifs'),
+  "categoryId": zod.coerce.number().optional().describe('Filter to items that belong to this category ID'),
+  "page": zod.coerce.number().min(1).default(listPotteryQueryPageDefault),
+  "pageSize": zod.coerce.number().min(1).max(listPotteryQueryPageSizeMax).default(listPotteryQueryPageSizeDefault)
+})
+
+
+
+
+export const ListPotteryResponse = zod.object({
+  "items": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "quantity": zod.number().min(1),
@@ -176,8 +191,11 @@ export const ListPotteryResponseItem = zod.object({
 })),
   "imageUrl": zod.string(),
   "createdAt": zod.coerce.date()
+})),
+  "total": zod.number().describe('Total number of items matching the query (before pagination)'),
+  "page": zod.number(),
+  "pageSize": zod.number()
 })
-export const ListPotteryResponse = zod.array(ListPotteryResponseItem)
 
 
 /**
@@ -654,7 +672,21 @@ export const GetCollectionStatsResponse = zod.object({
 /**
  * @summary List all fabrics
  */
-export const ListFabricsResponseItem = zod.object({
+export const listFabricsQueryPageDefault = 1;
+
+export const listFabricsQueryPageSizeDefault = 50;
+export const listFabricsQueryPageSizeMax = 500;
+
+
+
+export const ListFabricsQueryParams = zod.object({
+  "q": zod.coerce.string().optional(),
+  "page": zod.coerce.number().min(1).default(listFabricsQueryPageDefault),
+  "pageSize": zod.coerce.number().min(1).max(listFabricsQueryPageSizeMax).default(listFabricsQueryPageSizeDefault)
+})
+
+export const ListFabricsResponse = zod.object({
+  "items": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "lineName": zod.string().nullish(),
@@ -689,8 +721,11 @@ export const ListFabricsResponseItem = zod.object({
   "imageUrl": zod.string(),
   "hasEmbedding": zod.boolean(),
   "createdAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number()
 })
-export const ListFabricsResponse = zod.array(ListFabricsResponseItem)
 
 
 /**
@@ -887,6 +922,59 @@ export const ReanalyzeFabricResponse = zod.object({
 
 
 /**
+ * @summary Get up to 4 stash fabrics that pair well with this one (embedding similarity)
+ */
+export const GetFabricPairingsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetFabricPairingsResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "lineName": zod.string().nullish(),
+  "designer": zod.string().nullish(),
+  "manufacturer": zod.string().nullish(),
+  "colorway": zod.string().nullish(),
+  "printType": zod.string().nullish(),
+  "fiberContent": zod.string().nullish(),
+  "widthInches": zod.number().nullish(),
+  "quantity": zod.number(),
+  "quantityUnit": zod.string(),
+  "sku": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "aiDescription": zod.string().nullish(),
+  "dominantColors": zod.array(zod.string()),
+  "motifs": zod.array(zod.string()),
+  "styleDescriptors": zod.array(zod.string()),
+  "acquiredAt": zod.string().nullish(),
+  "lockedFields": zod.array(zod.string()),
+  "categories": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "bgColor": zod.string().nullish(),
+  "textColor": zod.string().nullish()
+})),
+  "images": zod.array(zod.object({
+  "id": zod.number(),
+  "url": zod.string(),
+  "label": zod.string().nullish(),
+  "position": zod.number()
+})),
+  "imageUrl": zod.string(),
+  "hasEmbedding": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+export const GetFabricPairingsResponse = zod.array(GetFabricPairingsResponseItem)
+
+
+/**
+ * @summary Get IDs of fabrics linked to at least one finished quilt
+ */
+export const GetUsedFabricIdsResponseItem = zod.number()
+export const GetUsedFabricIdsResponse = zod.array(GetUsedFabricIdsResponseItem)
+
+
+/**
  * @summary Re-run AI analysis on multiple fabrics
  */
 export const bulkReanalyzeFabricsBodyIdsMax = 50;
@@ -958,7 +1046,21 @@ export const DeleteFabricImageParams = zod.object({
 /**
  * @summary List all quilt patterns
  */
-export const ListPatternsResponseItem = zod.object({
+export const listPatternsQueryPageDefault = 1;
+
+export const listPatternsQueryPageSizeDefault = 50;
+export const listPatternsQueryPageSizeMax = 500;
+
+
+
+export const ListPatternsQueryParams = zod.object({
+  "q": zod.coerce.string().optional(),
+  "page": zod.coerce.number().min(1).default(listPatternsQueryPageDefault),
+  "pageSize": zod.coerce.number().min(1).max(listPatternsQueryPageSizeMax).default(listPatternsQueryPageSizeDefault)
+})
+
+export const ListPatternsResponse = zod.object({
+  "items": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "designer": zod.string().nullish(),
@@ -985,8 +1087,11 @@ export const ListPatternsResponseItem = zod.object({
   "imageUrl": zod.string().nullish(),
   "hasEmbedding": zod.boolean(),
   "createdAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number()
 })
-export const ListPatternsResponse = zod.array(ListPatternsResponseItem)
 
 
 /**
@@ -1275,7 +1380,26 @@ export const DeletePatternImageParams = zod.object({
 /**
  * @summary List all finished quilts
  */
-export const ListQuiltsResponseItem = zod.object({
+export const listQuiltsQueryPageDefault = 1;
+
+export const listQuiltsQueryPageSizeDefault = 50;
+export const listQuiltsQueryPageSizeMax = 500;
+
+
+
+export const ListQuiltsQueryParams = zod.object({
+  "q": zod.coerce.string().optional(),
+  "page": zod.coerce.number().min(1).default(listQuiltsQueryPageDefault),
+  "pageSize": zod.coerce.number().min(1).max(listQuiltsQueryPageSizeMax).default(listQuiltsQueryPageSizeDefault)
+})
+
+export const listQuiltsResponseItemsItemCompletionPercentageMin = 0;
+export const listQuiltsResponseItemsItemCompletionPercentageMax = 100;
+
+
+
+export const ListQuiltsResponse = zod.object({
+  "items": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "dateCompleted": zod.string().nullish(),
@@ -1285,6 +1409,7 @@ export const ListQuiltsResponseItem = zod.object({
   "notes": zod.string().nullish(),
   "dominantColors": zod.array(zod.string()),
   "lockedFields": zod.array(zod.string()),
+  "completionPercentage": zod.number().min(listQuiltsResponseItemsItemCompletionPercentageMin).max(listQuiltsResponseItemsItemCompletionPercentageMax).optional().describe('WIP completion 0–100. 0 = not started, 100 = finished.'),
   "categories": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -1308,8 +1433,11 @@ export const ListQuiltsResponseItem = zod.object({
   "dominantColors": zod.array(zod.string())
 })),
   "createdAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number()
 })
-export const ListQuiltsResponse = zod.array(ListQuiltsResponseItem)
 
 
 /**
@@ -1336,6 +1464,11 @@ export const GetQuiltParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const getQuiltResponseCompletionPercentageMin = 0;
+export const getQuiltResponseCompletionPercentageMax = 100;
+
+
+
 export const GetQuiltResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -1346,6 +1479,7 @@ export const GetQuiltResponse = zod.object({
   "notes": zod.string().nullish(),
   "dominantColors": zod.array(zod.string()),
   "lockedFields": zod.array(zod.string()),
+  "completionPercentage": zod.number().min(getQuiltResponseCompletionPercentageMin).max(getQuiltResponseCompletionPercentageMax).optional().describe('WIP completion 0–100. 0 = not started, 100 = finished.'),
   "categories": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -1383,6 +1517,9 @@ export const updateQuiltBodyCategoriesItemMax = 100;
 
 export const updateQuiltBodyCategoriesMax = 50;
 
+export const updateQuiltBodyCompletionPercentageMin = 0;
+export const updateQuiltBodyCompletionPercentageMax = 100;
+
 
 
 export const UpdateQuiltBody = zod.object({
@@ -1395,8 +1532,14 @@ export const UpdateQuiltBody = zod.object({
   "lockedFields": zod.array(zod.string()).optional(),
   "categories": zod.array(zod.string().max(updateQuiltBodyCategoriesItemMax)).max(updateQuiltBodyCategoriesMax).optional(),
   "linkedFabricIds": zod.array(zod.number()).optional(),
-  "linkedPatternIds": zod.array(zod.number()).optional()
+  "linkedPatternIds": zod.array(zod.number()).optional(),
+  "completionPercentage": zod.number().min(updateQuiltBodyCompletionPercentageMin).max(updateQuiltBodyCompletionPercentageMax).nullish()
 })
+
+export const updateQuiltResponseCompletionPercentageMin = 0;
+export const updateQuiltResponseCompletionPercentageMax = 100;
+
+
 
 export const UpdateQuiltResponse = zod.object({
   "id": zod.number(),
@@ -1408,6 +1551,7 @@ export const UpdateQuiltResponse = zod.object({
   "notes": zod.string().nullish(),
   "dominantColors": zod.array(zod.string()),
   "lockedFields": zod.array(zod.string()),
+  "completionPercentage": zod.number().min(updateQuiltResponseCompletionPercentageMin).max(updateQuiltResponseCompletionPercentageMax).optional().describe('WIP completion 0–100. 0 = not started, 100 = finished.'),
   "categories": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -1457,6 +1601,11 @@ export const ReanalyzeQuiltParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const reanalyzeQuiltResponseCompletionPercentageMin = 0;
+export const reanalyzeQuiltResponseCompletionPercentageMax = 100;
+
+
+
 export const ReanalyzeQuiltResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -1467,6 +1616,7 @@ export const ReanalyzeQuiltResponse = zod.object({
   "notes": zod.string().nullish(),
   "dominantColors": zod.array(zod.string()),
   "lockedFields": zod.array(zod.string()),
+  "completionPercentage": zod.number().min(reanalyzeQuiltResponseCompletionPercentageMin).max(reanalyzeQuiltResponseCompletionPercentageMax).optional().describe('WIP completion 0–100. 0 = not started, 100 = finished.'),
   "categories": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -1721,6 +1871,11 @@ export const PaletteMatchQuiltsBody = zod.object({
   "image": zod.instanceof(File)
 })
 
+export const paletteMatchQuiltsResponseMatchesItemQuiltCompletionPercentageMin = 0;
+export const paletteMatchQuiltsResponseMatchesItemQuiltCompletionPercentageMax = 100;
+
+
+
 export const PaletteMatchQuiltsResponse = zod.object({
   "extractedColors": zod.array(zod.string()),
   "matches": zod.array(zod.object({
@@ -1734,6 +1889,7 @@ export const PaletteMatchQuiltsResponse = zod.object({
   "notes": zod.string().nullish(),
   "dominantColors": zod.array(zod.string()),
   "lockedFields": zod.array(zod.string()),
+  "completionPercentage": zod.number().min(paletteMatchQuiltsResponseMatchesItemQuiltCompletionPercentageMin).max(paletteMatchQuiltsResponseMatchesItemQuiltCompletionPercentageMax).optional().describe('WIP completion 0–100. 0 = not started, 100 = finished.'),
   "categories": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),

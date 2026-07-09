@@ -326,7 +326,7 @@ export function useElaineChat({
           },
           onAction: (action) => setPendingActions((prev) => [...prev, action]),
           onStatus: (msg) => setStatusMessage(msg),
-          onWidget: (widget) => pendingWidgets.push(widget),
+          onWidget: (widget) => pendingWidgets.push(widget as ChatWidget),
           onDone: (res) => {
             setMessages(res.messages);
             // attach widgets to the last assistant message index

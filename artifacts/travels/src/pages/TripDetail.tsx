@@ -29,6 +29,7 @@ import {
   useGetTripCardCollapse,
   useUpdateTripCardCollapse,
   useLinkGmailMessage,
+  useGetPackingList,
   useListCustomDocumentTypes,
   useCreateCustomDocumentType,
   useSuggestDocumentType,
@@ -170,6 +171,10 @@ import {
   Leaf,
   AlertCircle,
   Rows2,
+  StickyNote,
+  CheckCircle2,
+  Circle,
+  ClipboardList,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -342,9 +347,11 @@ const ALL_STATUSES: TripStatus[] = [
 // single sortable unit even though it renders two independently-collapsible
 // columns (see COLLAPSE_CARD_IDS below).
 const DEFAULT_CARD_ORDER = [
+  "readiness",
   "reminders",
   "itinerary",
   "documents",
+  "notes",
   "packing-todo",
   "photos",
   "magnets",
@@ -2059,6 +2066,32 @@ function DayCard({
   );
 }
 
+// ─── Trip Notes Card ──────────────────────────────────────────────────────────
+
+function TripNotesCard({
+  value,
+  onSave,
+}: {
+  value: string;
+  onSave: (v: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+  return (
+    <Textarea
+      className="min-h-[140px] resize-y text-sm leading-relaxed placeholder:text-muted-foreground/50"
+      placeholder="Jot down anything — links, ideas, things to remember…"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        if (draft !== value) onSave(draft);
+      }}
+    />
+  );
+}
+
 // ─── Todo List ────────────────────────────────────────────────────────────────
 
 function TodoList({
@@ -2839,6 +2872,7 @@ export default function TripDetail({ id }: { id: number }) {
 
   const { data: trip, isLoading } = useGetTrip(id);
   const { data: reminders = [] } = useListReminders(id);
+  const { data: packingData } = useGetPackingList(id);
   const updateTrip = useUpdateTrip();
   const { data: cardLayout } = useGetCardLayout();
   const updateCardLayout = useUpdateCardLayout();
@@ -3240,6 +3274,7 @@ export default function TripDetail({ id }: { id: number }) {
       : `Viewing trip "${trip.title}" to ${trip.destination} (tripId: ${trip.id}, status: ${trip.status}${
           trip.startDate ? `, starts ${trip.startDate}` : ""
         }${trip.endDate ? `, ends ${trip.endDate}` : ""}). ` +
+          (trip.notes ? `Trip notes: "${trip.notes}". ` : "") +
           `To-do list has ${todoList.length} item(s). ` +
           (documents.length > 0
             ? `Documents attached to this trip (use these already-parsed fields to answer questions like confirmation numbers, hotel names, or flight/check-in times — never ask the user to re-upload or open the file):\n${documentsSummary}`
@@ -3648,13 +3683,6 @@ export default function TripDetail({ id }: { id: number }) {
             onSave={(v) => saveField({ accommodationArea: v || undefined })}
           />
 
-          <InlineTextareaField
-            label="Notes"
-            value={trip.notes ?? ""}
-            onSave={(v) => saveField({ notes: v || undefined })}
-            className="col-span-2 sm:col-span-3 pt-2 border-t border-border/50"
-          />
-
           <InlineField
             label="The One Thing (highlights)"
             value={(trip.theOneThing as string[] | null) ?? []}
@@ -3712,6 +3740,118 @@ export default function TripDetail({ id }: { id: number }) {
               <SortableSection key={cardId} id={cardId}>
                 {({ dragHandleListeners, dragHandleAttributes }) => {
                   switch (cardId) {
+                    case "readiness": {
+                      const packingItems = packingData?.items ?? [];
+                      const totalItems = packingItems.length;
+                      const packedItems = packingItems.filter(
+                        (p) => p.packed,
+                      ).length;
+                      const checks = [
+                        {
+                          label: "Trip info",
+                          done: !!(
+                            trip.title &&
+                            trip.destination &&
+                            trip.startDate
+                          ),
+                          hint: "Set destination & travel dates",
+                        },
+                        {
+                          label: "Documents",
+                          done: documents.length > 0,
+                          hint: "Upload a ticket, booking or passport",
+                        },
+                        {
+                          label: "Reminders",
+                          done: reminders.some((r) => !r.done),
+                          hint: "Add a pre-trip reminder",
+                        },
+                        {
+                          label: "Packing",
+                          done: totalItems > 0,
+                          hint: "Start your packing list",
+                        },
+                      ];
+                      const doneCt = checks.filter((c) => c.done).length;
+                      const score = Math.round((doneCt / checks.length) * 100);
+                      const barColor =
+                        score >= 80
+                          ? "bg-green-500"
+                          : score >= 50
+                            ? "bg-amber-500"
+                            : "bg-red-400";
+                      const scoreLabel =
+                        score === 100
+                          ? "All set!"
+                          : score >= 75
+                            ? "Almost there"
+                            : score >= 50
+                              ? "Getting there"
+                              : "Just started";
+                      return (
+                        <CardShell
+                          title="Trip readiness"
+                          icon={<ClipboardList className="w-5 h-5" />}
+                          collapsed={collapsedCards.has("readiness")}
+                          onToggleCollapse={() =>
+                            toggleCardCollapse("readiness")
+                          }
+                          dragHandleListeners={dragHandleListeners}
+                          dragHandleAttributes={dragHandleAttributes}
+                        >
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-3">
+                              <div className="flex-1 h-2.5 rounded-full bg-muted overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${barColor} transition-all duration-500`}
+                                  style={{ width: `${score}%` }}
+                                />
+                              </div>
+                              <div className="text-right shrink-0">
+                                <span className="text-sm font-semibold tabular-nums">
+                                  {score}%
+                                </span>
+                                <span className="text-xs text-muted-foreground ml-1.5">
+                                  {scoreLabel}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                              {checks.map(({ label, done, hint }) => (
+                                <div
+                                  key={label}
+                                  title={done ? undefined : hint}
+                                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
+                                    done
+                                      ? "bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400"
+                                      : "bg-muted/60 text-muted-foreground"
+                                  }`}
+                                >
+                                  {done ? (
+                                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                                  ) : (
+                                    <Circle className="w-4 h-4 shrink-0 opacity-40" />
+                                  )}
+                                  <span className="truncate">{label}</span>
+                                </div>
+                              ))}
+                            </div>
+                            {totalItems > 0 && (
+                              <p className="text-xs text-muted-foreground">
+                                Packing:{" "}
+                                <span className="font-medium">
+                                  {packedItems}/{totalItems}
+                                </span>{" "}
+                                items packed
+                                {totalItems > 0 &&
+                                  ` (${Math.round((packedItems / totalItems) * 100)}%)`}
+                              </p>
+                            )}
+                          </div>
+                        </CardShell>
+                      );
+                    }
+
                     case "weather-nearby":
                       return trip.lat != null && trip.lng != null ? (
                         <CardShell
@@ -4227,6 +4367,31 @@ export default function TripDetail({ id }: { id: number }) {
                         </CardShell>
                       );
 
+                    case "notes":
+                      return (
+                        <CardShell
+                          title="Notes"
+                          icon={<StickyNote className="w-4 h-4" />}
+                          collapsed={collapsedCards.has("notes")}
+                          onToggleCollapse={() => toggleCardCollapse("notes")}
+                          dragHandleListeners={dragHandleListeners}
+                          dragHandleAttributes={dragHandleAttributes}
+                        >
+                          <div className="space-y-3">
+                            <h2 className="font-serif text-xl text-foreground flex items-center gap-2">
+                              <StickyNote className="w-5 h-5" />
+                              Notes
+                            </h2>
+                            <TripNotesCard
+                              value={trip.notes ?? ""}
+                              onSave={(v) =>
+                                saveField({ notes: v || undefined })
+                              }
+                            />
+                          </div>
+                        </CardShell>
+                      );
+
                     case "packing-todo":
                       return (
                         <div className="relative">
@@ -4250,7 +4415,11 @@ export default function TripDetail({ id }: { id: number }) {
                                 </h2>
                                 <Card className="border-border/50">
                                   <CardContent className="py-4">
-                                    <PackingSection tripId={id} />
+                                    <PackingSection
+                                      tripId={id}
+                                      lat={trip.lat ?? undefined}
+                                      lng={trip.lng ?? undefined}
+                                    />
                                   </CardContent>
                                 </Card>
                               </div>

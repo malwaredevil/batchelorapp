@@ -7,6 +7,7 @@ import {
 } from "./email";
 import { sendReminderAlertSms, smsConfigured } from "./sms";
 import { pullReminderAlertDaysFromCalendar } from "../routes/travels/reminders";
+import { shouldRunScheduledTask } from "./scheduler-guard";
 import { logger } from "./logger";
 
 // Gating is driven entirely by each reminder's own alert_days_before array
@@ -272,6 +273,12 @@ const IN_PROCESS_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
  */
 export function startReminderScheduler(): void {
   const run = async (): Promise<void> => {
+    if (
+      !(await shouldRunScheduledTask("reminder-scheduler", IN_PROCESS_INTERVAL_MS))
+    ) {
+      logger.info("reminder-scheduler: skipped (ran within the last hour)");
+      return;
+    }
     const t0 = Date.now();
     logger.info("reminder-scheduler: run starting");
     try {

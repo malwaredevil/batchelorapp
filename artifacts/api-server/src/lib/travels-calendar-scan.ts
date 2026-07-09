@@ -23,6 +23,7 @@ import {
 } from "./google-calendar-tokens";
 import { listCalendarEvents, type CalendarEvent } from "./google-calendar";
 import { callModel, getModels } from "./ai-client";
+import { shouldRunScheduledTask } from "./scheduler-guard";
 import { logger } from "./logger";
 
 const SCAN_WINDOW_DAYS_PAST = 7;
@@ -251,6 +252,12 @@ const SCAN_INTERVAL_MS = 24 * 60 * 60 * 1000; // 1 day
  */
 export function startCalendarTripScanScheduler(): void {
   const run = async (): Promise<void> => {
+    if (
+      !(await shouldRunScheduledTask("travels-calendar-scan", SCAN_INTERVAL_MS))
+    ) {
+      logger.info("travels-calendar-scan: skipped (ran within the last day)");
+      return;
+    }
     const t0 = Date.now();
     logger.info("travels-calendar-scan: run starting");
     try {

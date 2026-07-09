@@ -16,6 +16,7 @@
 import crypto from "node:crypto";
 import { and, eq, ne } from "drizzle-orm";
 import { db, travelsGmailScanDecisions, travelsTrips } from "@workspace/db";
+import { shouldRunScheduledTask } from "./scheduler-guard";
 import {
   getAllGmailConnections,
   getValidGmailAccessToken,
@@ -311,6 +312,10 @@ const SCAN_INTERVAL_MS = 6 * 60 * 60 * 1000; // every 6 hours
  */
 export function startGmailScanScheduler(): void {
   const run = async (): Promise<void> => {
+    if (!(await shouldRunScheduledTask("gmail-scan", SCAN_INTERVAL_MS))) {
+      logger.info("gmail-scan: skipped (ran within the last 6 hours)");
+      return;
+    }
     const t0 = Date.now();
     logger.info("gmail-scan: run starting");
     try {

@@ -34,6 +34,7 @@ import { db, ornamentsHallmarkEvents } from "@workspace/db";
 import { webSearch } from "../web-search";
 import { callFusion } from "../ai-client";
 import { syncHallmarkEventToGoogle } from "./hallmark-calendar-sync";
+import { shouldRunScheduledTask } from "../scheduler-guard";
 import { logger } from "../logger";
 
 const SEARCH_QUERIES = [
@@ -264,18 +265,38 @@ export async function scanForHallmarkEvents(): Promise<HallmarkEventScanResult> 
   };
 }
 
-const SCAN_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000; // ~monthly
+const SCAN_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000; // ~monthly (guard interval)
+
+// Node clamps setInterval/setTimeout delays to a 32-bit signed int
+// (~24.8 days, 2,147,483,647ms). SCAN_INTERVAL_MS (30 days) EXCEEDS that, so
+// passing it directly to setInterval would silently overflow and fire almost
+// immediately and repeatedly forever — this is the exact bug that caused a
+// tight loop of "skipped" checks (and, before the shouldRunScheduledTask
+// guard existed, would have caused a tight loop of full multi-model AI scans
+// — a very plausible mechanism for burning a large AI spend in under a
+// second). Instead we poll on a safe, well-under-the-limit cadence (6h) and
+// let the persisted guard decide whether a real ~monthly scan is actually due.
+const POLL_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6h — safely under the int32 limit
 
 /**
  * Best-effort in-process monthly scheduler, same caveat as the other
  * schedulers in this codebase (autoscale instances can sleep for long
- * stretches, so this is a convenience, not a delivery guarantee). Runs once
- * immediately on startup (to seed the next 9-12 months right away) and then
- * roughly every 30 days thereafter. Safe to call repeatedly — application-
- * level de-dup means a re-run never creates duplicate events.
+ * stretches, so this is a convenience, not a delivery guarantee). Polls every
+ * 6 hours (see POLL_INTERVAL_MS note above) but the persisted
+ * shouldRunScheduledTask() guard means an actual scan only fires roughly
+ * every ~30 days, so restarting the server (e.g. during development) never
+ * re-triggers this expensive multi-model AI scan. Safe to call repeatedly —
+ * application-level de-dup also means a re-run never creates duplicate
+ * events even if it does fire.
  */
 export function startHallmarkEventsScanScheduler(): void {
   const run = async (): Promise<void> => {
+    if (!(await shouldRunScheduledTask("hallmark-events-scan", SCAN_INTERVAL_MS))) {
+      logger.info(
+        "hallmark-events-scan: skipped (ran within the last ~30 days)",
+      );
+      return;
+    }
     const t0 = Date.now();
     logger.info("hallmark-events-scan: run starting");
     try {
@@ -294,10 +315,10 @@ export function startHallmarkEventsScanScheduler(): void {
 
   void run();
 
-  const interval = setInterval(() => void run(), SCAN_INTERVAL_MS);
+  const interval = setInterval(() => void run(), POLL_INTERVAL_MS);
   interval.unref();
 
   logger.info(
-    "hallmark-events-scan: started (in-process fallback, runs ~monthly)",
+    "hallmark-events-scan: started (in-process fallback, polls every 6h, scans ~monthly)",
   );
 }

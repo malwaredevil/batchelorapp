@@ -56,6 +56,16 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE password_reset_tokens
      ADD COLUMN IF NOT EXISTS used_at timestamptz`,
 
+  // Persisted last-run guard for in-process schedulers (hallmark events scan,
+  // gmail scan, calendar trip scan, nudges, reminders). Prevents an
+  // AI-calling scheduled run from firing again immediately after every
+  // workflow restart — see schema/users.ts for the full rationale.
+  `CREATE TABLE IF NOT EXISTS scheduler_runs (
+    name text PRIMARY KEY,
+    last_run_at timestamptz NOT NULL
+  )`,
+  `ALTER TABLE scheduler_runs ENABLE ROW LEVEL SECURITY`,
+
   // ── Session stores (owned by connect-pg-simple, never altered by drizzle) ──
   `CREATE TABLE IF NOT EXISTS pottery_sessions (
     sid varchar NOT NULL COLLATE "default",

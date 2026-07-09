@@ -1,11 +1,5 @@
 import { Link, useLocation } from "wouter";
-import {
-  LogOut,
-  MessageSquare,
-  Settings as SettingsIcon,
-  Sun,
-  Moon,
-} from "lucide-react";
+import { LogOut, Sun, Moon } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -21,6 +15,7 @@ import {
 } from "@workspace/elaine-ui";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { getNavItemsByGroup } from "@/features/registry";
 
 function isActive(current: string, href: string) {
   if (href === "/") return current === "/";
@@ -36,6 +31,7 @@ export function Header() {
   const [location] = useLocation();
   const queryClient = useQueryClient();
   const { isDark, toggleTheme } = useTheme();
+  const mainNav = getNavItemsByGroup().main;
   const logout = useLogout({
     mutation: {
       onMutate: async () => {
@@ -61,32 +57,22 @@ export function Header() {
           </div>
 
           <nav className="flex items-center gap-1">
-            <Link
-              href="/"
-              className={cn(
-                "flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-medium transition-colors",
-                isActive(location, "/")
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
-              data-testid="navlink-chat"
-            >
-              <MessageSquare className="h-4 w-4" />
-              <span className="hidden md:inline">Chat</span>
-            </Link>
-            <Link
-              href="/settings"
-              className={cn(
-                "flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-medium transition-colors",
-                isActive(location, "/settings")
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
-              data-testid="navlink-settings"
-            >
-              <SettingsIcon className="h-4 w-4" />
-              <span className="hidden md:inline">Settings</span>
-            </Link>
+            {mainNav.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-medium transition-colors",
+                  isActive(location, item.href)
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+                data-testid={item.testId}
+              >
+                <item.icon className="h-4 w-4" />
+                <span className="hidden md:inline">{item.label}</span>
+              </Link>
+            ))}
           </nav>
 
           <SearchTrigger />

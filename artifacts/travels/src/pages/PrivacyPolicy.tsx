@@ -57,6 +57,16 @@ export default function PrivacyPolicy() {
               </li>
               <li>
                 <span className="font-medium text-foreground">
+                  Phone number (optional):
+                </span>{" "}
+                if you add and verify a phone number, we use it to send SMS
+                verification codes and Travels trip reminders via our SMS
+                provider (AgentPhone). We never sell or share your phone number
+                with third parties, and we never use it for marketing. Reply
+                STOP to any message to opt out at any time, or HELP for help.
+              </li>
+              <li>
+                <span className="font-medium text-foreground">
                   Calendar data (optional):
                 </span>{" "}
                 if you connect Google Calendar, we read your calendar events to

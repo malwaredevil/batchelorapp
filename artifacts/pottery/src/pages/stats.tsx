@@ -221,7 +221,9 @@ function parseDimensionCm(dim: string | null | undefined): number | null {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function StatsPage() {
-  const { data: listData, isLoading: itemsLoading } = useListPottery({ pageSize: 200 });
+  const { data: listData, isLoading: itemsLoading } = useListPottery({
+    pageSize: 200,
+  });
   const items = listData?.items;
   const { data: stats, isLoading: statsLoading } = useGetCollectionStats();
 
@@ -299,7 +301,17 @@ export default function StatsPage() {
     "pottery-stats",
     isLoading
       ? undefined
-      : `Collection Stats page: ${stats?.totalItems ?? 0} total pieces (${uniqueCount} unique items) across ${timelineData.length} tracked years. Top motifs: ${stats?.topMotifs.slice(0, 5).map((m) => `${m.label} (${m.count})`).join(", ") || "none"}. Shape breakdown: ${shapeData.map((s) => `${s.name} (${s.value})`).join(", ") || "none"}. Size distribution: ${sizeData.map((s) => `${s.name} (${s.value})`).join(", ") || "none"}. Top glaze colours: ${stats?.topColors.slice(0, 8).map((c) => `${c.label} (${c.count})`).join(", ") || "none"}.`,
+      : `Collection Stats page: ${stats?.totalItems ?? 0} total pieces (${uniqueCount} unique items) across ${timelineData.length} tracked years. Top motifs: ${
+          stats?.topMotifs
+            .slice(0, 5)
+            .map((m) => `${m.label} (${m.count})`)
+            .join(", ") || "none"
+        }. Shape breakdown: ${shapeData.map((s) => `${s.name} (${s.value})`).join(", ") || "none"}. Size distribution: ${sizeData.map((s) => `${s.name} (${s.value})`).join(", ") || "none"}. Top glaze colours: ${
+          stats?.topColors
+            .slice(0, 8)
+            .map((c) => `${c.label} (${c.count})`)
+            .join(", ") || "none"
+        }.`,
   );
 
   if (isLoading) {

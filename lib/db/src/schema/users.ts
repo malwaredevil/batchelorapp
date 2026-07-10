@@ -96,3 +96,21 @@ export const passwordResetTokens = pgTable("password_reset_tokens", {
 
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type InsertPasswordResetToken = typeof passwordResetTokens.$inferInsert;
+
+// Persisted last-run timestamp per in-process scheduler (hallmark events
+// scan, gmail scan, calendar trip scan, nudges, reminders, etc). Exists
+// solely to survive process restarts: every scheduler's `void run()` used to
+// fire an unconditional AI-calling run immediately on startup with no
+// cooldown, so during active development (many workflow restarts per hour)
+// the same expensive scan could re-run dozens of times in quick succession.
+// shouldRunScheduledTask() in api-server uses this table as an atomic
+// UPSERT-with-WHERE guard so a run only proceeds if the persisted last run
+// was more than `minIntervalMs` ago, regardless of how many times the
+// process has restarted since. Ephemeral/regenerable — intentionally
+// excluded from Supabase<->Replit backups (same category as session tables).
+export const schedulerRuns = pgTable("scheduler_runs", {
+  name: text("name").primaryKey(),
+  lastRunAt: timestamp("last_run_at", { withTimezone: true }).notNull(),
+}).enableRLS();
+
+export type SchedulerRun = typeof schedulerRuns.$inferSelect;

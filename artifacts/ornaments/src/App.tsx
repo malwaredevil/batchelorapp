@@ -22,6 +22,7 @@ import Scan from "@/pages/scan";
 import Categories from "@/pages/categories";
 import Maintenance from "@/pages/maintenance";
 import Settings from "@/pages/settings";
+import HallmarkEvents from "@/pages/hallmark-events";
 import StatsPage from "@/pages/stats";
 import NotFound from "@/pages/not-found";
 
@@ -74,6 +75,7 @@ function Routes() {
         <Route path="/categories" component={Categories} />
         <Route path="/maintenance" component={Maintenance} />
         <Route path="/settings" component={Settings} />
+        <Route path="/hallmark-events" component={HallmarkEvents} />
         <Route path="/login">
           <Redirect to="/" />
         </Route>

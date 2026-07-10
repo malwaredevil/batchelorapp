@@ -97,11 +97,24 @@ drift in this category).
 ## Outstanding / follow-up
 
 - New issue filed for the hub `/api/hub/weather-config` + `/api/hub/preferences`
-  raw-fetch drift (no OpenAPI coverage yet) — see GitHub issue link in the
-  EPIC #158 thread.
-- Per the EPIC's sequencing, #155 (pre-publish checklist) is blocked pending a
-  GitHub push + CI/CodeQL confirmation, which is paused for this session by
-  explicit user instruction. #157 (Resend prod webhook cutover) is in turn
-  blocked on #155. The audit substance of #156 (this document) is complete,
-  but formal closure of #156/#157 should wait for the push-and-CI gate along
-  with #155.
+  raw-fetch drift (no OpenAPI coverage yet) — filed as issue #167 under EPIC
+  #158.
+- New issue filed for a CodeQL remediation backlog (30 open alerts, almost all
+  pre-existing and only now surfaced because this was the first real CodeQL
+  scan of the actual app content after the repo was out of sync with GitHub
+  for a long time) — filed as issue #168.
+
+## Final status (2026-07-10)
+
+- #155 (pre-publish checklist) passed: the Phase 2/3 modules+office migration
+  was found to have never been pushed to GitHub; it was synced via two
+  batched Git Data API commits, GitHub CI went fully green (Analyze x2,
+  Codegen drift, Lint, Typecheck, Build API server), Dependabot is clean (0
+  alerts), and the Supabase→Replit backup ran successfully.
+- Re-ran this document's drift categories against the now-synced final state:
+  no new drift beyond what's already documented above (the `use-pottery.ts`
+  hit in a repeat grep is a stale comment referencing the old raw-fetch
+  pattern by name, not a live `fetch()` call — confirms A1/#131's fix held).
+- Every child issue under EPIC #158 is closed except #156 (this document) and
+  #157 (blocked on #156, the final production webhook cutover).
+- #156 is closed as of this update. Proceeding to #157.

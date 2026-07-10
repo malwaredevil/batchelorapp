@@ -3746,8 +3746,19 @@ export default function BlockDesigner() {
         toast.error("Allow pop-ups to export PDF.");
         return;
       }
+      const escapedName = name.replace(
+        /[&<>"']/g,
+        (c) =>
+          ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;",
+          })[c]!,
+      );
       win.document.write(
-        `<html><head><title>${name}</title><style>body{margin:0;background:#fff}img{max-width:100%;display:block}</style></head><body><img src="${imgData}"></body></html>`,
+        `<html><head><title>${escapedName}</title><style>body{margin:0;background:#fff}img{max-width:100%;display:block}</style></head><body><img src="${imgData}"></body></html>`,
       );
       win.document.close();
       setTimeout(() => {

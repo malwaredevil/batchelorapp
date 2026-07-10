@@ -105,7 +105,10 @@ export async function processEmailAttachments(params: {
           }
           extractedData = await extractFromPdf(buffer);
         } else {
-          extractedData = await extractFromImage(buffer, attachment.content_type);
+          extractedData = await extractFromImage(
+            buffer,
+            attachment.content_type,
+          );
           const parts = Object.entries(extractedData)
             .filter(([, v]) => v != null && v !== "")
             .map(([k, v]) => `${k}: ${String(v)}`);
@@ -142,7 +145,11 @@ export async function processEmailAttachments(params: {
 
       if (doc && suggestedTripId) {
         try {
-          await syncItineraryFromDocument(suggestedTripId, doc.id, extractedData);
+          await syncItineraryFromDocument(
+            suggestedTripId,
+            doc.id,
+            extractedData,
+          );
         } catch (err) {
           logger.warn(
             { err, docId: doc.id },

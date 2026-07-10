@@ -6245,7 +6245,8 @@ const RESTRICTED_SOFT_TOOL_NAMES = new Set<string>([
 ]);
 
 const RESTRICTED_SOFT_TOOLS = [...SOFT_TOOLS, ...SOFT_TOOLS_EXTRA].filter(
-  (t) => t.type === "function" && RESTRICTED_SOFT_TOOL_NAMES.has(t.function.name),
+  (t) =>
+    t.type === "function" && RESTRICTED_SOFT_TOOL_NAMES.has(t.function.name),
 );
 
 // The in-app "suggest_navigation" tool renders a clickable in-app button —
@@ -6318,7 +6319,12 @@ async function executeRestrictedSoftTool(
         .object({ include: z.array(z.string()).optional() })
         .safeParse(JSON.parse(args || "{}"));
       const include = parsed.success
-        ? (parsed.data.include ?? ["pottery", "quilting", "ornaments", "travels"])
+        ? (parsed.data.include ?? [
+            "pottery",
+            "quilting",
+            "ornaments",
+            "travels",
+          ])
         : ["pottery", "quilting", "ornaments", "travels"];
       const parts: string[] = [];
 
@@ -6409,7 +6415,8 @@ async function executeRestrictedSoftTool(
 
     if (name === WEB_SEARCH_TOOL_NAME) {
       const parsed = WebSearchToolPayload.safeParse(JSON.parse(args));
-      if (!parsed.success) return "Invalid search query — ask the user to rephrase.";
+      if (!parsed.success)
+        return "Invalid search query — ask the user to rephrase.";
       const { answer, citations } = await webSearch(parsed.data.query);
       return answer
         ? citations.length > 0
@@ -6420,7 +6427,8 @@ async function executeRestrictedSoftTool(
 
     if (name === CONSULT_EXPERTS_TOOL_NAME) {
       const parsed = ConsultExpertsToolPayload.safeParse(JSON.parse(args));
-      if (!parsed.success) return "Invalid question — ask the user to rephrase.";
+      if (!parsed.success)
+        return "Invalid question — ask the user to rephrase.";
       const { answer } = await consultExperts(
         parsed.data.question,
         parsed.data.context,
@@ -6459,7 +6467,11 @@ async function executeRestrictedSoftTool(
       let lng: number | null = parsed.data.lng ?? null;
       if (lat == null || lng == null) {
         const geoPlaces = await searchPlaces(locationName);
-        if (geoPlaces.length > 0 && geoPlaces[0].lat != null && geoPlaces[0].lng != null) {
+        if (
+          geoPlaces.length > 0 &&
+          geoPlaces[0].lat != null &&
+          geoPlaces[0].lng != null
+        ) {
           lat = geoPlaces[0].lat;
           lng = geoPlaces[0].lng;
         }
@@ -6468,7 +6480,8 @@ async function executeRestrictedSoftTool(
         return `Couldn't find coordinates for "${locationName}" — ask the user for a more specific place name.`;
       }
       const forecast = await getWeatherForecast(lat, lng);
-      if (forecast.length === 0) return `No forecast data available for ${locationName}.`;
+      if (forecast.length === 0)
+        return `No forecast data available for ${locationName}.`;
       return (
         `Forecast for ${locationName}:\n` +
         forecast
@@ -6485,7 +6498,8 @@ async function executeRestrictedSoftTool(
 
     if (name === FIND_NEARBY_PLACES_TOOL_NAME) {
       const parsed = FindNearbyPlacesToolPayload.safeParse(JSON.parse(args));
-      if (!parsed.success) return "Invalid place search — ask the user to rephrase.";
+      if (!parsed.success)
+        return "Invalid place search — ask the user to rephrase.";
       const places = await searchPlaces(
         parsed.data.query,
         parsed.data.lat,
@@ -6529,7 +6543,8 @@ async function executeRestrictedSoftTool(
       const parsed = GetPollenForecastToolPayload.safeParse(JSON.parse(args));
       if (!parsed.success) return "Invalid location — ask the user to clarify.";
       const pollen = await getPollenForecast(parsed.data.lat, parsed.data.lng);
-      if (!pollen) return `No pollen data available for ${parsed.data.locationName}.`;
+      if (!pollen)
+        return `No pollen data available for ${parsed.data.locationName}.`;
       return (
         `Pollen forecast for ${parsed.data.locationName} (${pollen.date}): overall ${pollen.overallCategory}. ` +
         pollen.types.map((t) => `${t.displayName}: ${t.category}`).join(", ")
@@ -6538,7 +6553,8 @@ async function executeRestrictedSoftTool(
 
     if (name === CALCULATE_YARDAGE_TOOL_NAME) {
       const parsed = CalculateYardageToolPayload.safeParse(JSON.parse(args));
-      if (!parsed.success) return "Invalid quilt dimensions — ask the user to clarify.";
+      if (!parsed.success)
+        return "Invalid quilt dimensions — ask the user to clarify.";
       const {
         quiltWidthInches: w,
         quiltHeightInches: h,
@@ -6547,16 +6563,25 @@ async function executeRestrictedSoftTool(
       } = parsed.data;
       const backingWidthNeeded = w + 8;
       const backingHeightNeeded = h + 8;
-      const backingPanels = Math.max(1, Math.ceil(backingWidthNeeded / fabricWidth));
+      const backingPanels = Math.max(
+        1,
+        Math.ceil(backingWidthNeeded / fabricWidth),
+      );
       const backingLengthInches = backingHeightNeeded * backingPanels;
       const backingYards = Math.ceil((backingLengthInches / 36) * 8) / 8;
       const bindingPerimeterInches = 2 * (w + h) + 15;
-      const bindingStrips = Math.max(1, Math.ceil(bindingPerimeterInches / fabricWidth));
-      const bindingYards = Math.ceil(((bindingStrips * bindingStripWidth) / 36) * 8) / 8;
+      const bindingStrips = Math.max(
+        1,
+        Math.ceil(bindingPerimeterInches / fabricWidth),
+      );
+      const bindingYards =
+        Math.ceil(((bindingStrips * bindingStripWidth) / 36) * 8) / 8;
       return (
         `For a ${w}x${h}" finished quilt:\n` +
         `Backing: ~${backingYards} yards` +
-        (backingPanels > 1 ? ` (pieced from ${backingPanels} panels of ${fabricWidth}" fabric)` : "") +
+        (backingPanels > 1
+          ? ` (pieced from ${backingPanels} panels of ${fabricWidth}" fabric)`
+          : "") +
         `\nBinding: ~${bindingYards} yards (${bindingStrips} strip${bindingStrips === 1 ? "" : "s"} of ${bindingStripWidth}" fabric)`
       );
     }
@@ -6587,7 +6612,9 @@ async function executeRestrictedSoftTool(
       const docFilter =
         semanticDocIds.length > 0
           ? and(
-              tripId != null ? eq(travelsTripDocuments.tripId, tripId) : undefined,
+              tripId != null
+                ? eq(travelsTripDocuments.tripId, tripId)
+                : undefined,
               inArray(travelsTripDocuments.id, semanticDocIds),
             )
           : tripId != null
@@ -6626,18 +6653,24 @@ async function executeRestrictedSoftTool(
         rows = scored.map((s) => s.row);
       } else {
         const idxMap = new Map(semanticDocIds.map((id, i) => [id, i]));
-        rows.sort((a, b) => (idxMap.get(a.id) ?? 99) - (idxMap.get(b.id) ?? 99));
+        rows.sort(
+          (a, b) => (idxMap.get(a.id) ?? 99) - (idxMap.get(b.id) ?? 99),
+        );
         rows = rows.slice(0, 5);
       }
-      if (rows.length === 0) return `No uploaded trip documents match "${query}".`;
+      if (rows.length === 0)
+        return `No uploaded trip documents match "${query}".`;
       return rows
         .map((row) => {
           const parts = [
             `Document: ${row.title ?? row.documentType ?? "untitled"} (trip #${row.tripId})`,
           ];
-          if (row.documentType) parts.push(`Type: ${row.documentType.replace(/_/g, " ")}`);
+          if (row.documentType)
+            parts.push(`Type: ${row.documentType.replace(/_/g, " ")}`);
           if (row.extractedData && typeof row.extractedData === "object") {
-            const fields = Object.entries(row.extractedData as Record<string, unknown>)
+            const fields = Object.entries(
+              row.extractedData as Record<string, unknown>,
+            )
               .filter(([, v]) => v != null && v !== "")
               .map(([k, v]) => `  ${k}: ${String(v)}`)
               .join("\n");
@@ -6656,7 +6689,10 @@ async function executeRestrictedSoftTool(
 
     return "Unsupported tool.";
   } catch (err) {
-    logger.error({ err, name }, "restricted-channel soft tool execution failed");
+    logger.error(
+      { err, name },
+      "restricted-channel soft tool execution failed",
+    );
     return "That lookup failed on our end — tell the user to try again or use the app.";
   }
 }

@@ -7,7 +7,7 @@
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
-    "lint": "prettier --check .",
+    "lint": "prettier --check . && pnpm --filter @workspace/scripts run check-raw-fetch",
     "lint:fix": "prettier --write .",
     "prepare": "husky"
   },

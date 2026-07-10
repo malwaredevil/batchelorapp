@@ -100,7 +100,16 @@ router.get("/connect", (req, res) => {
     return;
   }
   const state = crypto.randomBytes(16).toString("hex");
-  res.cookie(OAUTH_STATE_COOKIE, state, {
+  // Optional same-origin relative path to redirect back to after the OAuth
+  // round trip (e.g. "/modules/office/gmail"). Defaults to Hub's "/gmail".
+  // Only same-origin relative paths are accepted to avoid an open redirect.
+  const rawReturnTo = typeof req.query.returnTo === "string" ? req.query.returnTo : "";
+  const returnTo =
+    rawReturnTo.startsWith("/") && !rawReturnTo.startsWith("//")
+      ? rawReturnTo
+      : "/gmail";
+  const cookieValue = `${state}:${Buffer.from(returnTo).toString("base64url")}`;
+  res.cookie(OAUTH_STATE_COOKIE, cookieValue, {
     signed: true,
     httpOnly: true,
     secure: true,
@@ -121,11 +130,9 @@ router.get("/connect", (req, res) => {
 
 router.get("/callback", async (req, res) => {
   const userId = req.session.userId!;
-  const FAILURE = "/gmail?gmail=error";
-  const SUCCESS = "/gmail?gmail=connected";
 
-  const { code, state } = req.query;
-  const expectedState = req.signedCookies?.[OAUTH_STATE_COOKIE];
+  const { code, state: rawState } = req.query;
+  const expectedCookie = req.signedCookies?.[OAUTH_STATE_COOKIE];
   res.clearCookie(OAUTH_STATE_COOKIE, {
     httpOnly: true,
     secure: true,
@@ -133,12 +140,39 @@ router.get("/callback", async (req, res) => {
     path: OAUTH_COOKIE_PATH,
   });
 
+  // expectedCookie is "{state}:{base64url(returnTo)}" — split the returnTo
+  // path back out before we know whether the state itself is valid, so
+  // every redirect (success or failure) lands back where the user started.
+  let returnTo = "/gmail";
+  let expectedState: string | undefined;
+  if (typeof expectedCookie === "string") {
+    const sepIndex = expectedCookie.indexOf(":");
+    if (sepIndex !== -1) {
+      expectedState = expectedCookie.slice(0, sepIndex);
+      try {
+        const decoded = Buffer.from(
+          expectedCookie.slice(sepIndex + 1),
+          "base64url",
+        ).toString("utf8");
+        if (decoded.startsWith("/") && !decoded.startsWith("//")) {
+          returnTo = decoded;
+        }
+      } catch {
+        // keep default returnTo
+      }
+    } else {
+      expectedState = expectedCookie;
+    }
+  }
+  const FAILURE = `${returnTo}?gmail=error`;
+  const SUCCESS = `${returnTo}?gmail=connected`;
+
   if (
     typeof code !== "string" ||
-    typeof state !== "string" ||
+    typeof rawState !== "string" ||
     typeof expectedState !== "string" ||
     !expectedState ||
-    state !== expectedState
+    rawState !== expectedState
   ) {
     res.redirect(FAILURE);
     return;
@@ -153,7 +187,7 @@ router.get("/callback", async (req, res) => {
     }
     if (!tokens.refresh_token) {
       // No refresh token — user may need to revoke the existing grant first.
-      res.redirect("/gmail?gmail=no_refresh_token");
+      res.redirect(`${returnTo}?gmail=no_refresh_token`);
       return;
     }
 

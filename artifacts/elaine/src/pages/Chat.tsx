@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { getTripPhotoImageUrl } from "@workspace/api-client-react";
 import {
+  getElaineConversationMessagesFn,
   getElaineDailyBriefQueryKey,
   getListElaineConversationsQueryKey,
   useDeleteElaineConversation,
@@ -29,7 +30,6 @@ import {
   useListElaineConversations,
   useRegenerateElaineDailyBrief,
   useRenameElaineConversation,
-  type ConversationMessage,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFullChat } from "@/lib/useFullChat";
@@ -191,9 +191,7 @@ export default function Chat() {
       if (loadingConvId === id) return;
       setLoadingConvId(id);
       try {
-        const res = await fetch(`/api/elaine/conversations/${id}/messages`);
-        if (!res.ok) throw new Error("Failed to load conversation");
-        const msgs = (await res.json()) as ConversationMessage[];
+        const msgs = await getElaineConversationMessagesFn(id);
         chat.handleLoadConversation(id, msgs);
       } catch {
         // If load fails, just clear to a new conversation

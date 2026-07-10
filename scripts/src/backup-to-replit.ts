@@ -206,6 +206,16 @@ CREATE TABLE IF NOT EXISTS ornaments_barcode_cache (
   created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Office
+CREATE TABLE IF NOT EXISTS office_notes (
+  id                  SERIAL PRIMARY KEY,
+  title               TEXT NOT NULL,
+  body                TEXT NOT NULL DEFAULT '',
+  created_by_user_id  INTEGER REFERENCES app_users(id),
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS ornaments_hallmark_events (
   id               SERIAL PRIMARY KEY,
   user_id          INTEGER,
@@ -940,6 +950,21 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "ornaments_hallmark_events", "id");
+
+  // ── Office ────────────────────────────────────────────────────────────────
+  summary["office_notes"] = await copyTable(source, dest, {
+    table: "office_notes",
+    columns: [
+      "id",
+      "title",
+      "body",
+      "created_by_user_id",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "office_notes", "id");
 
   // ── Quilting ──────────────────────────────────────────────────────────────
   summary["quilting_categories"] = await copyTable(source, dest, {

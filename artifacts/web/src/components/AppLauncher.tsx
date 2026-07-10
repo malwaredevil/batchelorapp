@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Search,
   Plus,
@@ -64,7 +64,13 @@ import {
   useGetStats,
   useGetTravelsStats,
   useGetOrnamentStats,
+  useListNotes,
+  useListConnectedCalendars,
+  useListConnectedCalendarEvents,
+  useGetElaineNudgesUnseenCount,
+  useListElaineMemory,
 } from "@workspace/api-client-react";
+import { useGmailLabels } from "@workspace/gmail-ui";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 
 const base = import.meta.env.BASE_URL;
@@ -130,6 +136,10 @@ const ELAINE_QUICK_LINKS = [
     href: `${base}elaine/settings`,
   },
   { label: "Account", icon: Settings, href: `${base}account` },
+];
+
+const OFFICE_QUICK_LINKS = [
+  { label: "Open Office", icon: Activity, href: `${base}modules/office/` },
 ];
 
 const CATEGORY_LABELS: { id: "all" | WidgetCategory; label: string }[] = [
@@ -516,6 +526,29 @@ function HallmarkOpenHouseCountdown() {
   );
 }
 
+// Loads upcoming (next 30 days) event count for a single connected calendar
+// and reports it up to the parent. Kept as its own component (rather than a
+// hook called in a loop) so each connected calendar can independently call
+// useListConnectedCalendarEvents — mirrors the CalendarEventsLoader pattern
+// used on Office's own calendar page.
+function UpcomingCalendarEventsLoader({
+  calendarId,
+  start,
+  end,
+  onCount,
+}: {
+  calendarId: number;
+  start: string;
+  end: string;
+  onCount: (calendarId: number, count: number) => void;
+}) {
+  const { data } = useListConnectedCalendarEvents(calendarId, start, end);
+  useEffect(() => {
+    onCount(calendarId, data?.length ?? 0);
+  }, [calendarId, data, onCount]);
+  return null;
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 export function AppLauncher() {
   const { isDark, toggleTheme } = useTheme();
@@ -549,6 +582,7 @@ export function AppLauncher() {
   const [travelsExpanded, setTravelsExpanded] = useState(false);
   const [ornamentsExpanded, setOrnamentsExpanded] = useState(false);
   const [elaineExpanded, setElaineExpanded] = useState(false);
+  const [officeExpanded, setOfficeExpanded] = useState(false);
 
   // Live stats
   const { data: potteryStatsData } = useGetCollectionStats();
@@ -556,6 +590,37 @@ export function AppLauncher() {
   const { data: quiltingStatsData } = useGetStats();
   const { data: travelsStatsData } = useGetTravelsStats();
   const { data: ornamentsStatsData } = useGetOrnamentStats();
+  const { data: notesData } = useListNotes();
+  const { data: gmailLabelsData } = useGmailLabels();
+  const { data: connectedCalendarsData } = useListConnectedCalendars();
+  const { data: elaineNudgesData } = useGetElaineNudgesUnseenCount();
+  const { data: elaineMemoryData } = useListElaineMemory();
+
+  const unreadEmailCount =
+    gmailLabelsData?.find((l) => l.id === "UNREAD")?.threadsUnread ?? null;
+
+  const upcomingEventsRangeStart = useMemo(
+    () => new Date().toISOString(),
+    [],
+  );
+  const upcomingEventsRangeEnd = useMemo(
+    () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    [],
+  );
+  const [upcomingEventsByCalendar, setUpcomingEventsByCalendar] = useState<
+    Record<number, number>
+  >({});
+  const handleUpcomingEventsCount = useCallback(
+    (calendarId: number, count: number) => {
+      setUpcomingEventsByCalendar((prev) =>
+        prev[calendarId] === count ? prev : { ...prev, [calendarId]: count },
+      );
+    },
+    [],
+  );
+  const upcomingEventsTotal = (connectedCalendarsData ?? []).length
+    ? Object.values(upcomingEventsByCalendar).reduce((a, b) => a + b, 0)
+    : null;
 
   function liveStats(appId: string): { value: string; label: string }[] {
     if (appId === "pottery") {
@@ -658,6 +723,39 @@ export function AppLauncher() {
         },
       ];
     }
+    if (appId === "office") {
+      return [
+        {
+          value: notesData != null ? String(notesData.length) : "—",
+          label: "Notes",
+        },
+        {
+          value: unreadEmailCount != null ? String(unreadEmailCount) : "—",
+          label: "Unread",
+        },
+        {
+          value:
+            upcomingEventsTotal != null ? String(upcomingEventsTotal) : "—",
+          label: "Upcoming",
+        },
+      ];
+    }
+    if (appId === "elaine") {
+      return [
+        {
+          value:
+            elaineNudgesData?.count != null
+              ? String(elaineNudgesData.count)
+              : "—",
+          label: "Nudges",
+        },
+        {
+          value:
+            elaineMemoryData != null ? String(elaineMemoryData.length) : "—",
+          label: "Memory",
+        },
+      ];
+    }
     const app = APPS.find((a) => a.id === appId);
     return app?.stats ?? [];
   }
@@ -695,6 +793,15 @@ export function AppLauncher() {
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans flex flex-col">
+      {(connectedCalendarsData ?? []).map((cal) => (
+        <UpcomingCalendarEventsLoader
+          key={cal.id}
+          calendarId={cal.id}
+          start={upcomingEventsRangeStart}
+          end={upcomingEventsRangeEnd}
+          onCount={handleUpcomingEventsCount}
+        />
+      ))}
       {/* Header — max-w-6xl matches pottery/quilting shells */}
       <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
@@ -731,7 +838,9 @@ export function AppLauncher() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => navigate(`${base}gmail`)}
+              onClick={() => {
+                window.location.href = "/modules/office/gmail";
+              }}
               aria-label="Open Gmail"
               className="text-muted-foreground hover:text-foreground"
             >
@@ -742,7 +851,7 @@ export function AppLauncher() {
               variant="ghost"
               size="icon"
               onClick={() => {
-                window.location.href = "/travels/travel-calendar";
+                window.location.href = "/modules/travels/travel-calendar";
               }}
               aria-label="Travel Calendar"
               title="Travel Calendar"
@@ -989,6 +1098,16 @@ export function AppLauncher() {
               accentIconColor="text-indigo-600 dark:text-indigo-400"
               expanded={elaineExpanded}
               onToggle={() => setElaineExpanded((e) => !e)}
+            />
+            <AppHeroCard
+              app={APPS.find((a) => a.id === "office")!}
+              stats={liveStats("office")}
+              quickLinks={OFFICE_QUICK_LINKS}
+              accentBorderColor="border-slate-200/60 dark:border-slate-700/40"
+              accentSectionBg="bg-slate-50/60 dark:bg-slate-900/10"
+              accentIconColor="text-slate-600 dark:text-slate-400"
+              expanded={officeExpanded}
+              onToggle={() => setOfficeExpanded((e) => !e)}
             />
           </div>
         </section>

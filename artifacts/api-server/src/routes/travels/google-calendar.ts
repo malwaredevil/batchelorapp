@@ -44,6 +44,15 @@ router.get("/google-calendar/status", requireAuth, async (req, res) => {
   });
 });
 
+// Only allow redirecting back into our own app's relative paths — never an
+// absolute/external URL — to prevent this becoming an open-redirect vector.
+function sanitizeReturnTo(raw: unknown): string | null {
+  if (typeof raw !== "string" || !raw.startsWith("/") || raw.startsWith("//")) {
+    return null;
+  }
+  return raw;
+}
+
 // GET /google-calendar/connect — begin the per-user OAuth flow
 router.get("/google-calendar/connect", requireAuth, (req, res) => {
   if (!googleCalendarOAuthEnabled()) {
@@ -51,7 +60,11 @@ router.get("/google-calendar/connect", requireAuth, (req, res) => {
     return;
   }
   const state = crypto.randomBytes(16).toString("hex");
-  res.cookie(OAUTH_STATE_COOKIE, state, {
+  const returnTo = sanitizeReturnTo(req.query.returnTo);
+  const cookieValue = returnTo
+    ? `${state}:${Buffer.from(returnTo, "utf8").toString("base64url")}`
+    : state;
+  res.cookie(OAUTH_STATE_COOKIE, cookieValue, {
     signed: true,
     httpOnly: true,
     secure: true,
@@ -71,17 +84,39 @@ router.get("/google-calendar/connect", requireAuth, (req, res) => {
 // GET /google-calendar/callback — Google redirects back here with a one-time code
 router.get("/google-calendar/callback", requireAuth, async (req, res) => {
   const userId = req.session.userId!;
-  const FAILURE_REDIRECT = "/travels/settings?calendar=error";
-  const SUCCESS_REDIRECT = "/travels/settings?calendar=connected";
 
   const { code, state } = req.query;
-  const expectedState = req.signedCookies?.[OAUTH_STATE_COOKIE];
+  const rawCookie = req.signedCookies?.[OAUTH_STATE_COOKIE];
   res.clearCookie(OAUTH_STATE_COOKIE, {
     httpOnly: true,
     secure: true,
     sameSite: "none",
     path: OAUTH_COOKIE_PATH,
   });
+
+  let expectedState: string | undefined;
+  let returnTo = "/modules/travels/settings";
+  if (typeof rawCookie === "string") {
+    const sepIndex = rawCookie.indexOf(":");
+    if (sepIndex === -1) {
+      expectedState = rawCookie;
+    } else {
+      expectedState = rawCookie.slice(0, sepIndex);
+      try {
+        const decoded = Buffer.from(
+          rawCookie.slice(sepIndex + 1),
+          "base64url",
+        ).toString("utf8");
+        const sanitized = sanitizeReturnTo(decoded);
+        if (sanitized) returnTo = sanitized;
+      } catch {
+        // Ignore a malformed returnTo segment — fall back to the default.
+      }
+    }
+  }
+
+  const FAILURE_REDIRECT = `${returnTo}${returnTo.includes("?") ? "&" : "?"}calendar=error`;
+  const SUCCESS_REDIRECT = `${returnTo}${returnTo.includes("?") ? "&" : "?"}calendar=connected`;
 
   if (
     typeof code !== "string" ||

@@ -10,6 +10,7 @@
     "seed-quilting-block-templates": "tsx ./src/seed-quilting-block-templates.ts",
     "add-users": "tsx ./src/add-users.ts",
     "check-ci-status": "tsx ./src/check-ci-status.ts",
+    "check-raw-fetch": "tsx ./src/check-raw-fetch.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

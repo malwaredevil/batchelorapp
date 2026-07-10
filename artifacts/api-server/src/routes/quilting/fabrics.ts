@@ -39,8 +39,24 @@ import {
   ListFabricsResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../../middleware/auth";
+import { env } from "../../lib/env";
 import { aiLimiter, bulkAiLimiter } from "../../middleware/rateLimit";
-import { sniffImageType, stripImageMetadata, toDataUrl } from "../../lib/image";
+import {
+  sniffImageType,
+  stripImageMetadata,
+  toDataUrl,
+  generateFlatFabricTile,
+  generateFlatFabricTileV2,
+  generateFabricTilePosterized,
+  generateFabricTileVectorized,
+  generateFabricTileVectorizedTuned,
+  generateProductionFabricTile,
+  DIRECTION_A_SMOOTH_TUNING,
+  DIRECTION_A_CRISP_TUNING,
+  DIRECTION_A_THREE_PASS_TUNING,
+  DIRECTION_A_ULTRA_SMOOTH_TUNING,
+  DIRECTION_A_MAX_DETAIL_TUNING,
+} from "../../lib/image";
 import {
   uploadImage,
   deleteImage,
@@ -145,7 +161,224 @@ async function resolveOrCreateCategories(names: string[]): Promise<number[]> {
 }
 
 const router: IRouter = Router();
+
+// ---------------------------------------------------------------------------
+// Dev-only: flat-field tile preview for the fabric-compare comparison page.
+// Reads a single bundled fixture image, never user-controlled input. Mounted
+// before requireAuth because it's loaded via a raw SVG <image> element (no
+// custom-fetch header attached), and hard-disabled outside development.
+// ---------------------------------------------------------------------------
+router.get("/dev/fabric-tile-preview", async (_req, res) => {
+  if (env.isProduction) {
+    res.status(404).end();
+    return;
+  }
+  const { readFile } = await import("node:fs/promises");
+  const path = await import("node:path");
+  const fixturePath = path.resolve(
+    __dirname,
+    "dev-assets/fabric-compare-source.jpg",
+  );
+  const buffer = await readFile(fixturePath);
+  const tile = await generateFlatFabricTile(buffer, "image/jpeg");
+  res.set("Content-Type", "image/jpeg");
+  res.set("Cache-Control", "no-store");
+  res.end(tile);
+});
+
+// ---------------------------------------------------------------------------
+// Dev-only: experimental flat-field v2 (percentile/division-anchored) tile,
+// per the vectorization research report. Same fixture/gating as above.
+// ---------------------------------------------------------------------------
+router.get("/dev/fabric-tile-experiment-v2", async (_req, res) => {
+  if (env.isProduction) {
+    res.status(404).end();
+    return;
+  }
+  const { readFile } = await import("node:fs/promises");
+  const path = await import("node:path");
+  const fixturePath = path.resolve(
+    __dirname,
+    "dev-assets/fabric-compare-source.jpg",
+  );
+  const buffer = await readFile(fixturePath);
+  const tile = await generateFlatFabricTileV2(buffer, "image/jpeg");
+  res.set("Content-Type", "image/jpeg");
+  res.set("Cache-Control", "no-store");
+  res.end(tile);
+});
+
+// ---------------------------------------------------------------------------
+// Dev-only: experimental posterized/quantized tile (flat-field v2 + texture
+// suppression + no-dither palette reduction), the "ready to vectorize" raster
+// stage from the research report. Same fixture/gating as above.
+// ---------------------------------------------------------------------------
+router.get("/dev/fabric-tile-experiment-posterized", async (_req, res) => {
+  if (env.isProduction) {
+    res.status(404).end();
+    return;
+  }
+  const { readFile } = await import("node:fs/promises");
+  const path = await import("node:path");
+  const fixturePath = path.resolve(
+    __dirname,
+    "dev-assets/fabric-compare-source.jpg",
+  );
+  const buffer = await readFile(fixturePath);
+  const tile = await generateFabricTilePosterized(buffer, "image/jpeg");
+  res.set("Content-Type", "image/png");
+  res.set("Cache-Control", "no-store");
+  res.end(tile);
+});
+
+// ---------------------------------------------------------------------------
+// Dev-only: VTracer-vectorized tile (Direction A from the vectorization
+// research report). Traces the posterized raster into a real SVG with vector
+// fill paths via `@neplex/vectorizer` (Node/WASM VTracer binding, no API key
+// or Python toolchain needed). Same fixture/gating as the raster variants.
+// ---------------------------------------------------------------------------
+router.get("/dev/fabric-tile-experiment-vectorized", async (_req, res) => {
+  if (env.isProduction) {
+    res.status(404).end();
+    return;
+  }
+  const { readFile } = await import("node:fs/promises");
+  const path = await import("node:path");
+  const fixturePath = path.resolve(
+    __dirname,
+    "dev-assets/fabric-compare-source.jpg",
+  );
+  const buffer = await readFile(fixturePath);
+  const svg = await generateFabricTileVectorized(buffer, "image/jpeg");
+  res.set("Content-Type", "image/svg+xml");
+  res.set("Cache-Control", "no-store");
+  res.end(svg);
+});
+
 router.use(requireAuth);
+
+// ---------------------------------------------------------------------------
+// Dev-only: same tile experiments as above, but sourced from a real stored
+// fabric's own photo instead of the bundled fixture — used by the HST
+// comparison section on the fabric-compare dev page to test a second,
+// contrasting-color fabric. Requires auth (real household data), unlike the
+// fixture-based routes above which read a static bundled asset.
+// ---------------------------------------------------------------------------
+router.get(
+  "/dev/fabric-tile-experiment/:fabricId/:method",
+  async (req, res) => {
+    if (env.isProduction) {
+      res.status(404).end();
+      return;
+    }
+    const fabricId = Number(req.params["fabricId"]);
+    const method = String(req.params["method"]);
+    if (!Number.isInteger(fabricId) || fabricId <= 0) {
+      res.status(400).json({ error: "Invalid fabricId" });
+      return;
+    }
+    const [row] = await db
+      .select({ imagePath: fabrics.imagePath })
+      .from(fabrics)
+      .where(eq(fabrics.id, fabricId))
+      .limit(1);
+    if (!row) {
+      res.status(404).json({ error: "Fabric not found" });
+      return;
+    }
+    const { buffer, contentType: rawContentType } = await downloadImageBuffer(
+      row.imagePath,
+    );
+    const contentType = sniffImageType(buffer) ?? "image/jpeg";
+
+    switch (method) {
+      case "original": {
+        res.set("Content-Type", rawContentType);
+        res.set("Cache-Control", "no-store");
+        res.end(buffer);
+        return;
+      }
+      case "v2": {
+        const tile = await generateFlatFabricTileV2(buffer, contentType);
+        res.set("Content-Type", contentType);
+        res.set("Cache-Control", "no-store");
+        res.end(tile);
+        return;
+      }
+      case "posterized": {
+        const tile = await generateFabricTilePosterized(buffer, contentType);
+        res.set("Content-Type", "image/png");
+        res.set("Cache-Control", "no-store");
+        res.end(tile);
+        return;
+      }
+      case "vectorized": {
+        const svg = await generateFabricTileVectorized(buffer, contentType);
+        res.set("Content-Type", "image/svg+xml");
+        res.set("Cache-Control", "no-store");
+        res.end(svg);
+        return;
+      }
+      case "vectorized-smooth": {
+        const svg = await generateFabricTileVectorizedTuned(
+          buffer,
+          contentType,
+          DIRECTION_A_SMOOTH_TUNING,
+        );
+        res.set("Content-Type", "image/svg+xml");
+        res.set("Cache-Control", "no-store");
+        res.end(svg);
+        return;
+      }
+      case "vectorized-crisp": {
+        const svg = await generateFabricTileVectorizedTuned(
+          buffer,
+          contentType,
+          DIRECTION_A_CRISP_TUNING,
+        );
+        res.set("Content-Type", "image/svg+xml");
+        res.set("Cache-Control", "no-store");
+        res.end(svg);
+        return;
+      }
+      case "vectorized-3pass": {
+        const svg = await generateFabricTileVectorizedTuned(
+          buffer,
+          contentType,
+          DIRECTION_A_THREE_PASS_TUNING,
+        );
+        res.set("Content-Type", "image/svg+xml");
+        res.set("Cache-Control", "no-store");
+        res.end(svg);
+        return;
+      }
+      case "vectorized-ultra-smooth": {
+        const svg = await generateFabricTileVectorizedTuned(
+          buffer,
+          contentType,
+          DIRECTION_A_ULTRA_SMOOTH_TUNING,
+        );
+        res.set("Content-Type", "image/svg+xml");
+        res.set("Cache-Control", "no-store");
+        res.end(svg);
+        return;
+      }
+      case "vectorized-max-detail": {
+        const svg = await generateFabricTileVectorizedTuned(
+          buffer,
+          contentType,
+          DIRECTION_A_MAX_DETAIL_TUNING,
+        );
+        res.set("Content-Type", "image/svg+xml");
+        res.set("Cache-Control", "no-store");
+        res.end(svg);
+        return;
+      }
+      default:
+        res.status(400).json({ error: "Invalid method" });
+    }
+  },
+);
 
 // ---------------------------------------------------------------------------
 // List
@@ -533,6 +766,25 @@ router.get("/fabrics/:id/image", async (req, res) => {
   res.set("Content-Type", contentType);
   res.set("Cache-Control", "private, max-age=3600");
   res.end(buffer);
+});
+
+router.get("/fabrics/:id/tile-image", async (req, res) => {
+  const { id } = GetFabricImageParams.parse(req.params);
+  const [row] = await db
+    .select({ imagePath: fabrics.imagePath })
+    .from(fabrics)
+    .where(eq(fabrics.id, id))
+    .limit(1);
+  if (!row) {
+    res.status(404).json({ error: "Fabric not found." });
+    return;
+  }
+  const { buffer } = await downloadImageBuffer(row.imagePath);
+  const sniffed = sniffImageType(buffer) ?? "image/jpeg";
+  const svg = await generateProductionFabricTile(buffer, sniffed);
+  res.set("Content-Type", "image/svg+xml");
+  res.set("Cache-Control", "private, max-age=86400");
+  res.end(svg);
 });
 
 // ---------------------------------------------------------------------------

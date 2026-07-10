@@ -14,9 +14,14 @@ function timingSafeTokenMatch(provided: string, expected: string): boolean {
 // Dev-only automation bypass: the automated screenshot tool loads pages over
 // plain HTTP against the container directly, which means the app's
 // Secure+SameSite=None session cookie can never be set or sent to it (browser
-// spec, not a bug). Instead, the frontend forwards a `?screenshotToken=...`
-// query param as an `X-Screenshot-Token` header on every request (see
-// `custom-fetch.ts`), which we validate here as a stand-in for a session.
+// spec, not a bug). For normal API calls, the frontend forwards
+// `?screenshotToken=...` as an `X-Screenshot-Token` header on every request
+// (see `custom-fetch.ts`), which we validate here as a stand-in for a
+// session. Raw `<img src>` / SVG `<image href>` requests (e.g. fabric tile
+// pattern fills) can't attach a custom header at all, so those call sites
+// append the same token as a `?screenshotToken=` query param instead (see
+// `appendScreenshotToken()` in `custom-fetch.ts`) — we accept it from either
+// place here so both request styles authenticate identically.
 //
 // Hard-disabled in production regardless of configuration, requires a secret
 // token compared in constant time, and only ever authenticates as the single
@@ -27,7 +32,12 @@ async function tryScreenshotTokenAuth(req: Request): Promise<number | null> {
   if (!env.screenshotAuthToken || !env.agentLoginEmail) return null;
 
   const header = req.header("x-screenshot-token");
-  if (!header || !timingSafeTokenMatch(header, env.screenshotAuthToken)) {
+  const queryToken =
+    typeof req.query.screenshotToken === "string"
+      ? req.query.screenshotToken
+      : undefined;
+  const provided = header || queryToken;
+  if (!provided || !timingSafeTokenMatch(provided, env.screenshotAuthToken)) {
     return null;
   }
 

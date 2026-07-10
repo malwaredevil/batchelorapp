@@ -87,10 +87,38 @@ function toDateOnly(iso: string | undefined | null): string | null {
 }
 
 /**
- * Best-effort match against the household's existing trips: a booking
+ * Loose word-overlap check between a document's from/to location text and a
+ * trip's free-text destination field. Both sides are messy natural language
+ * ("Catania (CTA)" vs "Catania, Sicily"), so this only needs to catch a
+ * shared city/place token — it's a disambiguation signal, not a strict match.
+ */
+function destinationOverlaps(
+  destination: string | null | undefined,
+  ...candidates: Array<string | null | undefined>
+): boolean {
+  const destTokens = new Set(
+    normalize(destination).split(/[^a-z0-9]+/).filter((t) => t.length >= 4),
+  );
+  if (destTokens.size === 0) return false;
+  for (const candidate of candidates) {
+    const candTokens = normalize(candidate)
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length >= 4);
+    if (candTokens.some((t) => destTokens.has(t))) return true;
+  }
+  return false;
+}
+
+/**
+ * Best-effort match against the household's existing trips. A booking
  * "belongs" to a trip if its travel date falls inside (or within a day of)
- * that trip's date range. Returns null rather than guessing when no trip
- * lines up — the review UI lets the user pick manually in that case.
+ * that trip's date range. When more than one trip's window covers the date
+ * (e.g. back-to-back or overlapping trips), the from/to location text is
+ * used to break the tie against each trip's destination; if that still
+ * doesn't disambiguate, the trip whose date range center is closest to the
+ * travel date wins rather than an arbitrary "first in the DB" pick. Returns
+ * null rather than guessing when nothing lines up — the review UI lets the
+ * user pick manually in that case.
  */
 export async function suggestTripId(
   extracted: Record<string, unknown>,
@@ -98,7 +126,9 @@ export async function suggestTripId(
   const travelDate = toDateOnly(
     (extracted.departureDateTime ??
       extracted.checkInDate ??
-      extracted.pickupDateTime) as string | undefined,
+      extracted.pickupDateTime ??
+      extracted.returnDepartureDateTime ??
+      extracted.returnArrivalDateTime) as string | undefined,
   );
   if (!travelDate) return null;
 
@@ -107,20 +137,48 @@ export async function suggestTripId(
       id: travelsTrips.id,
       startDate: travelsTrips.startDate,
       endDate: travelsTrips.endDate,
+      destination: travelsTrips.destination,
     })
     .from(travelsTrips);
 
   const target = new Date(travelDate).getTime();
   const DAY_MS = 86_400_000;
+  const candidates: Array<{ id: number; distance: number; destMatch: boolean }> =
+    [];
+
   for (const trip of trips) {
     if (!trip.startDate) continue;
     const start = new Date(trip.startDate).getTime() - DAY_MS;
     const end = trip.endDate
       ? new Date(trip.endDate).getTime() + DAY_MS
       : start + DAY_MS;
-    if (target >= start && target <= end) return trip.id;
+    if (target < start || target > end) continue;
+
+    const center = (start + end) / 2;
+    candidates.push({
+      id: trip.id,
+      distance: Math.abs(target - center),
+      destMatch: destinationOverlaps(
+        trip.destination,
+        extracted.fromLocation as string | undefined,
+        extracted.toLocation as string | undefined,
+        extracted.returnFromLocation as string | undefined,
+        extracted.returnToLocation as string | undefined,
+      ),
+    });
   }
-  return null;
+
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0]!.id;
+
+  // Multiple overlapping trips: prefer a destination match, then the
+  // closest date-range center, instead of silently taking whichever trip
+  // happened to be selected from the DB first.
+  candidates.sort((a, b) => {
+    if (a.destMatch !== b.destMatch) return a.destMatch ? -1 : 1;
+    return a.distance - b.distance;
+  });
+  return candidates[0]!.id;
 }
 
 export interface GmailScanResult {

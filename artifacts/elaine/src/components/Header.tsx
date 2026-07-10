@@ -57,22 +57,41 @@ export function Header() {
           </div>
 
           <nav className="flex items-center gap-1">
-            {mainNav.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-medium transition-colors",
-                  isActive(location, item.href)
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-                data-testid={item.testId}
-              >
-                <item.icon className="h-4 w-4" />
-                <span className="hidden md:inline">{item.label}</span>
-              </Link>
-            ))}
+            {mainNav.map((item) => {
+              const linkClassName = cn(
+                "flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-medium transition-colors",
+                !item.external && isActive(location, item.href)
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              );
+              if (item.external) {
+                // Crosses an artifact boundary (e.g. the hub's unified
+                // /account settings page) — must be a full browser
+                // navigation, not client-side routing.
+                return (
+                  <a
+                    key={item.href}
+                    href={item.href}
+                    className={linkClassName}
+                    data-testid={item.testId}
+                  >
+                    <item.icon className="h-4 w-4" />
+                    <span className="hidden md:inline">{item.label}</span>
+                  </a>
+                );
+              }
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={linkClassName}
+                  data-testid={item.testId}
+                >
+                  <item.icon className="h-4 w-4" />
+                  <span className="hidden md:inline">{item.label}</span>
+                </Link>
+              );
+            })}
           </nav>
 
           <SearchTrigger />

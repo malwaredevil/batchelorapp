@@ -22,7 +22,9 @@ export type AppId =
   | "travels"
   | "ornaments"
   | "elaine"
-  | "gmail";
+  | "gmail"
+  | "office"
+  | "modules";
 
 function HubLogo({ className }: { className?: string }) {
   return (
@@ -212,7 +214,7 @@ function ElaineLogo({ className }: { className?: string }) {
   return <ElaineAvatar className={className} size={32} />;
 }
 
-function GmailLogo({ className }: { className?: string }) {
+function OfficeLogo({ className }: { className?: string }) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -221,29 +223,33 @@ function GmailLogo({ className }: { className?: string }) {
       aria-hidden="true"
     >
       <rect width="100" height="100" rx="22" fill="#1B3A5C" />
-      {/* Envelope body */}
       <rect
-        x="18"
+        x="24"
         y="30"
-        width="64"
+        width="52"
         height="42"
-        rx="5"
+        rx="4"
         stroke="#F0E8D8"
         strokeWidth="3.5"
         fill="none"
       />
-      {/* Envelope flap V */}
-      <polyline
-        points="18,30 50,56 82,30"
+      <path
+        d="M24 40 L76 40"
+        stroke="#F0E8D8"
+        strokeWidth="3.5"
+        strokeLinecap="round"
+      />
+      <path
+        d="M40 30 L40 24 Q40 20 44 20 L56 20 Q60 20 60 24 L60 30"
         stroke="#F0E8D8"
         strokeWidth="3.5"
         fill="none"
-        strokeLinejoin="round"
         strokeLinecap="round"
       />
     </svg>
   );
 }
+
 
 interface AppEntry {
   id: AppId;
@@ -277,7 +283,7 @@ function useApps(): AppEntry[] {
       name: "Batchelor Pottery",
       subtitle:
         potteryCount != null ? `${potteryCount} pieces` : "Pottery Studio",
-      href: "/pottery/",
+      href: "/modules/pottery/",
       Logo: PotteryLogo,
     },
     {
@@ -285,14 +291,14 @@ function useApps(): AppEntry[] {
       name: "Ashley's Quilting",
       subtitle:
         fabricCount != null ? `${fabricCount} fabrics` : "Quilting Studio",
-      href: "/quilting/",
+      href: "/modules/quilting/",
       Logo: QuiltingLogo,
     },
     {
       id: "travels",
       name: "Batchelor Travels",
       subtitle: tripCount != null ? `${tripCount} trips` : "Travel Journal",
-      href: "/travels/",
+      href: "/modules/travels/",
       Logo: TravelsLogo,
     },
     {
@@ -302,8 +308,15 @@ function useApps(): AppEntry[] {
         ornamentsCount != null
           ? `${ornamentsCount} ornaments`
           : "Ornament Collection",
-      href: "/ornaments/",
+      href: "/modules/ornaments/",
       Logo: OrnamentsLogo,
+    },
+    {
+      id: "office",
+      name: "Office",
+      subtitle: "Gmail, calendars & notes",
+      href: "/modules/office/",
+      Logo: OfficeLogo,
     },
     {
       id: "elaine",
@@ -311,13 +324,6 @@ function useApps(): AppEntry[] {
       subtitle: "Your AI assistant",
       href: "/elaine/",
       Logo: ElaineLogo,
-    },
-    {
-      id: "gmail",
-      name: "Gmail",
-      subtitle: "Your inbox",
-      href: "/gmail",
-      Logo: GmailLogo,
     },
   ];
 }

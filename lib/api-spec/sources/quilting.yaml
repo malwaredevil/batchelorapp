@@ -2033,6 +2033,7 @@ components:
           categories,
           images,
           imageUrl,
+          tileImageUrl,
           hasEmbedding,
           createdAt,
         ]
@@ -2104,6 +2105,13 @@ components:
             $ref: "#/components/schemas/EntityImage"
         imageUrl:
           type: string
+        tileImageUrl:
+          type: string
+          description: >-
+            Flat-field-corrected, tileable crop of the fabric photo. Use this
+            (not imageUrl) for SVG pattern-fill rendering — it removes the
+            source photo's natural lighting/vignette falloff so tiled squares
+            don't show a "puffy" embossed grid.
         hasEmbedding:
           type: boolean
         createdAt:

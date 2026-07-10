@@ -74,6 +74,7 @@ export interface SerializedFabric {
   categories: CategoryResult[];
   images: ImageResult[];
   imageUrl: string;
+  tileImageUrl: string;
   hasEmbedding: boolean;
   createdAt: Date;
 }
@@ -252,6 +253,7 @@ function toFabric(
     categories: cats,
     images: imgs,
     imageUrl: `/api/quilting/fabrics/${row.id}/image`,
+    tileImageUrl: `/api/quilting/fabrics/${row.id}/tile-image`,
     hasEmbedding,
     createdAt: row.createdAt,
   };

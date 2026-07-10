@@ -15,6 +15,8 @@ export interface NavEntry {
   /** Lower numbers render first within the group. Default: 50. */
   order?: number;
   testId?: string;
+  /** True if href crosses an artifact boundary and needs a full browser nav. */
+  external?: boolean;
 }
 
 export interface ContextAction {

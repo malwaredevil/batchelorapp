@@ -9,7 +9,6 @@ import {
   useAuth,
   redirectToMainLogin,
 } from "@workspace/web-core/auth";
-import { useRealtimeInvalidation } from "@workspace/api-client-react";
 import { ModuleShell } from "@/components/module-shell";
 import {
   ThemeProvider,
@@ -115,9 +114,6 @@ function Routes() {
   useEffect(() => {
     if (!isLoading && !user) redirectToMainLogin();
   }, [isLoading, user]);
-
-  // Only subscribe once authenticated — the SSE endpoint requires a session.
-  useRealtimeInvalidation(!!user);
 
   if (isLoading || !user) return <Splash />;
 

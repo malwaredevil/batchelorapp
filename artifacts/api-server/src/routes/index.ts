@@ -13,7 +13,6 @@ import gmailRouter from "./gmail";
 import searchRouter from "./search";
 import agentphoneRouter from "./agentphone";
 import elaineEmailRouter from "./elaine-email";
-import realtimeRouter from "./realtime";
 
 const router: IRouter = Router();
 
@@ -34,7 +33,6 @@ router.use("/gmail", gmailRouter);
 router.use("/elaine", elaineEmailRouter);
 router.use("/elaine", elaineRouter);
 router.use("/agentphone", agentphoneRouter);
-router.use("/realtime", realtimeRouter);
 router.use(hubRouter);
 
 export default router;

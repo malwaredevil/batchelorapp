@@ -14,6 +14,7 @@
 import { pool } from "@workspace/db";
 import { logger } from "./logger";
 import { getAirQuality, getPollenForecast } from "./travels/google-maps";
+import { shouldRunScheduledTask } from "./scheduler-guard";
 
 // How close a trip's start date has to be before we start nudging about it.
 const NUDGE_WINDOW_DAYS = 3;
@@ -168,6 +169,10 @@ const IN_PROCESS_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
  */
 export function startNudgeScheduler(): void {
   const run = async (): Promise<void> => {
+    if (!(await shouldRunScheduledTask("travels-nudges", IN_PROCESS_INTERVAL_MS))) {
+      logger.info("travels-nudges: skipped (ran within the last hour)");
+      return;
+    }
     const t0 = Date.now();
     logger.info("travels-nudges: run starting");
     try {

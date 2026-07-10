@@ -188,6 +188,49 @@ router.put("/connected-calendars/:id/travel", requireAuth, async (req, res) => {
   res.json({ id, isTravelCalendar: true });
 });
 
+// PUT /connected-calendars/:id/hallmark — assign this calendar as the shared
+// "Hallmark" calendar used by the Ornaments app's event countdown/calendar
+// feature (unassigning whichever one previously held the flag). Mirrors
+// /travel above; owner-only since it affects every user's app.
+router.put(
+  "/connected-calendars/:id/hallmark",
+  requireAuth,
+  async (req, res) => {
+    const userId = req.session.userId!;
+    const id = Number(req.params["id"]);
+
+    if (!(await isOwnerUser(userId))) {
+      res.status(403).json({
+        error: "Only the app owner can assign the Hallmark calendar.",
+      });
+      return;
+    }
+
+    const [target] = await db
+      .select()
+      .from(travelsConnectedCalendars)
+      .where(eq(travelsConnectedCalendars.id, id))
+      .limit(1);
+    if (!target) {
+      res.status(404).json({ error: "Connected calendar not found." });
+      return;
+    }
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(travelsConnectedCalendars)
+        .set({ isHallmarkCalendar: false, updatedAt: new Date() })
+        .where(eq(travelsConnectedCalendars.isHallmarkCalendar, true));
+      await tx
+        .update(travelsConnectedCalendars)
+        .set({ isHallmarkCalendar: true, updatedAt: new Date() })
+        .where(eq(travelsConnectedCalendars.id, id));
+    });
+
+    res.json({ id, isHallmarkCalendar: true });
+  },
+);
+
 const EventsQuery = z.object({
   start: z.string().min(1),
   end: z.string().min(1),

@@ -8,6 +8,7 @@ import {
   FileDown,
   Loader2,
   BarChart3,
+  CalendarHeart,
 } from "lucide-react";
 import { useListOrnaments } from "@workspace/api-client-react";
 import type { OrnamentsOrnamentItem as OrnamentItem } from "@workspace/api-client-react";
@@ -34,6 +35,12 @@ const SETTINGS_ITEMS = [
     label: "Maintenance",
     description: "Bulk re-analyze ornaments in the collection",
     icon: Wrench,
+  },
+  {
+    href: "/hallmark-events",
+    label: "Hallmark Events",
+    description: "Manage Open House and other Hallmark Keepsake dates",
+    icon: CalendarHeart,
   },
   {
     href: "/account",

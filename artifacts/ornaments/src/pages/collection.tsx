@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import {
   useListOrnaments,
   useListOrnamentCategories,
+  useListOrnamentsHallmarkEvents,
 } from "@workspace/api-client-react";
 import {
   Search,
@@ -13,6 +14,7 @@ import {
   X,
   SlidersHorizontal,
   Image as ImageIcon,
+  CalendarHeart,
 } from "lucide-react";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 import { Button } from "@/components/ui/button";
@@ -29,6 +31,61 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+
+function NextHallmarkEventCard() {
+  const { data: events } = useListOrnamentsHallmarkEvents();
+  const now = Date.now();
+
+  const upcoming = (events ?? [])
+    .map((e) => ({
+      ...e,
+      start: new Date(`${e.startDate}T00:00:00`),
+      end: new Date(`${e.endDate}T23:59:59`),
+    }))
+    .filter((e) => e.end.getTime() >= now)
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+
+  const next = upcoming[0];
+  if (!next) return null;
+
+  const isLive = now >= next.start.getTime() && now <= next.end.getTime();
+  const daysAway = isLive
+    ? 0
+    : Math.max(0, Math.ceil((next.start.getTime() - now) / 86_400_000));
+
+  const dateRangeLabel = `${next.start.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  })} – ${next.end.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })}`;
+
+  return (
+    <Link href="/hallmark-events">
+      <div className="flex items-center gap-4 rounded-xl border border-rose-200/60 dark:border-rose-800/40 bg-rose-50 dark:bg-rose-900/20 p-4 hover:bg-rose-100/70 dark:hover:bg-rose-900/30 transition-colors cursor-pointer">
+        <div className="w-12 h-12 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center flex-shrink-0">
+          <CalendarHeart className="w-6 h-6 text-rose-600 dark:text-rose-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="font-serif font-semibold truncate">{next.title}</div>
+          <div className="text-sm text-muted-foreground">{dateRangeLabel}</div>
+        </div>
+        <div className="text-center flex-shrink-0">
+          <div className="text-3xl font-bold text-rose-600 dark:text-rose-400 tabular-nums leading-none">
+            {isLive ? "Live" : daysAway}
+          </div>
+          {!isLive && (
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wide">
+              days away
+            </div>
+          )}
+        </div>
+      </div>
+    </Link>
+  );
+}
 
 export default function Collection() {
   const [search, setSearch] = useState("");
@@ -115,6 +172,8 @@ export default function Collection() {
           </Button>
         </div>
       </div>
+
+      <NextHallmarkEventCard />
 
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">

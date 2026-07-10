@@ -92,7 +92,7 @@ function toDateOnly(iso: string | undefined | null): string | null {
  * that trip's date range. Returns null rather than guessing when no trip
  * lines up — the review UI lets the user pick manually in that case.
  */
-async function suggestTripId(
+export async function suggestTripId(
   extracted: Record<string, unknown>,
 ): Promise<number | null> {
   const travelDate = toDateOnly(

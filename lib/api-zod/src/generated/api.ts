@@ -2824,7 +2824,7 @@ export const GetTripResponse = zod.object({
   "todoList": zod.unknown().nullish(),
   "documents": zod.array(zod.object({
   "id": zod.number(),
-  "tripId": zod.number(),
+  "tripId": zod.number().nullish(),
   "userId": zod.number(),
   "storagePath": zod.string(),
   "title": zod.string().nullish(),
@@ -2834,6 +2834,11 @@ export const GetTripResponse = zod.object({
   "lockedFields": zod.array(zod.string()).optional(),
   "gmailMessageId": zod.string().nullish(),
   "iconOverride": zod.string().nullish(),
+  "status": zod.enum(['linked', 'unmatched']).optional(),
+  "source": zod.enum(['upload', 'email_forward']).optional(),
+  "sourceEmailFrom": zod.string().nullish(),
+  "sourceEmailSubject": zod.string().nullish(),
+  "sourceReceivedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })).optional()
 }))
@@ -2932,7 +2937,7 @@ export const ListTripDocumentsParams = zod.object({
 
 export const ListTripDocumentsResponseItem = zod.object({
   "id": zod.number(),
-  "tripId": zod.number(),
+  "tripId": zod.number().nullish(),
   "userId": zod.number(),
   "storagePath": zod.string(),
   "title": zod.string().nullish(),
@@ -2942,6 +2947,11 @@ export const ListTripDocumentsResponseItem = zod.object({
   "lockedFields": zod.array(zod.string()).optional(),
   "gmailMessageId": zod.string().nullish(),
   "iconOverride": zod.string().nullish(),
+  "status": zod.enum(['linked', 'unmatched']).optional(),
+  "source": zod.enum(['upload', 'email_forward']).optional(),
+  "sourceEmailFrom": zod.string().nullish(),
+  "sourceEmailSubject": zod.string().nullish(),
+  "sourceReceivedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
 export const ListTripDocumentsResponse = zod.array(ListTripDocumentsResponseItem)
@@ -2977,7 +2987,7 @@ export const UpdateTripDocumentBody = zod.object({
 
 export const UpdateTripDocumentResponse = zod.object({
   "id": zod.number(),
-  "tripId": zod.number(),
+  "tripId": zod.number().nullish(),
   "userId": zod.number(),
   "storagePath": zod.string(),
   "title": zod.string().nullish(),
@@ -2987,6 +2997,11 @@ export const UpdateTripDocumentResponse = zod.object({
   "lockedFields": zod.array(zod.string()).optional(),
   "gmailMessageId": zod.string().nullish(),
   "iconOverride": zod.string().nullish(),
+  "status": zod.enum(['linked', 'unmatched']).optional(),
+  "source": zod.enum(['upload', 'email_forward']).optional(),
+  "sourceEmailFrom": zod.string().nullish(),
+  "sourceEmailSubject": zod.string().nullish(),
+  "sourceReceivedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -3010,7 +3025,7 @@ export const RescanTripDocumentParams = zod.object({
 
 export const RescanTripDocumentResponse = zod.object({
   "id": zod.number(),
-  "tripId": zod.number(),
+  "tripId": zod.number().nullish(),
   "userId": zod.number(),
   "storagePath": zod.string(),
   "title": zod.string().nullish(),
@@ -3020,6 +3035,11 @@ export const RescanTripDocumentResponse = zod.object({
   "lockedFields": zod.array(zod.string()).optional(),
   "gmailMessageId": zod.string().nullish(),
   "iconOverride": zod.string().nullish(),
+  "status": zod.enum(['linked', 'unmatched']).optional(),
+  "source": zod.enum(['upload', 'email_forward']).optional(),
+  "sourceEmailFrom": zod.string().nullish(),
+  "sourceEmailSubject": zod.string().nullish(),
+  "sourceReceivedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -3029,6 +3049,79 @@ export const RescanTripDocumentResponse = zod.object({
  */
 export const DownloadTripDocumentParams = zod.object({
   "id": zod.coerce.number(),
+  "docId": zod.coerce.number()
+})
+
+
+/**
+ * @summary List documents from forwarded emails that couldn't be auto-matched to a trip
+ */
+export const ListUnmatchedDocumentsResponseItem = zod.object({
+  "id": zod.number(),
+  "tripId": zod.number().nullish(),
+  "userId": zod.number(),
+  "storagePath": zod.string(),
+  "title": zod.string().nullish(),
+  "documentType": zod.string().nullish(),
+  "originalFilename": zod.string().nullish(),
+  "extractedData": zod.record(zod.string(), zod.unknown()).nullish(),
+  "lockedFields": zod.array(zod.string()).optional(),
+  "gmailMessageId": zod.string().nullish(),
+  "iconOverride": zod.string().nullish(),
+  "status": zod.enum(['linked', 'unmatched']).optional(),
+  "source": zod.enum(['upload', 'email_forward']).optional(),
+  "sourceEmailFrom": zod.string().nullish(),
+  "sourceEmailSubject": zod.string().nullish(),
+  "sourceReceivedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListUnmatchedDocumentsResponse = zod.array(ListUnmatchedDocumentsResponseItem)
+
+
+/**
+ * @summary Count of unmatched documents (for a badge indicator)
+ */
+export const GetUnmatchedDocumentsCountResponse = zod.object({
+  "count": zod.number()
+})
+
+
+/**
+ * @summary Assign an unmatched document to a trip
+ */
+export const AssignUnmatchedDocumentParams = zod.object({
+  "docId": zod.coerce.number()
+})
+
+export const AssignUnmatchedDocumentBody = zod.object({
+  "tripId": zod.number()
+})
+
+export const AssignUnmatchedDocumentResponse = zod.object({
+  "id": zod.number(),
+  "tripId": zod.number().nullish(),
+  "userId": zod.number(),
+  "storagePath": zod.string(),
+  "title": zod.string().nullish(),
+  "documentType": zod.string().nullish(),
+  "originalFilename": zod.string().nullish(),
+  "extractedData": zod.record(zod.string(), zod.unknown()).nullish(),
+  "lockedFields": zod.array(zod.string()).optional(),
+  "gmailMessageId": zod.string().nullish(),
+  "iconOverride": zod.string().nullish(),
+  "status": zod.enum(['linked', 'unmatched']).optional(),
+  "source": zod.enum(['upload', 'email_forward']).optional(),
+  "sourceEmailFrom": zod.string().nullish(),
+  "sourceEmailSubject": zod.string().nullish(),
+  "sourceReceivedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Discard an unmatched document
+ */
+export const DeleteUnmatchedDocumentParams = zod.object({
   "docId": zod.coerce.number()
 })
 

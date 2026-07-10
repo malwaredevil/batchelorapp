@@ -6,6 +6,7 @@ import {
   MessageSquarePlus,
   Maximize2,
   History,
+  GripVertical,
 } from "lucide-react";
 import {
   useGetElaineNudgesUnseenCount,
@@ -67,6 +68,87 @@ export function ElaineWidget({
     startW: number;
     startH: number;
   } | null>(null);
+
+  // Widget position — null means anchored bottom-right via CSS (default).
+  // Once the user drags the widget (bubble or panel header), it switches to
+  // an explicit top/left position that persists across open/close.
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(
+    null,
+  );
+  const moveRef = useRef<{
+    startX: number;
+    startY: number;
+    origX: number;
+    origY: number;
+    moved: boolean;
+  } | null>(null);
+  const justDraggedRef = useRef(false);
+
+  const clampPosition = useCallback((x: number, y: number) => {
+    const el = containerRef.current;
+    const w = el?.offsetWidth ?? 60;
+    const h = el?.offsetHeight ?? 60;
+    const maxX = Math.max(4, window.innerWidth - w - 4);
+    const maxY = Math.max(4, window.innerHeight - h - 4);
+    return {
+      x: Math.min(Math.max(4, x), maxX),
+      y: Math.min(Math.max(4, y), maxY),
+    };
+  }, []);
+
+  const onMovePointerDown = useCallback((e: React.PointerEvent) => {
+    const el = containerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    moveRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: rect.left,
+      origY: rect.top,
+      moved: false,
+    };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }, []);
+
+  const onMovePointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      const ms = moveRef.current;
+      if (!ms) return;
+      const dx = e.clientX - ms.startX;
+      const dy = e.clientY - ms.startY;
+      if (!ms.moved && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+        ms.moved = true;
+      }
+      if (!ms.moved) return;
+      setPosition(clampPosition(ms.origX + dx, ms.origY + dy));
+    },
+    [clampPosition],
+  );
+
+  const onMovePointerUp = useCallback((e: React.PointerEvent) => {
+    const ms = moveRef.current;
+    moveRef.current = null;
+    if (ms?.moved) {
+      justDraggedRef.current = true;
+    }
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      // Pointer capture may already have been released — safe to ignore.
+    }
+  }, []);
+
+  // Re-clamp the saved position on viewport resize/orientation change so the
+  // widget never ends up off-screen (e.g. rotating a mobile device).
+  useEffect(() => {
+    if (!position) return;
+    const onResize = () => {
+      setPosition((prev) => (prev ? clampPosition(prev.x, prev.y) : prev));
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [position, clampPosition]);
 
   const getDefaultSize = useCallback(() => {
     const key = settings?.chatWindowSize ?? "compact";
@@ -163,13 +245,23 @@ export function ElaineWidget({
       }}
     >
       <div
+        ref={containerRef}
         className="flex flex-col items-end gap-3"
-        style={{
-          position: "absolute",
-          bottom: isDesktop ? "1.5rem" : "1rem",
-          right: isDesktop ? "1.5rem" : "1rem",
-          pointerEvents: "auto",
-        }}
+        style={
+          position
+            ? {
+                position: "absolute",
+                top: `${position.y}px`,
+                left: `${position.x}px`,
+                pointerEvents: "auto",
+              }
+            : {
+                position: "absolute",
+                bottom: isDesktop ? "1.5rem" : "1rem",
+                right: isDesktop ? "1.5rem" : "1rem",
+                pointerEvents: "auto",
+              }
+        }
       >
         {open && (
           <div
@@ -217,8 +309,17 @@ export function ElaineWidget({
               </div>
             )}
 
-            <div className="flex items-center justify-between gap-2 border-b border-border/50 bg-muted/40 px-4 py-3">
+            <div
+              className="flex items-center justify-between gap-2 border-b border-border/50 bg-muted/40 px-4 py-3"
+              style={{ touchAction: "none", cursor: "grab" }}
+              onPointerDown={onMovePointerDown}
+              onPointerMove={onMovePointerMove}
+              onPointerUp={onMovePointerUp}
+              onPointerCancel={onMovePointerUp}
+              title="Drag to move"
+            >
               <div className="flex items-center gap-2.5">
+                <GripVertical className="h-4 w-4 text-muted-foreground/50" />
                 <ElaineAvatar size={34} />
                 <ElaineWordmark className="text-lg" />
               </div>
@@ -283,7 +384,18 @@ export function ElaineWidget({
 
         {!open && (
           <button
-            onClick={() => setOpen(true)}
+            onClick={() => {
+              if (justDraggedRef.current) {
+                justDraggedRef.current = false;
+                return;
+              }
+              setOpen(true);
+            }}
+            onPointerDown={onMovePointerDown}
+            onPointerMove={onMovePointerMove}
+            onPointerUp={onMovePointerUp}
+            onPointerCancel={onMovePointerUp}
+            style={{ touchAction: "none" }}
             className="relative flex items-center gap-2 rounded-full border border-card-border bg-card py-2 pl-2 pr-4 shadow-lg transition-transform hover:scale-105"
             aria-label={
               unseenNudges && unseenNudges.count > 0

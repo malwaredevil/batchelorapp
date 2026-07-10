@@ -6,10 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { TravelsTripDocumentExtractedData } from './travelsTripDocumentExtractedData';
+import type { TravelsTripDocumentSource } from './travelsTripDocumentSource';
+import type { TravelsTripDocumentStatus } from './travelsTripDocumentStatus';
 
 export interface TravelsTripDocument {
   id: number;
-  tripId: number;
+  tripId?: number | null;
   userId: number;
   storagePath: string;
   title?: string | null;
@@ -19,5 +21,10 @@ export interface TravelsTripDocument {
   lockedFields?: string[];
   gmailMessageId?: string | null;
   iconOverride?: string | null;
+  status?: TravelsTripDocumentStatus;
+  source?: TravelsTripDocumentSource;
+  sourceEmailFrom?: string | null;
+  sourceEmailSubject?: string | null;
+  sourceReceivedAt?: Date | null;
   createdAt: Date;
 }

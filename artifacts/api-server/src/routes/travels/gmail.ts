@@ -393,6 +393,7 @@ router.get("/gmail/inbox", async (req, res) => {
             inArray(travelsTripDocuments.id, linkedDocIds),
           ),
         )) {
+        if (d.tripId == null) continue;
         docInfoById.set(d.id, {
           tripId: d.tripId,
           name: d.originalFilename ?? d.documentType ?? null,

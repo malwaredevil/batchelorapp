@@ -59,7 +59,7 @@ export const travelsTripDocuments = pgTable(
   "travels_trip_documents",
   {
     id: serial("id").primaryKey(),
-    tripId: integer("trip_id").notNull(),
+    tripId: integer("trip_id"),
     userId: integer("user_id").notNull(),
     storagePath: text("storage_path").notNull(),
     title: text("title"),
@@ -73,6 +73,11 @@ export const travelsTripDocuments = pgTable(
     gmailMessageId: text("gmail_message_id"),
     iconOverride: text("icon_override"),
     rawText: text("raw_text"),
+    status: text("status").notNull().default("linked"),
+    source: text("source").notNull().default("upload"),
+    sourceEmailFrom: text("source_email_from"),
+    sourceEmailSubject: text("source_email_subject"),
+    sourceReceivedAt: timestamp("source_received_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -80,6 +85,7 @@ export const travelsTripDocuments = pgTable(
   (table) => [
     index("travels_trip_documents_trip_id_idx").on(table.tripId),
     index("travels_trip_documents_user_id_idx").on(table.userId),
+    index("travels_trip_documents_status_idx").on(table.status),
   ],
 ).enableRLS();
 

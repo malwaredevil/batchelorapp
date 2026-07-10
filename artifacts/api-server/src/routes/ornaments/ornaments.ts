@@ -286,6 +286,21 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
     parseInt(req.body?.quantity ?? "1", 10) || 1,
   );
 
+  // If the vision analysis detected a barcode on the packaging, auto-enrich
+  // with UPC lookup data (name/brand/series/year) — user-supplied and
+  // AI-vision fields still take priority over the barcode lookup.
+  let barcodeLookup: Awaited<ReturnType<typeof lookupBarcode>> | null = null;
+  if (barcodeField) {
+    try {
+      barcodeLookup = await lookupBarcode(barcodeField);
+    } catch (err) {
+      logger.warn(
+        { err, barcode: barcodeField },
+        "Auto barcode lookup failed during ornament create",
+      );
+    }
+  }
+
   const imagePath = await uploadImage(cleanBuffer, contentType);
   const today = new Date().toISOString().slice(0, 10);
 
@@ -294,10 +309,18 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
       .insert(ornamentsItems)
       .values({
         userId,
-        name: nameField ?? analysis.name,
-        brand: brandField ?? "Hallmark",
-        seriesOrCollection: analysis.seriesOrCollection,
-        year: analysis.year,
+        name:
+          nameField ??
+          analysis.name ??
+          (barcodeLookup?.found ? barcodeLookup.name : null),
+        brand:
+          brandField ??
+          (barcodeLookup?.found ? barcodeLookup.brand : null) ??
+          "Hallmark",
+        seriesOrCollection:
+          analysis.seriesOrCollection ??
+          (barcodeLookup?.found ? barcodeLookup.seriesOrCollection : null),
+        year: analysis.year ?? (barcodeLookup?.found ? barcodeLookup.year : null),
         barcodeValue: barcodeField,
         quantity: quantityField,
         notes: notesField,

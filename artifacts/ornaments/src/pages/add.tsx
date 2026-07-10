@@ -3,7 +3,14 @@ import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Loader2, ArrowLeft, Camera, Box, Info } from "lucide-react";
+import {
+  Loader2,
+  ArrowLeft,
+  Camera,
+  Box,
+  Info,
+  ScanBarcode,
+} from "lucide-react";
 import {
   useCreateOrnament,
   getListOrnamentsQueryKey,
@@ -340,13 +347,25 @@ export default function AddOrnament() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>UPC / Barcode</FormLabel>
-                    <FormControl>
-                      <Input
-                        className="bg-background font-mono text-sm"
-                        {...field}
-                        value={field.value || ""}
-                      />
-                    </FormControl>
+                    <div className="flex gap-2">
+                      <FormControl>
+                        <Input
+                          className="bg-background font-mono text-sm"
+                          {...field}
+                          value={field.value || ""}
+                        />
+                      </FormControl>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        title="Scan barcode"
+                        className="shrink-0"
+                        onClick={() => setLocation("/scan")}
+                      >
+                        <ScanBarcode className="h-4 w-4" />
+                      </Button>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}

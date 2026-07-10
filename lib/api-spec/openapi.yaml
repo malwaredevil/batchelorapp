@@ -2597,6 +2597,110 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /travels/documents/unmatched:
+    get:
+      operationId: listUnmatchedDocuments
+      tags:
+        - travels
+      summary: List documents from forwarded emails that couldn't be auto-matched to a trip
+      responses:
+        "200":
+          description: List of unmatched documents
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TravelsListDocumentsResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /travels/documents/unmatched/count:
+    get:
+      operationId: getUnmatchedDocumentsCount
+      tags:
+        - travels
+      summary: Count of unmatched documents (for a badge indicator)
+      responses:
+        "200":
+          description: Count
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - count
+                properties:
+                  count:
+                    type: integer
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /travels/documents/{docId}/assign:
+    patch:
+      operationId: assignUnmatchedDocument
+      tags:
+        - travels
+      summary: Assign an unmatched document to a trip
+      parameters:
+        - $ref: "#/components/parameters/DocId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tripId
+              properties:
+                tripId:
+                  type: integer
+      responses:
+        "200":
+          description: Document assigned and linked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TravelsTripDocument"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /travels/documents/{docId}:
+    delete:
+      operationId: deleteUnmatchedDocument
+      tags:
+        - travels
+      summary: Discard an unmatched document
+      parameters:
+        - $ref: "#/components/parameters/DocId"
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /travels/explore:
     post:
       operationId: exploreDestination
@@ -5878,7 +5982,6 @@ components:
       type: object
       required:
         - id
-        - tripId
         - userId
         - storagePath
         - createdAt
@@ -5887,6 +5990,7 @@ components:
           type: integer
         tripId:
           type: integer
+          nullable: true
         userId:
           type: integer
         storagePath:
@@ -5913,6 +6017,26 @@ components:
           nullable: true
         iconOverride:
           type: string
+          nullable: true
+        status:
+          type: string
+          enum:
+            - linked
+            - unmatched
+        source:
+          type: string
+          enum:
+            - upload
+            - email_forward
+        sourceEmailFrom:
+          type: string
+          nullable: true
+        sourceEmailSubject:
+          type: string
+          nullable: true
+        sourceReceivedAt:
+          type: string
+          format: date-time
           nullable: true
         createdAt:
           type: string

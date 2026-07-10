@@ -20,6 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AssignUnmatchedDocumentBody,
   AuthProviders,
   AuthUser,
   ChangePasswordInput,
@@ -29,6 +30,7 @@ import type {
   DeleteQuiltingUnusedCategories200,
   Error,
   ForgotPasswordInput,
+  GetUnmatchedDocumentsCount200,
   HealthStatus,
   ImportPatternFromUrlBody,
   ListFabricsParams,
@@ -9240,6 +9242,302 @@ export function useDownloadTripDocument<TData = Awaited<ReturnType<typeof downlo
 
 
 
+
+export const getListUnmatchedDocumentsUrl = () => {
+
+
+
+
+  return `/api/travels/documents/unmatched`
+}
+
+/**
+ * @summary List documents from forwarded emails that couldn't be auto-matched to a trip
+ */
+export const listUnmatchedDocuments = async ( options?: RequestInit): Promise<TravelsListDocumentsResponse> => {
+
+  return customFetch<TravelsListDocumentsResponse>(getListUnmatchedDocumentsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListUnmatchedDocumentsQueryKey = () => {
+    return [
+    `/api/travels/documents/unmatched`
+    ] as const;
+    }
+
+
+export const getListUnmatchedDocumentsQueryOptions = <TData = Awaited<ReturnType<typeof listUnmatchedDocuments>>, TError = ErrorType<Error>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listUnmatchedDocuments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListUnmatchedDocumentsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listUnmatchedDocuments>>> = ({ signal }) => listUnmatchedDocuments({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listUnmatchedDocuments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListUnmatchedDocumentsQueryResult = NonNullable<Awaited<ReturnType<typeof listUnmatchedDocuments>>>
+export type ListUnmatchedDocumentsQueryError = ErrorType<Error>
+
+
+/**
+ * @summary List documents from forwarded emails that couldn't be auto-matched to a trip
+ */
+
+export function useListUnmatchedDocuments<TData = Awaited<ReturnType<typeof listUnmatchedDocuments>>, TError = ErrorType<Error>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listUnmatchedDocuments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListUnmatchedDocumentsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetUnmatchedDocumentsCountUrl = () => {
+
+
+
+
+  return `/api/travels/documents/unmatched/count`
+}
+
+/**
+ * @summary Count of unmatched documents (for a badge indicator)
+ */
+export const getUnmatchedDocumentsCount = async ( options?: RequestInit): Promise<GetUnmatchedDocumentsCount200> => {
+
+  return customFetch<GetUnmatchedDocumentsCount200>(getGetUnmatchedDocumentsCountUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetUnmatchedDocumentsCountQueryKey = () => {
+    return [
+    `/api/travels/documents/unmatched/count`
+    ] as const;
+    }
+
+
+export const getGetUnmatchedDocumentsCountQueryOptions = <TData = Awaited<ReturnType<typeof getUnmatchedDocumentsCount>>, TError = ErrorType<Error>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUnmatchedDocumentsCount>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetUnmatchedDocumentsCountQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getUnmatchedDocumentsCount>>> = ({ signal }) => getUnmatchedDocumentsCount({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getUnmatchedDocumentsCount>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetUnmatchedDocumentsCountQueryResult = NonNullable<Awaited<ReturnType<typeof getUnmatchedDocumentsCount>>>
+export type GetUnmatchedDocumentsCountQueryError = ErrorType<Error>
+
+
+/**
+ * @summary Count of unmatched documents (for a badge indicator)
+ */
+
+export function useGetUnmatchedDocumentsCount<TData = Awaited<ReturnType<typeof getUnmatchedDocumentsCount>>, TError = ErrorType<Error>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUnmatchedDocumentsCount>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetUnmatchedDocumentsCountQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getAssignUnmatchedDocumentUrl = (docId: number,) => {
+
+
+
+
+  return `/api/travels/documents/${docId}/assign`
+}
+
+/**
+ * @summary Assign an unmatched document to a trip
+ */
+export const assignUnmatchedDocument = async (docId: number,
+    assignUnmatchedDocumentBody: AssignUnmatchedDocumentBody, options?: RequestInit): Promise<TravelsTripDocument> => {
+
+  return customFetch<TravelsTripDocument>(getAssignUnmatchedDocumentUrl(docId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      assignUnmatchedDocumentBody,)
+  }
+);}
+
+
+
+
+export const getAssignUnmatchedDocumentMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignUnmatchedDocument>>, TError,{docId: number;data: BodyType<AssignUnmatchedDocumentBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof assignUnmatchedDocument>>, TError,{docId: number;data: BodyType<AssignUnmatchedDocumentBody>}, TContext> => {
+
+const mutationKey = ['assignUnmatchedDocument'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof assignUnmatchedDocument>>, {docId: number;data: BodyType<AssignUnmatchedDocumentBody>}> = (props) => {
+          const {docId,data} = props ?? {};
+
+          return  assignUnmatchedDocument(docId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AssignUnmatchedDocumentMutationResult = NonNullable<Awaited<ReturnType<typeof assignUnmatchedDocument>>>
+    export type AssignUnmatchedDocumentMutationBody = BodyType<AssignUnmatchedDocumentBody>
+    export type AssignUnmatchedDocumentMutationError = ErrorType<Error>
+
+    /**
+ * @summary Assign an unmatched document to a trip
+ */
+export const useAssignUnmatchedDocument = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignUnmatchedDocument>>, TError,{docId: number;data: BodyType<AssignUnmatchedDocumentBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof assignUnmatchedDocument>>,
+        TError,
+        {docId: number;data: BodyType<AssignUnmatchedDocumentBody>},
+        TContext
+      > => {
+      return useMutation(getAssignUnmatchedDocumentMutationOptions(options));
+    }
+
+export const getDeleteUnmatchedDocumentUrl = (docId: number,) => {
+
+
+
+
+  return `/api/travels/documents/${docId}`
+}
+
+/**
+ * @summary Discard an unmatched document
+ */
+export const deleteUnmatchedDocument = async (docId: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteUnmatchedDocumentUrl(docId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteUnmatchedDocumentMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteUnmatchedDocument>>, TError,{docId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteUnmatchedDocument>>, TError,{docId: number}, TContext> => {
+
+const mutationKey = ['deleteUnmatchedDocument'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteUnmatchedDocument>>, {docId: number}> = (props) => {
+          const {docId} = props ?? {};
+
+          return  deleteUnmatchedDocument(docId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteUnmatchedDocumentMutationResult = NonNullable<Awaited<ReturnType<typeof deleteUnmatchedDocument>>>
+
+    export type DeleteUnmatchedDocumentMutationError = ErrorType<Error>
+
+    /**
+ * @summary Discard an unmatched document
+ */
+export const useDeleteUnmatchedDocument = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteUnmatchedDocument>>, TError,{docId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteUnmatchedDocument>>,
+        TError,
+        {docId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteUnmatchedDocumentMutationOptions(options));
+    }
 
 export const getExploreDestinationUrl = () => {
 

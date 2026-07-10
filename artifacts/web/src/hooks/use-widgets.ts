@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { WIDGETS, type WidgetEntry } from "@/config/apps";
+import { getPreferences, updatePreferences } from "@workspace/api-client-react";
 
 // ── Slot types (static catalogue widget OR configurable RSS instance) ──────────
 export interface StaticSlot {
@@ -76,19 +77,10 @@ function writeLocalStorage(slots: WidgetSlot[]) {
 }
 
 // ── Server sync ───────────────────────────────────────────────────────────────
-const PREFS_URL = `${import.meta.env.BASE_URL}api/hub/preferences`.replace(
-  /\/\//g,
-  "/",
-);
-
 async function fetchServerPrefs(): Promise<WidgetSlot[] | null> {
   try {
-    const res = await fetch(PREFS_URL, { credentials: "include" });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { slots?: unknown; widgetIds?: unknown };
+    const data = await getPreferences();
     if (data.slots !== undefined) return parseSlots(data.slots);
-    // Backwards compat with old widgetIds format
-    if (Array.isArray(data.widgetIds)) return parseSlots(data.widgetIds);
     return null;
   } catch {
     return null;
@@ -97,12 +89,7 @@ async function fetchServerPrefs(): Promise<WidgetSlot[] | null> {
 
 async function saveServerPrefs(slots: WidgetSlot[]): Promise<void> {
   try {
-    await fetch(PREFS_URL, {
-      method: "PUT",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slots }),
-    });
+    await updatePreferences({ slots });
   } catch {
     /* silent — localStorage still has it */
   }

@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Api
   version: 0.1.0
-  description: Unified API specification (pottery + quilting + travels + ornaments + office)
+  description: Unified API specification (pottery + quilting + travels + ornaments + office + hub)
 servers:
   - url: /api
     description: Base API path
@@ -3683,6 +3683,104 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /hub/preferences:
+    get:
+      operationId: getPreferences
+      tags:
+        - hub
+      summary: Get the current user's hub dashboard widget layout
+      responses:
+        "200":
+          description: Widget slot preferences (null if never saved)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HubPreferencesResponse"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    put:
+      operationId: updatePreferences
+      tags:
+        - hub
+      summary: Save the current user's hub dashboard widget layout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HubPreferencesBody"
+      responses:
+        "200":
+          description: Saved widget slot preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HubPreferencesResponse"
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /hub/weather-config:
+    get:
+      operationId: getWeatherConfig
+      tags:
+        - hub
+      summary: Get the current user's saved weather widget location/unit
+      responses:
+        "200":
+          description: Weather config (null if never saved)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HubWeatherConfigResponse"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    put:
+      operationId: updateWeatherConfig
+      tags:
+        - hub
+      summary: Save the current user's weather widget location/unit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HubWeatherConfigBody"
+      responses:
+        "200":
+          description: Saved weather config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HubWeatherConfigResponse"
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 components:
   schemas:
     HealthStatus:
@@ -6756,6 +6854,82 @@ components:
         body:
           type: string
           maxLength: 20000
+    HubWidgetSlot:
+      description: A static catalogue widget slot ({t:"s",id}) or a configurable RSS instance slot ({t:"r",iid,title,url}). Union validated client-side; represented loosely here since Zod uses a discriminated union that Orval renders as a plain object.
+      type: object
+      required:
+        - t
+      properties:
+        t:
+          type: string
+          enum:
+            - s
+            - r
+        id:
+          type: string
+        iid:
+          type: string
+        title:
+          type: string
+        url:
+          type: string
+    HubPreferencesBody:
+      type: object
+      required:
+        - slots
+      properties:
+        slots:
+          type: array
+          maxItems: 60
+          items:
+            $ref: "#/components/schemas/HubWidgetSlot"
+    HubPreferencesResponse:
+      type: object
+      required:
+        - slots
+      properties:
+        slots:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/HubWidgetSlot"
+    HubWeatherConfigBody:
+      type: object
+      required:
+        - city
+        - country
+        - lat
+        - lon
+        - unit
+      properties:
+        city:
+          type: string
+          maxLength: 200
+        country:
+          type: string
+          maxLength: 100
+        lat:
+          type: number
+          minimum: -90
+          maximum: 90
+        lon:
+          type: number
+          minimum: -180
+          maximum: 180
+        unit:
+          type: string
+          enum:
+            - celsius
+            - fahrenheit
+    HubWeatherConfigResponse:
+      type: object
+      required:
+        - config
+      properties:
+        config:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/HubWeatherConfigBody"
   parameters:
     IdParam:
       name: id

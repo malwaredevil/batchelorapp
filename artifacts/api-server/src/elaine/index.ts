@@ -3714,7 +3714,10 @@ router.get("/conversations", async (req, res) => {
   // a DB-level ILIKE across both the conversation title and all message content.
   let matchingConvIds: Set<number> | null = null;
   if (searchQuery) {
-    const pattern = `%${searchQuery.replace(/%/g, "\\%").replace(/_/g, "\\_")}%`;
+    // Escape the LIKE escape character itself FIRST, or a literal "\" in the
+    // search query would combine with the following escaped "%"/"_" and let
+    // a crafted query re-introduce an unescaped wildcard.
+    const pattern = `%${searchQuery.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_")}%`;
     // Title matches
     const titleMatches = await db
       .select({ id: elaineHistoryConversations.id })

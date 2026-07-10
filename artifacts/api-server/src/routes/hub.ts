@@ -264,13 +264,15 @@ async function safeFetchFollowingRedirects(
 }
 
 function unescapeHtml(s: string): string {
+  // Decode &amp; LAST so a double-encoded entity like "&amp;lt;" (which
+  // represents the literal text "&lt;") doesn't get collapsed into "<".
   return s
-    .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#039;/g, "'")
-    .replace(/&apos;/g, "'");
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&");
 }
 
 function extractText(raw: string): string {

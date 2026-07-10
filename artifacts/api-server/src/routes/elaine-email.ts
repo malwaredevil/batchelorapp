@@ -128,20 +128,28 @@ async function getOrCreateEmailConversation(
 // block-level tags into line breaks, strips remaining tags, and decodes the
 // handful of entities that show up in real mail.
 function htmlToPlainText(html: string): string {
-  return html
-    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ")
-    .replace(/<(br|\/p|\/div|\/tr|\/li)\s*\/?>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n[ \t]+/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  // Cap input length before running the script/style stripper: it uses a
+  // greedy-ish tag-content match that, on pathological input (thousands of
+  // unclosed "<script" fragments), could otherwise cost more than one pass.
+  const bounded = html.slice(0, 200_000);
+  return (
+    bounded
+      .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ")
+      .replace(/<(br|\/p|\/div|\/tr|\/li)\s*\/?>/gi, "\n")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      // Decode &amp; LAST so a double-encoded entity like "&amp;lt;" (which
+      // represents the literal text "&lt;") doesn't get collapsed into "<".
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&amp;/g, "&")
+      .replace(/[ \t]+/g, " ")
+      .replace(/\n[ \t]+/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim()
+  );
 }
 
 // Best-effort strip of quoted reply text / signature blocks from a plain-text

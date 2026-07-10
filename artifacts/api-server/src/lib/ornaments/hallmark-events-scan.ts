@@ -291,7 +291,9 @@ const POLL_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6h — safely under the int32 li
  */
 export function startHallmarkEventsScanScheduler(): void {
   const run = async (): Promise<void> => {
-    if (!(await shouldRunScheduledTask("hallmark-events-scan", SCAN_INTERVAL_MS))) {
+    if (
+      !(await shouldRunScheduledTask("hallmark-events-scan", SCAN_INTERVAL_MS))
+    ) {
       logger.info(
         "hallmark-events-scan: skipped (ran within the last ~30 days)",
       );

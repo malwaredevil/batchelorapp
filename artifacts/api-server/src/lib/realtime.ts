@@ -37,11 +37,9 @@ export function initRealtimeRelay(): void {
   if (started) return;
   started = true;
 
-  const supabase = createClient(
-    env.supabaseUrl,
-    env.supabaseServiceRoleKey,
-    { auth: { persistSession: false, autoRefreshToken: false } },
-  );
+  const supabase = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 
   const channel = supabase.channel("api-server-realtime-relay");
   for (const table of REALTIME_TABLES) {

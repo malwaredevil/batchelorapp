@@ -232,7 +232,11 @@ router.post("/email-webhook", async (req: Request, res: Response) => {
           "elaine-email: failed to fetch full email content",
         );
       } else if (fullEmail) {
-        data = { ...data, text: fullEmail.text ?? undefined, html: fullEmail.html ?? undefined };
+        data = {
+          ...data,
+          text: fullEmail.text ?? undefined,
+          html: fullEmail.html ?? undefined,
+        };
       }
     } catch (err) {
       logger.warn(

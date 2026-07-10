@@ -64,7 +64,8 @@ function DocumentCard({
         toast.success("Document assigned to trip");
         onAssigned();
       },
-      onError: () => toast.error("Could not assign document. Please try again."),
+      onError: () =>
+        toast.error("Could not assign document. Please try again."),
     },
   });
 
@@ -74,7 +75,8 @@ function DocumentCard({
         toast.success("Document discarded");
         onDeleted();
       },
-      onError: () => toast.error("Could not discard document. Please try again."),
+      onError: () =>
+        toast.error("Could not discard document. Please try again."),
     },
   });
 

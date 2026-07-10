@@ -320,7 +320,8 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
         seriesOrCollection:
           analysis.seriesOrCollection ??
           (barcodeLookup?.found ? barcodeLookup.seriesOrCollection : null),
-        year: analysis.year ?? (barcodeLookup?.found ? barcodeLookup.year : null),
+        year:
+          analysis.year ?? (barcodeLookup?.found ? barcodeLookup.year : null),
         barcodeValue: barcodeField,
         quantity: quantityField,
         notes: notesField,

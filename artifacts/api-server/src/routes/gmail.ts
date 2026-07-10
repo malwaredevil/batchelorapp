@@ -103,7 +103,8 @@ router.get("/connect", (req, res) => {
   // Optional same-origin relative path to redirect back to after the OAuth
   // round trip (e.g. "/modules/office/gmail"). Defaults to Hub's "/gmail".
   // Only same-origin relative paths are accepted to avoid an open redirect.
-  const rawReturnTo = typeof req.query.returnTo === "string" ? req.query.returnTo : "";
+  const rawReturnTo =
+    typeof req.query.returnTo === "string" ? req.query.returnTo : "";
   const returnTo =
     rawReturnTo.startsWith("/") && !rawReturnTo.startsWith("//")
       ? rawReturnTo

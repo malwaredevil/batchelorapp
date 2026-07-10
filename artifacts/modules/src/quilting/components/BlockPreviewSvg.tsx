@@ -47,11 +47,7 @@ export function BlockPreviewSvg({
   })();
 
   return (
-    <svg
-      width={size}
-      height={svgH}
-      xmlns="http://www.w3.org/2000/svg"
-    >
+    <svg width={size} height={svgH} xmlns="http://www.w3.org/2000/svg">
       {fabIds.length > 0 && (
         <defs>
           {fabIds.map((id) => (

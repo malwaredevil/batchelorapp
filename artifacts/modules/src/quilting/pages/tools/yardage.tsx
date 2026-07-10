@@ -545,7 +545,9 @@ export default function YardageCalculator() {
                   No fabrics in your stash yet
                 </p>
                 <Button variant="link" size="sm" asChild className="mt-1">
-                  <Link href="/quilting/fabrics/add">Add your first fabric</Link>
+                  <Link href="/quilting/fabrics/add">
+                    Add your first fabric
+                  </Link>
                 </Button>
               </div>
             )}

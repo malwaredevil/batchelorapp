@@ -547,7 +547,10 @@ function GoogleApisDemoContent() {
           description="Scans a connected Gmail inbox for travel confirmation emails and suggests linking them as trip documents, and powers the general-purpose Office inbox."
           status="live"
           usedIn={[
-            { label: "Travels Gmail review", href: `${base}modules/travels/gmail` },
+            {
+              label: "Travels Gmail review",
+              href: `${base}modules/travels/gmail`,
+            },
             { label: "Office Gmail", href: `${base}modules/office/gmail` },
           ]}
         />
@@ -558,7 +561,12 @@ function GoogleApisDemoContent() {
           status="live"
           usedIn={
             demoTrip
-              ? [{ label: "Trip documents", href: travelsTripHref(demoTrip.id) }]
+              ? [
+                  {
+                    label: "Trip documents",
+                    href: travelsTripHref(demoTrip.id),
+                  },
+                ]
               : []
           }
         />

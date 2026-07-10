@@ -599,10 +599,7 @@ export function AppLauncher() {
   const unreadEmailCount =
     gmailLabelsData?.find((l) => l.id === "UNREAD")?.threadsUnread ?? null;
 
-  const upcomingEventsRangeStart = useMemo(
-    () => new Date().toISOString(),
-    [],
-  );
+  const upcomingEventsRangeStart = useMemo(() => new Date().toISOString(), []);
   const upcomingEventsRangeEnd = useMemo(
     () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     [],

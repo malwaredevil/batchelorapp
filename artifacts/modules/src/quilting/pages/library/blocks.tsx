@@ -81,7 +81,10 @@ function TemplateCard({
   return (
     <>
       <div className="group relative overflow-hidden rounded-xl border border-card-border bg-card transition-shadow hover:shadow-md">
-        <Link href={`/quilting/library/blocks/${template.id}/edit`} className="block">
+        <Link
+          href={`/quilting/library/blocks/${template.id}/edit`}
+          className="block"
+        >
           <div className="relative flex items-center justify-center overflow-hidden bg-white">
             <BlockPreviewSvg
               cells={template.cells}
@@ -156,7 +159,9 @@ function TemplateCard({
                 Use template
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={() => navigate(`/quilting/library/blocks/${template.id}/edit`)}
+                onClick={() =>
+                  navigate(`/quilting/library/blocks/${template.id}/edit`)
+                }
               >
                 <Pencil className="mr-2 h-3.5 w-3.5" />
                 Edit

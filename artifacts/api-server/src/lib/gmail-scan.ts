@@ -97,7 +97,9 @@ function destinationOverlaps(
   ...candidates: Array<string | null | undefined>
 ): boolean {
   const destTokens = new Set(
-    normalize(destination).split(/[^a-z0-9]+/).filter((t) => t.length >= 4),
+    normalize(destination)
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length >= 4),
   );
   if (destTokens.size === 0) return false;
   for (const candidate of candidates) {
@@ -143,8 +145,11 @@ export async function suggestTripId(
 
   const target = new Date(travelDate).getTime();
   const DAY_MS = 86_400_000;
-  const candidates: Array<{ id: number; distance: number; destMatch: boolean }> =
-    [];
+  const candidates: Array<{
+    id: number;
+    distance: number;
+    destMatch: boolean;
+  }> = [];
 
   for (const trip of trips) {
     if (!trip.startDate) continue;

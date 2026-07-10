@@ -30,11 +30,7 @@ import {
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 
-function InsuranceExportCard({
-  items,
-}: {
-  items: OrnamentItem[] | undefined;
-}) {
+function InsuranceExportCard({ items }: { items: OrnamentItem[] | undefined }) {
   const [progress, setProgress] = useState<string | null>(null);
   const generating = progress !== null;
 

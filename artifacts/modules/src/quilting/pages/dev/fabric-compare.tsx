@@ -20,9 +20,12 @@ const SOURCE_IMAGE_URL = `${import.meta.env.BASE_URL}dev-fabric-compare/source.j
 function useZoomPan() {
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(
-    null,
-  );
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    origX: number;
+    origY: number;
+  } | null>(null);
 
   const onWheel = (e: WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -55,12 +58,35 @@ function useZoomPan() {
     setOffset({ x: 0, y: 0 });
   };
 
-  return { scale, offset, onWheel, onMouseDown, onMouseMove, onMouseUp, reset, setScale };
+  return {
+    scale,
+    offset,
+    onWheel,
+    onMouseDown,
+    onMouseMove,
+    onMouseUp,
+    reset,
+    setScale,
+  };
 }
 
-function ZoomPanel({ title, children }: { title: string; children: (scale: number) => React.ReactNode }) {
-  const { scale, offset, onWheel, onMouseDown, onMouseMove, onMouseUp, reset, setScale } =
-    useZoomPan();
+function ZoomPanel({
+  title,
+  children,
+}: {
+  title: string;
+  children: (scale: number) => React.ReactNode;
+}) {
+  const {
+    scale,
+    offset,
+    onWheel,
+    onMouseDown,
+    onMouseMove,
+    onMouseUp,
+    reset,
+    setScale,
+  } = useZoomPan();
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border bg-card p-3">
@@ -81,7 +107,11 @@ function ZoomPanel({ title, children }: { title: string; children: (scale: numbe
           >
             −
           </button>
-          <button type="button" className="rounded border px-2 py-1 hover:bg-muted" onClick={reset}>
+          <button
+            type="button"
+            className="rounded border px-2 py-1 hover:bg-muted"
+            onClick={reset}
+          >
             Reset
           </button>
           <span>{Math.round(scale * 100)}%</span>
@@ -136,7 +166,11 @@ const FABRIC_RED = { id: 33, label: "Red with Red Blossoms (RED role)" };
  * on the same pipeline — see the matching `DIRECTION_A_*_TUNING` presets and
  * doc comments in `artifacts/api-server/src/lib/image.ts` for the rationale
  * behind each one. */
-const DIRECTION_A_VARIANTS: { method: TileMethod; title: string; description: string }[] = [
+const DIRECTION_A_VARIANTS: {
+  method: TileMethod;
+  title: string;
+  description: string;
+}[] = [
   {
     method: "vectorized",
     title: "Baseline",
@@ -237,8 +271,21 @@ function AuntSukeysChoiceBlock({
             [R, tileUrlRed],
           ] as const
         ).map(([role, url]) => (
-          <pattern key={role} id={patId(role)} patternUnits="userSpaceOnUse" width={tilePx} height={tilePx}>
-            <image href={url} x={0} y={0} width={tilePx} height={tilePx} preserveAspectRatio="xMidYMid slice" />
+          <pattern
+            key={role}
+            id={patId(role)}
+            patternUnits="userSpaceOnUse"
+            width={tilePx}
+            height={tilePx}
+          >
+            <image
+              href={url}
+              x={0}
+              y={0}
+              width={tilePx}
+              height={tilePx}
+              preserveAspectRatio="xMidYMid slice"
+            />
           </pattern>
         ))}
       </defs>
@@ -275,9 +322,26 @@ function AuntSukeysChoiceBlock({
         const diagX2 = cell.kind === "nwse" ? x + cellPx : x;
         return (
           <g key={i}>
-            <polygon points={bPoints} fill={fillFor(cell.b)} stroke="#00000022" strokeWidth={0.5} />
-            <polygon points={aPoints} fill={fillFor(cell.a)} stroke="#00000022" strokeWidth={0.5} />
-            <line x1={diagX1} y1={y} x2={diagX2} y2={y + cellPx} stroke="#00000033" strokeWidth={1} />
+            <polygon
+              points={bPoints}
+              fill={fillFor(cell.b)}
+              stroke="#00000022"
+              strokeWidth={0.5}
+            />
+            <polygon
+              points={aPoints}
+              fill={fillFor(cell.a)}
+              stroke="#00000022"
+              strokeWidth={0.5}
+            />
+            <line
+              x1={diagX1}
+              y1={y}
+              x2={diagX2}
+              y2={y + cellPx}
+              stroke="#00000033"
+              strokeWidth={1}
+            />
           </g>
         );
       })}
@@ -289,41 +353,53 @@ export default function FabricCompareDevPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-4 p-6">
       <div>
-        <h1 className="text-xl font-bold">Fabric SVG rendering — dev comparison</h1>
+        <h1 className="text-xl font-bold">
+          Fabric SVG rendering — dev comparison
+        </h1>
         <p className="text-sm text-muted-foreground">
-          Internal, dev-only page. Not linked from any menu. Scroll to zoom, drag to pan on each
-          panel independently.
+          Internal, dev-only page. Not linked from any menu. Scroll to zoom,
+          drag to pan on each panel independently.
         </p>
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         <ZoomPanel title="Source fabric photo">
           {() => (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={SOURCE_IMAGE_URL} alt="Source fabric" className="max-w-none" width={400} />
+            <img
+              src={SOURCE_IMAGE_URL}
+              alt="Source fabric"
+              className="max-w-none"
+              width={400}
+            />
           )}
         </ZoomPanel>
       </div>
 
       <div className="pt-4">
         <h2 className="text-lg font-bold">
-          Direction A: VTracer vectorization (posterized raster traced to real SVG paths)
+          Direction A: VTracer vectorization (posterized raster traced to real
+          SVG paths)
         </h2>
         <p className="text-sm text-muted-foreground">
-          Chosen as the best-so-far direction. Each block below is a full "Aunt Sukey's Choice"
-          3×3 block (see <code>scripts/src/seed-quilting-block-templates.ts</code>), rendered with
-          the exact solid-rect / diagonal-split polygon geometry the block designer uses for
+          Chosen as the best-so-far direction. Each block below is a full "Aunt
+          Sukey's Choice" 3×3 block (see{" "}
+          <code>scripts/src/seed-quilting-block-templates.ts</code>), rendered
+          with the exact solid-rect / diagonal-split polygon geometry the block
+          designer uses for
           <code> solid</code>/<code>nwse</code>/<code>nesw</code> cells (see{" "}
-          <code>CellShape.tsx</code>) — 4 real fabrics fill the block's 4 color roles: fabric #
-          {FABRIC_LIGHT.id} "{FABRIC_LIGHT.label}", fabric #{FABRIC_DARK.id} "{FABRIC_DARK.label}",
-          fabric #{FABRIC_GOLD.id} "{FABRIC_GOLD.label}", and fabric #{FABRIC_RED.id} "
-          {FABRIC_RED.label}", so the pipeline can be judged across a more complex, multi-fabric
-          pattern instead of a single two-fabric triangle. The core pipeline is a flat-field
-          correction (<code>generateFlatFabricTileV3</code>) → texture-suppressing blur →
-          no-dither posterize → VTracer trace (<code>@neplex/vectorizer</code>) into real vector
-          fill paths. Below the baseline are 5 tuned variants exploring different levers on that
-          same pipeline to chase down the known residual artifact (a very faint darker band near
-          tile edges, faint lighter patch near center) and to push further toward a visibly
-          distinct, production-ready option.
+          <code>CellShape.tsx</code>) — 4 real fabrics fill the block's 4 color
+          roles: fabric #{FABRIC_LIGHT.id} "{FABRIC_LIGHT.label}", fabric #
+          {FABRIC_DARK.id} "{FABRIC_DARK.label}", fabric #{FABRIC_GOLD.id} "
+          {FABRIC_GOLD.label}", and fabric #{FABRIC_RED.id} "{FABRIC_RED.label}
+          ", so the pipeline can be judged across a more complex, multi-fabric
+          pattern instead of a single two-fabric triangle. The core pipeline is
+          a flat-field correction (<code>generateFlatFabricTileV3</code>) →
+          texture-suppressing blur → no-dither posterize → VTracer trace (
+          <code>@neplex/vectorizer</code>) into real vector fill paths. Below
+          the baseline are 5 tuned variants exploring different levers on that
+          same pipeline to chase down the known residual artifact (a very faint
+          darker band near tile edges, faint lighter patch near center) and to
+          push further toward a visibly distinct, production-ready option.
         </p>
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -344,7 +420,8 @@ export default function FabricCompareDevPage() {
       <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
         {DIRECTION_A_VARIANTS.map((variant) => (
           <p key={variant.method} className="text-xs text-muted-foreground">
-            <span className="font-semibold">{variant.title}:</span> {variant.description}
+            <span className="font-semibold">{variant.title}:</span>{" "}
+            {variant.description}
           </p>
         ))}
       </div>

@@ -169,9 +169,9 @@ export default function OfficeCalendar() {
           No Google Calendar connected
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Connect your Google account in Travels Settings to browse events
-          from all your calendars here. This uses the same connection as
-          Travels — no separate sign-in required.
+          Connect your Google account in Travels Settings to browse events from
+          all your calendars here. This uses the same connection as Travels — no
+          separate sign-in required.
         </p>
         <Button asChild className="mt-5">
           <a
@@ -197,9 +197,7 @@ export default function OfficeCalendar() {
       ))}
 
       <div>
-        <h1 className="font-serif text-2xl text-foreground">
-          All Calendars
-        </h1>
+        <h1 className="font-serif text-2xl text-foreground">All Calendars</h1>
         <p className="text-sm text-muted-foreground">
           Read-only view across every calendar you've connected.
         </p>
@@ -211,9 +209,7 @@ export default function OfficeCalendar() {
             variant="ghost"
             size="icon"
             onClick={() =>
-              setCursor(
-                (c) => new Date(c.getFullYear(), c.getMonth() - 1, 1),
-              )
+              setCursor((c) => new Date(c.getFullYear(), c.getMonth() - 1, 1))
             }
           >
             <ChevronLeft className="h-4 w-4" />
@@ -235,9 +231,7 @@ export default function OfficeCalendar() {
             variant="ghost"
             size="icon"
             onClick={() =>
-              setCursor(
-                (c) => new Date(c.getFullYear(), c.getMonth() + 1, 1),
-              )
+              setCursor((c) => new Date(c.getFullYear(), c.getMonth() + 1, 1))
             }
           >
             <ChevronRight className="h-4 w-4" />

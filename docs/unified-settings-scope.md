@@ -18,18 +18,19 @@ settings, and proposes a target location for each.
 
 ## 1. Global / account-level settings (`artifacts/web/src/pages/account.tsx`)
 
-| Setting | Current location | Target | Backing endpoint |
-|---|---|---|---|
-| Display name | account.tsx `ProfileCard` | Global | `PATCH /api/auth/me` |
-| Test email send | account.tsx `ProfileCard` | Global | `POST /api/auth/test-email` (verify exact path in route file) |
-| Phone number + verification | account.tsx `PhoneCard` | Global | `/api/auth/phone/*` |
-| Test SMS send | account.tsx `PhoneCard` | Global | `/api/auth/phone/test-sms` (verify) |
-| Theme (light/dark/system) | account.tsx `AppearanceCard`; duplicated in `artifacts/elaine/src/pages/Settings.tsx` | Global (single copy; Elaine's local copy becomes a link, not a duplicate) | client-only (localStorage/theme provider), no API |
-| Password change | account.tsx `PasswordCard` | Global | `/api/auth/change-password` |
-| Elaine personal preferences (name Elaine calls you, tone, etc.) | `ElaineSettingsCard` (from `lib/elaine-ui`, embedded in both account.tsx and elaine/Settings.tsx) | Global (single copy embedded once; Elaine's Settings page links to it instead of re-embedding) | Elaine settings endpoints in `elaine-ui` lib (verify exact path) |
-| Elaine global AI config (chatModel/subagentModel/timeouts) — **owner-only** | `GlobalConfigCard` (from `lib/elaine-ui`, embedded in account.tsx only) | Global, gated by `isOwner` (already gated) | `GET/PUT /api/elaine/admin/config`, `GET /api/elaine/admin/models` |
+| Setting                                                                     | Current location                                                                                  | Target                                                                                         | Backing endpoint                                                   |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Display name                                                                | account.tsx `ProfileCard`                                                                         | Global                                                                                         | `PATCH /api/auth/me`                                               |
+| Test email send                                                             | account.tsx `ProfileCard`                                                                         | Global                                                                                         | `POST /api/auth/test-email` (verify exact path in route file)      |
+| Phone number + verification                                                 | account.tsx `PhoneCard`                                                                           | Global                                                                                         | `/api/auth/phone/*`                                                |
+| Test SMS send                                                               | account.tsx `PhoneCard`                                                                           | Global                                                                                         | `/api/auth/phone/test-sms` (verify)                                |
+| Theme (light/dark/system)                                                   | account.tsx `AppearanceCard`; duplicated in `artifacts/elaine/src/pages/Settings.tsx`             | Global (single copy; Elaine's local copy becomes a link, not a duplicate)                      | client-only (localStorage/theme provider), no API                  |
+| Password change                                                             | account.tsx `PasswordCard`                                                                        | Global                                                                                         | `/api/auth/change-password`                                        |
+| Elaine personal preferences (name Elaine calls you, tone, etc.)             | `ElaineSettingsCard` (from `lib/elaine-ui`, embedded in both account.tsx and elaine/Settings.tsx) | Global (single copy embedded once; Elaine's Settings page links to it instead of re-embedding) | Elaine settings endpoints in `elaine-ui` lib (verify exact path)   |
+| Elaine global AI config (chatModel/subagentModel/timeouts) — **owner-only** | `GlobalConfigCard` (from `lib/elaine-ui`, embedded in account.tsx only)                           | Global, gated by `isOwner` (already gated)                                                     | `GET/PUT /api/elaine/admin/config`, `GET /api/elaine/admin/models` |
 
 **Notes:**
+
 - Elaine's own Settings page (`artifacts/elaine/src/pages/Settings.tsx`) already
   duplicates `AppearanceCard` and `ElaineSettingsCard`, and links out to the
   hub's `/account` for the owner-only Global Config. This is the pattern to
@@ -39,32 +40,32 @@ settings, and proposes a target location for each.
 
 ## 2. Travels (`artifacts/modules/src/travels/pages/Settings.tsx`)
 
-| Setting | Target | Backing endpoint |
-|---|---|---|
-| Reminder email address + test-send | Per-module section: Travels | `travels` reminder-email routes (verify exact path) |
-| Timezone | Per-module section: Travels | `travels` settings route (verify exact path) |
-| Gmail connect/disconnect/status (`GmailSyncCard`) | Per-module section: Travels | `/api/travels/gmail/*` — **single-owner**, must stay scoped to `req.session.userId`, never household-shared (see threat model) |
-| Google Calendar: connect/list/add calendars | Per-module section: Travels | `/api/travels/calendar/*` (Calendar OAuth connect must remain a full browser redirect — cannot be automated/assistant-triggered, see `travels-calendar-oauth-constraint` memory) |
-| Per-calendar color assignment | Per-module section: Travels | calendar color-update route (verify) |
-| Designate shared "Travel calendar" (owner-only action, household-wide effect) | Per-module section: Travels | `useSetTravelCalendar` → `PUT`-style route (matches the reusable "designated shared calendar" pattern also used by Ornaments/Hallmark) |
-| Delete a connected calendar | Per-module section: Travels | calendar delete route (verify) |
+| Setting                                                                       | Target                      | Backing endpoint                                                                                                                                                                 |
+| ----------------------------------------------------------------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reminder email address + test-send                                            | Per-module section: Travels | `travels` reminder-email routes (verify exact path)                                                                                                                              |
+| Timezone                                                                      | Per-module section: Travels | `travels` settings route (verify exact path)                                                                                                                                     |
+| Gmail connect/disconnect/status (`GmailSyncCard`)                             | Per-module section: Travels | `/api/travels/gmail/*` — **single-owner**, must stay scoped to `req.session.userId`, never household-shared (see threat model)                                                   |
+| Google Calendar: connect/list/add calendars                                   | Per-module section: Travels | `/api/travels/calendar/*` (Calendar OAuth connect must remain a full browser redirect — cannot be automated/assistant-triggered, see `travels-calendar-oauth-constraint` memory) |
+| Per-calendar color assignment                                                 | Per-module section: Travels | calendar color-update route (verify)                                                                                                                                             |
+| Designate shared "Travel calendar" (owner-only action, household-wide effect) | Per-module section: Travels | `useSetTravelCalendar` → `PUT`-style route (matches the reusable "designated shared calendar" pattern also used by Ornaments/Hallmark)                                           |
+| Delete a connected calendar                                                   | Per-module section: Travels | calendar delete route (verify)                                                                                                                                                   |
 
 **Notes:** Gmail tokens/connections and Calendar OAuth tokens are
 single-owner per the threat model even though the resulting data (synced
 trip suggestions, the designated shared Travel calendar) is household-shared.
 The unified page must preserve that boundary — i.e., a Travels settings
-section shows each user their *own* Gmail/Calendar connection status, never
+section shows each user their _own_ Gmail/Calendar connection status, never
 another household member's.
 
 ## 3. Pottery (`artifacts/modules/src/pottery/pages/settings.tsx`)
 
-| Item | Current location | Target | Rationale |
-|---|---|---|---|
-| Link to Categories | settings.tsx | Stays in module (data mgmt) | category CRUD, not a setting |
-| Link to Collection Stats | settings.tsx | Stays in module (data mgmt) | read-only stats/reporting, not a setting |
-| Link to Maintenance (bulk re-analyze) | settings.tsx | Stays in module (data mgmt) | bulk AI operation, not a setting |
-| Link to Account | settings.tsx | Removed — replaced by direct nav to the unified Global settings page | avoids a redundant hop through a module page just to reach global settings |
-| Insurance PDF export button | settings.tsx | Stays in module (data mgmt / export action) | one-off export action, not a persisted setting |
+| Item                                  | Current location | Target                                                               | Rationale                                                                  |
+| ------------------------------------- | ---------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Link to Categories                    | settings.tsx     | Stays in module (data mgmt)                                          | category CRUD, not a setting                                               |
+| Link to Collection Stats              | settings.tsx     | Stays in module (data mgmt)                                          | read-only stats/reporting, not a setting                                   |
+| Link to Maintenance (bulk re-analyze) | settings.tsx     | Stays in module (data mgmt)                                          | bulk AI operation, not a setting                                           |
+| Link to Account                       | settings.tsx     | Removed — replaced by direct nav to the unified Global settings page | avoids a redundant hop through a module page just to reach global settings |
+| Insurance PDF export button           | settings.tsx     | Stays in module (data mgmt / export action)                          | one-off export action, not a persisted setting                             |
 
 **Pottery has no real per-module settings today** — its "Settings" page is
 actually a landing/index page linking out to data-management tools plus the
@@ -77,13 +78,13 @@ group (mirrors the Quilting nav-grouping issue below).
 
 Same shape as Pottery, plus one extra link:
 
-| Item | Target | Rationale |
-|---|---|---|
-| Link to Categories | Stays in module (data mgmt) | same as Pottery |
-| Link to Collection Stats | Stays in module (data mgmt) | same as Pottery |
-| Link to Maintenance | Stays in module (data mgmt) | same as Pottery |
-| Link to Hallmark Events | Stays in module (data mgmt) | ornaments-specific data feature, not a setting |
-| Link to Account | Removed — replaced by direct nav to unified Global settings | same as Pottery |
+| Item                     | Target                                                      | Rationale                                      |
+| ------------------------ | ----------------------------------------------------------- | ---------------------------------------------- |
+| Link to Categories       | Stays in module (data mgmt)                                 | same as Pottery                                |
+| Link to Collection Stats | Stays in module (data mgmt)                                 | same as Pottery                                |
+| Link to Maintenance      | Stays in module (data mgmt)                                 | same as Pottery                                |
+| Link to Hallmark Events  | Stays in module (data mgmt)                                 | ornaments-specific data feature, not a setting |
+| Link to Account          | Removed — replaced by direct nav to unified Global settings | same as Pottery                                |
 
 ## 5. Quilting — no dedicated settings page today
 
@@ -101,7 +102,7 @@ This is the exact ambiguity the issue's acceptance criteria calls out:
   state.
 - **Target:** Both stay exactly where they are (`/quilting/categories`,
   `/quilting/maintenance`), but should be re-grouped from nav `group:
-  "settings"` to `group: "main"` (or an equivalent non-settings nav group) so
+"settings"` to `group: "main"` (or an equivalent non-settings nav group) so
   the nav no longer implies they're part of "Settings" once a real, unified
   Settings page exists elsewhere. This is a nav-grouping fix, not a
   data-model or route change.
@@ -128,14 +129,14 @@ ships, the fix is:
 
 ## Summary table
 
-| Module | Real settings found | Data-mgmt mislabeled as "settings" | Action needed |
-|---|---|---|---|
-| Global (Hub/account.tsx) | Profile, phone, theme, password, Elaine prefs, Elaine global config (owner) | — | Becomes the unified page's content |
-| Travels | Reminder email, timezone, Gmail connection, Calendar connections/colors/designation | — | Becomes a per-module section on the unified page; single-owner boundaries (Gmail/Calendar tokens) must be preserved |
-| Pottery | None (only a link to global Account) | Categories, Stats, Maintenance, Insurance export | Nav re-group only; no new settings section needed |
-| Ornaments | None (only a link to global Account) | Categories, Stats, Maintenance, Hallmark Events | Nav re-group only; no new settings section needed |
-| Quilting | None | Categories, Maintenance (both nav-grouped as "settings") | Nav re-group only; no new settings section needed |
-| Elaine | Duplicates of global Appearance + ElaineSettingsCard | — | Collapse to a link into the unified page |
+| Module                   | Real settings found                                                                 | Data-mgmt mislabeled as "settings"                       | Action needed                                                                                                       |
+| ------------------------ | ----------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Global (Hub/account.tsx) | Profile, phone, theme, password, Elaine prefs, Elaine global config (owner)         | —                                                        | Becomes the unified page's content                                                                                  |
+| Travels                  | Reminder email, timezone, Gmail connection, Calendar connections/colors/designation | —                                                        | Becomes a per-module section on the unified page; single-owner boundaries (Gmail/Calendar tokens) must be preserved |
+| Pottery                  | None (only a link to global Account)                                                | Categories, Stats, Maintenance, Insurance export         | Nav re-group only; no new settings section needed                                                                   |
+| Ornaments                | None (only a link to global Account)                                                | Categories, Stats, Maintenance, Hallmark Events          | Nav re-group only; no new settings section needed                                                                   |
+| Quilting                 | None                                                                                | Categories, Maintenance (both nav-grouped as "settings") | Nav re-group only; no new settings section needed                                                                   |
+| Elaine                   | Duplicates of global Appearance + ElaineSettingsCard                                | —                                                        | Collapse to a link into the unified page                                                                            |
 
 ## Out of scope for this audit
 

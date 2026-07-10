@@ -328,7 +328,10 @@ export default function PatternDetail() {
     return (
       <div className="flex h-60 flex-col items-center justify-center gap-4">
         <p className="text-muted-foreground">Pattern not found.</p>
-        <Button variant="outline" onClick={() => navigate("/quilting/patterns")}>
+        <Button
+          variant="outline"
+          onClick={() => navigate("/quilting/patterns")}
+        >
           Back
         </Button>
       </div>

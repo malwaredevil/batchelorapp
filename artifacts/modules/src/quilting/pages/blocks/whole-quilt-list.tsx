@@ -79,7 +79,9 @@ function DesignCard({
     <div className="group relative overflow-hidden rounded-xl border border-card-border bg-card transition-shadow hover:shadow-md">
       <button
         className="block w-full text-left"
-        onClick={() => navigate(`/quilting/whole-quilt/designer?id=${design.id}`)}
+        onClick={() =>
+          navigate(`/quilting/whole-quilt/designer?id=${design.id}`)
+        }
       >
         <div className="aspect-square overflow-hidden bg-muted">
           <img
@@ -116,7 +118,9 @@ function DesignCard({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem
-              onClick={() => navigate(`/quilting/whole-quilt/designer?id=${design.id}`)}
+              onClick={() =>
+                navigate(`/quilting/whole-quilt/designer?id=${design.id}`)
+              }
             >
               <ExternalLink className="mr-2 h-3.5 w-3.5" />
               Open
@@ -277,7 +281,9 @@ export default function WholeQuiltList() {
           {designs.length === 0 ? (
             <>
               <p className="text-muted-foreground">No quilt designs yet.</p>
-              <Button onClick={() => navigate("/quilting/whole-quilt/designer?new=1")}>
+              <Button
+                onClick={() => navigate("/quilting/whole-quilt/designer?new=1")}
+              >
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Create your first design
               </Button>

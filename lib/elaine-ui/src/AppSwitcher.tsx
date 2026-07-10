@@ -250,7 +250,6 @@ function OfficeLogo({ className }: { className?: string }) {
   );
 }
 
-
 interface AppEntry {
   id: AppId;
   name: string;

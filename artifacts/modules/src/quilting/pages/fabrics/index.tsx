@@ -252,7 +252,9 @@ function FabricCard({
                   Open
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() => navigate(`/quilting/fabrics/${fabric.id}?edit=1`)}
+                  onClick={() =>
+                    navigate(`/quilting/fabrics/${fabric.id}?edit=1`)
+                  }
                 >
                   <Pencil className="mr-2 h-3.5 w-3.5" />
                   Edit

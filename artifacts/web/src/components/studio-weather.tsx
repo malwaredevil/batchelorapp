@@ -16,15 +16,14 @@ import {
   RefreshCw,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import {
+  getWeatherConfig,
+  updateWeatherConfig,
+} from "@workspace/api-client-react";
+import type { HubWeatherConfigBody } from "@workspace/api-client-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-interface WeatherConfig {
-  city: string;
-  country: string;
-  lat: number;
-  lon: number;
-  unit: "celsius" | "fahrenheit";
-}
+type WeatherConfig = HubWeatherConfigBody;
 
 type WeatherState =
   | { status: "loading" }
@@ -41,11 +40,6 @@ interface GeoResult {
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const base = import.meta.env.BASE_URL as string;
-const WEATHER_CONFIG_URL = `${base}api/hub/weather-config`.replace(
-  /\/\//g,
-  "/",
-);
 const WEATHER_LS_KEY = "batchelor-weather-config";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -83,9 +77,7 @@ function writeLocalConfig(cfg: WeatherConfig) {
 
 async function fetchServerConfig(): Promise<WeatherConfig | null> {
   try {
-    const res = await fetch(WEATHER_CONFIG_URL, { credentials: "include" });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { config?: WeatherConfig | null };
+    const data = await getWeatherConfig();
     return data.config ?? null;
   } catch {
     return null;
@@ -94,12 +86,7 @@ async function fetchServerConfig(): Promise<WeatherConfig | null> {
 
 async function saveServerConfig(cfg: WeatherConfig): Promise<void> {
   try {
-    await fetch(WEATHER_CONFIG_URL, {
-      method: "PUT",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(cfg),
-    });
+    await updateWeatherConfig(cfg);
   } catch {
     /* silent */
   }

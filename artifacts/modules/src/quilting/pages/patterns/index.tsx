@@ -551,31 +551,31 @@ export default function Patterns() {
               label: "Fabrics",
               value: stats.totalFabrics,
               sub: "in your stash",
-              href: "/fabrics",
+              href: "/quilting/fabrics",
             },
             {
               label: "Patterns",
               value: stats.totalPatterns,
               sub: "saved",
-              href: "/patterns",
+              href: "/quilting/patterns",
             },
             {
               label: "Quilts",
               value: stats.totalQuilts,
               sub: "in collection",
-              href: "/quilts",
+              href: "/quilting/quilts",
             },
             {
               label: "Blocks",
               value: stats.totalBlocks,
               sub: "designed",
-              href: "/blocks",
+              href: "/quilting/blocks",
             },
             {
               label: "Layouts",
               value: stats.totalLayouts,
               sub: "arranged",
-              href: "/layouts",
+              href: "/quilting/layouts",
             },
           ].map(({ label, value, sub, href }) => (
             <Link

@@ -15,7 +15,6 @@ import { Header } from "@/components/Header";
 import { InstallBanner } from "@workspace/web-core";
 import "@/features";
 import Chat from "@/pages/Chat";
-import Settings from "@/pages/Settings";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -65,7 +64,6 @@ function Routes() {
       <main>
         <Switch>
           <Route path="/" component={Chat} />
-          <Route path="/settings" component={Settings} />
           <Route component={NotFound} />
         </Switch>
       </main>

@@ -428,10 +428,33 @@ export function useElaineChat({
         path.startsWith(prefix + "/") ||
         path.startsWith(prefix + "?"),
     );
+    // Pottery/quilting/travels/ornaments are now merged under the "modules"
+    // artifact, which mounts a single wouter Router at base "/modules" and
+    // routes every merged app under its own literal "/pottery", "/quilting",
+    // etc. prefix (e.g. "/travels/wishlist"). Elaine's tool contract still
+    // emits paths relative to the requesting app's own "home" (e.g. "/wishlist"
+    // for a same-app suggestion), since that contract predates the merge and
+    // still matches how each app runs standalone. When this bundle IS the
+    // modules host, same-app relative paths and old-style cross-app prefixes
+    // both need the "/modules" segment (and same-app paths also need their
+    // own app prefix) added before handing off to wouter/window.location.
+    const MERGED_APP_IDS = ["pottery", "quilting", "travels", "ornaments"];
+    const envBaseUrl = (import.meta as { env?: { BASE_URL?: string } }).env
+      ?.BASE_URL;
+    const base = (envBaseUrl ?? "/").replace(/\/$/, "");
+    const isModulesHost = base === "/modules";
     if (isCrossSpa) {
-      window.location.href = path;
+      const target =
+        isModulesHost && !path.startsWith("/elaine")
+          ? `/modules${path}`
+          : path;
+      window.location.href = target;
     } else {
-      navigate(path);
+      const target =
+        isModulesHost && MERGED_APP_IDS.includes(appId)
+          ? `/${appId}${path}`
+          : path;
+      navigate(target);
       onAfter?.();
     }
   }

@@ -17,6 +17,12 @@
     },
     {
       "path": "./lib/elaine-ui"
+    },
+    {
+      "path": "./lib/gmail-ui"
+    },
+    {
+      "path": "./lib/travels-settings-ui"
     }
   ]
 }

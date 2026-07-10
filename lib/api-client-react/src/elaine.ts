@@ -666,7 +666,7 @@ export function useDeleteElaineConversation(options?: {
 export const getGetElaineConversationMessagesQueryKey = (id: number) =>
   [`/api/elaine/conversations`, id, `messages`] as const;
 
-const getElaineConversationMessagesFn = (
+export const getElaineConversationMessagesFn = (
   id: number,
   options?: RequestInit,
 ): Promise<ConversationMessage[]> =>

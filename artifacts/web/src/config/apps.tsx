@@ -21,6 +21,7 @@ import {
   Plane,
   Bell,
   MapPin,
+  Briefcase,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -90,7 +91,7 @@ export const APPS: AppEntry[] = [
   {
     id: "pottery",
     name: "Pottery",
-    href: `${base}pottery/`,
+    href: `${base}modules/pottery/`,
     image: `${base}images/pottery-collection.png`,
     updated: "Updated 2h ago",
     stats: [
@@ -103,7 +104,7 @@ export const APPS: AppEntry[] = [
   {
     id: "quilting",
     name: "Quilting",
-    href: `${base}quilting/`,
+    href: `${base}modules/quilting/`,
     image: `${base}images/quilting-collection.png`,
     updated: "Updated 1d ago",
     stats: [
@@ -117,7 +118,7 @@ export const APPS: AppEntry[] = [
   {
     id: "travels",
     name: "Travels",
-    href: `${base}travels/`,
+    href: `${base}modules/travels/`,
     image: `${base}images/travels-collection.png`,
     updated: "Plan your next trip",
     stats: [],
@@ -128,7 +129,7 @@ export const APPS: AppEntry[] = [
   {
     id: "ornaments",
     name: "Ornaments",
-    href: `${base}ornaments/`,
+    href: `${base}modules/ornaments/`,
     image: `${base}images/ornaments-collection.png`,
     updated: "Updated 3d ago",
     stats: [
@@ -140,12 +141,30 @@ export const APPS: AppEntry[] = [
       "Your Hallmark ornament collection — track series, quantities, and book value.",
   },
   {
+    id: "office",
+    name: "Office",
+    href: `${base}modules/office/`,
+    image: `${base}images/office-collection.png`,
+    updated: "General household hub",
+    stats: [
+      { value: "—", label: "Notes" },
+      { value: "—", label: "Unread" },
+      { value: "—", label: "Upcoming" },
+    ],
+    description:
+      "Gmail inbox, all connected calendars, and notes — general-purpose, separate from Travels' trip-specific Gmail and calendar features.",
+    cta: "Open Office",
+  },
+  {
     id: "elaine",
     name: "Elaine",
     href: `${base}elaine/`,
     image: `${base}images/elaine-collection.svg`,
     updated: "Your AI assistant",
-    stats: [],
+    stats: [
+      { value: "—", label: "Nudges" },
+      { value: "—", label: "Memory" },
+    ],
     description:
       "Chat with your household's AI assistant — full context on pottery, quilting, and travels, with viewable, editable settings.",
     cta: "Chat with Elaine",

@@ -98,6 +98,13 @@ export function ElaineWidget({
   }, []);
 
   const onMovePointerDown = useCallback((e: React.PointerEvent) => {
+    // Never start a drag (or capture the pointer) from a click that
+    // originated on a button/interactive control inside the header —
+    // setPointerCapture reroutes the resulting click event to the
+    // capturing element in most browsers, which silently swallows clicks
+    // on the History/Fullscreen/New-chat/Close buttons.
+    if ((e.target as HTMLElement).closest("button")) return;
+
     const el = containerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();

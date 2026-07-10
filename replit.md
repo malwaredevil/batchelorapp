@@ -27,12 +27,16 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
 
 ## Where things live
 
-- `artifacts/api-server/` — single Express API server serving both apps' routes
-- `lib/db/` — shared Drizzle schema + bootstrap (pottery + quilting tables)
+- `artifacts/api-server/` — single Express API server serving all apps' routes (pottery, quilting, travels, ornaments, hub, elaine, auth)
+- `artifacts/modules/` — single consolidated web artifact serving pottery, quilting, travels, and ornaments under one `/modules` base path (each app still namespaced at `/modules/pottery`, `/modules/quilting`, `/modules/travels`, `/modules/ornaments`). The standalone `artifacts/pottery`, `artifacts/quilting`, `artifacts/travels`, and `artifacts/ornaments` artifacts were decommissioned and removed once `/modules` reached full parity.
+- `artifacts/web/` — Hub app (app switcher, launcher, dashboard widgets)
+- `artifacts/elaine/` — standalone Elaine AI assistant app (not merged into modules)
+- Only 4 artifacts remain registered: `api-server`, `modules`, `web`, `elaine`
+- `lib/db/` — shared Drizzle schema + bootstrap (pottery + quilting + travels + ornaments tables)
 - `scripts/src/backup-to-replit.ts` — Supabase → Replit DB snapshot
 - `scripts/src/restore-from-replit.ts` — restore from snapshot
 - `scripts/post-merge.sh` — runs after every agent merge: install → bootstrap → backup
-- `MERGE_HANDOFF_PROMPT.md` — prompt to extract handoff manifests from pottery/quilting Repls
+- `MERGE_HANDOFF_PROMPT.md` — prompt to extract handoff manifests from pottery/quilting Repls (historical; apps are now fully merged)
 
 ## Database layout (shared Supabase project: gadhlfluflknlwgmlmos)
 
@@ -51,6 +55,8 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
 - **Single Google OAuth client** shared by both apps. Redirect URI: `{host}/api/auth/google/callback`.
 - **DATABASE_URL → Supabase; PG\* → Replit built-in DB.** Never swap these.
 - **`travels.ts`'s trips/packing hooks were fully migrated to orval-generated hooks.** The ~42 duplicated names (trips + packing) that used to be hand-written in `lib/api-client-react/src/travels.ts` and shadowed by a disambiguation re-export block in `index.ts` have been deleted; all consuming pages now import the generated `Travels*` hooks/types directly from `@workspace/api-client-react`, adjusted for orval's mutation payload shapes (`{data}` for create, `{id,data}` for update, `{id,docId,data}` for nested document updates, etc.) and generated type names (e.g. `TravelsCreateTripBody`, `TravelsTrip`, `TravelsTripDetail`). The OpenAPI spec (`lib/api-spec/sources/travels.yaml`) was the source of several schema-drift fixes uncovered during migration (missing fields like `todoList`, `iconOverride`, document `title`/`documentType` on the PATCH body, `TravelsStatsResponse.nextTrip`, etc.) — always cross-check spec vs actual server route handler when a generated type appears to be missing a field the server accepts. `travels.ts` now only retains wishlist hooks and `useGetTripDocumentWalletPass`, which were never part of the overlap. The `check-travels-overlap` script and its CI guard have been removed since there is no longer any shadowing to drift out of sync.
+- **Fabric tile vectorization uses "Max Detail" tuning as the enforced production default.** The `/fabrics/:id/tile-image` route calls `generateProductionFabricTile()` (`artifacts/api-server/src/lib/image.ts`), which wraps `generateFabricTileVectorizedTuned` with `DIRECTION_A_MAX_DETAIL_TUNING` and serves `image/svg+xml`. This is the single shared production pipeline for all fabric tile rendering across the hub/sub-apps — not a dev-only experiment. The separate dev comparison route (`fabric-compare.tsx`) still exists for evaluating tuning variants but does not affect the production path.
+- **Screenshot-tool image auth is a real fix, not a documented limitation.** `tryScreenshotTokenAuth` (`artifacts/api-server/src/middleware/auth.ts`) accepts the dev screenshot token via `?screenshotToken=` query param in addition to the `X-Screenshot-Token` header. `installScreenshotImageAutoAuth()` (`lib/api-client-react/src/custom-fetch.ts`) is a dev-only global patch on `HTMLImageElement.prototype.src` and `Element.prototype.setAttribute`/`setAttributeNS` that auto-appends the token to every raw image URL app-wide (covers `<img>` tags and SVG `<image href>`), so the automated screenshot tool renders real images instead of 401s. Wired into all three frontend entrypoints (`modules`, `web`, `elaine`) before `createRoot(...).render`.
 - **Elaine global config is admin-only, one row, cached.** `elaine_global_config` (singleton, id=1) holds chatModel/subagentModel/requestTimeoutMs/maxResponseTokens, editable only by `app_users.isOwner` accounts via `/api/elaine/admin/config` (GET/PUT) and `/api/elaine/admin/models` (OpenRouter model list, public REST API, 1hr cache). Reuses the existing isOwner-gating pattern from travel-calendar routes. Server-side config cache has a 30s TTL with safe hardcoded defaults as fallback.
 
 ## Product

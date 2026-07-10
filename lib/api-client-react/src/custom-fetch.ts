@@ -59,6 +59,104 @@ export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
   _authTokenGetter = getter;
 }
 
+/**
+ * Returns the dev-only screenshot automation token captured from
+ * `?screenshotToken=...` on page load, or `null` if not present.
+ *
+ * `customFetch` already attaches this as an `X-Screenshot-Token` header
+ * automatically. This getter exists for the narrow set of call sites that
+ * bypass `customFetch` entirely — raw `<img src>` / SVG `<image href>` tags
+ * (e.g. fabric tile pattern fills) can't attach custom headers, so those
+ * call sites must append the token as a `?screenshotToken=` query param
+ * themselves via `appendScreenshotToken()` below. The server accepts the
+ * token from either the header or the query param (dev-only, see
+ * `middleware/auth.ts`).
+ */
+export function getScreenshotToken(): string | null {
+  return _screenshotToken;
+}
+
+/**
+ * Appends the dev-only screenshot token (if present) to a URL as a
+ * `screenshotToken` query param, for raw `<img>`/`<image>` tags that can't
+ * carry the `X-Screenshot-Token` header. No-op (returns the URL unchanged)
+ * when no token is set, so this is inert for normal users.
+ */
+export function appendScreenshotToken(url: string): string {
+  if (!_screenshotToken || !url) return url;
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}screenshotToken=${encodeURIComponent(_screenshotToken)}`;
+}
+
+let _screenshotImagePatchInstalled = false;
+
+/**
+ * Dev-only: when a `?screenshotToken=...` is present, monkey-patch
+ * `HTMLImageElement.src` and SVG `<image>` `href`/`xlink:href` attribute
+ * writes so every raw `<img>`/`<image>` tag in the app automatically carries
+ * the token — without needing every call site (there are hundreds across
+ * pottery/quilting/ornaments/travels) to remember to call
+ * `appendScreenshotToken()` individually. No-op when no token is present, so
+ * this is completely inert for normal users; safe to call once from each
+ * artifact's entrypoint (e.g. `main.tsx`).
+ */
+export function installScreenshotImageAutoAuth(): void {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  if (!_screenshotToken) return;
+  if (_screenshotImagePatchInstalled) return;
+  _screenshotImagePatchInstalled = true;
+
+  const shouldRewrite = (value: string): boolean =>
+    typeof value === "string" && value.length > 0 && !value.startsWith("data:");
+
+  // <img src="...">
+  const imgProto = window.HTMLImageElement?.prototype;
+  const srcDescriptor =
+    imgProto && Object.getOwnPropertyDescriptor(imgProto, "src");
+  if (imgProto && srcDescriptor?.set) {
+    Object.defineProperty(imgProto, "src", {
+      ...srcDescriptor,
+      set(this: HTMLImageElement, value: string) {
+        srcDescriptor.set!.call(
+          this,
+          shouldRewrite(value) ? appendScreenshotToken(value) : value,
+        );
+      },
+    });
+  }
+
+  // SVG <image href="..."> / <image xlink:href="...">, which React sets via
+  // setAttribute/setAttributeNS rather than a property setter.
+  const origSetAttribute = Element.prototype.setAttribute;
+  Element.prototype.setAttribute = function (
+    this: Element,
+    name: string,
+    value: string,
+  ) {
+    if (
+      this.tagName === "image" &&
+      (name === "href" || name === "xlink:href") &&
+      shouldRewrite(value)
+    ) {
+      value = appendScreenshotToken(value);
+    }
+    return origSetAttribute.call(this, name, value);
+  };
+
+  const origSetAttributeNS = Element.prototype.setAttributeNS;
+  Element.prototype.setAttributeNS = function (
+    this: Element,
+    namespace: string | null,
+    name: string,
+    value: string,
+  ) {
+    if (this.tagName === "image" && name === "href" && shouldRewrite(value)) {
+      value = appendScreenshotToken(value);
+    }
+    return origSetAttributeNS.call(this, namespace, name, value);
+  };
+}
+
 function isRequest(input: RequestInfo | URL): input is Request {
   return typeof Request !== "undefined" && input instanceof Request;
 }
@@ -73,6 +171,16 @@ function resolveMethod(input: RequestInfo | URL, explicitMethod?: string): strin
 // differently, so `instanceof URL` can fail.
 function isUrl(input: RequestInfo | URL): input is URL {
   return typeof URL !== "undefined" && input instanceof URL;
+}
+
+/**
+ * Resolve a relative API path (e.g. "/api/travels/trips/plan") against the
+ * configured base URL, for call sites that need a raw fetch() (streaming
+ * responses, etc.) instead of the JSON-only customFetch() helper.
+ */
+export function resolveApiUrl(path: string): string {
+  const resolved = applyBaseUrl(path);
+  return typeof resolved === "string" ? resolved : path;
 }
 
 function applyBaseUrl(input: RequestInfo | URL): RequestInfo | URL {

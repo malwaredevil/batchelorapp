@@ -319,6 +319,23 @@ async function main() {
   });
   await resetSequence(dest, "ornaments_hallmark_events", "id");
 
+  // ── Office ────────────────────────────────────────────────────────────────
+  await dest.query("TRUNCATE office_notes CASCADE");
+
+  await copyTable(source, dest, {
+    table: "office_notes",
+    columns: [
+      "id",
+      "title",
+      "body",
+      "created_by_user_id",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "office_notes", "id");
+
   // ── Quilting ──────────────────────────────────────────────────────────────
   await dest.query(
     "TRUNCATE quilting_entity_categories, quilting_fabric_links, quilting_pattern_links, quilting_images, quilting_blocks, quilting_block_templates, quilting_layouts, quilting_shopping_items CASCADE",

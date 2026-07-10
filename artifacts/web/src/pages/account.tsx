@@ -33,6 +33,12 @@ import {
   ElaineSettingsCard,
   GlobalConfigCard,
 } from "@workspace/elaine-ui";
+import {
+  ReminderEmailCard,
+  TimezoneCard,
+  GmailSyncCard,
+  CalendarSyncCard,
+} from "@workspace/travels-settings-ui";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 
 const base = import.meta.env.BASE_URL;
@@ -540,6 +546,42 @@ export default function Account() {
           <ElaineSettingsCard subtitle="Your household's AI assistant across every app" />
         </div>
         <GlobalConfigCard />
+
+        <div className="mx-auto w-full max-w-xl space-y-4 pt-4">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">Travels</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Reminder emails, timezone, Gmail scanning, and Google Calendar
+              connections for the Travels app.
+            </p>
+          </div>
+          <div className="space-y-6">
+            <ReminderEmailCard />
+            <TimezoneCard />
+            <GmailSyncCard usePageContext={usePageAssistantContext} />
+            <CalendarSyncCard usePageContext={usePageAssistantContext} />
+          </div>
+        </div>
+
+        {user?.isOwner && (
+          <div className="mx-auto w-full max-w-xl space-y-4 pt-4">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight">
+                Developer
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Owner-only tools.
+              </p>
+            </div>
+            <Link
+              href="/google-apis-demo"
+              className="flex w-full items-center justify-between rounded-lg border border-card-border bg-card px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/60"
+            >
+              Google APIs demo
+            </Link>
+          </div>
+        )}
+
         <p className="pt-2 text-center text-xs text-muted-foreground">
           Signed in to {base.replace(/\/$/, "") || "/"} · one account, every
           collection

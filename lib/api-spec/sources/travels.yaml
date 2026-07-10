@@ -201,6 +201,8 @@ paths:
                 file:
                   type: string
                   format: binary
+                title:
+                  type: string
       responses:
         "201":
           description: Document uploaded and OCR extracted

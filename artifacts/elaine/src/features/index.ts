@@ -17,10 +17,11 @@ registerFeature({
   id: "settings",
   nav: {
     group: "main",
-    href: "/settings",
+    href: "/account",
     label: "Settings",
     icon: SettingsIcon,
     order: 20,
     testId: "navlink-settings",
+    external: true,
   },
 });

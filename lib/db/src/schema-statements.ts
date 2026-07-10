@@ -1266,4 +1266,18 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE travels_trip_documents ADD COLUMN IF NOT EXISTS source_email_subject TEXT`,
   `ALTER TABLE travels_trip_documents ADD COLUMN IF NOT EXISTS source_received_at TIMESTAMPTZ`,
   `CREATE INDEX IF NOT EXISTS travels_trip_documents_status_idx ON travels_trip_documents (status)`,
+
+  // ── Office notes (issue #146) ───────────────────────────────────────────────
+  // Genuinely new household-shared feature (not ported from another app).
+  // created_by_user_id is attribution-only, per the household-sharing model.
+  `CREATE TABLE IF NOT EXISTS office_notes (
+    id                  SERIAL PRIMARY KEY,
+    title               TEXT NOT NULL,
+    body                TEXT NOT NULL DEFAULT '',
+    created_by_user_id  INTEGER REFERENCES app_users(id),
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS office_notes_created_by_user_id_idx ON office_notes (created_by_user_id)`,
+  `ALTER TABLE office_notes ENABLE ROW LEVEL SECURITY`,
 ];

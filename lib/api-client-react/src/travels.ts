@@ -9,7 +9,7 @@ import {
   type UseQueryOptions,
   type UseQueryResult,
 } from "@tanstack/react-query";
-import { customFetch } from "./custom-fetch";
+import { customFetch, resolveApiUrl } from "./custom-fetch";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -495,6 +495,51 @@ export const clearTripChat = (
   customFetch<{ history: ChatMessage[] }>(`/api/travels/trips/${tripId}/chat`, {
     ...options,
     method: "DELETE",
+  });
+
+/**
+ * Streaming trip-plan endpoint. Returns the raw Response so callers can read
+ * the body stream incrementally — not a customFetch()/hook wrapper since the
+ * response is not a single JSON payload.
+ */
+export const planTripStream = (
+  body: {
+    prompt: string;
+    startDate?: string;
+    endDate?: string;
+    travellerCount?: number;
+  },
+  signal?: AbortSignal,
+): Promise<Response> =>
+  fetch(resolveApiUrl("/api/travels/trips/plan"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(body),
+    signal,
+  });
+
+/**
+ * Streaming packing-list generation endpoint. Returns the raw Response so
+ * callers can read the body stream incrementally.
+ */
+export const generatePackingListStream = (
+  tripId: number,
+  signal?: AbortSignal,
+): Promise<Response> =>
+  fetch(resolveApiUrl(`/api/travels/trips/${tripId}/packing/generate`), {
+    method: "POST",
+    credentials: "include",
+    signal,
+  });
+
+export const suggestHighlights = (
+  destination: string,
+): Promise<{ suggestions: string[] }> =>
+  customFetch<{ suggestions: string[] }>("/api/travels/highlights/suggest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ destination }),
   });
 
 // ---------------------------------------------------------------------------

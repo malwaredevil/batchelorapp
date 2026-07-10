@@ -193,6 +193,10 @@ function remapOrnamentsPath(p: string): string {
   return "/ornaments" + p;
 }
 
+function remapOfficePath(p: string): string {
+  return "/office" + p;
+}
+
 // ---------------------------------------------------------------------------
 // Build
 // ---------------------------------------------------------------------------
@@ -206,6 +210,7 @@ function main(): void {
   const quilting = loadSpec("quilting.yaml");
   const travels = loadSpec("travels.yaml");
   const ornaments = loadSpec("ornaments.yaml");
+  const office = loadSpec("office.yaml");
 
   const potterySchemas: Record<string, Json> = (pottery.components?.schemas ??
     {}) as Json;
@@ -215,6 +220,8 @@ function main(): void {
     {}) as Json;
   const ornamentsSchemas: Record<string, Json> = (ornaments.components
     ?.schemas ?? {}) as Json;
+  const officeSchemas: Record<string, Json> = (office.components?.schemas ??
+    {}) as Json;
 
   // ----- Shared schema set: transitive closure of refs from quilting shared paths
   const sharedSchemaNames = new Set<string>();
@@ -253,6 +260,13 @@ function main(): void {
   for (const name of Object.keys(ornamentsSchemas)) {
     if (!sharedSchemaNames.has(name)) {
       ornamentsSchemaRename.set(name, "Ornaments" + name);
+    }
+  }
+
+  const officeSchemaRename = new Map<string, string>();
+  for (const name of Object.keys(officeSchemas)) {
+    if (!sharedSchemaNames.has(name)) {
+      officeSchemaRename.set(name, "Office" + name);
     }
   }
 
@@ -315,6 +329,21 @@ function main(): void {
     }
   }
 
+  const officeFeatureOps = collectFeatureOpIds(office.paths as Json);
+  const allOtherOpsForOffice = new Set([
+    ...sharedOpIds,
+    ...potteryFeatureOps,
+    ...quiltingFeatureOps,
+    ...travelsFeatureOps,
+    ...ornamentsFeatureOps,
+  ]);
+  const officeOpRename = new Map<string, string>();
+  for (const op of officeFeatureOps) {
+    if (allOtherOpsForOffice.has(op)) {
+      officeOpRename.set(op, renameOpId(op, "office"));
+    }
+  }
+
   // ----- Assemble output
   const out: Json = {
     openapi: "3.1.0",
@@ -322,7 +351,7 @@ function main(): void {
       title: "Api",
       version: "0.1.0",
       description:
-        "Unified API specification (pottery + quilting + travels + ornaments)",
+        "Unified API specification (pottery + quilting + travels + ornaments + office)",
     },
     servers: [{ url: "/api", description: "Base API path" }],
     paths: {},
@@ -402,6 +431,21 @@ function main(): void {
     outPaths[newPath] = cloned;
   }
 
+  // Office feature paths
+  for (const [p, item] of Object.entries(
+    office.paths as Record<string, Json>,
+  )) {
+    if (SHARED_PATHS.has(p)) continue;
+    const newPath = remapOfficePath(p);
+    const cloned = deepClone(item);
+    rewriteSchemaRefs(cloned, officeSchemaRename);
+    applyOpIdRenames(cloned, officeOpRename);
+    if (outPaths[newPath] !== undefined) {
+      throw new Error(`Duplicate path key after office remap: ${newPath}`);
+    }
+    outPaths[newPath] = cloned;
+  }
+
   // ----- Components: schemas
   const outSchemas: Record<string, Json> = {};
 
@@ -455,6 +499,18 @@ function main(): void {
     const newName = ornamentsSchemaRename.get(name)!;
     const cloned = deepClone(schema);
     rewriteSchemaRefs(cloned, ornamentsSchemaRename);
+    if (outSchemas[newName] !== undefined) {
+      throw new Error(`Duplicate schema key: ${newName}`);
+    }
+    outSchemas[newName] = cloned;
+  }
+
+  // Office non-shared schemas, prefixed + internal refs rewritten
+  for (const [name, schema] of Object.entries(officeSchemas)) {
+    if (sharedSchemaNames.has(name)) continue;
+    const newName = officeSchemaRename.get(name)!;
+    const cloned = deepClone(schema);
+    rewriteSchemaRefs(cloned, officeSchemaRename);
     if (outSchemas[newName] !== undefined) {
       throw new Error(`Duplicate schema key: ${newName}`);
     }

@@ -4,6 +4,7 @@ import authRouter from "./auth";
 import potteryRouter from "./pottery";
 import quiltingRouter from "./quilting";
 import ornamentsRouter from "./ornaments";
+import officeRouter from "./office";
 import travelsRouter from "./travels";
 import hubRouter from "./hub";
 import devScreenshotLoginRouter from "./dev-screenshot-login";
@@ -23,6 +24,7 @@ router.use(searchRouter);
 router.use("/pottery", potteryRouter);
 router.use("/quilting", quiltingRouter);
 router.use("/ornaments", ornamentsRouter);
+router.use("/office", officeRouter);
 router.use("/travels", travelsRouter);
 router.use("/gmail", gmailRouter);
 // Must be mounted before elaineRouter: elaineRouter applies a blanket

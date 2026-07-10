@@ -20,6 +20,7 @@ import Destinations from "@/pages/Destinations";
 import Settings from "@/pages/Settings";
 import TravelCalendar from "@/pages/TravelCalendar";
 import GmailReview from "@/pages/GmailReview";
+import Documents from "@/pages/Documents";
 import GoogleApisDemo from "@/pages/GoogleApisDemo";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import TripShare from "@/pages/TripShare";
@@ -112,6 +113,14 @@ function Router() {
         <ProtectedRoute>
           <Layout>
             <GmailReview />
+          </Layout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/documents">
+        <ProtectedRoute>
+          <Layout>
+            <Documents />
           </Layout>
         </ProtectedRoute>
       </Route>

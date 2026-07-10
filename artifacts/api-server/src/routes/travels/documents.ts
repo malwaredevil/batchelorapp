@@ -35,7 +35,7 @@ function chunkText(text: string): string[] {
   return chunks.filter((c) => c.trim().length > 20);
 }
 
-async function indexDocumentChunks(
+export async function indexDocumentChunks(
   docId: number,
   rawText: string,
 ): Promise<void> {
@@ -757,6 +757,105 @@ router.get("/trips/:id/documents/:docId/download", async (req, res) => {
     `inline; filename="${doc.originalFilename ?? "document"}"`,
   );
   res.send(buffer);
+});
+
+// -----------------------------------------------------------------------
+// Unmatched-documents triage inbox. These are documents that arrived via a
+// forwarded booking-confirmation email (source: "email_forward") whose
+// attachment couldn't be confidently matched to an existing trip
+// (status: "unmatched", tripId: null). Household-shared like everything
+// else in travels — any authenticated member can view/assign/discard them,
+// not just the household member the email was addressed to.
+// -----------------------------------------------------------------------
+
+router.get("/documents/unmatched", async (_req, res) => {
+  const docs = await db
+    .select()
+    .from(travelsTripDocuments)
+    .where(eq(travelsTripDocuments.status, "unmatched"))
+    .orderBy(asc(travelsTripDocuments.createdAt));
+  res.json(docs);
+});
+
+router.get("/documents/unmatched/count", async (_req, res) => {
+  const docs = await db
+    .select({ id: travelsTripDocuments.id })
+    .from(travelsTripDocuments)
+    .where(eq(travelsTripDocuments.status, "unmatched"));
+  res.json({ count: docs.length });
+});
+
+router.patch("/documents/:docId/assign", async (req, res) => {
+  const docId = parseInt(req.params.docId, 10);
+  const { tripId } = req.body as { tripId?: number };
+  if (isNaN(docId) || typeof tripId !== "number") {
+    res.status(400).json({ error: "tripId (number) is required" });
+    return;
+  }
+
+  if (!(await tripExists(tripId))) {
+    res.status(404).json({ error: "Trip not found" });
+    return;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(travelsTripDocuments)
+    .where(eq(travelsTripDocuments.id, docId));
+  if (!existing) {
+    res.status(404).json({ error: "Document not found" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(travelsTripDocuments)
+    .set({ tripId, status: "linked" })
+    .where(eq(travelsTripDocuments.id, docId))
+    .returning();
+
+  try {
+    await syncItineraryFromDocument(
+      tripId,
+      docId,
+      (existing.extractedData as Record<string, unknown> | null) ?? {},
+    );
+  } catch (err) {
+    req.log.warn(
+      { err },
+      "Failed to sync itinerary after assigning unmatched document",
+    );
+  }
+
+  res.json(updated);
+});
+
+router.delete("/documents/:docId", async (req, res) => {
+  const docId = parseInt(req.params.docId, 10);
+  if (isNaN(docId)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  const [doc] = await db
+    .select()
+    .from(travelsTripDocuments)
+    .where(eq(travelsTripDocuments.id, docId));
+  if (!doc) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  try {
+    await deleteDocument(doc.storagePath);
+  } catch (err) {
+    req.log.warn({ err }, "Storage delete failed — removing DB record anyway");
+  }
+
+  await db
+    .delete(travelsTripDocuments)
+    .where(eq(travelsTripDocuments.id, docId));
+
+  res.status(204).send();
 });
 
 export default router;

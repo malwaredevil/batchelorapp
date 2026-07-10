@@ -358,18 +358,18 @@ function AppHeroCard({
     >
       <Card className="h-full overflow-hidden border-border bg-card shadow-sm hover:shadow-md transition-all duration-200 flex flex-col cursor-pointer">
         {/* Hero image */}
-        <div className="h-48 w-full relative overflow-hidden bg-muted flex-shrink-0">
+        <div className="h-32 sm:h-48 w-full relative overflow-hidden bg-muted flex-shrink-0">
           <img
             src={app.image}
             alt={`${app.name} Collection`}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
-          <div className="absolute bottom-4 left-6 right-6 flex justify-between items-end">
-            <h2 className="text-3xl font-bold text-white tracking-tight">
+          <div className="absolute bottom-2.5 left-3.5 right-3.5 sm:bottom-4 sm:left-6 sm:right-6 flex justify-between items-end gap-2">
+            <h2 className="text-xl sm:text-3xl font-bold text-white tracking-tight truncate">
               {app.name}
             </h2>
-            <Badge className="bg-white/20 hover:bg-white/30 text-white backdrop-blur-md border-0">
+            <Badge className="bg-white/20 hover:bg-white/30 text-white backdrop-blur-md border-0 flex-shrink-0 text-[10px] sm:text-xs">
               {app.updated}
             </Badge>
           </div>

@@ -1234,11 +1234,27 @@ export interface TravelsTrip {
   createdAt: string;
 }
 
+export type TravelsTripDocumentStatus = typeof TravelsTripDocumentStatus[keyof typeof TravelsTripDocumentStatus];
+
+
+export const TravelsTripDocumentStatus = {
+  linked: 'linked',
+  unmatched: 'unmatched',
+} as const;
+
+export type TravelsTripDocumentSource = typeof TravelsTripDocumentSource[keyof typeof TravelsTripDocumentSource];
+
+
+export const TravelsTripDocumentSource = {
+  upload: 'upload',
+  email_forward: 'email_forward',
+} as const;
+
 export type TravelsTripDocumentExtractedData = { [key: string]: unknown } | null;
 
 export interface TravelsTripDocument {
   id: number;
-  tripId: number;
+  tripId?: number | null;
   userId: number;
   storagePath: string;
   title?: string | null;
@@ -1248,6 +1264,11 @@ export interface TravelsTripDocument {
   lockedFields?: string[];
   gmailMessageId?: string | null;
   iconOverride?: string | null;
+  status?: TravelsTripDocumentStatus;
+  source?: TravelsTripDocumentSource;
+  sourceEmailFrom?: string | null;
+  sourceEmailSubject?: string | null;
+  sourceReceivedAt?: string | null;
   createdAt: string;
 }
 
@@ -1758,6 +1779,14 @@ export type UpdateTripDocumentBody = {
   title?: string | null;
   documentType?: string | null;
   iconOverride?: string | null;
+};
+
+export type GetUnmatchedDocumentsCount200 = {
+  count: number;
+};
+
+export type AssignUnmatchedDocumentBody = {
+  tripId: number;
 };
 
 export type ReorderPackingItems200 = {

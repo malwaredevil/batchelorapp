@@ -8,10 +8,15 @@ import {
   elaineEmailWebhookDeliveries,
   type ElaineEmailConversationRow,
 } from "@workspace/db";
+import { Resend } from "resend";
 import { env } from "../lib/env";
 import { logger } from "../lib/logger";
 import { sendElaineEmailReply } from "../lib/email";
 import { runElaineEmailTurn, type ElaineEmailChatMessage } from "../elaine";
+import {
+  processEmailAttachments,
+  type EmailAttachmentOutcome,
+} from "../lib/elaine-email-attachments";
 
 // ---------------------------------------------------------------------------
 // Resend inbound-email webhook for elaine@app.batchelor.app. Mirrors the
@@ -116,6 +121,29 @@ async function getOrCreateEmailConversation(
   return row;
 }
 
+// Best-effort HTML->plain-text conversion for inbound emails that only send
+// an HTML body (no `text` field) — some clients/senders (including Resend's
+// own test inbox) omit plain text entirely. Not a full parser, just enough
+// to give the model readable content: strips script/style blocks, turns
+// block-level tags into line breaks, strips remaining tags, and decodes the
+// handful of entities that show up in real mail.
+function htmlToPlainText(html: string): string {
+  return html
+    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<(br|\/p|\/div|\/tr|\/li)\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 // Best-effort strip of quoted reply text / signature blocks from a plain-text
 // email body so the model isn't fed the entire prior thread on every reply.
 // Not perfect (mail clients vary wildly), but Elaine's own reply already
@@ -158,6 +186,7 @@ router.post("/email-webhook", async (req: Request, res: Response) => {
   const body = req.body as {
     type?: string;
     data?: {
+      email_id?: string;
       from?: string;
       subject?: string;
       text?: string;
@@ -180,7 +209,39 @@ router.post("/email-webhook", async (req: Request, res: Response) => {
     return;
   }
 
-  const data = body.data ?? {};
+  let data = body.data ?? {};
+
+  // Resend's inbound webhooks intentionally never include the body, headers,
+  // or attachments inline (only metadata) — full content must be fetched via
+  // the Received Emails API using the payload's email_id. See
+  // https://resend.com/docs/dashboard/receiving/introduction.
+  const emailId = typeof data.email_id === "string" ? data.email_id : "";
+  if (
+    emailId &&
+    typeof data.text !== "string" &&
+    typeof data.html !== "string" &&
+    env.resendApiKey
+  ) {
+    try {
+      const resend = new Resend(env.resendApiKey);
+      const { data: fullEmail, error } =
+        await resend.emails.receiving.get(emailId);
+      if (error) {
+        logger.warn(
+          { deliveryId, emailId, error },
+          "elaine-email: failed to fetch full email content",
+        );
+      } else if (fullEmail) {
+        data = { ...data, text: fullEmail.text ?? undefined, html: fullEmail.html ?? undefined };
+      }
+    } catch (err) {
+      logger.warn(
+        { deliveryId, emailId, err },
+        "elaine-email: error fetching full email content",
+      );
+    }
+  }
+
   const fromRaw = typeof data.from === "string" ? data.from : "";
   // From header is typically `"Name" <email@example.com>` — extract the bare
   // address for an exact match against app_users.email.
@@ -209,17 +270,67 @@ router.post("/email-webhook", async (req: Request, res: Response) => {
     return;
   }
 
-  const bodyText = typeof data.text === "string" ? data.text : "";
+  const rawText = typeof data.text === "string" ? data.text : "";
+  const rawHtml = typeof data.html === "string" ? data.html : "";
+  const bodyText = rawText.trim() || (rawHtml ? htmlToPlainText(rawHtml) : "");
   const cleanedText = stripQuotedText(bodyText).slice(0, 8000);
   const subject =
     typeof data.subject === "string" ? data.subject : "Message from you";
   const inboundMessageId =
     typeof data.message_id === "string" ? data.message_id : undefined;
 
-  if (!cleanedText) {
+  // Forwarded booking-confirmation emails often carry an attachment with
+  // little or no body text — process attachments regardless of whether
+  // there's usable text, then let a missing-text email short-circuit only
+  // when there were no attachments either.
+  let attachmentOutcomes: EmailAttachmentOutcome[] = [];
+  if (emailId) {
+    try {
+      attachmentOutcomes = await processEmailAttachments({
+        emailId,
+        userId: user.id,
+        fromEmail: user.email,
+        subject,
+      });
+    } catch (err) {
+      logger.error(
+        { err, deliveryId, emailId },
+        "elaine-email: attachment processing failed",
+      );
+    }
+  }
+
+  if (!cleanedText && attachmentOutcomes.length === 0) {
+    logger.info(
+      {
+        deliveryId,
+        hasText: Boolean(rawText),
+        hasHtml: Boolean(rawHtml),
+        dataKeys: Object.keys(data),
+      },
+      "elaine-email: no usable body text or attachments extracted, ignoring",
+    );
     res.status(200).json({ ok: true });
     return;
   }
+
+  const attachmentSummaryLines = attachmentOutcomes.map((a) => {
+    if (a.outcome === "linked") {
+      return `- Attachment "${a.filename}": saved and matched to an existing trip${a.tripTitle ? ` (${a.tripTitle})` : ""}.`;
+    }
+    if (a.outcome === "unmatched") {
+      return `- Attachment "${a.filename}": saved, but I couldn't confidently match it to a trip — it's waiting in the Documents triage inbox for someone to assign it.`;
+    }
+    if (a.outcome === "skipped") {
+      return `- Attachment "${a.filename}": skipped (unsupported file type — only PDF and image files are supported).`;
+    }
+    return `- Attachment "${a.filename}": failed to process.`;
+  });
+
+  const effectiveInputText =
+    attachmentSummaryLines.length > 0
+      ? `${cleanedText || "(forwarded email with no body text)"}\n\n[System note — not from the user: the email had ${attachmentOutcomes.length} attachment(s) processed as follows. Mention this outcome briefly in your reply.]\n${attachmentSummaryLines.join("\n")}`
+      : cleanedText;
 
   const conversation = await getOrCreateEmailConversation(user.id);
   const history =
@@ -230,7 +341,7 @@ router.post("/email-webhook", async (req: Request, res: Response) => {
   try {
     const result = await runElaineEmailTurn({
       userId: user.id,
-      inputText: cleanedText,
+      inputText: effectiveInputText,
       history,
     });
     replyText = result.replyText;

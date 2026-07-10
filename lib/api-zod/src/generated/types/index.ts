@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './assignUnmatchedDocumentBody';
 export * from './authProviders';
 export * from './authUser';
 export * from './authUserThemePreference';
@@ -16,6 +17,7 @@ export * from './deletePotteryUnusedCategories200';
 export * from './deleteQuiltingUnusedCategories200';
 export * from './error';
 export * from './forgotPasswordInput';
+export * from './getUnmatchedDocumentsCount200';
 export * from './healthStatus';
 export * from './importPatternFromUrlBody';
 export * from './listFabricsParams';
@@ -179,6 +181,8 @@ export * from './travelsTrip';
 export * from './travelsTripDetail';
 export * from './travelsTripDocument';
 export * from './travelsTripDocumentExtractedData';
+export * from './travelsTripDocumentSource';
+export * from './travelsTripDocumentStatus';
 export * from './travelsTripStatus';
 export * from './travelsTripTransportTo';
 export * from './travelsUpdatePackingItemBody';

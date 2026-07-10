@@ -10,6 +10,7 @@ import {
   CalendarDays,
   Mail,
   Sparkles,
+  FileText,
 } from "lucide-react";
 
 // ── Primary ─────────────────────────────────────────────────────────────────
@@ -107,6 +108,17 @@ registerFeature({
     icon: Mail,
     order: 20,
     mobilePrimary: true,
+  },
+});
+
+registerFeature({
+  id: "documents",
+  nav: {
+    group: "plan",
+    href: "/documents",
+    label: "Documents",
+    icon: FileText,
+    order: 30,
   },
 });
 

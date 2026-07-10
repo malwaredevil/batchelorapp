@@ -1256,4 +1256,14 @@ export const STATEMENTS: string[] = [
        ALTER PUBLICATION supabase_realtime ADD TABLE travels_trips;
      END IF;
    END $$`,
+
+  // Unmatched-documents triage queue: forwarded booking-confirmation emails
+  // with attachments that Elaine couldn't confidently match to a trip.
+  `ALTER TABLE travels_trip_documents ALTER COLUMN trip_id DROP NOT NULL`,
+  `ALTER TABLE travels_trip_documents ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'linked'`,
+  `ALTER TABLE travels_trip_documents ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'upload'`,
+  `ALTER TABLE travels_trip_documents ADD COLUMN IF NOT EXISTS source_email_from TEXT`,
+  `ALTER TABLE travels_trip_documents ADD COLUMN IF NOT EXISTS source_email_subject TEXT`,
+  `ALTER TABLE travels_trip_documents ADD COLUMN IF NOT EXISTS source_received_at TIMESTAMPTZ`,
+  `CREATE INDEX IF NOT EXISTS travels_trip_documents_status_idx ON travels_trip_documents (status)`,
 ];

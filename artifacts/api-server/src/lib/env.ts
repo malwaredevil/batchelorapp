@@ -51,5 +51,9 @@ export const env = {
       ? "RESEND_WEBHOOK_SECRET_PROD"
       : "RESEND_WEBHOOK_SECRET_DEV",
   ),
+  // Used by the inbound-email webhook to fetch full body content via the
+  // Received Emails API — Resend's webhook payloads never include the
+  // body/headers/attachments inline, only metadata.
+  resendApiKey: optional("RESEND_API_KEY"),
   sentryDsn: optional("SENTRY_DSN"),
 };

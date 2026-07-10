@@ -5204,8 +5204,15 @@ Keep replies concise and easy to read in a chat bubble.`;
               const [wishRow] = await db
                 .select({ total: count() })
                 .from(travelsWishlist);
-              const [activeRow] = await db
-                .select({ total: count() })
+              const activeTrips = await db
+                .select({
+                  id: travelsTrips.id,
+                  title: travelsTrips.title,
+                  destination: travelsTrips.destination,
+                  status: travelsTrips.status,
+                  startDate: travelsTrips.startDate,
+                  endDate: travelsTrips.endDate,
+                })
                 .from(travelsTrips)
                 .where(
                   inArray(travelsTrips.status, [
@@ -5213,25 +5220,26 @@ Keep replies concise and easy to read in a chat bubble.`;
                     "booked",
                     "in_progress",
                   ] as string[]),
-                );
-              const nextTrip = await db
-                .select({
-                  title: travelsTrips.title,
-                  destination: travelsTrips.destination,
-                })
-                .from(travelsTrips)
-                .where(
-                  inArray(travelsTrips.status, [
-                    "planning",
-                    "booked",
-                  ] as string[]),
                 )
-                .orderBy(desc(travelsTrips.startDate))
-                .limit(1);
+                .orderBy(travelsTrips.startDate);
+              const formatRange = (
+                start: string | null,
+                end: string | null,
+              ) => {
+                if (!start && !end) return "dates not set yet";
+                if (start && end) return `${start} to ${end}`;
+                return start ? `starting ${start}` : `ending ${end}`;
+              };
               parts.push(
-                `Travels: ${activeRow?.total ?? 0} active trips, ${wishRow?.total ?? 0} on the wishlist.` +
-                  (nextTrip.length > 0
-                    ? ` Next up: ${nextTrip[0].title} to ${nextTrip[0].destination}.`
+                `Travels: ${activeTrips.length} active trip(s), ${wishRow?.total ?? 0} on the wishlist.` +
+                  (activeTrips.length > 0
+                    ? " Active trips:\n" +
+                      activeTrips
+                        .map(
+                          (t) =>
+                            `- ${t.title} (${t.destination}), status: ${t.status}, dates: ${formatRange(t.startDate, t.endDate)}, tripId: ${t.id}`,
+                        )
+                        .join("\n")
                     : ""),
               );
             }
@@ -6173,18 +6181,485 @@ router.delete("/memory/:id", async (req, res) => {
 // actions per task #105.
 // ---------------------------------------------------------------------------
 
-export const AGENTPHONE_ACTION_TYPES = new Set<string>([
-  "add_reminder",
-  "edit_reminder",
-  "sync_reminder_to_calendar",
-  "add_packing_item",
-  "remove_packing_item",
-  "update_trip_status",
+// Action types deliberately EXCLUDED from the restricted (SMS/voice/email)
+// channels even though everything else gets full parity with in-app chat.
+// Each of these relies on state that only exists in an interactive browser
+// session and has no sane equivalent over text:
+//  - send_test_email / send_test_sms / send_phone_verification_code /
+//    verify_phone_code: tied to the *current* logged-in session's own
+//    verification flow, not something a household member triggers remotely.
+//  - update_card_layout / update_trip_card_collapse: pure on-screen layout
+//    state for the web widget — meaningless without a screen.
+//  - add_connected_calendar: requires picking a googleCalendarId from an
+//    on-screen list rendered by an already-connected OAuth session; there is
+//    no such list available over SMS/email (see
+//    .agents/memory/travels-calendar-oauth-constraint.md). disconnect_calendar
+//    has no such requirement and stays enabled.
+const RESTRICTED_EXCLUDED_ACTION_TYPES = new Set<string>([
+  "send_test_email",
+  "send_test_sms",
+  "send_phone_verification_code",
+  "verify_phone_code",
+  "update_card_layout",
+  "update_trip_card_collapse",
+  "add_connected_calendar",
 ]);
+
+// Full parity with the in-app chat widget's action tools, minus the
+// session/screen-bound exclusions above. This intentionally includes
+// destructive actions (deletes, cancels, sends) per an explicit household
+// decision — see threat_model.md's AgentPhone/Resend trust-boundary
+// sections for the reasoning and the identity-proof tradeoff this accepts.
+export const AGENTPHONE_ACTION_TYPES = new Set<string>(
+  ACTION_TOOLS.filter(
+    (t) =>
+      t.type === "function" &&
+      !RESTRICTED_EXCLUDED_ACTION_TYPES.has(t.function.name),
+  ).map((t) => (t as { function: { name: string } }).function.name),
+);
 
 const AGENTPHONE_ACTION_TOOLS = ACTION_TOOLS.filter(
   (t) => t.type === "function" && AGENTPHONE_ACTION_TYPES.has(t.function.name),
 );
+
+// Read/utility "soft" tools also given to the restricted channels — this is
+// what lets Elaine answer factual questions ("when's my next trip?") over
+// email/SMS instead of refusing, matching the in-app chat's capability.
+// Deliberately excludes: SHOW_* visual card tools (no-op without a screen),
+// SET_MODE_TOOL_NAME (restricted channels are always auto-run, no
+// confirmation modes to switch), and SUGGEST_CLOTHING_LAYERS (needs a
+// multi-step subagent flow not worth the added round-trip cost here).
+const RESTRICTED_SOFT_TOOL_NAMES = new Set<string>([
+  QUERY_HOUSEHOLD_TOOL_NAME,
+  WEB_SEARCH_TOOL_NAME,
+  GET_EXCHANGE_RATE_TOOL_NAME,
+  SEARCH_TRIP_DOCUMENTS_TOOL_NAME,
+  GET_WEATHER_TOOL_NAME,
+  FIND_NEARBY_PLACES_TOOL_NAME,
+  GET_ROUTE_INFO_TOOL_NAME,
+  GET_AIR_QUALITY_TOOL_NAME,
+  GET_POLLEN_FORECAST_TOOL_NAME,
+  CONSULT_EXPERTS_TOOL_NAME,
+  CALCULATE_YARDAGE_TOOL_NAME,
+  REMEMBER_TOOL_NAME,
+]);
+
+const RESTRICTED_SOFT_TOOLS = [...SOFT_TOOLS, ...SOFT_TOOLS_EXTRA].filter(
+  (t) => t.type === "function" && RESTRICTED_SOFT_TOOL_NAMES.has(t.function.name),
+);
+
+// The in-app "suggest_navigation" tool renders a clickable in-app button —
+// there is no such UI over SMS/email/voice. Restricted channels get their
+// own navigate tool that always requires a cross-app-prefixed path (there is
+// no "current app" context outside a browser tab) and resolves it to an
+// absolute, clickable URL included directly in the reply text instead.
+const RESTRICTED_NAVIGATE_TOOL_NAME = "share_app_link";
+
+const RestrictedNavigatePayload = z.object({
+  path: z
+    .string()
+    .max(200)
+    .refine(
+      (p) => CROSS_APP_NAVIGATE_RE.test(p),
+      "must be an app-prefixed path like /pottery/, /travels/trips/42, /quilting/fabrics",
+    ),
+  reason: z.string().min(1).max(300),
+});
+
+const RESTRICTED_NAVIGATE_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: RESTRICTED_NAVIGATE_TOOL_NAME,
+    description:
+      'Give the user a direct link to a screen in the app — use this whenever you would otherwise tell them to "go to" or "check" a page (e.g. connecting a calendar, viewing photos, browsing the full collection). You can never navigate them yourself over email/SMS/voice, only hand them a URL. Always use an app-prefixed path: "/pottery/", "/pottery/piece/42", "/quilting/fabrics", "/quilting/fabrics/add", "/travels/", "/travels/trips/42", "/ornaments/", "/elaine/". Add query params like ?search=term where useful.',
+    parameters: {
+      type: "object",
+      properties: {
+        path: {
+          type: "string",
+          description:
+            'App-prefixed path, e.g. "/travels/trips/42" or "/pottery/?search=polish".',
+        },
+        reason: {
+          type: "string",
+          description:
+            "Short user-friendly description of what's at that link, e.g. 'your pottery collection filtered for polish pottery'",
+        },
+      },
+      required: ["path", "reason"],
+    },
+  },
+};
+
+function getAppBaseUrl(): string {
+  const host = (process.env.REPLIT_DOMAINS ?? "app.batchelor.app")
+    .split(",")[0]
+    .trim();
+  return `https://${host}`;
+}
+
+const RESTRICTED_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  ...AGENTPHONE_ACTION_TOOLS,
+  ...RESTRICTED_SOFT_TOOLS,
+  RESTRICTED_NAVIGATE_TOOL,
+];
+
+// Executes one of the read/utility "soft" tools for a restricted channel
+// turn and returns the text to feed back to the model. Mirrors the logic in
+// the main streaming chat handler above, minus any sendEvent/widget calls
+// (there is no live UI on this channel — only the final text result matters).
+async function executeRestrictedSoftTool(
+  name: string,
+  args: string,
+): Promise<string> {
+  try {
+    if (name === QUERY_HOUSEHOLD_TOOL_NAME) {
+      const parsed = z
+        .object({ include: z.array(z.string()).optional() })
+        .safeParse(JSON.parse(args || "{}"));
+      const include = parsed.success
+        ? (parsed.data.include ?? ["pottery", "quilting", "ornaments", "travels"])
+        : ["pottery", "quilting", "ornaments", "travels"];
+      const parts: string[] = [];
+
+      if (include.includes("pottery")) {
+        const [row] = await db.select({ total: count() }).from(potteryItems);
+        const recent = await db
+          .select({ name: potteryItems.name })
+          .from(potteryItems)
+          .orderBy(desc(potteryItems.createdAt))
+          .limit(3);
+        parts.push(
+          `Pottery collection: ${row?.total ?? 0} pieces total.` +
+            (recent.length > 0
+              ? ` Recently added: ${recent.map((r) => r.name).join(", ")}.`
+              : ""),
+        );
+      }
+      if (include.includes("quilting")) {
+        const [fabRow] = await db.select({ total: count() }).from(fabrics);
+        const [patRow] = await db
+          .select({ total: count() })
+          .from(quiltPatterns);
+        const [quiltRow] = await db
+          .select({ total: count() })
+          .from(finishedQuilts);
+        parts.push(
+          `Quilting stash: ${fabRow?.total ?? 0} fabrics, ${patRow?.total ?? 0} patterns, ${quiltRow?.total ?? 0} finished quilts.`,
+        );
+      }
+      if (include.includes("ornaments")) {
+        const [ornRow] = await db
+          .select({ total: count() })
+          .from(ornamentsItems);
+        const ornRecent = await db
+          .select({ name: ornamentsItems.name })
+          .from(ornamentsItems)
+          .orderBy(desc(ornamentsItems.createdAt))
+          .limit(3);
+        parts.push(
+          `Ornaments collection: ${ornRow?.total ?? 0} ornaments total.` +
+            (ornRecent.length > 0
+              ? ` Recently added: ${ornRecent.map((r) => r.name).join(", ")}.`
+              : ""),
+        );
+      }
+      if (include.includes("travels")) {
+        const [wishRow] = await db
+          .select({ total: count() })
+          .from(travelsWishlist);
+        const activeTrips = await db
+          .select({
+            id: travelsTrips.id,
+            title: travelsTrips.title,
+            destination: travelsTrips.destination,
+            status: travelsTrips.status,
+            startDate: travelsTrips.startDate,
+            endDate: travelsTrips.endDate,
+          })
+          .from(travelsTrips)
+          .where(
+            inArray(travelsTrips.status, [
+              "planning",
+              "booked",
+              "in_progress",
+            ] as string[]),
+          )
+          .orderBy(travelsTrips.startDate);
+        const formatRange = (start: string | null, end: string | null) => {
+          if (!start && !end) return "dates not set yet";
+          if (start && end) return `${start} to ${end}`;
+          return start ? `starting ${start}` : `ending ${end}`;
+        };
+        parts.push(
+          `Travels: ${activeTrips.length} active trip(s), ${wishRow?.total ?? 0} on the wishlist.` +
+            (activeTrips.length > 0
+              ? " Active trips:\n" +
+                activeTrips
+                  .map(
+                    (t) =>
+                      `- ${t.title} (${t.destination}), status: ${t.status}, dates: ${formatRange(t.startDate, t.endDate)}, tripId: ${t.id}`,
+                  )
+                  .join("\n")
+              : ""),
+        );
+      }
+      return parts.length > 0 ? parts.join("\n") : "No household data found.";
+    }
+
+    if (name === WEB_SEARCH_TOOL_NAME) {
+      const parsed = WebSearchToolPayload.safeParse(JSON.parse(args));
+      if (!parsed.success) return "Invalid search query — ask the user to rephrase.";
+      const { answer, citations } = await webSearch(parsed.data.query);
+      return answer
+        ? citations.length > 0
+          ? `${answer}\n\nSources:\n${citations.map((url, i) => `[${i + 1}] ${url}`).join("\n")}`
+          : answer
+        : "No results found for this search.";
+    }
+
+    if (name === CONSULT_EXPERTS_TOOL_NAME) {
+      const parsed = ConsultExpertsToolPayload.safeParse(JSON.parse(args));
+      if (!parsed.success) return "Invalid question — ask the user to rephrase.";
+      const { answer } = await consultExperts(
+        parsed.data.question,
+        parsed.data.context,
+      );
+      return answer || "No panel opinion could be gathered.";
+    }
+
+    if (name === GET_EXCHANGE_RATE_TOOL_NAME) {
+      const parsed = GetExchangeRateToolPayload.safeParse(JSON.parse(args));
+      if (!parsed.success) return "Invalid currency — ask the user to clarify.";
+      const { from, to } = parsed.data;
+      const url = `https://api.frankfurter.app/latest?from=${from}&to=${to.join(",")}`;
+      const resp = await withRetry(
+        () => fetch(url, { signal: AbortSignal.timeout(8_000) }),
+        { label: "frankfurter-exchange-rate" },
+      );
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = (await resp.json()) as {
+        date: string;
+        rates: Record<string, number>;
+      };
+      const rates = to.map((code) => ({ code, rate: json.rates[code] ?? 0 }));
+      return (
+        `Exchange rates from ${from} (as of ${json.date}):\n` +
+        rates
+          .map((r) => `1 ${from} = ${r.rate.toFixed(4)} ${r.code}`)
+          .join("\n")
+      );
+    }
+
+    if (name === GET_WEATHER_TOOL_NAME) {
+      const parsed = GetWeatherToolPayload.safeParse(JSON.parse(args));
+      if (!parsed.success) return "Invalid location — ask the user to clarify.";
+      const locationName = parsed.data.locationName;
+      let lat: number | null = parsed.data.lat ?? null;
+      let lng: number | null = parsed.data.lng ?? null;
+      if (lat == null || lng == null) {
+        const geoPlaces = await searchPlaces(locationName);
+        if (geoPlaces.length > 0 && geoPlaces[0].lat != null && geoPlaces[0].lng != null) {
+          lat = geoPlaces[0].lat;
+          lng = geoPlaces[0].lng;
+        }
+      }
+      if (lat == null || lng == null) {
+        return `Couldn't find coordinates for "${locationName}" — ask the user for a more specific place name.`;
+      }
+      const forecast = await getWeatherForecast(lat, lng);
+      if (forecast.length === 0) return `No forecast data available for ${locationName}.`;
+      return (
+        `Forecast for ${locationName}:\n` +
+        forecast
+          .map(
+            (d) =>
+              `${d.date}: ${d.conditionDescription}, ${d.minTempC ?? "?"}–${d.maxTempC ?? "?"}°C` +
+              (d.precipitationChancePercent != null
+                ? `, ${d.precipitationChancePercent}% chance of rain`
+                : ""),
+          )
+          .join("\n")
+      );
+    }
+
+    if (name === FIND_NEARBY_PLACES_TOOL_NAME) {
+      const parsed = FindNearbyPlacesToolPayload.safeParse(JSON.parse(args));
+      if (!parsed.success) return "Invalid place search — ask the user to rephrase.";
+      const places = await searchPlaces(
+        parsed.data.query,
+        parsed.data.lat,
+        parsed.data.lng,
+      );
+      if (places.length === 0) return "No places found for that search.";
+      return places
+        .map(
+          (p) =>
+            `${p.name} — ${p.address}${p.rating != null ? ` (${p.rating}★, ${p.userRatingCount ?? 0} ratings)` : ""}`,
+        )
+        .join("\n");
+    }
+
+    if (name === GET_ROUTE_INFO_TOOL_NAME) {
+      const parsed = GetRouteInfoToolPayload.safeParse(JSON.parse(args));
+      if (!parsed.success)
+        return "Invalid route request — ask the user to clarify origin/destination.";
+      const route = await computeRoute(
+        parsed.data.origin,
+        parsed.data.destination,
+        [],
+        parsed.data.mode as TravelMode,
+        false,
+      );
+      return route
+        ? `${parsed.data.origin.label} to ${parsed.data.destination.label} by ${parsed.data.mode.toLowerCase()}: ${(route.distanceMeters / 1000).toFixed(1)} km, about ${Math.round(route.durationSeconds / 60)} minutes.`
+        : `No route found between ${parsed.data.origin.label} and ${parsed.data.destination.label}.`;
+    }
+
+    if (name === GET_AIR_QUALITY_TOOL_NAME) {
+      const parsed = GetAirQualityToolPayload.safeParse(JSON.parse(args));
+      if (!parsed.success) return "Invalid location — ask the user to clarify.";
+      const airQuality = await getAirQuality(parsed.data.lat, parsed.data.lng);
+      return airQuality
+        ? `Air quality in ${parsed.data.locationName}: Universal AQI ${airQuality.aqi} (${airQuality.category}), dominant pollutant ${airQuality.dominantPollutant}.`
+        : `No air quality data available for ${parsed.data.locationName}.`;
+    }
+
+    if (name === GET_POLLEN_FORECAST_TOOL_NAME) {
+      const parsed = GetPollenForecastToolPayload.safeParse(JSON.parse(args));
+      if (!parsed.success) return "Invalid location — ask the user to clarify.";
+      const pollen = await getPollenForecast(parsed.data.lat, parsed.data.lng);
+      if (!pollen) return `No pollen data available for ${parsed.data.locationName}.`;
+      return (
+        `Pollen forecast for ${parsed.data.locationName} (${pollen.date}): overall ${pollen.overallCategory}. ` +
+        pollen.types.map((t) => `${t.displayName}: ${t.category}`).join(", ")
+      );
+    }
+
+    if (name === CALCULATE_YARDAGE_TOOL_NAME) {
+      const parsed = CalculateYardageToolPayload.safeParse(JSON.parse(args));
+      if (!parsed.success) return "Invalid quilt dimensions — ask the user to clarify.";
+      const {
+        quiltWidthInches: w,
+        quiltHeightInches: h,
+        fabricWidthInches: fabricWidth,
+        bindingStripWidthInches: bindingStripWidth,
+      } = parsed.data;
+      const backingWidthNeeded = w + 8;
+      const backingHeightNeeded = h + 8;
+      const backingPanels = Math.max(1, Math.ceil(backingWidthNeeded / fabricWidth));
+      const backingLengthInches = backingHeightNeeded * backingPanels;
+      const backingYards = Math.ceil((backingLengthInches / 36) * 8) / 8;
+      const bindingPerimeterInches = 2 * (w + h) + 15;
+      const bindingStrips = Math.max(1, Math.ceil(bindingPerimeterInches / fabricWidth));
+      const bindingYards = Math.ceil(((bindingStrips * bindingStripWidth) / 36) * 8) / 8;
+      return (
+        `For a ${w}x${h}" finished quilt:\n` +
+        `Backing: ~${backingYards} yards` +
+        (backingPanels > 1 ? ` (pieced from ${backingPanels} panels of ${fabricWidth}" fabric)` : "") +
+        `\nBinding: ~${bindingYards} yards (${bindingStrips} strip${bindingStrips === 1 ? "" : "s"} of ${bindingStripWidth}" fabric)`
+      );
+    }
+
+    if (name === SEARCH_TRIP_DOCUMENTS_TOOL_NAME) {
+      const parsed = SearchTripDocumentsToolPayload.safeParse(JSON.parse(args));
+      if (!parsed.success) return "Invalid search — ask the user to rephrase.";
+      const { query, tripId } = parsed.data;
+      let semanticDocIds: number[] = [];
+      try {
+        const qEmbedding = await embedText(query);
+        const embStr = `[${qEmbedding.join(",")}]`;
+        const chunkRows = await db.execute(sql`
+          SELECT dc.trip_document_id, MIN(dc.embedding <=> ${embStr}::vector) AS dist
+          FROM travels_doc_chunks dc
+          JOIN travels_trip_documents d ON d.id = dc.trip_document_id
+          WHERE ${tripId != null ? sql`d.trip_id = ${tripId}` : sql`TRUE`}
+          GROUP BY dc.trip_document_id
+          ORDER BY dist ASC
+          LIMIT 8
+        `);
+        semanticDocIds = (chunkRows.rows as { trip_document_id: number }[]).map(
+          (r) => r.trip_document_id,
+        );
+      } catch {
+        // fallback to keyword below
+      }
+      const docFilter =
+        semanticDocIds.length > 0
+          ? and(
+              tripId != null ? eq(travelsTripDocuments.tripId, tripId) : undefined,
+              inArray(travelsTripDocuments.id, semanticDocIds),
+            )
+          : tripId != null
+            ? eq(travelsTripDocuments.tripId, tripId)
+            : undefined;
+      let rows = await db
+        .select({
+          id: travelsTripDocuments.id,
+          tripId: travelsTripDocuments.tripId,
+          title: travelsTripDocuments.title,
+          documentType: travelsTripDocuments.documentType,
+          extractedData: travelsTripDocuments.extractedData,
+          rawText: travelsTripDocuments.rawText,
+        })
+        .from(travelsTripDocuments)
+        .where(docFilter)
+        .limit(semanticDocIds.length > 0 ? 8 : 50);
+      if (semanticDocIds.length === 0) {
+        const q = query.toLowerCase();
+        const scored = rows
+          .map((row) => {
+            const haystack = [
+              row.title ?? "",
+              row.documentType ?? "",
+              JSON.stringify(row.extractedData ?? ""),
+            ]
+              .join(" ")
+              .toLowerCase();
+            const words = q.split(/\s+/).filter(Boolean);
+            const hits = words.filter((w) => haystack.includes(w)).length;
+            return { row, hits };
+          })
+          .filter((s) => s.hits > 0)
+          .sort((a, b) => b.hits - a.hits)
+          .slice(0, 5);
+        rows = scored.map((s) => s.row);
+      } else {
+        const idxMap = new Map(semanticDocIds.map((id, i) => [id, i]));
+        rows.sort((a, b) => (idxMap.get(a.id) ?? 99) - (idxMap.get(b.id) ?? 99));
+        rows = rows.slice(0, 5);
+      }
+      if (rows.length === 0) return `No uploaded trip documents match "${query}".`;
+      return rows
+        .map((row) => {
+          const parts = [
+            `Document: ${row.title ?? row.documentType ?? "untitled"} (trip #${row.tripId})`,
+          ];
+          if (row.documentType) parts.push(`Type: ${row.documentType.replace(/_/g, " ")}`);
+          if (row.extractedData && typeof row.extractedData === "object") {
+            const fields = Object.entries(row.extractedData as Record<string, unknown>)
+              .filter(([, v]) => v != null && v !== "")
+              .map(([k, v]) => `  ${k}: ${String(v)}`)
+              .join("\n");
+            if (fields) parts.push("Extracted fields:\n" + fields);
+          }
+          return parts.join("\n");
+        })
+        .join("\n\n---\n\n");
+    }
+
+    if (name === REMEMBER_TOOL_NAME) {
+      const parsed = RememberToolPayload.safeParse(JSON.parse(args));
+      if (!parsed.success) return "Couldn't save that note.";
+      return "noted"; // no-op result text; the insert below is the real effect
+    }
+
+    return "Unsupported tool.";
+  } catch (err) {
+    logger.error({ err, name }, "restricted-channel soft tool execution failed");
+    return "That lookup failed on our end — tell the user to try again or use the app.";
+  }
+}
 
 export interface AgentphoneChatMessage {
   role: "user" | "assistant";
@@ -6192,7 +6667,7 @@ export interface AgentphoneChatMessage {
 }
 
 const AGENTPHONE_SYSTEM_PROMPT =
-  "You are Elaine, the Batchelor household's assistant, replying over SMS or a phone call rather than the app's chat widget. Keep replies short — one to three sentences, plain text, no markdown, no emojis, no bullet points, since this may be read aloud or sent as a text message. You can help with trip reminders, packing lists, and moving a trip between stages (e.g. wishlist/planning/booked), using only the tools available to you here. Only act on a trip or reminder you can see listed in the context below; never invent a tripId or reminderId — if you can't find what the user means, ask them to clarify or say to use the app instead. If asked to do anything outside what your tools support here (creating or deleting a trip, wishlist items, connecting a calendar, sending email, generating an itinerary, editing itinerary days), say you can only help with reminders, packing lists, and trip status over text or call, and that they should use the app for anything else. There is no confirmation step over SMS/voice — any action you call runs immediately — so always briefly confirm in your reply what you actually did (or that it failed).";
+  "You are Elaine, the Batchelor household's assistant, replying over SMS or a phone call rather than the app's chat widget. Keep replies short — one to three sentences, plain text, no markdown, no emojis, no bullet points, since this may be read aloud or sent as a text message. You have the same capabilities as the in-app chat — you can look up real household data (pottery/quilting/ornaments/travels counts and recent items, trip and reminder details), search the web, check weather/exchange rates/travel documents, and take action (add/edit/delete reminders and packing items, update trips, and more) — except you can never navigate the user anywhere yourself; if a request needs an actual screen (e.g. connecting a calendar, uploading a photo), use share_app_link to give them a direct URL instead of describing where to click. Only act on a trip, reminder, or record you can actually find (via the context below or query_household_data); never invent an id — ask the user to clarify instead. There is no confirmation step over SMS/voice — any action you call runs immediately — so always briefly confirm in your reply what you actually did (or that it failed).";
 
 // Builds a compact text snapshot of trips/reminders/packing lists standing
 // in for the on-screen state the web widget's tools normally rely on to
@@ -6205,6 +6680,8 @@ async function buildAgentphoneContext(): Promise<string> {
       title: travelsTrips.title,
       destination: travelsTrips.destination,
       status: travelsTrips.status,
+      startDate: travelsTrips.startDate,
+      endDate: travelsTrips.endDate,
       packingList: travelsTrips.packingList,
     })
     .from(travelsTrips)
@@ -6231,7 +6708,15 @@ async function buildAgentphoneContext(): Promise<string> {
       packing.length > 0
         ? ` | packing: ${packing.map((p) => `${p.item}${p.packed ? " (packed)" : ""}`).join(", ")}`
         : "";
-    return `tripId: ${t.id} — "${t.title || t.destination}" (${t.destination}), status: ${t.status}${packingText}`;
+    const dates =
+      t.startDate && t.endDate
+        ? `${t.startDate} to ${t.endDate}`
+        : t.startDate
+          ? `starting ${t.startDate}`
+          : t.endDate
+            ? `ending ${t.endDate}`
+            : "dates not set yet";
+    return `tripId: ${t.id} — "${t.title || t.destination}" (${t.destination}), status: ${t.status}, dates: ${dates}${packingText}`;
   });
 
   const reminderLines = reminders.map(
@@ -6249,23 +6734,30 @@ async function buildAgentphoneContext(): Promise<string> {
   ].join("\n\n");
 }
 
-// Runs one restricted, non-streaming Elaine turn for an inbound SMS message
-// or voice-call transcript. Always auto-executes any allowed tool call
-// (there is no confirmation UI over SMS/voice) and returns the trimmed
-// conversation history to persist alongside the reply text.
-export async function runAgentphoneTurn(params: {
+// Shared restricted-turn engine used by both the AgentPhone (SMS/voice) and
+// Resend (email) bridges. Same tool set, same auto-run semantics, same
+// household-lookup/action-execution glue — only the system prompt, token
+// budget, and reply-channel label differ per caller.
+async function runRestrictedElaineTurn(params: {
   userId: number;
   inputText: string;
-  history: AgentphoneChatMessage[];
-}): Promise<{ replyText: string; history: AgentphoneChatMessage[] }> {
-  const { userId, inputText, history } = params;
+  history: Array<{ role: "user" | "assistant"; content: string }>;
+  systemPrompt: string;
+  maxTokens: number;
+  channelLabel: string;
+}): Promise<{
+  replyText: string;
+  history: Array<{ role: "user" | "assistant"; content: string }>;
+}> {
+  const { userId, inputText, history, systemPrompt, maxTokens, channelLabel } =
+    params;
   const config = await getElaineGlobalConfig();
   const contextText = await buildAgentphoneContext();
 
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     {
       role: "system",
-      content: `${AGENTPHONE_SYSTEM_PROMPT}\n\n${contextText}`,
+      content: `${systemPrompt}\n\n${contextText}`,
     },
     ...history.slice(-10).map(
       (m) =>
@@ -6283,9 +6775,9 @@ export async function runAgentphoneTurn(params: {
     const completion = await callModel(config.chatModel, (client, model) =>
       client.chat.completions.create({
         model,
-        max_tokens: 300,
+        max_tokens: maxTokens,
         messages,
-        tools: AGENTPHONE_ACTION_TOOLS,
+        tools: RESTRICTED_TOOLS,
       }),
     );
     const message = completion.choices[0]?.message;
@@ -6303,8 +6795,39 @@ export async function runAgentphoneTurn(params: {
     for (const call of toolCalls) {
       if (call.type !== "function") continue;
       const name = call.function.name;
-      let resultText = "That action isn't available over SMS/voice.";
-      if (AGENTPHONE_ACTION_TYPES.has(name)) {
+      let resultText = `That action isn't available over ${channelLabel}.`;
+
+      if (name === RESTRICTED_NAVIGATE_TOOL_NAME) {
+        const parsed = RestrictedNavigatePayload.safeParse(
+          JSON.parse(call.function.arguments || "{}"),
+        );
+        resultText = parsed.success
+          ? `Link (share this exactly as-is in your reply): ${getAppBaseUrl()}${parsed.data.path}`
+          : "Invalid link path — describe it in words instead.";
+      } else if (name === REMEMBER_TOOL_NAME) {
+        const parsed = RememberToolPayload.safeParse(
+          JSON.parse(call.function.arguments || "{}"),
+        );
+        if (!parsed.success) {
+          resultText = "Couldn't save that note.";
+        } else {
+          try {
+            await db.insert(elaineMemory).values({
+              content: parsed.data.content,
+              createdByUserId: userId,
+            });
+            resultText = "Noted and saved for later.";
+          } catch (err) {
+            logger.error({ err }, "restricted-channel remember tool failed");
+            resultText = "Couldn't save that note on our end.";
+          }
+        }
+      } else if (RESTRICTED_SOFT_TOOL_NAMES.has(name)) {
+        resultText = await executeRestrictedSoftTool(
+          name,
+          call.function.arguments,
+        );
+      } else if (AGENTPHONE_ACTION_TYPES.has(name)) {
         try {
           const finalAction = await tryBuildAction(
             name,
@@ -6327,12 +6850,13 @@ export async function runAgentphoneTurn(params: {
         } catch (err) {
           logger.error(
             { err, name },
-            "AgentPhone restricted action execution failed",
+            `${channelLabel} restricted action execution failed`,
           );
           resultText =
             "That action failed on our end — tell the user to try again or use the app.";
         }
       }
+
       messages.push({
         role: "tool",
         tool_call_id: call.id,
@@ -6346,13 +6870,30 @@ export async function runAgentphoneTurn(params: {
       "Sorry, I couldn't process that — please try again or use the app.";
   }
 
-  const updatedHistory: AgentphoneChatMessage[] = [
+  const updatedHistory = [
     ...history,
     { role: "user" as const, content: inputText },
     { role: "assistant" as const, content: replyText },
   ].slice(-20);
 
   return { replyText, history: updatedHistory };
+}
+
+// Runs one restricted, non-streaming Elaine turn for an inbound SMS message
+// or voice-call transcript. Always auto-executes any allowed tool call
+// (there is no confirmation UI over SMS/voice) and returns the trimmed
+// conversation history to persist alongside the reply text.
+export async function runAgentphoneTurn(params: {
+  userId: number;
+  inputText: string;
+  history: AgentphoneChatMessage[];
+}): Promise<{ replyText: string; history: AgentphoneChatMessage[] }> {
+  return runRestrictedElaineTurn({
+    ...params,
+    systemPrompt: AGENTPHONE_SYSTEM_PROMPT,
+    maxTokens: 300,
+    channelLabel: "SMS/voice",
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -6371,7 +6912,7 @@ export interface ElaineEmailChatMessage {
 }
 
 const ELAINE_EMAIL_SYSTEM_PROMPT =
-  "You are Elaine, the Batchelor household's assistant, replying by email rather than the app's chat widget. Keep replies concise and in plain text (no markdown syntax like ** or #, since this is sent as plain email text) — a short paragraph or two is usually enough. You can help with trip reminders, packing lists, and moving a trip between stages (e.g. wishlist/planning/booked), using only the tools available to you here. Only act on a trip or reminder you can see listed in the context below; never invent a tripId or reminderId — if you can't find what the user means, ask them to clarify or say to use the app instead. If asked to do anything outside what your tools support here (creating or deleting a trip, wishlist items, connecting a calendar, sending email on their behalf, generating an itinerary, editing itinerary days), say you can only help with reminders, packing lists, and trip status by email, and that they should use the app for anything else. There is no confirmation step over email — any action you call runs immediately — so always briefly confirm in your reply what you actually did (or that it failed). Sign off naturally as Elaine; do not repeat a greeting like 'Hi' if the message is a quick reply.";
+  "You are Elaine, the Batchelor household's assistant, replying by email rather than the app's chat widget. Keep replies concise and in plain text (no markdown syntax like ** or #, since this is sent as plain email text) — a short paragraph or two is usually enough. You have the same capabilities as the in-app chat — you can look up real household data (pottery/quilting/ornaments/travels counts and recent items, trip and reminder details), search the web, check weather/exchange rates/travel documents, and take action (add/edit/delete reminders and packing items, update trips, and more) — except you can never navigate the user anywhere yourself; if a request needs an actual screen (e.g. connecting a calendar, uploading a photo), use share_app_link to give them a direct URL instead of describing where to click. Only act on a trip, reminder, or record you can actually find (via the context below or query_household_data); never invent an id — ask the user to clarify instead. There is no confirmation step over email — any action you call runs immediately — so always briefly confirm in your reply what you actually did (or that it failed). Sign off naturally as Elaine; do not repeat a greeting like 'Hi' if the message is a quick reply.";
 
 // Runs one restricted, non-streaming Elaine turn for an inbound email from a
 // known household member. Mirrors runAgentphoneTurn's shape/behavior exactly
@@ -6383,101 +6924,12 @@ export async function runElaineEmailTurn(params: {
   inputText: string;
   history: ElaineEmailChatMessage[];
 }): Promise<{ replyText: string; history: ElaineEmailChatMessage[] }> {
-  const { userId, inputText, history } = params;
-  const config = await getElaineGlobalConfig();
-  const contextText = await buildAgentphoneContext();
-
-  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    {
-      role: "system",
-      content: `${ELAINE_EMAIL_SYSTEM_PROMPT}\n\n${contextText}`,
-    },
-    ...history.slice(-10).map(
-      (m) =>
-        ({
-          role: m.role,
-          content: m.content,
-        }) as OpenAI.Chat.Completions.ChatCompletionMessageParam,
-    ),
-    { role: "user", content: inputText },
-  ];
-
-  let replyText = "";
-  const MAX_ROUNDS = 3;
-  for (let round = 0; round < MAX_ROUNDS; round++) {
-    const completion = await callModel(config.chatModel, (client, model) =>
-      client.chat.completions.create({
-        model,
-        max_tokens: 500,
-        messages,
-        tools: AGENTPHONE_ACTION_TOOLS,
-      }),
-    );
-    const message = completion.choices[0]?.message;
-    if (!message) break;
-    replyText = (message.content ?? "").trim();
-    const toolCalls = message.tool_calls ?? [];
-    if (toolCalls.length === 0) break;
-
-    messages.push({
-      role: "assistant",
-      content: message.content ?? null,
-      tool_calls: toolCalls,
-    });
-
-    for (const call of toolCalls) {
-      if (call.type !== "function") continue;
-      const name = call.function.name;
-      let resultText = "That action isn't available over email.";
-      if (AGENTPHONE_ACTION_TYPES.has(name)) {
-        try {
-          const finalAction = await tryBuildAction(
-            name,
-            call.function.arguments,
-          );
-          if (finalAction) {
-            const executor = ACTION_EXECUTORS[finalAction.type as ActionType];
-            const { status, body } = await executor(
-              finalAction.payload as never,
-              userId,
-            );
-            resultText =
-              status < 400
-                ? `Done: ${finalAction.label}.`
-                : `Failed (${status}): ${JSON.stringify(body)}`;
-          } else {
-            resultText =
-              "Couldn't understand that request clearly enough to act — ask the user to clarify.";
-          }
-        } catch (err) {
-          logger.error(
-            { err, name },
-            "Elaine email restricted action execution failed",
-          );
-          resultText =
-            "That action failed on our end — tell the user to try again or use the app.";
-        }
-      }
-      messages.push({
-        role: "tool",
-        tool_call_id: call.id,
-        content: resultText,
-      });
-    }
-  }
-
-  if (!replyText) {
-    replyText =
-      "Sorry, I couldn't process that — please try again or use the app.";
-  }
-
-  const updatedHistory: ElaineEmailChatMessage[] = [
-    ...history,
-    { role: "user" as const, content: inputText },
-    { role: "assistant" as const, content: replyText },
-  ].slice(-20);
-
-  return { replyText, history: updatedHistory };
+  return runRestrictedElaineTurn({
+    ...params,
+    systemPrompt: ELAINE_EMAIL_SYSTEM_PROMPT,
+    maxTokens: 500,
+    channelLabel: "email",
+  });
 }
 
 export default router;

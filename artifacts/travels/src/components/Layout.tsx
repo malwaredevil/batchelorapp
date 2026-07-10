@@ -12,6 +12,8 @@ import { AppSwitcher, SearchTrigger } from "@workspace/elaine-ui";
 import {
   useLogout,
   getGetCurrentUserQueryKey,
+  useGetUnmatchedDocumentsCount,
+  getGetUnmatchedDocumentsCountQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -48,18 +50,33 @@ function isActive(current: string, href: string) {
   return current === href || current.startsWith(href + "/");
 }
 
+function NavBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="ml-auto flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground">
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
 function NavGroupMenu({
   label,
   icon: Icon,
   items,
   location,
+  badges,
 }: {
   label: string;
   icon: typeof Compass;
   items: NavEntry[];
   location: string;
+  badges?: Record<string, number>;
 }) {
   const groupActive = items.some((item) => isActive(location, item.href));
+  const groupCount = items.reduce(
+    (sum, item) => sum + (badges?.[item.href] ?? 0),
+    0,
+  );
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -73,6 +90,11 @@ function NavGroupMenu({
         >
           <Icon className="h-4 w-4" />
           {label}
+          {groupCount > 0 && (
+            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground">
+              {groupCount > 99 ? "99+" : groupCount}
+            </span>
+          )}
           <ChevronDown className="h-3.5 w-3.5" />
         </button>
       </DropdownMenuTrigger>
@@ -94,6 +116,7 @@ function NavGroupMenu({
               >
                 <item.icon className="h-4 w-4" />
                 {item.label}
+                <NavBadge count={badges?.[item.href] ?? 0} />
               </Link>
             </DropdownMenuItem>
           );
@@ -120,6 +143,16 @@ export function Layout({ children }: { children: ReactNode }) {
       onError: () => toast.error("Could not sign out. Please try again."),
     },
   });
+
+  const { data: unmatchedCountData } = useGetUnmatchedDocumentsCount({
+    query: {
+      enabled: !!user,
+      queryKey: getGetUnmatchedDocumentsCountQueryKey(),
+    },
+  });
+  const badges: Record<string, number> = {
+    "/documents": unmatchedCountData?.count ?? 0,
+  };
 
   if (!user) {
     return <>{children}</>;
@@ -170,6 +203,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 icon={CalendarDays}
                 items={groups.plan}
                 location={location}
+                badges={badges}
               />
             </nav>
 
@@ -266,7 +300,16 @@ export function Layout({ children }: { children: ReactNode }) {
                           : "text-muted-foreground hover:bg-muted hover:text-foreground",
                       )}
                     >
-                      <item.icon className="h-5 w-5" />
+                      <span className="relative">
+                        <item.icon className="h-5 w-5" />
+                        {(badges[item.href] ?? 0) > 0 && (
+                          <span className="absolute -right-1.5 -top-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-none text-primary-foreground">
+                            {(badges[item.href] ?? 0) > 99
+                              ? "99+"
+                              : badges[item.href]}
+                          </span>
+                        )}
+                      </span>
                       <span className="text-xs font-medium">{item.label}</span>
                     </Link>
                   </SheetClose>

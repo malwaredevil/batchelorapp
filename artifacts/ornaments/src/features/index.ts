@@ -1,14 +1,5 @@
 import { registerFeature } from "./registry";
-import {
-  Library,
-  PlusCircle,
-  ScanBarcode,
-  Settings,
-  Tags,
-  BarChart3,
-  Wrench,
-  KeyRound,
-} from "lucide-react";
+import { Library, PlusCircle, Tags, BarChart3, Wrench } from "lucide-react";
 
 registerFeature({
   id: "collection",
@@ -26,33 +17,15 @@ registerFeature({
   nav: {
     group: "main",
     href: "/add",
-    label: "Add Manually",
+    label: "Add Ornament",
     icon: PlusCircle,
     order: 20,
   },
 });
 
-registerFeature({
-  id: "scan",
-  nav: {
-    group: "main",
-    href: "/scan",
-    label: "Scan Barcode",
-    icon: ScanBarcode,
-    order: 30,
-  },
-});
-
-registerFeature({
-  id: "settings",
-  nav: {
-    group: "main",
-    href: "/settings",
-    label: "Settings",
-    icon: Settings,
-    order: 40,
-  },
-});
+// Note: "scan" (barcode scanning) is intentionally not registered as a nav
+// item anymore — the /scan route and ScanPage component still exist and are
+// reused via a small barcode icon button on the Add Ornament page instead.
 
 // Settings nav items
 registerFeature({

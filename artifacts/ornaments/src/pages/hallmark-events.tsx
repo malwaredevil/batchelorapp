@@ -2,7 +2,14 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Loader2, Plus, CalendarHeart, Pencil, Trash2, ExternalLink } from "lucide-react";
+import {
+  Loader2,
+  Plus,
+  CalendarHeart,
+  Pencil,
+  Trash2,
+  ExternalLink,
+} from "lucide-react";
 import {
   useListOrnamentsHallmarkEvents,
   useCreateOrnamentsHallmarkEvent,
@@ -111,16 +118,22 @@ function EventFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isEditing ? "Edit event" : "Add Hallmark event"}</DialogTitle>
+          <DialogTitle>
+            {isEditing ? "Edit event" : "Add Hallmark event"}
+          </DialogTitle>
           <DialogDescription>
-            Household-shared dates for Hallmark Keepsake events (Open House, etc.). Best-effort
-            synced to the shared Hallmark Google Calendar.
+            Household-shared dates for Hallmark Keepsake events (Open House,
+            etc.). Best-effort synced to the shared Hallmark Google Calendar.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="title">Title</Label>
-            <Input id="title" {...form.register("title")} placeholder="Hallmark Open House" />
+            <Input
+              id="title"
+              {...form.register("title")}
+              placeholder="Hallmark Open House"
+            />
             {form.formState.errors.title && (
               <p className="text-sm text-destructive">
                 {form.formState.errors.title.message}
@@ -130,7 +143,11 @@ function EventFormDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="startDate">Start date</Label>
-              <Input id="startDate" type="date" {...form.register("startDate")} />
+              <Input
+                id="startDate"
+                type="date"
+                {...form.register("startDate")}
+              />
               {form.formState.errors.startDate && (
                 <p className="text-sm text-destructive">
                   {form.formState.errors.startDate.message}
@@ -149,10 +166,18 @@ function EventFormDialog({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="description">Notes (optional)</Label>
-            <Textarea id="description" {...form.register("description")} rows={3} />
+            <Textarea
+              id="description"
+              {...form.register("description")}
+              rows={3}
+            />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
               Cancel
             </Button>
             <Button type="submit" disabled={isSaving}>
@@ -170,10 +195,13 @@ function formatRange(start: string, end: string) {
   const s = new Date(`${start}T00:00:00`);
   const e = new Date(`${end}T00:00:00`);
   const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
-  return `${s.toLocaleDateString("en-US", opts)} – ${e.toLocaleDateString("en-US", {
-    ...opts,
-    year: "numeric",
-  })}`;
+  return `${s.toLocaleDateString("en-US", opts)} – ${e.toLocaleDateString(
+    "en-US",
+    {
+      ...opts,
+      year: "numeric",
+    },
+  )}`;
 }
 
 export default function HallmarkEvents() {
@@ -181,10 +209,11 @@ export default function HallmarkEvents() {
   const deleteEvent = useDeleteOrnamentsHallmarkEvent();
 
   const [formOpen, setFormOpen] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<OrnamentsHallmarkEvent | undefined>(
-    undefined,
-  );
-  const [deleteTarget, setDeleteTarget] = useState<OrnamentsHallmarkEvent | null>(null);
+  const [editingEvent, setEditingEvent] = useState<
+    OrnamentsHallmarkEvent | undefined
+  >(undefined);
+  const [deleteTarget, setDeleteTarget] =
+    useState<OrnamentsHallmarkEvent | null>(null);
 
   usePageAssistantContext(
     "ornaments-hallmark-events",
@@ -227,12 +256,17 @@ export default function HallmarkEvents() {
             Hallmark Events
           </h1>
           <p className="text-muted-foreground mt-1">
-            Track Open House and other Hallmark Keepsake dates for the whole household
+            Track Open House and other Hallmark Keepsake dates for the whole
+            household
           </p>
         </div>
         <div className="flex gap-2 shrink-0">
           <Button variant="outline" asChild className="gap-2">
-            <a href={HALLMARK_CALENDAR_URL} target="_blank" rel="noopener noreferrer">
+            <a
+              href={HALLMARK_CALENDAR_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <ExternalLink className="h-4 w-4" />
               Open calendar
             </a>
@@ -251,7 +285,8 @@ export default function HallmarkEvents() {
       ) : sorted.length === 0 ? (
         <div className="rounded-xl border border-dashed border-card-border p-10 text-center text-muted-foreground">
           <CalendarHeart className="h-8 w-8 mx-auto mb-3 opacity-50" />
-          No Hallmark events yet. Add one to see it countdown on the app launcher.
+          No Hallmark events yet. Add one to see it countdown on the app
+          launcher.
         </div>
       ) : (
         <ul className="divide-y divide-card-border rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
@@ -293,20 +328,29 @@ export default function HallmarkEvents() {
         </ul>
       )}
 
-      <EventFormDialog open={formOpen} onOpenChange={setFormOpen} event={editingEvent} />
+      <EventFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        event={editingEvent}
+      />
 
-      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Remove this event?</AlertDialogTitle>
             <AlertDialogDescription>
-              "{deleteTarget?.title}" will be removed for the whole household. This can't be
-              undone.
+              "{deleteTarget?.title}" will be removed for the whole household.
+              This can't be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete}>Remove</AlertDialogAction>
+            <AlertDialogAction onClick={confirmDelete}>
+              Remove
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

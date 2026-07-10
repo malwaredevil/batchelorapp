@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth, redirectToMainLogin } from "@/lib/auth";
+import { useRealtimeInvalidation } from "@workspace/api-client-react";
 import { AppShell } from "@/components/app-shell";
 import {
   ThemeProvider,
@@ -49,6 +50,9 @@ function Routes() {
   useEffect(() => {
     if (!isLoading && !user) redirectToMainLogin();
   }, [isLoading, user]);
+
+  // Only subscribe once authenticated — the SSE endpoint requires a session.
+  useRealtimeInvalidation(!!user);
 
   if (isLoading) return <Splash />;
 

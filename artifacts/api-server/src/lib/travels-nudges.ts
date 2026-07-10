@@ -169,7 +169,9 @@ const IN_PROCESS_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
  */
 export function startNudgeScheduler(): void {
   const run = async (): Promise<void> => {
-    if (!(await shouldRunScheduledTask("travels-nudges", IN_PROCESS_INTERVAL_MS))) {
+    if (
+      !(await shouldRunScheduledTask("travels-nudges", IN_PROCESS_INTERVAL_MS))
+    ) {
       logger.info("travels-nudges: skipped (ran within the last hour)");
       return;
     }

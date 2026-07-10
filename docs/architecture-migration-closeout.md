@@ -14,6 +14,7 @@ endpoints.
 
 **Legitimate / excluded (not drift)** — consistent with A1's original exclusion
 reasoning:
+
 - Image/blob downloads with no JSON contract to codegen against:
   `pottery/lib/pdf-export.ts`, `ornaments/lib/pdf-export.ts`,
   `quilting/lib/svg-export.ts` (`downloadCollectionImage`).
@@ -30,6 +31,7 @@ reasoning:
   documented), so there's no generated hook to use here. Not drift.
 
 **New drift found (not caught by A1) — fixed in this pass:**
+
 - `artifacts/modules/src/quilting/components/PaletteMatchModal.tsx` was
   hand-rolling `fetch()` + `FormData` against
   `/api/quilting/tools/palette-match{,-patterns,-quilts}` even though fully
@@ -37,12 +39,13 @@ reasoning:
   `usePaletteMatchQuilts`) already existed in `@workspace/api-client-react`
   from the OpenAPI spec. Rewired the component to use the generated mutation
   hooks instead of raw `fetch`. Verified with `pnpm --filter @workspace/modules
-  run typecheck` (passes) and via the running dev workflow (HMR picked up the
+run typecheck` (passes) and via the running dev workflow (HMR picked up the
   change cleanly, no runtime errors in server/browser logs).
 
 **New drift found — NOT fixed here, filed as a follow-up issue:**
+
 - `artifacts/web/src/components/studio-weather.tsx` (`GET`/`PUT
-  /api/hub/weather-config`) and `artifacts/web/src/hooks/use-widgets.ts`
+/api/hub/weather-config`) and `artifacts/web/src/hooks/use-widgets.ts`
   (`GET`/`PUT /api/hub/preferences`) hand-roll `fetch()` against real internal
   JSON endpoints that have **no OpenAPI spec file at all** — there is no
   `lib/api-spec/sources/hub.yaml`, unlike pottery/quilting/travels/ornaments/

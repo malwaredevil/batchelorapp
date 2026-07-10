@@ -21,10 +21,7 @@ import {
   type ComposeParams,
 } from "@workspace/gmail-ui";
 import { GmailConnect } from "../components/gmail/GmailConnect";
-import {
-  GmailSidebar,
-  type LabelId,
-} from "../components/gmail/GmailSidebar";
+import { GmailSidebar, type LabelId } from "../components/gmail/GmailSidebar";
 import { ThreadList, type LayoutMode } from "../components/gmail/ThreadList";
 import { ThreadView } from "../components/gmail/ThreadView";
 import { ComposeModal } from "../components/gmail/ComposeModal";
@@ -289,9 +286,7 @@ export default function OfficeGmailPage() {
   }, []);
 
   const [selectedLabel, setSelectedLabel] = useState<LabelId>("INBOX");
-  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(
-    null,
-  );
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
   const [pageHistory, setPageHistory] = useState<string[]>([]);

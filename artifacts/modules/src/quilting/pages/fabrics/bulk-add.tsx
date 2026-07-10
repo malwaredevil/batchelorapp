@@ -155,7 +155,10 @@ export default function BulkAddFabric() {
         onChange={handleFileChange}
       />
 
-      <Button className="mt-4 w-full" onClick={() => navigate("/quilting/fabrics")}>
+      <Button
+        className="mt-4 w-full"
+        onClick={() => navigate("/quilting/fabrics")}
+      >
         Done
       </Button>
 

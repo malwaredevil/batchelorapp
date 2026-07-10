@@ -1,4 +1,10 @@
-import { useState, useEffect, useMemo, type ReactNode, type ReactElement } from "react";
+import {
+  useState,
+  useEffect,
+  useMemo,
+  type ReactNode,
+  type ReactElement,
+} from "react";
 import {
   Mail,
   Bell,
@@ -143,8 +149,7 @@ export function ReminderEmailCard() {
         <div>
           <h2 className="font-semibold text-foreground">Reminder alerts</h2>
           <p className="text-sm text-muted-foreground">
-            Receive emails when a reminder is 14 days, 7 days, and 3 days
-            away.
+            Receive emails when a reminder is 14 days, 7 days, and 3 days away.
           </p>
         </div>
       </div>
@@ -197,8 +202,7 @@ export function ReminderEmailCard() {
             Test email delivery
           </p>
           <p className="text-xs text-muted-foreground">
-            Sends a sample reminder email to your own account address right
-            now.
+            Sends a sample reminder email to your own account address right now.
           </p>
         </div>
         <Button
@@ -304,8 +308,8 @@ export function TimezoneCard() {
         <div>
           <h2 className="font-semibold text-foreground">Your timezone</h2>
           <p className="text-sm text-muted-foreground">
-            Used to show flight, train, and hotel times consistently across
-            your trips.
+            Used to show flight, train, and hotel times consistently across your
+            trips.
           </p>
         </div>
       </div>
@@ -395,8 +399,7 @@ export function GmailSyncCard({
           <h2 className="font-semibold text-foreground">Gmail scanning</h2>
           <p className="text-sm text-muted-foreground">
             Automatically find flight, train, and hotel confirmations in your
-            inbox and suggest them as trip documents. Read-only access — see
-            our{" "}
+            inbox and suggest them as trip documents. Read-only access — see our{" "}
             <LinkComponent
               href="/privacy"
               className="underline hover:text-foreground"
@@ -418,9 +421,7 @@ export function GmailSyncCard({
           </p>
           {confirmingDisconnect ? (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">
-                Disconnect?
-              </span>
+              <span className="text-xs text-muted-foreground">Disconnect?</span>
               <Button
                 variant="destructive"
                 size="sm"
@@ -617,8 +618,7 @@ export function CalendarSyncCard({
           setAddingCalendarId("");
           setNewCalendarColor(CALENDAR_COLOR_PRESETS[0]);
         },
-        onError: () =>
-          toast.error("Could not add calendar. Please try again."),
+        onError: () => toast.error("Could not add calendar. Please try again."),
       },
     );
   }
@@ -663,8 +663,7 @@ export function CalendarSyncCard({
           });
           setEditingColorId(null);
         },
-        onError: () =>
-          toast.error("Could not update color. Please try again."),
+        onError: () => toast.error("Could not update color. Please try again."),
       },
     );
   }
@@ -711,9 +710,9 @@ export function CalendarSyncCard({
             Your Google Calendars
           </h2>
           <p className="text-sm text-muted-foreground">
-            Connect your Google account, then add as many of your calendars
-            as you like. Each gets its own overlay color on the Travel
-            Calendar page.{" "}
+            Connect your Google account, then add as many of your calendars as
+            you like. Each gets its own overlay color on the Travel Calendar
+            page.{" "}
             {travelStatus?.isOwner
               ? "As the app owner, you can also assign one connected calendar as the shared Travel calendar."
               : "Only the app owner can assign the shared Travel calendar."}
@@ -929,9 +928,7 @@ export function CalendarSyncCard({
                   <Button
                     size="sm"
                     onClick={handleAddManualCalendar}
-                    disabled={
-                      !manualCalendarId.trim() || addCalendar.isPending
-                    }
+                    disabled={!manualCalendarId.trim() || addCalendar.isPending}
                   >
                     <Plus className="h-3.5 w-3.5 mr-1.5" />
                     Add calendar
@@ -975,9 +972,9 @@ export function CalendarSyncCard({
 
       <p className="text-xs text-muted-foreground pt-1">
         Reminders with a due date sync automatically to your primary Google
-        calendar. Events on the shared Travel calendar are visible and
-        editable by everyone; events on your other connected calendars appear
-        as read-only overlays on the Travel Calendar page.
+        calendar. Events on the shared Travel calendar are visible and editable
+        by everyone; events on your other connected calendars appear as
+        read-only overlays on the Travel Calendar page.
       </p>
     </div>
   );

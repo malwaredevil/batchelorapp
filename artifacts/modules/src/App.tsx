@@ -176,7 +176,10 @@ function Routes() {
           <Route path="/quilting/tools/yardage" component={YardageCalculator} />
           <Route path="/quilting/categories" component={QuiltingCategories} />
           <Route path="/quilting/maintenance" component={QuiltingMaintenance} />
-          <Route path="/quilting/dev/fabric-compare" component={FabricCompareDevPage} />
+          <Route
+            path="/quilting/dev/fabric-compare"
+            component={FabricCompareDevPage}
+          />
           <Route path="/travels">
             <TravelsLayout>
               <TravelsDashboard />

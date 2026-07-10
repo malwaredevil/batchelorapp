@@ -4149,7 +4149,9 @@ export default function BlockDesigner() {
             <DropdownMenuSeparator />
             {!isNew && blockId && !templateMode && (
               <DropdownMenuItem
-                onClick={() => navigate(`/quilting/blocks/${blockId}/cut-pattern`)}
+                onClick={() =>
+                  navigate(`/quilting/blocks/${blockId}/cut-pattern`)
+                }
               >
                 <Scissors className="mr-2 h-3.5 w-3.5" />
                 Cut Pattern…

@@ -50,7 +50,10 @@ import {
   type QuiltingBlockTemplate,
 } from "@workspace/api-client-react";
 import { BlockPreviewSvg } from "@/quilting/components/BlockPreviewSvg";
-import { FabricPicker, buildFabricUrlMap } from "@/quilting/components/FabricPicker";
+import {
+  FabricPicker,
+  buildFabricUrlMap,
+} from "@/quilting/components/FabricPicker";
 import type { QuiltingCategory } from "@workspace/api-client-react";
 import { TagSelector } from "@/quilting/components/tag-selector";
 import { useQueryClient } from "@tanstack/react-query";
@@ -360,11 +363,7 @@ function BlockMini({
   })();
 
   return (
-    <svg
-      width={size}
-      height={svgH}
-      xmlns="http://www.w3.org/2000/svg"
-    >
+    <svg width={size} height={svgH} xmlns="http://www.w3.org/2000/svg">
       {fabIds.length > 0 && (
         <defs>
           {fabIds.map((fabId) => (

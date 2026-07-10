@@ -19,7 +19,10 @@ import {
   Flag,
 } from "lucide-react";
 import { usePageAssistantContext } from "@/travels/lib/assistant-context";
-import { loadGoogleMaps, svgToMarkerContent } from "@/travels/lib/google-maps-loader";
+import {
+  loadGoogleMaps,
+  svgToMarkerContent,
+} from "@/travels/lib/google-maps-loader";
 
 const WORLD_MAP_ID = "travels-world-map";
 

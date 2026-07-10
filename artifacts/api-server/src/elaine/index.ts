@@ -1018,7 +1018,9 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
         .returning({ id: travelsPackingLists.id });
     }
     const [{ maxOrder }] = await db
-      .select({ maxOrder: sql<number | null>`max(${travelsPackingItems.sortOrder})` })
+      .select({
+        maxOrder: sql<number | null>`max(${travelsPackingItems.sortOrder})`,
+      })
       .from(travelsPackingItems)
       .where(eq(travelsPackingItems.listId, list.id));
     const [row] = await db
@@ -1040,9 +1042,7 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
     const [existing] = await db
       .select({ id: travelsTrips.id })
       .from(travelsTrips)
-      .where(
-        eq(travelsTrips.id, payload.tripId),
-      );
+      .where(eq(travelsTrips.id, payload.tripId));
     if (!existing) return { status: 404, body: { error: "Trip not found" } };
     const [row] = await db
       .update(travelsTrips)
@@ -1059,9 +1059,7 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
     const [existing] = await db
       .select({ id: travelsTrips.id })
       .from(travelsTrips)
-      .where(
-        eq(travelsTrips.id, payload.tripId),
-      );
+      .where(eq(travelsTrips.id, payload.tripId));
     if (!existing) return { status: 404, body: { error: "Trip not found" } };
     const updates: Partial<typeof travelsTrips.$inferInsert> = {};
     if (payload.destination !== undefined)
@@ -1088,9 +1086,7 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
     const [existing] = await db
       .select({ id: travelsTrips.id })
       .from(travelsTrips)
-      .where(
-        eq(travelsTrips.id, payload.tripId),
-      );
+      .where(eq(travelsTrips.id, payload.tripId));
     if (!existing) return { status: 404, body: { error: "Trip not found" } };
 
     // Same cleanup order as DELETE /trips/:id — remove storage objects
@@ -1133,9 +1129,7 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
     const [existing] = await db
       .select({ id: travelsWishlist.id })
       .from(travelsWishlist)
-      .where(
-        eq(travelsWishlist.id, payload.wishlistId),
-      );
+      .where(eq(travelsWishlist.id, payload.wishlistId));
     if (!existing)
       return { status: 404, body: { error: "Wishlist item not found" } };
     const [row] = await db
@@ -1153,9 +1147,7 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
     const [existing] = await db
       .select({ id: travelsWishlist.id })
       .from(travelsWishlist)
-      .where(
-        eq(travelsWishlist.id, payload.wishlistId),
-      );
+      .where(eq(travelsWishlist.id, payload.wishlistId));
     if (!existing)
       return { status: 404, body: { error: "Wishlist item not found" } };
     await db
@@ -1177,9 +1169,7 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
     const [existing] = await db
       .select()
       .from(travelsWishlist)
-      .where(
-        eq(travelsWishlist.id, payload.wishlistId),
-      );
+      .where(eq(travelsWishlist.id, payload.wishlistId));
     if (!existing)
       return { status: 404, body: { error: "Wishlist item not found" } };
     let extraCoords: { lat?: number; lng?: number } = {};
@@ -1244,9 +1234,7 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
     const [trip] = await db
       .select({ id: travelsTrips.id, title: travelsTrips.title })
       .from(travelsTrips)
-      .where(
-        eq(travelsTrips.id, payload.tripId),
-      );
+      .where(eq(travelsTrips.id, payload.tripId));
     if (!trip) return { status: 404, body: { error: "Trip not found" } };
 
     const syncToCalendar = payload.syncToCalendar ?? true;
@@ -1287,10 +1275,7 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
       .select()
       .from(travelsReminders)
       .where(eq(travelsReminders.id, payload.reminderId));
-    if (
-      !existing ||
-      existing.tripId !== payload.tripId
-    ) {
+    if (!existing || existing.tripId !== payload.tripId) {
       return { status: 404, body: { error: "Reminder not found" } };
     }
     const syncToCalendar = payload.syncToCalendar ?? true;
@@ -1329,10 +1314,7 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
       .select()
       .from(travelsReminders)
       .where(eq(travelsReminders.id, payload.reminderId));
-    if (
-      !existing ||
-      existing.tripId !== payload.tripId
-    ) {
+    if (!existing || existing.tripId !== payload.tripId) {
       return { status: 404, body: { error: "Reminder not found" } };
     }
 
@@ -1383,10 +1365,7 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
       .select()
       .from(travelsReminders)
       .where(eq(travelsReminders.id, payload.reminderId));
-    if (
-      !existing ||
-      existing.tripId !== payload.tripId
-    ) {
+    if (!existing || existing.tripId !== payload.tripId) {
       return { status: 404, body: { error: "Reminder not found" } };
     }
 
@@ -1408,9 +1387,7 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
     const [trip] = await db
       .select({ id: travelsTrips.id, itinerary: travelsTrips.itinerary })
       .from(travelsTrips)
-      .where(
-        eq(travelsTrips.id, payload.tripId),
-      );
+      .where(eq(travelsTrips.id, payload.tripId));
     if (!trip) return { status: 404, body: { error: "Trip not found" } };
 
     const existing =
@@ -1447,9 +1424,7 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
     const [trip] = await db
       .select({ id: travelsTrips.id })
       .from(travelsTrips)
-      .where(
-        eq(travelsTrips.id, payload.tripId),
-      );
+      .where(eq(travelsTrips.id, payload.tripId));
     if (!trip) return { status: 404, body: { error: "Trip not found" } };
 
     const dayIndex = payload.dayNumber - 1;
@@ -1525,9 +1500,7 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
     const [trip] = await db
       .select({ id: travelsTrips.id })
       .from(travelsTrips)
-      .where(
-        eq(travelsTrips.id, payload.tripId),
-      );
+      .where(eq(travelsTrips.id, payload.tripId));
     if (!trip) return { status: 404, body: { error: "Trip not found" } };
 
     const result = await rescanTripDocument(
@@ -1549,9 +1522,7 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
     const [trip] = await db
       .select({ id: travelsTrips.id })
       .from(travelsTrips)
-      .where(
-        eq(travelsTrips.id, payload.tripId),
-      );
+      .where(eq(travelsTrips.id, payload.tripId));
     if (!trip) return { status: 404, body: { error: "Trip not found" } };
 
     try {
@@ -1578,9 +1549,7 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
     const [trip] = await db
       .select({ id: travelsTrips.id, itinerary: travelsTrips.itinerary })
       .from(travelsTrips)
-      .where(
-        eq(travelsTrips.id, payload.tripId),
-      );
+      .where(eq(travelsTrips.id, payload.tripId));
     if (!trip) return { status: 404, body: { error: "Trip not found" } };
 
     const itinerary = trip.itinerary as {
@@ -1631,9 +1600,7 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
     const [trip] = await db
       .select({ id: travelsTrips.id, itinerary: travelsTrips.itinerary })
       .from(travelsTrips)
-      .where(
-        eq(travelsTrips.id, payload.tripId),
-      );
+      .where(eq(travelsTrips.id, payload.tripId));
     if (!trip) return { status: 404, body: { error: "Trip not found" } };
 
     const itinerary = trip.itinerary as {
@@ -6145,10 +6112,18 @@ function getAppBaseUrl(): string {
 // model emits (e.g. "/pottery/piece/42") must gain that segment when turned
 // into a real clickable URL for an email/SMS/voice reply. Elaine itself
 // remains a standalone artifact at "/elaine" and is left untouched.
-const MODULE_LINK_PREFIXES = ["/pottery", "/quilting", "/travels", "/ornaments"];
+const MODULE_LINK_PREFIXES = [
+  "/pottery",
+  "/quilting",
+  "/travels",
+  "/ornaments",
+];
 function resolveModuleLinkPath(path: string): string {
   const matchesModule = MODULE_LINK_PREFIXES.some(
-    (prefix) => path === prefix || path.startsWith(prefix + "/") || path.startsWith(prefix + "?"),
+    (prefix) =>
+      path === prefix ||
+      path.startsWith(prefix + "/") ||
+      path.startsWith(prefix + "?"),
   );
   return matchesModule ? `/modules${path}` : path;
 }

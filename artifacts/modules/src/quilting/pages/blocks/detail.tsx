@@ -271,7 +271,9 @@ export default function BlockDetail() {
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => navigate(`/quilting/blocks/${blockId}/cut-pattern`)}
+                onClick={() =>
+                  navigate(`/quilting/blocks/${blockId}/cut-pattern`)
+                }
                 title="Cut pattern"
               >
                 <Scissors className="h-4 w-4" />

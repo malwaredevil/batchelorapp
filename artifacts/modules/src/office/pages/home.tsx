@@ -12,8 +12,8 @@ export default function OfficeHome() {
       <Briefcase className="h-10 w-10 text-muted-foreground" />
       <h1 className="text-2xl font-bold text-foreground">Office</h1>
       <p className="max-w-md text-sm text-muted-foreground">
-        General household Gmail inbox, all connected calendars, and notes.
-        Use the tabs above to jump in.
+        General household Gmail inbox, all connected calendars, and notes. Use
+        the tabs above to jump in.
       </p>
     </div>
   );

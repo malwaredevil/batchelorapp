@@ -601,7 +601,7 @@ export default function TravelCalendar() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8 space-y-6">
+    <div className="space-y-6">
       {overlayCalendars.map((cal) => (
         <OverlayCalendarEvents
           key={cal.id}

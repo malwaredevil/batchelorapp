@@ -10,6 +10,7 @@ import {
   startOfWeek,
 } from "date-fns";
 import {
+  AlertTriangle,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
@@ -93,13 +94,15 @@ function CalendarEventsLoader({
   start,
   end,
   onEvents,
+  onError,
 }: {
   calendar: ConnectedCalendar;
   start: string;
   end: string;
   onEvents: (calendarId: number, events: TravelCalendarEvent[]) => void;
+  onError: (calendarId: number, hasError: boolean) => void;
 }) {
-  const { data = [] } = useListConnectedCalendarEvents(
+  const { data = [], isError } = useListConnectedCalendarEvents(
     calendar.id,
     start,
     end,
@@ -118,6 +121,10 @@ function CalendarEventsLoader({
     onEvents(calendar.id, data);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calendar.id, JSON.stringify(data)]);
+  useEffect(() => {
+    onError(calendar.id, isError);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendar.id, isError]);
   return null;
 }
 
@@ -159,6 +166,19 @@ export default function OfficeCalendar() {
       return next;
     });
   }
+
+  const [errorCalendarIds, setErrorCalendarIds] = useState<Set<number>>(
+    new Set(),
+  );
+  function handleError(calendarId: number, hasError: boolean) {
+    setErrorCalendarIds((prev) => {
+      const next = new Set(prev);
+      if (hasError) next.add(calendarId);
+      else next.delete(calendarId);
+      return next;
+    });
+  }
+  const hasTokenError = errorCalendarIds.size > 0;
 
   const displayEvents = useMemo<DisplayEvent[]>(() => {
     return calendars
@@ -247,7 +267,7 @@ export default function OfficeCalendar() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 space-y-4">
+    <div className="space-y-4">
       {calendars.map((cal) => (
         <CalendarEventsLoader
           key={cal.id}
@@ -255,6 +275,7 @@ export default function OfficeCalendar() {
           start={startISO}
           end={endISO}
           onEvents={handleEvents}
+          onError={handleError}
         />
       ))}
 
@@ -264,6 +285,22 @@ export default function OfficeCalendar() {
           Read-only view across every calendar you've connected.
         </p>
       </div>
+
+      {hasTokenError && (
+        <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900 dark:bg-amber-950/20">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <p className="text-sm text-amber-800 dark:text-amber-300">
+            Google Calendar connection expired.{" "}
+            <a
+              href="/modules/travels/settings"
+              className="font-medium underline"
+            >
+              Reconnect in Travels Settings
+            </a>{" "}
+            to load events.
+          </p>
+        </div>
+      )}
 
       {/* Toolbar: navigation + view switcher */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-card-border bg-card px-4 py-3">

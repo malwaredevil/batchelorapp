@@ -1,20 +1,35 @@
 import { registerFeature } from "@/features/registry";
-import { Briefcase } from "lucide-react";
-
-// Office is a new, general-purpose sub-app (Gmail inbox + all connected
-// calendars + notes). It is intentionally NOT trip-specific and is fully
-// independent of Travels' existing Gmail-scan-for-documents and
-// shared-Travel-calendar features — see threat_model.md's Gmail/Calendar
-// trust boundaries. This issue only reserves the nav slot; real
-// Gmail/calendar/notes functionality is built in follow-up issues.
+import { Mail, CalendarDays, NotebookPen } from "lucide-react";
 
 registerFeature({
-  id: "office-home",
+  id: "office-inbox",
   nav: {
-    group: "main",
-    href: "/office",
-    label: "Office",
-    icon: Briefcase,
+    group: "inbox",
+    href: "/office/gmail",
+    label: "Inbox",
+    icon: Mail,
     order: 60,
+  },
+});
+
+registerFeature({
+  id: "office-calendar",
+  nav: {
+    group: "calendar",
+    href: "/office/calendar",
+    label: "Calendar",
+    icon: CalendarDays,
+    order: 61,
+  },
+});
+
+registerFeature({
+  id: "office-notes",
+  nav: {
+    group: "notes",
+    href: "/office/notes",
+    label: "Notes",
+    icon: NotebookPen,
+    order: 62,
   },
 });

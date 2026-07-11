@@ -24,6 +24,8 @@ import {
   ScanSearch,
   Camera,
   CalendarHeart,
+  Mail,
+  NotebookPen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -79,11 +81,17 @@ const GROUP_META: Record<
     plan: { label: "Plan", icon: CalendarDays },
     settings: { label: "Settings", icon: Settings2 },
   },
+  office: {
+    inbox: { label: "Inbox", icon: Mail },
+    calendar: { label: "Calendar", icon: CalendarDays },
+    notes: { label: "Notes", icon: NotebookPen },
+  },
 };
 
 const GROUP_ORDER: Record<string, string[]> = {
   pottery: ["collection", "add", "compare", "scan", "settings"],
   quilting: ["collection", "shopping", "design", "settings"],
+  office: ["inbox", "calendar", "notes"],
   ornaments: ["collection", "add", "hallmark-events", "settings"],
   travels: ["home", "trips", "discover", "plan", "settings"],
 };

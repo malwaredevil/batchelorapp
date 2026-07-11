@@ -33,7 +33,7 @@ export const appUsers = pgTable("app_users", {
   // (e.g. "+12105551234"). Only usable for sending once phoneVerified is
   // true — set by completing the one-time-code flow in
   // phoneVerificationCodes below.
-  phoneNumber: text("phone_number"),
+  phoneNumber: text("phone_number").unique(),
   phoneVerified: boolean("phone_verified").notNull().default(false),
   phoneVerifiedAt: timestamp("phone_verified_at", { withTimezone: true }),
   // A2P 10DLC compliance: timestamp of the most recent explicit opt-in

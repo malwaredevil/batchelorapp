@@ -1062,6 +1062,19 @@ export const STATEMENTS: string[] = [
   // UNSUBSCRIBE/CANCEL/END/QUIT via the AgentPhone webhook; cleared on
   // START/UNSTOP/YES. Every outbound SMS send path must skip a set number.
   `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS sms_opted_out_at TIMESTAMPTZ`,
+  // Enforce uniqueness on verified phone numbers so that no two accounts can
+  // share the same number. The AgentPhone webhook resolves household identity
+  // purely by matching the caller's number against this column — duplicates
+  // would cause an ambiguous match and could let one user's SMS/voice session
+  // execute actions attributed to a different household member.
+  // The partial index (WHERE phone_number IS NOT NULL) is required because
+  // phone_number is optional: multiple users may have no number set (NULL),
+  // and PostgreSQL UNIQUE constraints treat NULLs as distinct, but a partial
+  // index makes the intent explicit and is consistent with the AgentPhone
+  // lookup (which only matches non-NULL numbers).
+  `CREATE UNIQUE INDEX IF NOT EXISTS app_users_phone_number_unique_idx
+     ON app_users (phone_number)
+     WHERE phone_number IS NOT NULL`,
 
   // ── AgentPhone webhook (SMS/voice) — rolling conversation + dedup log ──────
   `CREATE TABLE IF NOT EXISTS agentphone_conversations (

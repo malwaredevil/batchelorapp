@@ -642,39 +642,47 @@ router.post("/auth/reset-password", async (req, res) => {
   const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
   const now = new Date();
 
-  const [record] = await db
-    .select()
-    .from(passwordResetTokens)
-    .where(
-      and(
-        eq(passwordResetTokens.tokenHash, tokenHash),
-        gt(passwordResetTokens.expiresAt, now),
-        isNull(passwordResetTokens.usedAt),
-        eq(passwordResetTokens.used, false),
-      ),
-    )
-    .limit(1);
+  // Hash the password before opening the transaction so the slow bcrypt work
+  // doesn't hold a DB connection for longer than necessary.
+  const newHash = await bcrypt.hash(newPassword, 12);
 
-  if (!record) {
+  // Atomically claim the token and update the password in one transaction.
+  // The UPDATE...RETURNING approach means only one concurrent request can flip
+  // used=false → used=true — any parallel request races to the same row and
+  // gets 0 rows back, preventing token replay even under simultaneous requests.
+  const claimed = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(passwordResetTokens)
+      .set({ used: true, usedAt: now })
+      .where(
+        and(
+          eq(passwordResetTokens.tokenHash, tokenHash),
+          gt(passwordResetTokens.expiresAt, now),
+          isNull(passwordResetTokens.usedAt),
+          eq(passwordResetTokens.used, false),
+        ),
+      )
+      .returning({
+        id: passwordResetTokens.id,
+        userId: passwordResetTokens.userId,
+      });
+
+    if (!row) return null;
+
+    await tx
+      .update(appUsers)
+      .set({ passwordHash: newHash })
+      .where(eq(appUsers.id, row.userId));
+
+    return row;
+  });
+
+  if (!claimed) {
     res
       .status(400)
       .json({ error: "This reset link is invalid, expired, or already used." });
     return;
   }
-
-  const newHash = await bcrypt.hash(newPassword, 12);
-
-  // Mark token used and update password atomically in a single transaction
-  await db.transaction(async (tx) => {
-    await tx
-      .update(passwordResetTokens)
-      .set({ used: true, usedAt: now })
-      .where(eq(passwordResetTokens.id, record.id));
-    await tx
-      .update(appUsers)
-      .set({ passwordHash: newHash })
-      .where(eq(appUsers.id, record.userId));
-  });
 
   // Revoke ALL sessions for this user so that any stolen session cookie is
   // immediately invalidated. Password reset is the primary account recovery
@@ -682,7 +690,7 @@ router.post("/auth/reset-password", async (req, res) => {
   try {
     await pool.query(
       `DELETE FROM quilting_sessions WHERE sess->>'userId' = $1`,
-      [String(record.userId)],
+      [String(claimed.userId)],
     );
   } catch (err) {
     req.log.error({ err }, "failed to revoke sessions on password reset");

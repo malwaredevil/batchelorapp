@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
@@ -243,9 +243,7 @@ function Routes() {
           />
           <Route path="/ornaments/ornament/:id" component={OrnamentsDetail} />
           <Route path="/office">
-            <OfficeLayout>
-              <OfficeHome />
-            </OfficeLayout>
+            <Redirect to="/office/gmail" />
           </Route>
           <Route path="/office/gmail">
             <OfficeLayout>

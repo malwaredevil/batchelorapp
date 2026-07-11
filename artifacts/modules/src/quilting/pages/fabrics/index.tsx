@@ -296,7 +296,7 @@ function FabricCard({
         <img
           src={fabric.imageUrl}
           alt={fabric.name}
-          className="max-h-[85vh] max-w-[85vw] rounded object-contain"
+          className="max-h-[75vh] max-w-[75vw] rounded object-contain"
           draggable={false}
         />
       </PreviewZoomModal>

@@ -57,7 +57,13 @@ function main() {
     for (const file of walk(srcDir)) {
       const lines = readFileSync(file, "utf8").split("\n");
       lines.forEach((line, idx) => {
-        if (RAW_FETCH_RE.test(line)) {
+        if (!RAW_FETCH_RE.test(line)) return;
+        // Allow explicit override comment on the same line, the preceding line,
+        // or the following line (Prettier may reflow the fetch call across lines,
+        // moving an inline comment into the object body on the next line).
+        const window = [lines[idx - 1] ?? "", line, lines[idx + 1] ?? ""];
+        if (window.some((l) => l.includes("// raw-fetch-ok"))) return;
+        {
           violations.push({
             file: relative(REPO_ROOT, file),
             line: idx + 1,

@@ -68,13 +68,12 @@ export function buildFabricUrlMap(
 ): Record<number, string> {
   const map: Record<number, string> = {};
   for (const f of fabrics) {
-    // Use the pre-rasterized PNG tile endpoint: a single GPU texture with
-    // zero per-path DOM cost, eliminating the scroll/zoom jank caused by
-    // thousands of SVG <path> nodes when many fabric tiles are on screen.
-    // Falls back through SVG tile → full photo for resilience.
-    const url = f.id
-      ? `/api/quilting/fabrics/${f.id}/tile-image.png`
-      : (f.tileImageUrl ?? f.imageUrl);
+    // Use the full fabric photo so the pattern shows the fabric at a natural
+    // zoom level (not the small zoomed-in vectorized tile). Falls back to the
+    // tile-image endpoint if no photo URL is available.
+    const url =
+      f.imageUrl ??
+      (f.id ? `/api/quilting/fabrics/${f.id}/tile-image.png` : f.tileImageUrl);
     // These URLs feed raw SVG `<image href>` pattern fills, which can't
     // attach the X-Screenshot-Token header — append it as a query param
     // (no-op for normal users) so the automated screenshot tool can render

@@ -7,6 +7,7 @@ export function SvgCell({
   h,
   cell,
   fabricUrlMap = {},
+  patternPrefix = "",
 }: {
   x: number;
   y: number;
@@ -14,6 +15,12 @@ export function SvgCell({
   h: number;
   cell: string;
   fabricUrlMap?: Record<number, string>;
+  /**
+   * Prefix applied to SVG pattern IDs (`url(#<prefix>fab-N)`).
+   * Must match the prefix used in the parent SVG's <defs>.
+   * Defaults to "" (backward-compatible with single-panel usages).
+   */
+  patternPrefix?: string;
 }) {
   const p = parseCell(cell);
   const cx = x + w / 2;
@@ -22,7 +29,7 @@ export function SvgCell({
   const rf = (c: string) => {
     if (c.startsWith("fab:")) {
       const n = parseInt(c.slice(4), 10);
-      if (!isNaN(n) && fabricUrlMap[n]) return `url(#fab-${n})`;
+      if (!isNaN(n) && fabricUrlMap[n]) return `url(#${patternPrefix}fab-${n})`;
       return "#D1D5DB";
     }
     return c || "#FFFFFF";

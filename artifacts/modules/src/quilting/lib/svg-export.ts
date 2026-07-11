@@ -140,8 +140,8 @@ export function buildBlockSvgString(
       const patterns = ids
         .map(
           (id) =>
-            `<pattern id="fab-${id}" patternUnits="userSpaceOnUse" width="${cellPx / 4}" height="${cellPx / 4}">` +
-            `<image href="${fabricUrlMap[id]}" width="${cellPx / 4}" height="${cellPx / 4}" preserveAspectRatio="xMidYMid slice"/>` +
+            `<pattern id="fab-${id}" patternUnits="userSpaceOnUse" width="${cellPx}" height="${cellPx}">` +
+            `<image href="${fabricUrlMap[id]}" width="${cellPx}" height="${cellPx}" preserveAspectRatio="xMidYMid slice"/>` +
             `</pattern>`,
         )
         .join("");

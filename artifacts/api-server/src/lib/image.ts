@@ -717,3 +717,101 @@ export async function generateProductionFabricTile(
     DIRECTION_A_MAX_DETAIL_TUNING,
   );
 }
+
+// ---------------------------------------------------------------------------
+// Cached + concurrency-limited production tile access
+//
+// Root cause of the "all black-fabric blocks show a generic broken-image
+// pattern" bug: this endpoint used to regenerate the vectorized SVG from
+// scratch on every single request (11-18s each, CPU-bound vectorization +
+// a Supabase Storage download), with zero caching anywhere in the pipeline.
+// The Block Designer list page renders many blocks at once and each one
+// fires an independent `<image href>` fetch per distinct fabric it uses, so
+// a single page load can burst 15-20+ of these expensive requests
+// simultaneously. Under that burst, Supabase Storage connections would time
+// out (`ConnectTimeoutError`, 10s) for some fraction of them, those requests
+// 500'd, and the browser rendered its generic broken-image icon in the SVG
+// pattern fill for every failed fabric — which is why unrelated fabrics
+// (e.g. a gray linen and a muted floral) appeared to show the exact same
+// wrong texture: it wasn't a shared texture, it was the same fallback icon.
+//
+// Fix: memoize the generated SVG per storage path (content-addressed enough
+// since a re-upload/reanalyze writes to a new path) with a small LRU cap,
+// and cap concurrent generations so a page-load burst queues instead of
+// stampeding Supabase Storage.
+// ---------------------------------------------------------------------------
+
+const TILE_CACHE_MAX_ENTRIES = 300;
+const tileCache = new Map<string, string>();
+
+function cacheGet(key: string): string | undefined {
+  const hit = tileCache.get(key);
+  if (hit === undefined) return undefined;
+  // Refresh recency for a simple insertion-order LRU.
+  tileCache.delete(key);
+  tileCache.set(key, hit);
+  return hit;
+}
+
+function cacheSet(key: string, value: string): void {
+  tileCache.delete(key);
+  tileCache.set(key, value);
+  if (tileCache.size > TILE_CACHE_MAX_ENTRIES) {
+    const oldestKey = tileCache.keys().next().value;
+    if (oldestKey !== undefined) tileCache.delete(oldestKey);
+  }
+}
+
+const TILE_GENERATION_CONCURRENCY = 4;
+let activeGenerations = 0;
+const generationQueue: Array<() => void> = [];
+
+async function withGenerationSlot<T>(fn: () => Promise<T>): Promise<T> {
+  if (activeGenerations >= TILE_GENERATION_CONCURRENCY) {
+    await new Promise<void>((resolve) => generationQueue.push(resolve));
+  }
+  activeGenerations++;
+  try {
+    return await fn();
+  } finally {
+    activeGenerations--;
+    const next = generationQueue.shift();
+    if (next) next();
+  }
+}
+
+// De-dupe concurrent requests for the same not-yet-cached image so a burst
+// of requests for the same fabric only triggers one generation.
+const inFlight = new Map<string, Promise<string>>();
+
+/**
+ * Cached, concurrency-limited wrapper around {@link generateProductionFabricTile}.
+ * `imagePath` (the Supabase Storage object path) is used as the cache key —
+ * it changes whenever a fabric's image is replaced, so no explicit
+ * invalidation is required.
+ */
+export async function getCachedProductionFabricTile(
+  imagePath: string,
+  downloadImageBuffer: (
+    path: string,
+  ) => Promise<{ buffer: Buffer; contentType: string }>,
+): Promise<string> {
+  const cached = cacheGet(imagePath);
+  if (cached !== undefined) return cached;
+
+  const existing = inFlight.get(imagePath);
+  if (existing) return existing;
+
+  const generation = withGenerationSlot(async () => {
+    const { buffer } = await downloadImageBuffer(imagePath);
+    const sniffed = sniffImageType(buffer) ?? "image/jpeg";
+    const svg = await generateProductionFabricTile(buffer, sniffed);
+    cacheSet(imagePath, svg);
+    return svg;
+  }).finally(() => {
+    inFlight.delete(imagePath);
+  });
+
+  inFlight.set(imagePath, generation);
+  return generation;
+}

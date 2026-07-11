@@ -373,15 +373,15 @@ function BlockMini({
               patternUnits="userSpaceOnUse"
               x="0"
               y="0"
-              width={cellPx / 4}
-              height={cellPx / 4}
+              width={cellPx}
+              height={cellPx}
             >
               <image
                 href={fabricUrlMap[fabId]}
                 x="0"
                 y="0"
-                width={cellPx / 4}
-                height={cellPx / 4}
+                width={cellPx}
+                height={cellPx}
                 preserveAspectRatio="xMidYMid slice"
               />
             </pattern>
@@ -409,7 +409,7 @@ function BlockMini({
                   h={cellPx}
                   cell={cell}
                   fabricUrlMap={fabricUrlMap}
-                  patternPrefix="mini-fab"
+                  patternPrefix="mini-"
                 />
               );
             })}
@@ -556,6 +556,32 @@ function LayoutGrid({
                 y="0"
                 width={tilePx}
                 height={tilePx}
+                preserveAspectRatio="xMidYMid slice"
+                style={imageFilter ? { filter: imageFilter } : undefined}
+              />
+            </pattern>
+          ))}
+        </defs>
+      )}
+      {/* Fabric fill patterns for block cells (SvgCell references url(#fab-N) with no prefix) */}
+      {fabricPatternIds.size > 0 && (
+        <defs>
+          {Array.from(fabricPatternIds).map((id) => (
+            <pattern
+              key={id}
+              id={`fab-${id}`}
+              patternUnits="userSpaceOnUse"
+              x="0"
+              y="0"
+              width={cellPx}
+              height={cellPx}
+            >
+              <image
+                href={fabricUrlMap[id]}
+                x="0"
+                y="0"
+                width={cellPx}
+                height={cellPx}
                 preserveAspectRatio="xMidYMid slice"
                 style={imageFilter ? { filter: imageFilter } : undefined}
               />

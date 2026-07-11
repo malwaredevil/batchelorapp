@@ -39,6 +39,8 @@ export function PreviewZoomModal({
     py: number;
   } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [wheeling, setWheeling] = useState(false);
+  const wheelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const imageFilter = useMemo(() => {
     const { brightness, contrast, saturation } = viewFilter;
@@ -72,6 +74,9 @@ export function PreviewZoomModal({
     const curX = e.clientX - rect.left - rect.width / 2;
     const curY = e.clientY - rect.top - rect.height / 2;
     const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    setWheeling(true);
+    if (wheelTimerRef.current) clearTimeout(wheelTimerRef.current);
+    wheelTimerRef.current = setTimeout(() => setWheeling(false), 150);
     setZoom((prev) => {
       const next = Math.min(20, Math.max(0.05, prev * factor));
       const ratio = next / prev;
@@ -267,6 +272,7 @@ export function PreviewZoomModal({
             top: "50%",
             transform: `translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) scale(${zoom})`,
             transformOrigin: "center center",
+            transition: wheeling || dragging ? "none" : "transform 0.15s ease-out",
             filter: imageFilter ?? undefined,
             userSelect: "none",
           }}

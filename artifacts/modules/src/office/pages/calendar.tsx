@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   addDays,
+  eachDayOfInterval,
   endOfMonth,
   endOfWeek,
+  isSameMonth,
+  isToday,
   startOfMonth,
   startOfWeek,
 } from "date-fns";
@@ -14,6 +17,7 @@ import {
   MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   useGetCalendarStatus,
   useListConnectedCalendars,
@@ -24,15 +28,7 @@ import {
   type ConnectedCalendar,
 } from "@workspace/api-client-react";
 
-// Office's general-purpose "all connected calendars" view. This is
-// intentionally read-only and distinct from Travels' single designated
-// shared "Travel calendar" (see threat_model.md's Designated shared Google
-// Calendar pattern) — Office does not designate a shared calendar, does not
-// generate trip suggestions, and never writes events. It reuses the exact
-// same per-user Google Calendar OAuth connection and connected-calendars
-// list that Travels' Settings page manages; a user's Office calendar view
-// only ever shows their own connected calendars, matching the existing
-// single-owner boundary.
+type ViewMode = "month" | "week" | "list";
 
 function pad(n: number): string {
   return String(n).padStart(2, "0");
@@ -53,9 +49,29 @@ function monthGridRange(cursor: Date): { start: Date; end: Date } {
   return { start: gridStart, end: addDays(lastRowStart, 7) };
 }
 
-interface DisplayEvent {
-  event: TravelCalendarEvent;
-  calendar: ConnectedCalendar;
+function weekRange(cursor: Date): { start: Date; end: Date } {
+  const start = startOfWeek(cursor);
+  return { start, end: addDays(start, 7) };
+}
+
+function monthRange(cursor: Date): { start: Date; end: Date } {
+  const start = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+  const end = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  return { start, end };
+}
+
+function rangeForView(
+  view: ViewMode,
+  cursor: Date,
+): { start: Date; end: Date } {
+  if (view === "week") return weekRange(cursor);
+  if (view === "month") return monthGridRange(cursor);
+  return monthRange(cursor);
+}
+
+function shiftCursor(view: ViewMode, cursor: Date, direction: 1 | -1): Date {
+  if (view === "week") return addDays(cursor, 7 * direction);
+  return new Date(cursor.getFullYear(), cursor.getMonth() + direction, 1);
 }
 
 function tintColor(hex: string, alpha: number): string {
@@ -67,9 +83,11 @@ function tintColor(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-// Loads one connected calendar's events for the visible range and reports
-// them up to the parent. Kept as its own component so each calendar can
-// independently call the events hook (hooks can't be called in a loop).
+interface DisplayEvent {
+  event: TravelCalendarEvent;
+  calendar: ConnectedCalendar;
+}
+
 function CalendarEventsLoader({
   calendar,
   start,
@@ -103,6 +121,8 @@ function CalendarEventsLoader({
   return null;
 }
 
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
 export default function OfficeCalendar() {
   const { data: status, isLoading: statusLoading } = useGetCalendarStatus();
   const { data: calendars = [] } = useListConnectedCalendars({
@@ -113,14 +133,17 @@ export default function OfficeCalendar() {
   });
 
   const [cursor, setCursor] = useState(() => new Date());
-  const { start, end } = useMemo(() => monthGridRange(cursor), [cursor]);
+  const [view, setView] = useState<ViewMode>("month");
+  const { start, end } = useMemo(
+    () => rangeForView(view, cursor),
+    [view, cursor],
+  );
   const startISO = start.toISOString();
   const endISO = end.toISOString();
 
   const [eventsByCalendar, setEventsByCalendar] = useState<
     Record<number, TravelCalendarEvent[]>
   >({});
-
   function handleEvents(calendarId: number, events: TravelCalendarEvent[]) {
     setEventsByCalendar((prev) => ({ ...prev, [calendarId]: events }));
   }
@@ -148,6 +171,17 @@ export default function OfficeCalendar() {
       );
   }, [calendars, hiddenCalendarIds, eventsByCalendar]);
 
+  const eventsByDay = useMemo(() => {
+    const map = new Map<string, DisplayEvent[]>();
+    for (const item of displayEvents) {
+      const key = eventDayKey(item.event);
+      const list = map.get(key) ?? [];
+      list.push(item);
+      map.set(key, list);
+    }
+    return map;
+  }, [displayEvents]);
+
   const groups = useMemo(() => {
     const map = new Map<string, DisplayEvent[]>();
     for (const item of displayEvents) {
@@ -159,10 +193,38 @@ export default function OfficeCalendar() {
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [displayEvents]);
 
+  const gridDays = useMemo(() => {
+    if (view === "list") return [];
+    const lastDayInclusive = addDays(end, -1);
+    return eachDayOfInterval({ start, end: lastDayInclusive });
+  }, [view, start, end]);
+
+  const cursorLabel =
+    view === "week"
+      ? (() => {
+          const weekEnd = addDays(start, 6);
+          const sameMonth = start.getMonth() === weekEnd.getMonth();
+          const startLabel = start.toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+          });
+          const endLabel = weekEnd.toLocaleDateString(
+            undefined,
+            sameMonth
+              ? { day: "numeric", year: "numeric" }
+              : { month: "short", day: "numeric", year: "numeric" },
+          );
+          return `${startLabel} – ${endLabel}`;
+        })()
+      : cursor.toLocaleDateString(undefined, {
+          month: "long",
+          year: "numeric",
+        });
+
   if (!statusLoading && !status?.connected) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-16 text-center">
-        <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400">
+        <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400">
           <CalendarDays className="h-6 w-6" />
         </span>
         <h1 className="font-serif text-2xl text-foreground">
@@ -185,7 +247,7 @@ export default function OfficeCalendar() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8 space-y-6">
+    <div className="mx-auto max-w-5xl px-4 py-8 space-y-4">
       {calendars.map((cal) => (
         <CalendarEventsLoader
           key={cal.id}
@@ -203,22 +265,18 @@ export default function OfficeCalendar() {
         </p>
       </div>
 
+      {/* Toolbar: navigation + view switcher */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-card-border bg-card px-4 py-3">
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
             size="icon"
-            onClick={() =>
-              setCursor((c) => new Date(c.getFullYear(), c.getMonth() - 1, 1))
-            }
+            onClick={() => setCursor((c) => shiftCursor(view, c, -1))}
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <span className="font-medium text-foreground">
-            {cursor.toLocaleDateString(undefined, {
-              month: "long",
-              year: "numeric",
-            })}
+          <span className="font-medium text-foreground min-w-[160px] text-center">
+            {cursorLabel}
           </span>
           <Button
             variant="outline"
@@ -230,22 +288,30 @@ export default function OfficeCalendar() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() =>
-              setCursor((c) => new Date(c.getFullYear(), c.getMonth() + 1, 1))
-            }
+            onClick={() => setCursor((c) => shiftCursor(view, c, 1))}
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
+        <ToggleGroup
+          type="single"
+          value={view}
+          onValueChange={(v) => v && setView(v as ViewMode)}
+          className="justify-start"
+        >
+          <ToggleGroupItem value="month" size="sm" aria-label="Month view">
+            Month
+          </ToggleGroupItem>
+          <ToggleGroupItem value="week" size="sm" aria-label="Week view">
+            Week
+          </ToggleGroupItem>
+          <ToggleGroupItem value="list" size="sm" aria-label="List view">
+            List
+          </ToggleGroupItem>
+        </ToggleGroup>
       </div>
 
-      {calendars.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          Your Google account is connected, but no calendars have been added
-          yet. Add calendars from Travels Settings to see them here.
-        </p>
-      )}
-
+      {/* Calendar filter chips */}
       {calendars.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-card-border bg-card px-4 py-3">
           {calendars.map((cal) => {
@@ -257,7 +323,7 @@ export default function OfficeCalendar() {
                 onClick={() => toggleCalendarVisibility(cal.id)}
                 className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition ${
                   hidden
-                    ? "opacity-50 border-card-border"
+                    ? "opacity-40 border-card-border"
                     : "border-transparent"
                 }`}
                 style={
@@ -281,67 +347,165 @@ export default function OfficeCalendar() {
         </div>
       )}
 
-      <div className="space-y-4">
-        {groups.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            No events found in this range.
-          </p>
-        )}
-        {groups.map(([day, items]) => (
-          <div key={day} className="space-y-2">
-            <h2 className="text-sm font-semibold text-foreground">
-              {new Date(`${day}T00:00:00`).toLocaleDateString(undefined, {
-                weekday: "long",
-                month: "long",
-                day: "numeric",
-              })}
-            </h2>
-            <div className="space-y-1.5">
-              {items.map((item) => (
+      {/* Empty connected state */}
+      {calendars.length === 0 && (
+        <p className="text-sm text-muted-foreground px-1">
+          Your Google account is connected, but no calendars have been added
+          yet. Add calendars from Travels Settings to see them here.
+        </p>
+      )}
+
+      {/* ── Month / Week grid ─────────────────────────────────────────── */}
+      {(view === "month" || view === "week") && (
+        <div className="rounded-xl border border-card-border bg-card overflow-hidden">
+          {/* Day-of-week header */}
+          <div className="grid grid-cols-7 border-b border-card-border">
+            {DAY_LABELS.map((label) => (
+              <div
+                key={label}
+                className="py-2 text-center text-xs font-semibold text-muted-foreground"
+              >
+                {label}
+              </div>
+            ))}
+          </div>
+
+          {/* Grid cells */}
+          <div
+            className={`grid grid-cols-7 ${
+              view === "month" ? "auto-rows-[minmax(90px,1fr)]" : "auto-rows-[minmax(120px,1fr)]"
+            }`}
+          >
+            {gridDays.map((day) => {
+              const key = dateKey(day);
+              const dayEvents = eventsByDay.get(key) ?? [];
+              const outsideMonth =
+                view === "month" && !isSameMonth(day, cursor);
+              const today = isToday(day);
+
+              return (
                 <div
-                  key={`${item.calendar.id}-${item.event.id}`}
-                  className="flex items-start gap-3 rounded-lg border border-card-border bg-card px-3 py-2"
-                  style={{
-                    borderLeft: `3px solid ${item.calendar.primaryColor}`,
-                  }}
+                  key={key}
+                  className={`border-b border-r border-card-border p-1 ${
+                    outsideMonth ? "bg-muted/30" : ""
+                  } last:border-r-0`}
                 >
-                  <div className="min-w-0 flex-1 space-y-0.5">
-                    <p className="truncate text-sm font-medium text-foreground">
-                      {item.event.title}
-                      <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                        · {item.calendar.summary}
-                      </span>
-                    </p>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                      {!item.event.allDay && (
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {new Date(item.event.start).toLocaleTimeString(
-                            undefined,
-                            { hour: "numeric", minute: "2-digit" },
-                          )}
-                          {" – "}
-                          {new Date(item.event.end).toLocaleTimeString(
-                            undefined,
-                            { hour: "numeric", minute: "2-digit" },
-                          )}
-                        </span>
-                      )}
-                      {item.event.allDay && <span>All day</span>}
-                      {item.event.location && (
-                        <span className="flex items-center gap-1">
-                          <MapPin className="h-3 w-3" />
-                          {item.event.location}
-                        </span>
-                      )}
-                    </div>
+                  <div className="flex items-center justify-end mb-1">
+                    <span
+                      className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
+                        today
+                          ? "bg-primary text-primary-foreground"
+                          : outsideMonth
+                            ? "text-muted-foreground/50"
+                            : "text-foreground"
+                      }`}
+                    >
+                      {day.getDate()}
+                    </span>
+                  </div>
+                  <div className="space-y-0.5 overflow-hidden">
+                    {dayEvents.slice(0, view === "month" ? 2 : 4).map((item) => (
+                      <div
+                        key={`${item.calendar.id}-${item.event.id}`}
+                        className="truncate rounded px-1 py-0.5 text-[10px] font-medium leading-tight"
+                        style={{
+                          backgroundColor: tintColor(
+                            item.calendar.primaryColor,
+                            0.2,
+                          ),
+                          color: item.calendar.primaryColor,
+                          border: `1px solid ${tintColor(item.calendar.primaryColor, 0.4)}`,
+                        }}
+                        title={item.event.title}
+                      >
+                        {!item.event.allDay && (
+                          <span className="opacity-70 mr-0.5">
+                            {new Date(item.event.start).toLocaleTimeString(
+                              undefined,
+                              { hour: "numeric", minute: "2-digit" },
+                            )}
+                          </span>
+                        )}
+                        {item.event.title}
+                      </div>
+                    ))}
+                    {dayEvents.length > (view === "month" ? 2 : 4) && (
+                      <div className="px-1 text-[10px] text-muted-foreground">
+                        +{dayEvents.length - (view === "month" ? 2 : 4)} more
+                      </div>
+                    )}
                   </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
-        ))}
-      </div>
+        </div>
+      )}
+
+      {/* ── List view ─────────────────────────────────────────────────── */}
+      {view === "list" && (
+        <div className="space-y-4">
+          {groups.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              No events found in this range.
+            </p>
+          )}
+          {groups.map(([day, items]) => (
+            <div key={day} className="space-y-2">
+              <h2 className="text-sm font-semibold text-foreground">
+                {new Date(`${day}T00:00:00`).toLocaleDateString(undefined, {
+                  weekday: "long",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </h2>
+              <div className="space-y-1.5">
+                {items.map((item) => (
+                  <div
+                    key={`${item.calendar.id}-${item.event.id}`}
+                    className="flex items-start gap-3 rounded-lg border border-card-border bg-card px-3 py-2"
+                    style={{
+                      borderLeft: `3px solid ${item.calendar.primaryColor}`,
+                    }}
+                  >
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {item.event.title}
+                        <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                          · {item.calendar.summary}
+                        </span>
+                      </p>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        {!item.event.allDay && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {new Date(item.event.start).toLocaleTimeString(
+                              undefined,
+                              { hour: "numeric", minute: "2-digit" },
+                            )}
+                            {" – "}
+                            {new Date(item.event.end).toLocaleTimeString(
+                              undefined,
+                              { hour: "numeric", minute: "2-digit" },
+                            )}
+                          </span>
+                        )}
+                        {item.event.allDay && <span>All day</span>}
+                        {item.event.location && (
+                          <span className="flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
+                            {item.event.location}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

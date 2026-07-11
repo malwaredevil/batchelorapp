@@ -7,6 +7,77 @@ import { requireAuth } from "../../middleware/auth";
 
 const router: IRouter = Router();
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Sanitize the stored itinerary JSON for public consumption.
+ *
+ * The authenticated itinerary can contain fields that must never reach an
+ * unauthenticated bearer-token caller:
+ *
+ *  - `sourceDocumentId` — foreign-key reference to a private travel document.
+ *  - `sourceField`      — reveals the internal document extraction schema.
+ *  - `tip` (on document-sourced activities) — populated from
+ *    `extractedData.notes`, which can contain booking references and other
+ *    sensitive details extracted from private files uploaded by the household.
+ *
+ * User-authored activities (no `sourceDocumentId`) may keep their `tip`
+ * because those were typed in manually by the household, not derived from a
+ * private document.
+ *
+ * Only explicitly allow-listed top-level activity fields are forwarded so that
+ * any future additions to the stored shape do not silently become public.
+ */
+const SAFE_EMPTY_ITINERARY = { days: [] as unknown[] };
+
+function sanitizeItineraryForPublicShare(itinerary: unknown): unknown {
+  // Fail-closed: anything that is not a plain object with a `days` array is
+  // replaced with a safe empty structure so that non-conforming stored shapes
+  // (e.g. from an earlier schema, a future write, or an intentionally crafted
+  // PATCH body) cannot leak raw private data to unauthenticated callers.
+  if (
+    !itinerary ||
+    typeof itinerary !== "object" ||
+    !Array.isArray((itinerary as { days?: unknown }).days)
+  ) {
+    return SAFE_EMPTY_ITINERARY;
+  }
+  const { days } = itinerary as { days: unknown[] };
+  return {
+    days: days.flatMap((day: unknown) => {
+      // Non-object day entries are dropped rather than forwarded.
+      if (!day || typeof day !== "object") return [];
+      const d = day as Record<string, unknown>;
+      return [
+        {
+          date: d["date"],
+          title: d["title"],
+          activities: Array.isArray(d["activities"])
+            ? d["activities"].flatMap((act: unknown) => {
+                // Non-object activity entries are dropped rather than forwarded.
+                if (!act || typeof act !== "object") return [];
+                const a = act as Record<string, unknown>;
+                const isDocSourced = a["sourceDocumentId"] != null;
+                return [
+                  {
+                    time: a["time"],
+                    name: a["name"],
+                    description: a["description"],
+                    proximity: a["proximity"],
+                    status: a["status"],
+                    // Omit tip for document-sourced activities: the value comes
+                    // from extractedData.notes and may contain booking details.
+                    ...(isDocSourced ? {} : { tip: a["tip"] }),
+                  },
+                ];
+              })
+            : [],
+        },
+      ];
+    }),
+  };
+}
+
 // ── Public — no requireAuth ───────────────────────────────────────────────────
 
 // GET /trips/:id/share?token=<token> — read-only itinerary view, no session required.
@@ -38,7 +109,7 @@ router.get("/trips/:id/share", async (req, res) => {
     status: trip.status,
     travellerCount: trip.travellerCount,
     notes: trip.notes,
-    itinerary: trip.itinerary,
+    itinerary: sanitizeItineraryForPublicShare(trip.itinerary),
     theOneThing: trip.theOneThing,
     transportTo: trip.transportTo,
     accommodationName: trip.accommodationName,

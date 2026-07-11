@@ -51,6 +51,7 @@ import {
   generateFabricTileVectorized,
   generateFabricTileVectorizedTuned,
   generateProductionFabricTile,
+  getCachedProductionFabricTile,
   DIRECTION_A_SMOOTH_TUNING,
   DIRECTION_A_CRISP_TUNING,
   DIRECTION_A_THREE_PASS_TUNING,
@@ -779,12 +780,79 @@ router.get("/fabrics/:id/tile-image", async (req, res) => {
     res.status(404).json({ error: "Fabric not found." });
     return;
   }
-  const { buffer } = await downloadImageBuffer(row.imagePath);
-  const sniffed = sniffImageType(buffer) ?? "image/jpeg";
-  const svg = await generateProductionFabricTile(buffer, sniffed);
+  const svg = await getCachedProductionFabricTile(
+    row.imagePath,
+    downloadImageBuffer,
+  );
   res.set("Content-Type", "image/svg+xml");
   res.set("Cache-Control", "private, max-age=86400");
   res.end(svg);
+});
+
+// ---------------------------------------------------------------------------
+// GET /fabrics/:id/tile-image.png — rasterized PNG version of the SVG tile.
+// The browser caches this for 1 year (immutable). Use this instead of the
+// SVG endpoint wherever the tile fills a <pattern> inside an SVG canvas,
+// because a raster PNG is a single GPU texture (zero per-path layout cost),
+// while an inlined SVG pattern expands into thousands of DOM path nodes at
+// scale and causes scroll/zoom jank in the block designer and layout composer.
+// ---------------------------------------------------------------------------
+// Simple in-memory LRU-style cache: keyed by "imagePath:size".
+// Each 1024×1024 PNG is ~200–500 kB; cap at 100 entries (~30 MB worst case).
+const _pngCache = new Map<string, Buffer>();
+const PNG_CACHE_MAX = 100;
+function pngCacheGet(key: string): Buffer | undefined {
+  return _pngCache.get(key);
+}
+function pngCacheSet(key: string, buf: Buffer): void {
+  if (_pngCache.size >= PNG_CACHE_MAX) {
+    const oldest = _pngCache.keys().next().value;
+    if (oldest) _pngCache.delete(oldest);
+  }
+  _pngCache.set(key, buf);
+}
+
+router.get("/fabrics/:id/tile-image.png", async (req, res) => {
+  const { id } = GetFabricImageParams.parse(req.params);
+  const [row] = await db
+    .select({ imagePath: fabrics.imagePath })
+    .from(fabrics)
+    .where(eq(fabrics.id, id))
+    .limit(1);
+  if (!row) {
+    res.status(404).json({ error: "Fabric not found." });
+    return;
+  }
+
+  const sizeRaw = parseInt(String(req.query.size ?? "1024"), 10);
+  const size = Number.isFinite(sizeRaw)
+    ? Math.min(2048, Math.max(128, sizeRaw))
+    : 1024;
+
+  const cacheKey = `${row.imagePath}:${size}`;
+  const cached = pngCacheGet(cacheKey);
+  if (cached) {
+    res.set("Content-Type", "image/png");
+    res.set("Cache-Control", "public, max-age=31536000, immutable");
+    res.end(cached);
+    return;
+  }
+
+  const svg = await getCachedProductionFabricTile(
+    row.imagePath,
+    downloadImageBuffer,
+  );
+
+  const { default: sharp } = await import("sharp");
+  const png = await sharp(Buffer.from(svg), { density: Math.round(size / 3) })
+    .resize(size, size, { fit: "fill" })
+    .png({ compressionLevel: 8 })
+    .toBuffer();
+
+  pngCacheSet(cacheKey, png);
+  res.set("Content-Type", "image/png");
+  res.set("Cache-Control", "public, max-age=31536000, immutable");
+  res.end(png);
 });
 
 // ---------------------------------------------------------------------------

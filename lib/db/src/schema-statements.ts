@@ -50,6 +50,14 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE password_reset_tokens ENABLE ROW LEVEL SECURITY`,
   `CREATE INDEX IF NOT EXISTS password_reset_tokens_user_idx
      ON password_reset_tokens (user_id)`,
+  // Prevent two simultaneous forgot-password requests from both issuing a
+  // valid token for the same user. The partial index (WHERE NOT used) means
+  // at most one active token can exist per user; a concurrent INSERT from a
+  // second parallel request hits a unique constraint violation, which the
+  // handler catches and swallows — only the first request's token is active.
+  `CREATE UNIQUE INDEX IF NOT EXISTS password_reset_tokens_user_active_idx
+     ON password_reset_tokens (user_id)
+     WHERE NOT used`,
   // Additive back-fills (each app historically created a partial version):
   `ALTER TABLE password_reset_tokens
      ADD COLUMN IF NOT EXISTS used boolean NOT NULL DEFAULT false`,

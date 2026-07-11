@@ -588,25 +588,44 @@ router.post("/auth/forgot-password", loginLimiter, async (req, res) => {
 
       const expiresAt = new Date(Date.now() + THIRTY_MINUTES_MS);
 
-      // Revoke any outstanding (unused, unexpired) tokens for this user before
-      // issuing a fresh one. This ensures that only the newest reset link is
-      // valid, so a prior token obtained by an attacker (e.g. from a forwarded
-      // email) cannot be replayed after the victim initiates a new reset.
-      await db
-        .update(passwordResetTokens)
-        .set({ used: true, usedAt: new Date() })
-        .where(
-          and(
-            eq(passwordResetTokens.userId, user.id),
-            eq(passwordResetTokens.used, false),
-          ),
-        );
-
-      await db.insert(passwordResetTokens).values({
-        userId: user.id,
-        tokenHash,
-        expiresAt,
-      });
+      // Atomically revoke any outstanding tokens and issue a fresh one inside
+      // a single transaction. The partial unique index on
+      // (user_id) WHERE NOT used means only one active token per user can
+      // exist — if two simultaneous forgot-password requests both reach this
+      // point, the second INSERT hits a unique constraint violation. We catch
+      // that and return without sending a second email: the first request's
+      // token is already on its way, so the user gets exactly one valid link.
+      try {
+        await db.transaction(async (tx) => {
+          await tx
+            .update(passwordResetTokens)
+            .set({ used: true, usedAt: new Date() })
+            .where(
+              and(
+                eq(passwordResetTokens.userId, user.id),
+                eq(passwordResetTokens.used, false),
+              ),
+            );
+          await tx.insert(passwordResetTokens).values({
+            userId: user.id,
+            tokenHash,
+            expiresAt,
+          });
+        });
+      } catch (err: unknown) {
+        // A parallel request already inserted an active token for this user
+        // (unique constraint on (user_id) WHERE NOT used). One valid reset
+        // link is already in flight — swallow this and skip the email send.
+        const pg = err as { code?: string };
+        if (pg.code === "23505") {
+          req.log.info(
+            { userId: user.id },
+            "forgot-password: parallel request already issued a token, skipping duplicate",
+          );
+          return;
+        }
+        throw err;
+      }
 
       // Build the reset URL from the incoming request host (validated against
       // REPLIT_DOMAINS like the Google OAuth flow).

@@ -272,7 +272,8 @@ export function PreviewZoomModal({
             top: "50%",
             transform: `translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) scale(${zoom})`,
             transformOrigin: "center center",
-            transition: wheeling || dragging ? "none" : "transform 0.15s ease-out",
+            transition:
+              wheeling || dragging ? "none" : "transform 0.15s ease-out",
             filter: imageFilter ?? undefined,
             userSelect: "none",
           }}

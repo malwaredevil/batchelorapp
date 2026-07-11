@@ -246,6 +246,7 @@ export default function BlockDetail() {
             size={280}
             tileCount={1}
             fabricUrlMap={numMap}
+            patternPrefix="det-th-"
           />
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/20 group-hover:opacity-100">
             <ZoomIn className="h-10 w-10 text-white drop-shadow-lg" />
@@ -478,9 +479,10 @@ export default function BlockDetail() {
         <BlockPreviewSvg
           cells={cells}
           gridSize={gridSize}
-          size={500}
+          size={700}
           tileCount={1}
           fabricUrlMap={numMap}
+          patternPrefix="det-zm-"
         />
       </PreviewZoomModal>
       <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>

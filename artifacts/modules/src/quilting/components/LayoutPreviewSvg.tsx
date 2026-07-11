@@ -24,11 +24,22 @@ export function LayoutPreviewSvg({
   blocks,
   size = 160,
   fabricUrlMap = {},
+  fabricTileRepeats = 1,
+  patternPrefix = "",
 }: {
   layout: LayoutSummaryMin;
   blocks: BlockSummaryMin[];
   size?: number;
   fabricUrlMap?: Record<number, string>;
+  /** How many times to repeat the tile across one block cell. Default 4 (= 4×4 = 16 tiles per cell). */
+  fabricTileRepeats?: number;
+  /**
+   * Prefix applied to SVG pattern IDs to avoid ID collisions when multiple
+   * LayoutPreviewSvg instances share the same HTML document.
+   * Must be unique per instance; use React's useId() at the call site.
+   * Defaults to "" (backward-compatible for single-panel pages).
+   */
+  patternPrefix?: string;
 }) {
   const blockMap = new Map(blocks.map((b) => [b.id, b]));
   const sashW = layout.sashingWidthInches ?? 0;
@@ -77,19 +88,19 @@ export function LayoutPreviewSvg({
           {fabIds.map((id) => (
             <pattern
               key={id}
-              id={`fab-${id}`}
+              id={`${patternPrefix}fab-${id}`}
               patternUnits="userSpaceOnUse"
               x="0"
               y="0"
-              width={cellPx / 4}
-              height={cellPx / 4}
+              width={cellPx / fabricTileRepeats}
+              height={cellPx / fabricTileRepeats}
             >
               <image
                 href={fabricUrlMap[id]}
                 x="0"
                 y="0"
-                width={cellPx / 4}
-                height={cellPx / 4}
+                width={cellPx / fabricTileRepeats}
+                height={cellPx / fabricTileRepeats}
                 preserveAspectRatio="xMidYMid slice"
               />
             </pattern>
@@ -170,6 +181,7 @@ export function LayoutPreviewSvg({
                   h={bCellPx}
                   cell={blockCell}
                   fabricUrlMap={fabricUrlMap}
+                  patternPrefix={patternPrefix}
                 />
               );
             })}

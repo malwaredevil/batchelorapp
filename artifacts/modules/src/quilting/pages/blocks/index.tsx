@@ -94,16 +94,16 @@ function SvgCell({
   w,
   h,
   cell,
-  id,
   fabricUrlMap = {},
+  patternPrefix = "",
 }: {
   x: number;
   y: number;
   w: number;
   h: number;
   cell: string;
-  id: string;
   fabricUrlMap?: Record<number, string>;
+  patternPrefix?: string;
 }) {
   const p = parseCell(cell);
   const cx = x + w / 2;
@@ -111,8 +111,9 @@ function SvgCell({
   const sw = Math.max(0.4, w * 0.04); // seam-line stroke width scales with cell size
   const rf = (c: string) => {
     if (c.startsWith("fab:")) {
-      const id = parseInt(c.slice(4), 10);
-      if (!isNaN(id) && fabricUrlMap[id]) return `url(#fab-${id})`;
+      const fid = parseInt(c.slice(4), 10);
+      if (!isNaN(fid) && fabricUrlMap[fid])
+        return `url(#${patternPrefix}fab-${fid})`;
       return "#D1D5DB";
     }
     return c || "#FFFFFF";
@@ -295,6 +296,7 @@ function BlockPreviewSvg({
   size = 120,
   tileCount = 2,
   fabricUrlMap = {},
+  patternPrefix = "",
 }: {
   cells: string[];
   gridSize: number;
@@ -302,6 +304,7 @@ function BlockPreviewSvg({
   size?: number;
   tileCount?: number;
   fabricUrlMap?: Record<number, string>;
+  patternPrefix?: string;
 }) {
   const gridH = Math.max(1, Math.ceil(cells.length / gridSize));
   const cellPx = size / (gridSize * tileCount);
@@ -331,19 +334,19 @@ function BlockPreviewSvg({
           {fabIds.map((id) => (
             <pattern
               key={id}
-              id={`fab-${id}`}
+              id={`${patternPrefix}fab-${id}`}
               patternUnits="userSpaceOnUse"
               x="0"
               y="0"
-              width={cellPx / 4}
-              height={cellPx / 4}
+              width={cellPx * gridSize}
+              height={cellPx * gridH}
             >
               <image
                 href={fabricUrlMap[id]}
                 x="0"
                 y="0"
-                width={cellPx / 4}
-                height={cellPx / 4}
+                width={cellPx * gridSize}
+                height={cellPx * gridH}
                 preserveAspectRatio="xMidYMid slice"
               />
             </pattern>
@@ -364,13 +367,13 @@ function BlockPreviewSvg({
               return (
                 <SvgCell
                   key={i}
-                  id={`${tile}-${i}`}
                   x={offX + col * cellPx}
                   y={offY + row * cellPx}
                   w={cellPx}
                   h={cellPx}
                   cell={cell}
                   fabricUrlMap={fabricUrlMap}
+                  patternPrefix={patternPrefix}
                 />
               );
             })}
@@ -444,6 +447,7 @@ function BlockCard({
               size={160}
               tileCount={1}
               fabricUrlMap={fabricUrlMap}
+              patternPrefix={`bth-${block.id}-`}
             />
             <button
               onClick={(e) => {
@@ -618,9 +622,10 @@ function BlockCard({
           cells={block.cells}
           gridSize={block.gridSize}
           seams={block.seams}
-          size={500}
+          size={700}
           tileCount={1}
           fabricUrlMap={fabricUrlMap}
+          patternPrefix={`bzm-${block.id}-`}
         />
       </PreviewZoomModal>
     </>

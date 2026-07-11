@@ -442,7 +442,7 @@ export default function FabricDetail() {
           <img
             src={f.imageUrl}
             alt={f.name}
-            className="h-full w-full object-cover"
+            className="h-full w-full object-contain"
           />
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/20 group-hover:opacity-100">
             <ZoomIn className="h-10 w-10 text-white drop-shadow-lg" />
@@ -456,7 +456,7 @@ export default function FabricDetail() {
           <img
             src={f.imageUrl}
             alt={f.name}
-            className="max-h-[85vh] max-w-[85vw] rounded object-contain"
+            className="max-h-[75vh] max-w-[75vw] rounded object-contain"
             draggable={false}
           />
         </PreviewZoomModal>

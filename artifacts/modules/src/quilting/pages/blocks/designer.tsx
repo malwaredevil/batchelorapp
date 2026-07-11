@@ -1555,15 +1555,15 @@ export function BlockGrid({
                   patternUnits="userSpaceOnUse"
                   x="0"
                   y="0"
-                  width={CELL_PX / 4}
-                  height={CELL_PX / 4}
+                  width={CELL_PX * gridW}
+                  height={CELL_PX * gridH}
                 >
                   <image
                     href={fabricUrlMap[id]}
                     x="0"
                     y="0"
-                    width={CELL_PX / 4}
-                    height={CELL_PX / 4}
+                    width={CELL_PX * gridW}
+                    height={CELL_PX * gridH}
                     preserveAspectRatio="xMidYMid slice"
                     style={imageFilter ? { filter: imageFilter } : undefined}
                   />
@@ -2006,15 +2006,15 @@ function TiledPreview({
                   patternUnits="userSpaceOnUse"
                   x="0"
                   y="0"
-                  width={cellPx / 4}
-                  height={cellPx / 4}
+                  width={tileW}
+                  height={tileH}
                 >
                   <image
                     href={fabricUrlMap[id]}
                     x="0"
                     y="0"
-                    width={cellPx / 4}
-                    height={cellPx / 4}
+                    width={tileW}
+                    height={tileH}
                     preserveAspectRatio="xMidYMid slice"
                     style={imageFilter ? { filter: imageFilter } : undefined}
                   />
@@ -3381,7 +3381,9 @@ export default function BlockDesigner() {
         setIsDirty(false);
         if (exitAfterSaveRef.current) {
           exitAfterSaveRef.current = false;
-          navigate(blockId ? `/blocks/${blockId}` : "/blocks");
+          navigate(
+            blockId ? `/quilting/blocks/${blockId}` : "/quilting/blocks",
+          );
         } else {
           toast.success("Block design updated!");
         }
@@ -3971,7 +3973,9 @@ export default function BlockDesigner() {
                 setIsDirty(false);
                 navigate(
                   pendingNavRef.current ??
-                    (templateMode ? "/library/blocks" : "/blocks"),
+                    (templateMode
+                      ? "/quilting/library/blocks"
+                      : "/quilting/blocks"),
                 );
                 pendingNavRef.current = null;
               }}
@@ -4001,10 +4005,10 @@ export default function BlockDesigner() {
           onClick={() =>
             requestNav(
               templateMode
-                ? "/library/blocks"
+                ? "/quilting/library/blocks"
                 : blockId
-                  ? `/blocks/${blockId}`
-                  : "/blocks",
+                  ? `/quilting/blocks/${blockId}`
+                  : "/quilting/blocks",
             )
           }
         >

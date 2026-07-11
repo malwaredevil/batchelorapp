@@ -131,6 +131,7 @@ function SvgCell({
   h,
   cell,
   fabricUrlMap = {},
+  patternPrefix = "",
 }: {
   x: number;
   y: number;
@@ -138,6 +139,7 @@ function SvgCell({
   h: number;
   cell: string;
   fabricUrlMap?: Record<number, string>;
+  patternPrefix?: string;
 }) {
   const p = parseCell(cell);
   const cx = x + w / 2;
@@ -146,7 +148,7 @@ function SvgCell({
   const rf = (c: string) => {
     if (c.startsWith("fab:")) {
       const n = parseInt(c.slice(4), 10);
-      if (!isNaN(n) && fabricUrlMap[n]) return `url(#fab-${n})`;
+      if (!isNaN(n) && fabricUrlMap[n]) return `url(#${patternPrefix}fab-${n})`;
       return "#D1D5DB";
     }
     return c || "#FFFFFF";
@@ -313,11 +315,13 @@ function LayoutPreview({
   blocks,
   size = 160,
   fabricUrlMap = {},
+  patternPrefix = "",
 }: {
   layout: LayoutSummary;
   blocks: BlockSummary[];
   size: number;
   fabricUrlMap?: Record<number, string>;
+  patternPrefix?: string;
 }) {
   const blockMap = new Map(blocks.map((b) => [b.id, b]));
   const sashW = layout.sashingWidthInches ?? 0;
@@ -367,19 +371,19 @@ function LayoutPreview({
           {fabIds.map((id) => (
             <pattern
               key={id}
-              id={`fab-${id}`}
+              id={`${patternPrefix}fab-${id}`}
               patternUnits="userSpaceOnUse"
               x="0"
               y="0"
-              width={cellPx / 4}
-              height={cellPx / 4}
+              width={cellPx}
+              height={cellPx}
             >
               <image
                 href={fabricUrlMap[id]}
                 x="0"
                 y="0"
-                width={cellPx / 4}
-                height={cellPx / 4}
+                width={cellPx}
+                height={cellPx}
                 preserveAspectRatio="xMidYMid slice"
               />
             </pattern>
@@ -460,6 +464,7 @@ function LayoutPreview({
                   h={bCellPx}
                   cell={blockCell}
                   fabricUrlMap={fabricUrlMap}
+                  patternPrefix={patternPrefix}
                 />
               );
             })}
@@ -640,6 +645,7 @@ function LayoutCard({
               blocks={blocks}
               size={160}
               fabricUrlMap={fabricUrlMap}
+              patternPrefix={`lth-${layout.id}-`}
             />
             <button
               onClick={(e) => {
@@ -803,8 +809,9 @@ function LayoutCard({
         <LayoutPreview
           layout={layout}
           blocks={blocks}
-          size={600}
+          size={800}
           fabricUrlMap={fabricUrlMap}
+          patternPrefix={`lzm-${layout.id}-`}
         />
       </PreviewZoomModal>
     </>

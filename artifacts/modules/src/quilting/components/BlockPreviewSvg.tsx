@@ -16,6 +16,8 @@ export function BlockPreviewSvg({
   size = 120,
   tileCount = 2,
   fabricUrlMap = {},
+  fabricTileRepeats = 1,
+  patternPrefix = "",
 }: {
   cells: string[];
   gridSize: number;
@@ -25,6 +27,15 @@ export function BlockPreviewSvg({
   size?: number;
   tileCount?: number;
   fabricUrlMap?: Record<number, string>;
+  /** How many times to repeat the tile across one block cell. Default 4 (= 4×4 = 16 tiles per cell). */
+  fabricTileRepeats?: number;
+  /**
+   * Prefix applied to SVG pattern IDs to avoid ID collisions when multiple
+   * BlockPreviewSvg instances share the same HTML document.
+   * Must be unique per instance; use React's useId() at the call site.
+   * Defaults to "" (backward-compatible for single-panel pages).
+   */
+  patternPrefix?: string;
 }) {
   const gridH = gridHeight ?? Math.max(1, Math.ceil(cells.length / gridSize));
   const cellPx = size / (gridSize * tileCount);
@@ -53,19 +64,19 @@ export function BlockPreviewSvg({
           {fabIds.map((id) => (
             <pattern
               key={id}
-              id={`fab-${id}`}
+              id={`${patternPrefix}fab-${id}`}
               patternUnits="userSpaceOnUse"
               x="0"
               y="0"
-              width={cellPx / 4}
-              height={cellPx / 4}
+              width={(cellPx * gridSize) / fabricTileRepeats}
+              height={(cellPx * gridH) / fabricTileRepeats}
             >
               <image
                 href={fabricUrlMap[id]}
                 x="0"
                 y="0"
-                width={cellPx / 4}
-                height={cellPx / 4}
+                width={(cellPx * gridSize) / fabricTileRepeats}
+                height={(cellPx * gridH) / fabricTileRepeats}
                 preserveAspectRatio="xMidYMid slice"
               />
             </pattern>
@@ -92,6 +103,7 @@ export function BlockPreviewSvg({
                   h={cellPx}
                   cell={cell}
                   fabricUrlMap={fabricUrlMap}
+                  patternPrefix={patternPrefix}
                 />
               );
             })}

@@ -373,7 +373,9 @@ export default function OfficeCalendar() {
           {/* Grid cells */}
           <div
             className={`grid grid-cols-7 ${
-              view === "month" ? "auto-rows-[minmax(90px,1fr)]" : "auto-rows-[minmax(120px,1fr)]"
+              view === "month"
+                ? "auto-rows-[minmax(90px,1fr)]"
+                : "auto-rows-[minmax(120px,1fr)]"
             }`}
           >
             {gridDays.map((day) => {
@@ -404,31 +406,33 @@ export default function OfficeCalendar() {
                     </span>
                   </div>
                   <div className="space-y-0.5 overflow-hidden">
-                    {dayEvents.slice(0, view === "month" ? 2 : 4).map((item) => (
-                      <div
-                        key={`${item.calendar.id}-${item.event.id}`}
-                        className="truncate rounded px-1 py-0.5 text-[10px] font-medium leading-tight"
-                        style={{
-                          backgroundColor: tintColor(
-                            item.calendar.primaryColor,
-                            0.2,
-                          ),
-                          color: item.calendar.primaryColor,
-                          border: `1px solid ${tintColor(item.calendar.primaryColor, 0.4)}`,
-                        }}
-                        title={item.event.title}
-                      >
-                        {!item.event.allDay && (
-                          <span className="opacity-70 mr-0.5">
-                            {new Date(item.event.start).toLocaleTimeString(
-                              undefined,
-                              { hour: "numeric", minute: "2-digit" },
-                            )}
-                          </span>
-                        )}
-                        {item.event.title}
-                      </div>
-                    ))}
+                    {dayEvents
+                      .slice(0, view === "month" ? 2 : 4)
+                      .map((item) => (
+                        <div
+                          key={`${item.calendar.id}-${item.event.id}`}
+                          className="truncate rounded px-1 py-0.5 text-[10px] font-medium leading-tight"
+                          style={{
+                            backgroundColor: tintColor(
+                              item.calendar.primaryColor,
+                              0.2,
+                            ),
+                            color: item.calendar.primaryColor,
+                            border: `1px solid ${tintColor(item.calendar.primaryColor, 0.4)}`,
+                          }}
+                          title={item.event.title}
+                        >
+                          {!item.event.allDay && (
+                            <span className="opacity-70 mr-0.5">
+                              {new Date(item.event.start).toLocaleTimeString(
+                                undefined,
+                                { hour: "numeric", minute: "2-digit" },
+                              )}
+                            </span>
+                          )}
+                          {item.event.title}
+                        </div>
+                      ))}
                     {dayEvents.length > (view === "month" ? 2 : 4) && (
                       <div className="px-1 text-[10px] text-muted-foreground">
                         +{dayEvents.length - (view === "month" ? 2 : 4)} more

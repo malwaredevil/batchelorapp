@@ -17,6 +17,7 @@ import {
   Clock,
   Eye,
   EyeOff,
+  AlertTriangle,
   MapPin,
   Pencil,
   Plane,
@@ -220,13 +221,15 @@ function OverlayCalendarEvents({
   start,
   end,
   onEvents,
+  onError,
 }: {
   calendar: ConnectedCalendar;
   start: string;
   end: string;
   onEvents: (calendarId: number, events: TravelCalendarEvent[]) => void;
+  onError: (calendarId: number, hasError: boolean) => void;
 }) {
-  const { data = [] } = useListConnectedCalendarEvents(
+  const { data = [], isError } = useListConnectedCalendarEvents(
     calendar.id,
     start,
     end,
@@ -245,6 +248,10 @@ function OverlayCalendarEvents({
     onEvents(calendar.id, data);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calendar.id, JSON.stringify(data)]);
+  useEffect(() => {
+    onError(calendar.id, isError);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendar.id, isError]);
   return null;
 }
 
@@ -325,6 +332,22 @@ export default function TravelCalendar() {
       return next;
     });
   }
+
+  const [errorCalendarIds, setErrorCalendarIds] = useState<Set<number>>(
+    new Set(),
+  );
+
+  function handleOverlayError(calendarId: number, hasError: boolean) {
+    setErrorCalendarIds((prev) => {
+      if (prev.has(calendarId) === hasError) return prev;
+      const next = new Set(prev);
+      if (hasError) next.add(calendarId);
+      else next.delete(calendarId);
+      return next;
+    });
+  }
+
+  const hasTokenError = errorCalendarIds.size > 0;
 
   function handleOverlayEvents(
     calendarId: number,
@@ -609,8 +632,26 @@ export default function TravelCalendar() {
           start={startISO}
           end={endISO}
           onEvents={handleOverlayEvents}
+          onError={handleOverlayError}
         />
       ))}
+
+      {hasTokenError && (
+        <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900 dark:bg-amber-950/20">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <p className="text-sm text-amber-800 dark:text-amber-300">
+            One or more connected calendars couldn&apos;t load — your Google
+            Calendar connection may have expired.{" "}
+            <a
+              href="/api/travels/google-calendar/connect?returnTo=/modules/travels/travel-calendar"
+              className="font-medium underline"
+            >
+              Reconnect Google Calendar
+            </a>{" "}
+            to restore event display.
+          </p>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>

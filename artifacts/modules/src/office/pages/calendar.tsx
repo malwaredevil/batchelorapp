@@ -292,10 +292,10 @@ export default function OfficeCalendar() {
           <p className="text-sm text-amber-800 dark:text-amber-300">
             Google Calendar connection expired.{" "}
             <a
-              href="/modules/travels/settings"
+              href="/api/travels/google-calendar/connect?returnTo=/modules/office/calendar"
               className="font-medium underline"
             >
-              Reconnect in Travels Settings
+              Reconnect Google Calendar
             </a>{" "}
             to load events.
           </p>

@@ -152,6 +152,11 @@ type TileMethod =
 const fabricTileUrl = (fabricId: number, method: TileMethod) =>
   `/api/quilting/dev/fabric-tile-experiment/${fabricId}/${method}`;
 
+/** Production PNG tile — pre-rasterized from the Max Detail SVG pipeline.
+ *  One GPU texture; zero per-path DOM cost. Size defaults to 1024×1024. */
+const productionTilePngUrl = (fabricId: number, size = 1024) =>
+  `/api/quilting/fabrics/${fabricId}/tile-image.png?size=${size}`;
+
 /** Four real fabrics picked to fill the four distinct colour roles in the
  * "Aunt Sukey's Choice" block template (see
  * `scripts/src/seed-quilting-block-templates.ts`, LIGHT/DARK/GOLD/RED),
@@ -161,6 +166,73 @@ const FABRIC_LIGHT = { id: 57, label: "White Hearts (LIGHT role)" };
 const FABRIC_DARK = { id: 58, label: "Black Floral (DARK role)" };
 const FABRIC_GOLD = { id: 24, label: "Yellow with Gold Floral (GOLD role)" };
 const FABRIC_RED = { id: 33, label: "Red with Red Blossoms (RED role)" };
+
+/** Stamp density variants: how many tile repeats fill one block cell.
+ * tilePx = cellPx (150px) / repeatsPerCell.
+ * Current production default is 3 (= 9 tiles per cell). */
+const STAMP_DENSITY_VARIANTS: {
+  repeatsPerCell: number;
+  label: string;
+  description: string;
+}[] = [
+  {
+    repeatsPerCell: 1,
+    label: "1×1 per cell",
+    description:
+      "One fabric tile stretches to fill the entire cell — maximum stamp size. Good for bold, large-scale prints where repeating would feel busy.",
+  },
+  {
+    repeatsPerCell: 2,
+    label: "2×2 per cell (4 repeats)",
+    description:
+      "Four tiles per cell. Larger-scale print still visible; some repetition shows at seams.",
+  },
+  {
+    repeatsPerCell: 3,
+    label: "3×3 per cell (9 repeats) — current default",
+    description:
+      "Current production default: 9 tiles per cell. Good balance for most quilting cotton prints.",
+  },
+  {
+    repeatsPerCell: 4,
+    label: "4×4 per cell (16 repeats)",
+    description:
+      "16 tiles per cell. Smaller-scale repeat; tiny prints and tone-on-tones will look more accurate here.",
+  },
+  {
+    repeatsPerCell: 6,
+    label: "6×6 per cell (36 repeats)",
+    description:
+      "36 tiles per cell. Very small stamp — renders fine weaves and micro-prints accurately.",
+  },
+  {
+    repeatsPerCell: 8,
+    label: "8×8 per cell (64 repeats)",
+    description:
+      "64 tiles per cell. Maximum density — accurate only for very fine, high-frequency prints.",
+  },
+];
+
+/** Swatch size demo: given that each stored swatch photo represents a 3″ × 5″
+ * fabric sample, compute how many tile repeats fit in each cell for a range of
+ * standard quilt block sizes. AQS standard blocks run from 4″ to 18″.
+ *
+ * Each Aunt Sukey's Choice block has a 3×3 cell grid, so cell size = blockSize/3.
+ * repeatsPerCell = cellSizeInches / swatchWidthInches. */
+const SWATCH_WIDTH_IN = 3; // assumed swatch photo width in inches
+const SWATCH_SIZE_VARIANTS: {
+  blockInches: number;
+  label: string;
+  repeatsPerCell: number;
+}[] = [3, 4, 6, 9, 12, 18].map((blockInches) => {
+  const cellInches = blockInches / 3;
+  const repeatsPerCell = cellInches / SWATCH_WIDTH_IN;
+  return {
+    blockInches,
+    label: `${blockInches}″ block (cell = ${cellInches.toFixed(1)}″, ~${repeatsPerCell.toFixed(1)}× repeat/cell)`,
+    repeatsPerCell,
+  };
+});
 
 /** Direction A tuning variants to compare, each exploring a different lever
  * on the same pipeline — see the matching `DIRECTION_A_*_TUNING` presets and
@@ -349,6 +421,143 @@ function AuntSukeysChoiceBlock({
   );
 }
 
+/**
+ * Like AuntSukeysChoiceBlock but accepts a `repeatsPerCell` prop that controls
+ * how many times the fabric tile repeats across one block cell.
+ * repeatsPerCell=1 → tile fills cell; =2 → 2×2 grid; =3 → 3×3 (default); etc.
+ * Fractional values are supported for the swatch-size demo (e.g. 0.67 means
+ * the tile is larger than the cell — only the top-left portion shows).
+ */
+function AuntSukeysChoiceBlockTiled({
+  idPrefix,
+  tileUrlLight,
+  tileUrlDark,
+  tileUrlGold,
+  tileUrlRed,
+  repeatsPerCell,
+}: {
+  idPrefix: string;
+  tileUrlLight: string;
+  tileUrlDark: string;
+  tileUrlGold: string;
+  tileUrlRed: string;
+  repeatsPerCell: number;
+}) {
+  const blockPx = 450;
+  const cellPx = blockPx / 3;
+  const tilePx = cellPx / Math.max(repeatsPerCell, 0.1);
+
+  const patId = (role: string) => `${idPrefix}-${role}`;
+
+  type Cell =
+    | { kind: "solid"; fill: string }
+    | { kind: "nwse"; a: string; b: string }
+    | { kind: "nesw"; a: string; b: string };
+  const L = "light";
+  const D = "dark";
+  const G = "gold";
+  const R = "red";
+  const cells: Cell[] = [
+    { kind: "nwse", a: L, b: D },
+    { kind: "solid", fill: G },
+    { kind: "nesw", a: L, b: D },
+    { kind: "solid", fill: G },
+    { kind: "solid", fill: R },
+    { kind: "solid", fill: G },
+    { kind: "nesw", a: D, b: L },
+    { kind: "solid", fill: G },
+    { kind: "nwse", a: D, b: L },
+  ];
+
+  const fillFor = (role: string) => `url(#${patId(role)})`;
+
+  return (
+    <svg width={blockPx} height={blockPx} viewBox={`0 0 ${blockPx} ${blockPx}`}>
+      <defs>
+        {(
+          [
+            [L, tileUrlLight],
+            [D, tileUrlDark],
+            [G, tileUrlGold],
+            [R, tileUrlRed],
+          ] as const
+        ).map(([role, url]) => (
+          <pattern
+            key={role}
+            id={patId(role)}
+            patternUnits="userSpaceOnUse"
+            width={tilePx}
+            height={tilePx}
+          >
+            <image
+              href={url}
+              x={0}
+              y={0}
+              width={tilePx}
+              height={tilePx}
+              preserveAspectRatio="xMidYMid slice"
+            />
+          </pattern>
+        ))}
+      </defs>
+      {cells.map((cell, i) => {
+        const col = i % 3;
+        const row = Math.floor(i / 3);
+        const x = col * cellPx;
+        const y = row * cellPx;
+        if (cell.kind === "solid") {
+          return (
+            <rect
+              key={i}
+              x={x}
+              y={y}
+              width={cellPx}
+              height={cellPx}
+              fill={fillFor(cell.fill)}
+              stroke="#00000022"
+              strokeWidth={0.5}
+            />
+          );
+        }
+        const aPoints =
+          cell.kind === "nwse"
+            ? `${x},${y} ${x + cellPx},${y} ${x + cellPx},${y + cellPx}`
+            : `${x},${y} ${x + cellPx},${y} ${x},${y + cellPx}`;
+        const bPoints =
+          cell.kind === "nwse"
+            ? `${x},${y} ${x},${y + cellPx} ${x + cellPx},${y + cellPx}`
+            : `${x + cellPx},${y} ${x + cellPx},${y + cellPx} ${x},${y + cellPx}`;
+        const diagX1 = cell.kind === "nwse" ? x : x + cellPx;
+        const diagX2 = cell.kind === "nwse" ? x + cellPx : x;
+        return (
+          <g key={i}>
+            <polygon
+              points={bPoints}
+              fill={fillFor(cell.b)}
+              stroke="#00000022"
+              strokeWidth={0.5}
+            />
+            <polygon
+              points={aPoints}
+              fill={fillFor(cell.a)}
+              stroke="#00000022"
+              strokeWidth={0.5}
+            />
+            <line
+              x1={diagX1}
+              y1={y}
+              x2={diagX2}
+              y2={y + cellPx}
+              stroke="#00000033"
+              strokeWidth={1}
+            />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 export default function FabricCompareDevPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-4 p-6">
@@ -422,6 +631,90 @@ export default function FabricCompareDevPage() {
           <p key={variant.method} className="text-xs text-muted-foreground">
             <span className="font-semibold">{variant.title}:</span>{" "}
             {variant.description}
+          </p>
+        ))}
+      </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Section 2: Stamp density — same production PNG at different repeats */}
+      {/* ------------------------------------------------------------------ */}
+      <div className="pt-8 border-t">
+        <h2 className="text-lg font-bold">
+          Stamp density — progressively smaller tile stamps
+        </h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          All panels below use the same production PNG tile (Max Detail
+          pipeline, 1024 px). The only variable is how many times the tile
+          repeats within one block cell. Smaller stamp → more repeats → finer
+          pattern grain. Pick the density that looks most like the real fabric
+          at arm's length.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {STAMP_DENSITY_VARIANTS.map(({ repeatsPerCell, label }) => (
+          <ZoomPanel key={repeatsPerCell} title={label}>
+            {() => (
+              <AuntSukeysChoiceBlockTiled
+                idPrefix={`density-${repeatsPerCell}`}
+                tileUrlLight={productionTilePngUrl(FABRIC_LIGHT.id)}
+                tileUrlDark={productionTilePngUrl(FABRIC_DARK.id)}
+                tileUrlGold={productionTilePngUrl(FABRIC_GOLD.id)}
+                tileUrlRed={productionTilePngUrl(FABRIC_RED.id)}
+                repeatsPerCell={repeatsPerCell}
+              />
+            )}
+          </ZoomPanel>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+        {STAMP_DENSITY_VARIANTS.map(({ repeatsPerCell, description }) => (
+          <p
+            key={repeatsPerCell}
+            className="text-xs text-muted-foreground"
+          >
+            <span className="font-semibold">{repeatsPerCell}×:</span>{" "}
+            {description}
+          </p>
+        ))}
+      </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Section 3: Real swatch size demo (3″ × 5″ assumed swatch)          */}
+      {/* ------------------------------------------------------------------ */}
+      <div className="pt-8 border-t">
+        <h2 className="text-lg font-bold">
+          Swatch size demo — assuming 3″ × 5″ stored swatches
+        </h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          If each stored fabric swatch photo covers 3 inches of fabric width,
+          we can compute the exact stamp density for any standard block size.
+          The formula: repeats per cell = cell size ÷ swatch width.
+          A 12″ block → 4″ cells → 1.33× per cell; a 9″ block → 3″ cells →
+          exactly 1 tile per cell (tile = swatch). Panels below show the
+          same 4 fabrics as they would look in quilt blocks of different
+          real-world finished sizes.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {SWATCH_SIZE_VARIANTS.map(({ blockInches, label, repeatsPerCell }) => (
+          <ZoomPanel key={blockInches} title={`${blockInches}″ block`}>
+            {() => (
+              <AuntSukeysChoiceBlockTiled
+                idPrefix={`swatch-${blockInches}`}
+                tileUrlLight={productionTilePngUrl(FABRIC_LIGHT.id)}
+                tileUrlDark={productionTilePngUrl(FABRIC_DARK.id)}
+                tileUrlGold={productionTilePngUrl(FABRIC_GOLD.id)}
+                tileUrlRed={productionTilePngUrl(FABRIC_RED.id)}
+                repeatsPerCell={repeatsPerCell}
+              />
+            )}
+          </ZoomPanel>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+        {SWATCH_SIZE_VARIANTS.map(({ blockInches, label }) => (
+          <p key={blockInches} className="text-xs text-muted-foreground">
+            <span className="font-semibold">{blockInches}″:</span> {label}
           </p>
         ))}
       </div>

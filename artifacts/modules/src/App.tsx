@@ -57,6 +57,10 @@ import YardageCalculator from "@/quilting/pages/tools/yardage";
 import QuiltingCategories from "@/quilting/pages/categories";
 import QuiltingMaintenance from "@/quilting/pages/maintenance";
 import FabricCompareDevPage from "@/quilting/pages/dev/fabric-compare";
+import FabricDensityDevPage from "@/quilting/pages/dev/fabric-density";
+import FabricSizeDevPage from "@/quilting/pages/dev/fabric-size";
+import FabricPipelineDevPage from "@/quilting/pages/dev/fabric-pipeline";
+import FabricPhotoPreviewDevPage from "@/quilting/pages/dev/fabric-photo-preview";
 import OrnamentsCollection from "@/ornaments/pages/collection";
 import OrnamentsAdd from "@/ornaments/pages/add";
 import OrnamentsScan from "@/ornaments/pages/scan";
@@ -172,10 +176,30 @@ function Routes() {
           <Route path="/quilting/tools/yardage" component={YardageCalculator} />
           <Route path="/quilting/categories" component={QuiltingCategories} />
           <Route path="/quilting/maintenance" component={QuiltingMaintenance} />
-          <Route
-            path="/quilting/dev/fabric-compare"
-            component={FabricCompareDevPage}
-          />
+          {import.meta.env.DEV && (
+            <>
+              <Route
+                path="/quilting/dev/fabric-compare"
+                component={FabricCompareDevPage}
+              />
+              <Route
+                path="/quilting/dev/fabric-density"
+                component={FabricDensityDevPage}
+              />
+              <Route
+                path="/quilting/dev/fabric-size"
+                component={FabricSizeDevPage}
+              />
+              <Route
+                path="/quilting/dev/fabric-pipeline"
+                component={FabricPipelineDevPage}
+              />
+              <Route
+                path="/quilting/dev/fabric-photo-preview"
+                component={FabricPhotoPreviewDevPage}
+              />
+            </>
+          )}
           <Route path="/travels">
             <TravelsLayout>
               <TravelsDashboard />

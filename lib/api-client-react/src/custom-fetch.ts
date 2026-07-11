@@ -107,7 +107,10 @@ export function installScreenshotImageAutoAuth(): void {
   _screenshotImagePatchInstalled = true;
 
   const shouldRewrite = (value: string): boolean =>
-    typeof value === "string" && value.length > 0 && !value.startsWith("data:");
+    typeof value === "string" &&
+    value.length > 0 &&
+    !value.startsWith("data:") &&
+    !value.startsWith("blob:");
 
   // <img src="...">
   const imgProto = window.HTMLImageElement?.prototype;

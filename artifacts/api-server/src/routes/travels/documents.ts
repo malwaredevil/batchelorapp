@@ -9,6 +9,7 @@ import {
   travelsGmailScanDecisions,
 } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
+import { tripExists } from "../../lib/travels/db-helpers";
 import {
   uploadDocument,
   downloadDocument,
@@ -45,15 +46,15 @@ export async function indexDocumentChunks(
     await db
       .delete(travelsDocChunks)
       .where(eq(travelsDocChunks.tripDocumentId, docId));
-    for (let i = 0; i < chunks.length; i++) {
-      const embedding = await embedText(chunks[i]!);
-      await db.insert(travelsDocChunks).values({
+    const embeddings = await Promise.all(chunks.map((c) => embedText(c)));
+    await db.insert(travelsDocChunks).values(
+      chunks.map((content, i) => ({
         tripDocumentId: docId,
         chunkIndex: i,
-        content: chunks[i]!,
-        embedding,
-      });
-    }
+        content,
+        embedding: embeddings[i]!,
+      })),
+    );
   } catch (err) {
     logger.warn({ err, docId }, "doc chunk indexing failed (non-fatal)");
   }
@@ -66,14 +67,6 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 },
 });
-
-async function tripExists(tripId: number): Promise<boolean> {
-  const [row] = await db
-    .select({ id: travelsTrips.id })
-    .from(travelsTrips)
-    .where(eq(travelsTrips.id, tripId));
-  return !!row;
-}
 
 type ItineraryActivity = {
   time: string;

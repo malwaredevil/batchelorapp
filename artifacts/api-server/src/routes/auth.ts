@@ -46,9 +46,9 @@ import {
   SmsOptedOutError,
 } from "../lib/sms";
 import { runReminderAlerts } from "../lib/reminder-scheduler";
+import { THIRTY_DAYS_MS } from "../lib/session";
 
 const LOGIN_PATH = "/login";
-const THIRTY_DAYS_MS = 1000 * 60 * 60 * 24 * 30;
 
 // A throwaway bcrypt hash computed once at startup. When a login is attempted
 // for an email that does not exist, we still run bcrypt.compare against this so
@@ -69,10 +69,7 @@ const DUMMY_PASSWORD_HASH = bcrypt.hashSync(
 function googleCallbackUrl(req: Request): string | null {
   const host = req.get("host");
   if (!host) return null;
-  const allowed = (process.env.REPLIT_DOMAINS ?? "")
-    .split(",")
-    .map((d) => d.trim())
-    .filter(Boolean);
+  const allowed = env.replitDomains;
   if (allowed.length > 0 && !allowed.includes(host)) return null;
   return `${req.protocol}://${host}/api/auth/google/callback`;
 }
@@ -634,10 +631,7 @@ router.post("/auth/forgot-password", loginLimiter, async (req, res) => {
       // Build the reset URL from the incoming request host (validated against
       // REPLIT_DOMAINS like the Google OAuth flow).
       const host = req.get("host");
-      const allowed = (process.env.REPLIT_DOMAINS ?? "")
-        .split(",")
-        .map((d) => d.trim())
-        .filter(Boolean);
+      const allowed = env.replitDomains;
       const hostOk = !allowed.length || allowed.includes(host ?? "");
       const baseUrl =
         hostOk && host

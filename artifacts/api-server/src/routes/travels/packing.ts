@@ -12,6 +12,7 @@ import { requireAuth } from "../../middleware/auth";
 import { getModels, getOpenRouterClient } from "../../lib/ai-client";
 import { logger } from "../../lib/logger";
 import { getConfig } from "../../lib/app-config";
+import { tripExists } from "../../lib/travels/db-helpers";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -42,14 +43,6 @@ async function getOrCreateList(
     .from(travelsPackingLists)
     .where(eq(travelsPackingLists.tripId, tripId));
   return row!;
-}
-
-async function tripExists(tripId: number): Promise<boolean> {
-  const [row] = await db
-    .select({ id: travelsTrips.id })
-    .from(travelsTrips)
-    .where(eq(travelsTrips.id, tripId));
-  return !!row;
 }
 
 // ── GET /trips/:tripId/packing ────────────────────────────────────────────────

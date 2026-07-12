@@ -103,6 +103,29 @@ export async function runReminderAlerts(): Promise<void> {
                OR array_length(r.sms_recipient_user_ids, 1) > 0)`,
     );
 
+    // Pre-fetch ALL alert-log rows for this run's candidates in one query so
+    // the inner loop doesn't need a per-(reminder, type) round-trip.
+    const candidateIds = candidates.map((c) => c.reminder_id);
+    const alertLogMap = new Map<string, Set<string>>();
+    if (candidateIds.length > 0) {
+      const { rows: alertLogRows } = await client.query<{
+        reminder_id: number;
+        alert_type: string;
+        channel: string;
+      }>(
+        `SELECT reminder_id, alert_type, channel
+           FROM travels_reminder_alert_log
+          WHERE reminder_id = ANY($1::int[])`,
+        [candidateIds],
+      );
+      for (const row of alertLogRows) {
+        const key = `${row.reminder_id}:${row.alert_type}`;
+        const set = alertLogMap.get(key) ?? new Set<string>();
+        set.add(row.channel);
+        alertLogMap.set(key, set);
+      }
+    }
+
     for (const candidate of candidates) {
       // Pull-back: Google Calendar edits to the reminder's own notification
       // overrides win, so a user who nudges the popup time in their Google
@@ -121,14 +144,8 @@ export async function runReminderAlerts(): Promise<void> {
 
         const row = candidate;
 
-        const { rows: alreadySentRows } = await client.query<{
-          channel: string;
-        }>(
-          `SELECT channel FROM travels_reminder_alert_log
-            WHERE reminder_id = $1 AND alert_type = $2`,
-          [row.reminder_id, type],
-        );
-        const alreadySent = new Set(alreadySentRows.map((r) => r.channel));
+        const alreadySent =
+          alertLogMap.get(`${row.reminder_id}:${type}`) ?? new Set<string>();
 
         // --- Email channel ---
         if (

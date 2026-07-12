@@ -9,6 +9,7 @@ import {
   appUsers,
 } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
+import { tripExists } from "../../lib/travels/db-helpers";
 import {
   createReminderEvent,
   updateReminderEvent,
@@ -60,14 +61,6 @@ async function filterVerifiedPhoneUserIds(
       and(inArray(appUsers.id, userIds), eq(appUsers.phoneVerified, true)),
     );
   return rows.map((r) => r.id);
-}
-
-async function tripExists(tripId: number): Promise<boolean> {
-  const [row] = await db
-    .select({ id: travelsTrips.id })
-    .from(travelsTrips)
-    .where(eq(travelsTrips.id, tripId));
-  return !!row;
 }
 
 // Reminder events live on the single shared Travel calendar (not on each

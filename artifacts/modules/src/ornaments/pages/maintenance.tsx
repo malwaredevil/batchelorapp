@@ -19,6 +19,7 @@ import type { OrnamentsOrnamentItem as OrnamentItem } from "@workspace/api-clien
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { usePageAssistantContext } from "@/ornaments/lib/assistant-context";
+import { useAppConfigSummary } from "@workspace/elaine-ui";
 import { generateInsurancePdf } from "@/ornaments/lib/pdf-export";
 import { Button } from "@/components/ui/button";
 import {
@@ -94,9 +95,11 @@ export default function Maintenance() {
 
   const items = stragglers?.items || [];
 
+  const configSummary = useAppConfigSummary();
+
   usePageAssistantContext(
     "ornaments-maintenance",
-    `Maintenance page. Shows items missing descriptions or photos. Currently ${items.length} items need attention.`,
+    `Maintenance page. Shows items missing descriptions or photos. Currently ${items.length} items need attention.${configSummary ? ` ${configSummary}` : ""}`,
   );
 
   const handleBulkReanalyze = async () => {

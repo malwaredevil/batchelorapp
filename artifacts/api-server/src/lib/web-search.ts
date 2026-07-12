@@ -1,4 +1,5 @@
 import { callModel, getModels } from "./ai-client";
+import { getConfig } from "./app-config";
 
 /**
  * Live web search / current-events lookups for elAIne, backed by Perplexity
@@ -26,7 +27,7 @@ export interface WebSearchResult {
   images: WebSearchImage[];
 }
 
-const SEARCH_TIMEOUT_MS = 15_000;
+const DEFAULT_SEARCH_TIMEOUT_MS = 15_000;
 // Perplexity caps return_images results well above this; we only ever want
 // a small, chat-bubble-sized preview, not a gallery.
 const MAX_IMAGES = 4;
@@ -55,7 +56,7 @@ export async function webSearch(query: string): Promise<WebSearchResult> {
         // strict param typing, mirroring the `citations` response cast below.
         ...({ return_images: true } as Record<string, unknown>),
       },
-      { timeout: SEARCH_TIMEOUT_MS },
+      { timeout: await getConfig("web_search", "search_timeout_ms", 15_000) },
     );
   });
 

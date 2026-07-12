@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useBulkAdd } from "@/quilting/contexts/bulk-add-context";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
+import { useAppConfigSummary } from "@workspace/elaine-ui";
 
 type ItemStatus = "queued" | "processing" | "done" | "error";
 
@@ -39,9 +40,11 @@ export default function BulkAddFabric() {
 
   const { enqueue, resolve } = useBulkAdd();
 
+  const configSummary = useAppConfigSummary();
+
   usePageAssistantContext(
     "quilting-fabrics-bulk-add",
-    `Bulk Add Fabric page: capture multiple fabric photos in one go, each auto-catalogued by AI in the background. ${items.length} item(s) queued this session. This is a camera/photo-capture flow — you cannot add photos on the user's behalf from chat.`,
+    `Bulk Add Fabric page: capture multiple fabric photos in one go, each auto-catalogued by AI in the background. ${items.length} item(s) queued this session. This is a camera/photo-capture flow — you cannot add photos on the user's behalf from chat.${configSummary ? ` ${configSummary}` : ""}`,
   );
 
   async function runItem(item: CaptureItem) {

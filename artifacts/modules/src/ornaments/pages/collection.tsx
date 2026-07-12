@@ -17,6 +17,7 @@ import {
   CalendarHeart,
 } from "lucide-react";
 import { usePageAssistantContext } from "@/ornaments/lib/assistant-context";
+import { useAppConfigSummary } from "@workspace/elaine-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -143,9 +144,11 @@ export default function Collection() {
     }
   }, [items, sort]);
 
+  const configSummary = useAppConfigSummary();
+
   usePageAssistantContext(
     "ornaments-collection",
-    `Main collection page showing ${items.length} ornaments. Search: "${debouncedSearch}". Category filter: ${selectedCat || "none"}.`,
+    `Main collection page showing ${items.length} ornaments. Search: "${debouncedSearch}". Category filter: ${selectedCat || "none"}.${configSummary ? `\n\n${configSummary}` : ""}`,
   );
 
   return (

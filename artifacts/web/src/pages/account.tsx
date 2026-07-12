@@ -59,7 +59,8 @@ function ProfileCard() {
 
   const update = useUpdateCurrentUser({
     mutation: {
-      onSuccess: async () => {
+      onSuccess: async (result) => {
+        queryClient.setQueryData(getGetCurrentUserQueryKey(), result);
         await queryClient.invalidateQueries({
           queryKey: getGetCurrentUserQueryKey(),
         });
@@ -164,7 +165,8 @@ function PhoneCard() {
 
   const verifyCode = useVerifyPhoneCode({
     mutation: {
-      onSuccess: async () => {
+      onSuccess: async (result) => {
+        queryClient.setQueryData(getGetCurrentUserQueryKey(), result);
         await invalidateUser();
         toast.success("Phone number verified.");
         setCodeSent(false);
@@ -351,10 +353,12 @@ function AppearanceCard() {
 
   const update = useUpdateCurrentUser({
     mutation: {
-      onSuccess: () =>
-        queryClient.invalidateQueries({
+      onSuccess: (result) => {
+        queryClient.setQueryData(getGetCurrentUserQueryKey(), result);
+        void queryClient.invalidateQueries({
           queryKey: getGetCurrentUserQueryKey(),
-        }),
+        });
+      },
       onError: (err: unknown) =>
         toast.error(extractError(err, "Could not save your theme.")),
     },
@@ -573,6 +577,15 @@ export default function Account() {
                 Owner-only tools.
               </p>
             </div>
+            <Link
+              href="/control-panel"
+              className="flex w-full items-center justify-between rounded-lg border border-card-border bg-card px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/60"
+            >
+              Control Panel
+              <span className="text-xs text-muted-foreground">
+                AI timeouts &amp; token limits
+              </span>
+            </Link>
             <Link
               href="/google-apis-demo"
               className="flex w-full items-center justify-between rounded-lg border border-card-border bg-card px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/60"

@@ -667,6 +667,22 @@ async function loadExistingDecision(userId: number, messageId: string) {
   return existingDecision;
 }
 
+const GmailMessageAttachmentSchema = z.object({
+  filename: z.string(),
+  mimeType: z.string(),
+  attachmentId: z.string(),
+  size: z.number().int().nullable().optional(),
+});
+
+const GmailMessageDetailSchema = z.object({
+  id: z.string(),
+  subject: z.string().nullable(),
+  from: z.string().nullable(),
+  date: z.date().nullable(),
+  textBody: z.string().nullable(),
+  attachments: z.array(GmailMessageAttachmentSchema),
+});
+
 // GET /gmail/messages/:messageId — full content view (subject/from/date/body
 // + attachment metadata only, no raw attachment bytes) so the user can read
 // an email before deciding whether/how to attach it to a trip.
@@ -683,7 +699,7 @@ router.get("/gmail/messages/:messageId", async (req, res) => {
   try {
     const full = await getMessage(accessToken, messageId);
     const parsed = parseGmailMessage(full);
-    res.json({
+    const detail = GmailMessageDetailSchema.parse({
       id: messageId,
       subject: parsed.subject,
       from: parsed.from,
@@ -693,9 +709,10 @@ router.get("/gmail/messages/:messageId", async (req, res) => {
         filename: a.filename,
         mimeType: a.mimeType,
         attachmentId: a.attachmentId,
-        size: a.size,
+        size: a.size ?? null,
       })),
     });
+    res.json(detail);
   } catch (err) {
     logger.error(
       { err, userId, messageId },

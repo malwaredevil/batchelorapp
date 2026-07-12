@@ -14,6 +14,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { TagSelector } from "@/quilting/components/tag-selector";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
+import { useAppConfigSummary } from "@workspace/elaine-ui";
 
 export default function AddFabric() {
   const [, navigate] = useLocation();
@@ -25,9 +26,11 @@ export default function AddFabric() {
 
   const { data: allCategories } = useListQuiltingCategories();
 
+  const configSummary = useAppConfigSummary();
+
   usePageAssistantContext(
     "quilting-fabrics-add",
-    "Add Fabric page: a form to add one new fabric to the stash with a required photo (for AI cataloguing) plus optional name/quantity/notes/categories. This is a photo-upload form — you cannot submit it on the user's behalf from chat.",
+    `Add Fabric page: a form to add one new fabric to the stash with a required photo (for AI cataloguing) plus optional name/quantity/notes/categories. This is a photo-upload form — you cannot submit it on the user's behalf from chat.${configSummary ? ` ${configSummary}` : ""}`,
   );
 
   const create = useCreateFabric({

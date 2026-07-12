@@ -26,6 +26,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { usePageAssistantContext } from "@/pottery/lib/assistant-context";
+import { useAppConfigSummary } from "@workspace/elaine-ui";
 
 const LABEL_SUGGESTIONS = [
   "Front",
@@ -176,6 +177,8 @@ export default function AddPiece() {
 
   const busy = upload.isPending;
 
+  const configSummary = useAppConfigSummary();
+
   usePageAssistantContext(
     "pottery-add",
     `Add a Piece page: form for cataloguing a new pottery piece. Primary photo ${file ? "selected" : "not yet selected (required before submit)"}, ${suppPhotos.length} additional photo(s) attached. Current field values — name: ${name.trim() || "(blank, will be AI-generated)"}, quantity: ${quantity}, dimensions: ${dimensions.trim() || "(blank, AI estimates from photo)"}, notes: ${notes.trim() || "(blank)"}, categories: ${
@@ -185,7 +188,7 @@ export default function AddPiece() {
             .map((c) => c.name)
             .join(", ")
         : "none selected"
-    }. Pattern, colours, shape and motifs are auto-detected from the photo after submit. Available categories (name=id): ${categories.map((c) => `${c.name}=${c.id}`).join(", ") || "none"}.`,
+    }. Pattern, colours, shape and motifs are auto-detected from the photo after submit. Available categories (name=id): ${categories.map((c) => `${c.name}=${c.id}`).join(", ") || "none"}.${configSummary ? ` ${configSummary}` : ""}`,
   );
 
   // ---------------------------------------------------------------------------

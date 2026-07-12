@@ -42,6 +42,7 @@ import {
 import { QuickEditSheet } from "@/pottery/components/quick-edit-sheet";
 import { colorToHex } from "@/pottery/lib/colors";
 import { usePageAssistantContext } from "@/pottery/lib/assistant-context";
+import { useAppConfigSummary } from "@workspace/elaine-ui";
 
 // ---------------------------------------------------------------------------
 // Collection compare modal
@@ -865,6 +866,8 @@ export default function Collection() {
     });
   }, [groupByMaker, filtered]);
 
+  const configSummary = useAppConfigSummary();
+
   usePageAssistantContext(
     "pottery-collection",
     isLoading
@@ -881,7 +884,7 @@ export default function Collection() {
           )
           .join(
             "; ",
-          )}${filtered.length > 40 ? "; (list truncated, more pieces exist)" : ""}. Available category ids for filtering/assignment: ${usedCategories.map((c) => `${c.name}=${c.id}`).join(", ") || "none"}.`,
+          )}${filtered.length > 40 ? "; (list truncated, more pieces exist)" : ""}. Available category ids for filtering/assignment: ${usedCategories.map((c) => `${c.name}=${c.id}`).join(", ") || "none"}.${configSummary ? `\n\n${configSummary}` : ""}`,
   );
 
   return (

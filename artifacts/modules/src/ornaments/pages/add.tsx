@@ -33,6 +33,7 @@ import {
 import { ImagePicker } from "@/ornaments/components/image-picker";
 import { CategorySelector } from "@/ornaments/components/category-selector";
 import { usePageAssistantContext } from "@/ornaments/lib/assistant-context";
+import { useAppConfigSummary } from "@workspace/elaine-ui";
 
 // Note: createOrnament hook actually expects FormData for multipart/form-data.
 // We must build FormData manually since the generated hook signature uses `{ data: any }` but sends it via customFetch.
@@ -63,9 +64,11 @@ export default function AddOrnament() {
   const prefillJson = sessionStorage.getItem("ornaments-add-prefill");
   const prefill = prefillJson ? JSON.parse(prefillJson) : null;
 
+  const configSummary = useAppConfigSummary();
+
   usePageAssistantContext(
     "ornaments-add",
-    `Add ornament page. Prefilled from scan: ${prefill ? "Yes" : "No"}.`,
+    `Add ornament page. Prefilled from scan: ${prefill ? "Yes" : "No"}.${configSummary ? ` ${configSummary}` : ""}`,
   );
 
   const form = useForm<z.infer<typeof addSchema>>({

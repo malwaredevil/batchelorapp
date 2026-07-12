@@ -31,6 +31,7 @@ import {
 } from "@workspace/api-client-react";
 import type { ComponentType } from "react";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
+import { useAppConfigSummary } from "@workspace/elaine-ui";
 
 type RunStatus = "queued" | "processing" | "done" | "error";
 
@@ -626,9 +627,11 @@ function QuiltsPanel() {
 // ---------------------------------------------------------------------------
 
 export default function Maintenance() {
+  const configSummary = useAppConfigSummary();
+
   usePageAssistantContext(
     "quilting-maintenance",
-    "Maintenance page: housekeeping tools to find and bulk re-analyze fabrics/patterns/quilts that are missing AI embeddings (stale search results). You have bulk_reanalyze_quilting action tools for all three entity types.",
+    `Maintenance page: housekeeping tools to find and bulk re-analyze fabrics/patterns/quilts that are missing AI embeddings (stale search results). You have bulk_reanalyze_quilting action tools for all three entity types.${configSummary ? ` ${configSummary}` : ""}`,
   );
 
   return (

@@ -263,25 +263,23 @@ router.delete("/trips/:id", async (req, res) => {
   // Storage deletes (above) stay outside the transaction — they're not
   // atomic and the allSettled handling already accepts individual failures.
   await db.transaction(async (tx) => {
-    await tx
-      .delete(travelsTripPhotos)
-      .where(eq(travelsTripPhotos.tripId, id));
+    await tx.delete(travelsTripPhotos).where(eq(travelsTripPhotos.tripId, id));
     // Doc chunks have no FK cascade — delete before documents.
-    await tx.delete(travelsDocChunks).where(
-      inArray(
-        travelsDocChunks.tripDocumentId,
-        tx
-          .select({ id: travelsTripDocuments.id })
-          .from(travelsTripDocuments)
-          .where(eq(travelsTripDocuments.tripId, id)),
-      ),
-    );
+    await tx
+      .delete(travelsDocChunks)
+      .where(
+        inArray(
+          travelsDocChunks.tripDocumentId,
+          tx
+            .select({ id: travelsTripDocuments.id })
+            .from(travelsTripDocuments)
+            .where(eq(travelsTripDocuments.tripId, id)),
+        ),
+      );
     await tx
       .delete(travelsTripDocuments)
       .where(eq(travelsTripDocuments.tripId, id));
-    await tx
-      .delete(travelsReminders)
-      .where(eq(travelsReminders.tripId, id));
+    await tx.delete(travelsReminders).where(eq(travelsReminders.tripId, id));
     // Packing list items cascade via FK; delete the list row directly.
     await tx
       .delete(travelsPackingLists)

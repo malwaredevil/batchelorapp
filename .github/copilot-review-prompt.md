@@ -30,6 +30,7 @@ has exactly one "household" with a handful of user accounts.
 These are deliberate design choices, not bugs. Flagging them wastes review time.
 
 ### 2a. Household-Shared Data Model
+
 Every authenticated user can read, create, edit, and delete **any** pottery, quilting,
 ornaments, or travels record — there is no per-user ownership filter by design. The family
 shares one collection. `user_id` columns exist **only** for insert attribution (who created
@@ -37,6 +38,7 @@ a record) and are never used to scope reads or writes. **Do not flag missing per
 ownership checks on these tables.**
 
 ### 2b. Two Completely Different Authentication Mechanisms
+
 - **Session routes** (`/api/pottery`, `/api/quilting`, `/api/ornaments`, `/api/travels`,
   `/api/hub`, `/api/elaine`, `/api/auth`, `/api/config`) use the `requireAuth` middleware
   (Express session cookie). Missing `requireAuth` here IS a bug.
@@ -49,27 +51,32 @@ ownership checks on these tables.**
   guarded by `NODE_ENV`. Do not flag this.
 
 ### 2c. OpenRouter is the Only AI Gateway
+
 All LLM calls (chat completions, vision, some embeddings) route through OpenRouter.
 `OPENAI_API_KEY` is present but unused — it is kept for potential future use. Do not
 suggest adding direct OpenAI API calls or suggest the key is dead.
 
 ### 2d. Elaine Restricted Channels
+
 `runRestrictedElaineTurn` in `artifacts/api-server/src/elaine/index.ts` deliberately limits
 what tools AgentPhone SMS/voice and inbound email can invoke. `RESTRICTED_EXCLUDED_ACTION_TYPES`
 is an intentional security boundary. Do not suggest expanding it.
 
 ### 2e. Database Migrations Are Additive-Only by Design
+
 `lib/db/src/bootstrap.ts` uses only `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX IF NOT
 EXISTS`. `drizzle-kit push --force` is permanently banned — it would silently drop another
 app's tables on the shared Supabase instance. Do not suggest Drizzle push/migrate commands.
 
 ### 2f. Gmail Access Is Single-Owner Even Though Trip Data Is Shared
+
 Gmail OAuth tokens, scan decisions, label management, and inbox access are always scoped to
 the specific user who connected Gmail. Other household members cannot see another member's
 Gmail data, even though the resulting trip documents are household-shared. This asymmetry
 is intentional.
 
 ### 2g. The Screenshot Token Bypass Is Dev-Only
+
 `installScreenshotImageAutoAuth` in `lib/api-client-react/src/custom-fetch.ts` patches
 `HTMLImageElement.prototype.src` globally in development only. It is gated by `NODE_ENV`
 and removed from production builds. Do not flag this as a security issue.
@@ -78,25 +85,25 @@ and removed from production builds. Do not flag this as a security issue.
 
 ## 3. Tech Stack Details (for "modern best practices" context)
 
-| Layer | What We Use | Relevant Versions |
-|---|---|---|
-| Package manager | pnpm workspaces | v10 |
-| Runtime | Node.js | 24 |
-| Language | TypeScript | 5.9 (strict) |
-| API framework | Express | 5.x |
-| ORM | Drizzle ORM | 0.39+ |
-| DB driver | `drizzle-orm/node-postgres` | — |
-| React | React 18 | — |
-| Build (frontend) | Vite 6 | — |
-| Build (API) | esbuild | — |
-| Validation | Zod v4 (`zod/v4`) | — |
-| API contract | OpenAPI 3.1 → Orval codegen | — |
-| Query client | TanStack Query v5 | — |
-| Styling | Tailwind CSS v4 | — |
-| Testing | Vitest + Testing Library | — |
-| Logging | Pino | — |
-| Error tracking | Sentry | — |
-| Session | express-session | — |
+| Layer            | What We Use                 | Relevant Versions |
+| ---------------- | --------------------------- | ----------------- |
+| Package manager  | pnpm workspaces             | v10               |
+| Runtime          | Node.js                     | 24                |
+| Language         | TypeScript                  | 5.9 (strict)      |
+| API framework    | Express                     | 5.x               |
+| ORM              | Drizzle ORM                 | 0.39+             |
+| DB driver        | `drizzle-orm/node-postgres` | —                 |
+| React            | React 18                    | —                 |
+| Build (frontend) | Vite 6                      | —                 |
+| Build (API)      | esbuild                     | —                 |
+| Validation       | Zod v4 (`zod/v4`)           | —                 |
+| API contract     | OpenAPI 3.1 → Orval codegen | —                 |
+| Query client     | TanStack Query v5           | —                 |
+| Styling          | Tailwind CSS v4             | —                 |
+| Testing          | Vitest + Testing Library    | —                 |
+| Logging          | Pino                        | —                 |
+| Error tracking   | Sentry                      | —                 |
+| Session          | express-session             | —                 |
 
 ---
 
@@ -149,90 +156,99 @@ Tables are grouped by prefix. All tables use `serial` or `uuid` PKs unless noted
 `user_id` is an attribution foreign key (not an ownership filter) on household-shared tables.
 
 ### Auth
-| Table | Key Columns |
-|---|---|
-| `app_users` | `id`, `email`, `passwordHash`, `name`, `phoneNumber`, `isOwner`, `createdAt` |
-| `password_reset_tokens` | `id`, `userId`, `token`, `expiresAt`, `usedAt` |
+
+| Table                   | Key Columns                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| `app_users`             | `id`, `email`, `passwordHash`, `name`, `phoneNumber`, `isOwner`, `createdAt` |
+| `password_reset_tokens` | `id`, `userId`, `token`, `expiresAt`, `usedAt`                               |
 
 ### App Config
-| Table | Key Columns |
-|---|---|
+
+| Table        | Key Columns                                                                 |
+| ------------ | --------------------------------------------------------------------------- |
 | `app_config` | `id`, `module`, `key`, `value`, `updatedAt` (singleton rows per module+key) |
 
 ### Pottery (household-shared)
-| Table | Key Columns |
-|---|---|
-| `pottery_items` | `id`, `userId`, `name`, `description`, `category`, `maker`, `year`, `glazeType`, `dominantColors`, `aiDescription`, `lockedFields`, `embedding`, `zoneEmbedding`, `createdAt` |
-| `pottery_categories` | `id`, `name` |
-| `pottery_item_categories` | `itemId`, `categoryId` |
-| `pottery_images` | `id`, `itemId`, `storagePath`, `isPrimary` |
+
+| Table                     | Key Columns                                                                                                                                                                   |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pottery_items`           | `id`, `userId`, `name`, `description`, `category`, `maker`, `year`, `glazeType`, `dominantColors`, `aiDescription`, `lockedFields`, `embedding`, `zoneEmbedding`, `createdAt` |
+| `pottery_categories`      | `id`, `name`                                                                                                                                                                  |
+| `pottery_item_categories` | `itemId`, `categoryId`                                                                                                                                                        |
+| `pottery_images`          | `id`, `itemId`, `storagePath`, `isPrimary`                                                                                                                                    |
 
 ### Quilting (household-shared)
-| Table | Key Columns |
-|---|---|
-| `quilting_fabrics` | `id`, `userId`, `name`, `brand`, `colorFamily`, `dominantColors`, `fabricType`, `quantity`, `embedding`, `visualEmbedding`, `lockedFields`, `createdAt` |
-| `quilting_patterns` | `id`, `userId`, `name`, `designer`, `patternType`, `embedding`, `visualEmbedding`, `createdAt` |
-| `quilting_finished_quilts` | `id`, `userId`, `name`, `completedAt` |
-| `quilting_blocks` | `id`, `name`, `defaultSize`, `cellStructure` (JSON) |
-| `quilting_block_templates` | `id`, `name`, `blockId`, `fabricAssignments` (JSON) |
-| `quilting_layouts` | `id`, `name`, `blockTemplateId`, `rows`, `cols`, `cellColors` (JSON) |
-| `quilting_shopping_items` | `id`, `name`, `quantity`, `purchased`, `notes` |
-| `quilting_categories` | `id`, `name` |
-| `quilting_images` | `id`, `entityType`, `entityId`, `storagePath`, `isPrimary` |
+
+| Table                      | Key Columns                                                                                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `quilting_fabrics`         | `id`, `userId`, `name`, `brand`, `colorFamily`, `dominantColors`, `fabricType`, `quantity`, `embedding`, `visualEmbedding`, `lockedFields`, `createdAt` |
+| `quilting_patterns`        | `id`, `userId`, `name`, `designer`, `patternType`, `embedding`, `visualEmbedding`, `createdAt`                                                          |
+| `quilting_finished_quilts` | `id`, `userId`, `name`, `completedAt`                                                                                                                   |
+| `quilting_blocks`          | `id`, `name`, `defaultSize`, `cellStructure` (JSON)                                                                                                     |
+| `quilting_block_templates` | `id`, `name`, `blockId`, `fabricAssignments` (JSON)                                                                                                     |
+| `quilting_layouts`         | `id`, `name`, `blockTemplateId`, `rows`, `cols`, `cellColors` (JSON)                                                                                    |
+| `quilting_shopping_items`  | `id`, `name`, `quantity`, `purchased`, `notes`                                                                                                          |
+| `quilting_categories`      | `id`, `name`                                                                                                                                            |
+| `quilting_images`          | `id`, `entityType`, `entityId`, `storagePath`, `isPrimary`                                                                                              |
 
 ### Ornaments (household-shared)
-| Table | Key Columns |
-|---|---|
-| `ornaments_items` | `id`, `userId`, `name`, `series`, `year`, `dominantColors`, `motifs`, `aiDescription`, `upc`, `bookValue`, `lockedFields`, `createdAt` |
-| `ornaments_categories` | `id`, `name` |
-| `ornaments_item_categories` | `itemId`, `categoryId` |
-| `ornaments_images` | `id`, `itemId`, `storagePath`, `isPrimary` |
-| `ornaments_barcode_cache` | `upc`, `productData` (JSON), `cachedAt` |
-| `ornaments_hallmark_events` | (Hallmark ornament metadata) |
+
+| Table                       | Key Columns                                                                                                                            |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `ornaments_items`           | `id`, `userId`, `name`, `series`, `year`, `dominantColors`, `motifs`, `aiDescription`, `upc`, `bookValue`, `lockedFields`, `createdAt` |
+| `ornaments_categories`      | `id`, `name`                                                                                                                           |
+| `ornaments_item_categories` | `itemId`, `categoryId`                                                                                                                 |
+| `ornaments_images`          | `id`, `itemId`, `storagePath`, `isPrimary`                                                                                             |
+| `ornaments_barcode_cache`   | `upc`, `productData` (JSON), `cachedAt`                                                                                                |
+| `ornaments_hallmark_events` | (Hallmark ornament metadata)                                                                                                           |
 
 ### Travels (household-shared, with some single-owner exceptions)
-| Table | Key Columns | Shared? |
-|---|---|---|
-| `travels_trips` | `id`, `userId`, `name`, `destination`, `startDate`, `endDate`, `status`, `shareToken`, `iconOverride`, `todoList` | ✅ shared |
-| `travels_trip_documents` | `id`, `tripId`, `userId`, `title`, `documentType`, `storagePath`, `extractedData` (JSON), `status` | ✅ shared |
-| `travels_doc_chunks` | `id`, `documentId`, `chunkIndex`, `text`, `embedding` | ✅ shared |
-| `travels_trip_photos` | `id`, `tripId`, `userId`, `storagePath`, `caption` | ✅ shared |
-| `travels_reminders` | `id`, `tripId`, `userId`, `text`, `dueAt`, `sent` | ✅ shared |
-| `travels_wishlist` | `id`, `userId`, `destination`, `notes` | ✅ shared |
-| `travels_custom_document_types` | `id`, `label`, `userId` | ✅ shared |
-| `travels_calendar_trip_suggestions` | `id`, `tripId`, `userId`, `calendarEventId`, `dismissed` | ✅ shared |
-| `travels_google_calendar_connections` | `id`, `userId`, `accessToken`, `refreshToken`, `scope` | ⛔ single-owner |
-| `travels_connected_calendars` | `id`, `userId`, `connectionId`, `calendarId`, `isSharedTravelCalendar` | ⛔ single-owner |
-| `travels_gmail_connections` | `id`, `userId`, `accessToken`, `refreshToken` | ⛔ single-owner |
-| `travels_gmail_scan_decisions` | `id`, `userId`, `gmailMessageId`, `decision`, `tripDocumentId` | ⛔ single-owner |
-| `travels_card_layout_preferences` | `id`, `userId`, `layout` (JSON) | ⛔ single-owner |
-| `travels_trip_card_collapse_state` | `id`, `userId`, `tripId`, `collapsed` | ⛔ single-owner |
+
+| Table                                 | Key Columns                                                                                                       | Shared?         |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | --------------- |
+| `travels_trips`                       | `id`, `userId`, `name`, `destination`, `startDate`, `endDate`, `status`, `shareToken`, `iconOverride`, `todoList` | ✅ shared       |
+| `travels_trip_documents`              | `id`, `tripId`, `userId`, `title`, `documentType`, `storagePath`, `extractedData` (JSON), `status`                | ✅ shared       |
+| `travels_doc_chunks`                  | `id`, `documentId`, `chunkIndex`, `text`, `embedding`                                                             | ✅ shared       |
+| `travels_trip_photos`                 | `id`, `tripId`, `userId`, `storagePath`, `caption`                                                                | ✅ shared       |
+| `travels_reminders`                   | `id`, `tripId`, `userId`, `text`, `dueAt`, `sent`                                                                 | ✅ shared       |
+| `travels_wishlist`                    | `id`, `userId`, `destination`, `notes`                                                                            | ✅ shared       |
+| `travels_custom_document_types`       | `id`, `label`, `userId`                                                                                           | ✅ shared       |
+| `travels_calendar_trip_suggestions`   | `id`, `tripId`, `userId`, `calendarEventId`, `dismissed`                                                          | ✅ shared       |
+| `travels_google_calendar_connections` | `id`, `userId`, `accessToken`, `refreshToken`, `scope`                                                            | ⛔ single-owner |
+| `travels_connected_calendars`         | `id`, `userId`, `connectionId`, `calendarId`, `isSharedTravelCalendar`                                            | ⛔ single-owner |
+| `travels_gmail_connections`           | `id`, `userId`, `accessToken`, `refreshToken`                                                                     | ⛔ single-owner |
+| `travels_gmail_scan_decisions`        | `id`, `userId`, `gmailMessageId`, `decision`, `tripDocumentId`                                                    | ⛔ single-owner |
+| `travels_card_layout_preferences`     | `id`, `userId`, `layout` (JSON)                                                                                   | ⛔ single-owner |
+| `travels_trip_card_collapse_state`    | `id`, `userId`, `tripId`, `collapsed`                                                                             | ⛔ single-owner |
 
 ### Elaine AI Assistant
-| Table | Key Columns |
-|---|---|
-| `elaine_conversations` | `id`, `userId`, `pageContext`, `messages` (JSON), `createdAt` |
-| `elaine_history_conversations` | `id`, `userId`, `title`, `summary`, `createdAt` |
-| `elaine_history_messages` | `id`, `conversationId`, `role`, `content`, `createdAt` |
-| `elaine_memory` | `id`, `userId`, `content`, `createdAt` |
-| `elaine_nudges` | `id`, `userId`, `content`, `seen`, `createdAt` |
-| `elaine_global_config` | singleton (id=1): `chatModel`, `subagentModel`, `requestTimeoutMs`, `maxResponseTokens` |
-| `elaine_settings` | `id`, `userId`, `notificationsEnabled` |
-| `elaine_daily_briefs` | `id`, `userId`, `content`, `date` |
-| `elaine_email_conversations` | `id`, `userId`, `messages` (JSON), history per email thread |
+
+| Table                          | Key Columns                                                                             |
+| ------------------------------ | --------------------------------------------------------------------------------------- |
+| `elaine_conversations`         | `id`, `userId`, `pageContext`, `messages` (JSON), `createdAt`                           |
+| `elaine_history_conversations` | `id`, `userId`, `title`, `summary`, `createdAt`                                         |
+| `elaine_history_messages`      | `id`, `conversationId`, `role`, `content`, `createdAt`                                  |
+| `elaine_memory`                | `id`, `userId`, `content`, `createdAt`                                                  |
+| `elaine_nudges`                | `id`, `userId`, `content`, `seen`, `createdAt`                                          |
+| `elaine_global_config`         | singleton (id=1): `chatModel`, `subagentModel`, `requestTimeoutMs`, `maxResponseTokens` |
+| `elaine_settings`              | `id`, `userId`, `notificationsEnabled`                                                  |
+| `elaine_daily_briefs`          | `id`, `userId`, `content`, `date`                                                       |
+| `elaine_email_conversations`   | `id`, `userId`, `messages` (JSON), history per email thread                             |
 
 ### Office (Gmail inbox client — fully single-owner)
-| Table | Key Columns |
-|---|---|
+
+| Table                   | Key Columns                                            |
+| ----------------------- | ------------------------------------------------------ |
 | `app_gmail_connections` | `id`, `userId`, `accessToken`, `refreshToken`, `email` |
-| `office_notes` | `id`, `userId`, `threadId`, `content`, `createdAt` |
+| `office_notes`          | `id`, `userId`, `threadId`, `content`, `createdAt`     |
 
 ### Webhook Dedup
-| Table | Key Columns |
-|---|---|
-| `agentphone_webhook_deliveries` | `id`, `webhookId`, `processedAt` |
-| `agentphone_conversations` | `id`, `phoneNumber`, `messages` (JSON), `updatedAt` |
-| `elaine_email_webhook_deliveries` | `id`, `webhookId`, `processedAt` |
+
+| Table                             | Key Columns                                         |
+| --------------------------------- | --------------------------------------------------- |
+| `agentphone_webhook_deliveries`   | `id`, `webhookId`, `processedAt`                    |
+| `agentphone_conversations`        | `id`, `phoneNumber`, `messages` (JSON), `updatedAt` |
+| `elaine_email_webhook_deliveries` | `id`, `webhookId`, `processedAt`                    |
 
 ---
 
@@ -242,6 +258,7 @@ Perform a thorough expert-level code review across **all** of the following cate
 This is not just a security scan — it is a full engineering audit.
 
 ### 6.1 Security & Authentication
+
 - Missing `requireAuth` on session-gated routes (see §2b for which routes are exempt)
 - HMAC signature verification on webhook routes: runs on raw bytes before JSON parse?
 - Replay protection: are webhook dedup tables checked before any side effects?
@@ -260,6 +277,7 @@ This is not just a security scan — it is a full engineering audit.
   in the AgentPhone/email channels?
 
 ### 6.2 Runtime Safety & Crash Risks
+
 - Unhandled promise rejections in route handlers (missing `try/catch` or `.catch()`)
 - `!` non-null assertions on values that could realistically be null/undefined at runtime
 - Array access without bounds checking (e.g. `arr[0].foo` without checking `arr.length`)
@@ -271,6 +289,7 @@ This is not just a security scan — it is a full engineering audit.
 - Express 5 async route handlers: are all errors propagated to `next(err)`?
 
 ### 6.3 Data Integrity
+
 - DB writes without transactions where multiple rows should succeed or fail together
 - Missing uniqueness constraints (are there any DB inserts that should be upserts?)
 - Soft-delete patterns that could leave orphan rows (e.g. deleting a trip without
@@ -280,6 +299,7 @@ This is not just a security scan — it is a full engineering audit.
 - Embedding columns: are they ever partially updated, leaving stale vectors for live rows?
 
 ### 6.4 External I/O Error Handling
+
 - Supabase Storage calls without error handling (upload, download, delete, getSignedUrl)
 - OpenRouter/LLM calls without timeout, retry, or graceful degradation
 - Gmail API calls without handling token expiry (401 → token refresh → retry)
@@ -289,6 +309,7 @@ This is not just a security scan — it is a full engineering audit.
 - Any `fetch()` call without a timeout or abort signal
 
 ### 6.5 Performance & Efficiency
+
 - **N+1 query patterns**: loops that issue one DB query per item instead of a single
   batched query (e.g. `for (const id of ids) { await db.select().where(eq(t.id, id)) }`)
 - Fetching entire tables when only a subset is needed (missing `.limit()` or pagination)
@@ -305,6 +326,7 @@ This is not just a security scan — it is a full engineering audit.
   could be lazy-loaded? (e.g. PDF processing, heavy chart libraries)
 
 ### 6.6 Code Duplication & DRY Violations
+
 - Functions or utilities that do the same thing in two or more files — identify the pair
   and suggest which file should own it
 - Repeated error-response shape construction (should be a shared `sendError` helper)
@@ -317,6 +339,7 @@ This is not just a security scan — it is a full engineering audit.
 - Repeated inline Zod schemas that could be extracted to `lib/api-zod/`
 
 ### 6.7 Dead & Unreachable Code
+
 - Exported functions, types, or constants that are never imported anywhere
 - React components or hooks that are defined but never rendered/called
 - Environment variables that are read but whose values are never actually used
@@ -328,6 +351,7 @@ This is not just a security scan — it is a full engineering audit.
 - Database columns that exist in the schema but are never read or written by any route
 
 ### 6.8 TypeScript Quality
+
 - `any` types that could be replaced with a real type or `unknown` + type guard
 - `@ts-ignore` or `@ts-expect-error` suppressions — are they still needed?
 - Weak return types (functions that return `object` or `{}` instead of a specific type)
@@ -338,6 +362,7 @@ This is not just a security scan — it is a full engineering audit.
 - Overly broad union types that make callers do excessive narrowing
 
 ### 6.9 Outdated or Deprecated Patterns
+
 - Express 4 patterns that should be updated for Express 5 (e.g. error handling,
   async route handlers — Express 5 auto-catches rejected promises)
 - React patterns that are outdated in React 18 (class components, legacy context API,
@@ -350,6 +375,7 @@ This is not just a security scan — it is a full engineering audit.
 - Polyfills for features that Node 24 / modern browsers support natively
 
 ### 6.10 API Design & Consistency
+
 - Routes that return different error shapes (some return `{error: string}`, others
   `{message: string}`, others a plain status code) — should be unified
 - Endpoints that do too much (violate single responsibility) and should be split
@@ -361,6 +387,7 @@ This is not just a security scan — it is a full engineering audit.
 - Endpoints that modify state via GET requests
 
 ### 6.11 Memory Leaks & Resource Cleanup
+
 - `setInterval` / `setTimeout` that are started but never cleared when the module
   is stopped or reloaded
 - Event listeners added without corresponding cleanup
@@ -369,10 +396,12 @@ This is not just a security scan — it is a full engineering audit.
 - In-memory caches that grow without bound (no TTL, no size limit, no eviction)
 
 ### 6.12 Database Schema & Query Quality
+
 This is the Supabase PostgreSQL database. Analyze the Drizzle schema files in `lib/db/src/schema/`
 and the query patterns in `artifacts/api-server/src/routes/` and `artifacts/api-server/src/lib/`.
 
 Look for:
+
 - Tables that should have indexes but don't (columns used in `WHERE`, `ORDER BY`, or
   `JOIN` clauses that aren't primary keys or already indexed)
 - Foreign keys that are not enforced at the DB level (Drizzle references that have no
@@ -389,6 +418,7 @@ Look for:
 - Any soft-delete pattern without a partial index on `deletedAt IS NULL`
 
 ### 6.13 Architectural & Module-Level Concerns
+
 - Server-side modules (`artifacts/api-server/src/lib/`) that have grown too large and
   should be split (look for files >300 lines that mix concerns)
 - Circular dependencies between lib packages
@@ -404,6 +434,7 @@ Look for:
 ## 7. What to Skip
 
 Do **not** flag:
+
 - Formatting, indentation, or whitespace issues (Prettier handles this)
 - Missing JSDoc / TSDoc comments
 - Test coverage gaps (missing tests for covered functionality)
@@ -425,22 +456,27 @@ file(s) and line(s) so a developer can go directly to the problem.
 
 ```markdown
 ## Title
+
 [Category]: Short, specific description — e.g. "Runtime: Missing await on db.insert() in travels/packing.ts:142"
 
 ## Priority
+
 P1 – Critical (security hole, data loss, crash in production path)
 P2 – Important (likely bug, significant performance problem, meaningful duplication)
 P3 – Nice-to-have (code quality, minor optimization, cleanup)
 
 ## Category
+
 One of: Security | Runtime | DataIntegrity | ErrorHandling | Performance | Duplication |
 DeadCode | TypeScript | Pattern | ApiDesign | MemoryLeak | Database | Architecture
 
 ## Files
+
 - `artifacts/api-server/src/routes/travels/packing.ts` lines 140–145
 - (add more files if the issue spans multiple)
 
 ## Problem
+
 Clear description of what is wrong and why it matters. Include the actual code snippet
 that illustrates the problem.
 
@@ -451,6 +487,7 @@ res.json({ ok: true });
 \`\`\`
 
 ## Suggested Fix
+
 Concrete description of how to fix it. Show the corrected code if possible.
 
 \`\`\`typescript
@@ -460,6 +497,7 @@ res.json({ ok: true });
 \`\`\`
 
 ## Context
+
 Any additional context: why this pattern was likely introduced, what other files have
 the same problem, what tests should be added after the fix, etc.
 ```
@@ -485,18 +523,18 @@ the same problem, what tests should be added after the fix, etc.
 
 To avoid overwhelming Copilot's context window, review one area at a time:
 
-| Session | Files / Directories to Review |
-|---|---|
-| Auth & webhooks | `artifacts/api-server/src/routes/auth.ts`, `agentphone.ts`, `elaine-email.ts`, `lib/session.ts` |
-| Travels routes | `artifacts/api-server/src/routes/travels/` (all files) |
-| Elaine engine | `artifacts/api-server/src/elaine/index.ts`, all `*-actions.ts` files |
-| API server lib | `artifacts/api-server/src/lib/` — focus on `ai-client.ts`, `storage.ts`, `reminder-scheduler.ts`, `app-config.ts` |
-| DB schema | `lib/db/src/schema/` (all files) + `lib/db/src/bootstrap.ts` |
-| Frontend modules | `artifacts/modules/src/pottery/`, `quilting/`, `ornaments/` (look for duplication across the three) |
-| Travels frontend | `artifacts/modules/src/travels/` |
-| Hub & Elaine UI | `artifacts/web/src/`, `artifacts/elaine/src/`, `lib/elaine-ui/src/` |
-| Shared libs | `lib/api-client-react/src/`, `lib/web-core/src/` |
+| Session          | Files / Directories to Review                                                                                     |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Auth & webhooks  | `artifacts/api-server/src/routes/auth.ts`, `agentphone.ts`, `elaine-email.ts`, `lib/session.ts`                   |
+| Travels routes   | `artifacts/api-server/src/routes/travels/` (all files)                                                            |
+| Elaine engine    | `artifacts/api-server/src/elaine/index.ts`, all `*-actions.ts` files                                              |
+| API server lib   | `artifacts/api-server/src/lib/` — focus on `ai-client.ts`, `storage.ts`, `reminder-scheduler.ts`, `app-config.ts` |
+| DB schema        | `lib/db/src/schema/` (all files) + `lib/db/src/bootstrap.ts`                                                      |
+| Frontend modules | `artifacts/modules/src/pottery/`, `quilting/`, `ornaments/` (look for duplication across the three)               |
+| Travels frontend | `artifacts/modules/src/travels/`                                                                                  |
+| Hub & Elaine UI  | `artifacts/web/src/`, `artifacts/elaine/src/`, `lib/elaine-ui/src/`                                               |
+| Shared libs      | `lib/api-client-react/src/`, `lib/web-core/src/`                                                                  |
 
 ---
 
-*Last updated: 2026-07-12. Prompt version for Batchelor App commit `9050bce41d`.*
+_Last updated: 2026-07-12. Prompt version for Batchelor App commit `9050bce41d`._

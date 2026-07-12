@@ -9,6 +9,7 @@ import {
   deleteTripPhoto,
 } from "../../lib/travels/storage";
 import { generateVisualEmbedding } from "../../lib/visual-embed";
+import { tripExists } from "../../lib/travels/db-helpers";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -22,14 +23,6 @@ const upload = multer({
     cb(null, ALLOWED_TYPES.has(file.mimetype));
   },
 });
-
-async function tripExists(tripId: number): Promise<boolean> {
-  const [row] = await db
-    .select({ id: travelsTrips.id })
-    .from(travelsTrips)
-    .where(eq(travelsTrips.id, tripId));
-  return !!row;
-}
 
 function parsePhotoType(raw: unknown): "photo" | "magnet" {
   const value =

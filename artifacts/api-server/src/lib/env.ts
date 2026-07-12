@@ -56,4 +56,12 @@ export const env = {
   // body/headers/attachments inline, only metadata.
   resendApiKey: optional("RESEND_API_KEY"),
   sentryDsn: optional("SENTRY_DSN"),
+  // Comma-separated list of allowed host names for OAuth redirect URIs and
+  // password-reset URLs. Validated server-side so a forged Host header
+  // cannot shape sensitive redirect targets. Centralised here so every
+  // consumer uses the same parsed list rather than re-parsing the env var.
+  replitDomains: (process.env.REPLIT_DOMAINS ?? "")
+    .split(",")
+    .map((d) => d.trim())
+    .filter(Boolean),
 };

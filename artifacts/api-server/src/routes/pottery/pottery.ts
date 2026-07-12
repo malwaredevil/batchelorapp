@@ -13,6 +13,7 @@ import {
   notInArray,
   or,
   sql,
+  type SQL,
 } from "drizzle-orm";
 import {
   db,
@@ -131,8 +132,7 @@ router.get("/items", async (req, res) => {
   const { q, categoryId, page, pageSize } = parsed.data;
 
   // Build WHERE conditions for server-side filtering.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const conditions: any[] = [];
+  const conditions: SQL<unknown>[] = [];
   if (q && q.trim()) {
     const term = `%${q.trim().toLowerCase()}%`;
     conditions.push(
@@ -142,7 +142,7 @@ router.get("/items", async (req, res) => {
         ilike(potteryItems.style, term),
         ilike(potteryItems.shape, term),
         ilike(potteryItems.maker, term),
-      ),
+      )!,
     );
   }
 
@@ -163,9 +163,10 @@ router.get("/items", async (req, res) => {
     conditions.push(inArray(potteryItems.id, itemIdsForCategory));
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where =
-    conditions.length > 0 ? and(...(conditions as [any, ...any[]])) : undefined;
+    conditions.length > 0
+      ? and(...(conditions as [SQL<unknown>, ...SQL<unknown>[]]))
+      : undefined;
 
   // Total count for pagination metadata.
   const [{ value: total }] = await db

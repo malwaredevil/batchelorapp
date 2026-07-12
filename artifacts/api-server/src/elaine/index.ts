@@ -3645,7 +3645,7 @@ async function applyUnseenNudges(userId: number): Promise<ChatMessage[]> {
   const updatedHistory: ChatMessage[] = [
     ...history,
     ...unseen.map((n) => ({ role: "assistant" as const, content: n.message })),
-  ];
+  ].slice(-50);
 
   await db
     .update(elaineConversations)
@@ -5397,17 +5397,19 @@ Keep replies concise and easy to read in a chat bubble.`;
     allCitations.length > 0 ? `\x1f${JSON.stringify(allCitations)}` : "";
   const content = rawContent.trim() + citationSuffix;
 
-  const updatedHistory: ChatMessage[] = [
-    ...history,
-    {
-      role: "user",
-      content: message,
-      ...(allAttachmentUrls.length > 0
-        ? { attachmentUrls: allAttachmentUrls }
-        : {}),
-    },
-    { role: "assistant", content },
-  ];
+  const updatedHistory: ChatMessage[] = (
+    [
+      ...history,
+      {
+        role: "user" as const,
+        content: message,
+        ...(allAttachmentUrls.length > 0
+          ? { attachmentUrls: allAttachmentUrls }
+          : {}),
+      },
+      { role: "assistant" as const, content },
+    ] satisfies ChatMessage[]
+  ).slice(-50);
 
   // Save turn to the named history conversation.
   if (histConvId !== null) {

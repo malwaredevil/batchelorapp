@@ -25,9 +25,11 @@ const EXT_BY_TYPE: Record<SupportedImageType, string> = {
 // ---------------------------------------------------------------------------
 
 const DOWNLOAD_CACHE_MAX_ENTRIES = 500;
+const DOWNLOAD_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 const downloadCache = new Map<
   string,
-  { buffer: Buffer; contentType: string }
+  { buffer: Buffer; contentType: string; expiry: number }
 >();
 
 function cacheGet(
@@ -35,6 +37,11 @@ function cacheGet(
 ): { buffer: Buffer; contentType: string } | undefined {
   const hit = downloadCache.get(key);
   if (hit === undefined) return undefined;
+  if (Date.now() > hit.expiry) {
+    downloadCache.delete(key);
+    return undefined;
+  }
+  // LRU: move to tail
   downloadCache.delete(key);
   downloadCache.set(key, hit);
   return hit;
@@ -45,7 +52,7 @@ function cacheSet(
   value: { buffer: Buffer; contentType: string },
 ): void {
   downloadCache.delete(key);
-  downloadCache.set(key, value);
+  downloadCache.set(key, { ...value, expiry: Date.now() + DOWNLOAD_CACHE_TTL_MS });
   if (downloadCache.size > DOWNLOAD_CACHE_MAX_ENTRIES) {
     const oldestKey = downloadCache.keys().next().value;
     if (oldestKey !== undefined) downloadCache.delete(oldestKey);
@@ -181,7 +188,8 @@ export class ImageStorageService {
   }
 
   async deleteImage(path: string): Promise<void> {
-    await this.supabase.storage.from(this.bucket).remove([path]);
+    const { error } = await this.supabase.storage.from(this.bucket).remove([path]);
+    if (error) throw error;
     this.invalidateImageCache(path);
   }
 }

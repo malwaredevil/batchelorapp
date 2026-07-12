@@ -97,7 +97,9 @@ export const travelsDocChunks = pgTable(
   "travels_doc_chunks",
   {
     id: serial("id").primaryKey(),
-    tripDocumentId: integer("trip_document_id").notNull(),
+    tripDocumentId: integer("trip_document_id")
+      .notNull()
+      .references(() => travelsTripDocuments.id, { onDelete: "cascade" }),
     chunkIndex: integer("chunk_index").notNull(),
     content: text("content").notNull(),
     embedding: vector("embedding", { dimensions: 1536 }),

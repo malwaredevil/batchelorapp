@@ -1,10 +1,11 @@
 import { Router, type IRouter } from "express";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
 import {
   db,
   travelsTrips,
   travelsTripDocuments,
+  travelsDocChunks,
   travelsTripPhotos,
   travelsReminders,
   travelsPackingLists,
@@ -257,17 +258,36 @@ router.delete("/trips/:id", async (req, res) => {
     ...docs.map((d) => deleteDocument(d.storagePath)),
   ]);
 
-  // Delete child rows first, then the trip
-  await db.delete(travelsTripPhotos).where(eq(travelsTripPhotos.tripId, id));
-  await db
-    .delete(travelsTripDocuments)
-    .where(eq(travelsTripDocuments.tripId, id));
-  await db.delete(travelsReminders).where(eq(travelsReminders.tripId, id));
-  // Packing list items cascade via FK; delete the list row directly
-  await db
-    .delete(travelsPackingLists)
-    .where(eq(travelsPackingLists.tripId, id));
-  await db.delete(travelsTrips).where(eq(travelsTrips.id, id));
+  // Delete all child rows in a transaction so a mid-delete failure can't
+  // leave orphaned photos, documents, chunks, reminders, or packing rows.
+  // Storage deletes (above) stay outside the transaction — they're not
+  // atomic and the allSettled handling already accepts individual failures.
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(travelsTripPhotos)
+      .where(eq(travelsTripPhotos.tripId, id));
+    // Doc chunks have no FK cascade — delete before documents.
+    await tx.delete(travelsDocChunks).where(
+      inArray(
+        travelsDocChunks.tripDocumentId,
+        tx
+          .select({ id: travelsTripDocuments.id })
+          .from(travelsTripDocuments)
+          .where(eq(travelsTripDocuments.tripId, id)),
+      ),
+    );
+    await tx
+      .delete(travelsTripDocuments)
+      .where(eq(travelsTripDocuments.tripId, id));
+    await tx
+      .delete(travelsReminders)
+      .where(eq(travelsReminders.tripId, id));
+    // Packing list items cascade via FK; delete the list row directly.
+    await tx
+      .delete(travelsPackingLists)
+      .where(eq(travelsPackingLists.tripId, id));
+    await tx.delete(travelsTrips).where(eq(travelsTrips.id, id));
+  });
 
   res.status(204).send();
   void deleteTripCalendarEvents(id);

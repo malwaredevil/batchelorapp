@@ -237,6 +237,13 @@ export const travelsReminderAlertLog = pgTable(
   (table) => [
     index("travels_reminder_alert_log_reminder_id_idx").on(table.reminderId),
     index("travels_reminder_alert_log_user_id_idx").on(table.userId),
+    // Dedup key: prevents concurrent scheduler runs from inserting duplicate
+    // log rows and firing the same alert twice.
+    uniqueIndex("travels_reminder_alert_log_dedup_idx").on(
+      table.reminderId,
+      table.alertType,
+      table.channel,
+    ),
   ],
 ).enableRLS();
 

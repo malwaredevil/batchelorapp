@@ -25,6 +25,9 @@ import type {
   AuthUser,
   ChangePasswordInput,
   CompareFabricBody,
+  ConfigAppConfigListResponse,
+  ConfigUpdateAppConfigBody,
+  ConfigUpdateAppConfigResponse,
   DeleteOrnamentUnusedCategories200,
   DeletePotteryUnusedCategories200,
   DeleteQuiltingUnusedCategories200,
@@ -136,6 +139,7 @@ import type {
   TravelsExploreDestinationBody,
   TravelsExploreDestinationResult,
   TravelsGenerateItineraryBody,
+  TravelsGmailMessageDetail,
   TravelsItineraryResult,
   TravelsListDocumentsResponse,
   TravelsListTripsResponse,
@@ -9548,6 +9552,83 @@ export const useDeleteUnmatchedDocument = <TError = ErrorType<Error>,
       return useMutation(getDeleteUnmatchedDocumentMutationOptions(options));
     }
 
+export const getGetGmailMessageUrl = (messageId: string,) => {
+
+
+
+
+  return `/api/travels/gmail/messages/${messageId}`
+}
+
+/**
+ * @summary Get the full content and attachment metadata for a Gmail message
+ */
+export const getGmailMessage = async (messageId: string, options?: RequestInit): Promise<TravelsGmailMessageDetail> => {
+
+  return customFetch<TravelsGmailMessageDetail>(getGetGmailMessageUrl(messageId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetGmailMessageQueryKey = (messageId: string,) => {
+    return [
+    `/api/travels/gmail/messages/${messageId}`
+    ] as const;
+    }
+
+
+export const getGetGmailMessageQueryOptions = <TData = Awaited<ReturnType<typeof getGmailMessage>>, TError = ErrorType<Error>>(messageId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGmailMessage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetGmailMessageQueryKey(messageId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getGmailMessage>>> = ({ signal }) => getGmailMessage(messageId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(messageId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getGmailMessage>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetGmailMessageQueryResult = NonNullable<Awaited<ReturnType<typeof getGmailMessage>>>
+export type GetGmailMessageQueryError = ErrorType<Error>
+
+
+/**
+ * @summary Get the full content and attachment metadata for a Gmail message
+ */
+
+export function useGetGmailMessage<TData = Awaited<ReturnType<typeof getGmailMessage>>, TError = ErrorType<Error>>(
+ messageId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGmailMessage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetGmailMessageQueryOptions(messageId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
 export const getExploreDestinationUrl = () => {
 
 
@@ -12759,5 +12840,233 @@ export const useUpdateWeatherConfig = <TError = ErrorType<Error>,
         TContext
       > => {
       return useMutation(getUpdateWeatherConfigMutationOptions(options));
+    }
+
+export const getGetAppConfigUrl = () => {
+
+
+
+
+  return `/api/config`
+}
+
+/**
+ * @summary Get all app-wide configurable key/value rows
+ */
+export const getAppConfig = async ( options?: RequestInit): Promise<ConfigAppConfigListResponse> => {
+
+  return customFetch<ConfigAppConfigListResponse>(getGetAppConfigUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAppConfigQueryKey = () => {
+    return [
+    `/api/config`
+    ] as const;
+    }
+
+
+export const getGetAppConfigQueryOptions = <TData = Awaited<ReturnType<typeof getAppConfig>>, TError = ErrorType<Error>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAppConfig>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAppConfigQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAppConfig>>> = ({ signal }) => getAppConfig({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAppConfig>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAppConfigQueryResult = NonNullable<Awaited<ReturnType<typeof getAppConfig>>>
+export type GetAppConfigQueryError = ErrorType<Error>
+
+
+/**
+ * @summary Get all app-wide configurable key/value rows
+ */
+
+export function useGetAppConfig<TData = Awaited<ReturnType<typeof getAppConfig>>, TError = ErrorType<Error>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAppConfig>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAppConfigQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetAppConfigByModuleUrl = (module: string,) => {
+
+
+
+
+  return `/api/config/${module}`
+}
+
+/**
+ * @summary Get config rows for a single module
+ */
+export const getAppConfigByModule = async (module: string, options?: RequestInit): Promise<ConfigAppConfigListResponse> => {
+
+  return customFetch<ConfigAppConfigListResponse>(getGetAppConfigByModuleUrl(module),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAppConfigByModuleQueryKey = (module: string,) => {
+    return [
+    `/api/config/${module}`
+    ] as const;
+    }
+
+
+export const getGetAppConfigByModuleQueryOptions = <TData = Awaited<ReturnType<typeof getAppConfigByModule>>, TError = ErrorType<Error>>(module: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAppConfigByModule>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAppConfigByModuleQueryKey(module);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAppConfigByModule>>> = ({ signal }) => getAppConfigByModule(module, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(module), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAppConfigByModule>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAppConfigByModuleQueryResult = NonNullable<Awaited<ReturnType<typeof getAppConfigByModule>>>
+export type GetAppConfigByModuleQueryError = ErrorType<Error>
+
+
+/**
+ * @summary Get config rows for a single module
+ */
+
+export function useGetAppConfigByModule<TData = Awaited<ReturnType<typeof getAppConfigByModule>>, TError = ErrorType<Error>>(
+ module: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAppConfigByModule>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAppConfigByModuleQueryOptions(module,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getUpdateAppConfigValueUrl = (module: string,
+    key: string,) => {
+
+
+
+
+  return `/api/config/${module}/${key}`
+}
+
+/**
+ * @summary Update a single config value (owner only)
+ */
+export const updateAppConfigValue = async (module: string,
+    key: string,
+    configUpdateAppConfigBody: ConfigUpdateAppConfigBody, options?: RequestInit): Promise<ConfigUpdateAppConfigResponse> => {
+
+  return customFetch<ConfigUpdateAppConfigResponse>(getUpdateAppConfigValueUrl(module,key),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      configUpdateAppConfigBody,)
+  }
+);}
+
+
+
+
+export const getUpdateAppConfigValueMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAppConfigValue>>, TError,{module: string;key: string;data: BodyType<ConfigUpdateAppConfigBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateAppConfigValue>>, TError,{module: string;key: string;data: BodyType<ConfigUpdateAppConfigBody>}, TContext> => {
+
+const mutationKey = ['updateAppConfigValue'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAppConfigValue>>, {module: string;key: string;data: BodyType<ConfigUpdateAppConfigBody>}> = (props) => {
+          const {module,key,data} = props ?? {};
+
+          return  updateAppConfigValue(module,key,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateAppConfigValueMutationResult = NonNullable<Awaited<ReturnType<typeof updateAppConfigValue>>>
+    export type UpdateAppConfigValueMutationBody = BodyType<ConfigUpdateAppConfigBody>
+    export type UpdateAppConfigValueMutationError = ErrorType<Error>
+
+    /**
+ * @summary Update a single config value (owner only)
+ */
+export const useUpdateAppConfigValue = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAppConfigValue>>, TError,{module: string;key: string;data: BodyType<ConfigUpdateAppConfigBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateAppConfigValue>>,
+        TError,
+        {module: string;key: string;data: BodyType<ConfigUpdateAppConfigBody>},
+        TContext
+      > => {
+      return useMutation(getUpdateAppConfigValueMutationOptions(options));
     }
 

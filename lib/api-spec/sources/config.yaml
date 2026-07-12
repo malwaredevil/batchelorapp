@@ -1,0 +1,194 @@
+openapi: 3.1.0
+info:
+  title: Config
+  version: 0.1.0
+paths:
+  /:
+    get:
+      operationId: getAppConfig
+      tags:
+        - config
+      summary: Get all app-wide configurable key/value rows
+      responses:
+        "200":
+          description: All config rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppConfigListResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /{module}:
+    get:
+      operationId: getAppConfigByModule
+      tags:
+        - config
+      summary: Get config rows for a single module
+      parameters:
+        - name: module
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Config rows for the module
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppConfigListResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /{module}/{key}:
+    put:
+      operationId: updateAppConfigValue
+      tags:
+        - config
+      summary: Update a single config value (owner only)
+      parameters:
+        - name: module
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAppConfigBody"
+      responses:
+        "200":
+          description: Updated config row
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateAppConfigResponse"
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Config key not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  schemas:
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+    AppConfigRow:
+      type: object
+      required:
+        - id
+        - module
+        - key
+        - value
+        - type
+        - label
+        - updatedAt
+        - defaultValue
+        - customisedAt
+        - orphaned
+      properties:
+        id:
+          type: integer
+        module:
+          type: string
+        key:
+          type: string
+        value:
+          type: string
+        defaultValue:
+          type: string
+          nullable: true
+          description: The hardcoded default for this key; null if no known default exists.
+        customisedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp of the last deliberate admin override; null if the value was never intentionally changed.
+        orphaned:
+          type: boolean
+          description: True when this DB row has no matching APP_CONFIG_DEFAULTS entry (e.g. after a key rename). The label/description shown may be stale.
+        type:
+          type: string
+        label:
+          type: string
+        description:
+          type: string
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+    AppConfigListResponse:
+      type: object
+      required:
+        - config
+      properties:
+        config:
+          type: array
+          items:
+            $ref: "#/components/schemas/AppConfigRow"
+        bootstrappedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp of the most recent server startup bootstrap/prune run. Null if the server has not yet bootstrapped (very rare). Advances on every restart so the admin UI can detect staleness.
+        bootstrapStatus:
+          type: string
+          enum: [pending, success, warn, error]
+          nullable: true
+          description: Outcome of the most recent bootstrapDefaults() run. "warn" means the server started without DB access and is running on hardcoded fallbacks; config rows may not be seeded yet. Null when the status is not yet known (pre-first-fetch).
+        bootstrapRetryAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Scheduled time of the next automatic bootstrapDefaults() retry. Only present (non-null) when bootstrapStatus is "warn". Null otherwise.
+    UpdateAppConfigBody:
+      type: object
+      required:
+        - value
+      properties:
+        value:
+          type: string
+    UpdateAppConfigResponse:
+      type: object
+      required:
+        - config
+      properties:
+        config:
+          $ref: "#/components/schemas/AppConfigRow"

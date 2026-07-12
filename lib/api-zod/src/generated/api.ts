@@ -12,7 +12,8 @@ import * as zod from 'zod';
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
-  "status": zod.string()
+  "status": zod.string(),
+  "configBootstrap": zod.enum(['pending', 'success', 'warn', 'error']).optional().describe('Outcome of the last app-config bootstrap run. \"pending\" = not yet run; \"success\" = all steps completed; \"warn\" = DB unavailable at startup (non-fatal, using hardcoded fallbacks); \"error\" = unexpected JS error, stale\/missing config rows may persist.\n')
 })
 
 
@@ -3135,6 +3136,28 @@ export const DeleteUnmatchedDocumentParams = zod.object({
 
 
 /**
+ * @summary Get the full content and attachment metadata for a Gmail message
+ */
+export const GetGmailMessageParams = zod.object({
+  "messageId": zod.coerce.string()
+})
+
+export const GetGmailMessageResponse = zod.object({
+  "id": zod.string(),
+  "subject": zod.string().nullable(),
+  "from": zod.string().nullable(),
+  "date": zod.coerce.date().nullable(),
+  "textBody": zod.string().nullable(),
+  "attachments": zod.array(zod.object({
+  "filename": zod.string(),
+  "mimeType": zod.string(),
+  "attachmentId": zod.string(),
+  "size": zod.number().nullish()
+}))
+})
+
+
+/**
  * @summary Get a map location and AI overview for a destination
  */
 export const ExploreDestinationBody = zod.object({
@@ -4089,6 +4112,85 @@ export const UpdateWeatherConfigResponse = zod.object({
   "lon": zod.number().min(updateWeatherConfigResponseConfigOneLonMin).max(updateWeatherConfigResponseConfigOneLonMax),
   "unit": zod.enum(['celsius', 'fahrenheit'])
 }).nullable()
+})
+
+
+/**
+ * @summary Get all app-wide configurable key/value rows
+ */
+export const GetAppConfigResponse = zod.object({
+  "config": zod.array(zod.object({
+  "id": zod.number(),
+  "module": zod.string(),
+  "key": zod.string(),
+  "value": zod.string(),
+  "defaultValue": zod.string().nullable().describe('The hardcoded default for this key; null if no known default exists.'),
+  "customisedAt": zod.coerce.date().nullable().describe('Timestamp of the last deliberate admin override; null if the value was never intentionally changed.'),
+  "orphaned": zod.boolean().describe('True when this DB row has no matching APP_CONFIG_DEFAULTS entry (e.g. after a key rename). The label\/description shown may be stale.'),
+  "type": zod.string(),
+  "label": zod.string(),
+  "description": zod.string().nullish(),
+  "updatedAt": zod.coerce.date()
+})),
+  "bootstrappedAt": zod.coerce.date().nullish().describe('Timestamp of the most recent server startup bootstrap\/prune run. Null if the server has not yet bootstrapped (very rare). Advances on every restart so the admin UI can detect staleness.'),
+  "bootstrapStatus": zod.enum(['pending', 'success', 'warn', 'error']).nullish().describe('Outcome of the most recent bootstrapDefaults() run. \"warn\" means the server started without DB access and is running on hardcoded fallbacks; config rows may not be seeded yet. Null when the status is not yet known (pre-first-fetch).'),
+  "bootstrapRetryAt": zod.coerce.date().nullish().describe('Scheduled time of the next automatic bootstrapDefaults() retry. Only present (non-null) when bootstrapStatus is \"warn\". Null otherwise.')
+})
+
+
+/**
+ * @summary Get config rows for a single module
+ */
+export const GetAppConfigByModuleParams = zod.object({
+  "module": zod.coerce.string()
+})
+
+export const GetAppConfigByModuleResponse = zod.object({
+  "config": zod.array(zod.object({
+  "id": zod.number(),
+  "module": zod.string(),
+  "key": zod.string(),
+  "value": zod.string(),
+  "defaultValue": zod.string().nullable().describe('The hardcoded default for this key; null if no known default exists.'),
+  "customisedAt": zod.coerce.date().nullable().describe('Timestamp of the last deliberate admin override; null if the value was never intentionally changed.'),
+  "orphaned": zod.boolean().describe('True when this DB row has no matching APP_CONFIG_DEFAULTS entry (e.g. after a key rename). The label\/description shown may be stale.'),
+  "type": zod.string(),
+  "label": zod.string(),
+  "description": zod.string().nullish(),
+  "updatedAt": zod.coerce.date()
+})),
+  "bootstrappedAt": zod.coerce.date().nullish().describe('Timestamp of the most recent server startup bootstrap\/prune run. Null if the server has not yet bootstrapped (very rare). Advances on every restart so the admin UI can detect staleness.'),
+  "bootstrapStatus": zod.enum(['pending', 'success', 'warn', 'error']).nullish().describe('Outcome of the most recent bootstrapDefaults() run. \"warn\" means the server started without DB access and is running on hardcoded fallbacks; config rows may not be seeded yet. Null when the status is not yet known (pre-first-fetch).'),
+  "bootstrapRetryAt": zod.coerce.date().nullish().describe('Scheduled time of the next automatic bootstrapDefaults() retry. Only present (non-null) when bootstrapStatus is \"warn\". Null otherwise.')
+})
+
+
+/**
+ * @summary Update a single config value (owner only)
+ */
+export const UpdateAppConfigValueParams = zod.object({
+  "module": zod.coerce.string(),
+  "key": zod.coerce.string()
+})
+
+export const UpdateAppConfigValueBody = zod.object({
+  "value": zod.string()
+})
+
+export const UpdateAppConfigValueResponse = zod.object({
+  "config": zod.object({
+  "id": zod.number(),
+  "module": zod.string(),
+  "key": zod.string(),
+  "value": zod.string(),
+  "defaultValue": zod.string().nullable().describe('The hardcoded default for this key; null if no known default exists.'),
+  "customisedAt": zod.coerce.date().nullable().describe('Timestamp of the last deliberate admin override; null if the value was never intentionally changed.'),
+  "orphaned": zod.boolean().describe('True when this DB row has no matching APP_CONFIG_DEFAULTS entry (e.g. after a key rename). The label\/description shown may be stale.'),
+  "type": zod.string(),
+  "label": zod.string(),
+  "description": zod.string().nullish(),
+  "updatedAt": zod.coerce.date()
+})
 })
 
 

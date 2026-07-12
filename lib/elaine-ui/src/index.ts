@@ -13,3 +13,4 @@ export * from "./ChatWidgets";
 export * from "./MarkdownMessage";
 export * from "./useVoiceInput";
 export * from "./useTTS";
+export * from "./useAppConfigSummary";

@@ -5,7 +5,11 @@
  * Unified API specification (pottery + quilting + travels + ornaments + office + hub)
  * OpenAPI spec version: 0.1.0
  */
+import type { HealthStatusConfigBootstrap } from './healthStatusConfigBootstrap';
 
 export interface HealthStatus {
   status: string;
+  /** Outcome of the last app-config bootstrap run. "pending" = not yet run; "success" = all steps completed; "warn" = DB unavailable at startup (non-fatal, using hardcoded fallbacks); "error" = unexpected JS error, stale/missing config rows may persist.
+   */
+  configBootstrap?: HealthStatusConfigBootstrap;
 }

@@ -1858,6 +1858,14 @@ components:
       properties:
         status:
           type: string
+        configBootstrap:
+          type: string
+          enum: [pending, success, warn, error]
+          description: >
+            Outcome of the last app-config bootstrap run.
+            "pending" = not yet run; "success" = all steps completed;
+            "warn" = DB unavailable at startup (non-fatal, using hardcoded fallbacks);
+            "error" = unexpected JS error, stale/missing config rows may persist.
 
     AuthUser:
       type: object

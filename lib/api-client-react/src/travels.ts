@@ -1468,49 +1468,6 @@ export function useUnlinkGmailMessage(
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
-export interface GmailMessageAttachment {
-  filename: string;
-  mimeType: string;
-  attachmentId: string;
-  size?: number;
-}
-
-export interface GmailMessageContent {
-  id: string;
-  subject: string | null;
-  from: string | null;
-  date: string | null;
-  textBody: string;
-  attachments: GmailMessageAttachment[];
-}
-
-const getGmailMessage = (messageId: string, options?: RequestInit): Promise<GmailMessageContent> =>
-  customFetch<GmailMessageContent>(`/api/travels/gmail/messages/${messageId}`, {
-    ...options,
-    method: "GET",
-  });
-
-export const getGetGmailMessageQueryKey = (messageId: string) =>
-  [`/api/travels/gmail/messages/${messageId}`] as const;
-
-export function useGetGmailMessage<TData = GmailMessageContent, TError = unknown>(
-  messageId: string,
-  options?: { query?: UseQueryOptions<GmailMessageContent, TError, TData> },
-): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const { query: queryOptions } = options ?? {};
-  const queryKey = queryOptions?.queryKey ?? getGetGmailMessageQueryKey(messageId);
-  const queryFn: QueryFunction<GmailMessageContent> = ({ signal }) =>
-    getGmailMessage(messageId, { signal });
-  const queryOpts = {
-    queryKey,
-    queryFn,
-    enabled: !!messageId,
-    ...queryOptions,
-  } as UseQueryOptions<GmailMessageContent, TError, TData> & { queryKey: QueryKey };
-  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
-  return { ...query, queryKey: queryOpts.queryKey };
-}
-
 export interface GmailBulkLinkResult {
   results: { messageId: string; status: "linked" | "already_linked" | "failed"; error?: string }[];
 }

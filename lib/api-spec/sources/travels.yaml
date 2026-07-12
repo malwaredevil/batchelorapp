@@ -455,6 +455,43 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /gmail/messages/{messageId}:
+    get:
+      operationId: getGmailMessage
+      tags: [travels]
+      summary: Get the full content and attachment metadata for a Gmail message
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Parsed message content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GmailMessageDetail"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Gmail is not connected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Could not load message from Gmail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /explore:
     post:
       operationId: exploreDestination
@@ -1208,3 +1245,41 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PackingItem"
+
+    GmailMessageAttachment:
+      type: object
+      required: [filename, mimeType, attachmentId]
+      properties:
+        filename:
+          type: string
+        mimeType:
+          type: string
+        attachmentId:
+          type: string
+        size:
+          type: integer
+          nullable: true
+
+    GmailMessageDetail:
+      type: object
+      required: [id, subject, from, date, textBody, attachments]
+      properties:
+        id:
+          type: string
+        subject:
+          type: string
+          nullable: true
+        from:
+          type: string
+          nullable: true
+        date:
+          type: string
+          format: date-time
+          nullable: true
+        textBody:
+          type: string
+          nullable: true
+        attachments:
+          type: array
+          items:
+            $ref: "#/components/schemas/GmailMessageAttachment"

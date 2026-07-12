@@ -14,6 +14,7 @@ import {
   PanelBottom,
   Square,
   AlertCircle,
+  MoreHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ThreadSummary } from "@workspace/gmail-ui";
@@ -617,22 +618,72 @@ export function ThreadList({
             /* ── Bulk action buttons ── */
             <>
               <Sep />
-              <IconBtn onClick={doBulkArchive} title="Archive">
-                <Archive className="w-4 h-4" />
-              </IconBtn>
-              <IconBtn onClick={doBulkSpam} title="Report spam">
-                <AlertCircle className="w-4 h-4" />
-              </IconBtn>
-              <IconBtn onClick={doBulkTrash} title="Delete" danger>
-                <Trash2 className="w-4 h-4" />
-              </IconBtn>
+              <span className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">
+                {checkedCount} selected
+              </span>
               <Sep />
-              <IconBtn onClick={doBulkMarkRead} title="Mark as read">
-                <MailOpen className="w-4 h-4" />
-              </IconBtn>
-              <IconBtn onClick={doBulkMarkUnread} title="Mark as unread">
-                <Mail className="w-4 h-4" />
-              </IconBtn>
+              {compact ? (
+                /* Mobile: collapse all bulk actions into one dropdown */
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className="p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground"
+                      aria-label="Bulk actions"
+                      title="Actions"
+                    >
+                      <MoreHorizontal className="w-4 h-4" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-44">
+                    <DropdownMenuItem onClick={doBulkArchive} className="gap-2">
+                      <Archive className="w-4 h-4 flex-shrink-0" /> Archive
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={doBulkSpam} className="gap-2">
+                      <AlertCircle className="w-4 h-4 flex-shrink-0" /> Report
+                      spam
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={doBulkTrash}
+                      className="gap-2 text-red-500 focus:text-red-500"
+                    >
+                      <Trash2 className="w-4 h-4 flex-shrink-0" /> Delete
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={doBulkMarkRead}
+                      className="gap-2"
+                    >
+                      <MailOpen className="w-4 h-4 flex-shrink-0" /> Mark as
+                      read
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={doBulkMarkUnread}
+                      className="gap-2"
+                    >
+                      <Mail className="w-4 h-4 flex-shrink-0" /> Mark as unread
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                /* Desktop: show all action icon buttons inline */
+                <>
+                  <IconBtn onClick={doBulkArchive} title="Archive">
+                    <Archive className="w-4 h-4" />
+                  </IconBtn>
+                  <IconBtn onClick={doBulkSpam} title="Report spam">
+                    <AlertCircle className="w-4 h-4" />
+                  </IconBtn>
+                  <IconBtn onClick={doBulkTrash} title="Delete" danger>
+                    <Trash2 className="w-4 h-4" />
+                  </IconBtn>
+                  <Sep />
+                  <IconBtn onClick={doBulkMarkRead} title="Mark as read">
+                    <MailOpen className="w-4 h-4" />
+                  </IconBtn>
+                  <IconBtn onClick={doBulkMarkUnread} title="Mark as unread">
+                    <Mail className="w-4 h-4" />
+                  </IconBtn>
+                </>
+              )}
             </>
           ) : (
             /* ── Normal label + refresh ── */
@@ -651,11 +702,7 @@ export function ThreadList({
 
         {/* Right side */}
         <div className="flex items-center gap-1 flex-shrink-0">
-          {anyChecked ? (
-            <span className="text-xs text-muted-foreground px-1.5 whitespace-nowrap">
-              {checkedCount} selected
-            </span>
-          ) : compact ? (
+          {anyChecked ? null : compact ? (
             /* Compact mode (narrow split pane on mobile): collapse count/sort
              * and pagination into a single overflow menu so the row never
              * has to fit more than a couple of icon buttons side by side. */

@@ -634,7 +634,7 @@ export default function OfficeGmailPage() {
                     hasThread ? "hidden lg:block lg:w-[380px]" : "w-full",
                   )}
                 >
-                  <ThreadList {...threadListSharedProps} />
+                  <ThreadList {...threadListSharedProps} compact={isMobile} />
                 </div>
                 <div
                   className={cn(

@@ -320,7 +320,10 @@ export default function TripShare() {
           <div className="border-t border-border/50 pt-6 text-center no-print">
             <p className="text-xs text-muted-foreground">
               Created with{" "}
-              <a href="/modules/travels" className="text-primary hover:underline">
+              <a
+                href="/modules/travels"
+                className="text-primary hover:underline"
+              >
                 Batchelor Travels
               </a>
             </p>

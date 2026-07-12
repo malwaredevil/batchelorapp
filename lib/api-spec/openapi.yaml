@@ -2703,6 +2703,43 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /travels/gmail/messages/{messageId}:
+    get:
+      operationId: getGmailMessage
+      tags:
+        - travels
+      summary: Get the full content and attachment metadata for a Gmail message
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Parsed message content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TravelsGmailMessageDetail"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Gmail is not connected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Could not load message from Gmail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /travels/explore:
     post:
       operationId: exploreDestination
@@ -3781,6 +3818,104 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /config:
+    get:
+      operationId: getAppConfig
+      tags:
+        - config
+      summary: Get all app-wide configurable key/value rows
+      responses:
+        "200":
+          description: All config rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfigAppConfigListResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /config/{module}:
+    get:
+      operationId: getAppConfigByModule
+      tags:
+        - config
+      summary: Get config rows for a single module
+      parameters:
+        - name: module
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Config rows for the module
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfigAppConfigListResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /config/{module}/{key}:
+    put:
+      operationId: updateAppConfigValue
+      tags:
+        - config
+      summary: Update a single config value (owner only)
+      parameters:
+        - name: module
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfigUpdateAppConfigBody"
+      responses:
+        "200":
+          description: Updated config row
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfigUpdateAppConfigResponse"
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Config key not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 components:
   schemas:
     HealthStatus:
@@ -3790,6 +3925,15 @@ components:
       properties:
         status:
           type: string
+        configBootstrap:
+          type: string
+          enum:
+            - pending
+            - success
+            - warn
+            - error
+          description: |
+            Outcome of the last app-config bootstrap run. "pending" = not yet run; "success" = all steps completed; "warn" = DB unavailable at startup (non-fatal, using hardcoded fallbacks); "error" = unexpected JS error, stale/missing config rows may persist.
     LoginInput:
       type: object
       required:
@@ -6412,6 +6556,51 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TravelsPackingItem"
+    TravelsGmailMessageAttachment:
+      type: object
+      required:
+        - filename
+        - mimeType
+        - attachmentId
+      properties:
+        filename:
+          type: string
+        mimeType:
+          type: string
+        attachmentId:
+          type: string
+        size:
+          type: integer
+          nullable: true
+    TravelsGmailMessageDetail:
+      type: object
+      required:
+        - id
+        - subject
+        - from
+        - date
+        - textBody
+        - attachments
+      properties:
+        id:
+          type: string
+        subject:
+          type: string
+          nullable: true
+        from:
+          type: string
+          nullable: true
+        date:
+          type: string
+          format: date-time
+          nullable: true
+        textBody:
+          type: string
+          nullable: true
+        attachments:
+          type: array
+          items:
+            $ref: "#/components/schemas/TravelsGmailMessageAttachment"
     OrnamentsCategory:
       type: object
       required:
@@ -6930,6 +7119,92 @@ components:
           nullable: true
           allOf:
             - $ref: "#/components/schemas/HubWeatherConfigBody"
+    ConfigAppConfigRow:
+      type: object
+      required:
+        - id
+        - module
+        - key
+        - value
+        - type
+        - label
+        - updatedAt
+        - defaultValue
+        - customisedAt
+        - orphaned
+      properties:
+        id:
+          type: integer
+        module:
+          type: string
+        key:
+          type: string
+        value:
+          type: string
+        defaultValue:
+          type: string
+          nullable: true
+          description: The hardcoded default for this key; null if no known default exists.
+        customisedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp of the last deliberate admin override; null if the value was never intentionally changed.
+        orphaned:
+          type: boolean
+          description: True when this DB row has no matching APP_CONFIG_DEFAULTS entry (e.g. after a key rename). The label/description shown may be stale.
+        type:
+          type: string
+        label:
+          type: string
+        description:
+          type: string
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+    ConfigAppConfigListResponse:
+      type: object
+      required:
+        - config
+      properties:
+        config:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConfigAppConfigRow"
+        bootstrappedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp of the most recent server startup bootstrap/prune run. Null if the server has not yet bootstrapped (very rare). Advances on every restart so the admin UI can detect staleness.
+        bootstrapStatus:
+          type: string
+          enum:
+            - pending
+            - success
+            - warn
+            - error
+          nullable: true
+          description: Outcome of the most recent bootstrapDefaults() run. "warn" means the server started without DB access and is running on hardcoded fallbacks; config rows may not be seeded yet. Null when the status is not yet known (pre-first-fetch).
+        bootstrapRetryAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Scheduled time of the next automatic bootstrapDefaults() retry. Only present (non-null) when bootstrapStatus is "warn". Null otherwise.
+    ConfigUpdateAppConfigBody:
+      type: object
+      required:
+        - value
+      properties:
+        value:
+          type: string
+    ConfigUpdateAppConfigResponse:
+      type: object
+      required:
+        - config
+      properties:
+        config:
+          $ref: "#/components/schemas/ConfigAppConfigRow"
   parameters:
     IdParam:
       name: id

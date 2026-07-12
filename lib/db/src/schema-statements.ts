@@ -1301,4 +1301,45 @@ export const STATEMENTS: string[] = [
   )`,
   `CREATE INDEX IF NOT EXISTS office_notes_created_by_user_id_idx ON office_notes (created_by_user_id)`,
   `ALTER TABLE office_notes ENABLE ROW LEVEL SECURITY`,
+
+  // ── App-wide configurable constants (issue #171) ─────────────────────────
+  // Key/value pairs keyed by (module, key). Admin can override any row via
+  // PUT /api/config/:module/:key (isOwner only).
+  // NOT for security-critical limits — those stay hardcoded.
+  `CREATE TABLE IF NOT EXISTS app_config (
+    id          SERIAL PRIMARY KEY,
+    module      TEXT NOT NULL,
+    key         TEXT NOT NULL,
+    value       TEXT NOT NULL,
+    type        TEXT NOT NULL DEFAULT 'string',
+    label       TEXT NOT NULL,
+    description TEXT,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(module, key)
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS app_config_module_key_idx ON app_config (module, key)`,
+  // Track deliberate admin overrides so the Control Panel "customised" badge
+  // doesn't fire just because a developer renamed a default value between
+  // deploys. Null = never intentionally changed; non-null = human override.
+  `ALTER TABLE app_config ADD COLUMN IF NOT EXISTS customised_at TIMESTAMPTZ`,
+
+  // Seed default config rows — ON CONFLICT DO NOTHING so admin overrides
+  // are never clobbered on re-bootstrap. Values here must stay in sync with
+  // APP_CONFIG_DEFAULTS in artifacts/api-server/src/lib/app-config.ts.
+  `INSERT INTO app_config (module, key, value, type, label, description) VALUES
+    ('web_search',  'search_timeout_ms',             '15000',   'integer', 'Web search timeout (ms)',                      'AbortController timeout for Perplexity Sonar web-search calls via OpenRouter.'),
+    ('openrouter',  'model_fetch_timeout_ms',         '8000',    'integer', 'OpenRouter model list fetch timeout (ms)',      'AbortController timeout when fetching the OpenRouter model catalogue for the admin UI.'),
+    ('openrouter',  'model_list_cache_ttl_ms',        '3600000', 'integer', 'OpenRouter model list cache TTL (ms)',          'How long to keep the OpenRouter model catalogue in-memory (default 1 h).'),
+    ('ornaments',   'barcode_fetch_timeout_ms',       '8000',    'integer', 'Barcode lookup fetch timeout (ms)',             'AbortController timeout for UPCitemdb barcode lookup calls.'),
+    ('quilting',    'color_suggestion_max_tokens',    '200',     'integer', 'Colour suggestion AI max tokens',               'max_tokens cap for the fabric colour-suggestion vision call (quilting tools).'),
+    ('quilting',    'pattern_import_max_tokens',      '400',     'integer', 'Pattern import AI max tokens',                  'max_tokens cap for the quilting pattern-import AI extraction call.'),
+    ('quilting',    'reranker_timeout_ms',            '10000',   'integer', 'Voyage reranker timeout (ms)',                  'AbortSignal.timeout value for Voyage AI rerank calls (fabric Compare).'),
+    ('travels',     'doc_type_suggestion_max_tokens', '400',     'integer', 'Document type suggestion AI max tokens',        'max_tokens cap for the AI call that suggests a custom document type name.'),
+    ('travels',     'packing_ai_max_tokens',          '1000',    'integer', 'Packing list AI max tokens',                    'max_tokens cap for AI-generated packing list suggestions.'),
+    ('travels',     'itinerary_gen_max_tokens',       '4000',    'integer', 'Itinerary generation AI max tokens',            'max_tokens cap for AI-generated day-by-day itinerary plans.'),
+    ('travels',     'place_activities_max_tokens',    '2000',    'integer', 'Place activities AI max tokens',                'max_tokens cap for AI-generated destination activity suggestions.'),
+    ('travels',     'place_summary_max_tokens',       '300',     'integer', 'Place summary AI max tokens',                   'max_tokens cap for brief AI-generated destination summaries.'),
+    ('travels',     'explore_overview_max_tokens',    '600',     'integer', 'Explore destination overview AI max tokens',    'max_tokens cap for the AI-generated explore-mode destination overview paragraph.'),
+    ('travels',     'full_itinerary_max_tokens',      '3000',    'integer', 'Full itinerary text AI max tokens',             'max_tokens cap for the full AI-generated itinerary text block.')
+  ON CONFLICT (module, key) DO NOTHING`,
 ];

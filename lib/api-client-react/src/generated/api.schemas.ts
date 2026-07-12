@@ -5,8 +5,25 @@
  * Unified API specification (pottery + quilting + travels + ornaments + office + hub)
  * OpenAPI spec version: 0.1.0
  */
+/**
+ * Outcome of the last app-config bootstrap run. "pending" = not yet run; "success" = all steps completed; "warn" = DB unavailable at startup (non-fatal, using hardcoded fallbacks); "error" = unexpected JS error, stale/missing config rows may persist.
+
+ */
+export type HealthStatusConfigBootstrap = typeof HealthStatusConfigBootstrap[keyof typeof HealthStatusConfigBootstrap];
+
+
+export const HealthStatusConfigBootstrap = {
+  pending: 'pending',
+  success: 'success',
+  warn: 'warn',
+  error: 'error',
+} as const;
+
 export interface HealthStatus {
   status: string;
+  /** Outcome of the last app-config bootstrap run. "pending" = not yet run; "success" = all steps completed; "warn" = DB unavailable at startup (non-fatal, using hardcoded fallbacks); "error" = unexpected JS error, stale/missing config rows may persist.
+   */
+  configBootstrap?: HealthStatusConfigBootstrap;
 }
 
 export interface LoginInput {
@@ -1470,6 +1487,22 @@ export interface TravelsLoadTemplateResult {
   items: TravelsPackingItem[];
 }
 
+export interface TravelsGmailMessageAttachment {
+  filename: string;
+  mimeType: string;
+  attachmentId: string;
+  size?: number | null;
+}
+
+export interface TravelsGmailMessageDetail {
+  id: string;
+  subject: string | null;
+  from: string | null;
+  date: string | null;
+  textBody: string | null;
+  attachments: TravelsGmailMessageAttachment[];
+}
+
 export interface OrnamentsCategory {
   id: number;
   name: string;
@@ -1754,6 +1787,54 @@ export interface HubWeatherConfigBody {
 
 export interface HubWeatherConfigResponse {
   config: HubWeatherConfigBody | null;
+}
+
+export interface ConfigAppConfigRow {
+  id: number;
+  module: string;
+  key: string;
+  value: string;
+  /** The hardcoded default for this key; null if no known default exists. */
+  defaultValue: string | null;
+  /** Timestamp of the last deliberate admin override; null if the value was never intentionally changed. */
+  customisedAt: string | null;
+  /** True when this DB row has no matching APP_CONFIG_DEFAULTS entry (e.g. after a key rename). The label/description shown may be stale. */
+  orphaned: boolean;
+  type: string;
+  label: string;
+  description?: string | null;
+  updatedAt: string;
+}
+
+/**
+ * Outcome of the most recent bootstrapDefaults() run. "warn" means the server started without DB access and is running on hardcoded fallbacks; config rows may not be seeded yet. Null when the status is not yet known (pre-first-fetch).
+ */
+export type ConfigAppConfigListResponseBootstrapStatus = typeof ConfigAppConfigListResponseBootstrapStatus[keyof typeof ConfigAppConfigListResponseBootstrapStatus] | null;
+
+
+export const ConfigAppConfigListResponseBootstrapStatus = {
+  pending: 'pending',
+  success: 'success',
+  warn: 'warn',
+  error: 'error',
+} as const;
+
+export interface ConfigAppConfigListResponse {
+  config: ConfigAppConfigRow[];
+  /** Timestamp of the most recent server startup bootstrap/prune run. Null if the server has not yet bootstrapped (very rare). Advances on every restart so the admin UI can detect staleness. */
+  bootstrappedAt?: string | null;
+  /** Outcome of the most recent bootstrapDefaults() run. "warn" means the server started without DB access and is running on hardcoded fallbacks; config rows may not be seeded yet. Null when the status is not yet known (pre-first-fetch). */
+  bootstrapStatus?: ConfigAppConfigListResponseBootstrapStatus;
+  /** Scheduled time of the next automatic bootstrapDefaults() retry. Only present (non-null) when bootstrapStatus is "warn". Null otherwise. */
+  bootstrapRetryAt?: string | null;
+}
+
+export interface ConfigUpdateAppConfigBody {
+  value: string;
+}
+
+export interface ConfigUpdateAppConfigResponse {
+  config: ConfigAppConfigRow;
 }
 
 export type ListPotteryParams = {

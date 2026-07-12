@@ -201,6 +201,11 @@ function remapHubPath(p: string): string {
   return "/hub" + p;
 }
 
+function remapConfigPath(p: string): string {
+  if (p === "/") return "/config";
+  return "/config" + p;
+}
+
 // ---------------------------------------------------------------------------
 // Build
 // ---------------------------------------------------------------------------
@@ -216,6 +221,7 @@ function main(): void {
   const ornaments = loadSpec("ornaments.yaml");
   const office = loadSpec("office.yaml");
   const hub = loadSpec("hub.yaml");
+  const config = loadSpec("config.yaml");
 
   const potterySchemas: Record<string, Json> = (pottery.components?.schemas ??
     {}) as Json;
@@ -274,6 +280,16 @@ function main(): void {
   for (const name of Object.keys(officeSchemas)) {
     if (!sharedSchemaNames.has(name)) {
       officeSchemaRename.set(name, "Office" + name);
+    }
+  }
+
+  const configSchemas: Record<string, Json> = (config.components?.schemas ??
+    {}) as Json;
+
+  const configSchemaRename = new Map<string, string>();
+  for (const name of Object.keys(configSchemas)) {
+    if (!sharedSchemaNames.has(name)) {
+      configSchemaRename.set(name, "Config" + name);
     }
   }
 
@@ -371,6 +387,23 @@ function main(): void {
   for (const op of hubFeatureOps) {
     if (allOtherOpsForHub.has(op)) {
       hubOpRename.set(op, renameOpId(op, "hub"));
+    }
+  }
+
+  const configFeatureOps = collectFeatureOpIds(config.paths as Json);
+  const allOtherOpsForConfig = new Set([
+    ...sharedOpIds,
+    ...potteryFeatureOps,
+    ...quiltingFeatureOps,
+    ...travelsFeatureOps,
+    ...ornamentsFeatureOps,
+    ...officeFeatureOps,
+    ...hubFeatureOps,
+  ]);
+  const configOpRename = new Map<string, string>();
+  for (const op of configFeatureOps) {
+    if (allOtherOpsForConfig.has(op)) {
+      configOpRename.set(op, renameOpId(op, "config"));
     }
   }
 
@@ -489,6 +522,21 @@ function main(): void {
     outPaths[newPath] = cloned;
   }
 
+  // Config paths
+  for (const [p, item] of Object.entries(
+    config.paths as Record<string, Json>,
+  )) {
+    if (SHARED_PATHS.has(p)) continue;
+    const newPath = remapConfigPath(p);
+    const cloned = deepClone(item);
+    rewriteSchemaRefs(cloned, configSchemaRename);
+    applyOpIdRenames(cloned, configOpRename);
+    if (outPaths[newPath] !== undefined) {
+      throw new Error(`Duplicate path key after config remap: ${newPath}`);
+    }
+    outPaths[newPath] = cloned;
+  }
+
   // ----- Components: schemas
   const outSchemas: Record<string, Json> = {};
 
@@ -566,6 +614,18 @@ function main(): void {
     const newName = hubSchemaRename.get(name)!;
     const cloned = deepClone(schema);
     rewriteSchemaRefs(cloned, hubSchemaRename);
+    if (outSchemas[newName] !== undefined) {
+      throw new Error(`Duplicate schema key: ${newName}`);
+    }
+    outSchemas[newName] = cloned;
+  }
+
+  // Config non-shared schemas, prefixed + internal refs rewritten
+  for (const [name, schema] of Object.entries(configSchemas)) {
+    if (sharedSchemaNames.has(name)) continue;
+    const newName = configSchemaRename.get(name)!;
+    const cloned = deepClone(schema);
+    rewriteSchemaRefs(cloned, configSchemaRename);
     if (outSchemas[newName] !== undefined) {
       throw new Error(`Duplicate schema key: ${newName}`);
     }

@@ -8,3 +8,4 @@ export * from "./agentphone";
 export * from "./ornaments";
 export * from "./office";
 export * from "./elaine-email";
+export * from "./app-config";

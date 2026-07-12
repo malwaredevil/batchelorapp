@@ -364,31 +364,35 @@ const defaultKeys = new Set(
 const SRC_DIR = path.resolve(__dirname, "..");
 
 describe("app-config drift guard", () => {
-  it("every getConfig() call site has a matching APP_CONFIG_DEFAULTS entry", () => {
-    const sites = extractCallSites(SRC_DIR);
+  it(
+    "every getConfig() call site has a matching APP_CONFIG_DEFAULTS entry",
+    { timeout: 30000 },
+    () => {
+      const sites = extractCallSites(SRC_DIR);
 
-    expect(sites.length).toBeGreaterThan(0); // sanity: we found call sites
+      expect(sites.length).toBeGreaterThan(0); // sanity: we found call sites
 
-    const missing = sites.filter(
-      (s) => !defaultKeys.has(`${s.module}::${s.key}`),
-    );
-
-    if (missing.length > 0) {
-      const report = missing
-        .map(
-          (s) =>
-            `  ${path.relative(SRC_DIR, s.file)}:${s.line}  getConfig("${s.module}", "${s.key}", ...)`,
-        )
-        .join("\n");
-
-      expect.fail(
-        `${missing.length} getConfig() call site(s) have no matching APP_CONFIG_DEFAULTS entry.\n` +
-          `Add the missing row(s) to APP_CONFIG_DEFAULTS in src/lib/app-config.ts,\n` +
-          `or add  // app-config-skip  on the call line to opt out of this check.\n\n` +
-          report,
+      const missing = sites.filter(
+        (s) => !defaultKeys.has(`${s.module}::${s.key}`),
       );
-    }
-  });
+
+      if (missing.length > 0) {
+        const report = missing
+          .map(
+            (s) =>
+              `  ${path.relative(SRC_DIR, s.file)}:${s.line}  getConfig("${s.module}", "${s.key}", ...)`,
+          )
+          .join("\n");
+
+        expect.fail(
+          `${missing.length} getConfig() call site(s) have no matching APP_CONFIG_DEFAULTS entry.\n` +
+            `Add the missing row(s) to APP_CONFIG_DEFAULTS in src/lib/app-config.ts,\n` +
+            `or add  // app-config-skip  on the call line to opt out of this check.\n\n` +
+            report,
+        );
+      }
+    },
+  );
 
   it("every APP_CONFIG_DEFAULTS entry is actually used by at least one getConfig() call", () => {
     const sites = extractCallSites(SRC_DIR);

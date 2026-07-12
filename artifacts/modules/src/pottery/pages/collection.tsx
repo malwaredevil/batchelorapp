@@ -269,7 +269,7 @@ function PieceCard({
       )}
 
       <Link
-        href={selecting ? "#" : `/piece/${item.id}`}
+        href={selecting ? "#" : `/pottery/piece/${item.id}`}
         onClick={
           selecting
             ? (e) => {

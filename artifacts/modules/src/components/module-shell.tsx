@@ -311,7 +311,10 @@ export function ModuleShell({ children }: { children: ReactNode }) {
             {groupOrder.map((group) => {
               const items = scopedGroups[group];
               if (!items || items.length === 0) return null;
-              const meta = groupMeta[group] ?? { label: group, icon: Settings2 };
+              const meta = groupMeta[group] ?? {
+                label: group,
+                icon: Settings2,
+              };
               const Icon = meta.icon;
 
               if (items.length === 1) {
@@ -345,7 +348,8 @@ export function ModuleShell({ children }: { children: ReactNode }) {
                   </p>
                   {items.map((item) => {
                     const ItemIcon = item.icon;
-                    const active = !item.external && isActive(location, item.href);
+                    const active =
+                      !item.external && isActive(location, item.href);
                     return (
                       <button
                         key={item.id}

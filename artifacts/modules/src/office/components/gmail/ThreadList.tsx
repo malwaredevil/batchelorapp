@@ -414,6 +414,7 @@ interface ThreadListProps {
   onBulkMarkUnread: (ids: string[]) => void;
   onBulkSpam: (ids: string[]) => void;
   isLoading: boolean;
+  isRefetching?: boolean;
   isError: boolean;
   nextPageToken: string | null;
   onNextPage: () => void;
@@ -445,6 +446,7 @@ export function ThreadList({
   onBulkMarkUnread,
   onBulkSpam,
   isLoading,
+  isRefetching = false,
   isError,
   nextPageToken,
   onNextPage,
@@ -636,7 +638,9 @@ export function ThreadList({
             /* ── Normal label + refresh ── */
             <>
               <IconBtn onClick={onRefresh} title="Refresh">
-                <RefreshCw className="w-4 h-4" />
+                <RefreshCw
+                  className={cn("w-4 h-4", isRefetching && "animate-spin")}
+                />
               </IconBtn>
               <span className="text-sm font-semibold text-foreground capitalize truncate hidden sm:block ml-1">
                 {labelName}

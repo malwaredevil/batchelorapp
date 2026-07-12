@@ -13,6 +13,7 @@ import {
 import { requireAuth } from "../../middleware/auth";
 import { aiLimiter } from "../../middleware/rateLimit";
 import { sniffImageType, stripImageMetadata, toDataUrl } from "../../lib/image";
+import { getConfig } from "../../lib/app-config";
 import { callModel, MODELS } from "../../lib/ai-client";
 import {
   serializeFabrics,
@@ -96,7 +97,11 @@ async function extractPaletteFromUpload(
     async (client, model) => {
       return client.chat.completions.create({
         model,
-        max_tokens: 200,
+        max_tokens: await getConfig(
+          "quilting",
+          "color_suggestion_max_tokens",
+          200,
+        ),
         response_format: { type: "json_object" },
         messages: [
           {

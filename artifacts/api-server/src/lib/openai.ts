@@ -224,7 +224,9 @@ export function buildEmbeddingText(analysis: VisionAnalysis): string {
 
 export async function embedText(text: string): Promise<number[]> {
   const models = await getModels();
-  const response = await getOpenRouterClient().embeddings.create({
+  const response = await (
+    await getOpenRouterClient()
+  ).embeddings.create({
     model: models.embedding,
     input: text,
   });

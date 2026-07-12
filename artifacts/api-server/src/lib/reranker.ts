@@ -7,6 +7,7 @@
  */
 import { env } from "./env";
 import { withRetry } from "./retry";
+import { getConfig } from "./app-config";
 
 const VOYAGE_RERANK_URL = "https://api.voyageai.com/v1/rerank";
 // rerank-2.5 is Voyage's current generalist model: better retrieval quality
@@ -45,6 +46,11 @@ export async function rerankCandidates(
   }
 
   try {
+    const rerankerTimeoutMs = await getConfig(
+      "quilting",
+      "reranker_timeout_ms",
+      10_000,
+    );
     const response = await withRetry(
       () =>
         fetch(VOYAGE_RERANK_URL, {
@@ -60,7 +66,7 @@ export async function rerankCandidates(
             top_k: Math.min(topK, documents.length),
             return_documents: false,
           }),
-          signal: AbortSignal.timeout(10_000),
+          signal: AbortSignal.timeout(rerankerTimeoutMs),
         }),
       { label: "voyage-rerank" },
     );

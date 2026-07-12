@@ -84,6 +84,11 @@ export function getScreenshotToken(): string | null {
  */
 export function appendScreenshotToken(url: string): string {
   if (!_screenshotToken || !url) return url;
+  // Guard against double-appending (e.g. when buildFabricUrlMap already called
+  // this and the setAttribute patcher fires again for the same SVG <image href>
+  // element). A double screenshotToken param makes Express parse it as an array,
+  // which then fails the strict string comparison in tryScreenshotTokenAuth.
+  if (url.includes("screenshotToken=")) return url;
   const separator = url.includes("?") ? "&" : "?";
   return `${url}${separator}screenshotToken=${encodeURIComponent(_screenshotToken)}`;
 }

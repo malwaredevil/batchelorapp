@@ -218,8 +218,8 @@ export function useGmailModify() {
 export function useGmailTrash() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (messageId: string) =>
-      apiFetch<{ ok: boolean }>(`/messages/${messageId}/trash`, {
+    mutationFn: (threadId: string) =>
+      apiFetch<{ ok: boolean }>(`/threads/${threadId}/trash`, {
         method: "POST",
       }),
     onSuccess: () => {
@@ -275,16 +275,39 @@ export function useBulkModify() {
 export function useBulkTrash() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (messageIds: string[]) => {
+    mutationFn: async (threadIds: string[]) => {
       await Promise.all(
-        messageIds.map((id) =>
-          apiFetch<{ ok: boolean }>(`/messages/${id}/trash`, {
+        threadIds.map((id) =>
+          apiFetch<{ ok: boolean }>(`/threads/${id}/trash`, {
             method: "POST",
           }),
         ),
       );
     },
-    onSuccess: () => {
+    onMutate: async (threadIds: string[]) => {
+      await qc.cancelQueries({ queryKey: ["gmail", "threads"] });
+      const idSet = new Set(threadIds);
+      const snapshots = qc.getQueriesData<ThreadListResponse>({
+        queryKey: ["gmail", "threads"],
+      });
+      qc.setQueriesData(
+        { queryKey: ["gmail", "threads"] },
+        (old: ThreadListResponse | undefined) => {
+          if (!old) return old;
+          return {
+            ...old,
+            threads: old.threads.filter((t) => !idSet.has(t.id)),
+          };
+        },
+      );
+      return { snapshots };
+    },
+    onError: (_err, _ids, ctx) => {
+      for (const [key, data] of ctx?.snapshots ?? []) {
+        qc.setQueryData(key, data);
+      }
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: ["gmail", "threads"] });
     },
   });

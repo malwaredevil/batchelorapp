@@ -2,90 +2,28 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
 import cookieParser from "cookie-parser";
+import {
+  makeEagerSelectBuilder,
+  createTrackedMutationBuilders,
+} from "../../test-helpers/db-mock";
 
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
 
 const selectQueue: unknown[][] = [];
-const insertCalls: { table: unknown; values: unknown }[] = [];
-const updateCalls: { table: unknown; set: unknown }[] = [];
-const deleteCalls: { table: unknown }[] = [];
-let lastReturning: unknown[] = [];
-
-function makeSelectBuilder() {
-  const resultPromise = Promise.resolve(selectQueue.shift() ?? []);
-  const builder = {
-    from() {
-      return builder;
-    },
-    where() {
-      return builder;
-    },
-    orderBy() {
-      return resultPromise;
-    },
-    limit() {
-      return resultPromise;
-    },
-    then(
-      onFulfilled: (value: unknown[]) => unknown,
-      onRejected?: (reason: unknown) => unknown,
-    ) {
-      return resultPromise.then(onFulfilled, onRejected);
-    },
-  };
-  return builder;
-}
-
-function makeUpdateBuilder(table: unknown) {
-  const builder = {
-    set(set: unknown) {
-      updateCalls.push({ table, set });
-      return builder;
-    },
-    where() {
-      return builder;
-    },
-    returning() {
-      return Promise.resolve(lastReturning);
-    },
-  };
-  return builder;
-}
-
-function makeDeleteBuilder(table: unknown) {
-  const builder = {
-    where() {
-      deleteCalls.push({ table });
-      return Promise.resolve(undefined);
-    },
-  };
-  return builder;
-}
-
-function makeInsertBuilder(table: unknown) {
-  const builder = {
-    values(values: unknown) {
-      insertCalls.push({ table, values });
-      return builder;
-    },
-    onConflictDoNothing() {
-      return builder;
-    },
-    onConflictDoUpdate(config: { set: unknown }) {
-      updateCalls.push({ table: "upsert", set: config.set });
-      return builder;
-    },
-    returning() {
-      return Promise.resolve(lastReturning);
-    },
-  };
-  return builder;
-}
+const {
+  insertCalls,
+  updateCalls,
+  deleteCalls,
+  lastReturning,
+  makeInsertBuilder,
+  makeUpdateBuilder,
+  makeDeleteBuilder,
+} = createTrackedMutationBuilders();
 
 const dbMock = {
-  select: vi.fn(() => makeSelectBuilder()),
+  select: vi.fn(() => makeEagerSelectBuilder(selectQueue)),
   update: vi.fn((table: unknown) => makeUpdateBuilder(table)),
   delete: vi.fn((table: unknown) => makeDeleteBuilder(table)),
   insert: vi.fn((table: unknown) => makeInsertBuilder(table)),
@@ -214,7 +152,7 @@ beforeEach(() => {
   insertCalls.length = 0;
   updateCalls.length = 0;
   deleteCalls.length = 0;
-  lastReturning = [];
+  lastReturning.value = [];
   vi.clearAllMocks();
   gmailOAuthEnabled.mockReturnValue(true);
 });
@@ -289,7 +227,7 @@ describe("GET /api/travels/gmail/suggestions", () => {
 
 describe("POST /api/travels/gmail/suggestions/:id/dismiss", () => {
   it("404s when the decision does not belong to the current user", async () => {
-    lastReturning = [];
+    lastReturning.value = [];
     const app = await buildApp();
 
     const res = await request(app).post(
@@ -300,7 +238,9 @@ describe("POST /api/travels/gmail/suggestions/:id/dismiss", () => {
   });
 
   it("marks the decision dismissed when owned by the current user", async () => {
-    lastReturning = [{ id: 5, userId: TEST_USER_ID, status: "dismissed" }];
+    lastReturning.value = [
+      { id: 5, userId: TEST_USER_ID, status: "dismissed" },
+    ];
     const app = await buildApp();
 
     const res = await request(app).post(
@@ -460,7 +400,7 @@ describe("POST /api/travels/gmail/messages/:messageId/link", () => {
       textBody: "Your flight is confirmed.",
       attachments: [],
     });
-    lastReturning = [{ id: 55, tripId: 7 }];
+    lastReturning.value = [{ id: 55, tripId: 7 }];
     const app = await buildApp();
 
     const res = await request(app)
@@ -485,7 +425,7 @@ describe("POST /api/travels/gmail/messages/:messageId/link", () => {
       textBody: "Your flight is confirmed.",
       attachments: [],
     });
-    lastReturning = [{ id: 56, tripId: 7 }];
+    lastReturning.value = [{ id: 56, tripId: 7 }];
     const app = await buildApp();
 
     const res = await request(app)
@@ -531,7 +471,7 @@ describe("POST /api/travels/gmail/messages/:messageId/link", () => {
       ],
     });
     getAttachment.mockResolvedValue(Buffer.from("binary"));
-    lastReturning = [{ id: 60, tripId: 7 }];
+    lastReturning.value = [{ id: 60, tripId: 7 }];
     const app = await buildApp();
 
     const res = await request(app)
@@ -564,13 +504,14 @@ describe("GET /api/travels/gmail/messages/:messageId", () => {
     parseGmailMessage.mockReturnValue({
       subject: "Flight confirmation",
       from: "a@delta.com",
-      date: "2026-01-01T00:00:00.000Z",
+      date: new Date("2026-01-01T00:00:00.000Z"),
       textBody: "Your flight is confirmed.",
       attachments: [
         {
           filename: "flight.pdf",
           mimeType: "application/pdf",
           attachmentId: "a1",
+          size: 12345,
         },
       ],
     });
@@ -582,8 +523,43 @@ describe("GET /api/travels/gmail/messages/:messageId", () => {
     expect(res.body.subject).toBe("Flight confirmation");
     expect(res.body.textBody).toBe("Your flight is confirmed.");
     expect(res.body.attachments).toEqual([
-      { filename: "flight.pdf", mimeType: "application/pdf" },
+      {
+        filename: "flight.pdf",
+        mimeType: "application/pdf",
+        attachmentId: "a1",
+        size: 12345,
+      },
     ]);
+  });
+
+  it("returns null for attachment size when the field is missing", async () => {
+    getValidGmailAccessToken.mockResolvedValue("mock-access-token");
+    getMessage.mockResolvedValue({ threadId: "t1" });
+    parseGmailMessage.mockReturnValue({
+      subject: "Hotel booking",
+      from: "b@marriott.com",
+      date: null,
+      textBody: null,
+      attachments: [
+        {
+          filename: "receipt.jpg",
+          mimeType: "image/jpeg",
+          attachmentId: "b1",
+          // size intentionally omitted — should be serialised as null
+        },
+      ],
+    });
+    const app = await buildApp();
+
+    const res = await request(app).get("/api/travels/gmail/messages/msg-2");
+
+    expect(res.status).toBe(200);
+    expect(res.body.attachments[0]).toMatchObject({
+      filename: "receipt.jpg",
+      mimeType: "image/jpeg",
+      attachmentId: "b1",
+      size: null,
+    });
   });
 });
 
@@ -639,7 +615,7 @@ describe("POST /api/travels/gmail/messages/bulk-link", () => {
       textBody: "Your stay is confirmed.",
       attachments: [],
     });
-    lastReturning = [{ id: 61, tripId: 7 }];
+    lastReturning.value = [{ id: 61, tripId: 7 }];
     const app = await buildApp();
 
     const res = await request(app)

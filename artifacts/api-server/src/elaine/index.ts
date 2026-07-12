@@ -41,6 +41,11 @@ import {
   getElaineGlobalConfig,
   invalidateElaineGlobalConfigCache,
 } from "../lib/elaine-config";
+import {
+  APP_CONFIG_DEFAULTS,
+  getAllConfig,
+  updateConfigValue,
+} from "../lib/app-config";
 import { listOpenRouterModels } from "../lib/openrouter-models";
 import { deleteTripPhoto } from "../lib/travels/storage";
 import { deleteDocument } from "../lib/travels-storage";
@@ -556,6 +561,15 @@ const UpdateTripCardCollapseActionPayload = z.object({
   collapsedCards: z.array(z.string().min(1).max(50)).max(50),
 });
 
+// Control Panel config update — owner-only, applies to app-wide tuning
+// constants stored in app_config. The executor re-checks isOwner so
+// non-owner users who somehow trigger the action still get a 403.
+const UpdateAppConfigActionPayload = z.object({
+  module: z.string().min(1).max(100),
+  key: z.string().min(1).max(100),
+  value: z.string().min(0).max(1000),
+});
+
 const ActionBody = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("create_trip"),
@@ -685,6 +699,10 @@ const ActionBody = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("update_trip_card_collapse"),
     payload: UpdateTripCardCollapseActionPayload,
+  }),
+  z.object({
+    type: z.literal("update_app_config"),
+    payload: UpdateAppConfigActionPayload,
   }),
   ...potteryActionSchemas,
   ...quiltingActionSchemas,
@@ -924,6 +942,8 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
       const name = trip ? `"${trip.title || trip.destination}"` : "this trip";
       return `Update which cards are collapsed on ${name}'s page`;
     }
+    case "update_app_config":
+      return `Update Control Panel: set ${action.payload.module}.${action.payload.key} to "${action.payload.value}"`;
     default:
       if (POTTERY_ACTION_TYPES.has(action.type as PotteryActionType)) {
         return buildPotteryActionLabel(
@@ -2071,6 +2091,50 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
       body: { type: "update_trip_card_collapse", result: { collapsedCards } },
     };
   }) as ActionExecutor,
+
+  update_app_config: (async (
+    payload: z.infer<typeof UpdateAppConfigActionPayload>,
+    userId: number,
+  ) => {
+    const [me] = await db
+      .select({ isOwner: appUsers.isOwner })
+      .from(appUsers)
+      .where(eq(appUsers.id, userId));
+    if (!me?.isOwner) {
+      return {
+        status: 403,
+        body: {
+          error:
+            "Admin access required — only the app owner can change Control Panel settings.",
+        },
+      };
+    }
+    const knownKey = APP_CONFIG_DEFAULTS.find(
+      (d) => d.module === payload.module && d.key === payload.key,
+    );
+    if (!knownKey) {
+      return {
+        status: 400,
+        body: {
+          error: `Config key "${payload.module}.${payload.key}" is not a recognised Control Panel setting. Only keys that are explicitly listed on the Control Panel page may be updated.`,
+        },
+      };
+    }
+    const row = await updateConfigValue(
+      payload.module,
+      payload.key,
+      payload.value,
+    );
+    if (!row) {
+      return {
+        status: 404,
+        body: {
+          error: `Config key "${payload.module}.${payload.key}" not found.`,
+        },
+      };
+    }
+    return { status: 200, body: { type: "update_app_config", result: row } };
+  }) as ActionExecutor,
 };
 
 const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
@@ -2688,6 +2752,36 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   ...potteryActionTools,
   ...quiltingActionTools,
   ...ornamentActionTools,
+  {
+    type: "function",
+    function: {
+      name: "update_app_config",
+      description:
+        "Propose updating a single Control Panel setting — an app-wide tuning constant like an AI token limit or a request timeout. Only available to the app owner (isOwner). Only call this if the specific config key is visible in the on-screen Control Panel state (look for the module and key names listed there); never guess a module or key — the server will reject any module+key not in the schema. This changes AI behaviour app-wide, so always describe what will change in your visible reply before calling it.",
+      parameters: {
+        type: "object",
+        properties: {
+          module: {
+            type: "string",
+            enum: [...new Set(APP_CONFIG_DEFAULTS.map((d) => d.module))],
+            description:
+              "Config module name. Must exactly match one of the allowed values.",
+          },
+          key: {
+            type: "string",
+            description:
+              "Config key within the module. Valid module.key pairs: " +
+              APP_CONFIG_DEFAULTS.map((d) => `${d.module}.${d.key}`).join(", "),
+          },
+          value: {
+            type: "string",
+            description: "New value as a string, e.g. '5000'",
+          },
+        },
+        required: ["module", "key", "value"],
+      },
+    },
+  },
 ];
 
 const NAVIGATE_TOOL_NAME = "suggest_navigation";
@@ -3333,7 +3427,7 @@ const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: QUERY_HOUSEHOLD_TOOL_NAME,
       description:
-        "Look up live counts and recent items from the household's pottery collection, quilting stash, ornaments collection, and travel plans — use this when the user asks summary questions like 'how many pieces do I have', 'what's in my quilting stash', 'how many ornaments do I have', 'how many trips am I planning', etc. Returns real numbers and recent record names directly from the database. Do not estimate or guess counts — always call this instead.",
+        "Look up live counts and recent items from the household's pottery collection, quilting stash, ornaments collection, and travel plans — use this when the user asks summary questions like 'how many pieces do I have', 'what's in my quilting stash', 'how many ornaments do I have', 'how many trips am I planning', etc. Returns real numbers and recent record names directly from the database. Do not estimate or guess counts — always call this instead. Also supports 'app_config' to fetch current Control Panel settings (AI token limits, timeouts) — use this when the user asks about or describes a performance/quality problem that a tuning constant might fix.",
       parameters: {
         type: "object",
         properties: {
@@ -3341,9 +3435,16 @@ const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
             type: "array",
             items: {
               type: "string",
-              enum: ["pottery", "quilting", "ornaments", "travels"],
+              enum: [
+                "pottery",
+                "quilting",
+                "ornaments",
+                "travels",
+                "app_config",
+              ],
             },
-            description: "Which apps to include. Omit to include all four.",
+            description:
+              "Which data to include. Omit to include pottery, quilting, ornaments, and travels. Pass 'app_config' to also fetch the current Control Panel tuning settings.",
           },
         },
         required: [],
@@ -4121,6 +4222,7 @@ Ornaments app:
 Hub (app launcher):
 - Launcher ("/"): lets the household pick which app to open (Pottery, Quilting, Ornaments, Travels, Office).
 - Account ("/account"): shared account/profile settings.
+- Control Panel ("/control-panel"): admin-only page (app owner only) for tuning app-wide AI behaviour — token limits, request timeouts, and model parameters grouped by module (web_search, openrouter, ornaments, quilting, travels). Linked from the Account page.
 
 If the user asks "what is this page for", "what can I do here", or similar without more specific on-screen detail below, answer using this map (and the live on-screen state if present) rather than saying you don't know. If they ask about a different app than the one they're currently in, you can still answer from this map — you don't need to tell them to switch apps first, though you can suggest navigating there if it's the same app they're already in.
 
@@ -4161,6 +4263,10 @@ ORNAMENTS ITEMS: Use update_ornament_item to edit an existing ornament (name, no
 EMAIL: Whenever you've just given the user something substantial worth keeping — a list of recommendations, an itinerary summary, packing tips, etc. — offer to email it to them, e.g. "Want me to email you this list?" Only call send_email once they say yes; never call it unprompted or assume they want it. It always goes to their own registered account email, so never ask for an address and never offer to send it to anyone else. Write a short subject and a plain-text body (no markdown/HTML, blank line between paragraphs) — it gets formatted into a nice email automatically. You have no way to export a PDF or Word document, so don't offer that; email is the only export option available.
 
 ACCOUNT & NOTIFICATIONS: These only make sense on the shared Account settings page (hub-account context). Use send_test_email if the user wants to confirm email delivery is working — always their own account address. Use send_test_sms the same way for texts, but only if the page context shows they already have a verified phone number; if not, tell them to verify one first instead of calling it. Use send_phone_verification_code when the user wants to add or change their phone number — you must have their explicit, clearly-stated agreement to receive SMS messages before calling it (set consent to true only then), and the number must be in E.164 format (e.g. +12105551234); ask them to reformat a local number if needed. Use verify_phone_code once they tell you the 6-digit code they received by text — never invent or reuse a code from earlier in the conversation. None of these four actions are available outside the Account page, and none of them ever touch another household member's phone/email. Use update_elaine_settings when the user explicitly asks to toggle Elaine on/off or change the chat window size (compact / comfortable / large) — this is also only appropriate on the Account page, never in other apps. For confirmation-mode changes, use set_action_confirmation_mode instead.
+
+CONTROL PANEL: The Control Panel ("/control-panel", hub app, owner-only) holds every app-wide tuning constant — AI token limits (e.g. itinerary_gen_max_tokens, packing_ai_max_tokens), request timeouts (openrouter.request_timeout_ms), and similar parameters. When a user describes a quality or performance problem that a tuning constant might fix — e.g. "the itinerary keeps getting cut off", "packing suggestions seem short", "search is timing out" — proactively call query_household_data with include: ["app_config"] to read the current values, then explain which setting is likely responsible and what a sensible new value might be. Only propose update_app_config when you are on the Control Panel page and the specific key is visible in the on-screen state; never guess a module or key name. update_app_config is restricted to the app owner (isOwner) — if the user isn't the owner, tell them only the app owner can change these settings. This action is also excluded from the SMS/voice/email channels. Changes take effect within 30 seconds (next cache refresh) without a server restart. When you execute update_app_config, the action result includes the full updated row with the new value — always state the new value explicitly in your reply so the user knows what was changed to. If the user asks a follow-up about the setting you just changed (e.g. "what did you just set it to?"), answer from the action result you already received rather than re-reading the page context, which may not yet reflect the update.
+
+PROACTIVE CONFIG WARNINGS: When the on-screen page context already includes an "App config snapshot" section and a setting there looks likely to cause problems for what the current page does — for example, a very short request timeout on a page that runs AI analysis, or a very low token limit on a page that generates long text — volunteer a one-sentence observation early in your reply (e.g. "By the way, your AI timeout is set to 5 s, which may be why ornament analysis keeps timing out — the app owner can raise it in the Control Panel."). Only do this when the config value is genuinely out of range for the task at hand and is visible in the current page context; do not speculate about settings you haven't seen, and don't repeat the warning in the same conversation if you've already mentioned it.
 
 WEB SEARCH: You have a real-time web_search tool, unlike a plain language model — use it proactively (no need to ask permission first) whenever a question depends on current information you can't be confident about from memory alone: opening hours, current prices, weather, visa/entry rules, local events, news, or anything else that changes over time. Don't use it for stable general knowledge or for things already visible in the on-screen state above. Call it as many times as needed for different sub-questions (e.g. rephrase or split into multiple focused searches for a broad question, so you get a fuller picture rather than one narrow result), then write your visible reply based on what it returns — never paste raw search output, and never fabricate a current fact instead of searching for it.
 
@@ -4952,14 +5058,13 @@ Keep replies concise and easy to read in a chat bubble.`;
             const parsed = z
               .object({ include: z.array(z.string()).optional() })
               .safeParse(JSON.parse(call.args || "{}"));
-            const include = parsed.success
-              ? (parsed.data.include ?? [
-                  "pottery",
-                  "quilting",
-                  "ornaments",
-                  "travels",
-                ])
-              : ["pottery", "quilting", "ornaments", "travels"];
+            const includeArg = parsed.success ? parsed.data.include : undefined;
+            const include = includeArg ?? [
+              "pottery",
+              "quilting",
+              "ornaments",
+              "travels",
+            ];
             const parts: string[] = [];
 
             if (include.includes("pottery")) {
@@ -5053,6 +5158,25 @@ Keep replies concise and easy to read in a chat bubble.`;
                         .join("\n")
                     : ""),
               );
+            }
+
+            if (include.includes("app_config")) {
+              const configRows = await getAllConfig();
+              if (configRows.length > 0) {
+                const configByModule: Record<string, string[]> = {};
+                for (const r of configRows) {
+                  if (!configByModule[r.module]) configByModule[r.module] = [];
+                  configByModule[r.module].push(
+                    `  ${r.key}: ${r.value} — ${r.label}`,
+                  );
+                }
+                const configText = Object.entries(configByModule)
+                  .map(([mod, lines]) => `${mod}:\n${lines.join("\n")}`)
+                  .join("\n");
+                parts.push(
+                  `Control Panel settings (current values):\n${configText}`,
+                );
+              }
             }
 
             resultText =
@@ -6014,6 +6138,9 @@ const RESTRICTED_EXCLUDED_ACTION_TYPES = new Set<string>([
   "update_card_layout",
   "update_trip_card_collapse",
   "add_connected_calendar",
+  // Admin-only action — requires the owner to be looking at the Control Panel
+  // with config keys visible on screen; not meaningful over SMS/voice/email.
+  "update_app_config",
 ]);
 
 // Full parity with the in-app chat widget's action tools, minus the

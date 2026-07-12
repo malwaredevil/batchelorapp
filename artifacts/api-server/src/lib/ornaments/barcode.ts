@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db, ornamentsBarcodeCache } from "@workspace/db";
 import { logger } from "../logger";
+import { getConfig } from "../app-config";
 
 /**
  * UPCitemdb barcode lookup, cached per-UPC in ornaments_barcode_cache so
@@ -22,7 +23,7 @@ export interface BarcodeLookupResult {
   fromCache: boolean;
 }
 
-const FETCH_TIMEOUT_MS = 8_000;
+const DEFAULT_FETCH_TIMEOUT_MS = 8_000;
 
 function guessSeriesFromTitle(title: string): string | null {
   // UPCitemdb titles are often "Hallmark Keepsake Ornament <Series> <Name> <Year>".
@@ -46,7 +47,12 @@ async function fetchFromUpcItemDb(
     : "https://api.upcitemdb.com/prod/trial/lookup";
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const fetchTimeoutMs = await getConfig(
+    "ornaments",
+    "barcode_fetch_timeout_ms",
+    8_000,
+  );
+  const timeout = setTimeout(() => controller.abort(), fetchTimeoutMs);
   try {
     const headers: Record<string, string> = { Accept: "application/json" };
     if (userKey) headers["user_key"] = userKey;

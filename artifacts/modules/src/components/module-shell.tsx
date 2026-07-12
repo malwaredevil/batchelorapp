@@ -1,6 +1,7 @@
 import { type ReactNode, type ComponentType, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { AppSwitcher } from "@workspace/elaine-ui";
+import { useBackgroundTasks } from "@/lib/background-tasks";
 import { InstallBanner } from "@workspace/web-core";
 import {
   useLogout,
@@ -180,9 +181,17 @@ export function ModuleShell({ children }: { children: ReactNode }) {
     }
   }
 
+  const { tasks } = useBackgroundTasks();
+  const hasTasks = tasks.length > 0;
+
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-40 border-b border-card-border bg-background/85 backdrop-blur">
+        {hasTasks && (
+          <div className="h-0.5 w-full overflow-hidden bg-primary/10">
+            <div className="h-full bg-primary/70 animate-[progress-bar_1.6s_ease-in-out_infinite]" />
+          </div>
+        )}
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
           <AppSwitcher currentAppId="modules" />
 

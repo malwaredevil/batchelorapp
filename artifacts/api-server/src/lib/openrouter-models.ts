@@ -1,4 +1,5 @@
 import { logger } from "./logger";
+import { getConfig } from "./app-config";
 
 /**
  * Browsable list of OpenRouter models for the Elaine admin config UI, backed
@@ -24,8 +25,8 @@ interface OpenRouterModelsApiResponse {
   }>;
 }
 
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
-const FETCH_TIMEOUT_MS = 8_000;
+const DEFAULT_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const DEFAULT_FETCH_TIMEOUT_MS = 8_000;
 
 let cached: { value: OpenRouterModelSummary[]; expiresAt: number } | null =
   null;
@@ -36,8 +37,18 @@ export async function listOpenRouterModels(): Promise<
   if (cached && cached.expiresAt > Date.now()) {
     return cached.value;
   }
+  const fetchTimeoutMs = await getConfig(
+    "openrouter",
+    "model_fetch_timeout_ms",
+    8_000,
+  );
+  const cacheTtlMs = await getConfig(
+    "openrouter",
+    "model_list_cache_ttl_ms",
+    3_600_000,
+  );
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), fetchTimeoutMs);
   try {
     const res = await fetch("https://openrouter.ai/api/v1/models", {
       signal: controller.signal,
@@ -59,7 +70,7 @@ export async function listOpenRouterModels(): Promise<
           : null,
       }))
       .sort((a, b) => a.id.localeCompare(b.id));
-    cached = { value, expiresAt: Date.now() + CACHE_TTL_MS };
+    cached = { value, expiresAt: Date.now() + cacheTtlMs };
     return value;
   } catch (err) {
     logger.error({ err }, "Failed to fetch OpenRouter model list");

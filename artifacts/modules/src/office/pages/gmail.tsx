@@ -26,6 +26,8 @@ import { ThreadList, type LayoutMode } from "../components/gmail/ThreadList";
 import { ThreadView } from "../components/gmail/ThreadView";
 import { ComposeModal } from "../components/gmail/ComposeModal";
 import { usePageAssistantContext } from "../lib/assistant-context";
+import { useAppConfigSummary } from "@workspace/elaine-ui";
+import { useAddBackgroundTask } from "@/lib/background-tasks";
 
 // This is a general-purpose email client for the household member's own
 // connected Gmail account — distinct from the Travels app's Gmail auto-scan
@@ -309,12 +311,15 @@ export default function OfficeGmailPage() {
   const {
     data: threadListData,
     isLoading: threadsLoading,
+    isFetching: threadsFetching,
     isError: threadsError,
     refetch: refetchThreads,
   } = useThreadList(threadListParams, connected);
 
   const { data: threadData, isLoading: threadLoading } =
     useThread(selectedThreadId);
+
+  const configSummary = useAppConfigSummary();
 
   usePageAssistantContext(
     "office-gmail",
@@ -326,10 +331,12 @@ export default function OfficeGmailPage() {
             : "") +
           (selectedThreadId && threadData
             ? ` A thread is open: "${threadData.messages[0]?.subject ?? "(no subject)"}" with ${threadData.messages.length} message(s). threadId: ${selectedThreadId}`
-            : "")
-      : `On the Office Gmail page. The user's Gmail account is not connected yet.`,
+            : "") +
+          (configSummary ? `\n\n${configSummary}` : "")
+      : `On the Office Gmail page. The user's Gmail account is not connected yet.${configSummary ? `\n\n${configSummary}` : ""}`,
   );
 
+  const addBackgroundTask = useAddBackgroundTask();
   const modify = useGmailModify();
   const trash = useGmailTrash();
   const bulkModify = useBulkModify();
@@ -475,7 +482,10 @@ export default function OfficeGmailPage() {
       toast({ title: `${ids.length} archived` });
     },
     onBulkTrash: (ids: string[]) => {
-      bulkTrash.mutate(ids);
+      const done = addBackgroundTask(
+        `Moving ${ids.length} thread${ids.length === 1 ? "" : "s"} to Trash…`,
+      );
+      bulkTrash.mutate(ids, { onSettled: done });
       toast({ title: `${ids.length} moved to Trash` });
     },
     onBulkMarkRead: (ids: string[]) => {
@@ -501,6 +511,7 @@ export default function OfficeGmailPage() {
       toast({ title: `${ids.length} reported as spam` });
     },
     isLoading: threadsLoading,
+    isRefetching: threadsFetching && !threadsLoading,
     isError: threadsError,
     nextPageToken: threadListData?.nextPageToken ?? null,
     onNextPage: handleNextPage,

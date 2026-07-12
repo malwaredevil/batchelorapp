@@ -12,6 +12,7 @@ import {
   getOpenRouterClient,
 } from "../../lib/ai-client";
 import { getTimeZone } from "../../lib/travels/google-maps";
+import { getConfig } from "../../lib/app-config";
 
 // Guidance for the openrouter:subagent server tool: the chat assistant can
 // delegate self-contained lookups (e.g. "list typical costs for X",
@@ -216,7 +217,7 @@ If dates are unspecified, create 5 days labelled Day 1, Day 2, etc. Return ONLY 
     const resp = await client.chat.completions.create({
       model,
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 4000,
+      max_tokens: await getConfig("travels", "itinerary_gen_max_tokens", 4000),
     });
     return resp.choices[0]?.message?.content ?? "{}";
   });
@@ -328,7 +329,11 @@ Return a JSON object:
 Include 6-8 highlights. Return ONLY valid JSON, no extra text.`,
           },
         ],
-        max_tokens: 2000,
+        max_tokens: await getConfig(
+          "travels",
+          "place_activities_max_tokens",
+          2000,
+        ),
       });
       return resp.choices[0]?.message?.content ?? "{}";
     },
@@ -373,7 +378,7 @@ Return ONLY a JSON array of short, specific names (2-5 words each). No descripti
 Example: ["Old Town Square", "Sunset Tram Ride", "Castle Tour", "Local Food Market", "River Cruise"]`,
           },
         ],
-        max_tokens: 300,
+        max_tokens: await getConfig("travels", "place_summary_max_tokens", 300),
       });
       return resp.choices[0]?.message?.content ?? "[]";
     },
@@ -492,7 +497,11 @@ Answer questions about ${trip.destination}: things to do, local food, customs, t
             }
           : {}),
         messages,
-        max_tokens: 600,
+        max_tokens: await getConfig(
+          "travels",
+          "explore_overview_max_tokens",
+          600,
+        ),
       });
       return response.choices[0]?.message?.content ?? "";
     },
@@ -604,7 +613,7 @@ Rules:
 
   try {
     const models = await getModels();
-    const client = getOpenRouterClient();
+    const client = await getOpenRouterClient();
 
     const stream = await client.chat.completions.create({
       model: models.fastVision,
@@ -613,7 +622,7 @@ Rules:
         { role: "user", content: userMessage },
       ],
       stream: true,
-      max_tokens: 3000,
+      max_tokens: await getConfig("travels", "full_itinerary_max_tokens", 3000),
     } as Parameters<typeof client.chat.completions.create>[0]);
 
     let fullText = "";

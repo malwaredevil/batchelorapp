@@ -2443,8 +2443,13 @@ function RemindersSection({ tripId }: { tripId: number }) {
   const { data: appUsers = [] } = useListTravelsAppUsers();
   const createReminder = useCreateReminder({
     mutation: {
-      onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getListRemindersQueryKey(tripId) });
+      onSuccess: (result) => {
+        qc.setQueryData<Reminder[]>(getListRemindersQueryKey(tripId), (old) =>
+          old ? [...old, result] : [result],
+        );
+        void qc.invalidateQueries({
+          queryKey: getListRemindersQueryKey(tripId),
+        });
         setNewTitle("");
         setNewDue("");
         setNewRecipients([]);
@@ -2457,15 +2462,26 @@ function RemindersSection({ tripId }: { tripId: number }) {
   });
   const updateReminder = useUpdateReminder({
     mutation: {
-      onSuccess: () =>
-        qc.invalidateQueries({ queryKey: getListRemindersQueryKey(tripId) }),
+      onSuccess: (result) => {
+        qc.setQueryData<Reminder[]>(getListRemindersQueryKey(tripId), (old) =>
+          old ? old.map((r) => (r.id === result.id ? result : r)) : [result],
+        );
+        void qc.invalidateQueries({
+          queryKey: getListRemindersQueryKey(tripId),
+        });
+      },
       onError: () => toast.error("Failed to update"),
     },
   });
   const deleteReminder = useDeleteReminder({
     mutation: {
-      onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getListRemindersQueryKey(tripId) });
+      onSuccess: (_, { reminderId }) => {
+        qc.setQueryData<Reminder[]>(getListRemindersQueryKey(tripId), (old) =>
+          old ? old.filter((r) => r.id !== reminderId) : [],
+        );
+        void qc.invalidateQueries({
+          queryKey: getListRemindersQueryKey(tripId),
+        });
         toast.success("Reminder deleted");
       },
       onError: () => toast.error("Failed to delete"),
@@ -3003,7 +3019,8 @@ export default function TripDetail({ id }: { id: number }) {
     updateTrip.mutate(
       { id, data: body },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
+          qc.setQueryData(getGetTripQueryKey(id), result);
           invalidate();
           toast.success(successMsg);
         },
@@ -3108,7 +3125,8 @@ export default function TripDetail({ id }: { id: number }) {
     updateTrip.mutate(
       { id, data: { todoList: items } },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
+          qc.setQueryData(getGetTripQueryKey(id), result);
           invalidate();
           toast.success("To-do list saved");
         },
@@ -3130,7 +3148,8 @@ export default function TripDetail({ id }: { id: number }) {
     updateTrip.mutate(
       { id, data: { itinerary: localItinerary } },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
+          qc.setQueryData(getGetTripQueryKey(id), result);
           invalidate();
           toast.success("Itinerary saved");
           setItineraryDirty(false);
@@ -3205,7 +3224,8 @@ export default function TripDetail({ id }: { id: number }) {
     updateTrip.mutate(
       { id, data: { itinerary: updated } },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
+          qc.setQueryData(getGetTripQueryKey(id), result);
           invalidate();
           toast.success("Marked as firm");
         },

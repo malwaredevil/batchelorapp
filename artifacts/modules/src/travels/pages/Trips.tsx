@@ -51,6 +51,7 @@ import {
 import { toast } from "sonner";
 import { MagnetCheckDialog } from "@/travels/components/MagnetCheckDialog";
 import { usePageAssistantContext } from "@/travels/lib/assistant-context";
+import { useAppConfigSummary } from "@workspace/elaine-ui";
 
 // ---------------------------------------------------------------------------
 // AI Trip Planner dialog — streaming SSE response from POST /travels/trips/plan
@@ -1045,6 +1046,20 @@ export default function Trips() {
     setFilterPerson([]);
     setFilterDestination(null);
   };
+
+  const configSummary = useAppConfigSummary();
+
+  usePageAssistantContext(
+    "trips-list",
+    isLoading
+      ? undefined
+      : `Trips page: ${trips.length} trip(s) total${hasActiveFilters ? `, ${filtered.length} shown after filters` : ""}. Status breakdown: ${
+          Object.entries(grouped)
+            .filter(([, bucket]) => bucket.length > 0)
+            .map(([status, bucket]) => `${status}: ${bucket.length}`)
+            .join(", ") || "none"
+        }.${configSummary ? `\n\n${configSummary}` : ""}`,
+  );
 
   return (
     <div className="space-y-6">

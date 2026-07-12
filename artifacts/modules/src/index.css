@@ -7,6 +7,20 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@keyframes progress-bar {
+  0% {
+    transform: translateX(-100%);
+    width: 40%;
+  }
+  50% {
+    width: 60%;
+  }
+  100% {
+    transform: translateX(300%);
+    width: 40%;
+  }
+}
+
 @layer base {
   * {
     @apply border-border;

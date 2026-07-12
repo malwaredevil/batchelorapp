@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { env } from "./env";
 import { getElaineGlobalConfig } from "./elaine-config";
+import { getConfig } from "./app-config";
 import { logger } from "./logger";
 
 /**
@@ -74,18 +75,23 @@ export type OpenRouterServerTool =
       };
     };
 
-// Per-request timeout (ms). Gemini 2.5 Flash vision calls normally return in
-// 1-4s. This must stay well UNDER the reverse proxy's hard ~30s request budget:
-// the bulk-reanalyze path runs several AI calls synchronously within a single
-// proxied request. maxRetries is 0 so a timeout/failure doesn't multiply
-// latency — callers should surface the error rather than silently retry.
-const REQUEST_TIMEOUT_MS = 12_000;
+// Default per-request timeout (ms). Gemini 2.5 Flash vision calls normally
+// return in 1-4s. This must stay well UNDER the reverse proxy's hard ~30s
+// request budget: the bulk-reanalyze path runs several AI calls synchronously
+// within a single proxied request. maxRetries is 0 so a timeout/failure
+// doesn't multiply latency — callers should surface the error rather than
+// silently retry.
+//
+// The live value is read from app_config (openrouter / request_timeout_ms) on
+// every call so an admin override survives a server restart without a deploy.
+// The singleton client is rebuilt only when the timeout value changes.
+const REQUEST_TIMEOUT_MS_DEFAULT = 12_000;
 
-function makeOpenRouterClient(): OpenAI {
+function makeOpenRouterClient(timeoutMs: number): OpenAI {
   return new OpenAI({
     apiKey: env.openrouterApiKey,
     baseURL: "https://openrouter.ai/api/v1",
-    timeout: REQUEST_TIMEOUT_MS,
+    timeout: timeoutMs,
     maxRetries: 0,
     defaultHeaders: {
       "HTTP-Referer": "https://app.batchelor.app",
@@ -94,11 +100,14 @@ function makeOpenRouterClient(): OpenAI {
   });
 }
 
-let _openrouterClient: OpenAI | null = null;
+let _openrouterClient: { client: OpenAI; timeoutMs: number } | null = null;
 
-export function getOpenRouterClient(): OpenAI {
-  if (!_openrouterClient) _openrouterClient = makeOpenRouterClient();
-  return _openrouterClient;
+export async function getOpenRouterClient(): Promise<OpenAI> {
+  const timeoutMs = await getConfig("openrouter", "request_timeout_ms", 12_000);
+  if (!_openrouterClient || _openrouterClient.timeoutMs !== timeoutMs) {
+    _openrouterClient = { client: makeOpenRouterClient(timeoutMs), timeoutMs };
+  }
+  return _openrouterClient.client;
 }
 
 /**
@@ -109,7 +118,7 @@ export async function callModel<T>(
   model: string,
   fn: (client: OpenAI, model: string) => Promise<T>,
 ): Promise<T> {
-  return fn(getOpenRouterClient(), model);
+  return fn(await getOpenRouterClient(), model);
 }
 
 /**
@@ -131,7 +140,7 @@ export async function callModelWithAdvisor<T>(
 ): Promise<T> {
   const config = await getElaineGlobalConfig();
   if (!config.features.enableAdvisor) {
-    return fn(getOpenRouterClient(), model, undefined);
+    return fn(await getOpenRouterClient(), model, undefined);
   }
   const tools: OpenRouterServerTool[] = [
     {
@@ -142,7 +151,7 @@ export async function callModelWithAdvisor<T>(
       },
     },
   ];
-  return fn(getOpenRouterClient(), model, tools);
+  return fn(await getOpenRouterClient(), model, tools);
 }
 
 /**
@@ -174,7 +183,7 @@ export async function callModelWithSubagent<T>(
         },
       ]
     : [];
-  return fn(getOpenRouterClient(), model, tools);
+  return fn(await getOpenRouterClient(), model, tools);
 }
 
 /**
@@ -272,7 +281,7 @@ export async function callFusion(
     config.models.fusionModels.length > 0
       ? config.models.fusionModels
       : DEFAULT_MODELS_FALLBACK.fusionModels;
-  const client = getOpenRouterClient();
+  const client = await getOpenRouterClient();
 
   const settled = await Promise.allSettled(
     panel.map((model) =>

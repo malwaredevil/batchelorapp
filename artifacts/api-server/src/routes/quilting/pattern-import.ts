@@ -4,6 +4,7 @@ import { requireAuth } from "../../middleware/auth";
 import { aiLimiter } from "../../middleware/rateLimit";
 import { logger } from "../../lib/logger";
 import { callModel, getModels } from "../../lib/ai-client";
+import { getConfig } from "../../lib/app-config";
 import {
   fetchPageText,
   isSafeFetchBlockedError,
@@ -65,6 +66,11 @@ router.post("/patterns/import-url", aiLimiter, async (req, res) => {
   }
 
   const models = await getModels();
+  const patternImportMaxTokens = await getConfig(
+    "quilting",
+    "pattern_import_max_tokens",
+    400,
+  );
   const completion = await callModel(models.fastVision, (client, model) =>
     client.chat.completions.create({
       model,
@@ -73,7 +79,7 @@ router.post("/patterns/import-url", aiLimiter, async (req, res) => {
         { role: "user", content: `URL: ${url}\n\nPage text:\n${pageText}` },
       ],
       temperature: 0,
-      max_tokens: 400,
+      max_tokens: patternImportMaxTokens,
       response_format: { type: "json_object" },
     }),
   );

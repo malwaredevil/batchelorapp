@@ -4,6 +4,7 @@ import type OpenAI from "openai";
 import { db, travelsCustomDocumentTypes } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { callModelWithAdvisor, getModels } from "../../lib/ai-client";
+import { getConfig } from "../../lib/app-config";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -114,7 +115,11 @@ Return ONLY valid JSON in exactly this shape (no markdown fences, no commentary)
         )({
           model,
           messages: [{ role: "user", content: prompt }],
-          max_tokens: 400,
+          max_tokens: await getConfig(
+            "travels",
+            "doc_type_suggestion_max_tokens",
+            400,
+          ),
         });
         return resp.choices[0]?.message?.content ?? "{}";
       },

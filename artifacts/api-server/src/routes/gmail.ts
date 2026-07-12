@@ -25,6 +25,7 @@ import {
   listDrafts,
   modifyMessage,
   trashMessage,
+  trashThread,
   untrashMessage,
 } from "../lib/gmail-api-extended";
 import { getAttachment } from "../lib/gmail-api";
@@ -610,6 +611,21 @@ router.post("/messages/:messageId/trash", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "gmail trash-message failed");
     res.status(502).json({ error: "Failed to trash message." });
+  }
+});
+
+router.post("/threads/:threadId/trash", async (req, res) => {
+  const token = await resolveToken(
+    req,
+    res as Parameters<typeof resolveToken>[1],
+  );
+  if (!token) return;
+  try {
+    await trashThread(token, req.params.threadId);
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "gmail trash-thread failed");
+    res.status(502).json({ error: "Failed to trash thread." });
   }
 });
 

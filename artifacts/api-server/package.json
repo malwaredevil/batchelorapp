@@ -10,7 +10,8 @@
     "send-reminder-alerts": "node --enable-source-maps ./dist/scripts/send-reminder-alerts.mjs",
     "pretypecheck": "pnpm -w run typecheck:libs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint:config": "vitest run --reporter=verbose src/lib/app-config-drift.test.ts"
   },
   "dependencies": {
     "@opentelemetry/instrumentation": "^0.220.0",

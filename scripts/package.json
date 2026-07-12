@@ -11,6 +11,7 @@
     "add-users": "tsx ./src/add-users.ts",
     "check-ci-status": "tsx ./src/check-ci-status.ts",
     "check-raw-fetch": "tsx ./src/check-raw-fetch.ts",
+    "cleanup-app-config-defaults": "tsx ./src/cleanup-app-config-defaults.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

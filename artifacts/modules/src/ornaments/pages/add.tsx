@@ -132,7 +132,7 @@ export default function AddOrnament() {
       });
 
       toast.success("Ornament added!");
-      setLocation(`/ornament/${result.id}`);
+      setLocation(`/ornaments/ornament/${result.id}`);
     } catch (err: any) {
       toast.error(err.message || "Failed to add ornament");
     }

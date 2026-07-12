@@ -57,7 +57,7 @@ const ENTITY_CONFIG: Record<PaletteMatchEntity, EntityConfig> = {
       "Painting, room photo, outfit — we'll extract its colour palette and find matching fabrics in your stash",
     findLabel: "Find matching fabrics",
     emptyLabel: "No matching fabrics found in your stash",
-    linkPrefix: "/fabrics",
+    linkPrefix: "/quilting/fabrics",
     resultKey: "fabric",
   },
   pattern: {
@@ -66,7 +66,7 @@ const ENTITY_CONFIG: Record<PaletteMatchEntity, EntityConfig> = {
       "Painting, room photo, outfit — we'll extract its colour palette and find matching patterns in your collection",
     findLabel: "Find matching patterns",
     emptyLabel: "No matching patterns found in your collection",
-    linkPrefix: "/patterns",
+    linkPrefix: "/quilting/patterns",
     resultKey: "pattern",
   },
   quilt: {
@@ -75,7 +75,7 @@ const ENTITY_CONFIG: Record<PaletteMatchEntity, EntityConfig> = {
       "Painting, room photo, outfit — we'll extract its colour palette and find matching quilts in your collection",
     findLabel: "Find matching quilts",
     emptyLabel: "No matching quilts found in your collection",
-    linkPrefix: "/quilts",
+    linkPrefix: "/quilting/quilts",
     resultKey: "quilt",
   },
 };

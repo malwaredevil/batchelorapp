@@ -252,7 +252,7 @@ router.get("/search", requireAuth, async (req, res) => {
             ? buildMessageSnippet(r.notes ?? "", q)
             : r.destination,
           matchedContent,
-          url: `/travels/trips/${r.id}`,
+          url: `/modules/travels/trips/${r.id}`,
         };
       }),
     });
@@ -266,7 +266,7 @@ router.get("/search", requireAuth, async (req, res) => {
         id: r.id,
         title: r.title,
         subtitle: "Trip reminder",
-        url: `/travels/trips/${r.tripId}`,
+        url: `/modules/travels/trips/${r.tripId}`,
       })),
     });
   }
@@ -301,7 +301,7 @@ router.get("/search", requireAuth, async (req, res) => {
             ? buildMessageSnippet(r.patternDescription ?? "", q)
             : (r.maker ?? undefined),
           matchedContent,
-          url: `/pottery/piece/${r.id}`,
+          url: `/modules/pottery/piece/${r.id}`,
         };
       }),
     });
@@ -326,7 +326,7 @@ router.get("/search", requireAuth, async (req, res) => {
             ? buildMessageSnippet(r.notes ?? "", q)
             : staticSubtitle,
           matchedContent,
-          url: `/quilting/fabrics/${r.id}`,
+          url: `/modules/quilting/fabrics/${r.id}`,
         };
       }),
     });
@@ -348,7 +348,7 @@ router.get("/search", requireAuth, async (req, res) => {
             ? buildMessageSnippet(r.notes ?? "", q)
             : (r.designer ?? undefined),
           matchedContent,
-          url: `/quilting/patterns/${r.id}`,
+          url: `/modules/quilting/patterns/${r.id}`,
         };
       }),
     });
@@ -361,7 +361,7 @@ router.get("/search", requireAuth, async (req, res) => {
       results: quiltResults.map((r) => ({
         id: r.id,
         title: r.name,
-        url: `/quilting/quilts/${r.id}`,
+        url: `/modules/quilting/quilts/${r.id}`,
       })),
     });
   }

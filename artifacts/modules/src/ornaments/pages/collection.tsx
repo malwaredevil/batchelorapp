@@ -307,7 +307,7 @@ export default function Collection() {
           {sortedItems.map((item) => (
             <Link
               key={item.id}
-              href={`/ornament/${item.id}`}
+              href={`/ornaments/ornament/${item.id}`}
               className="group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl"
             >
               <div className="relative aspect-square overflow-hidden rounded-xl bg-muted border border-border group-hover:border-primary/50 transition-colors shadow-sm mb-3">
@@ -355,7 +355,7 @@ export default function Collection() {
           {sortedItems.map((item) => (
             <Link
               key={item.id}
-              href={`/ornament/${item.id}`}
+              href={`/ornaments/ornament/${item.id}`}
               className="group flex gap-4 p-3 bg-card border border-card-border rounded-xl hover:border-primary/50 transition-colors shadow-sm items-center"
             >
               <div className="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 overflow-hidden rounded-lg bg-muted border border-border">

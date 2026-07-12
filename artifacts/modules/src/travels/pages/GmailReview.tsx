@@ -1146,7 +1146,7 @@ export default function GmailReview() {
           <Mail className="h-8 w-8 mx-auto text-muted-foreground" />
           <p className="text-sm text-muted-foreground">Not connected yet.</p>
           <Button asChild>
-            <a href="/settings">Go to Settings</a>
+            <a href="/account">Go to Settings</a>
           </Button>
         </div>
       </div>

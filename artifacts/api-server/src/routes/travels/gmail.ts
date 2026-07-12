@@ -134,8 +134,8 @@ router.get("/gmail/connect", (req, res) => {
 // GET /gmail/callback
 router.get("/gmail/callback", async (req, res) => {
   const userId = req.session.userId!;
-  const FAILURE_REDIRECT = "/modules/travels/settings?gmail=error";
-  const SUCCESS_REDIRECT = "/modules/travels/settings?gmail=connected";
+  const FAILURE_REDIRECT = "/account?gmail=error";
+  const SUCCESS_REDIRECT = "/account?gmail=connected";
 
   const { code, state } = req.query;
   const expectedState = req.signedCookies?.[OAUTH_STATE_COOKIE];

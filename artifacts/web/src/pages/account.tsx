@@ -215,7 +215,7 @@ function PhoneCard() {
       <p className="mb-4 text-sm text-muted-foreground">
         Verify a phone number to receive Travels reminders by text. See our{" "}
         <a
-          href={`${base}travels/privacy`}
+          href={`${base}modules/travels/privacy`}
           target="_blank"
           rel="noopener noreferrer"
           className="underline hover:text-foreground"
@@ -280,7 +280,7 @@ function PhoneCard() {
               varies. Reply STOP to opt out at any time, or HELP for help. See
               our{" "}
               <a
-                href={`${base}travels/privacy`}
+                href={`${base}modules/travels/privacy`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline hover:text-foreground"

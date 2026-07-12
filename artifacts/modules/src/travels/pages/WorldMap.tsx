@@ -281,7 +281,7 @@ function MapPanel({
           if (link) {
             link.addEventListener("click", (e) => {
               e.preventDefault();
-              onNavigate(`/trips/${link.dataset.tripId}`);
+              onNavigate(`/travels/trips/${link.dataset.tripId}`);
             });
           }
         });
@@ -709,7 +709,7 @@ export default function WorldMap() {
             {unmappedTrips.map((t) => (
               <button
                 key={t.id}
-                onClick={() => navigate(`/trips/${t.id}`)}
+                onClick={() => navigate(`/travels/trips/${t.id}`)}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-muted hover:bg-muted/70 text-sm transition-colors"
               >
                 <span

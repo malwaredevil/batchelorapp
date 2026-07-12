@@ -354,7 +354,7 @@ export function TimezoneCard() {
 export function GmailSyncCard({
   usePageContext = noopPageContext,
   LinkComponent = DefaultLink,
-  gmailHref = "/gmail",
+  gmailHref = "/modules/travels/gmail",
 }: {
   usePageContext?: UsePageContext;
   LinkComponent?: LinkComponent;
@@ -401,7 +401,7 @@ export function GmailSyncCard({
             Automatically find flight, train, and hotel confirmations in your
             inbox and suggest them as trip documents. Read-only access — see our{" "}
             <LinkComponent
-              href="/privacy"
+              href="/modules/travels/privacy"
               className="underline hover:text-foreground"
             >
               Privacy Policy

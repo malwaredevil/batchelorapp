@@ -149,7 +149,7 @@ export function FullChatPanel({
                 {magnetResult.matches.map((match) => (
                   <a
                     key={match.photoId}
-                    href={`/travels/trips/${match.tripId}`}
+                    href={`/modules/travels/trips/${match.tripId}`}
                     onClick={onNavigated}
                   >
                     <div className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-border/50 p-1.5 transition-colors hover:border-primary/30">

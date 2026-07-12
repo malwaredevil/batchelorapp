@@ -444,8 +444,7 @@ export function useElaineChat({
     const base = (envBaseUrl ?? "/").replace(/\/$/, "");
     const isModulesHost = base === "/modules";
     if (isCrossSpa) {
-      const target =
-        isModulesHost && !path.startsWith("/elaine") ? `/modules${path}` : path;
+      const target = !path.startsWith("/elaine") ? `/modules${path}` : path;
       window.location.href = target;
     } else {
       const target =

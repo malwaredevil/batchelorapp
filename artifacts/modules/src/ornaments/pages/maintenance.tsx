@@ -218,7 +218,7 @@ export default function Maintenance() {
             {items.map((item) => (
               <Link
                 key={item.id}
-                href={`/ornament/${item.id}`}
+                href={`/ornaments/ornament/${item.id}`}
                 className="flex items-center justify-between p-4 hover:bg-muted/40 transition-colors group"
               >
                 <div>

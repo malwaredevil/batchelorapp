@@ -95,7 +95,7 @@ router.get("/google-calendar/callback", requireAuth, async (req, res) => {
   });
 
   let expectedState: string | undefined;
-  let returnTo = "/modules/travels/settings";
+  let returnTo = "/account";
   if (typeof rawCookie === "string") {
     const sepIndex = rawCookie.indexOf(":");
     if (sepIndex === -1) {

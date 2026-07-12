@@ -332,7 +332,7 @@ export default function WholeQuiltDesigner() {
   // Redirect to the list if not accessing a specific design or creating a new one
   useEffect(() => {
     if (!urlId && !isNewDesign && !urlCols && !urlRows && !urlBlockSize) {
-      window.location.href = "/whole-quilt";
+      window.location.href = "/modules/quilting/whole-quilt";
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1196,7 +1196,7 @@ export default function WholeQuiltDesigner() {
               onClick={() => {
                 setShowExitDialog(false);
                 setIsDirty(false);
-                navigate(pendingNavRef.current ?? "/whole-quilt");
+                navigate(pendingNavRef.current ?? "/quilting/whole-quilt");
               }}
             >
               Discard &amp; exit
@@ -1205,7 +1205,7 @@ export default function WholeQuiltDesigner() {
               onClick={() => {
                 setShowExitDialog(false);
                 handleSave();
-                navigate(pendingNavRef.current ?? "/whole-quilt");
+                navigate(pendingNavRef.current ?? "/quilting/whole-quilt");
               }}
             >
               Save &amp; exit
@@ -1264,7 +1264,7 @@ export default function WholeQuiltDesigner() {
           variant="ghost"
           size="icon"
           className="h-7 w-7"
-          onClick={() => requestNav("/whole-quilt")}
+          onClick={() => requestNav("/quilting/whole-quilt")}
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>

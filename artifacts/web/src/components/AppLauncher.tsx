@@ -130,11 +130,6 @@ const HALLMARK_OPEN_HOUSE = {
 
 const ELAINE_QUICK_LINKS = [
   { label: "Chat", icon: MessageCircle, href: `${base}elaine/` },
-  {
-    label: "Settings",
-    icon: SlidersHorizontal,
-    href: `${base}elaine/settings`,
-  },
   { label: "Account", icon: Settings, href: `${base}account` },
 ];
 

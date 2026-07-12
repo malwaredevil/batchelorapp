@@ -1055,7 +1055,7 @@ export default function LayoutComposer() {
         setIsDirty(false);
         if (exitAfterSaveRef.current) {
           exitAfterSaveRef.current = false;
-          navigate(layoutId ? `/layouts/${layoutId}` : "/layouts");
+          navigate(layoutId ? `/quilting/layouts/${layoutId}` : "/quilting/layouts");
         }
       },
       onError: () => toast.error("Failed to update layout."),
@@ -1213,7 +1213,7 @@ export default function LayoutComposer() {
               onClick={() => {
                 setShowExitDialog(false);
                 setIsDirty(false);
-                navigate(pendingNavRef.current ?? "/layouts");
+                navigate(pendingNavRef.current ?? "/quilting/layouts");
                 pendingNavRef.current = null;
               }}
             >
@@ -1244,7 +1244,7 @@ export default function LayoutComposer() {
           variant="ghost"
           size="icon"
           onClick={() =>
-            requestNav(layoutId ? `/layouts/${layoutId}` : "/layouts")
+            requestNav(layoutId ? `/quilting/layouts/${layoutId}` : "/quilting/layouts")
           }
           className="h-8 w-8"
         >

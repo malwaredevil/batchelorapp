@@ -212,7 +212,7 @@ export default function TripTimeline({ trips }: Props) {
             return (
               <button
                 key={trip.id}
-                onClick={() => navigate(`/trips/${trip.id}`)}
+                onClick={() => navigate(`/travels/trips/${trip.id}`)}
                 title={`${trip.destination} · ${trip.startDate}`}
                 style={{
                   position: "absolute",

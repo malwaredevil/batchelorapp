@@ -52,7 +52,10 @@ function cacheSet(
   value: { buffer: Buffer; contentType: string },
 ): void {
   downloadCache.delete(key);
-  downloadCache.set(key, { ...value, expiry: Date.now() + DOWNLOAD_CACHE_TTL_MS });
+  downloadCache.set(key, {
+    ...value,
+    expiry: Date.now() + DOWNLOAD_CACHE_TTL_MS,
+  });
   if (downloadCache.size > DOWNLOAD_CACHE_MAX_ENTRIES) {
     const oldestKey = downloadCache.keys().next().value;
     if (oldestKey !== undefined) downloadCache.delete(oldestKey);
@@ -188,7 +191,9 @@ export class ImageStorageService {
   }
 
   async deleteImage(path: string): Promise<void> {
-    const { error } = await this.supabase.storage.from(this.bucket).remove([path]);
+    const { error } = await this.supabase.storage
+      .from(this.bucket)
+      .remove([path]);
     if (error) throw error;
     this.invalidateImageCache(path);
   }

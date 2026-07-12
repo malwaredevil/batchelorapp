@@ -51,5 +51,8 @@ Thumbs.db
 attached_assets/
 .canvas/
 
+# Husky generated hooks (not the actual hook scripts)
+.husky/_/
+
 # Security-sensitive docs (keep local only)
 threat_model.md

@@ -61,6 +61,36 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run lint
 
+  app-config-drift:
+    name: App-config drift guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/api-server run lint:config
+
+  test-api-server:
+    name: API server tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/api-server run test
+
   codegen-drift:
     name: Codegen drift
     runs-on: ubuntu-latest

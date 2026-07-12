@@ -662,6 +662,12 @@ router.delete("/trips/:id/documents/:docId", async (req, res) => {
     req.log.warn({ err }, "Storage delete failed — removing DB record anyway");
   }
 
+  // Delete embedding chunks first — they have no FK cascade so they would
+  // otherwise accumulate as orphans and pollute semantic search results.
+  await db
+    .delete(travelsDocChunks)
+    .where(eq(travelsDocChunks.tripDocumentId, docId));
+
   await db
     .delete(travelsTripDocuments)
     .where(

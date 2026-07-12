@@ -24,7 +24,11 @@ import {
   VerifyPhoneCodeResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middleware/auth";
-import { loginLimiter, phoneVerifyLimiter } from "../middleware/rateLimit";
+import {
+  loginLimiter,
+  passwordResetLimiter,
+  phoneVerifyLimiter,
+} from "../middleware/rateLimit";
 import { env } from "../lib/env";
 import {
   googleEnabled,
@@ -649,7 +653,7 @@ router.post("/auth/forgot-password", loginLimiter, async (req, res) => {
   })();
 });
 
-router.post("/auth/reset-password", async (req, res) => {
+router.post("/auth/reset-password", passwordResetLimiter, async (req, res) => {
   const parsed = ResetPasswordBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Token and new password are required." });

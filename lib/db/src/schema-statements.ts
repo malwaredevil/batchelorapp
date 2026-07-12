@@ -1318,6 +1318,12 @@ export const STATEMENTS: string[] = [
     UNIQUE(module, key)
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS app_config_module_key_idx ON app_config (module, key)`,
+
+  // Dedup key for the reminder alert log: prevents concurrent scheduler runs
+  // (login-triggered + hourly cron) from inserting duplicate rows and sending
+  // the same alert email/SMS twice. Matches the uniqueIndex in travels.ts schema.
+  `CREATE UNIQUE INDEX IF NOT EXISTS travels_reminder_alert_log_dedup_idx
+     ON travels_reminder_alert_log (reminder_id, alert_type, channel)`,
   // Track deliberate admin overrides so the Control Panel "customised" badge
   // doesn't fire just because a developer renamed a default value between
   // deploys. Null = never intentionally changed; non-null = human override.

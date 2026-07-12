@@ -26,11 +26,22 @@ async function getOrCreateList(
     .from(travelsPackingLists)
     .where(eq(travelsPackingLists.tripId, tripId));
   if (existing) return existing;
+
+  // Use onConflictDoNothing so two simultaneous requests for a trip with no
+  // packing list yet don't race into a unique-constraint 500. The loser of
+  // the race gets null back from .returning(), then re-fetches the winner's row.
   const [created] = await db
     .insert(travelsPackingLists)
     .values({ tripId })
+    .onConflictDoNothing()
     .returning();
-  return created!;
+  if (created) return created;
+
+  const [row] = await db
+    .select()
+    .from(travelsPackingLists)
+    .where(eq(travelsPackingLists.tripId, tripId));
+  return row!;
 }
 
 async function tripExists(tripId: number): Promise<boolean> {

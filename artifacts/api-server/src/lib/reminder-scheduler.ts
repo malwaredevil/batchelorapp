@@ -174,7 +174,8 @@ export async function runReminderAlerts(): Promise<void> {
           if (failures.length === 0 && successCount > 0) {
             await client.query(
               `INSERT INTO travels_reminder_alert_log (reminder_id, user_id, alert_type, channel)
-               VALUES ($1, $2, $3, 'email')`,
+               VALUES ($1, $2, $3, 'email')
+               ON CONFLICT (reminder_id, alert_type, channel) DO NOTHING`,
               [row.reminder_id, row.user_id, type],
             );
 
@@ -266,7 +267,8 @@ export async function runReminderAlerts(): Promise<void> {
             if (failures.length === 0) {
               await client.query(
                 `INSERT INTO travels_reminder_alert_log (reminder_id, user_id, alert_type, channel)
-                 VALUES ($1, $2, $3, 'sms')`,
+                 VALUES ($1, $2, $3, 'sms')
+                 ON CONFLICT (reminder_id, alert_type, channel) DO NOTHING`,
                 [row.reminder_id, row.user_id, type],
               );
 

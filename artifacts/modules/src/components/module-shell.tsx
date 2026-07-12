@@ -1,4 +1,4 @@
-import { type ReactNode, type ComponentType, useEffect } from "react";
+import { type ReactNode, type ComponentType, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { AppSwitcher } from "@workspace/elaine-ui";
 import { useBackgroundTasks } from "@/lib/background-tasks";
@@ -27,6 +27,7 @@ import {
   CalendarHeart,
   Mail,
   NotebookPen,
+  Menu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { getNavItemsByGroup, type ResolvedNavEntry } from "@/features/registry";
 
 function isActive(current: string, href: string) {
@@ -183,6 +190,7 @@ export function ModuleShell({ children }: { children: ReactNode }) {
 
   const { tasks } = useBackgroundTasks();
   const hasTasks = tasks.length > 0;
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-background">
@@ -267,16 +275,102 @@ export function ModuleShell({ children }: { children: ReactNode }) {
             })}
           </nav>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => logout.mutate()}
-            aria-label="Log out"
-          >
-            <LogOut className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            {/* Hamburger — mobile only */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden"
+              onClick={() => setMobileNavOpen(true)}
+              aria-label="Open navigation"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => logout.mutate()}
+              aria-label="Log out"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </header>
+
+      {/* Mobile navigation drawer */}
+      <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+        <SheetContent side="right" className="w-72 p-0">
+          <SheetHeader className="border-b border-card-border px-4 py-4">
+            <SheetTitle className="text-base font-semibold capitalize">
+              {MODULE_TITLES[currentModule] ?? "Navigate"}
+            </SheetTitle>
+          </SheetHeader>
+          <nav className="flex flex-col gap-1 p-3">
+            {groupOrder.map((group) => {
+              const items = scopedGroups[group];
+              if (!items || items.length === 0) return null;
+              const meta = groupMeta[group] ?? { label: group, icon: Settings2 };
+              const Icon = meta.icon;
+
+              if (items.length === 1) {
+                const item = items[0]!;
+                const active = !item.external && isActive(location, item.href);
+                return (
+                  <button
+                    key={group}
+                    onClick={() => {
+                      go(item);
+                      setMobileNavOpen(false);
+                    }}
+                    className={cn(
+                      "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                      active
+                        ? "bg-accent text-accent-foreground"
+                        : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                    )}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    {meta.label}
+                  </button>
+                );
+              }
+
+              // Multi-item group: show group label as a section header, then all items
+              return (
+                <div key={group}>
+                  <p className="mt-2 mb-1 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
+                    {meta.label}
+                  </p>
+                  {items.map((item) => {
+                    const ItemIcon = item.icon;
+                    const active = !item.external && isActive(location, item.href);
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          go(item);
+                          setMobileNavOpen(false);
+                        }}
+                        className={cn(
+                          "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
+                          active
+                            ? "bg-accent text-accent-foreground font-medium"
+                            : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                        )}
+                      >
+                        <ItemIcon className="h-4 w-4 shrink-0" />
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </nav>
+        </SheetContent>
+      </Sheet>
 
       <InstallBanner />
 

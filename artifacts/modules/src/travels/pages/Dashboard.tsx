@@ -507,8 +507,8 @@ export default function Dashboard() {
                           );
                           const href =
                             tripsForTag.length === 1
-                              ? `/trips/${tripsForTag[0]!.id}`
-                              : `/trips?year=${year}&destination=${encodeURIComponent(d)}`;
+                              ? `/travels/trips/${tripsForTag[0]!.id}`
+                              : `/travels/trips?year=${year}&destination=${encodeURIComponent(d)}`;
                           return (
                             <Link key={d} href={href}>
                               <span className="text-xs px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground border border-border/50 hover:bg-secondary/70 hover:border-primary/40 cursor-pointer transition-colors">

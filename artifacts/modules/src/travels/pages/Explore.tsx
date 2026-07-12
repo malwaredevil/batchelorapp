@@ -82,7 +82,7 @@ function ExploreResult({ result }: { result: ExploreDestinationResult }) {
           qc.invalidateQueries({ queryKey: getListTripsQueryKey() });
           qc.invalidateQueries({ queryKey: getGetTravelsStatsQueryKey() });
           toast.success("Added to wishlist");
-          setLocation(`/trips/${trip.id}`);
+          setLocation(`/travels/trips/${trip.id}`);
         },
         onError: () => toast.error("Failed to add to wishlist"),
       },

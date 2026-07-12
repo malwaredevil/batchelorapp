@@ -2494,7 +2494,7 @@ export default function BlockDesigner() {
   const queryClient = useQueryClient();
   const isNew = !id || id === "new";
   const blockId = isNew ? null : Number(id);
-  const templateMode = location.startsWith("/library/blocks");
+  const templateMode = location.startsWith("/quilting/library/blocks");
 
   const { data: existingBlock, isLoading: loadingExistingBlock } = useGetBlock(
     !templateMode ? (blockId ?? 0) : 0,

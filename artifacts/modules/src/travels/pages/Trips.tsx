@@ -500,7 +500,7 @@ function AiPlannerDialog({
             qc.invalidateQueries({ queryKey: getGetTravelsStatsQueryKey() });
             toast.success("Trip created from AI plan");
             onOpenChange(false);
-            navigate(`/trips/${newTrip.id}`);
+            navigate(`/travels/trips/${newTrip.id}`);
           };
           // Persist reminders from scaffold (fire-and-forget, non-blocking)
           const scaffoldReminders = scaffold["reminders"];
@@ -736,7 +736,7 @@ function AiPlannerDialog({
           setMergeOpen(false);
           onOpenChange(false);
           if (typeof applyTarget === "number") {
-            navigate(`/trips/${applyTarget}`);
+            navigate(`/travels/trips/${applyTarget}`);
           }
         }}
       />

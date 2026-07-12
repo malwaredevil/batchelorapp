@@ -745,7 +745,7 @@ function ImageLightbox({
 // ---------------------------------------------------------------------------
 
 export default function PieceDetail() {
-  const [, params] = useRoute("/piece/:id");
+  const [, params] = useRoute("/pottery/piece/:id");
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const id = Number(params?.id);

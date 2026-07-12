@@ -218,7 +218,7 @@ function ItineraryShareExportButtons({
 
   const shareUrl =
     localToken != null
-      ? `${window.location.origin}/travels/trips/${tripId}/share?token=${localToken}`
+      ? `${window.location.origin}/modules/travels/trips/${tripId}/share?token=${localToken}`
       : null;
 
   const handleShare = () => {
@@ -233,7 +233,7 @@ function ItineraryShareExportButtons({
     generateShare.mutate(tripId, {
       onSuccess: (data) => {
         setLocalToken(data.shareToken);
-        const url = `${window.location.origin}/travels/trips/${tripId}/share?token=${data.shareToken}`;
+        const url = `${window.location.origin}/modules/travels/trips/${tripId}/share?token=${data.shareToken}`;
         navigator.clipboard
           .writeText(url)
           .then(() => toast.success("Share link copied to clipboard"))
@@ -263,7 +263,7 @@ function ItineraryShareExportButtons({
       generateShare.mutate(tripId, {
         onSuccess: (data) => {
           setLocalToken(data.shareToken);
-          const url = `${window.location.origin}/travels/trips/${tripId}/share?token=${data.shareToken}&print=1`;
+          const url = `${window.location.origin}/modules/travels/trips/${tripId}/share?token=${data.shareToken}&print=1`;
           window.open(url, "_blank");
           qc.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
         },
@@ -3036,7 +3036,7 @@ export default function TripDetail({ id }: { id: number }) {
         onSuccess: () => {
           invalidate();
           toast.success("Trip deleted");
-          setLocation("/trips");
+          setLocation("/travels/trips");
         },
         onError: () => toast.error("Failed to delete trip"),
       },
@@ -3358,7 +3358,7 @@ export default function TripDetail({ id }: { id: number }) {
         <Button
           variant="ghost"
           className="mt-4"
-          onClick={() => setLocation("/trips")}
+          onClick={() => setLocation("/travels/trips")}
         >
           Back to trips
         </Button>
@@ -3377,7 +3377,7 @@ export default function TripDetail({ id }: { id: number }) {
           variant="ghost"
           size="icon"
           className="shrink-0 mt-0.5"
-          onClick={() => setLocation("/trips")}
+          onClick={() => setLocation("/travels/trips")}
         >
           <ArrowLeft className="w-4 h-4" />
         </Button>

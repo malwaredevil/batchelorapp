@@ -243,10 +243,10 @@ function PieceCard({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem asChild>
-                <a href={`/pottery/piece/${item.id}`}>
+                <Link href={`/pottery/piece/${item.id}`}>
                   <ExternalLink className="mr-2 h-3.5 w-3.5" />
                   Open
-                </a>
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={(e) => {

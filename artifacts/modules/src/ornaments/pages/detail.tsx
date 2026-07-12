@@ -48,7 +48,7 @@ function formatCurrency(amount: number | null | undefined): string {
 }
 
 export default function OrnamentDetail() {
-  const [match, params] = useRoute("/ornament/:id");
+  const [match, params] = useRoute("/ornaments/ornament/:id");
   const id = Number(params?.id);
   const [_, setLocation] = useLocation();
   const queryClient = useQueryClient();

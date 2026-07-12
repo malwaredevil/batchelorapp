@@ -11,6 +11,7 @@ import {
 import { requireAuth } from "../../middleware/auth";
 import { getModels, getOpenRouterClient } from "../../lib/ai-client";
 import { logger } from "../../lib/logger";
+import { getConfig } from "../../lib/app-config";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -295,13 +296,13 @@ Example format:
 
   try {
     const models = await getModels();
-    const client = getOpenRouterClient();
+    const client = await getOpenRouterClient();
 
     const stream = await client.chat.completions.create({
       model: models.fastVision,
       messages: [{ role: "user", content: prompt }],
       stream: true,
-      max_tokens: 1000,
+      max_tokens: await getConfig("travels", "packing_ai_max_tokens", 1000),
     } as Parameters<typeof client.chat.completions.create>[0]);
 
     let fullText = "";

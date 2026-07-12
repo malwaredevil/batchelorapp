@@ -54,6 +54,7 @@ import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { CategoryEditDialog } from "@/quilting/components/CategoryEditDialog";
 import { PaletteMatchModal } from "@/quilting/components/PaletteMatchModal";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
+import { useAppConfigSummary } from "@workspace/elaine-ui";
 
 type SortOption = "newest" | "oldest" | "az" | "za";
 
@@ -526,6 +527,8 @@ export default function Fabrics() {
     setStashBustMode(false);
   }
 
+  const configSummary = useAppConfigSummary();
+
   usePageAssistantContext(
     "quilting-fabrics",
     isLoading
@@ -535,7 +538,7 @@ export default function Fabrics() {
             .slice(0, 30)
             .map((f) => `${f.name} (fabricId: ${f.id})`)
             .join(", ") || "none"
-        }.`,
+        }.${configSummary ? `\n\n${configSummary}` : ""}`,
   );
 
   return (

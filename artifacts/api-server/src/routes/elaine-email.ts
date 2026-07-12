@@ -87,14 +87,29 @@ function verifySignature(req: Request): boolean {
   return false;
 }
 
+// Returns true when `err` looks like a PostgreSQL unique-constraint violation
+// (SQLSTATE 23505) or an equivalent ORM-level duplicate-key error. Any other
+// error is assumed to be a transient infrastructure problem (DB unreachable,
+// timeout, etc.) and must NOT be silently swallowed.
+function isDuplicateKeyError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const pgErr = err as Error & { code?: string };
+  if (pgErr.code === "23505") return true;
+  const msg = err.message.toLowerCase();
+  return msg.includes("unique") || msg.includes("duplicate key");
+}
+
 // Records the delivery id before any side effect runs so a redelivered
-// webhook is a no-op. Returns false when the id was already claimed.
+// webhook is a no-op. Returns false when the id was already claimed
+// (duplicate delivery). Throws for any other DB error so the caller can
+// fail closed (503) rather than silently treating the event as a duplicate.
 async function claimDelivery(id: string): Promise<boolean> {
   try {
     await db.insert(elaineEmailWebhookDeliveries).values({ id });
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    if (isDuplicateKeyError(err)) return false;
+    throw err;
   }
 }
 
@@ -182,7 +197,18 @@ router.post("/email-webhook", async (req: Request, res: Response) => {
     return;
   }
 
-  if (!(await claimDelivery(deliveryId))) {
+  let claimed: boolean;
+  try {
+    claimed = await claimDelivery(deliveryId);
+  } catch (err) {
+    logger.error(
+      { err, deliveryId },
+      "elaine-email: dedup DB error — failing closed",
+    );
+    res.status(503).json({ error: "Service unavailable" });
+    return;
+  }
+  if (!claimed) {
     logger.warn(
       { deliveryId },
       "elaine-email: duplicate webhook delivery rejected",

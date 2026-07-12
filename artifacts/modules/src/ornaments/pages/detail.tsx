@@ -29,6 +29,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { usePageAssistantContext } from "@/ornaments/lib/assistant-context";
+import { useAppConfigSummary } from "@workspace/elaine-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -99,9 +100,11 @@ export default function OrnamentDetail() {
   const mutateFnRef = useRef(updateOrnament.mutate);
   mutateFnRef.current = updateOrnament.mutate;
 
+  const configSummary = useAppConfigSummary();
+
   usePageAssistantContext(
     "ornaments-detail",
-    `Ornament detail for ${ornament?.name || id}. Edit fields, manage photos, or look up book value.`,
+    `Ornament detail for ${ornament?.name || id}. Edit fields, manage photos, or look up book value.${configSummary ? `\n\n${configSummary}` : ""}`,
   );
 
   useEffect(() => {

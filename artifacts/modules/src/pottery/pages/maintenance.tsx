@@ -29,6 +29,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { usePageAssistantContext } from "@/pottery/lib/assistant-context";
+import { useAppConfigSummary } from "@workspace/elaine-ui";
 import { generateInsurancePdf } from "@/pottery/lib/pdf-export";
 
 // ---------------------------------------------------------------------------
@@ -431,11 +432,13 @@ export default function Maintenance() {
     );
   }
 
+  const configSummary = useAppConfigSummary();
+
   usePageAssistantContext(
     "pottery-maintenance",
     isLoading || stragglersLoading
       ? undefined
-      : `Maintenance page: housekeeping tools for the collection. AI re-analyse stragglers: ${stragglerCount} piece(s) need attention (${embeddingCount} missing similarity data, ${attributeCount} missing details)${isRunning && runSource === "stragglers" ? ` — a straggler refresh is in progress (${progress.done}/${progress.total})` : ""}. Bulk re-analyse: ${data?.length ?? 0} total pieces, ${totalSelected} currently selected for re-analysis${isRunning && runSource === "bulk" ? ` — a bulk refresh is in progress (${progress.done}/${progress.total})` : ""}. Locked fields are never overwritten by re-analysis.`,
+      : `Maintenance page: housekeeping tools for the collection. AI re-analyse stragglers: ${stragglerCount} piece(s) need attention (${embeddingCount} missing similarity data, ${attributeCount} missing details)${isRunning && runSource === "stragglers" ? ` — a straggler refresh is in progress (${progress.done}/${progress.total})` : ""}. Bulk re-analyse: ${data?.length ?? 0} total pieces, ${totalSelected} currently selected for re-analysis${isRunning && runSource === "bulk" ? ` — a bulk refresh is in progress (${progress.done}/${progress.total})` : ""}. Locked fields are never overwritten by re-analysis.${configSummary ? ` ${configSummary}` : ""}`,
   );
 
   return (

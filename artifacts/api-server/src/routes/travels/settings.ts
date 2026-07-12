@@ -59,8 +59,9 @@ router.get("/settings", async (req, res) => {
     .from(appUsers)
     .where(eq(appUsers.id, userId));
 
+  const rawEmail = user?.travelsReminderEmail ?? null;
   res.json({
-    reminderEmail: user?.travelsReminderEmail ?? null,
+    reminderEmail: rawEmail && rawEmail.trim() ? rawEmail.trim() : null,
     timezone: user?.timezone ?? null,
   });
 });

@@ -10,6 +10,26 @@ import { pullReminderAlertDaysFromCalendar } from "../routes/travels/reminders";
 import { shouldRunScheduledTask } from "./scheduler-guard";
 import { logger } from "./logger";
 
+/**
+ * Returns true only for non-empty strings that look like valid email addresses.
+ * Defends against empty strings, whitespace-only values, or other malformed
+ * data that could reach the DB via direct edits or legacy import paths.
+ */
+export function isValidEmailAddress(email: string): boolean {
+  const trimmed = email.trim();
+  return trimmed.length > 0 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmed);
+}
+
+/**
+ * Returns true only for strings that look like valid E.164 phone numbers.
+ * E.164 format: a leading '+' followed by 7–15 digits (ITU-T standard).
+ * Defends against empty strings, bare digit strings without a country code
+ * prefix, or other malformed values that could reach the DB via direct edits.
+ */
+export function isValidE164PhoneNumber(phone: string): boolean {
+  return /^\+[1-9]\d{6,14}$/.test(phone.trim());
+}
+
 // Gating is driven entirely by each reminder's own alert_days_before array
 // (which may itself have been edited directly in the recipient's Google
 // Calendar and pulled back here before we decide what to send) — any
@@ -120,6 +140,13 @@ export async function runReminderAlerts(): Promise<void> {
           let successCount = 0;
 
           for (const toEmail of row.recipient_emails) {
+            if (!isValidEmailAddress(toEmail)) {
+              logger.warn(
+                { reminderId: row.reminder_id, alertType: type, toEmail },
+                "reminder-scheduler: skipping malformed recipient email address",
+              );
+              continue;
+            }
             try {
               await sendReminderAlertEmail(
                 toEmail,
@@ -139,11 +166,12 @@ export async function runReminderAlerts(): Promise<void> {
             }
           }
 
-          // Only mark the alert as sent once every recipient has actually
-          // received it. If even one recipient failed (e.g. Resend rejecting
-          // an unverified address), leave the log row absent so the next run
-          // retries the whole reminder rather than silently dropping it.
-          if (failures.length === 0) {
+          // Only mark the alert as sent once at least one recipient actually
+          // received it AND there were no failures. If every email was
+          // filtered out as malformed (successCount === 0) or even one
+          // delivery failed, leave the log row absent so the next run retries
+          // the whole reminder rather than silently dropping it.
+          if (failures.length === 0 && successCount > 0) {
             await client.query(
               `INSERT INTO travels_reminder_alert_log (reminder_id, user_id, alert_type, channel)
                VALUES ($1, $2, $3, 'email')`,
@@ -200,6 +228,17 @@ export async function runReminderAlerts(): Promise<void> {
             let successCount = 0;
 
             for (const recipient of phoneRows) {
+              if (!isValidE164PhoneNumber(recipient.phone_number)) {
+                logger.warn(
+                  {
+                    reminderId: row.reminder_id,
+                    alertType: type,
+                    userId: recipient.id,
+                  },
+                  "reminder-scheduler: skipping malformed phone number for sms alert",
+                );
+                continue;
+              }
               try {
                 await sendReminderAlertSms(
                   recipient.phone_number,

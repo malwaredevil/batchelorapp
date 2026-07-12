@@ -14,7 +14,7 @@ import {
 import {
   useGetGmailMessage,
   getGetGmailMessageQueryKey,
-  type GmailMessageAttachment,
+  type TravelsGmailMessageAttachment,
 } from "@workspace/api-client-react";
 
 function formatAttachmentSize(bytes?: number): string {
@@ -24,7 +24,7 @@ function formatAttachmentSize(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function attachmentTypeLabel(a: GmailMessageAttachment): string {
+function attachmentTypeLabel(a: TravelsGmailMessageAttachment): string {
   if (a.mimeType === "application/pdf") return "PDF";
   const sub = a.mimeType.split("/")[1] ?? a.mimeType;
   return sub.toUpperCase();

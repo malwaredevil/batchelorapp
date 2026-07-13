@@ -1715,6 +1715,7 @@ export interface OfficeNote {
   id: number;
   title: string;
   body: string;
+  backgroundColor?: string | null;
   createdByUserId: number | null;
   createdByName: string | null;
   createdAt: string;
@@ -1729,6 +1730,7 @@ export interface OfficeNoteInput {
   title: string;
   /** @maxLength 20000 */
   body: string;
+  backgroundColor?: string | null;
 }
 
 export type HubWidgetSlotT = typeof HubWidgetSlotT[keyof typeof HubWidgetSlotT];

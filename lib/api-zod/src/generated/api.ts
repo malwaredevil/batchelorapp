@@ -3941,6 +3941,7 @@ export const ListNotesResponseItem = zod.object({
   "id": zod.number(),
   "title": zod.string(),
   "body": zod.string(),
+  "backgroundColor": zod.string().nullable().optional(),
   "createdByUserId": zod.number().nullable(),
   "createdByName": zod.string().nullable(),
   "createdAt": zod.string(),
@@ -3960,7 +3961,8 @@ export const createNoteBodyBodyMax = 20000;
 
 export const CreateNoteBody = zod.object({
   "title": zod.string().min(1).max(createNoteBodyTitleMax),
-  "body": zod.string().max(createNoteBodyBodyMax)
+  "body": zod.string().max(createNoteBodyBodyMax),
+  "backgroundColor": zod.string().nullable().optional()
 })
 
 
@@ -3979,13 +3981,15 @@ export const updateNoteBodyBodyMax = 20000;
 
 export const UpdateNoteBody = zod.object({
   "title": zod.string().min(1).max(updateNoteBodyTitleMax),
-  "body": zod.string().max(updateNoteBodyBodyMax)
+  "body": zod.string().max(updateNoteBodyBodyMax),
+  "backgroundColor": zod.string().nullable().optional()
 })
 
 export const UpdateNoteResponse = zod.object({
   "id": zod.number(),
   "title": zod.string(),
   "body": zod.string(),
+  "backgroundColor": zod.string().nullable().optional(),
   "createdByUserId": zod.number().nullable(),
   "createdByName": zod.string().nullable(),
   "createdAt": zod.string(),

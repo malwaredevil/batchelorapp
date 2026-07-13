@@ -14,4 +14,5 @@ export interface OfficeNoteInput {
   title: string;
   /** @maxLength 20000 */
   body: string;
+  backgroundColor?: string | null;
 }

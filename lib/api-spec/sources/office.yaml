@@ -106,6 +106,9 @@ components:
           type: string
         body:
           type: string
+        backgroundColor:
+          type: string
+          nullable: true
         createdByUserId:
           type: integer
           nullable: true
@@ -129,6 +132,9 @@ components:
         body:
           type: string
           maxLength: 20000
+        backgroundColor:
+          type: string
+          nullable: true
     Error:
       type: object
       required:

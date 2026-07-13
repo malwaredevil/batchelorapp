@@ -572,7 +572,9 @@ function HallmarkEventStatTile() {
               {daysAway}
             </span>
             <div className="text-[10px] font-medium text-amber-700/70 dark:text-amber-300/70 uppercase tracking-wider leading-tight pb-0.5">
-              days<br />until
+              days
+              <br />
+              until
             </div>
           </div>
         )}

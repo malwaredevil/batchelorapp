@@ -485,6 +485,7 @@ function HallmarkEventStatTile() {
 
   const upcoming = (events ?? [])
     .map((e) => ({
+      id: e.id,
       title: e.title,
       start: new Date(`${e.startDate}T00:00:00`),
       end: new Date(`${e.endDate}T23:59:59`),
@@ -492,7 +493,12 @@ function HallmarkEventStatTile() {
     .filter((e) => e.end.getTime() >= now)
     .sort((a, b) => a.start.getTime() - b.start.getTime());
 
-  const list =
+  const list: Array<{
+    id?: number;
+    title: string;
+    start: Date;
+    end: Date;
+  }> =
     upcoming.length > 0
       ? upcoming
       : [
@@ -516,14 +522,31 @@ function HallmarkEventStatTile() {
     : Math.max(0, Math.ceil((current.start.getTime() - now) / 86_400_000));
 
   const shortTitle = current.title.replace(/hallmark'?s?\s*/i, "").trim();
+  const href =
+    `/modules/ornaments/hallmark-events?view=month` +
+    (current.id != null ? `&eventId=${current.id}` : "");
 
   return (
     <div
+      role="link"
+      tabIndex={0}
       title={current.title}
-      className={`flex-1 flex flex-col justify-between p-3 rounded-lg min-w-0 cursor-default ${
+      onClick={(e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        window.location.href = href;
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.stopPropagation();
+          e.preventDefault();
+          window.location.href = href;
+        }
+      }}
+      className={`flex-1 flex flex-col justify-between p-3 rounded-lg min-w-0 cursor-pointer ${
         isLive
-          ? "bg-red-100 dark:bg-red-900/40"
-          : "bg-amber-50 dark:bg-amber-900/30"
+          ? "bg-red-100 dark:bg-red-900/40 hover:bg-red-200 dark:hover:bg-red-900/60"
+          : "bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50"
       }`}
     >
       {/* Top: number/LIVE + sub-label */}

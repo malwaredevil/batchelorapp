@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -109,8 +109,10 @@ function shiftCursor(view: ViewMode, cursor: Date, direction: 1 | -1): Date {
   return new Date(cursor.getFullYear(), cursor.getMonth() + direction, 1);
 }
 
-function eventCoversDay(event: OrnamentsHallmarkEvent, day: string): boolean {
-  return day >= event.startDate && day <= event.endDate;
+function chunk<T>(arr: T[], size: number): T[][] {
+  return Array.from({ length: Math.ceil(arr.length / size) }, (_, i) =>
+    arr.slice(i * size, (i + 1) * size),
+  );
 }
 
 function EventFormDialog({
@@ -244,6 +246,90 @@ function EventFormDialog({
   );
 }
 
+function EventViewDialog({
+  open,
+  event,
+  onOpenChange,
+  onEdit,
+  onDelete,
+}: {
+  open: boolean;
+  event: OrnamentsHallmarkEvent | null;
+  onOpenChange: (open: boolean) => void;
+  onEdit: (event: OrnamentsHallmarkEvent) => void;
+  onDelete: (event: OrnamentsHallmarkEvent) => void;
+}) {
+  if (!event) return null;
+  const now = Date.now();
+  const start = new Date(`${event.startDate}T00:00:00`);
+  const end = new Date(`${event.endDate}T23:59:59`);
+  const isLive = now >= start.getTime() && now <= end.getTime();
+  const daysAway = isLive
+    ? null
+    : Math.max(0, Math.ceil((start.getTime() - now) / 86_400_000));
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <div className="flex items-start justify-between gap-2">
+            <DialogTitle className="font-serif text-xl leading-tight">
+              {event.title}
+            </DialogTitle>
+            <div className="flex gap-1 flex-shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                aria-label="Edit event"
+                onClick={() => onEdit(event)}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-destructive hover:text-destructive"
+                aria-label="Delete event"
+                onClick={() => onDelete(event)}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          <DialogDescription>
+            {formatRange(event.startDate, event.endDate)}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 pt-1">
+          <div
+            className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${
+              isLive
+                ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
+                : "bg-amber-50 text-amber-800 dark:bg-amber-900/20 dark:text-amber-200"
+            }`}
+          >
+            {isLive ? (
+              <>
+                <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+                Live now
+              </>
+            ) : (
+              <>
+                <CalendarHeart className="h-4 w-4" />
+                {daysAway === 0 ? "Starting today" : `${daysAway} days away`}
+              </>
+            )}
+          </div>
+          {event.description && (
+            <p className="text-sm text-muted-foreground">{event.description}</p>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function formatRange(start: string, end: string) {
   const s = new Date(`${start}T00:00:00`);
   const e = new Date(`${end}T00:00:00`);
@@ -271,6 +357,10 @@ export default function HallmarkEvents() {
   const [defaultDate, setDefaultDate] = useState<string | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] =
     useState<OrnamentsHallmarkEvent | null>(null);
+  const [viewingEvent, setViewingEvent] =
+    useState<OrnamentsHallmarkEvent | null>(null);
+
+  const hasHandledInitialParams = useRef(false);
 
   const todayKey = useMemo(() => dateKey(new Date()), []);
 
@@ -289,6 +379,21 @@ export default function HallmarkEvents() {
     } event(s), ${upcoming.length} upcoming.`,
   );
 
+  useEffect(() => {
+    if (hasHandledInitialParams.current || !events) return;
+    hasHandledInitialParams.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const viewParam = params.get("view") as ViewMode | null;
+    const eventId = params.get("eventId");
+    if (viewParam === "month" || viewParam === "week" || viewParam === "list") {
+      setView(viewParam);
+    }
+    if (eventId) {
+      const found = events.find((e) => String(e.id) === eventId);
+      if (found) setViewingEvent(found);
+    }
+  }, [events]);
+
   const { start, end } = useMemo(
     () => rangeForView(view, cursor),
     [view, cursor],
@@ -300,16 +405,6 @@ export default function HallmarkEvents() {
     return eachDayOfInterval({ start, end: lastDayInclusive });
   }, [view, start, end]);
 
-  const eventsByDay = useMemo(() => {
-    const map = new Map<string, OrnamentsHallmarkEvent[]>();
-    for (const day of gridDays) {
-      const key = dateKey(day);
-      const dayEvents = (events ?? []).filter((e) => eventCoversDay(e, key));
-      if (dayEvents.length > 0) map.set(key, dayEvents);
-    }
-    return map;
-  }, [events, gridDays]);
-
   const openCreate = (date?: string) => {
     setEditingEvent(undefined);
     setDefaultDate(date);
@@ -317,6 +412,17 @@ export default function HallmarkEvents() {
   };
 
   const openEdit = (event: OrnamentsHallmarkEvent) => {
+    setEditingEvent(event);
+    setDefaultDate(undefined);
+    setFormOpen(true);
+  };
+
+  const openView = (event: OrnamentsHallmarkEvent) => {
+    setViewingEvent(event);
+  };
+
+  const openEditFromView = (event: OrnamentsHallmarkEvent) => {
+    setViewingEvent(null);
     setEditingEvent(event);
     setDefaultDate(undefined);
     setFormOpen(true);
@@ -439,6 +545,7 @@ export default function HallmarkEvents() {
         </div>
       ) : view === "month" ? (
         <div className="overflow-hidden rounded-xl border border-card-border bg-card">
+          {/* Day-of-week header */}
           <div className="grid grid-cols-7 border-b border-card-border bg-muted/40 text-center text-xs font-medium text-muted-foreground">
             {gridDays.slice(0, 7).map((d) => (
               <div key={d.toISOString()} className="py-2">
@@ -446,12 +553,185 @@ export default function HallmarkEvents() {
               </div>
             ))}
           </div>
-          <div className="grid grid-cols-7">
+          {/* Week rows with spanning event bars */}
+          {chunk(gridDays, 7).map((week, wi) => {
+            const weekStartKey = dateKey(week[0]);
+            const weekEndKey = dateKey(week[6]);
+            const weekEvents = (events ?? [])
+              .filter(
+                (e) =>
+                  e.endDate >= weekStartKey && e.startDate <= weekEndKey,
+              )
+              .sort((a, b) => a.startDate.localeCompare(b.startDate));
+            const isLastWeek = wi === chunk(gridDays, 7).length - 1;
+            return (
+              <div
+                key={wi}
+                className={isLastWeek ? "" : "border-b border-card-border/60"}
+              >
+                {/* Day number cells */}
+                <div className="grid grid-cols-7">
+                  {week.map((day) => {
+                    const key = dateKey(day);
+                    const inMonth = isSameMonth(day, cursor);
+                    const today = isToday(day);
+                    return (
+                      <div
+                        key={key}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => openCreate(key)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ")
+                            openCreate(key);
+                        }}
+                        className={`min-h-[48px] cursor-pointer border-r border-card-border/60 p-1.5 last:border-r-0 hover:bg-muted/40 ${
+                          inMonth ? "bg-card" : "bg-muted/20"
+                        }`}
+                      >
+                        <span
+                          className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${
+                            today
+                              ? "bg-primary text-primary-foreground font-semibold"
+                              : inMonth
+                                ? "text-foreground"
+                                : "text-muted-foreground"
+                          }`}
+                        >
+                          {day.getDate()}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Spanning event bars */}
+                {weekEvents.length > 0 && (
+                  <div className="grid grid-cols-7 gap-y-0.5 pb-1.5 pt-0.5">
+                    {weekEvents.map((event) => {
+                      const isStart = event.startDate >= weekStartKey;
+                      const isEnd = event.endDate <= weekEndKey;
+                      const colStart = isStart
+                        ? week.findIndex(
+                            (d) => dateKey(d) === event.startDate,
+                          ) + 1
+                        : 1;
+                      const endIdx = week.findIndex(
+                        (d) => dateKey(d) === event.endDate,
+                      );
+                      const colEnd = isEnd && endIdx >= 0 ? endIdx + 2 : 8;
+                      return (
+                        <button
+                          key={event.id}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openView(event);
+                          }}
+                          style={{
+                            gridColumn: `${colStart} / ${colEnd}`,
+                            marginLeft: isStart ? 2 : 0,
+                            marginRight: isEnd ? 2 : 0,
+                          }}
+                          className={`h-5 px-1.5 text-left text-[11px] truncate flex items-center gap-1 bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-900/60 ${
+                            isStart ? "rounded-l" : ""
+                          } ${isEnd ? "rounded-r" : ""}`}
+                          title={event.title}
+                        >
+                          {isStart && (
+                            <CalendarHeart className="h-2.5 w-2.5 shrink-0" />
+                          )}
+                          {isStart && (
+                            <span className="truncate">{event.title}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : view === "week" ? (
+        <div className="overflow-hidden rounded-xl border border-card-border bg-card">
+          {/* Day headers */}
+          <div className="grid grid-cols-7 divide-x divide-card-border/60 border-b border-card-border/60">
+            {gridDays.map((day) => {
+              const today = isToday(day);
+              return (
+                <div
+                  key={dateKey(day)}
+                  className={`flex flex-col items-center py-2 ${
+                    today ? "bg-primary/10" : "bg-muted/30"
+                  }`}
+                >
+                  <span className="text-[11px] text-muted-foreground">
+                    {day.toLocaleDateString(undefined, { weekday: "short" })}
+                  </span>
+                  <span
+                    className={`mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${
+                      today
+                        ? "bg-primary text-primary-foreground font-semibold"
+                        : "text-foreground"
+                    }`}
+                  >
+                    {day.getDate()}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          {/* Spanning event bars */}
+          {(() => {
+            const wStartKey = dateKey(gridDays[0]);
+            const wEndKey = dateKey(gridDays[6]);
+            const wEvents = (events ?? [])
+              .filter(
+                (e) => e.endDate >= wStartKey && e.startDate <= wEndKey,
+              )
+              .sort((a, b) => a.startDate.localeCompare(b.startDate));
+            if (wEvents.length === 0) return null;
+            return (
+              <div className="grid grid-cols-7 gap-y-0.5 py-1.5 border-b border-card-border/60">
+                {wEvents.map((event) => {
+                  const isStart = event.startDate >= wStartKey;
+                  const isEnd = event.endDate <= wEndKey;
+                  const colStart = isStart
+                    ? gridDays.findIndex(
+                        (d) => dateKey(d) === event.startDate,
+                      ) + 1
+                    : 1;
+                  const endIdx = gridDays.findIndex(
+                    (d) => dateKey(d) === event.endDate,
+                  );
+                  const colEnd = isEnd && endIdx >= 0 ? endIdx + 2 : 8;
+                  return (
+                    <button
+                      key={event.id}
+                      type="button"
+                      onClick={() => openView(event)}
+                      style={{
+                        gridColumn: `${colStart} / ${colEnd}`,
+                        marginLeft: isStart ? 2 : 0,
+                        marginRight: isEnd ? 2 : 0,
+                      }}
+                      className={`h-5 px-1.5 text-left text-[11px] truncate flex items-center gap-1 bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-900/60 ${
+                        isStart ? "rounded-l" : ""
+                      } ${isEnd ? "rounded-r" : ""}`}
+                      title={event.title}
+                    >
+                      <CalendarHeart className="h-2.5 w-2.5 shrink-0" />
+                      <span className="truncate">{event.title}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
+          {/* Day bodies — click to create */}
+          <div className="grid grid-cols-7 divide-x divide-card-border/60">
             {gridDays.map((day) => {
               const key = dateKey(day);
-              const dayEvents = eventsByDay.get(key) ?? [];
-              const inMonth = isSameMonth(day, cursor);
-              const today = isToday(day);
               return (
                 <div
                   key={key}
@@ -461,101 +741,8 @@ export default function HallmarkEvents() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") openCreate(key);
                   }}
-                  className={`min-h-[92px] cursor-pointer border-b border-r border-card-border/60 p-1.5 text-left align-top last:border-r-0 hover:bg-muted/40 ${
-                    inMonth ? "bg-card" : "bg-muted/20"
-                  }`}
-                >
-                  <span
-                    className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${
-                      today
-                        ? "bg-primary text-primary-foreground font-semibold"
-                        : inMonth
-                          ? "text-foreground"
-                          : "text-muted-foreground"
-                    }`}
-                  >
-                    {day.getDate()}
-                  </span>
-                  <div className="mt-1 space-y-0.5">
-                    {dayEvents.slice(0, 3).map((event) => (
-                      <div
-                        key={event.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEdit(event);
-                        }}
-                        className="flex items-center gap-1 truncate rounded px-1 py-0.5 text-[11px] bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-900/60"
-                        title={event.title}
-                      >
-                        <CalendarHeart className="h-2.5 w-2.5 shrink-0" />
-                        <span className="truncate">{event.title}</span>
-                      </div>
-                    ))}
-                    {dayEvents.length > 3 && (
-                      <div className="px-1 text-[10px] text-muted-foreground">
-                        +{dayEvents.length - 3} more
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : view === "week" ? (
-        <div className="overflow-hidden rounded-xl border border-card-border bg-card">
-          <div className="grid grid-cols-7 divide-x divide-card-border/60">
-            {gridDays.map((day) => {
-              const key = dateKey(day);
-              const dayEvents = eventsByDay.get(key) ?? [];
-              const today = isToday(day);
-              return (
-                <div key={key} className="min-h-[220px]">
-                  <div
-                    className={`flex flex-col items-center border-b border-card-border/60 py-2 ${
-                      today ? "bg-primary/10" : "bg-muted/30"
-                    }`}
-                  >
-                    <span className="text-[11px] text-muted-foreground">
-                      {day.toLocaleDateString(undefined, { weekday: "short" })}
-                    </span>
-                    <span
-                      className={`mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${
-                        today
-                          ? "bg-primary text-primary-foreground font-semibold"
-                          : "text-foreground"
-                      }`}
-                    >
-                      {day.getDate()}
-                    </span>
-                  </div>
-                  <div className="space-y-1 p-1.5">
-                    {dayEvents.length === 0 ? (
-                      <button
-                        type="button"
-                        onClick={() => openCreate(key)}
-                        className="w-full px-1 text-center text-[11px] text-muted-foreground hover:text-foreground"
-                      >
-                        —
-                      </button>
-                    ) : (
-                      dayEvents.map((event) => (
-                        <button
-                          key={event.id}
-                          type="button"
-                          onClick={() => openEdit(event)}
-                          className="flex w-full items-center gap-1 truncate rounded px-1.5 py-1 text-left text-[11px] bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-900/60"
-                          title={event.title}
-                        >
-                          <CalendarHeart className="h-2.5 w-2.5 shrink-0" />
-                          <span className="truncate">{event.title}</span>
-                        </button>
-                      ))
-                    )}
-                  </div>
-                </div>
+                  className="min-h-[160px] cursor-pointer hover:bg-muted/20"
+                />
               );
             })}
           </div>
@@ -605,6 +792,17 @@ export default function HallmarkEvents() {
           ))}
         </ul>
       )}
+
+      <EventViewDialog
+        open={!!viewingEvent}
+        event={viewingEvent}
+        onOpenChange={(o) => !o && setViewingEvent(null)}
+        onEdit={openEditFromView}
+        onDelete={(e) => {
+          setViewingEvent(null);
+          setDeleteTarget(e);
+        }}
+      />
 
       <EventFormDialog
         open={formOpen}

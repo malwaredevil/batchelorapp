@@ -559,8 +559,7 @@ export default function HallmarkEvents() {
             const weekEndKey = dateKey(week[6]);
             const weekEvents = (events ?? [])
               .filter(
-                (e) =>
-                  e.endDate >= weekStartKey && e.startDate <= weekEndKey,
+                (e) => e.endDate >= weekStartKey && e.startDate <= weekEndKey,
               )
               .sort((a, b) => a.startDate.localeCompare(b.startDate));
             const isLastWeek = wi === chunk(gridDays, 7).length - 1;
@@ -686,9 +685,7 @@ export default function HallmarkEvents() {
             const wStartKey = dateKey(gridDays[0]);
             const wEndKey = dateKey(gridDays[6]);
             const wEvents = (events ?? [])
-              .filter(
-                (e) => e.endDate >= wStartKey && e.startDate <= wEndKey,
-              )
+              .filter((e) => e.endDate >= wStartKey && e.startDate <= wEndKey)
               .sort((a, b) => a.startDate.localeCompare(b.startDate));
             if (wEvents.length === 0) return null;
             return (

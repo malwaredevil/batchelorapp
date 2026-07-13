@@ -1,6 +1,6 @@
 import { type ReactNode, type ComponentType, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { AppSwitcher } from "@workspace/elaine-ui";
+import { AppSwitcher, type AppId } from "@workspace/elaine-ui";
 import { useBackgroundTasks } from "@/lib/background-tasks";
 import { InstallBanner } from "@workspace/web-core";
 import {
@@ -201,7 +201,7 @@ export function ModuleShell({ children }: { children: ReactNode }) {
           </div>
         )}
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-          <AppSwitcher currentAppId="modules" />
+          <AppSwitcher currentAppId={currentModule as AppId} />
 
           <nav className="hidden items-center gap-1 md:flex">
             {groupOrder.map((group) => {

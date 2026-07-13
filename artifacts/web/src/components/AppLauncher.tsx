@@ -526,6 +526,14 @@ function HallmarkEventStatTile() {
     `/modules/ornaments/hallmark-events?view=month` +
     (current.id != null ? `&eventId=${current.id}` : "");
 
+  const dateRange =
+    current.start.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    }) +
+    " – " +
+    current.end.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
   return (
     <div
       role="link"
@@ -543,36 +551,41 @@ function HallmarkEventStatTile() {
           window.location.href = href;
         }
       }}
-      className={`flex-1 flex flex-col justify-between p-3 rounded-lg min-w-0 cursor-pointer ${
+      className={`flex-[2] flex flex-col justify-between p-3 rounded-lg min-w-0 cursor-pointer ${
         isLive
           ? "bg-red-100 dark:bg-red-900/40 hover:bg-red-200 dark:hover:bg-red-900/60"
           : "bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50"
       }`}
     >
-      {/* Top: number/LIVE + sub-label */}
+      {/* Top: countdown or LIVE indicator */}
       <div>
         {isLive ? (
-          <div className="flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
-            <span className="text-base font-bold text-red-700 dark:text-red-300 leading-none uppercase tracking-wide">
-              Live
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+            <span className="text-lg font-bold text-red-700 dark:text-red-300 leading-none uppercase tracking-wide">
+              Live Now
             </span>
           </div>
         ) : (
-          <>
-            <span className="text-lg font-bold text-amber-800 dark:text-amber-200 tabular-nums leading-none">
+          <div className="flex items-end gap-2">
+            <span className="text-2xl font-bold text-amber-800 dark:text-amber-200 tabular-nums leading-none">
               {daysAway}
             </span>
-            <div className="text-[9px] font-medium text-amber-700/70 dark:text-amber-300/70 uppercase tracking-wider mt-0.5">
-              days until
+            <div className="text-[10px] font-medium text-amber-700/70 dark:text-amber-300/70 uppercase tracking-wider leading-tight pb-0.5">
+              days<br />until
             </div>
-          </>
+          </div>
         )}
       </div>
-      {/* Bottom: event name */}
-      <span className="text-[10px] font-medium uppercase tracking-wider truncate mt-1.5 block text-amber-900/70 dark:text-amber-100/60">
-        {shortTitle || current.title}
-      </span>
+      {/* Bottom: event name + date range */}
+      <div className="mt-2 min-w-0">
+        <span className="text-xs font-semibold uppercase tracking-wide truncate block text-amber-900/80 dark:text-amber-100/70">
+          {shortTitle || current.title}
+        </span>
+        <span className="text-[9px] text-amber-700/55 dark:text-amber-300/50 block mt-0.5">
+          {dateRange}
+        </span>
+      </div>
     </div>
   );
 }
@@ -756,13 +769,6 @@ export function AppLauncher() {
               ? String(ornamentsStatsData.totalQuantity)
               : "—",
           label: "Quantity",
-        },
-        {
-          value:
-            ornamentsStatsData?.totalBookValue != null
-              ? `$${Math.round(ornamentsStatsData.totalBookValue)}`
-              : "—",
-          label: "Book Value",
         },
       ];
     }

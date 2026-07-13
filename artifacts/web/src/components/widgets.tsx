@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   ShoppingBag,
@@ -22,6 +23,9 @@ import {
   Bell,
   MapPin,
   List,
+  X,
+  NotebookPen,
+  Send,
 } from "lucide-react";
 import {
   useGetCollectionStats,
@@ -32,6 +36,10 @@ import {
   useGetTravelsStats,
   useListAllReminders,
   useListWishlist,
+  useListNotes,
+  useCreateNote,
+  getListNotesQueryKey,
+  type OfficeNote,
 } from "@workspace/api-client-react";
 
 const base = import.meta.env.BASE_URL;
@@ -414,26 +422,190 @@ export function AiSearchWidget() {
   );
 }
 
-// ── Interactive: Sticky Notes ────────────────────────────────────────────────
-const NOTES_KEY = "batchelor-widget-notes";
+// ── Interactive: Office Notes widget ─────────────────────────────────────────
+function stripTags(html: string) {
+  return html
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 export function NotesWidget() {
-  const [text, setText] = useState(() => {
-    if (typeof window === "undefined") return "";
-    return window.localStorage.getItem(NOTES_KEY) ?? "";
+  const { data: notes } = useListNotes();
+  const queryClient = useQueryClient();
+  const [mode, setMode] = useState<"list" | "create" | "view">("list");
+  const [pinnedNote, setPinnedNote] = useState<OfficeNote | null>(null);
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+
+  const createNote = useCreateNote({
+    mutation: {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({
+          queryKey: getListNotesQueryKey(),
+        });
+        setMode("list");
+        setTitle("");
+        setBody("");
+      },
+    },
   });
 
-  useEffect(() => {
-    window.localStorage.setItem(NOTES_KEY, text);
-  }, [text]);
+  const recent = (notes ?? []).slice(0, 4);
+
+  if (mode === "create") {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            New Note
+          </span>
+          <button
+            onClick={() => {
+              setMode("list");
+              setTitle("");
+              setBody("");
+            }}
+            className="text-muted-foreground hover:text-foreground p-0.5 rounded"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        <input
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Title…"
+          maxLength={200}
+          className="w-full text-xs bg-background border border-border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary/30"
+        />
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          placeholder="Write your note…"
+          rows={4}
+          maxLength={20000}
+          className="w-full text-xs bg-yellow-50 dark:bg-yellow-900/10 border border-border rounded px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-primary/30"
+        />
+        <div className="flex gap-1.5">
+          <button
+            disabled={!title.trim() || createNote.isPending}
+            onClick={() =>
+              createNote.mutate({ data: { title: title.trim(), body } })
+            }
+            className="flex-1 flex items-center justify-center gap-1 text-xs font-medium bg-primary text-primary-foreground rounded px-2 py-1.5 disabled:opacity-50 hover:bg-primary/90 transition-colors"
+          >
+            {createNote.isPending ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Send className="w-3 h-3" />
+            )}
+            Save note
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === "view" && pinnedNote) {
+    const bodyText = stripTags(pinnedNote.body);
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold truncate flex-1 pr-2">
+            {pinnedNote.title}
+          </span>
+          <button
+            onClick={() => {
+              setMode("list");
+              setPinnedNote(null);
+            }}
+            className="text-muted-foreground hover:text-foreground p-0.5 rounded flex-shrink-0"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        <div
+          className="text-xs text-foreground/80 rounded-lg p-2.5 max-h-32 overflow-y-auto leading-relaxed whitespace-pre-wrap"
+          style={{
+            backgroundColor:
+              pinnedNote.backgroundColor ?? "rgb(254 249 195 / 0.6)",
+          }}
+        >
+          {bodyText || (
+            <span className="italic text-muted-foreground">(empty)</span>
+          )}
+        </div>
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setMode("list")}
+            className="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground"
+          >
+            ← All notes
+          </button>
+          <a
+            href={`${base}office/notes`}
+            className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+          >
+            Open Office <ArrowRight className="w-3 h-3" />
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <textarea
-      value={text}
-      onChange={(e) => setText(e.target.value)}
-      placeholder="Jot down a quick note…"
-      className="w-full h-20 text-xs bg-yellow-50 dark:bg-yellow-900/10 border-0 resize-none rounded-lg p-2.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
-    />
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Office Notes
+        </span>
+        <button
+          onClick={() => setMode("create")}
+          className="flex items-center gap-0.5 text-xs font-medium text-primary hover:text-primary/80 rounded px-1.5 py-0.5 hover:bg-muted transition-colors"
+        >
+          <Plus className="w-3 h-3" /> New
+        </button>
+      </div>
+
+      {recent.length === 0 ? (
+        <p className="text-xs text-muted-foreground italic py-1">
+          No notes yet — tap New to create one.
+        </p>
+      ) : (
+        <div className="space-y-0.5">
+          {recent.map((note) => (
+            <button
+              key={note.id}
+              onClick={() => {
+                setPinnedNote(note);
+                setMode("view");
+              }}
+              className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors group"
+            >
+              <NotebookPen className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+              <span className="text-xs font-medium truncate flex-1">
+                {note.title}
+              </span>
+              <span className="text-[9px] text-muted-foreground flex-shrink-0 opacity-60 group-hover:opacity-100">
+                {new Date(note.updatedAt).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                })}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <a
+        href={`${base}office/notes`}
+        className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-primary hover:underline pt-0.5"
+      >
+        Open Notes <ArrowRight className="w-3 h-3" />
+      </a>
+    </div>
   );
 }
 

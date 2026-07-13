@@ -18,6 +18,7 @@ export type WidgetSlot = StaticSlot | RssSlot;
 // ── Constants ─────────────────────────────────────────────────────────────────
 const STORAGE_KEY = "batchelor-widgets-v2";
 const LEGACY_KEY = "batchelor-widgets";
+const CARD_ORDER_STORAGE_KEY = "batchelor-app-card-order-v1";
 
 const ALL_STATIC_IDS = new Set(WIDGETS.map((w) => w.id));
 
@@ -27,6 +28,17 @@ const DEFAULT_SLOTS: WidgetSlot[] = [
   { t: "s", id: "weather" },
   { t: "s", id: "shopping-list" },
 ];
+
+export const DEFAULT_APP_CARD_ORDER = [
+  "pottery",
+  "quilting",
+  "travels",
+  "ornaments",
+  "elaine",
+  "office",
+] as const;
+
+const VALID_APP_IDS = new Set<string>(DEFAULT_APP_CARD_ORDER);
 
 // ── Parsing helpers ───────────────────────────────────────────────────────────
 function parseSlots(raw: unknown): WidgetSlot[] | null {
@@ -49,6 +61,19 @@ function parseSlots(raw: unknown): WidgetSlot[] | null {
   });
 }
 
+function parseAppCardOrder(raw: unknown): string[] | null {
+  if (!Array.isArray(raw)) return null;
+  const filtered = (raw as unknown[]).filter(
+    (x): x is string => typeof x === "string" && VALID_APP_IDS.has(x),
+  );
+  // Must include all known app IDs (append any missing to the end)
+  const set = new Set(filtered);
+  for (const id of DEFAULT_APP_CARD_ORDER) {
+    if (!set.has(id)) filtered.push(id);
+  }
+  return filtered.length > 0 ? filtered : null;
+}
+
 function readLocalStorage(): WidgetSlot[] | null {
   if (typeof window === "undefined") return null;
   try {
@@ -68,6 +93,17 @@ function readLocalStorage(): WidgetSlot[] | null {
   }
 }
 
+function readCardOrderLocalStorage(): string[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(CARD_ORDER_STORAGE_KEY);
+    if (raw) return parseAppCardOrder(JSON.parse(raw) as unknown);
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function writeLocalStorage(slots: WidgetSlot[]) {
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(slots));
@@ -76,20 +112,41 @@ function writeLocalStorage(slots: WidgetSlot[]) {
   }
 }
 
-// ── Server sync ───────────────────────────────────────────────────────────────
-async function fetchServerPrefs(): Promise<WidgetSlot[] | null> {
+function writeCardOrderLocalStorage(order: string[]) {
   try {
-    const data = await getPreferences();
-    if (data.slots !== undefined) return parseSlots(data.slots);
-    return null;
+    window.localStorage.setItem(CARD_ORDER_STORAGE_KEY, JSON.stringify(order));
   } catch {
-    return null;
+    /* quota full */
   }
 }
 
-async function saveServerPrefs(slots: WidgetSlot[]): Promise<void> {
+// ── Server sync ───────────────────────────────────────────────────────────────
+interface ServerPrefs {
+  slots: WidgetSlot[] | null;
+  appCardOrder: string[] | null;
+}
+
+async function fetchServerPrefs(): Promise<ServerPrefs> {
   try {
-    await updatePreferences({ slots });
+    const data = await getPreferences();
+    return {
+      slots: data.slots !== undefined ? parseSlots(data.slots) : null,
+      appCardOrder:
+        data.appCardOrder !== undefined && data.appCardOrder !== null
+          ? parseAppCardOrder(data.appCardOrder)
+          : null,
+    };
+  } catch {
+    return { slots: null, appCardOrder: null };
+  }
+}
+
+async function saveServerPrefs(
+  slots: WidgetSlot[],
+  appCardOrder: string[],
+): Promise<void> {
+  try {
+    await updatePreferences({ slots, appCardOrder });
   } catch {
     /* silent — localStorage still has it */
   }
@@ -101,7 +158,7 @@ function genIid(): string {
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 /**
- * Manages the ordered list of dashboard widget slots.
+ * Manages the ordered list of dashboard widget slots AND app card order.
  *
  * A slot is either:
  *  - StaticSlot  { t:"s", id }           — one of the catalogue widgets
@@ -115,20 +172,41 @@ export function useWidgets() {
   const [slots, setSlotsRaw] = useState<WidgetSlot[]>(
     () => readLocalStorage() ?? DEFAULT_SLOTS,
   );
+  const [appCardOrder, setAppCardOrderRaw] = useState<string[]>(
+    () =>
+      readCardOrderLocalStorage() ?? [...DEFAULT_APP_CARD_ORDER],
+  );
   const [serverReady, setServerReady] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
 
+  // Keep a ref so debounced saves always see latest values
+  const latestSlotsRef = useRef(slots);
+  const latestOrderRef = useRef(appCardOrder);
+  latestSlotsRef.current = slots;
+  latestOrderRef.current = appCardOrder;
+
   // Hydrate from server on mount
   useEffect(() => {
-    fetchServerPrefs().then((serverSlots) => {
-      if (serverSlots !== null) {
-        setSlotsRaw(serverSlots);
-        writeLocalStorage(serverSlots);
+    fetchServerPrefs().then((prefs) => {
+      if (prefs.slots !== null) {
+        setSlotsRaw(prefs.slots);
+        writeLocalStorage(prefs.slots);
+      }
+      if (prefs.appCardOrder !== null) {
+        setAppCardOrderRaw(prefs.appCardOrder);
+        writeCardOrderLocalStorage(prefs.appCardOrder);
       }
       setServerReady(true);
     });
+  }, []);
+
+  const scheduleSave = useCallback(() => {
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      void saveServerPrefs(latestSlotsRef.current, latestOrderRef.current);
+    }, 800);
   }, []);
 
   const setSlots = useCallback(
@@ -136,16 +214,20 @@ export function useWidgets() {
       setSlotsRaw((prev) => {
         const next = typeof updater === "function" ? updater(prev) : updater;
         writeLocalStorage(next);
-        if (serverReady) {
-          clearTimeout(saveTimer.current);
-          saveTimer.current = setTimeout(() => {
-            void saveServerPrefs(next);
-          }, 800);
-        }
+        if (serverReady) scheduleSave();
         return next;
       });
     },
-    [serverReady],
+    [serverReady, scheduleSave],
+  );
+
+  const setAppCardOrder = useCallback(
+    (order: string[]) => {
+      setAppCardOrderRaw(order);
+      writeCardOrderLocalStorage(order);
+      if (serverReady) scheduleSave();
+    },
+    [serverReady, scheduleSave],
   );
 
   const byId = useMemo(() => {
@@ -212,6 +294,8 @@ export function useWidgets() {
 
   return {
     slots,
+    appCardOrder,
+    setAppCardOrder,
     byId,
     isStaticEnabled,
     toggleStatic,

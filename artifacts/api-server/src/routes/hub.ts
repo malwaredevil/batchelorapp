@@ -24,8 +24,21 @@ const SlotSchema = z.union([
   }),
 ]);
 
+const VALID_APP_IDS = new Set([
+  "pottery",
+  "quilting",
+  "travels",
+  "ornaments",
+  "elaine",
+  "office",
+]);
+
 const PreferencesBody = z.object({
   slots: z.array(SlotSchema).max(60),
+  appCardOrder: z
+    .array(z.string().max(64))
+    .max(20)
+    .optional(),
 });
 
 function parseStoredSlots(raw: string): WidgetSlot[] | null {
@@ -56,7 +69,10 @@ router.get("/hub/preferences", requireAuth, async (req, res) => {
   const userId = req.session.userId!;
   try {
     const [user] = await db
-      .select({ hubWidgetIds: appUsers.hubWidgetIds })
+      .select({
+        hubWidgetIds: appUsers.hubWidgetIds,
+        hubAppCardOrder: appUsers.hubAppCardOrder,
+      })
       .from(appUsers)
       .where(eq(appUsers.id, userId))
       .limit(1);
@@ -69,7 +85,23 @@ router.get("/hub/preferences", requireAuth, async (req, res) => {
     const slots = user.hubWidgetIds
       ? parseStoredSlots(user.hubWidgetIds)
       : null;
-    res.json({ slots });
+
+    let appCardOrder: string[] | null = null;
+    if (user.hubAppCardOrder) {
+      try {
+        const raw = JSON.parse(user.hubAppCardOrder) as unknown;
+        if (
+          Array.isArray(raw) &&
+          raw.every((x) => typeof x === "string" && VALID_APP_IDS.has(x))
+        ) {
+          appCardOrder = raw as string[];
+        }
+      } catch {
+        /* malformed — return null */
+      }
+    }
+
+    res.json({ slots, appCardOrder });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch hub preferences");
     res.status(500).json({ error: "Server error" });
@@ -86,13 +118,27 @@ router.put("/hub/preferences", requireAuth, async (req, res) => {
     return;
   }
 
+  // Filter to known app IDs only — unknown IDs are silently dropped
+  const sanitisedCardOrder =
+    parsed.data.appCardOrder !== undefined
+      ? parsed.data.appCardOrder.filter((id) => VALID_APP_IDS.has(id))
+      : undefined;
+
   try {
     await db
       .update(appUsers)
-      .set({ hubWidgetIds: JSON.stringify(parsed.data.slots) })
+      .set({
+        hubWidgetIds: JSON.stringify(parsed.data.slots),
+        ...(sanitisedCardOrder !== undefined && {
+          hubAppCardOrder: JSON.stringify(sanitisedCardOrder),
+        }),
+      })
       .where(eq(appUsers.id, userId));
 
-    res.json({ slots: parsed.data.slots });
+    res.json({
+      slots: parsed.data.slots,
+      appCardOrder: parsed.data.appCardOrder ?? null,
+    });
   } catch (err) {
     req.log.error({ err }, "Failed to save hub preferences");
     res.status(500).json({ error: "Server error" });

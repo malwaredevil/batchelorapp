@@ -17,6 +17,8 @@ export const appUsers = pgTable("app_users", {
   themePreference: text("theme_preference"),
   // Per-user hub dashboard widget config — JSON-serialised string[] of widget IDs in order.
   hubWidgetIds: text("hub_widget_ids"),
+  // Per-user hub app card order — JSON-serialised string[] of app IDs in display order.
+  hubAppCardOrder: text("hub_app_card_order"),
   // Per-user weather widget location — JSON { city, country, lat, lon, unit }.
   hubWeatherConfig: text("hub_weather_config"),
   // Email address for travels trip-reminder alerts (14-day, 7-day, 3-day).

@@ -9,4 +9,5 @@ import type { HubWidgetSlot } from './hubWidgetSlot';
 
 export interface HubPreferencesResponse {
   slots: HubWidgetSlot[] | null;
+  appCardOrder?: string[] | null;
 }

@@ -10,4 +10,6 @@ import type { HubWidgetSlot } from './hubWidgetSlot';
 export interface HubPreferencesBody {
   /** @maxItems 60 */
   slots: HubWidgetSlot[];
+  /** @maxItems 20 */
+  appCardOrder?: string[];
 }

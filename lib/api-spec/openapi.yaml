@@ -7078,6 +7078,12 @@ components:
           maxItems: 60
           items:
             $ref: "#/components/schemas/HubWidgetSlot"
+        appCardOrder:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            maxLength: 64
     HubPreferencesResponse:
       type: object
       required:
@@ -7088,6 +7094,11 @@ components:
           nullable: true
           items:
             $ref: "#/components/schemas/HubWidgetSlot"
+        appCardOrder:
+          type: array
+          nullable: true
+          items:
+            type: string
     HubWeatherConfigBody:
       type: object
       required:

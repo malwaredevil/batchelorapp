@@ -4015,7 +4015,8 @@ export const GetPreferencesResponse = zod.object({
   "iid": zod.string().optional(),
   "title": zod.string().optional(),
   "url": zod.string().optional()
-}).describe('A static catalogue widget slot ({t:\"s\",id}) or a configurable RSS instance slot ({t:\"r\",iid,title,url}). Union validated client-side; represented loosely here since Zod uses a discriminated union that Orval renders as a plain object.')).nullable()
+}).describe('A static catalogue widget slot ({t:\"s\",id}) or a configurable RSS instance slot ({t:\"r\",iid,title,url}). Union validated client-side; represented loosely here since Zod uses a discriminated union that Orval renders as a plain object.')).nullable(),
+  "appCardOrder": zod.array(zod.string()).nullish()
 })
 
 
@@ -4023,6 +4024,10 @@ export const GetPreferencesResponse = zod.object({
  * @summary Save the current user's hub dashboard widget layout
  */
 export const updatePreferencesBodySlotsMax = 60;
+
+export const updatePreferencesBodyAppCardOrderItemMax = 64;
+
+export const updatePreferencesBodyAppCardOrderMax = 20;
 
 
 
@@ -4033,7 +4038,8 @@ export const UpdatePreferencesBody = zod.object({
   "iid": zod.string().optional(),
   "title": zod.string().optional(),
   "url": zod.string().optional()
-}).describe('A static catalogue widget slot ({t:\"s\",id}) or a configurable RSS instance slot ({t:\"r\",iid,title,url}). Union validated client-side; represented loosely here since Zod uses a discriminated union that Orval renders as a plain object.')).max(updatePreferencesBodySlotsMax)
+}).describe('A static catalogue widget slot ({t:\"s\",id}) or a configurable RSS instance slot ({t:\"r\",iid,title,url}). Union validated client-side; represented loosely here since Zod uses a discriminated union that Orval renders as a plain object.')).max(updatePreferencesBodySlotsMax),
+  "appCardOrder": zod.array(zod.string().max(updatePreferencesBodyAppCardOrderItemMax)).max(updatePreferencesBodyAppCardOrderMax).optional()
 })
 
 export const UpdatePreferencesResponse = zod.object({
@@ -4043,7 +4049,8 @@ export const UpdatePreferencesResponse = zod.object({
   "iid": zod.string().optional(),
   "title": zod.string().optional(),
   "url": zod.string().optional()
-}).describe('A static catalogue widget slot ({t:\"s\",id}) or a configurable RSS instance slot ({t:\"r\",iid,title,url}). Union validated client-side; represented loosely here since Zod uses a discriminated union that Orval renders as a plain object.')).nullable()
+}).describe('A static catalogue widget slot ({t:\"s\",id}) or a configurable RSS instance slot ({t:\"r\",iid,title,url}). Union validated client-side; represented loosely here since Zod uses a discriminated union that Orval renders as a plain object.')).nullable(),
+  "appCardOrder": zod.array(zod.string()).nullish()
 })
 
 

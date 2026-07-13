@@ -11,6 +11,7 @@ export const officeNotes = pgTable("office_notes", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
   body: text("body").notNull().default(""),
+  backgroundColor: text("background_color"),
   createdByUserId: integer("created_by_user_id"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()

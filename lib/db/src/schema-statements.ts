@@ -1301,6 +1301,7 @@ export const STATEMENTS: string[] = [
   )`,
   `CREATE INDEX IF NOT EXISTS office_notes_created_by_user_id_idx ON office_notes (created_by_user_id)`,
   `ALTER TABLE office_notes ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE office_notes ADD COLUMN IF NOT EXISTS background_color TEXT`,
 
   // ── App-wide configurable constants (issue #171) ─────────────────────────
   // Key/value pairs keyed by (module, key). Admin can override any row via

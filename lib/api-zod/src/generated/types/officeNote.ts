@@ -10,6 +10,7 @@ export interface OfficeNote {
   id: number;
   title: string;
   body: string;
+  backgroundColor?: string | null;
   createdByUserId: number | null;
   createdByName: string | null;
   createdAt: string;

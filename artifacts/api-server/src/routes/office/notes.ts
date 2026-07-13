@@ -20,6 +20,7 @@ async function fetchNote(id: number) {
       id: officeNotes.id,
       title: officeNotes.title,
       body: officeNotes.body,
+      backgroundColor: officeNotes.backgroundColor,
       createdByUserId: officeNotes.createdByUserId,
       createdByName: appUsers.displayName,
       createdByEmail: appUsers.email,
@@ -34,6 +35,7 @@ async function fetchNote(id: number) {
     id: row.id,
     title: row.title,
     body: row.body,
+    backgroundColor: row.backgroundColor,
     createdByUserId: row.createdByUserId,
     createdByName: row.createdByName ?? row.createdByEmail ?? null,
     createdAt: row.createdAt.toISOString(),
@@ -47,6 +49,7 @@ router.get("/notes", async (_req, res) => {
       id: officeNotes.id,
       title: officeNotes.title,
       body: officeNotes.body,
+      backgroundColor: officeNotes.backgroundColor,
       createdByUserId: officeNotes.createdByUserId,
       createdByName: appUsers.displayName,
       createdByEmail: appUsers.email,
@@ -60,6 +63,7 @@ router.get("/notes", async (_req, res) => {
     id: row.id,
     title: row.title,
     body: row.body,
+    backgroundColor: row.backgroundColor,
     createdByUserId: row.createdByUserId,
     createdByName: row.createdByName ?? row.createdByEmail ?? null,
     createdAt: row.createdAt.toISOString(),
@@ -76,6 +80,7 @@ router.post("/notes", async (req, res) => {
     .values({
       title: body.title,
       body: body.body,
+      backgroundColor: body.backgroundColor ?? null,
       createdByUserId: userId,
     })
     .returning({ id: officeNotes.id });
@@ -88,7 +93,14 @@ router.patch("/notes/:id", async (req, res) => {
   const body = UpdateNoteBody.parse(req.body);
   const [updated] = await db
     .update(officeNotes)
-    .set({ title: body.title, body: body.body, updatedAt: new Date() })
+    .set({
+      title: body.title,
+      body: body.body,
+      ...(body.backgroundColor !== undefined
+        ? { backgroundColor: body.backgroundColor }
+        : {}),
+      updatedAt: new Date(),
+    })
     .where(eq(officeNotes.id, id))
     .returning({ id: officeNotes.id });
   if (!updated) {

@@ -666,9 +666,7 @@ export default function TravelCalendar() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() =>
-                          handleDismissSuggestion(suggestion.id)
-                        }
+                        onClick={() => handleDismissSuggestion(suggestion.id)}
                         disabled={dismissSuggestion.isPending}
                       >
                         Dismiss
@@ -746,9 +744,7 @@ export default function TravelCalendar() {
         {({ view, cursor, gridDays }: CalendarCoreContext) => {
           if (eventsLoading) {
             return (
-              <p className="text-sm text-muted-foreground">
-                Loading events…
-              </p>
+              <p className="text-sm text-muted-foreground">Loading events…</p>
             );
           }
 
@@ -827,9 +823,8 @@ export default function TravelCalendar() {
                             const isStart = startKey >= weekStartKey;
                             const isEnd = endKey <= weekEndKey;
                             const colStart = isStart
-                              ? week.findIndex(
-                                  (d) => dateKey(d) === startKey,
-                                ) + 1
+                              ? week.findIndex((d) => dateKey(d) === startKey) +
+                                1
                               : 1;
                             const endIdx = week.findIndex(
                               (d) => dateKey(d) === endKey,
@@ -929,9 +924,8 @@ export default function TravelCalendar() {
                         const isStart = startKey >= wStartKey;
                         const isEnd = endKey <= wEndKey;
                         const colStart = isStart
-                          ? gridDays.findIndex(
-                              (d) => dateKey(d) === startKey,
-                            ) + 1
+                          ? gridDays.findIndex((d) => dateKey(d) === startKey) +
+                            1
                           : 1;
                         const endIdx = gridDays.findIndex(
                           (d) => dateKey(d) === endKey,
@@ -1086,9 +1080,7 @@ export default function TravelCalendar() {
                                   <Button
                                     variant="destructive"
                                     size="sm"
-                                    onClick={() =>
-                                      handleDelete(item.event.id)
-                                    }
+                                    onClick={() => handleDelete(item.event.id)}
                                     disabled={deleteEvent.isPending}
                                   >
                                     Delete
@@ -1096,9 +1088,7 @@ export default function TravelCalendar() {
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() =>
-                                      setConfirmingDeleteId(null)
-                                    }
+                                    onClick={() => setConfirmingDeleteId(null)}
                                     disabled={deleteEvent.isPending}
                                   >
                                     Cancel

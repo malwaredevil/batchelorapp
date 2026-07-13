@@ -7020,6 +7020,9 @@ components:
           type: string
         body:
           type: string
+        backgroundColor:
+          type: string
+          nullable: true
         createdByUserId:
           type: integer
           nullable: true
@@ -7043,6 +7046,9 @@ components:
         body:
           type: string
           maxLength: 20000
+        backgroundColor:
+          type: string
+          nullable: true
     HubWidgetSlot:
       description: A static catalogue widget slot ({t:"s",id}) or a configurable RSS instance slot ({t:"r",iid,title,url}). Union validated client-side; represented loosely here since Zod uses a discriminated union that Orval renders as a plain object.
       type: object

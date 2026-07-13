@@ -1,19 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "wouter";
-import {
-  addDays,
-  eachDayOfInterval,
-  endOfMonth,
-  endOfWeek,
-  isSameMonth,
-  isToday,
-  startOfMonth,
-  startOfWeek,
-} from "date-fns";
+import { isSameMonth, isToday } from "date-fns";
 import {
   CalendarDays,
-  ChevronLeft,
-  ChevronRight,
   Clock,
   Eye,
   EyeOff,
@@ -27,12 +16,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Dialog,
   DialogContent,
@@ -64,20 +53,17 @@ import {
   type ConnectedCalendar,
 } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/travels/lib/assistant-context";
+import {
+  CalendarCore,
+  dateKey,
+  chunk,
+  tintColor,
+  rangeForView,
+  type ViewMode,
+  type CalendarCoreContext,
+} from "@/components/CalendarCore";
 
-function pad(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
-function dateKey(d: Date): string {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-function chunk<T>(arr: T[], size: number): T[][] {
-  return Array.from({ length: Math.ceil(arr.length / size) }, (_, i) =>
-    arr.slice(i * size, (i + 1) * size),
-  );
-}
+// ─── Local helpers (not shared with other calendars) ─────────────────────────
 
 function displayEventStartKey(item: { event: TravelCalendarEvent }): string {
   if (item.event.allDay) return item.event.start;
@@ -89,41 +75,6 @@ function displayEventEndKey(item: { event: TravelCalendarEvent }): string {
   return dateKey(new Date(item.event.end));
 }
 
-type ViewMode = "month" | "week" | "list";
-
-function monthRange(cursor: Date): { start: Date; end: Date } {
-  const start = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
-  const end = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
-  return { start, end };
-}
-
-function weekRange(cursor: Date): { start: Date; end: Date } {
-  const start = startOfWeek(cursor);
-  return { start, end: addDays(start, 7) };
-}
-
-function monthGridRange(cursor: Date): { start: Date; end: Date } {
-  const gridStart = startOfWeek(startOfMonth(cursor));
-  const lastRowStart = startOfWeek(endOfWeek(endOfMonth(cursor)));
-  return { start: gridStart, end: addDays(lastRowStart, 7) };
-}
-
-function rangeForView(
-  view: ViewMode,
-  cursor: Date,
-): { start: Date; end: Date } {
-  if (view === "week") return weekRange(cursor);
-  if (view === "month") return monthGridRange(cursor);
-  return monthRange(cursor);
-}
-
-function shiftCursor(view: ViewMode, cursor: Date, direction: 1 | -1): Date {
-  if (view === "week") return addDays(cursor, 7 * direction);
-  return new Date(cursor.getFullYear(), cursor.getMonth() + direction, 1);
-}
-
-// A displayed event tagged with which calendar it came from — either the
-// shared, editable Travel calendar, or a read-only overlay calendar.
 interface DisplayEvent {
   event: TravelCalendarEvent;
   kind: "travel" | "overlay";
@@ -132,8 +83,11 @@ interface DisplayEvent {
 
 function eventDayKey(event: TravelCalendarEvent): string {
   if (event.allDay) return event.start;
-  const d = new Date(event.start);
-  return dateKey(d);
+  return dateKey(new Date(event.start));
+}
+
+function pad(n: number): string {
+  return String(n).padStart(2, "0");
 }
 
 function isoToLocalParts(iso: string): { date: string; time: string } {
@@ -271,24 +225,21 @@ function OverlayCalendarEvents({
   return null;
 }
 
-function tintColor(hex: string, alpha: number): string {
-  const clean = hex.replace("#", "");
-  if (clean.length !== 6) return hex;
-  const r = parseInt(clean.slice(0, 2), 16);
-  const g = parseInt(clean.slice(2, 4), 16);
-  const b = parseInt(clean.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
+// ─── Main component ───────────────────────────────────────────────────────────
 
 export default function TravelCalendar() {
   const qc = useQueryClient();
   const { data: status, isLoading: statusLoading } =
     useGetTravelCalendarStatus();
-  const [cursor, setCursor] = useState(() => new Date());
-  const [view, setView] = useState<ViewMode>("month");
+
+  // Mirror CalendarCore's internal view/cursor so we can derive API query keys
+  // and the assistant page context outside the children render prop.
+  const [calView, setCalView] = useState<ViewMode>("month");
+  const [calCursor, setCalCursor] = useState(() => new Date());
+
   const { start, end } = useMemo(
-    () => rangeForView(view, cursor),
-    [view, cursor],
+    () => rangeForView(calView, calCursor),
+    [calView, calCursor],
   );
   const startISO = start.toISOString();
   const endISO = end.toISOString();
@@ -326,8 +277,6 @@ export default function TravelCalendar() {
     return map;
   }, [googleColors]);
 
-  // Outlook-style calendar overlay: every connected calendar (Travel calendar
-  // is always shown; other calendars can be toggled on/off with the eye icon).
   const { data: connectedCalendars = [] } = useListConnectedCalendars();
   const overlayCalendars = useMemo(
     () => connectedCalendars.filter((c) => !c.isTravelCalendar),
@@ -486,7 +435,7 @@ export default function TravelCalendar() {
     if (!status?.configured) {
       return "Travel Calendar page: no shared Travel calendar is configured yet. The app owner needs to connect Google Calendar in Settings and assign a calendar as the shared Travel calendar.";
     }
-    const monthLabel = cursor.toLocaleDateString(undefined, {
+    const monthLabel = calCursor.toLocaleDateString(undefined, {
       month: "long",
       year: "numeric",
     });
@@ -505,7 +454,7 @@ export default function TravelCalendar() {
       )
       .join("; ");
     return (
-      `Travel Calendar page: viewing ${monthLabel} in ${view} view. Shared Travel calendar is "${status.calendarSummary}". ` +
+      `Travel Calendar page: viewing ${monthLabel} in ${calView} view. Shared Travel calendar is "${status.calendarSummary}". ` +
       `${overlayCalendars.length} other connected calendar(s) available as overlays. ` +
       (summary
         ? `Events in range: ${summary}.`
@@ -517,9 +466,9 @@ export default function TravelCalendar() {
   }, [
     statusLoading,
     status,
-    cursor,
+    calCursor,
     displayEvents,
-    view,
+    calView,
     overlayCalendars,
     pendingSuggestions,
   ]);
@@ -535,12 +484,6 @@ export default function TravelCalendar() {
     }
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [displayEvents]);
-
-  const gridDays = useMemo(() => {
-    if (view === "list") return [];
-    const lastDayInclusive = addDays(end, -1);
-    return eachDayOfInterval({ start, end: lastDayInclusive });
-  }, [view, start, end]);
 
   function openCreate() {
     setEditingEvent(null);
@@ -628,117 +571,9 @@ export default function TravelCalendar() {
     );
   }
 
-  return (
-    <div className="space-y-6">
-      {overlayCalendars.map((cal) => (
-        <OverlayCalendarEvents
-          key={cal.id}
-          calendar={cal}
-          start={startISO}
-          end={endISO}
-          onEvents={handleOverlayEvents}
-          onError={handleOverlayError}
-        />
-      ))}
-
-      {hasTokenError && (
-        <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900 dark:bg-amber-950/20">
-          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-          <p className="text-sm text-amber-800 dark:text-amber-300">
-            One or more connected calendars couldn&apos;t load — your Google
-            Calendar connection may have expired.{" "}
-            <a
-              href="/api/travels/google-calendar/connect?returnTo=/modules/travels/travel-calendar"
-              className="font-medium underline"
-            >
-              Reconnect Google Calendar
-            </a>{" "}
-            to restore event display.
-          </p>
-        </div>
-      )}
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="font-serif text-2xl text-foreground">
-            Travel Calendar
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {status?.calendarSummary
-              ? `Shared calendar: "${status.calendarSummary}"`
-              : "Shared Travel calendar"}
-          </p>
-        </div>
-        <Button onClick={openCreate}>
-          <Plus className="h-4 w-4 mr-1.5" />
-          Add event
-        </Button>
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-card-border bg-card px-4 py-3">
-        <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setCursor((c) => shiftCursor(view, c, -1))}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="font-medium text-foreground">
-            {view === "week"
-              ? (() => {
-                  const weekEnd = addDays(start, 6);
-                  const sameMonth = start.getMonth() === weekEnd.getMonth();
-                  const startLabel = start.toLocaleDateString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                  });
-                  const endLabel = weekEnd.toLocaleDateString(
-                    undefined,
-                    sameMonth
-                      ? { day: "numeric", year: "numeric" }
-                      : { month: "short", day: "numeric", year: "numeric" },
-                  );
-                  return `${startLabel} – ${endLabel}`;
-                })()
-              : cursor.toLocaleDateString(undefined, {
-                  month: "long",
-                  year: "numeric",
-                })}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCursor(new Date())}
-          >
-            Today
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setCursor((c) => shiftCursor(view, c, 1))}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-        <ToggleGroup
-          type="single"
-          value={view}
-          onValueChange={(v) => v && setView(v as ViewMode)}
-          className="justify-start"
-        >
-          <ToggleGroupItem value="month" size="sm" aria-label="Month view">
-            Month
-          </ToggleGroupItem>
-          <ToggleGroupItem value="week" size="sm" aria-label="Week view">
-            Week
-          </ToggleGroupItem>
-          <ToggleGroupItem value="list" size="sm" aria-label="List view">
-            List
-          </ToggleGroupItem>
-        </ToggleGroup>
-      </div>
-
+  // ── belowToolbar: overlay calendar toggles + trip suggestions ───────────────
+  const belowToolbar = (
+    <>
       {overlayCalendars.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-card-border bg-card px-4 py-3">
           <span className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
@@ -831,7 +666,9 @@ export default function TravelCalendar() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleDismissSuggestion(suggestion.id)}
+                        onClick={() =>
+                          handleDismissSuggestion(suggestion.id)
+                        }
                         disabled={dismissSuggestion.isPending}
                       >
                         Dismiss
@@ -850,44 +687,284 @@ export default function TravelCalendar() {
             )}
           </div>
         )}
+    </>
+  );
 
-      {eventsLoading ? (
-        <p className="text-sm text-muted-foreground">Loading events…</p>
-      ) : view === "month" ? (
-        <div className="overflow-hidden rounded-xl border border-card-border bg-card">
-          {/* Day-of-week header */}
-          <div className="grid grid-cols-7 border-b border-card-border bg-muted/40 text-center text-xs font-medium text-muted-foreground">
-            {gridDays.slice(0, 7).map((d) => (
-              <div key={d.toISOString()} className="py-2">
-                {d.toLocaleDateString(undefined, { weekday: "short" })}
-              </div>
-            ))}
-          </div>
-          {/* Week rows with spanning event bars */}
-          {chunk(gridDays, 7).map((week, wi) => {
-            const weekStartKey = dateKey(week[0]);
-            const weekEndKey = dateKey(week[6]);
-            const weekEvents = displayEvents
-              .filter(
-                (item) =>
-                  displayEventEndKey(item) >= weekStartKey &&
-                  displayEventStartKey(item) <= weekEndKey,
-              )
-              .sort((a, b) =>
-                displayEventStartKey(a).localeCompare(displayEventStartKey(b)),
-              );
-            const isLastWeek = wi === chunk(gridDays, 7).length - 1;
+  return (
+    <div className="space-y-6">
+      {/* Overlay calendar data loaders (null-rendering; use mirror-state range) */}
+      {overlayCalendars.map((cal) => (
+        <OverlayCalendarEvents
+          key={cal.id}
+          calendar={cal}
+          start={startISO}
+          end={endISO}
+          onEvents={handleOverlayEvents}
+          onError={handleOverlayError}
+        />
+      ))}
+
+      {hasTokenError && (
+        <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900 dark:bg-amber-950/20">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <p className="text-sm text-amber-800 dark:text-amber-300">
+            One or more connected calendars couldn&apos;t load — your Google
+            Calendar connection may have expired.{" "}
+            <a
+              href="/api/travels/google-calendar/connect?returnTo=/modules/travels/travel-calendar"
+              className="font-medium underline"
+            >
+              Reconnect Google Calendar
+            </a>{" "}
+            to restore event display.
+          </p>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="font-serif text-2xl text-foreground">
+            Travel Calendar
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {status?.calendarSummary
+              ? `Shared calendar: "${status.calendarSummary}"`
+              : "Shared Travel calendar"}
+          </p>
+        </div>
+        <Button onClick={openCreate}>
+          <Plus className="h-4 w-4 mr-1.5" />
+          Add event
+        </Button>
+      </div>
+
+      <CalendarCore
+        onViewChange={setCalView}
+        onCursorChange={setCalCursor}
+        belowToolbar={belowToolbar}
+      >
+        {({ view, cursor, gridDays }: CalendarCoreContext) => {
+          if (eventsLoading) {
             return (
-              <div
-                key={wi}
-                className={isLastWeek ? "" : "border-b border-card-border/60"}
-              >
-                {/* Day number cells */}
-                <div className="grid grid-cols-7">
-                  {week.map((day) => {
-                    const key = dateKey(day);
-                    const inMonth = isSameMonth(day, cursor);
+              <p className="text-sm text-muted-foreground">
+                Loading events…
+              </p>
+            );
+          }
+
+          /* ── Month view ──────────────────────────────────────────────── */
+          if (view === "month") {
+            return (
+              <div className="overflow-hidden rounded-xl border border-card-border bg-card">
+                <div className="grid grid-cols-7 border-b border-card-border bg-muted/40 text-center text-xs font-medium text-muted-foreground">
+                  {gridDays.slice(0, 7).map((d) => (
+                    <div key={d.toISOString()} className="py-2">
+                      {d.toLocaleDateString(undefined, { weekday: "short" })}
+                    </div>
+                  ))}
+                </div>
+                {chunk(gridDays, 7).map((week, wi) => {
+                  const weekStartKey = dateKey(week[0]);
+                  const weekEndKey = dateKey(week[6]);
+                  const weekEvents = displayEvents
+                    .filter(
+                      (item) =>
+                        displayEventEndKey(item) >= weekStartKey &&
+                        displayEventStartKey(item) <= weekEndKey,
+                    )
+                    .sort((a, b) =>
+                      displayEventStartKey(a).localeCompare(
+                        displayEventStartKey(b),
+                      ),
+                    );
+                  const isLastWeek = wi === chunk(gridDays, 7).length - 1;
+                  return (
+                    <div
+                      key={wi}
+                      className={
+                        isLastWeek ? "" : "border-b border-card-border/60"
+                      }
+                    >
+                      <div className="grid grid-cols-7">
+                        {week.map((day) => {
+                          const key = dateKey(day);
+                          const inMonth = isSameMonth(day, cursor);
+                          const today = isToday(day);
+                          return (
+                            <div
+                              key={key}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => openCreateForDay(key)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ")
+                                  openCreateForDay(key);
+                              }}
+                              className={`min-h-[48px] cursor-pointer border-r border-card-border/60 p-1.5 last:border-r-0 hover:bg-muted/40 ${
+                                inMonth ? "bg-card" : "bg-muted/20"
+                              }`}
+                            >
+                              <span
+                                className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${
+                                  today
+                                    ? "bg-primary text-primary-foreground font-semibold"
+                                    : inMonth
+                                      ? "text-foreground"
+                                      : "text-muted-foreground"
+                                }`}
+                              >
+                                {day.getDate()}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {weekEvents.length > 0 && (
+                        <div className="grid grid-cols-7 gap-y-0.5 pb-1.5 pt-0.5">
+                          {weekEvents.map((item) => {
+                            const startKey = displayEventStartKey(item);
+                            const endKey = displayEventEndKey(item);
+                            const isStart = startKey >= weekStartKey;
+                            const isEnd = endKey <= weekEndKey;
+                            const colStart = isStart
+                              ? week.findIndex(
+                                  (d) => dateKey(d) === startKey,
+                                ) + 1
+                              : 1;
+                            const endIdx = week.findIndex(
+                              (d) => dateKey(d) === endKey,
+                            );
+                            const colEnd =
+                              isEnd && endIdx >= 0 ? endIdx + 2 : 8;
+                            const st = eventStyle(item);
+                            return (
+                              <button
+                                key={`${item.kind}-${item.calendar?.id ?? "t"}-${item.event.id}`}
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openEdit(item);
+                                }}
+                                style={{
+                                  gridColumn: `${colStart} / ${colEnd}`,
+                                  marginLeft: isStart ? 2 : 0,
+                                  marginRight: isEnd ? 2 : 0,
+                                  ...st.style,
+                                }}
+                                className={`h-5 flex items-center gap-1 truncate px-1.5 text-left text-[11px] ${st.className} ${isStart ? "rounded-l" : ""} ${isEnd ? "rounded-r" : ""}`}
+                                title={item.event.title}
+                              >
+                                {isStart && item.kind === "travel" && (
+                                  <Plane className="h-2.5 w-2.5 shrink-0" />
+                                )}
+                                {isStart && (
+                                  <span className="truncate">
+                                    {item.event.title}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          }
+
+          /* ── Week view ───────────────────────────────────────────────── */
+          if (view === "week") {
+            return (
+              <div className="overflow-hidden rounded-xl border border-card-border bg-card">
+                <div className="grid grid-cols-7 divide-x divide-card-border/60 border-b border-card-border/60">
+                  {gridDays.map((day) => {
                     const today = isToday(day);
+                    return (
+                      <div
+                        key={dateKey(day)}
+                        className={`flex flex-col items-center py-2 ${
+                          today ? "bg-primary/10" : "bg-muted/30"
+                        }`}
+                      >
+                        <span className="text-[11px] text-muted-foreground">
+                          {day.toLocaleDateString(undefined, {
+                            weekday: "short",
+                          })}
+                        </span>
+                        <span
+                          className={`mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${
+                            today
+                              ? "bg-primary text-primary-foreground font-semibold"
+                              : "text-foreground"
+                          }`}
+                        >
+                          {day.getDate()}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {(() => {
+                  const wStartKey = dateKey(gridDays[0]);
+                  const wEndKey = dateKey(gridDays[6]);
+                  const wEvents = displayEvents
+                    .filter(
+                      (item) =>
+                        displayEventEndKey(item) >= wStartKey &&
+                        displayEventStartKey(item) <= wEndKey,
+                    )
+                    .sort((a, b) =>
+                      displayEventStartKey(a).localeCompare(
+                        displayEventStartKey(b),
+                      ),
+                    );
+                  if (wEvents.length === 0) return null;
+                  return (
+                    <div className="grid grid-cols-7 gap-y-0.5 border-b border-card-border/60 py-1.5">
+                      {wEvents.map((item) => {
+                        const startKey = displayEventStartKey(item);
+                        const endKey = displayEventEndKey(item);
+                        const isStart = startKey >= wStartKey;
+                        const isEnd = endKey <= wEndKey;
+                        const colStart = isStart
+                          ? gridDays.findIndex(
+                              (d) => dateKey(d) === startKey,
+                            ) + 1
+                          : 1;
+                        const endIdx = gridDays.findIndex(
+                          (d) => dateKey(d) === endKey,
+                        );
+                        const colEnd = isEnd && endIdx >= 0 ? endIdx + 2 : 8;
+                        const st = eventStyle(item);
+                        return (
+                          <button
+                            key={`${item.kind}-${item.calendar?.id ?? "t"}-${item.event.id}`}
+                            type="button"
+                            onClick={() => openEdit(item)}
+                            style={{
+                              gridColumn: `${colStart} / ${colEnd}`,
+                              marginLeft: isStart ? 2 : 0,
+                              marginRight: isEnd ? 2 : 0,
+                              ...st.style,
+                            }}
+                            className={`h-5 flex items-center gap-1 truncate px-1.5 text-left text-[11px] ${st.className} ${isStart ? "rounded-l" : ""} ${isEnd ? "rounded-r" : ""}`}
+                            title={item.event.title}
+                          >
+                            {item.kind === "travel" && (
+                              <Plane className="h-2.5 w-2.5 shrink-0" />
+                            )}
+                            <span className="truncate">{item.event.title}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+                <div className="grid grid-cols-7 divide-x divide-card-border/60">
+                  {gridDays.map((day) => {
+                    const key = dateKey(day);
                     return (
                       <div
                         key={key}
@@ -898,320 +975,169 @@ export default function TravelCalendar() {
                           if (e.key === "Enter" || e.key === " ")
                             openCreateForDay(key);
                         }}
-                        className={`min-h-[48px] cursor-pointer border-r border-card-border/60 p-1.5 last:border-r-0 hover:bg-muted/40 ${
-                          inMonth ? "bg-card" : "bg-muted/20"
-                        }`}
-                      >
-                        <span
-                          className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${
-                            today
-                              ? "bg-primary text-primary-foreground font-semibold"
-                              : inMonth
-                                ? "text-foreground"
-                                : "text-muted-foreground"
-                          }`}
-                        >
-                          {day.getDate()}
-                        </span>
-                      </div>
+                        className="min-h-[160px] cursor-pointer hover:bg-muted/20"
+                      />
                     );
                   })}
                 </div>
-                {/* Spanning event bars */}
-                {weekEvents.length > 0 && (
-                  <div className="grid grid-cols-7 gap-y-0.5 pb-1.5 pt-0.5">
-                    {weekEvents.map((item) => {
-                      const startKey = displayEventStartKey(item);
-                      const endKey = displayEventEndKey(item);
-                      const isStart = startKey >= weekStartKey;
-                      const isEnd = endKey <= weekEndKey;
-                      const colStart = isStart
-                        ? week.findIndex((d) => dateKey(d) === startKey) + 1
-                        : 1;
-                      const endIdx = week.findIndex(
-                        (d) => dateKey(d) === endKey,
-                      );
-                      const colEnd = isEnd && endIdx >= 0 ? endIdx + 2 : 8;
-                      const st = eventStyle(item);
-                      return (
-                        <button
-                          key={`${item.kind}-${item.calendar?.id ?? "t"}-${item.event.id}`}
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openEdit(item);
-                          }}
-                          style={{
-                            gridColumn: `${colStart} / ${colEnd}`,
-                            marginLeft: isStart ? 2 : 0,
-                            marginRight: isEnd ? 2 : 0,
-                            ...st.style,
-                          }}
-                          className={`h-5 flex items-center gap-1 truncate px-1.5 text-left text-[11px] ${st.className} ${isStart ? "rounded-l" : ""} ${isEnd ? "rounded-r" : ""}`}
-                          title={item.event.title}
-                        >
-                          {isStart && item.kind === "travel" && (
-                            <Plane className="h-2.5 w-2.5 shrink-0" />
-                          )}
-                          {isStart && (
-                            <span className="truncate">{item.event.title}</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
               </div>
             );
-          })}
-        </div>
-      ) : view === "week" ? (
-        <div className="overflow-hidden rounded-xl border border-card-border bg-card">
-          {/* Day headers */}
-          <div className="grid grid-cols-7 divide-x divide-card-border/60 border-b border-card-border/60">
-            {gridDays.map((day) => {
-              const today = isToday(day);
-              return (
-                <div
-                  key={dateKey(day)}
-                  className={`flex flex-col items-center py-2 ${
-                    today ? "bg-primary/10" : "bg-muted/30"
-                  }`}
-                >
-                  <span className="text-[11px] text-muted-foreground">
-                    {day.toLocaleDateString(undefined, { weekday: "short" })}
-                  </span>
-                  <span
-                    className={`mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${
-                      today
-                        ? "bg-primary text-primary-foreground font-semibold"
-                        : "text-foreground"
-                    }`}
-                  >
-                    {day.getDate()}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-          {/* Spanning event bars */}
-          {(() => {
-            const wStartKey = dateKey(gridDays[0]);
-            const wEndKey = dateKey(gridDays[6]);
-            const wEvents = displayEvents
-              .filter(
-                (item) =>
-                  displayEventEndKey(item) >= wStartKey &&
-                  displayEventStartKey(item) <= wEndKey,
-              )
-              .sort((a, b) =>
-                displayEventStartKey(a).localeCompare(displayEventStartKey(b)),
-              );
-            if (wEvents.length === 0) return null;
+          }
+
+          /* ── List view ───────────────────────────────────────────────── */
+          if (groups.length === 0) {
             return (
-              <div className="grid grid-cols-7 gap-y-0.5 border-b border-card-border/60 py-1.5">
-                {wEvents.map((item) => {
-                  const startKey = displayEventStartKey(item);
-                  const endKey = displayEventEndKey(item);
-                  const isStart = startKey >= wStartKey;
-                  const isEnd = endKey <= wEndKey;
-                  const colStart = isStart
-                    ? gridDays.findIndex((d) => dateKey(d) === startKey) + 1
-                    : 1;
-                  const endIdx = gridDays.findIndex(
-                    (d) => dateKey(d) === endKey,
-                  );
-                  const colEnd = isEnd && endIdx >= 0 ? endIdx + 2 : 8;
-                  const st = eventStyle(item);
-                  return (
-                    <button
-                      key={`${item.kind}-${item.calendar?.id ?? "t"}-${item.event.id}`}
-                      type="button"
-                      onClick={() => openEdit(item)}
-                      style={{
-                        gridColumn: `${colStart} / ${colEnd}`,
-                        marginLeft: isStart ? 2 : 0,
-                        marginRight: isEnd ? 2 : 0,
-                        ...st.style,
-                      }}
-                      className={`h-5 flex items-center gap-1 truncate px-1.5 text-left text-[11px] ${st.className} ${isStart ? "rounded-l" : ""} ${isEnd ? "rounded-r" : ""}`}
-                      title={item.event.title}
-                    >
-                      {item.kind === "travel" && (
-                        <Plane className="h-2.5 w-2.5 shrink-0" />
-                      )}
-                      <span className="truncate">{item.event.title}</span>
-                    </button>
-                  );
-                })}
-              </div>
+              <p className="rounded-xl border border-dashed border-card-border p-8 text-center text-sm text-muted-foreground">
+                No events this month yet.
+              </p>
             );
-          })()}
-          {/* Day bodies — click to create */}
-          <div className="grid grid-cols-7 divide-x divide-card-border/60">
-            {gridDays.map((day) => {
-              const key = dateKey(day);
-              return (
+          }
+          return (
+            <div className="space-y-4">
+              {groups.map(([key, dayEvents]) => (
                 <div
                   key={key}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => openCreateForDay(key)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ")
-                      openCreateForDay(key);
-                  }}
-                  className="min-h-[160px] cursor-pointer hover:bg-muted/20"
-                />
-              );
-            })}
-          </div>
-        </div>
-      ) : groups.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-card-border p-8 text-center text-sm text-muted-foreground">
-          No events this month yet.
-        </p>
-      ) : (
-        <div className="space-y-4">
-          {groups.map(([key, dayEvents]) => (
-            <div
-              key={key}
-              className="rounded-xl border border-card-border bg-card p-4"
-            >
-              <h2 className="mb-2 text-sm font-semibold text-foreground">
-                {new Date(`${key}T00:00:00`).toLocaleDateString(undefined, {
-                  weekday: "long",
-                  month: "long",
-                  day: "numeric",
-                })}
-              </h2>
-              <ul className="space-y-2">
-                {dayEvents.map((item) => {
-                  const style = eventStyle(item);
-                  return (
-                    <li
-                      key={`${item.kind}-${item.event.id}`}
-                      className={`flex items-start justify-between gap-3 rounded-lg border p-3 ${
-                        item.kind === "travel"
-                          ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20"
-                          : "border-card-border/60"
-                      }`}
-                      style={
-                        item.kind === "overlay"
-                          ? {
-                              borderLeft: `4px solid ${item.calendar?.primaryColor}`,
-                            }
-                          : undefined
-                      }
-                    >
-                      <div className="min-w-0 space-y-1">
-                        <p className="flex items-center gap-1.5 font-medium text-foreground">
-                          {item.kind === "travel" ? (
-                            <Plane className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-                          ) : (
-                            <span
-                              className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
-                              style={{
-                                backgroundColor: style.style
-                                  ?.backgroundColor as string | undefined,
-                              }}
-                            />
-                          )}
-                          {item.event.title}
-                          {item.kind === "overlay" && (
-                            <span className="text-xs font-normal text-muted-foreground">
-                              · {item.calendar?.summary}
-                            </span>
-                          )}
-                        </p>
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                          {!item.event.allDay && (
-                            <span className="flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              {new Date(item.event.start).toLocaleTimeString(
-                                undefined,
-                                {
-                                  hour: "numeric",
-                                  minute: "2-digit",
-                                },
-                              )}
-                              {" – "}
-                              {new Date(item.event.end).toLocaleTimeString(
-                                undefined,
-                                {
-                                  hour: "numeric",
-                                  minute: "2-digit",
-                                },
-                              )}
-                            </span>
-                          )}
-                          {item.event.allDay && <span>All day</span>}
-                          {item.event.location && (
-                            <span className="flex items-center gap-1">
-                              <MapPin className="h-3 w-3" />
-                              {item.event.location}
-                            </span>
-                          )}
-                        </div>
-                        {item.event.description && (
-                          <p className="text-xs text-muted-foreground">
-                            {item.event.description}
-                          </p>
-                        )}
-                      </div>
-                      {item.kind === "travel" && (
-                        <div className="flex shrink-0 items-center gap-1">
-                          {confirmingDeleteId === item.event.id ? (
-                            <>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => handleDelete(item.event.id)}
-                                disabled={deleteEvent.isPending}
-                              >
-                                Delete
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setConfirmingDeleteId(null)}
-                                disabled={deleteEvent.isPending}
-                              >
-                                Cancel
-                              </Button>
-                            </>
-                          ) : (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                                onClick={() => openEdit(item)}
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                onClick={() =>
-                                  setConfirmingDeleteId(item.event.id)
+                  className="rounded-xl border border-card-border bg-card p-4"
+                >
+                  <h2 className="mb-2 text-sm font-semibold text-foreground">
+                    {new Date(`${key}T00:00:00`).toLocaleDateString(undefined, {
+                      weekday: "long",
+                      month: "long",
+                      day: "numeric",
+                    })}
+                  </h2>
+                  <ul className="space-y-2">
+                    {dayEvents.map((item) => {
+                      const style = eventStyle(item);
+                      return (
+                        <li
+                          key={`${item.kind}-${item.event.id}`}
+                          className={`flex items-start justify-between gap-3 rounded-lg border p-3 ${
+                            item.kind === "travel"
+                              ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20"
+                              : "border-card-border/60"
+                          }`}
+                          style={
+                            item.kind === "overlay"
+                              ? {
+                                  borderLeft: `4px solid ${item.calendar?.primaryColor}`,
                                 }
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </>
+                              : undefined
+                          }
+                        >
+                          <div className="min-w-0 space-y-1">
+                            <p className="flex items-center gap-1.5 font-medium text-foreground">
+                              {item.kind === "travel" ? (
+                                <Plane className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                              ) : (
+                                <span
+                                  className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                                  style={{
+                                    backgroundColor: style.style
+                                      ?.backgroundColor as string | undefined,
+                                  }}
+                                />
+                              )}
+                              {item.event.title}
+                              {item.kind === "overlay" && (
+                                <span className="text-xs font-normal text-muted-foreground">
+                                  · {item.calendar?.summary}
+                                </span>
+                              )}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                              {!item.event.allDay && (
+                                <span className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  {new Date(
+                                    item.event.start,
+                                  ).toLocaleTimeString(undefined, {
+                                    hour: "numeric",
+                                    minute: "2-digit",
+                                  })}
+                                  {" – "}
+                                  {new Date(item.event.end).toLocaleTimeString(
+                                    undefined,
+                                    {
+                                      hour: "numeric",
+                                      minute: "2-digit",
+                                    },
+                                  )}
+                                </span>
+                              )}
+                              {item.event.allDay && <span>All day</span>}
+                              {item.event.location && (
+                                <span className="flex items-center gap-1">
+                                  <MapPin className="h-3 w-3" />
+                                  {item.event.location}
+                                </span>
+                              )}
+                            </div>
+                            {item.event.description && (
+                              <p className="text-xs text-muted-foreground">
+                                {item.event.description}
+                              </p>
+                            )}
+                          </div>
+                          {item.kind === "travel" && (
+                            <div className="flex shrink-0 items-center gap-1">
+                              {confirmingDeleteId === item.event.id ? (
+                                <>
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleDelete(item.event.id)
+                                    }
+                                    disabled={deleteEvent.isPending}
+                                  >
+                                    Delete
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                      setConfirmingDeleteId(null)
+                                    }
+                                    disabled={deleteEvent.isPending}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </>
+                              ) : (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={() => openEdit(item)}
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                    onClick={() =>
+                                      setConfirmingDeleteId(item.event.id)
+                                    }
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </>
+                              )}
+                            </div>
                           )}
-                        </div>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
+          );
+        }}
+      </CalendarCore>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md max-h-[90dvh] overflow-y-auto">

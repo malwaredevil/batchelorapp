@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, Code2, Globe, Settings2 } from "lucide-react";
+import { ArrowLeft, Code2, Globe, Map, Settings2 } from "lucide-react";
 import { GlobalConfigCard } from "@workspace/elaine-ui";
 import {
   ReminderEmailCard,
@@ -11,13 +11,16 @@ import {
 import { AppLogo } from "@/components/app-logo";
 import { useAuth } from "@/lib/auth";
 import { usePageAssistantContext } from "@/lib/assistant-context";
+import { ControlPanelContent } from "@/pages/control-panel";
+import { GoogleApisDemoContent } from "@/pages/google-apis-demo";
 
-type Tab = "travels" | "global-config" | "developer";
+type Tab = "travels" | "global-config" | "control-panel" | "google-apis";
 
 const ALL_TABS: { id: Tab; label: string; icon: typeof Globe }[] = [
   { id: "travels", label: "Travels", icon: Globe },
   { id: "global-config", label: "Global Config", icon: Settings2 },
-  { id: "developer", label: "Developer", icon: Code2 },
+  { id: "control-panel", label: "Control Panel", icon: Code2 },
+  { id: "google-apis", label: "Google APIs", icon: Map },
 ];
 
 export default function OwnerPanel() {
@@ -35,7 +38,7 @@ export default function OwnerPanel() {
 
   usePageAssistantContext(
     "hub-owner-panel",
-    `On the Owner Panel page (Travels app settings, Global Configuration, and Developer tools). Signed in as ${user?.email ?? "unknown"}${isOwner ? " (owner)" : ""}.`,
+    `On the Owner Panel page (Travels app settings, Global Configuration, Control Panel, and Google APIs demo). Signed in as ${user?.email ?? "unknown"}${isOwner ? " (owner)" : ""}.`,
   );
 
   return (
@@ -61,7 +64,7 @@ export default function OwnerPanel() {
           <h1 className="text-2xl font-bold tracking-tight">Owner Panel</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {isOwner
-              ? "App settings, AI configuration, and developer tools."
+              ? "App settings, AI configuration, runtime tuning, and developer tools."
               : "App settings for the Travels module."}
           </p>
         </div>
@@ -75,14 +78,14 @@ export default function OwnerPanel() {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                   active
                     ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                <Icon className="h-4 w-4" />
-                {tab.label}
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="hidden sm:inline">{tab.label}</span>
               </button>
             );
           })}
@@ -120,33 +123,9 @@ export default function OwnerPanel() {
           </div>
         )}
 
-        {safeTab === "developer" && isOwner && (
-          <div className="mx-auto w-full max-w-xl space-y-4">
-            <div>
-              <h2 className="text-lg font-semibold tracking-tight">
-                Developer
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Owner-only tools.
-              </p>
-            </div>
-            <Link
-              href="/control-panel"
-              className="flex w-full items-center justify-between rounded-lg border border-card-border bg-card px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/60"
-            >
-              Control Panel
-              <span className="text-xs text-muted-foreground">
-                AI timeouts &amp; token limits
-              </span>
-            </Link>
-            <Link
-              href="/google-apis-demo"
-              className="flex w-full items-center justify-between rounded-lg border border-card-border bg-card px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/60"
-            >
-              Google APIs demo
-            </Link>
-          </div>
-        )}
+        {safeTab === "control-panel" && isOwner && <ControlPanelContent />}
+
+        {safeTab === "google-apis" && isOwner && <GoogleApisDemoContent />}
       </main>
     </div>
   );

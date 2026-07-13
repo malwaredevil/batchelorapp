@@ -420,7 +420,7 @@ function DbReconnectingBanner({
   );
 }
 
-export default function ControlPanel() {
+export function ControlPanelContent() {
   const { user } = useAuth();
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const { data, isLoading, isError, isFetching } = useGetAppConfig({
@@ -472,14 +472,98 @@ export default function ControlPanel() {
   ).length;
 
   return (
+    <div className="space-y-8">
+      <div>
+        <div className="flex items-center gap-2">
+          <SlidersHorizontal className="h-5 w-5 text-muted-foreground" />
+          <h2 className="text-xl font-bold tracking-tight">Control Panel</h2>
+          {totalCustomised > 0 && (
+            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+              {totalCustomised} customised
+            </span>
+          )}
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Tune AI timeouts, token limits, and other runtime settings without a
+          code change. Click any value to edit it inline.{" "}
+          {totalCustomised > 0
+            ? "Amber rows have been changed from their defaults — use the reset button to restore."
+            : "All values are at their defaults."}
+        </p>
+      </div>
+
+      {showReconnectBanner && (
+        <DbReconnectingBanner
+          bootstrapRetryAt={data?.bootstrapRetryAt}
+          onDismiss={() => setBannerDismissed(true)}
+        />
+      )}
+
+      {isLoading && (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      )}
+
+      {isError && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          Failed to load configuration. Please try refreshing the page.
+        </div>
+      )}
+
+      {!isLoading && !isError && modules.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          No configuration keys found.
+        </p>
+      )}
+
+      {modules.map((mod) => (
+        <ModuleSection key={mod} module={mod} rows={grouped[mod]} />
+      ))}
+
+      <div className="border-t border-border pt-4 space-y-1.5">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <RefreshCw
+            className={[
+              "h-3 w-3",
+              isFetching && !isLoading ? "animate-spin" : "",
+            ].join(" ")}
+          />
+          {data?.bootstrappedAt ? (
+            <span>
+              Server last bootstrapped{" "}
+              <span
+                className="font-mono"
+                title={new Date(data.bootstrappedAt).toLocaleString()}
+              >
+                {new Date(data.bootstrappedAt).toLocaleTimeString()}
+              </span>{" "}
+              — config refreshes every 30 s.
+            </span>
+          ) : (
+            <span>Config refreshes every 30 s.</span>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Changes take effect within 30 seconds (server-side cache TTL).
+          Security-critical limits (webhook body caps, rate limits) are
+          hardcoded and cannot be changed here.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export default function ControlPanel() {
+  return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background/80 px-6 py-4 backdrop-blur-md">
         <Link
-          href="/account"
+          href="/owner-panel"
           className="flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to account
+          Back to Owner Panel
         </Link>
         <div className="flex items-center gap-2">
           <AppLogo className="h-7 w-7" />
@@ -488,85 +572,8 @@ export default function ControlPanel() {
           </span>
         </div>
       </header>
-
-      <main className="mx-auto max-w-3xl space-y-8 p-6 md:p-8">
-        <div>
-          <div className="flex items-center gap-2">
-            <SlidersHorizontal className="h-5 w-5 text-muted-foreground" />
-            <h1 className="text-2xl font-bold tracking-tight">Control Panel</h1>
-            {totalCustomised > 0 && (
-              <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                {totalCustomised} customised
-              </span>
-            )}
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Tune AI timeouts, token limits, and other runtime settings without a
-            code change. Click any value to edit it inline.{" "}
-            {totalCustomised > 0
-              ? "Amber rows have been changed from their defaults — use the reset button to restore."
-              : "All values are at their defaults."}
-          </p>
-        </div>
-
-        {showReconnectBanner && (
-          <DbReconnectingBanner
-            bootstrapRetryAt={data?.bootstrapRetryAt}
-            onDismiss={() => setBannerDismissed(true)}
-          />
-        )}
-
-        {isLoading && (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        )}
-
-        {isError && (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            Failed to load configuration. Please try refreshing the page.
-          </div>
-        )}
-
-        {!isLoading && !isError && modules.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            No configuration keys found.
-          </p>
-        )}
-
-        {modules.map((mod) => (
-          <ModuleSection key={mod} module={mod} rows={grouped[mod]} />
-        ))}
-
-        <div className="border-t border-border pt-4 space-y-1.5">
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <RefreshCw
-              className={[
-                "h-3 w-3",
-                isFetching && !isLoading ? "animate-spin" : "",
-              ].join(" ")}
-            />
-            {data?.bootstrappedAt ? (
-              <span>
-                Server last bootstrapped{" "}
-                <span
-                  className="font-mono"
-                  title={new Date(data.bootstrappedAt).toLocaleString()}
-                >
-                  {new Date(data.bootstrappedAt).toLocaleTimeString()}
-                </span>{" "}
-                — config refreshes every 30 s.
-              </span>
-            ) : (
-              <span>Config refreshes every 30 s.</span>
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Changes take effect within 30 seconds (server-side cache TTL).
-            Security-critical limits (webhook body caps, rate limits) are
-            hardcoded and cannot be changed here.
-          </p>
-        </div>
+      <main className="mx-auto max-w-3xl p-6 md:p-8">
+        <ControlPanelContent />
       </main>
     </div>
   );

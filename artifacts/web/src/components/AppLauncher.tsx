@@ -361,7 +361,10 @@ function AppHeroCard({
       href={arranging ? undefined : app.href}
       className="group block"
       onClick={(e) => {
-        if (arranging) { e.preventDefault(); return; }
+        if (arranging) {
+          e.preventDefault();
+          return;
+        }
         const t = e.target as HTMLElement;
         if (t.closest("[data-accordion]")) e.preventDefault();
       }}

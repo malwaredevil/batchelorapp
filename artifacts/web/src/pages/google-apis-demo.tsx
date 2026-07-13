@@ -309,7 +309,7 @@ function AerialViewDemo({ address }: { address: string }) {
   );
 }
 
-function GoogleApisDemoContent() {
+export function GoogleApisDemoContent() {
   const { data: trips, isLoading: tripsLoading } = useListTrips();
   const createTrip = useCreateTrip();
   const base = import.meta.env.BASE_URL;

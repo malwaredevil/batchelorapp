@@ -29,6 +29,7 @@ import {
   Gift,
   Tag,
   Sparkle,
+  GripVertical,
 } from "lucide-react";
 import { AppSwitcher } from "@workspace/elaine-ui";
 import { useListOrnamentsHallmarkEvents } from "@workspace/api-client-react";
@@ -328,6 +329,7 @@ function AppHeroCard({
   expanded,
   onToggle,
   extraBlock,
+  arranging,
 }: {
   app: {
     id: string;
@@ -351,12 +353,15 @@ function AppHeroCard({
   onToggle: () => void;
   /** Optional extra block rendered below the stats row (e.g. a countdown). */
   extraBlock?: React.ReactNode;
+  /** When true, suppress click-navigation so drags don't accidentally navigate. */
+  arranging?: boolean;
 }) {
   return (
     <a
-      href={app.href}
+      href={arranging ? undefined : app.href}
       className="group block"
       onClick={(e) => {
+        if (arranging) { e.preventDefault(); return; }
         const t = e.target as HTMLElement;
         if (t.closest("[data-accordion]")) e.preventDefault();
       }}
@@ -549,6 +554,8 @@ export function AppLauncher() {
   const { isDark, toggleTheme } = useTheme();
   const {
     slots,
+    appCardOrder,
+    setAppCardOrder,
     byId,
     isStaticEnabled,
     toggleStatic,
@@ -572,12 +579,12 @@ export function AppLauncher() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [customizing, setCustomizing] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
-  const [potteryExpanded, setPotteryExpanded] = useState(false);
-  const [quiltingExpanded, setQuiltingExpanded] = useState(false);
-  const [travelsExpanded, setTravelsExpanded] = useState(false);
-  const [ornamentsExpanded, setOrnamentsExpanded] = useState(false);
-  const [elaineExpanded, setElaineExpanded] = useState(false);
-  const [officeExpanded, setOfficeExpanded] = useState(false);
+  const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [arranging, setArranging] = useState(false);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   // Live stats
   const { data: potteryStatsData } = useGetCollectionStats();
@@ -767,6 +774,53 @@ export function AppLauncher() {
     "hub-launcher",
     `On the app launcher (the Batchelor hub home page) — lets the household pick which app to open: Pottery (${potteryStatsData?.totalItems ?? "?"} items), Quilting (${quiltingStatsData?.totalFabrics ?? "?"} fabrics), or Travels (${travelsStatsData?.totalTrips ?? "?"} trips). ${totalCount} widget(s) are shown on the dashboard.`,
   );
+
+  type CardCfg = {
+    quickLinks: typeof POTTERY_QUICK_LINKS;
+    accentBorderColor: string;
+    accentSectionBg: string;
+    accentIconColor: string;
+    extraBlock?: React.ReactNode;
+  };
+  const CARD_CONFIG: Record<string, CardCfg> = {
+    pottery: {
+      quickLinks: POTTERY_QUICK_LINKS,
+      accentBorderColor: "border-amber-200/60 dark:border-amber-800/40",
+      accentSectionBg: "bg-amber-50/60 dark:bg-amber-900/10",
+      accentIconColor: "text-amber-600 dark:text-amber-400",
+    },
+    quilting: {
+      quickLinks: QUILTING_QUICK_LINKS,
+      accentBorderColor: "border-violet-200/60 dark:border-violet-800/40",
+      accentSectionBg: "bg-violet-50/60 dark:bg-violet-900/10",
+      accentIconColor: "text-violet-600 dark:text-violet-400",
+    },
+    travels: {
+      quickLinks: TRAVELS_QUICK_LINKS,
+      accentBorderColor: "border-sky-200/60 dark:border-sky-800/40",
+      accentSectionBg: "bg-sky-50/60 dark:bg-sky-900/10",
+      accentIconColor: "text-sky-600 dark:text-sky-400",
+    },
+    ornaments: {
+      quickLinks: ORNAMENTS_QUICK_LINKS,
+      accentBorderColor: "border-rose-200/60 dark:border-rose-800/40",
+      accentSectionBg: "bg-rose-50/60 dark:bg-rose-900/10",
+      accentIconColor: "text-rose-600 dark:text-rose-400",
+      extraBlock: <HallmarkOpenHouseCountdown />,
+    },
+    elaine: {
+      quickLinks: ELAINE_QUICK_LINKS,
+      accentBorderColor: "border-indigo-200/60 dark:border-indigo-800/40",
+      accentSectionBg: "bg-indigo-50/60 dark:bg-indigo-900/10",
+      accentIconColor: "text-indigo-600 dark:text-indigo-400",
+    },
+    office: {
+      quickLinks: OFFICE_QUICK_LINKS,
+      accentBorderColor: "border-slate-200/60 dark:border-slate-700/40",
+      accentSectionBg: "bg-slate-50/60 dark:bg-slate-900/10",
+      accentIconColor: "text-slate-600 dark:text-slate-400",
+    },
+  };
 
   function navigate(href: string) {
     window.location.href = href;
@@ -1034,73 +1088,132 @@ export function AppLauncher() {
 
         {/* Apps */}
         <section className="space-y-4">
-          <div className="flex items-center gap-2 text-foreground font-semibold">
-            <LayoutGrid className="w-5 h-5 text-primary" />
-            <h3 className="text-lg">Your apps</h3>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-foreground font-semibold">
+              <LayoutGrid className="w-5 h-5 text-primary" />
+              <h3 className="text-lg">Your apps</h3>
+            </div>
+            <button
+              onClick={() => {
+                if (arranging) {
+                  setDraggedId(null);
+                  setDragOverId(null);
+                }
+                setArranging((a) => !a);
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                arranging
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <GripVertical className="w-3.5 h-3.5" />
+              {arranging ? "Done" : "Arrange"}
+            </button>
           </div>
 
+          {arranging && (
+            <p className="text-xs text-muted-foreground -mt-1">
+              Drag cards to reorder. Your layout is saved automatically.
+            </p>
+          )}
+
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            <AppHeroCard
-              app={APPS.find((a) => a.id === "pottery")!}
-              stats={liveStats("pottery")}
-              quickLinks={POTTERY_QUICK_LINKS}
-              accentBorderColor="border-amber-200/60 dark:border-amber-800/40"
-              accentSectionBg="bg-amber-50/60 dark:bg-amber-900/10"
-              accentIconColor="text-amber-600 dark:text-amber-400"
-              expanded={potteryExpanded}
-              onToggle={() => setPotteryExpanded((e) => !e)}
-            />
-            <AppHeroCard
-              app={APPS.find((a) => a.id === "quilting")!}
-              stats={liveStats("quilting")}
-              quickLinks={QUILTING_QUICK_LINKS}
-              accentBorderColor="border-violet-200/60 dark:border-violet-800/40"
-              accentSectionBg="bg-violet-50/60 dark:bg-violet-900/10"
-              accentIconColor="text-violet-600 dark:text-violet-400"
-              expanded={quiltingExpanded}
-              onToggle={() => setQuiltingExpanded((e) => !e)}
-            />
-            <AppHeroCard
-              app={APPS.find((a) => a.id === "travels")!}
-              stats={liveStats("travels")}
-              quickLinks={TRAVELS_QUICK_LINKS}
-              accentBorderColor="border-sky-200/60 dark:border-sky-800/40"
-              accentSectionBg="bg-sky-50/60 dark:bg-sky-900/10"
-              accentIconColor="text-sky-600 dark:text-sky-400"
-              expanded={travelsExpanded}
-              onToggle={() => setTravelsExpanded((e) => !e)}
-            />
-            <AppHeroCard
-              app={APPS.find((a) => a.id === "ornaments")!}
-              stats={liveStats("ornaments")}
-              quickLinks={ORNAMENTS_QUICK_LINKS}
-              accentBorderColor="border-rose-200/60 dark:border-rose-800/40"
-              accentSectionBg="bg-rose-50/60 dark:bg-rose-900/10"
-              accentIconColor="text-rose-600 dark:text-rose-400"
-              expanded={ornamentsExpanded}
-              onToggle={() => setOrnamentsExpanded((e) => !e)}
-              extraBlock={<HallmarkOpenHouseCountdown />}
-            />
-            <AppHeroCard
-              app={APPS.find((a) => a.id === "elaine")!}
-              stats={liveStats("elaine")}
-              quickLinks={ELAINE_QUICK_LINKS}
-              accentBorderColor="border-indigo-200/60 dark:border-indigo-800/40"
-              accentSectionBg="bg-indigo-50/60 dark:bg-indigo-900/10"
-              accentIconColor="text-indigo-600 dark:text-indigo-400"
-              expanded={elaineExpanded}
-              onToggle={() => setElaineExpanded((e) => !e)}
-            />
-            <AppHeroCard
-              app={APPS.find((a) => a.id === "office")!}
-              stats={liveStats("office")}
-              quickLinks={OFFICE_QUICK_LINKS}
-              accentBorderColor="border-slate-200/60 dark:border-slate-700/40"
-              accentSectionBg="bg-slate-50/60 dark:bg-slate-900/10"
-              accentIconColor="text-slate-600 dark:text-slate-400"
-              expanded={officeExpanded}
-              onToggle={() => setOfficeExpanded((e) => !e)}
-            />
+            {appCardOrder.map((appId) => {
+              const app = APPS.find((a) => a.id === appId);
+              const cfg = CARD_CONFIG[appId];
+              if (!app || !cfg) return null;
+
+              const isDragged = draggedId === appId;
+              const isOver = dragOverId === appId;
+
+              return (
+                <div
+                  key={appId}
+                  draggable={arranging}
+                  onDragStart={
+                    arranging
+                      ? (e) => {
+                          setDraggedId(appId);
+                          e.dataTransfer.effectAllowed = "move";
+                        }
+                      : undefined
+                  }
+                  onDragOver={
+                    arranging
+                      ? (e) => {
+                          e.preventDefault();
+                          if (appId !== draggedId) setDragOverId(appId);
+                        }
+                      : undefined
+                  }
+                  onDragLeave={
+                    arranging
+                      ? () => {
+                          if (dragOverId === appId) setDragOverId(null);
+                        }
+                      : undefined
+                  }
+                  onDrop={
+                    arranging
+                      ? (e) => {
+                          e.preventDefault();
+                          if (draggedId && draggedId !== appId) {
+                            const next = [...appCardOrder];
+                            const from = next.indexOf(draggedId);
+                            const to = next.indexOf(appId);
+                            if (from !== -1 && to !== -1) {
+                              next.splice(from, 1);
+                              next.splice(to, 0, draggedId);
+                              setAppCardOrder(next);
+                            }
+                          }
+                          setDraggedId(null);
+                          setDragOverId(null);
+                        }
+                      : undefined
+                  }
+                  onDragEnd={
+                    arranging
+                      ? () => {
+                          setDraggedId(null);
+                          setDragOverId(null);
+                        }
+                      : undefined
+                  }
+                  className={`relative transition-all duration-150 ${
+                    arranging ? "cursor-grab" : ""
+                  } ${isDragged ? "opacity-40 scale-95" : ""} ${
+                    isOver && !isDragged
+                      ? "ring-2 ring-primary ring-offset-2 ring-offset-background rounded-2xl"
+                      : ""
+                  }`}
+                >
+                  {arranging && (
+                    <div className="absolute top-2 right-2 z-10 flex items-center justify-center w-7 h-7 rounded-full bg-background/90 border border-border shadow-sm pointer-events-none">
+                      <GripVertical className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                  )}
+                  <AppHeroCard
+                    app={app}
+                    stats={liveStats(appId)}
+                    quickLinks={cfg.quickLinks}
+                    accentBorderColor={cfg.accentBorderColor}
+                    accentSectionBg={cfg.accentSectionBg}
+                    accentIconColor={cfg.accentIconColor}
+                    expanded={!!expandedCards[appId]}
+                    onToggle={() =>
+                      setExpandedCards((prev) => ({
+                        ...prev,
+                        [appId]: !prev[appId],
+                      }))
+                    }
+                    extraBlock={cfg.extraBlock}
+                    arranging={arranging}
+                  />
+                </div>
+              );
+            })}
           </div>
         </section>
 

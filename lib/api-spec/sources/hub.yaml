@@ -134,6 +134,12 @@ components:
           maxItems: 60
           items:
             $ref: "#/components/schemas/WidgetSlot"
+        appCardOrder:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            maxLength: 64
     PreferencesResponse:
       type: object
       required:
@@ -144,6 +150,11 @@ components:
           nullable: true
           items:
             $ref: "#/components/schemas/WidgetSlot"
+        appCardOrder:
+          type: array
+          nullable: true
+          items:
+            type: string
     WeatherConfigBody:
       type: object
       required:

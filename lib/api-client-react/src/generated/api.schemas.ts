@@ -1755,10 +1755,13 @@ export interface HubWidgetSlot {
 export interface HubPreferencesBody {
   /** @maxItems 60 */
   slots: HubWidgetSlot[];
+  /** @maxItems 20 */
+  appCardOrder?: string[];
 }
 
 export interface HubPreferencesResponse {
   slots: HubWidgetSlot[] | null;
+  appCardOrder?: string[] | null;
 }
 
 export type HubWeatherConfigBodyUnit = typeof HubWeatherConfigBodyUnit[keyof typeof HubWeatherConfigBodyUnit];

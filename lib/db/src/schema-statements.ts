@@ -1330,6 +1330,9 @@ export const STATEMENTS: string[] = [
   // deploys. Null = never intentionally changed; non-null = human override.
   `ALTER TABLE app_config ADD COLUMN IF NOT EXISTS customised_at TIMESTAMPTZ`,
 
+  // Per-user hub app card order — JSON-serialised string[] of app IDs in display order.
+  `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS hub_app_card_order TEXT`,
+
   // Seed default config rows — ON CONFLICT DO NOTHING so admin overrides
   // are never clobbered on re-bootstrap. Values here must stay in sync with
   // APP_CONFIG_DEFAULTS in artifacts/api-server/src/lib/app-config.ts.

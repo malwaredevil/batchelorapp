@@ -410,7 +410,11 @@ export default function HallmarkEvents() {
         </div>
       </div>
 
-      <CalendarCore defaultView={initialView} listLabel="Upcoming events" disableNavInList>
+      <CalendarCore
+        defaultView={initialView}
+        listLabel="Upcoming events"
+        disableNavInList
+      >
         {({ view, cursor, gridDays }: CalendarCoreContext) => {
           if (isLoading) {
             return (
@@ -441,8 +445,7 @@ export default function HallmarkEvents() {
                         e.endDate >= weekStartKey && e.startDate <= weekEndKey,
                     )
                     .sort((a, b) => a.startDate.localeCompare(b.startDate));
-                  const isLastWeek =
-                    wi === chunk(gridDays, 7).length - 1;
+                  const isLastWeek = wi === chunk(gridDays, 7).length - 1;
                   return (
                     <div
                       key={wi}
@@ -523,7 +526,9 @@ export default function HallmarkEvents() {
                                   <CalendarHeart className="h-2.5 w-2.5 shrink-0" />
                                 )}
                                 {isStart && (
-                                  <span className="truncate">{event.title}</span>
+                                  <span className="truncate">
+                                    {event.title}
+                                  </span>
                                 )}
                               </button>
                             );

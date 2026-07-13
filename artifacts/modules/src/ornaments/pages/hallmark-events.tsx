@@ -2,16 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import {
-  addDays,
-  eachDayOfInterval,
-  endOfMonth,
-  endOfWeek,
-  isSameMonth,
-  isToday,
-  startOfMonth,
-  startOfWeek,
-} from "date-fns";
+import { isSameMonth, isToday } from "date-fns";
 import {
   Loader2,
   Plus,
@@ -19,8 +10,6 @@ import {
   Pencil,
   Trash2,
   ExternalLink,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 import {
   useListOrnamentsHallmarkEvents,
@@ -35,7 +24,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Dialog,
   DialogContent,
@@ -54,6 +42,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  CalendarCore,
+  dateKey,
+  chunk,
+  type ViewMode,
+  type CalendarCoreContext,
+} from "@/components/CalendarCore";
 
 const eventSchema = z
   .object({
@@ -74,46 +69,6 @@ const HALLMARK_CALENDAR_ID =
 const HALLMARK_CALENDAR_URL = `https://calendar.google.com/calendar/u/0?cid=${encodeURIComponent(
   HALLMARK_CALENDAR_ID,
 )}`;
-
-type ViewMode = "month" | "week" | "list";
-
-function pad(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
-function dateKey(d: Date): string {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-function monthGridRange(cursor: Date): { start: Date; end: Date } {
-  const gridStart = startOfWeek(startOfMonth(cursor));
-  const lastRowStart = startOfWeek(endOfWeek(endOfMonth(cursor)));
-  return { start: gridStart, end: addDays(lastRowStart, 7) };
-}
-
-function weekRange(cursor: Date): { start: Date; end: Date } {
-  const start = startOfWeek(cursor);
-  return { start, end: addDays(start, 7) };
-}
-
-function rangeForView(
-  view: ViewMode,
-  cursor: Date,
-): { start: Date; end: Date } {
-  if (view === "week") return weekRange(cursor);
-  return monthGridRange(cursor);
-}
-
-function shiftCursor(view: ViewMode, cursor: Date, direction: 1 | -1): Date {
-  if (view === "week") return addDays(cursor, 7 * direction);
-  return new Date(cursor.getFullYear(), cursor.getMonth() + direction, 1);
-}
-
-function chunk<T>(arr: T[], size: number): T[][] {
-  return Array.from({ length: Math.ceil(arr.length / size) }, (_, i) =>
-    arr.slice(i * size, (i + 1) * size),
-  );
-}
 
 function EventFormDialog({
   open,
@@ -336,10 +291,7 @@ function formatRange(start: string, end: string) {
   const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
   return `${s.toLocaleDateString("en-US", opts)} – ${e.toLocaleDateString(
     "en-US",
-    {
-      ...opts,
-      year: "numeric",
-    },
+    { ...opts, year: "numeric" },
   )}`;
 }
 
@@ -347,8 +299,12 @@ export default function HallmarkEvents() {
   const { data: events, isLoading } = useListOrnamentsHallmarkEvents();
   const deleteEvent = useDeleteOrnamentsHallmarkEvent();
 
-  const [view, setView] = useState<ViewMode>("month");
-  const [cursor, setCursor] = useState(() => new Date());
+  // Read view from URL params once on mount so deep-links work (e.g. ?view=list).
+  const initialView = useMemo<ViewMode>(() => {
+    const v = new URLSearchParams(window.location.search).get("view");
+    if (v === "month" || v === "week" || v === "list") return v;
+    return "month";
+  }, []);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<
@@ -382,28 +338,12 @@ export default function HallmarkEvents() {
   useEffect(() => {
     if (hasHandledInitialParams.current || !events) return;
     hasHandledInitialParams.current = true;
-    const params = new URLSearchParams(window.location.search);
-    const viewParam = params.get("view") as ViewMode | null;
-    const eventId = params.get("eventId");
-    if (viewParam === "month" || viewParam === "week" || viewParam === "list") {
-      setView(viewParam);
-    }
+    const eventId = new URLSearchParams(window.location.search).get("eventId");
     if (eventId) {
       const found = events.find((e) => String(e.id) === eventId);
       if (found) setViewingEvent(found);
     }
   }, [events]);
-
-  const { start, end } = useMemo(
-    () => rangeForView(view, cursor),
-    [view, cursor],
-  );
-
-  const gridDays = useMemo(() => {
-    if (view === "list") return [];
-    const lastDayInclusive = addDays(end, -1);
-    return eachDayOfInterval({ start, end: lastDayInclusive });
-  }, [view, start, end]);
 
   const openCreate = (date?: string) => {
     setEditingEvent(undefined);
@@ -470,110 +410,216 @@ export default function HallmarkEvents() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-card-border bg-card px-4 py-3">
-        <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setCursor((c) => shiftCursor(view, c, -1))}
-            disabled={view === "list"}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="font-medium text-foreground">
-            {view === "week"
-              ? (() => {
-                  const weekEnd = addDays(start, 6);
-                  const sameMonth = start.getMonth() === weekEnd.getMonth();
-                  const startLabel = start.toLocaleDateString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                  });
-                  const endLabel = weekEnd.toLocaleDateString(
-                    undefined,
-                    sameMonth
-                      ? { day: "numeric", year: "numeric" }
-                      : { month: "short", day: "numeric", year: "numeric" },
-                  );
-                  return `${startLabel} – ${endLabel}`;
-                })()
-              : view === "month"
-                ? cursor.toLocaleDateString(undefined, {
-                    month: "long",
-                    year: "numeric",
-                  })
-                : "Upcoming events"}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCursor(new Date())}
-            disabled={view === "list"}
-          >
-            Today
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setCursor((c) => shiftCursor(view, c, 1))}
-            disabled={view === "list"}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-        <ToggleGroup
-          type="single"
-          value={view}
-          onValueChange={(v) => v && setView(v as ViewMode)}
-          className="justify-start"
-        >
-          <ToggleGroupItem value="month" size="sm" aria-label="Month view">
-            Month
-          </ToggleGroupItem>
-          <ToggleGroupItem value="week" size="sm" aria-label="Week view">
-            Week
-          </ToggleGroupItem>
-          <ToggleGroupItem value="list" size="sm" aria-label="List view">
-            List
-          </ToggleGroupItem>
-        </ToggleGroup>
-      </div>
-
-      {isLoading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : view === "month" ? (
-        <div className="overflow-hidden rounded-xl border border-card-border bg-card">
-          {/* Day-of-week header */}
-          <div className="grid grid-cols-7 border-b border-card-border bg-muted/40 text-center text-xs font-medium text-muted-foreground">
-            {gridDays.slice(0, 7).map((d) => (
-              <div key={d.toISOString()} className="py-2">
-                {d.toLocaleDateString(undefined, { weekday: "short" })}
-              </div>
-            ))}
-          </div>
-          {/* Week rows with spanning event bars */}
-          {chunk(gridDays, 7).map((week, wi) => {
-            const weekStartKey = dateKey(week[0]);
-            const weekEndKey = dateKey(week[6]);
-            const weekEvents = (events ?? [])
-              .filter(
-                (e) => e.endDate >= weekStartKey && e.startDate <= weekEndKey,
-              )
-              .sort((a, b) => a.startDate.localeCompare(b.startDate));
-            const isLastWeek = wi === chunk(gridDays, 7).length - 1;
+      <CalendarCore defaultView={initialView} listLabel="Upcoming events" disableNavInList>
+        {({ view, cursor, gridDays }: CalendarCoreContext) => {
+          if (isLoading) {
             return (
-              <div
-                key={wi}
-                className={isLastWeek ? "" : "border-b border-card-border/60"}
-              >
-                {/* Day number cells */}
-                <div className="grid grid-cols-7">
-                  {week.map((day) => {
-                    const key = dateKey(day);
-                    const inMonth = isSameMonth(day, cursor);
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            );
+          }
+
+          if (view === "month") {
+            return (
+              <div className="overflow-hidden rounded-xl border border-card-border bg-card">
+                {/* Day-of-week header */}
+                <div className="grid grid-cols-7 border-b border-card-border bg-muted/40 text-center text-xs font-medium text-muted-foreground">
+                  {gridDays.slice(0, 7).map((d) => (
+                    <div key={d.toISOString()} className="py-2">
+                      {d.toLocaleDateString(undefined, { weekday: "short" })}
+                    </div>
+                  ))}
+                </div>
+                {/* Week rows with spanning event bars */}
+                {chunk(gridDays, 7).map((week, wi) => {
+                  const weekStartKey = dateKey(week[0]);
+                  const weekEndKey = dateKey(week[6]);
+                  const weekEvents = (events ?? [])
+                    .filter(
+                      (e) =>
+                        e.endDate >= weekStartKey && e.startDate <= weekEndKey,
+                    )
+                    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+                  const isLastWeek =
+                    wi === chunk(gridDays, 7).length - 1;
+                  return (
+                    <div
+                      key={wi}
+                      className={
+                        isLastWeek ? "" : "border-b border-card-border/60"
+                      }
+                    >
+                      {/* Day number cells */}
+                      <div className="grid grid-cols-7">
+                        {week.map((day) => {
+                          const key = dateKey(day);
+                          const inMonth = isSameMonth(day, cursor);
+                          const today = isToday(day);
+                          return (
+                            <div
+                              key={key}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => openCreate(key)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ")
+                                  openCreate(key);
+                              }}
+                              className={`min-h-[48px] cursor-pointer border-r border-card-border/60 p-1.5 last:border-r-0 hover:bg-muted/40 ${
+                                inMonth ? "bg-card" : "bg-muted/20"
+                              }`}
+                            >
+                              <span
+                                className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${
+                                  today
+                                    ? "bg-primary text-primary-foreground font-semibold"
+                                    : inMonth
+                                      ? "text-foreground"
+                                      : "text-muted-foreground"
+                                }`}
+                              >
+                                {day.getDate()}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {/* Spanning event bars */}
+                      {weekEvents.length > 0 && (
+                        <div className="grid grid-cols-7 gap-y-0.5 pb-1.5 pt-0.5">
+                          {weekEvents.map((event) => {
+                            const isStart = event.startDate >= weekStartKey;
+                            const isEnd = event.endDate <= weekEndKey;
+                            const colStart = isStart
+                              ? week.findIndex(
+                                  (d) => dateKey(d) === event.startDate,
+                                ) + 1
+                              : 1;
+                            const endIdx = week.findIndex(
+                              (d) => dateKey(d) === event.endDate,
+                            );
+                            const colEnd =
+                              isEnd && endIdx >= 0 ? endIdx + 2 : 8;
+                            return (
+                              <button
+                                key={event.id}
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openView(event);
+                                }}
+                                style={{
+                                  gridColumn: `${colStart} / ${colEnd}`,
+                                  marginLeft: isStart ? 2 : 0,
+                                  marginRight: isEnd ? 2 : 0,
+                                }}
+                                className={`h-5 px-1.5 text-left text-[11px] truncate flex items-center gap-1 bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-900/60 ${
+                                  isStart ? "rounded-l" : ""
+                                } ${isEnd ? "rounded-r" : ""}`}
+                                title={event.title}
+                              >
+                                {isStart && (
+                                  <CalendarHeart className="h-2.5 w-2.5 shrink-0" />
+                                )}
+                                {isStart && (
+                                  <span className="truncate">{event.title}</span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          }
+
+          if (view === "week") {
+            return (
+              <div className="overflow-hidden rounded-xl border border-card-border bg-card">
+                {/* Day headers */}
+                <div className="grid grid-cols-7 divide-x divide-card-border/60 border-b border-card-border/60">
+                  {gridDays.map((day) => {
                     const today = isToday(day);
+                    return (
+                      <div
+                        key={dateKey(day)}
+                        className={`flex flex-col items-center py-2 ${
+                          today ? "bg-primary/10" : "bg-muted/30"
+                        }`}
+                      >
+                        <span className="text-[11px] text-muted-foreground">
+                          {day.toLocaleDateString(undefined, {
+                            weekday: "short",
+                          })}
+                        </span>
+                        <span
+                          className={`mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${
+                            today
+                              ? "bg-primary text-primary-foreground font-semibold"
+                              : "text-foreground"
+                          }`}
+                        >
+                          {day.getDate()}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Spanning event bars */}
+                {(() => {
+                  const wStartKey = dateKey(gridDays[0]);
+                  const wEndKey = dateKey(gridDays[6]);
+                  const wEvents = (events ?? [])
+                    .filter(
+                      (e) => e.endDate >= wStartKey && e.startDate <= wEndKey,
+                    )
+                    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+                  if (wEvents.length === 0) return null;
+                  return (
+                    <div className="grid grid-cols-7 gap-y-0.5 py-1.5 border-b border-card-border/60">
+                      {wEvents.map((event) => {
+                        const isStart = event.startDate >= wStartKey;
+                        const isEnd = event.endDate <= wEndKey;
+                        const colStart = isStart
+                          ? gridDays.findIndex(
+                              (d) => dateKey(d) === event.startDate,
+                            ) + 1
+                          : 1;
+                        const endIdx = gridDays.findIndex(
+                          (d) => dateKey(d) === event.endDate,
+                        );
+                        const colEnd = isEnd && endIdx >= 0 ? endIdx + 2 : 8;
+                        return (
+                          <button
+                            key={event.id}
+                            type="button"
+                            onClick={() => openView(event)}
+                            style={{
+                              gridColumn: `${colStart} / ${colEnd}`,
+                              marginLeft: isStart ? 2 : 0,
+                              marginRight: isEnd ? 2 : 0,
+                            }}
+                            className={`h-5 px-1.5 text-left text-[11px] truncate flex items-center gap-1 bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-900/60 ${
+                              isStart ? "rounded-l" : ""
+                            } ${isEnd ? "rounded-r" : ""}`}
+                            title={event.title}
+                          >
+                            <CalendarHeart className="h-2.5 w-2.5 shrink-0" />
+                            <span className="truncate">{event.title}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+                {/* Day bodies — click to create */}
+                <div className="grid grid-cols-7 divide-x divide-card-border/60">
+                  {gridDays.map((day) => {
+                    const key = dateKey(day);
                     return (
                       <div
                         key={key}
@@ -584,211 +630,66 @@ export default function HallmarkEvents() {
                           if (e.key === "Enter" || e.key === " ")
                             openCreate(key);
                         }}
-                        className={`min-h-[48px] cursor-pointer border-r border-card-border/60 p-1.5 last:border-r-0 hover:bg-muted/40 ${
-                          inMonth ? "bg-card" : "bg-muted/20"
-                        }`}
-                      >
-                        <span
-                          className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${
-                            today
-                              ? "bg-primary text-primary-foreground font-semibold"
-                              : inMonth
-                                ? "text-foreground"
-                                : "text-muted-foreground"
-                          }`}
-                        >
-                          {day.getDate()}
-                        </span>
-                      </div>
+                        className="min-h-[160px] cursor-pointer hover:bg-muted/20"
+                      />
                     );
                   })}
                 </div>
-                {/* Spanning event bars */}
-                {weekEvents.length > 0 && (
-                  <div className="grid grid-cols-7 gap-y-0.5 pb-1.5 pt-0.5">
-                    {weekEvents.map((event) => {
-                      const isStart = event.startDate >= weekStartKey;
-                      const isEnd = event.endDate <= weekEndKey;
-                      const colStart = isStart
-                        ? week.findIndex(
-                            (d) => dateKey(d) === event.startDate,
-                          ) + 1
-                        : 1;
-                      const endIdx = week.findIndex(
-                        (d) => dateKey(d) === event.endDate,
-                      );
-                      const colEnd = isEnd && endIdx >= 0 ? endIdx + 2 : 8;
-                      return (
-                        <button
-                          key={event.id}
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openView(event);
-                          }}
-                          style={{
-                            gridColumn: `${colStart} / ${colEnd}`,
-                            marginLeft: isStart ? 2 : 0,
-                            marginRight: isEnd ? 2 : 0,
-                          }}
-                          className={`h-5 px-1.5 text-left text-[11px] truncate flex items-center gap-1 bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-900/60 ${
-                            isStart ? "rounded-l" : ""
-                          } ${isEnd ? "rounded-r" : ""}`}
-                          title={event.title}
-                        >
-                          {isStart && (
-                            <CalendarHeart className="h-2.5 w-2.5 shrink-0" />
-                          )}
-                          {isStart && (
-                            <span className="truncate">{event.title}</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
               </div>
             );
-          })}
-        </div>
-      ) : view === "week" ? (
-        <div className="overflow-hidden rounded-xl border border-card-border bg-card">
-          {/* Day headers */}
-          <div className="grid grid-cols-7 divide-x divide-card-border/60 border-b border-card-border/60">
-            {gridDays.map((day) => {
-              const today = isToday(day);
-              return (
-                <div
-                  key={dateKey(day)}
-                  className={`flex flex-col items-center py-2 ${
-                    today ? "bg-primary/10" : "bg-muted/30"
-                  }`}
-                >
-                  <span className="text-[11px] text-muted-foreground">
-                    {day.toLocaleDateString(undefined, { weekday: "short" })}
-                  </span>
-                  <span
-                    className={`mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${
-                      today
-                        ? "bg-primary text-primary-foreground font-semibold"
-                        : "text-foreground"
-                    }`}
-                  >
-                    {day.getDate()}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-          {/* Spanning event bars */}
-          {(() => {
-            const wStartKey = dateKey(gridDays[0]);
-            const wEndKey = dateKey(gridDays[6]);
-            const wEvents = (events ?? [])
-              .filter((e) => e.endDate >= wStartKey && e.startDate <= wEndKey)
-              .sort((a, b) => a.startDate.localeCompare(b.startDate));
-            if (wEvents.length === 0) return null;
+          }
+
+          /* List view */
+          if (upcoming.length === 0) {
             return (
-              <div className="grid grid-cols-7 gap-y-0.5 py-1.5 border-b border-card-border/60">
-                {wEvents.map((event) => {
-                  const isStart = event.startDate >= wStartKey;
-                  const isEnd = event.endDate <= wEndKey;
-                  const colStart = isStart
-                    ? gridDays.findIndex(
-                        (d) => dateKey(d) === event.startDate,
-                      ) + 1
-                    : 1;
-                  const endIdx = gridDays.findIndex(
-                    (d) => dateKey(d) === event.endDate,
-                  );
-                  const colEnd = isEnd && endIdx >= 0 ? endIdx + 2 : 8;
-                  return (
-                    <button
-                      key={event.id}
-                      type="button"
-                      onClick={() => openView(event)}
-                      style={{
-                        gridColumn: `${colStart} / ${colEnd}`,
-                        marginLeft: isStart ? 2 : 0,
-                        marginRight: isEnd ? 2 : 0,
-                      }}
-                      className={`h-5 px-1.5 text-left text-[11px] truncate flex items-center gap-1 bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-900/60 ${
-                        isStart ? "rounded-l" : ""
-                      } ${isEnd ? "rounded-r" : ""}`}
-                      title={event.title}
-                    >
-                      <CalendarHeart className="h-2.5 w-2.5 shrink-0" />
-                      <span className="truncate">{event.title}</span>
-                    </button>
-                  );
-                })}
+              <div className="rounded-xl border border-dashed border-card-border p-10 text-center text-muted-foreground">
+                <CalendarHeart className="h-8 w-8 mx-auto mb-3 opacity-50" />
+                No upcoming Hallmark events. Add one to see it countdown on the
+                app launcher.
               </div>
             );
-          })()}
-          {/* Day bodies — click to create */}
-          <div className="grid grid-cols-7 divide-x divide-card-border/60">
-            {gridDays.map((day) => {
-              const key = dateKey(day);
-              return (
-                <div
-                  key={key}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => openCreate(key)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") openCreate(key);
-                  }}
-                  className="min-h-[160px] cursor-pointer hover:bg-muted/20"
-                />
-              );
-            })}
-          </div>
-        </div>
-      ) : upcoming.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-card-border p-10 text-center text-muted-foreground">
-          <CalendarHeart className="h-8 w-8 mx-auto mb-3 opacity-50" />
-          No upcoming Hallmark events. Add one to see it countdown on the app
-          launcher.
-        </div>
-      ) : (
-        <ul className="divide-y divide-card-border rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
-          {upcoming.map((event) => (
-            <li
-              key={event.id}
-              className="flex items-center gap-4 px-5 py-4 hover:bg-muted/40 transition-colors"
-            >
-              <div className="w-10 h-10 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center flex-shrink-0">
-                <CalendarHeart className="h-5 w-5 text-rose-600 dark:text-rose-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium font-serif tracking-wide truncate">
-                  {event.title}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {formatRange(event.startDate, event.endDate)}
-                  {event.googleEventId ? "" : " · calendar sync pending"}
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => openEdit(event)}
-                aria-label="Edit event"
-              >
-                <Pencil className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setDeleteTarget(event)}
-                aria-label="Delete event"
-              >
-                <Trash2 className="h-4 w-4 text-destructive" />
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
+          }
+          return (
+            <ul className="divide-y divide-card-border rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
+              {upcoming.map((event) => (
+                <li
+                  key={event.id}
+                  className="flex items-center gap-4 px-5 py-4 hover:bg-muted/40 transition-colors"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center flex-shrink-0">
+                    <CalendarHeart className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium font-serif tracking-wide truncate">
+                      {event.title}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {formatRange(event.startDate, event.endDate)}
+                      {event.googleEventId ? "" : " · calendar sync pending"}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => openEdit(event)}
+                    aria-label="Edit event"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setDeleteTarget(event)}
+                    aria-label="Delete event"
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          );
+        }}
+      </CalendarCore>
 
       <EventViewDialog
         open={!!viewingEvent}

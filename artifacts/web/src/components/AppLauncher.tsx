@@ -329,6 +329,7 @@ function AppHeroCard({
   expanded,
   onToggle,
   extraBlock,
+  statTile,
   arranging,
 }: {
   app: {
@@ -353,6 +354,8 @@ function AppHeroCard({
   onToggle: () => void;
   /** Optional extra block rendered below the stats row (e.g. a countdown). */
   extraBlock?: React.ReactNode;
+  /** Optional tile rendered inline in the stats row (same height as a stat square). */
+  statTile?: React.ReactNode;
   /** When true, suppress click-navigation so drags don't accidentally navigate. */
   arranging?: boolean;
 }) {
@@ -391,6 +394,7 @@ function AppHeroCard({
         {/* Stats */}
         <CardContent className="p-6 pb-4 flex-1">
           <div className="flex gap-3">
+            {statTile}
             {stats.map((s) => (
               <div
                 key={s.label}
@@ -471,9 +475,12 @@ function AppHeroCard({
 // in the Ornaments app, best-effort synced to the shared Hallmark Google
 // Calendar). Falls back to the hardcoded HALLMARK_OPEN_HOUSE constant only
 // if no events have been entered yet or the request hasn't resolved.
-function HallmarkOpenHouseCountdown() {
+// Compact stat-square–sized tile that replaces the "Total" square for ornaments.
+// If multiple events are upcoming, it rotates through them every 4 seconds.
+function HallmarkEventStatTile() {
   const { data: events } = useListOrnamentsHallmarkEvents();
   const now = Date.now();
+  const [index, setIndex] = useState(0);
 
   const upcoming = (events ?? [])
     .map((e) => ({
@@ -484,47 +491,50 @@ function HallmarkOpenHouseCountdown() {
     .filter((e) => e.end.getTime() >= now)
     .sort((a, b) => a.start.getTime() - b.start.getTime());
 
-  const next = upcoming[0] ?? {
-    title: "Hallmark's Open House",
-    start: HALLMARK_OPEN_HOUSE.start,
-    end: HALLMARK_OPEN_HOUSE.end,
-  };
+  const list =
+    upcoming.length > 0
+      ? upcoming
+      : [
+          {
+            title: "Hallmark Open House",
+            start: HALLMARK_OPEN_HOUSE.start,
+            end: HALLMARK_OPEN_HOUSE.end,
+          },
+        ];
 
-  const isLive = now >= next.start.getTime() && now <= next.end.getTime();
+  useEffect(() => {
+    if (list.length <= 1) return;
+    const id = setInterval(() => setIndex((i) => (i + 1) % list.length), 4000);
+    return () => clearInterval(id);
+  }, [list.length]);
+
+  const current = list[index % list.length];
+  const isLive = now >= current.start.getTime() && now <= current.end.getTime();
   const daysAway = isLive
     ? 0
-    : Math.max(0, Math.ceil((next.start.getTime() - now) / 86_400_000));
+    : Math.max(0, Math.ceil((current.start.getTime() - now) / 86_400_000));
 
-  const dateRangeLabel = `${next.start.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  })} – ${next.end.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  })}`;
+  const shortTitle = current.title.replace(/hallmark'?s?\s*/i, "").trim();
 
   return (
-    <div className="mt-3 flex items-center gap-3 rounded-lg bg-rose-50 dark:bg-rose-900/20 p-3">
-      <div className="w-10 h-10 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center flex-shrink-0">
-        <Sparkle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-semibold truncate">{next.title}</div>
-        <div className="text-[10px] text-muted-foreground">
-          {dateRangeLabel}
-        </div>
-      </div>
-      <div className="text-center flex-shrink-0">
-        <div className="text-2xl font-bold text-rose-600 dark:text-rose-400 tabular-nums leading-none">
+    <div className="flex-1 flex flex-col space-y-1 p-3 rounded-lg bg-rose-50/80 dark:bg-rose-900/20 min-w-0">
+      <div className="flex items-center gap-1">
+        <Sparkle className="w-3 h-3 text-rose-500 dark:text-rose-400 flex-shrink-0" />
+        <span className="text-2xl font-bold text-rose-600 dark:text-rose-400 tabular-nums leading-none">
           {isLive ? "Live" : daysAway}
-        </div>
+        </span>
         {!isLive && (
-          <div className="text-[9px] text-muted-foreground uppercase tracking-wide">
-            days
-          </div>
+          <span className="text-[9px] text-muted-foreground uppercase tracking-wide self-end pb-0.5">
+            d
+          </span>
         )}
       </div>
+      <span
+        className="text-[10px] font-medium text-rose-700/70 dark:text-rose-300/70 uppercase tracking-wider truncate"
+        title={current.title}
+      >
+        {shortTitle || current.title}
+      </span>
     </div>
   );
 }
@@ -704,13 +714,6 @@ export function AppLauncher() {
       return [
         {
           value:
-            ornamentsStatsData?.totalItems != null
-              ? String(ornamentsStatsData.totalItems)
-              : "—",
-          label: "Total",
-        },
-        {
-          value:
             ornamentsStatsData?.totalQuantity != null
               ? String(ornamentsStatsData.totalQuantity)
               : "—",
@@ -809,7 +812,6 @@ export function AppLauncher() {
       accentBorderColor: "border-rose-200/60 dark:border-rose-800/40",
       accentSectionBg: "bg-rose-50/60 dark:bg-rose-900/10",
       accentIconColor: "text-rose-600 dark:text-rose-400",
-      extraBlock: <HallmarkOpenHouseCountdown />,
     },
     elaine: {
       quickLinks: ELAINE_QUICK_LINKS,
@@ -1212,6 +1214,11 @@ export function AppLauncher() {
                       }))
                     }
                     extraBlock={cfg.extraBlock}
+                    statTile={
+                      appId === "ornaments" ? (
+                        <HallmarkEventStatTile />
+                      ) : undefined
+                    }
                     arranging={arranging}
                   />
                 </div>

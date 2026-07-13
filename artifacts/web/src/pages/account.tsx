@@ -13,6 +13,7 @@ import {
 import { toast } from "sonner";
 import {
   ArrowLeft,
+  ChevronRight,
   KeyRound,
   Loader2,
   Mail,
@@ -28,17 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AppLogo } from "@/components/app-logo";
 import { useAuth } from "@/lib/auth";
-import {
-  useTheme,
-  ElaineSettingsCard,
-  GlobalConfigCard,
-} from "@workspace/elaine-ui";
-import {
-  ReminderEmailCard,
-  TimezoneCard,
-  GmailSyncCard,
-  CalendarSyncCard,
-} from "@workspace/travels-settings-ui";
+import { useTheme, ElaineSettingsCard } from "@workspace/elaine-ui";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 
 const base = import.meta.env.BASE_URL;
@@ -549,48 +540,20 @@ export default function Account() {
           <PasswordCard />
           <ElaineSettingsCard subtitle="Your household's AI assistant across every app" />
         </div>
-        <GlobalConfigCard />
-
-        <div className="mx-auto w-full max-w-xl space-y-4 pt-4">
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight">Travels</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Reminder emails, timezone, Gmail scanning, and Google Calendar
-              connections for the Travels app.
-            </p>
-          </div>
-          <div className="space-y-6">
-            <ReminderEmailCard />
-            <TimezoneCard />
-            <GmailSyncCard usePageContext={usePageAssistantContext} />
-            <CalendarSyncCard usePageContext={usePageAssistantContext} />
-          </div>
-        </div>
 
         {user?.isOwner && (
-          <div className="mx-auto w-full max-w-xl space-y-4 pt-4">
-            <div>
-              <h2 className="text-lg font-semibold tracking-tight">
-                Developer
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Owner-only tools.
-              </p>
-            </div>
+          <div className="mx-auto w-full max-w-xl">
             <Link
-              href="/control-panel"
-              className="flex w-full items-center justify-between rounded-lg border border-card-border bg-card px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/60"
+              href="/owner-panel"
+              className="flex w-full items-center justify-between rounded-xl border border-card-border bg-card px-5 py-4 text-sm font-medium transition-colors hover:bg-muted/60"
             >
-              Control Panel
-              <span className="text-xs text-muted-foreground">
-                AI timeouts &amp; token limits
-              </span>
-            </Link>
-            <Link
-              href="/google-apis-demo"
-              className="flex w-full items-center justify-between rounded-lg border border-card-border bg-card px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/60"
-            >
-              Google APIs demo
+              <div>
+                <p className="font-semibold">Owner Panel</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Travels settings, AI configuration &amp; developer tools
+                </p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </Link>
           </div>
         )}

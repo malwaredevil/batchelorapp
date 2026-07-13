@@ -73,6 +73,22 @@ function dateKey(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+function chunk<T>(arr: T[], size: number): T[][] {
+  return Array.from({ length: Math.ceil(arr.length / size) }, (_, i) =>
+    arr.slice(i * size, (i + 1) * size),
+  );
+}
+
+function displayEventStartKey(item: { event: TravelCalendarEvent }): string {
+  if (item.event.allDay) return item.event.start;
+  return dateKey(new Date(item.event.start));
+}
+
+function displayEventEndKey(item: { event: TravelCalendarEvent }): string {
+  if (item.event.allDay) return item.event.end;
+  return dateKey(new Date(item.event.end));
+}
+
 type ViewMode = "month" | "week" | "list";
 
 function monthRange(cursor: Date): { start: Date; end: Date } {
@@ -520,17 +536,6 @@ export default function TravelCalendar() {
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [displayEvents]);
 
-  const eventsByDay = useMemo(() => {
-    const map = new Map<string, DisplayEvent[]>();
-    for (const item of displayEvents) {
-      const key = eventDayKey(item.event);
-      const list = map.get(key) ?? [];
-      list.push(item);
-      map.set(key, list);
-    }
-    return map;
-  }, [displayEvents]);
-
   const gridDays = useMemo(() => {
     if (view === "list") return [];
     const lastDayInclusive = addDays(end, -1);
@@ -850,6 +855,7 @@ export default function TravelCalendar() {
         <p className="text-sm text-muted-foreground">Loading events…</p>
       ) : view === "month" ? (
         <div className="overflow-hidden rounded-xl border border-card-border bg-card">
+          {/* Day-of-week header */}
           <div className="grid grid-cols-7 border-b border-card-border bg-muted/40 text-center text-xs font-medium text-muted-foreground">
             {gridDays.slice(0, 7).map((d) => (
               <div key={d.toISOString()} className="py-2">
@@ -857,12 +863,194 @@ export default function TravelCalendar() {
               </div>
             ))}
           </div>
-          <div className="grid grid-cols-7">
+          {/* Week rows with spanning event bars */}
+          {chunk(gridDays, 7).map((week, wi) => {
+            const weekStartKey = dateKey(week[0]);
+            const weekEndKey = dateKey(week[6]);
+            const weekEvents = displayEvents
+              .filter(
+                (item) =>
+                  displayEventEndKey(item) >= weekStartKey &&
+                  displayEventStartKey(item) <= weekEndKey,
+              )
+              .sort((a, b) =>
+                displayEventStartKey(a).localeCompare(displayEventStartKey(b)),
+              );
+            const isLastWeek = wi === chunk(gridDays, 7).length - 1;
+            return (
+              <div
+                key={wi}
+                className={isLastWeek ? "" : "border-b border-card-border/60"}
+              >
+                {/* Day number cells */}
+                <div className="grid grid-cols-7">
+                  {week.map((day) => {
+                    const key = dateKey(day);
+                    const inMonth = isSameMonth(day, cursor);
+                    const today = isToday(day);
+                    return (
+                      <div
+                        key={key}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => openCreateForDay(key)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ")
+                            openCreateForDay(key);
+                        }}
+                        className={`min-h-[48px] cursor-pointer border-r border-card-border/60 p-1.5 last:border-r-0 hover:bg-muted/40 ${
+                          inMonth ? "bg-card" : "bg-muted/20"
+                        }`}
+                      >
+                        <span
+                          className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${
+                            today
+                              ? "bg-primary text-primary-foreground font-semibold"
+                              : inMonth
+                                ? "text-foreground"
+                                : "text-muted-foreground"
+                          }`}
+                        >
+                          {day.getDate()}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Spanning event bars */}
+                {weekEvents.length > 0 && (
+                  <div className="grid grid-cols-7 gap-y-0.5 pb-1.5 pt-0.5">
+                    {weekEvents.map((item) => {
+                      const startKey = displayEventStartKey(item);
+                      const endKey = displayEventEndKey(item);
+                      const isStart = startKey >= weekStartKey;
+                      const isEnd = endKey <= weekEndKey;
+                      const colStart = isStart
+                        ? week.findIndex((d) => dateKey(d) === startKey) + 1
+                        : 1;
+                      const endIdx = week.findIndex(
+                        (d) => dateKey(d) === endKey,
+                      );
+                      const colEnd = isEnd && endIdx >= 0 ? endIdx + 2 : 8;
+                      const st = eventStyle(item);
+                      return (
+                        <button
+                          key={`${item.kind}-${item.calendar?.id ?? "t"}-${item.event.id}`}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEdit(item);
+                          }}
+                          style={{
+                            gridColumn: `${colStart} / ${colEnd}`,
+                            marginLeft: isStart ? 2 : 0,
+                            marginRight: isEnd ? 2 : 0,
+                            ...st.style,
+                          }}
+                          className={`h-5 flex items-center gap-1 truncate px-1.5 text-left text-[11px] ${st.className} ${isStart ? "rounded-l" : ""} ${isEnd ? "rounded-r" : ""}`}
+                          title={item.event.title}
+                        >
+                          {isStart && item.kind === "travel" && (
+                            <Plane className="h-2.5 w-2.5 shrink-0" />
+                          )}
+                          {isStart && (
+                            <span className="truncate">{item.event.title}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : view === "week" ? (
+        <div className="overflow-hidden rounded-xl border border-card-border bg-card">
+          {/* Day headers */}
+          <div className="grid grid-cols-7 divide-x divide-card-border/60 border-b border-card-border/60">
+            {gridDays.map((day) => {
+              const today = isToday(day);
+              return (
+                <div
+                  key={dateKey(day)}
+                  className={`flex flex-col items-center py-2 ${
+                    today ? "bg-primary/10" : "bg-muted/30"
+                  }`}
+                >
+                  <span className="text-[11px] text-muted-foreground">
+                    {day.toLocaleDateString(undefined, { weekday: "short" })}
+                  </span>
+                  <span
+                    className={`mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${
+                      today
+                        ? "bg-primary text-primary-foreground font-semibold"
+                        : "text-foreground"
+                    }`}
+                  >
+                    {day.getDate()}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          {/* Spanning event bars */}
+          {(() => {
+            const wStartKey = dateKey(gridDays[0]);
+            const wEndKey = dateKey(gridDays[6]);
+            const wEvents = displayEvents
+              .filter(
+                (item) =>
+                  displayEventEndKey(item) >= wStartKey &&
+                  displayEventStartKey(item) <= wEndKey,
+              )
+              .sort((a, b) =>
+                displayEventStartKey(a).localeCompare(displayEventStartKey(b)),
+              );
+            if (wEvents.length === 0) return null;
+            return (
+              <div className="grid grid-cols-7 gap-y-0.5 border-b border-card-border/60 py-1.5">
+                {wEvents.map((item) => {
+                  const startKey = displayEventStartKey(item);
+                  const endKey = displayEventEndKey(item);
+                  const isStart = startKey >= wStartKey;
+                  const isEnd = endKey <= wEndKey;
+                  const colStart = isStart
+                    ? gridDays.findIndex((d) => dateKey(d) === startKey) + 1
+                    : 1;
+                  const endIdx = gridDays.findIndex(
+                    (d) => dateKey(d) === endKey,
+                  );
+                  const colEnd = isEnd && endIdx >= 0 ? endIdx + 2 : 8;
+                  const st = eventStyle(item);
+                  return (
+                    <button
+                      key={`${item.kind}-${item.calendar?.id ?? "t"}-${item.event.id}`}
+                      type="button"
+                      onClick={() => openEdit(item)}
+                      style={{
+                        gridColumn: `${colStart} / ${colEnd}`,
+                        marginLeft: isStart ? 2 : 0,
+                        marginRight: isEnd ? 2 : 0,
+                        ...st.style,
+                      }}
+                      className={`h-5 flex items-center gap-1 truncate px-1.5 text-left text-[11px] ${st.className} ${isStart ? "rounded-l" : ""} ${isEnd ? "rounded-r" : ""}`}
+                      title={item.event.title}
+                    >
+                      {item.kind === "travel" && (
+                        <Plane className="h-2.5 w-2.5 shrink-0" />
+                      )}
+                      <span className="truncate">{item.event.title}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
+          {/* Day bodies — click to create */}
+          <div className="grid grid-cols-7 divide-x divide-card-border/60">
             {gridDays.map((day) => {
               const key = dateKey(day);
-              const dayEvents = eventsByDay.get(key) ?? [];
-              const inMonth = isSameMonth(day, cursor);
-              const today = isToday(day);
               return (
                 <div
                   key={key}
@@ -873,114 +1061,8 @@ export default function TravelCalendar() {
                     if (e.key === "Enter" || e.key === " ")
                       openCreateForDay(key);
                   }}
-                  className={`min-h-[92px] cursor-pointer border-b border-r border-card-border/60 p-1.5 text-left align-top last:border-r-0 hover:bg-muted/40 ${
-                    inMonth ? "bg-card" : "bg-muted/20"
-                  }`}
-                >
-                  <span
-                    className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${
-                      today
-                        ? "bg-primary text-primary-foreground font-semibold"
-                        : inMonth
-                          ? "text-foreground"
-                          : "text-muted-foreground"
-                    }`}
-                  >
-                    {day.getDate()}
-                  </span>
-                  <div className="mt-1 space-y-0.5">
-                    {dayEvents.slice(0, 3).map((item) => (
-                      <div
-                        key={`${item.kind}-${item.event.id}`}
-                        role="button"
-                        tabIndex={0}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEdit(item);
-                        }}
-                        className={`flex items-center gap-1 truncate rounded px-1 py-0.5 text-[11px] ${eventStyle(item).className}`}
-                        style={eventStyle(item).style}
-                        title={item.event.title}
-                      >
-                        {item.kind === "travel" && (
-                          <Plane className="h-2.5 w-2.5 shrink-0" />
-                        )}
-                        <span className="truncate">{item.event.title}</span>
-                      </div>
-                    ))}
-                    {dayEvents.length > 3 && (
-                      <div className="px-1 text-[10px] text-muted-foreground">
-                        +{dayEvents.length - 3} more
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : view === "week" ? (
-        <div className="overflow-hidden rounded-xl border border-card-border bg-card">
-          <div className="grid grid-cols-7 divide-x divide-card-border/60">
-            {gridDays.map((day) => {
-              const key = dateKey(day);
-              const dayEvents = eventsByDay.get(key) ?? [];
-              const today = isToday(day);
-              return (
-                <div key={key} className="min-h-[220px]">
-                  <div
-                    className={`flex flex-col items-center border-b border-card-border/60 py-2 ${
-                      today ? "bg-primary/10" : "bg-muted/30"
-                    }`}
-                  >
-                    <span className="text-[11px] text-muted-foreground">
-                      {day.toLocaleDateString(undefined, { weekday: "short" })}
-                    </span>
-                    <span
-                      className={`mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${
-                        today
-                          ? "bg-primary text-primary-foreground font-semibold"
-                          : "text-foreground"
-                      }`}
-                    >
-                      {day.getDate()}
-                    </span>
-                  </div>
-                  <div className="space-y-1 p-1.5">
-                    {dayEvents.length === 0 ? (
-                      <p className="px-1 text-center text-[11px] text-muted-foreground">
-                        —
-                      </p>
-                    ) : (
-                      dayEvents.map((item) => (
-                        <button
-                          key={`${item.kind}-${item.event.id}`}
-                          type="button"
-                          onClick={() => openEdit(item)}
-                          className={`flex w-full items-center gap-1 truncate rounded px-1.5 py-1 text-left text-[11px] ${eventStyle(item).className}`}
-                          style={eventStyle(item).style}
-                          title={item.event.title}
-                        >
-                          {item.kind === "travel" && (
-                            <Plane className="h-2.5 w-2.5 shrink-0" />
-                          )}
-                          {!item.event.allDay && (
-                            <span className="mr-1 text-muted-foreground">
-                              {new Date(item.event.start).toLocaleTimeString(
-                                undefined,
-                                {
-                                  hour: "numeric",
-                                  minute: "2-digit",
-                                },
-                              )}
-                            </span>
-                          )}
-                          <span className="truncate">{item.event.title}</span>
-                        </button>
-                      ))
-                    )}
-                  </div>
-                </div>
+                  className="min-h-[160px] cursor-pointer hover:bg-muted/20"
+                />
               );
             })}
           </div>

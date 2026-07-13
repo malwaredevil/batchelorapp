@@ -173,8 +173,7 @@ export function useWidgets() {
     () => readLocalStorage() ?? DEFAULT_SLOTS,
   );
   const [appCardOrder, setAppCardOrderRaw] = useState<string[]>(
-    () =>
-      readCardOrderLocalStorage() ?? [...DEFAULT_APP_CARD_ORDER],
+    () => readCardOrderLocalStorage() ?? [...DEFAULT_APP_CARD_ORDER],
   );
   const [serverReady, setServerReady] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(

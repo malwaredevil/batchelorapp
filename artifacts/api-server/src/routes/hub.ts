@@ -35,10 +35,7 @@ const VALID_APP_IDS = new Set([
 
 const PreferencesBody = z.object({
   slots: z.array(SlotSchema).max(60),
-  appCardOrder: z
-    .array(z.string().max(64))
-    .max(20)
-    .optional(),
+  appCardOrder: z.array(z.string().max(64)).max(20).optional(),
 });
 
 function parseStoredSlots(raw: string): WidgetSlot[] | null {

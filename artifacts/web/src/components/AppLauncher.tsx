@@ -476,7 +476,8 @@ function AppHeroCard({
 // Calendar). Falls back to the hardcoded HALLMARK_OPEN_HOUSE constant only
 // if no events have been entered yet or the request hasn't resolved.
 // Compact stat-square–sized tile that replaces the "Total" square for ornaments.
-// If multiple events are upcoming, it rotates through them every 4 seconds.
+// Yellow background while counting down, red background when live.
+// Rotates through multiple upcoming events every 4 seconds.
 function HallmarkEventStatTile() {
   const { data: events } = useListOrnamentsHallmarkEvents();
   const now = Date.now();
@@ -517,22 +518,36 @@ function HallmarkEventStatTile() {
   const shortTitle = current.title.replace(/hallmark'?s?\s*/i, "").trim();
 
   return (
-    <div className="flex-1 flex flex-col space-y-1 p-3 rounded-lg bg-rose-50/80 dark:bg-rose-900/20 min-w-0">
-      <div className="flex items-center gap-1">
-        <Sparkle className="w-3 h-3 text-rose-500 dark:text-rose-400 flex-shrink-0" />
-        <span className="text-2xl font-bold text-rose-600 dark:text-rose-400 tabular-nums leading-none">
-          {isLive ? "Live" : daysAway}
-        </span>
-        {!isLive && (
-          <span className="text-[9px] text-muted-foreground uppercase tracking-wide self-end pb-0.5">
-            d
-          </span>
+    <div
+      title={current.title}
+      className={`flex-1 flex flex-col justify-between p-3 rounded-lg min-w-0 cursor-default ${
+        isLive
+          ? "bg-red-100 dark:bg-red-900/40"
+          : "bg-amber-50 dark:bg-amber-900/30"
+      }`}
+    >
+      {/* Top: number/LIVE + sub-label */}
+      <div>
+        {isLive ? (
+          <div className="flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+            <span className="text-base font-bold text-red-700 dark:text-red-300 leading-none uppercase tracking-wide">
+              Live
+            </span>
+          </div>
+        ) : (
+          <>
+            <span className="text-lg font-bold text-amber-800 dark:text-amber-200 tabular-nums leading-none">
+              {daysAway}
+            </span>
+            <div className="text-[9px] font-medium text-amber-700/70 dark:text-amber-300/70 uppercase tracking-wider mt-0.5">
+              days until
+            </div>
+          </>
         )}
       </div>
-      <span
-        className="text-[10px] font-medium text-rose-700/70 dark:text-rose-300/70 uppercase tracking-wider truncate"
-        title={current.title}
-      >
+      {/* Bottom: event name */}
+      <span className="text-[10px] font-medium uppercase tracking-wider truncate mt-1.5 block text-amber-900/70 dark:text-amber-100/60">
         {shortTitle || current.title}
       </span>
     </div>

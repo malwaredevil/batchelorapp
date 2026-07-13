@@ -44,8 +44,7 @@ function ColorPicker({
           className="h-5 w-5 rounded-full border transition-all flex-shrink-0"
           style={{
             backgroundColor: c.hex === "transparent" ? "white" : c.hex,
-            borderColor:
-              value === c.value ? "#6366f1" : "rgba(0,0,0,0.15)",
+            borderColor: value === c.value ? "#6366f1" : "rgba(0,0,0,0.15)",
             boxShadow: value === c.value ? "0 0 0 2px #6366f1" : undefined,
           }}
           aria-pressed={value === c.value}

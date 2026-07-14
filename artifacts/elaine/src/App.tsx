@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth, redirectToMainLogin } from "@/lib/auth";
+import { MessengerWidget } from "@workspace/messenger-ui";
 import {
   ElainePageContextProvider,
   ThemeProvider,
@@ -57,17 +58,20 @@ function Routes() {
   if (isLoading || !user) return <Splash />;
 
   return (
-    <div className="min-h-screen bg-background">
-      <ThemeSync />
-      <Header />
-      <InstallBanner />
-      <main>
-        <Switch>
-          <Route path="/" component={Chat} />
-          <Route component={NotFound} />
-        </Switch>
-      </main>
-    </div>
+    <>
+      <div className="min-h-screen bg-background">
+        <ThemeSync />
+        <Header />
+        <InstallBanner />
+        <main>
+          <Switch>
+            <Route path="/" component={Chat} />
+            <Route component={NotFound} />
+          </Switch>
+        </main>
+      </div>
+      <MessengerWidget messengerPageHref="/modules/office/messenger" />
+    </>
   );
 }
 

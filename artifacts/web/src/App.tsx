@@ -12,6 +12,7 @@ import {
   ElainePageContextProvider,
   ElaineWidget,
 } from "@workspace/elaine-ui";
+import { MessengerWidget } from "@workspace/messenger-ui";
 import Login from "@/pages/login";
 import ForgotPassword from "@/pages/forgot-password";
 import ResetPassword from "@/pages/reset-password";
@@ -83,6 +84,7 @@ function Routes() {
         <Route component={NotFound} />
       </Switch>
       <ElaineWidget appId="hub" fullScreenPath="/elaine/" />
+      <MessengerWidget messengerPageHref="/modules/office/messenger" />
     </>
   );
 }

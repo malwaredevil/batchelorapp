@@ -3,6 +3,7 @@
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
 @source "../../../lib/elaine-ui/src";
+@source "../../../lib/messenger-ui/src";
 
 @custom-variant dark (&:is(.dark *));
 

@@ -9,3 +9,4 @@ export * from "./ornaments";
 export * from "./office";
 export * from "./elaine-email";
 export * from "./app-config";
+export * from "./messenger";

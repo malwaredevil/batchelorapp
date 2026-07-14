@@ -30,6 +30,7 @@ import {
   CalendarHeart,
   Mail,
   NotebookPen,
+  MessageSquare,
   Menu,
   Sun,
   Moon,
@@ -101,13 +102,14 @@ const GROUP_META: Record<
     inbox: { label: "Inbox", icon: Mail },
     calendar: { label: "Calendar", icon: CalendarDays },
     notes: { label: "Notes", icon: NotebookPen },
+    messenger: { label: "Messenger", icon: MessageSquare },
   },
 };
 
 const GROUP_ORDER: Record<string, string[]> = {
   pottery: ["collection", "add", "compare", "scan", "settings"],
   quilting: ["collection", "shopping", "design", "settings"],
-  office: ["inbox", "calendar", "notes"],
+  office: ["inbox", "calendar", "notes", "messenger"],
   ornaments: ["collection", "add", "hallmark-events", "settings"],
   travels: ["home", "trips", "discover", "plan", "settings"],
 };

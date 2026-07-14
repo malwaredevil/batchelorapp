@@ -24,9 +24,6 @@ export default function MessengerPage() {
         display: "flex",
         flexDirection: "column",
         height: "calc(100vh - 120px)",
-        maxWidth: 720,
-        margin: "0 auto",
-        padding: "0 16px",
       }}
     >
       {/* Header */}

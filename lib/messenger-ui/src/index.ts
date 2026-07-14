@@ -1,4 +1,6 @@
 export { MessengerWidget } from "./MessengerWidget";
+export { MessengerNavIcon } from "./MessengerNavIcon";
+export { MessengerNotification } from "./MessengerNotification";
 export { MessengerChatPanel } from "./MessengerChatPanel";
 export { MessageItem } from "./MessageItem";
 export { ImageModal } from "./ImageModal";

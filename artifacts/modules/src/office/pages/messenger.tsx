@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Users, ArrowLeft } from "lucide-react";
+import { Users, ArrowLeft, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useAuth } from "@workspace/web-core/auth";
 import {
   MessengerChatPanel,
@@ -18,6 +18,7 @@ export default function MessengerPage() {
   const [selectedConvId, setSelectedConvId] = useState<number | null>(null);
   const [view, setView] = useState<"chat" | "contacts">("chat");
   const [pendingPrefill, setPendingPrefill] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const { data: conversations = [] } = useListConversations({
     query: {
@@ -72,14 +73,16 @@ export default function MessengerPage() {
         background: "#fff",
       }}
     >
-      {/* Left sidebar */}
-      <MessengerConversationSidebar
-        selectedConvId={selectedConvId}
-        onSelect={(id) => {
-          setSelectedConvId(id);
-          setView("chat");
-        }}
-      />
+      {/* Left sidebar — collapsible */}
+      {sidebarOpen && (
+        <MessengerConversationSidebar
+          selectedConvId={selectedConvId}
+          onSelect={(id) => {
+            setSelectedConvId(id);
+            setView("chat");
+          }}
+        />
+      )}
 
       {/* Right: header + body */}
       <div
@@ -102,6 +105,28 @@ export default function MessengerPage() {
             flexShrink: 0,
           }}
         >
+          {/* Sidebar toggle */}
+          <button
+            onClick={() => setSidebarOpen((v) => !v)}
+            title={sidebarOpen ? "Hide chat list" : "Show chat list"}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "#9ca3af",
+              padding: 2,
+              display: "flex",
+              alignItems: "center",
+              flexShrink: 0,
+            }}
+          >
+            {sidebarOpen ? (
+              <PanelLeftClose size={16} />
+            ) : (
+              <PanelLeftOpen size={16} />
+            )}
+          </button>
+
           {view === "contacts" ? (
             <>
               <button

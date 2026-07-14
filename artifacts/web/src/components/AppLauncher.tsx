@@ -382,13 +382,16 @@ function AppHeroCard({
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
-          <div className="absolute bottom-2.5 left-3.5 right-3.5 sm:bottom-4 sm:left-6 sm:right-6 flex justify-between items-end gap-2">
+          {/* Tagline — top-right so it never covers the title */}
+          <div className="absolute top-2.5 right-3 sm:top-3.5 sm:right-4">
+            <Badge className="bg-white/20 hover:bg-white/30 text-white backdrop-blur-md border-0 text-[10px] sm:text-xs">
+              {app.updated}
+            </Badge>
+          </div>
+          <div className="absolute bottom-2.5 left-3.5 right-3.5 sm:bottom-4 sm:left-6 sm:right-6">
             <h2 className="text-xl sm:text-3xl font-bold text-white tracking-tight truncate">
               {app.name}
             </h2>
-            <Badge className="bg-white/20 hover:bg-white/30 text-white backdrop-blur-md border-0 flex-shrink-0 text-[10px] sm:text-xs">
-              {app.updated}
-            </Badge>
           </div>
         </div>
 

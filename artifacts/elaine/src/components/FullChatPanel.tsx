@@ -77,8 +77,7 @@ export function FullChatPanel({
           <div className="flex flex-col items-center gap-2 py-8 text-center">
             <ElaineAvatar size={48} />
             <p className="text-sm text-muted-foreground">
-              Hi, I'm <ElaineName />! Ask me anything about your pottery,
-              quilting, or trips.
+              Hi, I'm <ElaineName />! Ask me anything.
             </p>
           </div>
         )

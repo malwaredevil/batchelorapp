@@ -100,7 +100,6 @@ export function MessengerConversationSidebar({
   const { mutateAsync: updateConv } = useUpdateConversation();
   const { mutateAsync: deleteConv } = useDeleteConversation();
 
-  // Create a DM with the selected person (or find existing)
   const handleCreateDm = useCallback(
     async (otherId: number) => {
       const created = await createConv({
@@ -113,7 +112,6 @@ export function MessengerConversationSidebar({
     [createConv, qc, onSelect],
   );
 
-  // Create a named group chat
   const handleCreateGroup = useCallback(
     async (selectedIds: number[], name: string) => {
       const trimmed = name.trim() || "Group Chat";
@@ -176,9 +174,9 @@ export function MessengerConversationSidebar({
           borderRadius: 8,
           cursor: "pointer",
           background: isSelected
-            ? "#eff6ff"
+            ? "rgba(59,130,246,0.1)"
             : isHovered
-              ? "#f9fafb"
+              ? "rgba(127,127,127,0.07)"
               : "transparent",
           borderLeft: isSelected
             ? "2px solid #3b82f6"
@@ -207,15 +205,21 @@ export function MessengerConversationSidebar({
             }}
           >
             {c.isDirect ? (
-              <User size={10} style={{ color: "#9ca3af", flexShrink: 0 }} />
+              <User
+                size={10}
+                style={{ color: "hsl(var(--muted-foreground))", flexShrink: 0 }}
+              />
             ) : (
-              <Users size={10} style={{ color: "#9ca3af", flexShrink: 0 }} />
+              <Users
+                size={10}
+                style={{ color: "hsl(var(--muted-foreground))", flexShrink: 0 }}
+              />
             )}
             <span
               style={{
                 fontSize: 13,
                 fontWeight: c.unreadCount > 0 ? 600 : 500,
-                color: "#111827",
+                color: "hsl(var(--foreground))",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
@@ -249,7 +253,11 @@ export function MessengerConversationSidebar({
               </span>
             )}
             {time && (
-              <span style={{ fontSize: 10, color: "#9ca3af" }}>{time}</span>
+              <span
+                style={{ fontSize: 10, color: "hsl(var(--muted-foreground))" }}
+              >
+                {time}
+              </span>
             )}
           </div>
         </div>
@@ -259,7 +267,7 @@ export function MessengerConversationSidebar({
           <div
             style={{
               fontSize: 11,
-              color: "#6b7280",
+              color: "hsl(var(--muted-foreground))",
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
@@ -304,12 +312,13 @@ export function MessengerConversationSidebar({
                 setConfirmDeleteId(null);
               }}
               style={{
-                background: "#f3f4f6",
-                border: "1px solid #e5e7eb",
+                background: "hsl(var(--muted))",
+                border: "1px solid hsl(var(--border))",
                 borderRadius: 4,
                 padding: "1px 6px",
                 fontSize: 10,
                 cursor: "pointer",
+                color: "hsl(var(--foreground))",
               }}
             >
               Cancel
@@ -338,7 +347,7 @@ export function MessengerConversationSidebar({
                 background: "none",
                 border: "none",
                 cursor: "pointer",
-                color: "#9ca3af",
+                color: "hsl(var(--muted-foreground))",
                 padding: 2,
                 borderRadius: 4,
                 display: "flex",
@@ -357,7 +366,7 @@ export function MessengerConversationSidebar({
                 background: "none",
                 border: "none",
                 cursor: "pointer",
-                color: "#9ca3af",
+                color: "hsl(var(--muted-foreground))",
                 padding: 2,
                 borderRadius: 4,
                 display: "flex",
@@ -372,11 +381,9 @@ export function MessengerConversationSidebar({
     );
   };
 
-  // Render the member picker / group-name step
   const renderCreateFlow = () => {
     if (!createStep) return null;
 
-    // Step 1: Member picker
     if (createStep.step === "picker") {
       const otherMembers = members.filter((m) => m.id !== currentUserId);
       const { selectedIds } = createStep;
@@ -391,11 +398,10 @@ export function MessengerConversationSidebar({
       return (
         <div
           style={{
-            borderBottom: "1px solid #f3f4f6",
+            borderBottom: "1px solid hsl(var(--border))",
             paddingBottom: 6,
           }}
         >
-          {/* Picker header */}
           <div
             style={{
               display: "flex",
@@ -410,7 +416,7 @@ export function MessengerConversationSidebar({
                 background: "none",
                 border: "none",
                 cursor: "pointer",
-                color: "#9ca3af",
+                color: "hsl(var(--muted-foreground))",
                 padding: 2,
                 display: "flex",
               }}
@@ -421,7 +427,7 @@ export function MessengerConversationSidebar({
               style={{
                 fontSize: 11,
                 fontWeight: 600,
-                color: "#374151",
+                color: "hsl(var(--foreground))",
                 flex: 1,
               }}
             >
@@ -435,7 +441,7 @@ export function MessengerConversationSidebar({
                 background: "none",
                 border: "none",
                 cursor: "pointer",
-                color: "#9ca3af",
+                color: "hsl(var(--muted-foreground))",
                 padding: 2,
                 display: "flex",
               }}
@@ -444,11 +450,14 @@ export function MessengerConversationSidebar({
             </button>
           </div>
 
-          {/* Member list */}
           <div style={{ maxHeight: 140, overflowY: "auto", padding: "0 6px" }}>
             {otherMembers.length === 0 && (
               <div
-                style={{ fontSize: 11, color: "#9ca3af", padding: "8px 4px" }}
+                style={{
+                  fontSize: 11,
+                  color: "hsl(var(--muted-foreground))",
+                  padding: "8px 4px",
+                }}
               >
                 No other household members.
               </div>
@@ -466,7 +475,9 @@ export function MessengerConversationSidebar({
                     padding: "5px 6px",
                     borderRadius: 6,
                     cursor: "pointer",
-                    background: checked ? "#eff6ff" : "transparent",
+                    background: checked
+                      ? "rgba(59,130,246,0.1)"
+                      : "transparent",
                   }}
                 >
                   <div
@@ -476,8 +487,8 @@ export function MessengerConversationSidebar({
                       borderRadius: 3,
                       border: checked
                         ? "2px solid #3b82f6"
-                        : "2px solid #d1d5db",
-                      background: checked ? "#3b82f6" : "#fff",
+                        : "2px solid hsl(var(--border))",
+                      background: checked ? "#3b82f6" : "hsl(var(--card))",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
@@ -486,7 +497,12 @@ export function MessengerConversationSidebar({
                   >
                     {checked && <Check size={9} color="#fff" />}
                   </div>
-                  <span style={{ fontSize: 12, color: "#374151" }}>
+                  <span
+                    style={{
+                      fontSize: 12,
+                      color: "hsl(var(--foreground))",
+                    }}
+                  >
                     {m.displayName ?? m.email}
                   </span>
                 </div>
@@ -494,7 +510,6 @@ export function MessengerConversationSidebar({
             })}
           </div>
 
-          {/* Action buttons */}
           {selectedIds.length > 0 && (
             <div style={{ padding: "4px 10px 0", display: "flex", gap: 4 }}>
               {selectedIds.length === 1 && (
@@ -541,14 +556,13 @@ export function MessengerConversationSidebar({
       );
     }
 
-    // Step 2: Group name
     if (createStep.step === "group-name") {
       const { selectedIds, name } = createStep;
       return (
         <div
           style={{
             padding: "6px 10px",
-            borderBottom: "1px solid #f3f4f6",
+            borderBottom: "1px solid hsl(var(--border))",
           }}
         >
           <div
@@ -565,14 +579,20 @@ export function MessengerConversationSidebar({
                 background: "none",
                 border: "none",
                 cursor: "pointer",
-                color: "#9ca3af",
+                color: "hsl(var(--muted-foreground))",
                 padding: 2,
                 display: "flex",
               }}
             >
               <ArrowLeft size={13} />
             </button>
-            <span style={{ fontSize: 11, fontWeight: 600, color: "#374151" }}>
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: "hsl(var(--foreground))",
+              }}
+            >
               Group name
             </span>
           </div>
@@ -596,10 +616,12 @@ export function MessengerConversationSidebar({
               style={{
                 flex: 1,
                 fontSize: 12,
-                border: "1px solid #d1d5db",
+                border: "1px solid hsl(var(--border))",
                 borderRadius: 5,
                 padding: "3px 6px",
                 outline: "none",
+                background: "hsl(var(--background))",
+                color: "hsl(var(--foreground))",
               }}
             />
             <button
@@ -621,7 +643,7 @@ export function MessengerConversationSidebar({
                 background: "none",
                 border: "none",
                 cursor: "pointer",
-                color: "#9ca3af",
+                color: "hsl(var(--muted-foreground))",
                 padding: 2,
                 display: "flex",
               }}
@@ -641,11 +663,11 @@ export function MessengerConversationSidebar({
       style={{
         width: 220,
         flexShrink: 0,
-        borderRight: "1px solid #f0f0f0",
+        borderRight: "1px solid hsl(var(--border))",
         display: "flex",
         flexDirection: "column",
         height: "100%",
-        background: "#fff",
+        background: "hsl(var(--card))",
         overflow: "hidden",
       }}
     >
@@ -653,7 +675,7 @@ export function MessengerConversationSidebar({
       <div
         style={{
           padding: "12px 10px 8px",
-          borderBottom: "1px solid #f3f4f6",
+          borderBottom: "1px solid hsl(var(--border))",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -661,8 +683,17 @@ export function MessengerConversationSidebar({
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <MessageSquare size={14} style={{ color: "#6b7280" }} />
-          <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>
+          <MessageSquare
+            size={14}
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          />
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: "hsl(var(--foreground))",
+            }}
+          >
             Chats
           </span>
         </div>
@@ -674,10 +705,10 @@ export function MessengerConversationSidebar({
             )
           }
           style={{
-            background: createStep ? "#eff6ff" : "none",
+            background: createStep ? "rgba(59,130,246,0.1)" : "none",
             border: "none",
             cursor: "pointer",
-            color: createStep ? "#3b82f6" : "#6b7280",
+            color: createStep ? "#3b82f6" : "hsl(var(--muted-foreground))",
             padding: 2,
             borderRadius: 4,
             display: "flex",
@@ -697,7 +728,7 @@ export function MessengerConversationSidebar({
           <div
             style={{
               textAlign: "center",
-              color: "#9ca3af",
+              color: "hsl(var(--muted-foreground))",
               fontSize: 12,
               padding: "16px 0",
             }}
@@ -710,7 +741,7 @@ export function MessengerConversationSidebar({
           <div
             style={{
               textAlign: "center",
-              color: "#9ca3af",
+              color: "hsl(var(--muted-foreground))",
               fontSize: 11,
               padding: "16px 8px",
             }}
@@ -735,9 +766,12 @@ export function MessengerConversationSidebar({
                 display: "flex",
                 alignItems: "center",
                 gap: 4,
-                padding: "4px 4px",
-                color: "#9ca3af",
-                fontSize: 11,
+                padding: "4px 8px",
+                fontSize: 10,
+                fontWeight: 600,
+                color: "hsl(var(--muted-foreground))",
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
                 width: "100%",
               }}
             >

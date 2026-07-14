@@ -238,7 +238,7 @@ export function ModuleShell({ children }: { children: ReactNode }) {
               const Icon = meta.icon;
 
               const triggerCls = cn(
-                "flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium hover-elevate",
+                "flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium cursor-pointer transition-colors hover:bg-accent/60 hover:text-foreground",
                 groupActive
                   ? "bg-accent text-accent-foreground"
                   : "text-muted-foreground",

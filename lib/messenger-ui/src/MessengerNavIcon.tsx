@@ -106,40 +106,64 @@ export function MessengerNavIcon({
       : (currentConv.name ?? "Group Chat")
     : null;
 
-  const isMobile = () => window.innerWidth < MOBILE_BREAK;
+  const vvWidth = () => window.visualViewport?.width ?? window.innerWidth;
+  const vvHeight = () => window.visualViewport?.height ?? window.innerHeight;
+  const isMobile = () => vvWidth() < MOBILE_BREAK;
 
   // Position the panel when first opened.
   // Mobile: full-width, 50 % height, centered on screen.
   // Desktop: right-aligned below the trigger button.
   const calcInitialPosition = useCallback((w: number, h: number) => {
-    if (isMobile()) {
-      // Centered horizontally with auto margins matching the 92% width
+    const vw = vvWidth();
+    const vh = vvHeight();
+    if (vw < MOBILE_BREAK) {
       setPanelPos({
-        left: Math.round((window.innerWidth - w) / 2),
-        top: Math.round((window.innerHeight - h) / 2),
+        left: Math.round((vw - w) / 2),
+        top: Math.round((vh - h) / 2),
       });
       return;
     }
     if (!triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
-    const left = Math.max(
-      8,
-      Math.min(rect.right - w, window.innerWidth - w - 8),
-    );
+    const left = Math.max(8, Math.min(rect.right - w, vw - w - 8));
     setPanelPos({ top: rect.bottom + 6, left });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (isOpen) {
-      const mobile = isMobile();
-      const w = mobile ? Math.round(window.innerWidth * 0.92) : DEFAULT_W;
-      const h = mobile ? Math.round(window.innerHeight * 0.5) : DEFAULT_H;
+      const vw = vvWidth();
+      const vh = vvHeight();
+      const mobile = vw < MOBILE_BREAK;
+      const w = mobile ? Math.round(vw * 0.92) : DEFAULT_W;
+      const h = mobile ? Math.round(vh * 0.5) : DEFAULT_H;
       setPanelSize({ width: w, height: h });
       calcInitialPosition(w, h);
       setView("list");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  // Re-clamp the panel when the visual viewport resizes (keyboard appears,
+  // address bar shows/hides, orientation changes).
+  useEffect(() => {
+    if (!isOpen) return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onResize = () => {
+      const vw = vv.width;
+      const vh = vv.height;
+      setPanelSize((prev) => ({
+        width: Math.min(prev.width, vw - 16),
+        height: Math.min(prev.height, vh - 40),
+      }));
+      setPanelPos((prev) => ({
+        left: Math.max(0, Math.min(prev.left, vw - MIN_W)),
+        top: Math.max(0, Math.min(prev.top, vh - 48)),
+      }));
+    };
+    vv.addEventListener("resize", onResize);
+    return () => vv.removeEventListener("resize", onResize);
   }, [isOpen]);
 
   // ── Global move / up handlers (shared by mouse & touch) ───────────────────
@@ -365,7 +389,8 @@ export function MessengerNavIcon({
   };
 
   // ── Panel ──────────────────────────────────────────────────────────────────
-  const currentIsMobile = window.innerWidth < MOBILE_BREAK;
+  const currentIsMobile =
+    (window.visualViewport?.width ?? window.innerWidth) < MOBILE_BREAK;
 
   const panel = isOpen
     ? createPortal(

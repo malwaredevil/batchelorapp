@@ -57,8 +57,14 @@ export function MessengerWidget({ messengerPageHref }: MessengerWidgetProps) {
   // pos tracks the bubble's top-left corner in viewport-space (clientX, clientY).
   // Default: bottom-right corner of the screen.
   const [pos, setPos] = useState(() => ({
-    x: window.innerWidth - BUBBLE_SIZE - EDGE_PAD,
-    y: window.innerHeight - BUBBLE_SIZE - EDGE_PAD,
+    x:
+      (window.visualViewport?.width ?? window.innerWidth) -
+      BUBBLE_SIZE -
+      EDGE_PAD,
+    y:
+      (window.visualViewport?.height ?? window.innerHeight) -
+      BUBBLE_SIZE -
+      EDGE_PAD,
   }));
   const dragging = useRef(false);
   const dragOffset = useRef({ x: 0, y: 0 });
@@ -66,9 +72,32 @@ export function MessengerWidget({ messengerPageHref }: MessengerWidgetProps) {
   const didDrag = useRef(false);
   const bubbleRef = useRef<HTMLButtonElement>(null);
 
+  // Re-render when the visual viewport resizes (address bar, keyboard, rotation)
+  // so that panel dimensions and position recalculate from fresh vv values.
+  const [, setVVVersion] = useState(0);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const handler = () => setVVVersion((n) => n + 1);
+    vv.addEventListener("resize", handler);
+    return () => vv.removeEventListener("resize", handler);
+  }, []);
+
   const clampPos = (x: number, y: number) => ({
-    x: Math.max(0, Math.min(window.innerWidth - BUBBLE_SIZE, x)),
-    y: Math.max(0, Math.min(window.innerHeight - BUBBLE_SIZE, y)),
+    x: Math.max(
+      0,
+      Math.min(
+        (window.visualViewport?.width ?? window.innerWidth) - BUBBLE_SIZE,
+        x,
+      ),
+    ),
+    y: Math.max(
+      0,
+      Math.min(
+        (window.visualViewport?.height ?? window.innerHeight) - BUBBLE_SIZE,
+        y,
+      ),
+    ),
   });
 
   // Mouse drag
@@ -143,22 +172,21 @@ export function MessengerWidget({ messengerPageHref }: MessengerWidgetProps) {
   }, []);
 
   // ── Panel layout ───────────────────────────────────────────────────────────
-  const isMobile = window.innerWidth < MOBILE_BREAK;
-  const panelW = isMobile ? window.innerWidth - 16 : PANEL_W;
-  const panelH = isMobile
-    ? Math.min(PANEL_H, window.innerHeight - 80)
-    : PANEL_H;
+  // Use visualViewport (tracks actual visible area on mobile) so the panel
+  // stays on-screen when the address bar shows/hides or the keyboard appears.
+  const vvw = window.visualViewport?.width ?? window.innerWidth;
+  const vvh = window.visualViewport?.height ?? window.innerHeight;
+  const isMobile = vvw < MOBILE_BREAK;
+  const panelW = isMobile ? vvw - 16 : PANEL_W;
+  const panelH = isMobile ? Math.min(PANEL_H, vvh - 80) : PANEL_H;
 
   // Horizontal: clamp so panel stays inside viewport
   const panelLeft = isMobile
     ? 8
-    : Math.max(
-        EDGE_PAD,
-        Math.min(pos.x, window.innerWidth - panelW - EDGE_PAD),
-      );
+    : Math.max(EDGE_PAD, Math.min(pos.x, vvw - panelW - EDGE_PAD));
 
   // Vertical: open above bubble if not enough space below, otherwise below
-  const spaceBelow = window.innerHeight - pos.y - BUBBLE_SIZE - 8;
+  const spaceBelow = vvh - pos.y - BUBBLE_SIZE - 8;
   const panelTop =
     spaceBelow >= panelH + EDGE_PAD
       ? pos.y + BUBBLE_SIZE + 8

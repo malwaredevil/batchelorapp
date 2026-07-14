@@ -260,6 +260,27 @@ function isItinerary(value: unknown): value is Itinerary {
   );
 }
 
+/**
+ * Key that identifies the "same real-world event" across multiple documents.
+ * Two activities on the same date with the same sourceField (e.g.
+ * "departureDateTime") almost certainly describe the same flight/booking —
+ * one from the email body and one from the attached PDF, for example.
+ */
+function activityDedupeKey(date: string, sourceField: string): string {
+  return `${date}::${sourceField}`;
+}
+
+/**
+ * How "rich" an activity is — more characters in the combined name + tip +
+ * description means more extracted detail. Used to pick the winner when two
+ * documents both produce an activity for the same real-world event.
+ */
+function activityRichness(a: ItineraryActivity): number {
+  return (
+    (a.name?.length ?? 0) + (a.tip?.length ?? 0) + (a.description?.length ?? 0)
+  );
+}
+
 export async function syncItineraryFromDocument(
   tripId: number,
   docId: number,
@@ -277,6 +298,8 @@ export async function syncItineraryFromDocument(
     ? trip.itinerary
     : { days: [] };
 
+  // Remove all activities previously synced from this document so re-syncing
+  // is idempotent (existing behaviour, unchanged).
   itinerary.days = itinerary.days.map((day) => ({
     ...day,
     activities: (day.activities ?? []).filter(
@@ -284,13 +307,28 @@ export async function syncItineraryFromDocument(
     ),
   }));
 
-  for (const c of candidates) {
-    let day = itinerary.days.find((d) => d.date === c.dateStr);
-    if (!day) {
-      day = { date: c.dateStr, title: "Travel Day", activities: [] };
-      itinerary.days.push(day);
+  // Build a lookup of existing activities from OTHER documents, keyed by
+  // date::sourceField. This lets us detect when two documents describe the
+  // same real-world event (e.g. email body + PDF attachment both containing
+  // the same flight) and keep only the richer one rather than showing both.
+  const existingByKey = new Map<
+    string,
+    { day: ItineraryDay; activity: ItineraryActivity }
+  >();
+  for (const day of itinerary.days) {
+    for (const a of day.activities) {
+      if (a.sourceDocumentId !== undefined && a.sourceField) {
+        const key = activityDedupeKey(day.date, a.sourceField);
+        existingByKey.set(key, { day, activity: a });
+      }
     }
-    day.activities.push({
+  }
+
+  for (const c of candidates) {
+    const key = activityDedupeKey(c.dateStr, c.sourceField);
+    const existing = existingByKey.get(key);
+
+    const newActivity: ItineraryActivity = {
       time: c.time,
       name: c.name,
       description: c.description,
@@ -299,7 +337,29 @@ export async function syncItineraryFromDocument(
       status: "tentative",
       sourceDocumentId: docId,
       sourceField: c.sourceField,
-    });
+    };
+
+    if (existing) {
+      // Same real-world event from two different documents. Keep the richer
+      // one and discard the thinner one — no duplicate in the itinerary.
+      if (activityRichness(newActivity) > activityRichness(existing.activity)) {
+        // New candidate is richer: replace the existing activity in-place.
+        existing.day.activities = existing.day.activities.map((a) =>
+          a === existing.activity ? newActivity : a,
+        );
+        existingByKey.set(key, { day: existing.day, activity: newActivity });
+      }
+      // Existing is richer (or equal): skip this candidate entirely.
+    } else {
+      // No duplicate — add normally.
+      let day = itinerary.days.find((d) => d.date === c.dateStr);
+      if (!day) {
+        day = { date: c.dateStr, title: "Travel Day", activities: [] };
+        itinerary.days.push(day);
+      }
+      day.activities.push(newActivity);
+      existingByKey.set(key, { day, activity: newActivity });
+    }
   }
 
   itinerary.days = itinerary.days.filter(

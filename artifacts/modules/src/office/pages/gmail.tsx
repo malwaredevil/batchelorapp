@@ -198,7 +198,13 @@ export default function OfficeGmailPage() {
 
   const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => {
     const saved = localStorage.getItem("office-gmail-layout-mode");
-    return saved === "vertical" || saved === "horizontal" ? saved : "none";
+    if (saved === "vertical" || saved === "horizontal" || saved === "none")
+      return saved;
+    // Default: bottom pane on desktop, none (full-screen switch) on mobile
+    return typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 767px)").matches
+      ? "none"
+      : "horizontal";
   });
 
   const [splitSize, setSplitSize] = useState<{

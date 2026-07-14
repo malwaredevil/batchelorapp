@@ -109,13 +109,17 @@ function HtmlBody({ html }: { html: string }) {
   }, [html]);
 
   const doc = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
+  html, body { overflow-x: hidden; }
   body { margin: 0; padding: 12px; font-family: Arial, sans-serif; font-size: 14px;
          line-height: 1.5; color: #111; background: transparent; word-break: break-word; }
-  img { max-width: 100%; height: auto; }
+  img { max-width: 100% !important; height: auto !important; }
   a { color: #1a73e8; }
   blockquote { border-left: 3px solid #ccc; margin: 0; padding-left: 12px; color: #555; }
-  table { max-width: 100%; }
+  table { max-width: 100% !important; width: auto !important; }
+  td, th { max-width: 100%; word-break: break-word; }
+  div, p { max-width: 100%; }
 </style>
 </head><body>${html}</body></html>`;
 
@@ -162,7 +166,7 @@ function MessageBody({ msg }: { msg: ThreadMessage }) {
       </div>
 
       {/* Body */}
-      <div className="pl-11">
+      <div className="sm:pl-11">
         {msg.htmlBody ? (
           <HtmlBody html={msg.htmlBody} />
         ) : (

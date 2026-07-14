@@ -1,6 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearch } from "wouter";
-import { Search, Mail, LogOut, X, Menu } from "lucide-react";
+import {
+  Search,
+  Mail,
+  LogOut,
+  X,
+  Menu,
+  AlertTriangle,
+  RefreshCw,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -613,6 +621,37 @@ export default function OfficeGmailPage() {
               <span className="hidden sm:inline">Disconnect</span>
             </Button>
           </div>
+
+          {/* Token-expired reconnect banner */}
+          {status?.tokenExpired && (
+            <div className="flex items-start gap-3 px-4 py-3 bg-amber-50 border-b border-amber-200 flex-shrink-0">
+              <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-amber-800">
+                  Gmail access has expired
+                </p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  Google periodically revokes app access for security. Your
+                  emails are untouched — you just need to reconnect so the app
+                  can read them again.
+                </p>
+              </div>
+              <a
+                href={`/api/gmail/connect?returnTo=${encodeURIComponent(
+                  `${import.meta.env.BASE_URL.replace(/\/$/, "")}/office/gmail`,
+                )}`}
+                className="flex-shrink-0"
+              >
+                <Button
+                  size="sm"
+                  className="bg-amber-600 hover:bg-amber-700 text-white gap-1.5 text-xs h-7"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  Reconnect Gmail
+                </Button>
+              </a>
+            </div>
+          )}
 
           <div ref={contentRef} className="relative flex flex-1 min-h-0">
             {layoutMode !== "none" && (

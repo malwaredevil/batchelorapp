@@ -16,5 +16,6 @@ export interface MessengerMessengerMessage {
   createdAt: Date;
   readAt?: Date | null;
   deletedAt?: Date | null;
+  editedAt?: Date | null;
   attachments?: MessengerMessengerAttachment[];
 }

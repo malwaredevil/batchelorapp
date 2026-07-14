@@ -20,6 +20,8 @@ export interface GmailProfile {
 
 export interface GmailStatus {
   connected: boolean;
+  /** True when a connection row exists but Google revoked the refresh token. */
+  tokenExpired?: boolean;
   email: string | null;
   profile: GmailProfile | null;
 }

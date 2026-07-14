@@ -93,7 +93,7 @@ export const APPS: AppEntry[] = [
     name: "Pottery",
     href: `${base}modules/pottery/`,
     image: `${base}images/pottery-collection.png`,
-    updated: "Updated 2h ago",
+    updated: "Your ceramics collection",
     stats: [
       { value: "163", label: "Pieces" },
       { value: "12", label: "Categories" },
@@ -106,7 +106,7 @@ export const APPS: AppEntry[] = [
     name: "Quilting",
     href: `${base}modules/quilting/`,
     image: `${base}images/quilting-collection.png`,
-    updated: "Updated 1d ago",
+    updated: "Your fabric & quilt stash",
     stats: [
       { value: "48", label: "Fabrics" },
       { value: "9", label: "Patterns" },
@@ -131,7 +131,7 @@ export const APPS: AppEntry[] = [
     name: "Ornaments",
     href: `${base}modules/ornaments/`,
     image: `${base}images/ornaments-collection.png`,
-    updated: "Updated 3d ago",
+    updated: "Your Hallmark ornament collection",
     stats: [
       { value: "0", label: "Total" },
       { value: "0", label: "Quantity" },

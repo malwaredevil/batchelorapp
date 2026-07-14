@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Api
   version: 0.1.0
-  description: Unified API specification (pottery + quilting + travels + ornaments + office + hub)
+  description: Unified API specification (pottery + quilting + travels + ornaments + office + hub + messenger)
 servers:
   - url: /api
     description: Base API path
@@ -3916,6 +3916,176 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /messenger/conversations:
+    get:
+      operationId: listConversations
+      tags:
+        - messenger
+      summary: List all household conversations with unread counts
+      responses:
+        "200":
+          description: Conversation list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MessengerConversationSummary"
+  /messenger/conversations/unread-count:
+    get:
+      operationId: getUnreadCount
+      tags:
+        - messenger
+      summary: Total unread message count (for badge)
+      responses:
+        "200":
+          description: Unread count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessengerUnreadCountResponse"
+  /messenger/conversations/{id}/messages:
+    get:
+      operationId: getConversationMessages
+      tags:
+        - messenger
+      summary: Get messages for a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: since
+          in: query
+          schema:
+            type: string
+          description: ISO timestamp — return only messages created after this time
+        - name: before
+          in: query
+          schema:
+            type: string
+          description: ISO timestamp — paginate backward before this time
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Message list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MessengerMessengerMessage"
+    post:
+      operationId: sendMessage
+      tags:
+        - messenger
+      summary: Send a message in a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessengerSendMessageBody"
+      responses:
+        "201":
+          description: Sent message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessengerMessengerMessage"
+  /messenger/messages/{id}/read:
+    post:
+      operationId: markMessageRead
+      tags:
+        - messenger
+      summary: Mark a message (and all prior in conversation) as read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - markedCount
+                properties:
+                  markedCount:
+                    type: integer
+  /messenger/messages/{id}:
+    delete:
+      operationId: deleteMessage
+      tags:
+        - messenger
+      summary: Soft-delete a message
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+  /messenger/attachments/upload:
+    post:
+      operationId: uploadAttachment
+      tags:
+        - messenger
+      summary: Upload a file attachment (returns storage info to include in sendMessage)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Upload result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessengerAttachmentUploadResult"
+  /messenger/link-preview:
+    get:
+      operationId: getLinkPreview
+      tags:
+        - messenger
+      summary: Get cached OG link preview for a URL
+      parameters:
+        - name: url
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Link preview (fields may be null if unavailable)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessengerLinkPreview"
 components:
   schemas:
     HealthStatus:
@@ -7222,6 +7392,147 @@ components:
       properties:
         config:
           $ref: "#/components/schemas/ConfigAppConfigRow"
+    MessengerConversationSummary:
+      type: object
+      required:
+        - id
+        - createdAt
+        - unreadCount
+      properties:
+        id:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        lastMessage:
+          $ref: "#/components/schemas/MessengerMessengerMessage"
+        unreadCount:
+          type: integer
+    MessengerMessengerMessage:
+      type: object
+      required:
+        - id
+        - conversationId
+        - body
+        - createdAt
+      properties:
+        id:
+          type: integer
+        conversationId:
+          type: integer
+        senderId:
+          type: integer
+          nullable: true
+        senderName:
+          type: string
+          nullable: true
+        body:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        readAt:
+          type: string
+          format: date-time
+          nullable: true
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+        attachments:
+          type: array
+          items:
+            $ref: "#/components/schemas/MessengerMessengerAttachment"
+    MessengerSendMessageBody:
+      type: object
+      required:
+        - body
+      properties:
+        body:
+          type: string
+        attachments:
+          type: array
+          items:
+            $ref: "#/components/schemas/MessengerAttachmentInput"
+    MessengerMessengerAttachment:
+      type: object
+      required:
+        - id
+        - messageId
+        - mimeType
+        - fileName
+        - url
+      properties:
+        id:
+          type: integer
+        messageId:
+          type: integer
+        mimeType:
+          type: string
+        fileName:
+          type: string
+        sizeBytes:
+          type: integer
+        url:
+          type: string
+    MessengerAttachmentInput:
+      type: object
+      required:
+        - storagePath
+        - mimeType
+        - fileName
+        - sizeBytes
+      properties:
+        storagePath:
+          type: string
+        mimeType:
+          type: string
+        fileName:
+          type: string
+        sizeBytes:
+          type: integer
+    MessengerAttachmentUploadResult:
+      type: object
+      required:
+        - storagePath
+        - url
+        - mimeType
+        - fileName
+        - sizeBytes
+      properties:
+        storagePath:
+          type: string
+        url:
+          type: string
+        mimeType:
+          type: string
+        fileName:
+          type: string
+        sizeBytes:
+          type: integer
+    MessengerUnreadCountResponse:
+      type: object
+      required:
+        - count
+      properties:
+        count:
+          type: integer
+    MessengerLinkPreview:
+      type: object
+      required:
+        - url
+      properties:
+        url:
+          type: string
+        title:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+          nullable: true
   parameters:
     IdParam:
       name: id

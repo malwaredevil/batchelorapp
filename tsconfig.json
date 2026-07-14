@@ -19,6 +19,9 @@
       "path": "./lib/elaine-ui"
     },
     {
+      "path": "./lib/messenger-ui"
+    },
+    {
       "path": "./lib/gmail-ui"
     },
     {

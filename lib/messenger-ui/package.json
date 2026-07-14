@@ -1,0 +1,28 @@
+{
+  "name": "@workspace/messenger-ui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@workspace/api-client-react": "workspace:*",
+    "@workspace/web-core": "workspace:*",
+    "clsx": "catalog:",
+    "lucide-react": "catalog:",
+    "tailwind-merge": "catalog:"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "*",
+    "react": ">=18",
+    "react-dom": ">=18",
+    "sonner": "*"
+  },
+  "devDependencies": {
+    "@tanstack/react-query": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "sonner": "^2.0.7"
+  }
+}

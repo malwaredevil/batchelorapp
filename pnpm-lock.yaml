@@ -434,6 +434,9 @@ importers:
       '@workspace/elaine-ui':
         specifier: workspace:*
         version: link:../../lib/elaine-ui
+      '@workspace/messenger-ui':
+        specifier: workspace:*
+        version: link:../../lib/messenger-ui
       '@workspace/web-core':
         specifier: workspace:*
         version: link:../../lib/web-core
@@ -681,6 +684,9 @@ importers:
       '@workspace/gmail-ui':
         specifier: workspace:*
         version: link:../../lib/gmail-ui
+      '@workspace/messenger-ui':
+        specifier: workspace:*
+        version: link:../../lib/messenger-ui
       '@workspace/travels-settings-ui':
         specifier: workspace:*
         version: link:../../lib/travels-settings-ui
@@ -900,6 +906,9 @@ importers:
       '@workspace/gmail-ui':
         specifier: workspace:*
         version: link:../../lib/gmail-ui
+      '@workspace/messenger-ui':
+        specifier: workspace:*
+        version: link:../../lib/messenger-ui
       '@workspace/travels-settings-ui':
         specifier: workspace:*
         version: link:../../lib/travels-settings-ui
@@ -1102,6 +1111,37 @@ importers:
       '@types/react':
         specifier: 'catalog:'
         version: 19.2.14
+
+  lib/messenger-ui:
+    dependencies:
+      '@workspace/api-client-react':
+        specifier: workspace:*
+        version: link:../api-client-react
+      '@workspace/web-core':
+        specifier: workspace:*
+        version: link:../web-core
+      clsx:
+        specifier: 'catalog:'
+        version: 2.1.1
+      lucide-react:
+        specifier: 'catalog:'
+        version: 0.545.0(react@19.1.0)
+      tailwind-merge:
+        specifier: 'catalog:'
+        version: 3.5.0
+    devDependencies:
+      '@tanstack/react-query':
+        specifier: 'catalog:'
+        version: 5.100.9(react@19.1.0)
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.2.3(@types/react@19.2.14)
+      sonner:
+        specifier: ^2.0.7
+        version: 2.0.7(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
 
   lib/travels-settings-ui:
     dependencies:

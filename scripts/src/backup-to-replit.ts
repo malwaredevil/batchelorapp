@@ -27,6 +27,8 @@
  *             travels_gmail_scan_decisions, travels_card_layout_preferences,
  *             travels_trip_card_collapse_state, travels_custom_document_types,
  *             travels_calendar_trip_suggestions
+ *   Messenger: messenger_conversations, messenger_messages, messenger_attachments,
+ *              messenger_link_previews
  *   Elaine:   elaine_conversations, elaine_settings, elaine_memory, elaine_nudges,
  *             elaine_global_config, elaine_history_conversations, elaine_history_messages
  *             (shared assistant, not namespaced per-app)
@@ -1521,6 +1523,51 @@ async function main() {
     jsonbColumns: ["related_event_ids"],
   });
   await resetSequence(dest, "travels_calendar_trip_suggestions", "id");
+
+  // ── Messenger ─────────────────────────────────────────────────────────────
+  summary["messenger_conversations"] = await copyTable(source, dest, {
+    table: "messenger_conversations",
+    columns: ["id", "created_at"],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "messenger_conversations", "id");
+
+  summary["messenger_messages"] = await copyTable(source, dest, {
+    table: "messenger_messages",
+    columns: [
+      "id",
+      "conversation_id",
+      "sender_id",
+      "body",
+      "read_at",
+      "deleted_at",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "messenger_messages", "id");
+
+  summary["messenger_attachments"] = await copyTable(source, dest, {
+    table: "messenger_attachments",
+    columns: [
+      "id",
+      "message_id",
+      "storage_path",
+      "mime_type",
+      "file_name",
+      "size_bytes",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "messenger_attachments", "id");
+
+  summary["messenger_link_previews"] = await copyTable(source, dest, {
+    table: "messenger_link_previews",
+    columns: ["id", "url", "title", "description", "image_url", "fetched_at"],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "messenger_link_previews", "id");
 
   // ── Record backup history ─────────────────────────────────────────────────
   const note = Object.entries(summary)

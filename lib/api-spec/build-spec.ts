@@ -206,6 +206,10 @@ function remapConfigPath(p: string): string {
   return "/config" + p;
 }
 
+function remapMessengerPath(p: string): string {
+  return "/messenger" + p;
+}
+
 // ---------------------------------------------------------------------------
 // Build
 // ---------------------------------------------------------------------------
@@ -222,6 +226,7 @@ function main(): void {
   const office = loadSpec("office.yaml");
   const hub = loadSpec("hub.yaml");
   const config = loadSpec("config.yaml");
+  const messenger = loadSpec("messenger.yaml");
 
   const potterySchemas: Record<string, Json> = (pottery.components?.schemas ??
     {}) as Json;
@@ -235,6 +240,8 @@ function main(): void {
     {}) as Json;
   const hubSchemas: Record<string, Json> = (hub.components?.schemas ??
     {}) as Json;
+  const messengerSchemas: Record<string, Json> = (messenger.components
+    ?.schemas ?? {}) as Json;
 
   // ----- Shared schema set: transitive closure of refs from quilting shared paths
   const sharedSchemaNames = new Set<string>();
@@ -297,6 +304,13 @@ function main(): void {
   for (const name of Object.keys(hubSchemas)) {
     if (!sharedSchemaNames.has(name)) {
       hubSchemaRename.set(name, "Hub" + name);
+    }
+  }
+
+  const messengerSchemaRename = new Map<string, string>();
+  for (const name of Object.keys(messengerSchemas)) {
+    if (!sharedSchemaNames.has(name)) {
+      messengerSchemaRename.set(name, "Messenger" + name);
     }
   }
 
@@ -407,6 +421,24 @@ function main(): void {
     }
   }
 
+  const messengerFeatureOps = collectFeatureOpIds(messenger.paths as Json);
+  const allOtherOpsForMessenger = new Set([
+    ...sharedOpIds,
+    ...potteryFeatureOps,
+    ...quiltingFeatureOps,
+    ...travelsFeatureOps,
+    ...ornamentsFeatureOps,
+    ...officeFeatureOps,
+    ...hubFeatureOps,
+    ...configFeatureOps,
+  ]);
+  const messengerOpRename = new Map<string, string>();
+  for (const op of messengerFeatureOps) {
+    if (allOtherOpsForMessenger.has(op)) {
+      messengerOpRename.set(op, renameOpId(op, "messenger"));
+    }
+  }
+
   // ----- Assemble output
   const out: Json = {
     openapi: "3.1.0",
@@ -414,7 +446,7 @@ function main(): void {
       title: "Api",
       version: "0.1.0",
       description:
-        "Unified API specification (pottery + quilting + travels + ornaments + office + hub)",
+        "Unified API specification (pottery + quilting + travels + ornaments + office + hub + messenger)",
     },
     servers: [{ url: "/api", description: "Base API path" }],
     paths: {},
@@ -537,6 +569,21 @@ function main(): void {
     outPaths[newPath] = cloned;
   }
 
+  // Messenger feature paths
+  for (const [p, item] of Object.entries(
+    messenger.paths as Record<string, Json>,
+  )) {
+    if (SHARED_PATHS.has(p)) continue;
+    const newPath = remapMessengerPath(p);
+    const cloned = deepClone(item);
+    rewriteSchemaRefs(cloned, messengerSchemaRename);
+    applyOpIdRenames(cloned, messengerOpRename);
+    if (outPaths[newPath] !== undefined) {
+      throw new Error(`Duplicate path key after messenger remap: ${newPath}`);
+    }
+    outPaths[newPath] = cloned;
+  }
+
   // ----- Components: schemas
   const outSchemas: Record<string, Json> = {};
 
@@ -626,6 +673,18 @@ function main(): void {
     const newName = configSchemaRename.get(name)!;
     const cloned = deepClone(schema);
     rewriteSchemaRefs(cloned, configSchemaRename);
+    if (outSchemas[newName] !== undefined) {
+      throw new Error(`Duplicate schema key: ${newName}`);
+    }
+    outSchemas[newName] = cloned;
+  }
+
+  // Messenger non-shared schemas, prefixed + internal refs rewritten
+  for (const [name, schema] of Object.entries(messengerSchemas)) {
+    if (sharedSchemaNames.has(name)) continue;
+    const newName = messengerSchemaRename.get(name)!;
+    const cloned = deepClone(schema);
+    rewriteSchemaRefs(cloned, messengerSchemaRename);
     if (outSchemas[newName] !== undefined) {
       throw new Error(`Duplicate schema key: ${newName}`);
     }

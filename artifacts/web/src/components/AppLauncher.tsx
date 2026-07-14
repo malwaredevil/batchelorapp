@@ -32,6 +32,7 @@ import {
   GripVertical,
 } from "lucide-react";
 import { AppSwitcher } from "@workspace/elaine-ui";
+import { MessengerNavIcon } from "@workspace/messenger-ui";
 import { useListOrnamentsHallmarkEvents } from "@workspace/api-client-react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -956,6 +957,11 @@ export function AppLauncher() {
             >
               <CalendarDays className="w-5 h-5" />
             </Button>
+
+            <MessengerNavIcon
+              buttonClassName="text-muted-foreground hover:text-foreground"
+              iconSize={20}
+            />
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

@@ -12,8 +12,8 @@ import {
   ElaineAvatar,
   ElaineWordmark,
   useTheme,
-  SearchTrigger,
 } from "@workspace/elaine-ui";
+import { MessengerNavIcon } from "@workspace/messenger-ui";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -113,8 +113,6 @@ export function Header() {
             })}
           </nav>
 
-          <SearchTrigger />
-
           <Button
             variant="ghost"
             size="icon"
@@ -153,6 +151,11 @@ export function Header() {
           >
             <CalendarDays className="h-4 w-4" />
           </Button>
+
+          <MessengerNavIcon
+            buttonClassName="text-muted-foreground hover:text-foreground"
+            iconSize={16}
+          />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

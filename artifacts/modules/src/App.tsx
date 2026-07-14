@@ -23,7 +23,7 @@ import "@/ornaments/features";
 import "@/travels/features";
 import "@/office/features";
 import MessengerPage from "@/office/pages/messenger";
-import { MessengerWidget } from "@workspace/messenger-ui";
+import { MessengerNotification } from "@workspace/messenger-ui";
 import NotFound from "@/pages/not-found";
 import PotteryCollection from "@/pottery/pages/collection";
 import PotteryAdd from "@/pottery/pages/add";
@@ -322,7 +322,7 @@ function Routes() {
           </BulkAddProvider>
         </ModuleShell>
       </BackgroundTaskProvider>
-      <MessengerWidget messengerPageHref="/modules/office/messenger" />
+      <MessengerNotification />
     </>
   );
 }

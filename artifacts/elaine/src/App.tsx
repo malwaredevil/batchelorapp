@@ -5,7 +5,7 @@ import { Loader2 } from "lucide-react";
 import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth, redirectToMainLogin } from "@/lib/auth";
-import { MessengerWidget } from "@workspace/messenger-ui";
+import { MessengerNotification } from "@workspace/messenger-ui";
 import {
   ElainePageContextProvider,
   ThemeProvider,
@@ -70,7 +70,7 @@ function Routes() {
           </Switch>
         </main>
       </div>
-      <MessengerWidget messengerPageHref="/modules/office/messenger" />
+      <MessengerNotification />
     </>
   );
 }

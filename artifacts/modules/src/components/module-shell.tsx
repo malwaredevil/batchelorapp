@@ -1,11 +1,7 @@
 import { type ReactNode, type ComponentType, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import {
-  AppSwitcher,
-  type AppId,
-  useTheme,
-  SearchTrigger,
-} from "@workspace/elaine-ui";
+import { AppSwitcher, type AppId, useTheme } from "@workspace/elaine-ui";
+import { MessengerNavIcon } from "@workspace/messenger-ui";
 import { useBackgroundTasks } from "@/lib/background-tasks";
 import { InstallBanner } from "@workspace/web-core";
 import {
@@ -300,7 +296,6 @@ export function ModuleShell({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-1">
             {/* Desktop icon strip — hidden on mobile */}
             <div className="hidden md:flex items-center gap-1">
-              <SearchTrigger />
               <Button
                 variant="ghost"
                 size="icon"
@@ -336,6 +331,10 @@ export function ModuleShell({ children }: { children: ReactNode }) {
               >
                 <CalendarDays className="h-4 w-4" />
               </Button>
+              <MessengerNavIcon
+                buttonClassName="text-muted-foreground hover:text-foreground"
+                iconSize={16}
+              />
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button className="flex items-center gap-2 pl-3 ml-1 border-l border-border outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm">

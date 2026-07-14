@@ -1,0 +1,339 @@
+import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { X, MessageSquare, Send, ChevronUp } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import type { UseQueryOptions } from "@tanstack/react-query";
+import {
+  useGetUnreadCount,
+  getGetUnreadCountQueryKey,
+  useListConversations,
+  getListConversationsQueryKey,
+  useGetConversationMessages,
+  getGetConversationMessagesQueryKey,
+  useSendMessage,
+  type MessengerConversationSummary,
+  type MessengerMessengerMessage,
+} from "@workspace/api-client-react";
+import { useAuth } from "@workspace/web-core/auth";
+
+let styleInjected = false;
+function injectStyle() {
+  if (styleInjected || typeof document === "undefined") return;
+  const el = document.createElement("style");
+  el.textContent = `
+    @keyframes mnf-slide-in {
+      from { transform: translateY(16px); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
+    .mnf-enter { animation: mnf-slide-in 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+  `;
+  document.head.appendChild(el);
+  styleInjected = true;
+}
+
+interface ActiveNotification {
+  convId: number;
+  message: MessengerMessengerMessage;
+}
+
+const AUTO_DISMISS_MS = 8_000;
+
+export function MessengerNotification() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+
+  const [notification, setNotification] = useState<ActiveNotification | null>(
+    null,
+  );
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [replyText, setReplyText] = useState("");
+  const [isSending, setIsSending] = useState(false);
+
+  const prevCountRef = useRef(-1);
+  const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isExpandedRef = useRef(false);
+
+  useEffect(() => {
+    injectStyle();
+  }, []);
+
+  const { data: unreadData } = useGetUnreadCount({
+    query: { queryKey: getGetUnreadCountQueryKey(), refetchInterval: 10_000 },
+  });
+  const unreadCount = unreadData?.count ?? 0;
+
+  const { data: conversations } = useListConversations({
+    query: {
+      queryKey: getListConversationsQueryKey(),
+      refetchInterval: 15_000,
+    } as UseQueryOptions<MessengerConversationSummary[]>,
+  });
+  const convId = conversations?.[0]?.id ?? null;
+
+  const { data: messages = [] } = useGetConversationMessages(
+    convId ?? 0,
+    {},
+    {
+      query: {
+        queryKey: getGetConversationMessagesQueryKey(convId ?? 0),
+        enabled: !!convId,
+        refetchInterval: 10_000,
+      } as UseQueryOptions<MessengerMessengerMessage[]>,
+    },
+  );
+
+  const { mutateAsync: sendMessageMutation } = useSendMessage();
+
+  const dismiss = useCallback(() => {
+    if (dismissTimerRef.current) {
+      clearTimeout(dismissTimerRef.current);
+      dismissTimerRef.current = null;
+    }
+    setNotification(null);
+    setIsExpanded(false);
+    isExpandedRef.current = false;
+    setReplyText("");
+  }, []);
+
+  const expand = useCallback(() => {
+    if (dismissTimerRef.current) {
+      clearTimeout(dismissTimerRef.current);
+      dismissTimerRef.current = null;
+    }
+    setIsExpanded(true);
+    isExpandedRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (prevCountRef.current === -1) {
+      prevCountRef.current = unreadCount;
+      return;
+    }
+    const prev = prevCountRef.current;
+    prevCountRef.current = unreadCount;
+
+    if (unreadCount <= prev) return;
+
+    const currentUserId = user?.id ?? 0;
+    const unread = (messages as MessengerMessengerMessage[])
+      .filter(
+        (m) =>
+          !m.readAt &&
+          !m.deletedAt &&
+          m.senderId !== null &&
+          m.senderId !== currentUserId,
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+
+    if (!unread.length || !convId) return;
+
+    if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
+
+    setNotification({ convId, message: unread[0] });
+    setIsExpanded(false);
+    isExpandedRef.current = false;
+    setReplyText("");
+
+    if (!isExpandedRef.current) {
+      dismissTimerRef.current = setTimeout(dismiss, AUTO_DISMISS_MS);
+    }
+  }, [unreadCount]);
+
+  const sendReply = useCallback(async () => {
+    if (!notification || !replyText.trim() || isSending) return;
+    setIsSending(true);
+    try {
+      await sendMessageMutation({
+        id: notification.convId,
+        data: { body: replyText.trim(), attachments: [] },
+      });
+      qc.invalidateQueries({
+        queryKey: getGetConversationMessagesQueryKey(notification.convId),
+      });
+      qc.invalidateQueries({ queryKey: getGetUnreadCountQueryKey() });
+      qc.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+      dismiss();
+    } finally {
+      setIsSending(false);
+    }
+  }, [notification, replyText, isSending, sendMessageMutation, qc, dismiss]);
+
+  if (!notification) return null;
+
+  const senderName = notification.message.senderName ?? "Someone";
+  const body = notification.message.body;
+  const preview = body.length > 80 ? body.slice(0, 80) + "…" : body;
+
+  return createPortal(
+    <div
+      className="mnf-enter"
+      style={{
+        position: "fixed",
+        bottom: 24,
+        right: 24,
+        width: isExpanded ? 340 : 310,
+        zIndex: 9997,
+        borderRadius: 14,
+        overflow: "hidden",
+        boxShadow: "0 12px 40px rgba(0,0,0,0.18), 0 4px 16px rgba(0,0,0,0.08)",
+        border: "1px solid rgba(0,0,0,0.07)",
+        background: "var(--background, #fff)",
+        transition: "width 0.18s ease",
+        fontFamily: "inherit",
+      }}
+    >
+      {/* Header */}
+      <div
+        onClick={!isExpanded ? expand : undefined}
+        style={{
+          padding: "10px 12px 9px",
+          background: "linear-gradient(135deg, #3b82f6, #2563eb)",
+          color: "#fff",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          cursor: isExpanded ? "default" : "pointer",
+          userSelect: "none",
+        }}
+      >
+        <MessageSquare size={14} style={{ flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 600, fontSize: 13, lineHeight: "1.25" }}>
+            {senderName} sent you a message
+          </div>
+          {!isExpanded && (
+            <div
+              style={{
+                fontSize: 11,
+                opacity: 0.82,
+                marginTop: 2,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {preview}
+            </div>
+          )}
+        </div>
+        {!isExpanded && (
+          <ChevronUp size={14} style={{ flexShrink: 0, opacity: 0.75 }} />
+        )}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            dismiss();
+          }}
+          aria-label="Dismiss"
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: "rgba(255,255,255,0.8)",
+            padding: "2px",
+            display: "flex",
+            flexShrink: 0,
+            borderRadius: 4,
+            lineHeight: 0,
+          }}
+        >
+          <X size={14} />
+        </button>
+      </div>
+
+      {/* Expanded body */}
+      {isExpanded && (
+        <div
+          style={{
+            padding: "12px 14px 14px",
+            background: "var(--background, #fff)",
+          }}
+        >
+          <div
+            style={{
+              background: "rgba(59,130,246,0.07)",
+              borderLeft: "3px solid #3b82f6",
+              borderRadius: "0 8px 8px 0",
+              padding: "8px 12px",
+              fontSize: 13,
+              lineHeight: "1.5",
+              color: "var(--foreground, #111)",
+              marginBottom: 10,
+              wordBreak: "break-word",
+            }}
+          >
+            {body}
+          </div>
+
+          <div style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
+            <textarea
+              autoFocus
+              value={replyText}
+              onChange={(e) => setReplyText(e.target.value)}
+              placeholder="Quick reply…"
+              rows={2}
+              style={{
+                flex: 1,
+                border: "1px solid rgba(0,0,0,0.12)",
+                borderRadius: 8,
+                padding: "7px 10px",
+                fontSize: 13,
+                resize: "none",
+                outline: "none",
+                fontFamily: "inherit",
+                background: "var(--background, #fff)",
+                color: "var(--foreground, #111)",
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  sendReply();
+                }
+              }}
+            />
+            <button
+              onClick={sendReply}
+              disabled={isSending || !replyText.trim()}
+              aria-label="Send reply"
+              style={{
+                background: "#3b82f6",
+                border: "none",
+                borderRadius: 8,
+                cursor: isSending || !replyText.trim() ? "default" : "pointer",
+                color: "#fff",
+                padding: "9px 10px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: isSending || !replyText.trim() ? 0.45 : 1,
+                transition: "opacity 0.15s",
+                height: 52,
+                flexShrink: 0,
+              }}
+            >
+              <Send size={16} />
+            </button>
+          </div>
+
+          <div style={{ marginTop: 8, textAlign: "center" }}>
+            <a
+              href="/modules/office/messenger"
+              style={{
+                fontSize: 11,
+                color: "#3b82f6",
+                textDecoration: "none",
+                opacity: 0.75,
+              }}
+            >
+              Open full Messenger →
+            </a>
+          </div>
+        </div>
+      )}
+    </div>,
+    document.body,
+  );
+}

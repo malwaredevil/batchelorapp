@@ -10,6 +10,8 @@ import {
 import {
   GetConversationMessagesQueryParams,
   SendMessageBody,
+  CreateConversationBody,
+  UpdateConversationBody,
 } from "@workspace/api-zod";
 import { callModel, getModels } from "../../lib/ai-client";
 import { getSignedUrls } from "../../lib/messenger/storage";
@@ -22,11 +24,14 @@ async function ensureDefaultConversation(): Promise<number> {
   const existing = await db
     .select({ id: messengerConversations.id })
     .from(messengerConversations)
+    .where(isNull(messengerConversations.archivedAt))
+    .orderBy(messengerConversations.id)
     .limit(1);
   if (existing[0]) return existing[0].id;
+  // No active conversation — create default
   const [created] = await db
     .insert(messengerConversations)
-    .values({})
+    .values({ name: "Group Chat" })
     .returning({ id: messengerConversations.id });
   return created.id;
 }
@@ -42,6 +47,7 @@ async function serializeMessages(
     createdAt: Date;
     readAt: Date | null;
     deletedAt: Date | null;
+    editedAt?: Date | null;
   }>,
   attachmentRows: Array<{
     id: number;
@@ -89,23 +95,27 @@ async function serializeMessages(
     createdAt: m.createdAt.toISOString(),
     readAt: m.readAt?.toISOString() ?? null,
     deletedAt: m.deletedAt?.toISOString() ?? null,
+    editedAt: m.editedAt?.toISOString() ?? null,
     attachments: attachmentsByMessage.get(m.id) ?? [],
   }));
 }
 
-// -----------------------------------------------------------------------
-// GET /conversations — list with last message + unread count
-// -----------------------------------------------------------------------
-router.get("/conversations", async (req, res) => {
-  const convId = await ensureDefaultConversation();
-  const userId = req.session?.userId as number;
-
+// Build a ConversationSummary for a given conversation row + userId.
+async function buildConversationSummary(
+  conv: {
+    id: number;
+    name: string | null;
+    archivedAt: Date | null;
+    createdAt: Date;
+  },
+  userId: number,
+) {
   const unreadCount = await db
     .select({ count: sql<string>`count(*)` })
     .from(messengerMessages)
     .where(
       and(
-        eq(messengerMessages.conversationId, convId),
+        eq(messengerMessages.conversationId, conv.id),
         isNull(messengerMessages.readAt),
         isNull(messengerMessages.deletedAt),
         or(
@@ -125,10 +135,11 @@ router.get("/conversations", async (req, res) => {
       createdAt: messengerMessages.createdAt,
       readAt: messengerMessages.readAt,
       deletedAt: messengerMessages.deletedAt,
+      editedAt: messengerMessages.editedAt,
     })
     .from(messengerMessages)
     .leftJoin(appUsers, eq(appUsers.id, messengerMessages.senderId))
-    .where(eq(messengerMessages.conversationId, convId))
+    .where(eq(messengerMessages.conversationId, conv.id))
     .orderBy(desc(messengerMessages.createdAt))
     .limit(1);
 
@@ -143,20 +154,57 @@ router.get("/conversations", async (req, res) => {
     lastMsgSerialized = serialized[0];
   }
 
-  res.json([
-    {
-      id: convId,
-      createdAt: (
-        await db
-          .select({ createdAt: messengerConversations.createdAt })
-          .from(messengerConversations)
-          .where(eq(messengerConversations.id, convId))
-          .limit(1)
-      )[0]?.createdAt.toISOString(),
-      unreadCount: Number(unreadCount[0]?.count ?? 0),
-      lastMessage: lastMsgSerialized,
-    },
-  ]);
+  return {
+    id: conv.id,
+    name: conv.name ?? null,
+    archivedAt: conv.archivedAt?.toISOString() ?? null,
+    createdAt: conv.createdAt.toISOString(),
+    unreadCount: Number(unreadCount[0]?.count ?? 0),
+    lastMessage: lastMsgSerialized,
+  };
+}
+
+// -----------------------------------------------------------------------
+// GET /conversations — list with last message + unread count
+// -----------------------------------------------------------------------
+router.get("/conversations", async (req, res) => {
+  const userId = req.session?.userId as number;
+
+  // Ensure at least one conversation exists
+  await ensureDefaultConversation();
+
+  const convRows = await db
+    .select()
+    .from(messengerConversations)
+    .orderBy(messengerConversations.id);
+
+  const summaries = await Promise.all(
+    convRows.map((conv) => buildConversationSummary(conv, userId)),
+  );
+
+  res.json(summaries);
+});
+
+// -----------------------------------------------------------------------
+// POST /conversations — create a new conversation
+// -----------------------------------------------------------------------
+router.post("/conversations", async (req, res) => {
+  const parsed = CreateConversationBody.safeParse(req.body);
+  if (!parsed.success) {
+    res
+      .status(400)
+      .json({ error: "Invalid body", details: parsed.error.flatten() });
+    return;
+  }
+
+  const userId = req.session?.userId as number;
+  const [conv] = await db
+    .insert(messengerConversations)
+    .values({ name: parsed.data.name })
+    .returning();
+
+  const summary = await buildConversationSummary(conv, userId);
+  res.status(201).json(summary);
 });
 
 // -----------------------------------------------------------------------
@@ -197,6 +245,104 @@ router.get("/conversations/unread-count", async (req, res) => {
     );
 
   res.json({ count: Number(result[0]?.count ?? 0) });
+});
+
+// -----------------------------------------------------------------------
+// PATCH /conversations/:id — rename or archive/unarchive
+// -----------------------------------------------------------------------
+router.patch("/conversations/:id", async (req, res) => {
+  const convId = Number(req.params.id);
+  if (!Number.isFinite(convId) || convId <= 0) {
+    res.status(400).json({ error: "Invalid conversation id" });
+    return;
+  }
+
+  const parsed = UpdateConversationBody.safeParse(req.body);
+  if (!parsed.success) {
+    res
+      .status(400)
+      .json({ error: "Invalid body", details: parsed.error.flatten() });
+    return;
+  }
+
+  const conv = await db
+    .select()
+    .from(messengerConversations)
+    .where(eq(messengerConversations.id, convId))
+    .limit(1);
+  if (!conv[0]) {
+    res.status(404).json({ error: "Conversation not found" });
+    return;
+  }
+
+  const updates: Partial<{
+    name: string | null;
+    archivedAt: Date | null;
+  }> = {};
+
+  if (parsed.data.name !== undefined) {
+    updates.name = parsed.data.name ?? null;
+  }
+  if (parsed.data.archived !== undefined) {
+    updates.archivedAt = parsed.data.archived ? new Date() : null;
+  }
+
+  const [updated] = await db
+    .update(messengerConversations)
+    .set(updates)
+    .where(eq(messengerConversations.id, convId))
+    .returning();
+
+  const userId = req.session?.userId as number;
+  const summary = await buildConversationSummary(updated, userId);
+  res.json(summary);
+});
+
+// -----------------------------------------------------------------------
+// DELETE /conversations/:id — permanently delete conversation + messages
+// -----------------------------------------------------------------------
+router.delete("/conversations/:id", async (req, res) => {
+  const convId = Number(req.params.id);
+  if (!Number.isFinite(convId) || convId <= 0) {
+    res.status(400).json({ error: "Invalid conversation id" });
+    return;
+  }
+
+  // Delete all messages first, then the conversation
+  await db
+    .delete(messengerMessages)
+    .where(eq(messengerMessages.conversationId, convId));
+
+  await db
+    .delete(messengerConversations)
+    .where(eq(messengerConversations.id, convId));
+
+  logger.info({ conversationId: convId }, "messenger: conversation deleted");
+  res.status(204).send();
+});
+
+// -----------------------------------------------------------------------
+// DELETE /conversations/:id/messages — clear all messages (soft-delete)
+// -----------------------------------------------------------------------
+router.delete("/conversations/:id/messages", async (req, res) => {
+  const convId = Number(req.params.id);
+  if (!Number.isFinite(convId) || convId <= 0) {
+    res.status(400).json({ error: "Invalid conversation id" });
+    return;
+  }
+
+  await db
+    .update(messengerMessages)
+    .set({ deletedAt: new Date() })
+    .where(
+      and(
+        eq(messengerMessages.conversationId, convId),
+        isNull(messengerMessages.deletedAt),
+      ),
+    );
+
+  logger.info({ conversationId: convId }, "messenger: conversation cleared");
+  res.status(204).send();
 });
 
 // -----------------------------------------------------------------------
@@ -248,15 +394,12 @@ router.get("/conversations/:id/messages", async (req, res) => {
       createdAt: messengerMessages.createdAt,
       readAt: messengerMessages.readAt,
       deletedAt: messengerMessages.deletedAt,
+      editedAt: messengerMessages.editedAt,
     })
     .from(messengerMessages)
     .leftJoin(appUsers, eq(appUsers.id, messengerMessages.senderId))
     .where(and(...filters))
-    .orderBy(
-      since
-        ? desc(messengerMessages.createdAt)
-        : desc(messengerMessages.createdAt),
-    )
+    .orderBy(desc(messengerMessages.createdAt))
     .limit(limit);
 
   if (msgRows.length === 0) {
@@ -346,6 +489,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
         createdAt: msg.createdAt,
         readAt: msg.readAt,
         deletedAt: msg.deletedAt,
+        editedAt: msg.editedAt,
       },
     ],
     attRows,
@@ -396,29 +540,5 @@ async function generateElaineReply(
     "messenger: @elaine reply saved",
   );
 }
-
-// -----------------------------------------------------------------------
-// DELETE /conversations/:id — soft-delete all messages (clear history)
-// -----------------------------------------------------------------------
-router.delete("/conversations/:id", async (req, res) => {
-  const convId = Number(req.params.id);
-  if (!Number.isFinite(convId) || convId <= 0) {
-    res.status(400).json({ error: "Invalid conversation id" });
-    return;
-  }
-
-  await db
-    .update(messengerMessages)
-    .set({ deletedAt: new Date() })
-    .where(
-      and(
-        eq(messengerMessages.conversationId, convId),
-        isNull(messengerMessages.deletedAt),
-      ),
-    );
-
-  logger.info({ conversationId: convId }, "messenger: conversation cleared");
-  res.status(204).send();
-});
 
 export default router;

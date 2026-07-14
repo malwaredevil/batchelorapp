@@ -18,6 +18,24 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ConversationSummary"
+    post:
+      operationId: createConversation
+      tags:
+        - messenger
+      summary: Create a new conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConversationBody"
+      responses:
+        "201":
+          description: Created conversation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationSummary"
   /conversations/unread-count:
     get:
       operationId: getUnreadCount
@@ -31,6 +49,47 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/UnreadCountResponse"
+  /conversations/{id}:
+    patch:
+      operationId: updateConversation
+      tags:
+        - messenger
+      summary: Rename or archive/unarchive a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateConversationBody"
+      responses:
+        "200":
+          description: Updated conversation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationSummary"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteConversation
+      tags:
+        - messenger
+      summary: Permanently delete a conversation and all its messages
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
   /conversations/{id}/messages:
     get:
       operationId: getConversationMessages
@@ -90,6 +149,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MessengerMessage"
+    delete:
+      operationId: clearConversation
+      tags:
+        - messenger
+      summary: Clear all messages in a conversation (soft-deletes everything, keeps the conversation)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Cleared
   /messages/{id}/read:
     post:
       operationId: markMessageRead
@@ -114,21 +187,6 @@ paths:
                 properties:
                   markedCount:
                     type: integer
-  /conversations/{id}:
-    delete:
-      operationId: clearConversation
-      tags:
-        - messenger
-      summary: Clear all messages in a conversation (soft-deletes everything)
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "204":
-          description: Cleared
   /messages/{id}:
     delete:
       operationId: deleteMessage
@@ -242,6 +300,13 @@ components:
       properties:
         id:
           type: integer
+        name:
+          type: string
+          nullable: true
+        archivedAt:
+          type: string
+          format: date-time
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -249,6 +314,21 @@ components:
           $ref: "#/components/schemas/MessengerMessage"
         unreadCount:
           type: integer
+    CreateConversationBody:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+    UpdateConversationBody:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+        archived:
+          type: boolean
     MessengerMessage:
       type: object
       required:

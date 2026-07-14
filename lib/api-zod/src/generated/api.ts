@@ -4210,6 +4210,8 @@ export const UpdateAppConfigValueResponse = zod.object({
  */
 export const ListConversationsResponseItem = zod.object({
   "id": zod.number(),
+  "name": zod.string().nullish(),
+  "archivedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date(),
   "lastMessage": zod.object({
   "id": zod.number(),
@@ -4236,10 +4238,66 @@ export const ListConversationsResponse = zod.array(ListConversationsResponseItem
 
 
 /**
+ * @summary Create a new conversation
+ */
+export const CreateConversationBody = zod.object({
+  "name": zod.string()
+})
+
+
+/**
  * @summary Total unread message count (for badge)
  */
 export const GetUnreadCountResponse = zod.object({
   "count": zod.number()
+})
+
+
+/**
+ * @summary Rename or archive/unarchive a conversation
+ */
+export const UpdateConversationParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateConversationBody = zod.object({
+  "name": zod.string().nullish(),
+  "archived": zod.boolean().optional()
+})
+
+export const UpdateConversationResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string().nullish(),
+  "archivedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "lastMessage": zod.object({
+  "id": zod.number(),
+  "conversationId": zod.number(),
+  "senderId": zod.number().nullish(),
+  "senderName": zod.string().nullish(),
+  "body": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "readAt": zod.coerce.date().nullish(),
+  "deletedAt": zod.coerce.date().nullish(),
+  "editedAt": zod.coerce.date().nullish(),
+  "attachments": zod.array(zod.object({
+  "id": zod.number(),
+  "messageId": zod.number(),
+  "mimeType": zod.string(),
+  "fileName": zod.string(),
+  "sizeBytes": zod.number().optional(),
+  "url": zod.string()
+})).optional()
+}).optional(),
+  "unreadCount": zod.number()
+})
+
+
+/**
+ * @summary Permanently delete a conversation and all its messages
+ */
+export const DeleteConversationParams = zod.object({
+  "id": zod.coerce.number()
 })
 
 
@@ -4297,6 +4355,14 @@ export const SendMessageBody = zod.object({
 
 
 /**
+ * @summary Clear all messages in a conversation (soft-deletes everything, keeps the conversation)
+ */
+export const ClearConversationParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
  * @summary Mark a message (and all prior in conversation) as read
  */
 export const MarkMessageReadParams = zod.object({
@@ -4305,14 +4371,6 @@ export const MarkMessageReadParams = zod.object({
 
 export const MarkMessageReadResponse = zod.object({
   "markedCount": zod.number()
-})
-
-
-/**
- * @summary Clear all messages in a conversation (soft-deletes everything)
- */
-export const ClearConversationParams = zod.object({
-  "id": zod.coerce.number()
 })
 
 

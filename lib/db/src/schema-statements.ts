@@ -1369,6 +1369,8 @@ export const STATEMENTS: string[] = [
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
 
+  `ALTER TABLE messenger_conversations ADD COLUMN IF NOT EXISTS name TEXT`,
+  `ALTER TABLE messenger_conversations ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`,
   `ALTER TABLE messenger_messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ`,
 
   `CREATE INDEX IF NOT EXISTS messenger_messages_conv_created_idx

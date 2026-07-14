@@ -19,7 +19,7 @@ import type { UseQueryOptions } from "@tanstack/react-query";
 
 export type { MessengerMessengerMessage };
 
-export function useMessengerChat(isOpen: boolean) {
+export function useMessengerChat(isOpen: boolean, conversationId?: number) {
   const qc = useQueryClient();
   const [isSending, setIsSending] = useState(false);
 
@@ -30,7 +30,10 @@ export function useMessengerChat(isOpen: boolean) {
     } as UseQueryOptions<MessengerConversationSummary[]>,
   });
 
-  const convId = conversations?.[0]?.id ?? null;
+  // Use explicit conversationId if provided; otherwise fall back to first
+  // non-archived conversation (widget compatibility).
+  const firstActiveId = conversations?.find((c) => !c.archivedAt)?.id ?? null;
+  const convId = conversationId ?? firstActiveId;
 
   const {
     data: messages = [],

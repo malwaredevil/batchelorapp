@@ -1866,9 +1866,20 @@ export interface MessengerMessengerMessage {
 
 export interface MessengerConversationSummary {
   id: number;
+  name?: string | null;
+  archivedAt?: string | null;
   createdAt: string;
   lastMessage?: MessengerMessengerMessage;
   unreadCount: number;
+}
+
+export interface MessengerCreateConversationBody {
+  name: string;
+}
+
+export interface MessengerUpdateConversationBody {
+  name?: string | null;
+  archived?: boolean;
 }
 
 export interface MessengerAttachmentInput {

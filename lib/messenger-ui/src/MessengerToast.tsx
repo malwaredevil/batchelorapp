@@ -41,11 +41,11 @@ function SingleToast({
   }, [toast.id, onDismiss]);
 
   const href =
-    messengerHref ??
-    `/modules/office/messenger?convId=${toast.convId}`;
+    messengerHref ?? `/modules/office/messenger?convId=${toast.convId}`;
 
   const preview = toast.body
-    ? toast.body.replace(/\n/g, " ").slice(0, 80) + (toast.body.length > 80 ? "…" : "")
+    ? toast.body.replace(/\n/g, " ").slice(0, 80) +
+      (toast.body.length > 80 ? "…" : "")
     : "Sent an attachment";
 
   return (
@@ -101,7 +101,8 @@ function SingleToast({
           {toast.senderName ?? "Elaine"}
           {toast.convName ? (
             <span style={{ fontWeight: 400, color: "#94a3b8" }}>
-              {" "}in {toast.convName}
+              {" "}
+              in {toast.convName}
             </span>
           ) : null}
         </div>
@@ -162,7 +163,11 @@ export function MessengerToastContainer({
     >
       {toasts.map((t) => (
         <div key={t.id} style={{ pointerEvents: "auto" }}>
-          <SingleToast toast={t} onDismiss={onDismiss} messengerHref={messengerHref} />
+          <SingleToast
+            toast={t}
+            onDismiss={onDismiss}
+            messengerHref={messengerHref}
+          />
         </div>
       ))}
     </div>

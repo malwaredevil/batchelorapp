@@ -1,5 +1,16 @@
 import { Router, type IRouter } from "express";
-import { and, desc, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import {
   db,
   messengerConversations,
@@ -27,7 +38,9 @@ const router: IRouter = Router();
 /** Return all conversation IDs the user participates in, sorted by id. */
 async function getParticipantConvIds(userId: number): Promise<number[]> {
   const rows = await db
-    .select({ conversationId: messengerConversationParticipants.conversationId })
+    .select({
+      conversationId: messengerConversationParticipants.conversationId,
+    })
     .from(messengerConversationParticipants)
     .where(eq(messengerConversationParticipants.userId, userId));
   return rows.map((r) => r.conversationId);
@@ -232,7 +245,9 @@ router.get("/conversations", async (req, res) => {
 router.post("/conversations", async (req, res) => {
   const parsed = CreateConversationBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "Invalid body", details: parsed.error.flatten() });
+    res
+      .status(400)
+      .json({ error: "Invalid body", details: parsed.error.flatten() });
     return;
   }
 
@@ -244,14 +259,18 @@ router.post("/conversations", async (req, res) => {
 
   if (isDirect) {
     if (allParticipantIds.length !== 2) {
-      res.status(400).json({ error: "A direct message must have exactly two participants" });
+      res
+        .status(400)
+        .json({ error: "A direct message must have exactly two participants" });
       return;
     }
     const otherId = allParticipantIds.find((id) => id !== userId)!;
 
     // Check if a DM between these two already exists
     const existingRows = await db
-      .select({ conversationId: messengerConversationParticipants.conversationId })
+      .select({
+        conversationId: messengerConversationParticipants.conversationId,
+      })
       .from(messengerConversationParticipants)
       .where(eq(messengerConversationParticipants.userId, userId));
 
@@ -273,12 +292,18 @@ router.post("/conversations", async (req, res) => {
         .from(messengerConversationParticipants)
         .where(
           and(
-            eq(messengerConversationParticipants.conversationId, row.conversationId),
+            eq(
+              messengerConversationParticipants.conversationId,
+              row.conversationId,
+            ),
             ne(messengerConversationParticipants.userId, userId),
           ),
         );
 
-      if (otherParticipants.length === 1 && otherParticipants[0].userId === otherId) {
+      if (
+        otherParticipants.length === 1 &&
+        otherParticipants[0].userId === otherId
+      ) {
         // Existing DM found — return it
         const summary = await buildConversationSummary(convRow[0], userId);
         res.status(200).json(summary);
@@ -300,7 +325,10 @@ router.post("/conversations", async (req, res) => {
 
   // Add participants
   await db.insert(messengerConversationParticipants).values(
-    allParticipantIds.map((uid) => ({ conversationId: conv.id, userId: uid })),
+    allParticipantIds.map((uid) => ({
+      conversationId: conv.id,
+      userId: uid,
+    })),
   );
 
   const summary = await buildConversationSummary(conv, userId);
@@ -370,7 +398,9 @@ router.patch("/conversations/:id", async (req, res) => {
 
   const parsed = UpdateConversationBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "Invalid body", details: parsed.error.flatten() });
+    res
+      .status(400)
+      .json({ error: "Invalid body", details: parsed.error.flatten() });
     return;
   }
 
@@ -416,11 +446,15 @@ router.delete("/conversations/:id", async (req, res) => {
     return;
   }
 
-  await db.delete(messengerMessages).where(eq(messengerMessages.conversationId, convId));
+  await db
+    .delete(messengerMessages)
+    .where(eq(messengerMessages.conversationId, convId));
   await db
     .delete(messengerConversationParticipants)
     .where(eq(messengerConversationParticipants.conversationId, convId));
-  await db.delete(messengerConversations).where(eq(messengerConversations.id, convId));
+  await db
+    .delete(messengerConversations)
+    .where(eq(messengerConversations.id, convId));
 
   logger.info({ conversationId: convId }, "messenger: conversation deleted");
   res.status(204).send();
@@ -480,11 +514,13 @@ router.get("/conversations/:id/messages", async (req, res) => {
   const filters = [eq(messengerMessages.conversationId, convId)];
   if (since) {
     const sinceDate = new Date(since);
-    if (!isNaN(sinceDate.getTime())) filters.push(gt(messengerMessages.createdAt, sinceDate));
+    if (!isNaN(sinceDate.getTime()))
+      filters.push(gt(messengerMessages.createdAt, sinceDate));
   }
   if (before && !since) {
     const beforeDate = new Date(before);
-    if (!isNaN(beforeDate.getTime())) filters.push(lt(messengerMessages.createdAt, beforeDate));
+    if (!isNaN(beforeDate.getTime()))
+      filters.push(lt(messengerMessages.createdAt, beforeDate));
   }
 
   const msgRows = await db
@@ -540,7 +576,9 @@ router.post("/conversations/:id/messages", async (req, res) => {
 
   const parsed = SendMessageBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "Invalid request body", details: parsed.error.flatten() });
+    res
+      .status(400)
+      .json({ error: "Invalid request body", details: parsed.error.flatten() });
     return;
   }
 
@@ -564,7 +602,10 @@ router.post("/conversations/:id/messages", async (req, res) => {
   }
 
   const [attRows, senderRow] = await Promise.all([
-    db.select().from(messengerAttachments).where(eq(messengerAttachments.messageId, msg.id)),
+    db
+      .select()
+      .from(messengerAttachments)
+      .where(eq(messengerAttachments.messageId, msg.id)),
     db
       .select({ displayName: appUsers.displayName })
       .from(appUsers)
@@ -628,7 +669,10 @@ async function generateElaineReply(
     body: replyBody,
   });
 
-  logger.info({ conversationId, chars: replyBody.length }, "messenger: @elaine reply saved");
+  logger.info(
+    { conversationId, chars: replyBody.length },
+    "messenger: @elaine reply saved",
+  );
 }
 
 export default router;

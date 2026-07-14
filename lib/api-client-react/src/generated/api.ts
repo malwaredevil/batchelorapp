@@ -52,6 +52,7 @@ import type {
   MergeQuiltingCategory200,
   MessengerAttachmentUploadResult,
   MessengerConversationSummary,
+  MessengerHouseholdMember,
   MessengerLinkPreview,
   MessengerMessengerMessage,
   MessengerSendMessageBody,
@@ -13607,6 +13608,83 @@ export const useUploadAttachment = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getUploadAttachmentMutationOptions(options));
     }
+
+export const getListHouseholdMembersUrl = () => {
+
+
+
+
+  return `/api/messenger/conversations/members`
+}
+
+/**
+ * @summary List all household member accounts (for @mention and contacts panel)
+ */
+export const listHouseholdMembers = async ( options?: RequestInit): Promise<MessengerHouseholdMember[]> => {
+
+  return customFetch<MessengerHouseholdMember[]>(getListHouseholdMembersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListHouseholdMembersQueryKey = () => {
+    return [
+    `/api/messenger/conversations/members`
+    ] as const;
+    }
+
+
+export const getListHouseholdMembersQueryOptions = <TData = Awaited<ReturnType<typeof listHouseholdMembers>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listHouseholdMembers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListHouseholdMembersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listHouseholdMembers>>> = ({ signal }) => listHouseholdMembers({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listHouseholdMembers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListHouseholdMembersQueryResult = NonNullable<Awaited<ReturnType<typeof listHouseholdMembers>>>
+export type ListHouseholdMembersQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all household member accounts (for @mention and contacts panel)
+ */
+
+export function useListHouseholdMembers<TData = Awaited<ReturnType<typeof listHouseholdMembers>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listHouseholdMembers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListHouseholdMembersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getGetLinkPreviewUrl = (params: GetLinkPreviewParams,) => {
   const normalizedParams = new URLSearchParams();

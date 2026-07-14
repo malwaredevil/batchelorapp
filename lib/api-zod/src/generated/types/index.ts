@@ -46,6 +46,7 @@ export * from './mergeQuiltingCategory200';
 export * from './messengerAttachmentInput';
 export * from './messengerAttachmentUploadResult';
 export * from './messengerConversationSummary';
+export * from './messengerHouseholdMember';
 export * from './messengerLinkPreview';
 export * from './messengerMessengerAttachment';
 export * from './messengerMessengerMessage';

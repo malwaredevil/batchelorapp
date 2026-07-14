@@ -1,10 +1,19 @@
-import { MessageSquare } from "lucide-react";
+import { useState } from "react";
+import { MessageSquare, Users, ArrowLeft } from "lucide-react";
 import { useAuth } from "@workspace/web-core/auth";
-import { MessengerChatPanel } from "@workspace/messenger-ui";
+import { MessengerChatPanel, MessengerContactsPanel } from "@workspace/messenger-ui";
 
 export default function MessengerPage() {
   const { user } = useAuth();
+  const [view, setView] = useState<"chat" | "contacts">("chat");
+  const [pendingPrefill, setPendingPrefill] = useState("");
+
   if (!user) return null;
+
+  const handleContactSelect = (prefill: string) => {
+    setPendingPrefill(prefill);
+    setView("chat");
+  };
 
   return (
     <div
@@ -41,9 +50,13 @@ export default function MessengerPage() {
             color: "#fff",
           }}
         >
-          <MessageSquare size={18} />
+          {view === "contacts" ? (
+            <Users size={18} />
+          ) : (
+            <MessageSquare size={18} />
+          )}
         </div>
-        <div>
+        <div style={{ flex: 1 }}>
           <h1
             style={{
               margin: 0,
@@ -53,15 +66,63 @@ export default function MessengerPage() {
               lineHeight: 1.3,
             }}
           >
-            Messenger
+            {view === "contacts" ? "Contacts" : "Messenger"}
           </h1>
           <p style={{ margin: 0, fontSize: 12, color: "#9ca3af" }}>
-            Household group chat · @elaine for AI help
+            {view === "contacts"
+              ? "Select a person to start chatting"
+              : "Household group chat · @elaine for AI help"}
           </p>
         </div>
+
+        {/* Contacts / back button */}
+        {view === "chat" ? (
+          <button
+            onClick={() => setView("contacts")}
+            aria-label="View contacts"
+            title="Contacts"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
+              background: "#f3f4f6",
+              border: "none",
+              borderRadius: 8,
+              padding: "6px 12px",
+              fontSize: 13,
+              fontWeight: 500,
+              color: "#374151",
+              cursor: "pointer",
+            }}
+          >
+            <Users size={15} />
+            Contacts
+          </button>
+        ) : (
+          <button
+            onClick={() => setView("chat")}
+            aria-label="Back to chat"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
+              background: "#f3f4f6",
+              border: "none",
+              borderRadius: 8,
+              padding: "6px 12px",
+              fontSize: 13,
+              fontWeight: 500,
+              color: "#374151",
+              cursor: "pointer",
+            }}
+          >
+            <ArrowLeft size={15} />
+            Back to chat
+          </button>
+        )}
       </div>
 
-      {/* Chat panel */}
+      {/* Body */}
       <div
         style={{
           flex: 1,
@@ -73,7 +134,16 @@ export default function MessengerPage() {
           background: "#fff",
         }}
       >
-        <MessengerChatPanel currentUserId={user.id} isOpen={true} />
+        {view === "contacts" ? (
+          <MessengerContactsPanel onSelect={handleContactSelect} />
+        ) : (
+          <MessengerChatPanel
+            currentUserId={user.id}
+            isOpen={true}
+            prefillInput={pendingPrefill}
+            onPrefillApplied={() => setPendingPrefill("")}
+          />
+        )}
       </div>
     </div>
   );

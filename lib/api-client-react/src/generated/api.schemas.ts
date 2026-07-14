@@ -1894,6 +1894,12 @@ export interface MessengerUnreadCountResponse {
   count: number;
 }
 
+export interface MessengerHouseholdMember {
+  id: number;
+  displayName?: string | null;
+  email: string;
+}
+
 export interface MessengerLinkPreview {
   url: string;
   title?: string | null;

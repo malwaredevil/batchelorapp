@@ -160,6 +160,21 @@ router.get("/conversations", async (req, res) => {
 });
 
 // -----------------------------------------------------------------------
+// GET /conversations/members — MUST be before /:id routes
+// -----------------------------------------------------------------------
+router.get("/conversations/members", async (_req, res) => {
+  const members = await db
+    .select({
+      id: appUsers.id,
+      displayName: appUsers.displayName,
+      email: appUsers.email,
+    })
+    .from(appUsers)
+    .orderBy(appUsers.displayName);
+  res.json(members);
+});
+
+// -----------------------------------------------------------------------
 // GET /conversations/unread-count — MUST be before /:id routes
 // -----------------------------------------------------------------------
 router.get("/conversations/unread-count", async (req, res) => {

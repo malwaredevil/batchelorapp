@@ -1,5 +1,8 @@
 import { ExternalLink } from "lucide-react";
-import { useGetLinkPreview, getGetLinkPreviewQueryKey } from "@workspace/api-client-react";
+import {
+  useGetLinkPreview,
+  getGetLinkPreviewQueryKey,
+} from "@workspace/api-client-react";
 
 interface LinkPreviewCardProps {
   url: string;
@@ -8,10 +11,16 @@ interface LinkPreviewCardProps {
 export function LinkPreviewCard({ url }: LinkPreviewCardProps) {
   const { data } = useGetLinkPreview(
     { url },
-    { query: { queryKey: getGetLinkPreviewQueryKey({ url }), staleTime: 5 * 60 * 1000 } },
+    {
+      query: {
+        queryKey: getGetLinkPreviewQueryKey({ url }),
+        staleTime: 5 * 60 * 1000,
+      },
+    },
   );
 
-  if (!data || (!data.title && !data.description && !data.imageUrl)) return null;
+  if (!data || (!data.title && !data.description && !data.imageUrl))
+    return null;
 
   return (
     <a

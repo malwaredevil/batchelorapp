@@ -1352,4 +1352,42 @@ export const STATEMENTS: string[] = [
     ('travels',     'explore_overview_max_tokens',    '600',     'integer', 'Explore destination overview AI max tokens',    'max_tokens cap for the AI-generated explore-mode destination overview paragraph.'),
     ('travels',     'full_itinerary_max_tokens',      '3000',    'integer', 'Full itinerary text AI max tokens',             'max_tokens cap for the full AI-generated itinerary text block.')
   ON CONFLICT (module, key) DO NOTHING`,
+
+  // Messenger: household group chat with @Elaine AI integration.
+  `CREATE TABLE IF NOT EXISTS messenger_conversations (
+    id              SERIAL PRIMARY KEY,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS messenger_messages (
+    id              SERIAL PRIMARY KEY,
+    conversation_id INTEGER NOT NULL REFERENCES messenger_conversations(id),
+    sender_id       INTEGER REFERENCES app_users(id),
+    body            TEXT NOT NULL DEFAULT '',
+    read_at         TIMESTAMPTZ,
+    deleted_at      TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS messenger_messages_conv_created_idx
+     ON messenger_messages (conversation_id, created_at DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS messenger_attachments (
+    id              SERIAL PRIMARY KEY,
+    message_id      INTEGER NOT NULL REFERENCES messenger_messages(id) ON DELETE CASCADE,
+    storage_path    TEXT NOT NULL,
+    mime_type       TEXT NOT NULL,
+    file_name       TEXT NOT NULL,
+    size_bytes      INTEGER NOT NULL DEFAULT 0,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS messenger_link_previews (
+    id              SERIAL PRIMARY KEY,
+    url             TEXT NOT NULL UNIQUE,
+    title           TEXT,
+    description     TEXT,
+    image_url       TEXT,
+    fetched_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
 ];

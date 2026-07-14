@@ -18,7 +18,10 @@ function extractUrls(text: string): string[] {
 
 export function MessageItem({ message, isOwn, onDelete }: MessageItemProps) {
   const [hovered, setHovered] = useState(false);
-  const [imageModal, setImageModal] = useState<{ url: string; name: string } | null>(null);
+  const [imageModal, setImageModal] = useState<{
+    url: string;
+    name: string;
+  } | null>(null);
 
   const isElaine = message.senderId === null;
   const isDeleted = !!message.deletedAt;
@@ -34,7 +37,11 @@ export function MessageItem({ message, isOwn, onDelete }: MessageItemProps) {
         ? "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)"
         : "#f3f4f6";
 
-  const bubbleColor = isDeleted ? "#9ca3af" : isElaine || isOwn ? "#fff" : "#111827";
+  const bubbleColor = isDeleted
+    ? "#9ca3af"
+    : isElaine || isOwn
+      ? "#fff"
+      : "#111827";
 
   return (
     <div
@@ -117,71 +124,86 @@ export function MessageItem({ message, isOwn, onDelete }: MessageItemProps) {
 
           {/* Link preview */}
           {firstUrl && !isDeleted && (
-            <div style={{ display: "flex", justifyContent: isOwn ? "flex-end" : "flex-start" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: isOwn ? "flex-end" : "flex-start",
+              }}
+            >
               <LinkPreviewCard url={firstUrl} />
             </div>
           )}
 
           {/* Attachments */}
-          {!isDeleted && message.attachments && message.attachments.length > 0 && (
-            <div
-              style={{
-                marginTop: 4,
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 6,
-                justifyContent: isOwn ? "flex-end" : "flex-start",
-              }}
-            >
-              {message.attachments.map((att) => {
-                if (att.mimeType.startsWith("image/")) {
+          {!isDeleted &&
+            message.attachments &&
+            message.attachments.length > 0 && (
+              <div
+                style={{
+                  marginTop: 4,
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 6,
+                  justifyContent: isOwn ? "flex-end" : "flex-start",
+                }}
+              >
+                {message.attachments.map((att) => {
+                  if (att.mimeType.startsWith("image/")) {
+                    return (
+                      <img
+                        key={att.id}
+                        src={att.url ?? undefined}
+                        alt={att.fileName}
+                        onClick={() =>
+                          att.url &&
+                          setImageModal({ url: att.url, name: att.fileName })
+                        }
+                        style={{
+                          width: 120,
+                          height: 90,
+                          objectFit: "cover",
+                          borderRadius: 8,
+                          cursor: "pointer",
+                          border: "1px solid rgba(0,0,0,0.1)",
+                        }}
+                      />
+                    );
+                  }
                   return (
-                    <img
+                    <a
                       key={att.id}
-                      src={att.url ?? undefined}
-                      alt={att.fileName}
-                      onClick={() =>
-                        att.url && setImageModal({ url: att.url, name: att.fileName })
-                      }
+                      href={att.url ?? undefined}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       style={{
-                        width: 120,
-                        height: 90,
-                        objectFit: "cover",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        padding: "6px 10px",
+                        background: "#f3f4f6",
+                        border: "1px solid #e5e7eb",
                         borderRadius: 8,
-                        cursor: "pointer",
-                        border: "1px solid rgba(0,0,0,0.1)",
+                        textDecoration: "none",
+                        color: "#374151",
+                        fontSize: 12,
                       }}
-                    />
+                    >
+                      <FileText size={14} />
+                      <span
+                        style={{
+                          maxWidth: 140,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {att.fileName}
+                      </span>
+                    </a>
                   );
-                }
-                return (
-                  <a
-                    key={att.id}
-                    href={att.url ?? undefined}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      padding: "6px 10px",
-                      background: "#f3f4f6",
-                      border: "1px solid #e5e7eb",
-                      borderRadius: 8,
-                      textDecoration: "none",
-                      color: "#374151",
-                      fontSize: 12,
-                    }}
-                  >
-                    <FileText size={14} />
-                    <span style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {att.fileName}
-                    </span>
-                  </a>
-                );
-              })}
-            </div>
-          )}
+                })}
+              </div>
+            )}
         </div>
       </div>
 

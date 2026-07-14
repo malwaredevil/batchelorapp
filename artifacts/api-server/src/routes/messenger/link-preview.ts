@@ -56,8 +56,7 @@ async function fetchPreview(url: string): Promise<{
       extractMeta(html, "og:description") ??
       extractMeta(html, "twitter:description");
     const imageUrl =
-      extractMeta(html, "og:image") ??
-      extractMeta(html, "twitter:image");
+      extractMeta(html, "og:image") ?? extractMeta(html, "twitter:image");
     return { title, description, imageUrl };
   } catch (err) {
     clearTimeout(timeout);

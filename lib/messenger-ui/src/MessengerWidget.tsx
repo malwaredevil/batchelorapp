@@ -26,21 +26,38 @@ export function MessengerWidget({ messengerPageHref }: MessengerWidgetProps) {
   const dragOffset = useRef({ x: 0, y: 0 });
   const bubbleRef = useRef<HTMLButtonElement>(null);
 
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
-    if (isOpen) return;
-    dragging.current = true;
-    dragOffset.current = { x: e.clientX - pos.x, y: e.clientY - pos.y };
-    e.preventDefault();
-  }, [isOpen, pos]);
+  const onMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (isOpen) return;
+      dragging.current = true;
+      dragOffset.current = { x: e.clientX - pos.x, y: e.clientY - pos.y };
+      e.preventDefault();
+    },
+    [isOpen, pos],
+  );
 
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
       if (!dragging.current) return;
-      const newX = Math.max(0, Math.min(window.innerWidth - BUBBLE_SIZE, e.clientX - dragOffset.current.x));
-      const newY = Math.max(0, Math.min(window.innerHeight - BUBBLE_SIZE, e.clientY - dragOffset.current.y));
+      const newX = Math.max(
+        0,
+        Math.min(
+          window.innerWidth - BUBBLE_SIZE,
+          e.clientX - dragOffset.current.x,
+        ),
+      );
+      const newY = Math.max(
+        0,
+        Math.min(
+          window.innerHeight - BUBBLE_SIZE,
+          e.clientY - dragOffset.current.y,
+        ),
+      );
       setPos({ x: newX, y: newY });
     };
-    const onMouseUp = () => { dragging.current = false; };
+    const onMouseUp = () => {
+      dragging.current = false;
+    };
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
     return () => {
@@ -76,7 +93,8 @@ export function MessengerWidget({ messengerPageHref }: MessengerWidgetProps) {
         width: PANEL_W,
         height: PANEL_H,
         zIndex: 9998,
-        boxShadow: "0 20px 60px -12px rgba(0,0,0,0.25), 0 8px 24px -6px rgba(0,0,0,0.1)",
+        boxShadow:
+          "0 20px 60px -12px rgba(0,0,0,0.25), 0 8px 24px -6px rgba(0,0,0,0.1)",
         borderRadius: 16,
         overflow: "hidden",
         border: "1px solid rgba(59,130,246,0.15)",
@@ -166,7 +184,8 @@ export function MessengerWidget({ messengerPageHref }: MessengerWidgetProps) {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        boxShadow: "0 8px 24px rgba(59,130,246,0.45), 0 2px 8px rgba(0,0,0,0.15)",
+        boxShadow:
+          "0 8px 24px rgba(59,130,246,0.45), 0 2px 8px rgba(0,0,0,0.15)",
         transition: "box-shadow 0.2s, transform 0.15s",
         userSelect: "none",
       }}

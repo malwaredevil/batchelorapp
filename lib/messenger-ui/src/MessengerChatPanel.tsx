@@ -18,7 +18,11 @@ function formatDateLabel(dateStr: string): string {
 
   if (d.toDateString() === today.toDateString()) return "Today";
   if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
-  return d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+  return d.toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function groupByDate(
@@ -37,7 +41,10 @@ function groupByDate(
   return groups;
 }
 
-export function MessengerChatPanel({ currentUserId, isOpen }: MessengerChatPanelProps) {
+export function MessengerChatPanel({
+  currentUserId,
+  isOpen,
+}: MessengerChatPanelProps) {
   const [input, setInput] = useState("");
   const [pendingAttachments, setPendingAttachments] = useState<
     NonNullable<MessengerSendMessageBody["attachments"]>
@@ -47,8 +54,15 @@ export function MessengerChatPanel({ currentUserId, isOpen }: MessengerChatPanel
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const { messages, isLoading, isSending, sendMessage, markRead, deleteMessage, convId } =
-    useMessengerChat(isOpen);
+  const {
+    messages,
+    isLoading,
+    isSending,
+    sendMessage,
+    markRead,
+    deleteMessage,
+    convId,
+  } = useMessengerChat(isOpen);
 
   const { mutateAsync: uploadAttachment } = useUploadAttachment();
 
@@ -64,7 +78,10 @@ export function MessengerChatPanel({ currentUserId, isOpen }: MessengerChatPanel
     if (!isOpen || messages.length === 0) return;
     const lastUnread = [...messages]
       .reverse()
-      .find((m) => !m.readAt && (m.senderId === null || m.senderId !== currentUserId));
+      .find(
+        (m) =>
+          !m.readAt && (m.senderId === null || m.senderId !== currentUserId),
+      );
     if (lastUnread) markRead(lastUnread.id);
   }, [isOpen, messages, currentUserId, markRead]);
 
@@ -93,7 +110,9 @@ export function MessengerChatPanel({ currentUserId, isOpen }: MessengerChatPanel
         files.map(async (file) => {
           const formData = new FormData();
           formData.append("file", file);
-          return uploadAttachment({ data: formData as unknown as { file: Blob } });
+          return uploadAttachment({
+            data: formData as unknown as { file: Blob },
+          });
         }),
       );
       setPendingAttachments((prev) => [
@@ -149,7 +168,10 @@ export function MessengerChatPanel({ currentUserId, isOpen }: MessengerChatPanel
               color: "#9ca3af",
             }}
           >
-            <Loader2 size={20} style={{ animation: "spin 1s linear infinite" }} />
+            <Loader2
+              size={20}
+              style={{ animation: "spin 1s linear infinite" }}
+            />
           </div>
         ) : messages.length === 0 ? (
           <div
@@ -166,7 +188,9 @@ export function MessengerChatPanel({ currentUserId, isOpen }: MessengerChatPanel
           >
             <MessageSquare size={28} strokeWidth={1.5} />
             <span>No messages yet</span>
-            <span style={{ fontSize: 11, color: "#d1d5db" }}>Say hi, or try @elaine</span>
+            <span style={{ fontSize: 11, color: "#d1d5db" }}>
+              Say hi, or try @elaine
+            </span>
           </div>
         ) : (
           dateGroups.map((group) => (
@@ -238,7 +262,9 @@ export function MessengerChatPanel({ currentUserId, isOpen }: MessengerChatPanel
               </span>
               <button
                 onClick={() =>
-                  setPendingAttachments((prev) => prev.filter((_, j) => j !== i))
+                  setPendingAttachments((prev) =>
+                    prev.filter((_, j) => j !== i),
+                  )
                 }
                 style={{
                   background: "none",
@@ -292,7 +318,10 @@ export function MessengerChatPanel({ currentUserId, isOpen }: MessengerChatPanel
           }}
         >
           {isUploading ? (
-            <Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} />
+            <Loader2
+              size={18}
+              style={{ animation: "spin 1s linear infinite" }}
+            />
           ) : (
             <Paperclip size={18} />
           )}
@@ -327,12 +356,15 @@ export function MessengerChatPanel({ currentUserId, isOpen }: MessengerChatPanel
 
         <button
           onClick={handleSend}
-          disabled={isSending || (!input.trim() && pendingAttachments.length === 0)}
+          disabled={
+            isSending || (!input.trim() && pendingAttachments.length === 0)
+          }
           aria-label="Send message"
           style={{
-            background: isSending || (!input.trim() && pendingAttachments.length === 0)
-              ? "#e5e7eb"
-              : "linear-gradient(135deg, #3b82f6, #2563eb)",
+            background:
+              isSending || (!input.trim() && pendingAttachments.length === 0)
+                ? "#e5e7eb"
+                : "linear-gradient(135deg, #3b82f6, #2563eb)",
             border: "none",
             borderRadius: 10,
             width: 36,
@@ -349,7 +381,10 @@ export function MessengerChatPanel({ currentUserId, isOpen }: MessengerChatPanel
           }}
         >
           {isSending ? (
-            <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} />
+            <Loader2
+              size={16}
+              style={{ animation: "spin 1s linear infinite" }}
+            />
           ) : (
             <Send size={15} />
           )}

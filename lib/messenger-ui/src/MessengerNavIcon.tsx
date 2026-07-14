@@ -117,9 +117,7 @@ export function MessengerNavIcon({
                 title={view === "contacts" ? "Back to chat" : "Contacts"}
                 style={{
                   background:
-                    view === "contacts"
-                      ? "rgba(255,255,255,0.25)"
-                      : "none",
+                    view === "contacts" ? "rgba(255,255,255,0.25)" : "none",
                   border: "none",
                   cursor: "pointer",
                   color: "rgba(255,255,255,0.9)",

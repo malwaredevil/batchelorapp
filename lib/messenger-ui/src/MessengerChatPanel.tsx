@@ -520,7 +520,9 @@ export function MessengerChatPanel({
                 >
                   {isElaine ? "✦" : (name[0]?.toUpperCase() ?? "?")}
                 </div>
-                <span style={{ fontSize: 13, fontWeight: 500, color: "#111827" }}>
+                <span
+                  style={{ fontSize: 13, fontWeight: 500, color: "#111827" }}
+                >
                   {name}
                 </span>
                 {isElaine && (

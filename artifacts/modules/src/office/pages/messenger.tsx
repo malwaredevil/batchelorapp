@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { MessageSquare, Users, ArrowLeft } from "lucide-react";
 import { useAuth } from "@workspace/web-core/auth";
-import { MessengerChatPanel, MessengerContactsPanel } from "@workspace/messenger-ui";
+import {
+  MessengerChatPanel,
+  MessengerContactsPanel,
+} from "@workspace/messenger-ui";
 
 export default function MessengerPage() {
   const { user } = useAuth();

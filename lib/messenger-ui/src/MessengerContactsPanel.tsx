@@ -7,7 +7,9 @@ interface MessengerContactsPanelProps {
 
 const ELAINE_ENTRY = { id: -1, displayName: "Elaine", email: "" };
 
-export function MessengerContactsPanel({ onSelect }: MessengerContactsPanelProps) {
+export function MessengerContactsPanel({
+  onSelect,
+}: MessengerContactsPanelProps) {
   const { data: members = [], isLoading } = useListHouseholdMembers();
   const all = [ELAINE_ENTRY, ...members];
 
@@ -72,9 +74,7 @@ export function MessengerContactsPanel({ onSelect }: MessengerContactsPanelProps
                 onMouseEnter={(e) =>
                   (e.currentTarget.style.background = "#f9fafb")
                 }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.background = "")
-                }
+                onMouseLeave={(e) => (e.currentTarget.style.background = "")}
               >
                 <div
                   style={{

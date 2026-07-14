@@ -484,6 +484,7 @@ function HallmarkEventStatTile() {
   const now = Date.now();
   const [index, setIndex] = useState(0);
 
+  const cutoff = now + 90 * 86_400_000;
   const upcoming = (events ?? [])
     .map((e) => ({
       id: e.id,
@@ -491,7 +492,11 @@ function HallmarkEventStatTile() {
       start: new Date(`${e.startDate}T00:00:00`),
       end: new Date(`${e.endDate}T23:59:59`),
     }))
-    .filter((e) => e.end.getTime() >= now)
+    .filter(
+      (e) =>
+        e.end.getTime() >= now && // not already over
+        e.start.getTime() <= cutoff, // live now OR starts within 90 days
+    )
     .sort((a, b) => a.start.getTime() - b.start.getTime());
 
   const list: Array<{

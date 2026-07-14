@@ -51,7 +51,10 @@ export function useMessengerChat(isOpen: boolean) {
   const { mutateAsync: deleteMessageMutation } = useDeleteMessage();
 
   const sendMessage = useCallback(
-    async (body: string, attachments: MessengerSendMessageBody["attachments"] = []) => {
+    async (
+      body: string,
+      attachments: MessengerSendMessageBody["attachments"] = [],
+    ) => {
       if (!convId || !body.trim()) return;
       setIsSending(true);
       try {
@@ -59,7 +62,9 @@ export function useMessengerChat(isOpen: boolean) {
           id: convId,
           data: { body: body.trim(), attachments },
         });
-        qc.invalidateQueries({ queryKey: getGetConversationMessagesQueryKey(convId) });
+        qc.invalidateQueries({
+          queryKey: getGetConversationMessagesQueryKey(convId),
+        });
         qc.invalidateQueries({ queryKey: getGetUnreadCountQueryKey() });
         qc.invalidateQueries({ queryKey: getListConversationsQueryKey() });
       } finally {
@@ -86,7 +91,9 @@ export function useMessengerChat(isOpen: boolean) {
     async (messageId: number) => {
       await deleteMessageMutation({ id: messageId });
       if (convId) {
-        qc.invalidateQueries({ queryKey: getGetConversationMessagesQueryKey(convId) });
+        qc.invalidateQueries({
+          queryKey: getGetConversationMessagesQueryKey(convId),
+        });
       }
     },
     [deleteMessageMutation, qc, convId],

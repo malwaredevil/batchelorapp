@@ -1,15 +1,5 @@
 import { Router, type IRouter } from "express";
-import {
-  and,
-  desc,
-  eq,
-  gt,
-  isNull,
-  lt,
-  ne,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lt, ne, or, sql } from "drizzle-orm";
 import {
   db,
   messengerConversations,
@@ -247,7 +237,11 @@ router.get("/conversations/:id/messages", async (req, res) => {
     .from(messengerMessages)
     .leftJoin(appUsers, eq(appUsers.id, messengerMessages.senderId))
     .where(and(...filters))
-    .orderBy(since ? desc(messengerMessages.createdAt) : desc(messengerMessages.createdAt))
+    .orderBy(
+      since
+        ? desc(messengerMessages.createdAt)
+        : desc(messengerMessages.createdAt),
+    )
     .limit(limit);
 
   if (msgRows.length === 0) {
@@ -279,7 +273,9 @@ router.post("/conversations/:id/messages", async (req, res) => {
 
   const parsed = SendMessageBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "Invalid request body", details: parsed.error.flatten() });
+    res
+      .status(400)
+      .json({ error: "Invalid request body", details: parsed.error.flatten() });
     return;
   }
 

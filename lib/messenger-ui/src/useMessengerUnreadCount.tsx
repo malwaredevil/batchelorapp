@@ -1,5 +1,8 @@
 import { useEffect, useRef } from "react";
-import { useGetUnreadCount, getGetUnreadCountQueryKey } from "@workspace/api-client-react";
+import {
+  useGetUnreadCount,
+  getGetUnreadCountQueryKey,
+} from "@workspace/api-client-react";
 
 export function useMessengerUnreadCount() {
   const { data } = useGetUnreadCount({
@@ -16,9 +19,9 @@ export function useMessengerUnreadCount() {
     if (count > prev) {
       try {
         if ("setAppBadge" in navigator) {
-          (navigator as Navigator & { setAppBadge: (n: number) => void }).setAppBadge(
-            count,
-          );
+          (
+            navigator as Navigator & { setAppBadge: (n: number) => void }
+          ).setAppBadge(count);
         }
       } catch {
         // not supported
@@ -26,7 +29,9 @@ export function useMessengerUnreadCount() {
     } else if (count === 0) {
       try {
         if ("clearAppBadge" in navigator) {
-          (navigator as Navigator & { clearAppBadge: () => void }).clearAppBadge();
+          (
+            navigator as Navigator & { clearAppBadge: () => void }
+          ).clearAppBadge();
         }
       } catch {
         // not supported

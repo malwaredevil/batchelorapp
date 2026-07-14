@@ -45,6 +45,7 @@ export * from './markMessageRead200';
 export * from './mergeQuiltingCategory200';
 export * from './messengerAttachmentInput';
 export * from './messengerAttachmentUploadResult';
+export * from './messengerConversationParticipant';
 export * from './messengerConversationSummary';
 export * from './messengerCreateConversationBody';
 export * from './messengerEditMessageBody';

@@ -1842,6 +1842,11 @@ export interface ConfigUpdateAppConfigResponse {
   config: ConfigAppConfigRow;
 }
 
+export interface MessengerConversationParticipant {
+  id: number;
+  displayName?: string | null;
+}
+
 export interface MessengerMessengerAttachment {
   id: number;
   messageId: number;
@@ -1867,14 +1872,18 @@ export interface MessengerMessengerMessage {
 export interface MessengerConversationSummary {
   id: number;
   name?: string | null;
+  isDirect: boolean;
   archivedAt?: string | null;
   createdAt: string;
   lastMessage?: MessengerMessengerMessage;
   unreadCount: number;
+  participants: MessengerConversationParticipant[];
 }
 
 export interface MessengerCreateConversationBody {
-  name: string;
+  name?: string | null;
+  isDirect?: boolean;
+  participantIds: number[];
 }
 
 export interface MessengerUpdateConversationBody {
@@ -2070,13 +2079,7 @@ export type DeleteOrnamentUnusedCategories200 = {
 };
 
 export type GetConversationMessagesParams = {
-/**
- * ISO timestamp — return only messages created after this time
- */
 since?: string;
-/**
- * ISO timestamp — paginate backward before this time
- */
 before?: string;
 limit?: number;
 };

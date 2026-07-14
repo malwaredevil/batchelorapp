@@ -13094,7 +13094,7 @@ export const getListConversationsUrl = () => {
 }
 
 /**
- * @summary List all household conversations with unread counts
+ * @summary List conversations the current user participates in
  */
 export const listConversations = async ( options?: RequestInit): Promise<MessengerConversationSummary[]> => {
 
@@ -13141,7 +13141,7 @@ export type ListConversationsQueryError = ErrorType<unknown>
 
 
 /**
- * @summary List all household conversations with unread counts
+ * @summary List conversations the current user participates in
  */
 
 export function useListConversations<TData = Awaited<ReturnType<typeof listConversations>>, TError = ErrorType<unknown>>(
@@ -13171,7 +13171,7 @@ export const getCreateConversationUrl = () => {
 }
 
 /**
- * @summary Create a new conversation
+ * @summary Create a new conversation (DM or group)
  */
 export const createConversation = async (messengerCreateConversationBody: MessengerCreateConversationBody, options?: RequestInit): Promise<MessengerConversationSummary> => {
 
@@ -13220,7 +13220,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type CreateConversationMutationError = ErrorType<unknown>
 
     /**
- * @summary Create a new conversation
+ * @summary Create a new conversation (DM or group)
  */
 export const useCreateConversation = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createConversation>>, TError,{data: BodyType<MessengerCreateConversationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -13242,7 +13242,7 @@ export const getGetUnreadCountUrl = () => {
 }
 
 /**
- * @summary Total unread message count (for badge)
+ * @summary Total unread message count across all participant conversations (for badge)
  */
 export const getUnreadCount = async ( options?: RequestInit): Promise<MessengerUnreadCountResponse> => {
 
@@ -13289,7 +13289,7 @@ export type GetUnreadCountQueryError = ErrorType<unknown>
 
 
 /**
- * @summary Total unread message count (for badge)
+ * @summary Total unread message count across all participant conversations (for badge)
  */
 
 export function useGetUnreadCount<TData = Awaited<ReturnType<typeof getUnreadCount>>, TError = ErrorType<unknown>>(
@@ -13622,7 +13622,7 @@ export const getClearConversationUrl = (id: number,) => {
 }
 
 /**
- * @summary Clear all messages in a conversation (soft-deletes everything, keeps the conversation)
+ * @summary Clear all messages (soft-delete only, keeps conversation)
  */
 export const clearConversation = async (id: number, options?: RequestInit): Promise<void> => {
 
@@ -13670,7 +13670,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type ClearConversationMutationError = ErrorType<unknown>
 
     /**
- * @summary Clear all messages in a conversation (soft-deletes everything, keeps the conversation)
+ * @summary Clear all messages (soft-delete only, keeps conversation)
  */
 export const useClearConversation = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearConversation>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -13832,7 +13832,7 @@ export const getEditMessageUrl = (id: number,) => {
 }
 
 /**
- * @summary Edit the body of your own last message (only allowed if no later message exists)
+ * @summary Edit the body of your own last message
  */
 export const editMessage = async (id: number,
     messengerEditMessageBody: MessengerEditMessageBody, options?: RequestInit): Promise<MessengerEditMessageResponse> => {
@@ -13882,7 +13882,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type EditMessageMutationError = ErrorType<void>
 
     /**
- * @summary Edit the body of your own last message (only allowed if no later message exists)
+ * @summary Edit the body of your own last message
  */
 export const useEditMessage = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof editMessage>>, TError,{id: number;data: BodyType<MessengerEditMessageBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -13904,7 +13904,7 @@ export const getUploadAttachmentUrl = () => {
 }
 
 /**
- * @summary Upload a file attachment (returns storage info to include in sendMessage)
+ * @summary Upload a file attachment
  */
 export const uploadAttachment = async (uploadAttachmentBody: UploadAttachmentBody, options?: RequestInit): Promise<MessengerAttachmentUploadResult> => {
     const formData = new FormData();
@@ -13955,7 +13955,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type UploadAttachmentMutationError = ErrorType<unknown>
 
     /**
- * @summary Upload a file attachment (returns storage info to include in sendMessage)
+ * @summary Upload a file attachment
  */
 export const useUploadAttachment = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadAttachment>>, TError,{data: BodyType<UploadAttachmentBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -13977,7 +13977,7 @@ export const getListHouseholdMembersUrl = () => {
 }
 
 /**
- * @summary List all household member accounts (for @mention and contacts panel)
+ * @summary List all household member accounts
  */
 export const listHouseholdMembers = async ( options?: RequestInit): Promise<MessengerHouseholdMember[]> => {
 
@@ -14024,7 +14024,7 @@ export type ListHouseholdMembersQueryError = ErrorType<unknown>
 
 
 /**
- * @summary List all household member accounts (for @mention and contacts panel)
+ * @summary List all household member accounts
  */
 
 export function useListHouseholdMembers<TData = Awaited<ReturnType<typeof listHouseholdMembers>>, TError = ErrorType<unknown>>(

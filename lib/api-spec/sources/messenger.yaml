@@ -8,7 +8,7 @@ paths:
       operationId: listConversations
       tags:
         - messenger
-      summary: List all household conversations with unread counts
+      summary: List conversations the current user participates in
       responses:
         "200":
           description: Conversation list
@@ -22,7 +22,7 @@ paths:
       operationId: createConversation
       tags:
         - messenger
-      summary: Create a new conversation
+      summary: Create a new conversation (DM or group)
       requestBody:
         required: true
         content:
@@ -30,6 +30,12 @@ paths:
             schema:
               $ref: "#/components/schemas/CreateConversationBody"
       responses:
+        "200":
+          description: Existing DM returned (when isDirect and DM already exists)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationSummary"
         "201":
           description: Created conversation
           content:
@@ -41,7 +47,7 @@ paths:
       operationId: getUnreadCount
       tags:
         - messenger
-      summary: Total unread message count (for badge)
+      summary: Total unread message count across all participant conversations (for badge)
       responses:
         "200":
           description: Unread count
@@ -74,6 +80,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ConversationSummary"
+        "403":
+          description: Not a participant
         "404":
           description: Not found
     delete:
@@ -106,12 +114,10 @@ paths:
           in: query
           schema:
             type: string
-          description: ISO timestamp — return only messages created after this time
         - name: before
           in: query
           schema:
             type: string
-          description: ISO timestamp — paginate backward before this time
         - name: limit
           in: query
           schema:
@@ -153,7 +159,7 @@ paths:
       operationId: clearConversation
       tags:
         - messenger
-      summary: Clear all messages in a conversation (soft-deletes everything, keeps the conversation)
+      summary: Clear all messages (soft-delete only, keeps conversation)
       parameters:
         - name: id
           in: path
@@ -206,7 +212,7 @@ paths:
       operationId: editMessage
       tags:
         - messenger
-      summary: Edit the body of your own last message (only allowed if no later message exists)
+      summary: Edit the body of your own last message
       parameters:
         - name: id
           in: path
@@ -229,13 +235,13 @@ paths:
         "403":
           description: Not your message
         "409":
-          description: A later message exists — edit not allowed
+          description: A later message exists
   /attachments/upload:
     post:
       operationId: uploadAttachment
       tags:
         - messenger
-      summary: Upload a file attachment (returns storage info to include in sendMessage)
+      summary: Upload a file attachment
       requestBody:
         required: true
         content:
@@ -260,7 +266,7 @@ paths:
       operationId: listHouseholdMembers
       tags:
         - messenger
-      summary: List all household member accounts (for @mention and contacts panel)
+      summary: List all household member accounts
       responses:
         "200":
           description: Member list
@@ -284,25 +290,39 @@ paths:
             type: string
       responses:
         "200":
-          description: Link preview (fields may be null if unavailable)
+          description: Link preview
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/LinkPreview"
 components:
   schemas:
+    ConversationParticipant:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: integer
+        displayName:
+          type: string
+          nullable: true
     ConversationSummary:
       type: object
       required:
         - id
+        - isDirect
         - createdAt
         - unreadCount
+        - participants
       properties:
         id:
           type: integer
         name:
           type: string
           nullable: true
+        isDirect:
+          type: boolean
         archivedAt:
           type: string
           format: date-time
@@ -314,13 +334,24 @@ components:
           $ref: "#/components/schemas/MessengerMessage"
         unreadCount:
           type: integer
+        participants:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConversationParticipant"
     CreateConversationBody:
       type: object
       required:
-        - name
+        - participantIds
       properties:
         name:
           type: string
+          nullable: true
+        isDirect:
+          type: boolean
+        participantIds:
+          type: array
+          items:
+            type: integer
     UpdateConversationBody:
       type: object
       properties:

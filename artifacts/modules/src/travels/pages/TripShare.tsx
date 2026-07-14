@@ -272,39 +272,43 @@ export default function TripShare() {
 
                   {/* Activities */}
                   <div className="ml-11 space-y-3">
-                    {day.activities.map((act, actIdx) => (
-                      <div
-                        key={actIdx}
-                        className="bg-card border border-border/50 rounded-lg p-3 space-y-1"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-mono text-muted-foreground shrink-0 flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              {formatTime(act.time)}
-                            </span>
-                            <span className="font-medium text-sm text-foreground">
-                              {act.name}
-                            </span>
+                    {[...day.activities]
+                      .sort((a, b) =>
+                        (a.time || "99:99").localeCompare(b.time || "99:99"),
+                      )
+                      .map((act, actIdx) => (
+                        <div
+                          key={actIdx}
+                          className="bg-card border border-border/50 rounded-lg p-3 space-y-1"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-mono text-muted-foreground shrink-0 flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {formatTime(act.time)}
+                              </span>
+                              <span className="font-medium text-sm text-foreground">
+                                {act.name}
+                              </span>
+                            </div>
+                            {act.proximity && (
+                              <span className="text-xs text-muted-foreground shrink-0">
+                                {act.proximity}
+                              </span>
+                            )}
                           </div>
-                          {act.proximity && (
-                            <span className="text-xs text-muted-foreground shrink-0">
-                              {act.proximity}
-                            </span>
+                          {act.description && (
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                              {act.description}
+                            </p>
+                          )}
+                          {act.tip && (
+                            <p className="text-xs text-primary/80 italic">
+                              💡 {act.tip}
+                            </p>
                           )}
                         </div>
-                        {act.description && (
-                          <p className="text-xs text-muted-foreground leading-relaxed">
-                            {act.description}
-                          </p>
-                        )}
-                        {act.tip && (
-                          <p className="text-xs text-primary/80 italic">
-                            💡 {act.tip}
-                          </p>
-                        )}
-                      </div>
-                    ))}
+                      ))}
                   </div>
                 </div>
               ))}

@@ -137,9 +137,9 @@ router.patch("/messages/:id", async (req, res) => {
     .limit(1);
 
   if (laterMessages.length > 0) {
-    res
-      .status(409)
-      .json({ error: "Cannot edit — a later message exists in this conversation" });
+    res.status(409).json({
+      error: "Cannot edit — a later message exists in this conversation",
+    });
     return;
   }
 

@@ -251,7 +251,9 @@ export function MessageItem({
               style={{
                 background: bubbleBg,
                 color: bubbleColor,
-                borderRadius: isOwn ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+                borderRadius: isOwn
+                  ? "16px 16px 4px 16px"
+                  : "16px 16px 16px 4px",
                 padding: isDeleted ? "6px 12px" : "8px 12px",
                 fontSize: 14,
                 lineHeight: 1.5,
@@ -276,7 +278,8 @@ export function MessageItem({
           )}
 
           {/* Attachments */}
-          {!editing && !isDeleted &&
+          {!editing &&
+            !isDeleted &&
             message.attachments &&
             message.attachments.length > 0 && (
               <div

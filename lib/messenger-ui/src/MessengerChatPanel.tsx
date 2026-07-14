@@ -4,6 +4,7 @@ import {
   Paperclip,
   Loader2,
   MessageSquare,
+  Sparkles,
   Trash2,
   Users,
 } from "lucide-react";
@@ -552,6 +553,76 @@ export function MessengerChatPanel({
               })}
             </div>
           ))
+        )}
+        {/* Elaine typing indicator — shown while waiting for her reply */}
+        {isSending && (
+          <div
+            style={{
+              padding: "2px 12px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-start",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                color: "#8b5cf6",
+                marginBottom: 2,
+                paddingLeft: 4,
+                display: "flex",
+                alignItems: "center",
+                gap: 3,
+              }}
+            >
+              <Sparkles size={10} />
+              Elaine
+            </div>
+            <div
+              style={{
+                background: "rgba(109, 40, 217, 0.07)",
+                border: "1px solid rgba(109, 40, 217, 0.15)",
+                borderRadius: "16px 16px 16px 4px",
+                padding: "10px 16px",
+                display: "flex",
+                gap: 5,
+                alignItems: "center",
+              }}
+            >
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  background: "#8b5cf6",
+                  display: "inline-block",
+                  animation: "bounce 1s infinite",
+                }}
+              />
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  background: "#8b5cf6",
+                  display: "inline-block",
+                  animation: "bounce 1s infinite",
+                  animationDelay: "0.15s",
+                }}
+              />
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  background: "#8b5cf6",
+                  display: "inline-block",
+                  animation: "bounce 1s infinite",
+                  animationDelay: "0.3s",
+                }}
+              />
+            </div>
+          </div>
         )}
         <div ref={bottomRef} />
       </div>

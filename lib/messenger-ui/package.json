@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@workspace/api-client-react": "workspace:*",
+    "@workspace/elaine-ui": "workspace:*",
     "@workspace/web-core": "workspace:*",
     "clsx": "catalog:",
     "lucide-react": "catalog:",

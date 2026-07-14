@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Trash2, FileText, Sparkles, Pencil, Check, X } from "lucide-react";
 import type { MessengerMessengerMessage } from "@workspace/api-client-react";
+import { MarkdownMessage } from "@workspace/elaine-ui";
 import { LinkPreviewCard } from "./LinkPreviewCard";
 import { ImageModal } from "./ImageModal";
 
@@ -49,22 +50,29 @@ export function MessageItem({
   const firstUrl = urls[0] ?? null;
 
   // Bubble colours:
-  //  - Own messages & Elaine: brand gradient (always on dark bg, so white text is fine)
+  //  - Own messages: blue gradient (dark bg, white text)
+  //  - Elaine: light lavender tint with dark text so MarkdownMessage classes work
   //  - Other members: theme muted bg with theme foreground text
   //  - Deleted: muted bg with muted-foreground text
   const bubbleBg = isDeleted
     ? "hsl(var(--muted))"
     : isElaine
-      ? "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)"
+      ? "rgba(109, 40, 217, 0.07)"
       : isOwn
         ? "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)"
         : "hsl(var(--muted))";
 
+  const bubbleBorder = isElaine && !isDeleted
+    ? "1px solid rgba(109, 40, 217, 0.15)"
+    : undefined;
+
   const bubbleColor = isDeleted
     ? "hsl(var(--muted-foreground))"
-    : isElaine || isOwn
-      ? "#fff"
-      : "hsl(var(--foreground))";
+    : isElaine
+      ? "hsl(var(--foreground))"
+      : isOwn
+        ? "#fff"
+        : "hsl(var(--foreground))";
 
   const handleSaveEdit = async () => {
     if (!onEdit || !editValue.trim() || editValue.trim() === message.body) {
@@ -258,6 +266,7 @@ export function MessageItem({
               style={{
                 background: bubbleBg,
                 color: bubbleColor,
+                border: bubbleBorder,
                 borderRadius: isOwn
                   ? "16px 16px 4px 16px"
                   : "16px 16px 16px 4px",
@@ -268,7 +277,11 @@ export function MessageItem({
                 fontStyle: isDeleted ? "italic" : undefined,
               }}
             >
-              {isDeleted ? "Message deleted" : message.body}
+              {isDeleted
+                ? "Message deleted"
+                : isElaine
+                  ? <MarkdownMessage text={message.body} />
+                  : message.body}
             </div>
           )}
 

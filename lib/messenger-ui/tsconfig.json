@@ -9,6 +9,6 @@
     "jsx": "react-jsx",
     "lib": ["dom", "es2022"]
   },
-  "references": [{ "path": "../api-client-react" }, { "path": "../web-core" }],
+  "references": [{ "path": "../api-client-react" }, { "path": "../elaine-ui" }, { "path": "../web-core" }],
   "include": ["src"]
 }

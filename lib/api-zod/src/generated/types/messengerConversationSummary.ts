@@ -5,13 +5,16 @@
  * Unified API specification (pottery + quilting + travels + ornaments + office + hub + messenger)
  * OpenAPI spec version: 0.1.0
  */
+import type { MessengerConversationParticipant } from './messengerConversationParticipant';
 import type { MessengerMessengerMessage } from './messengerMessengerMessage';
 
 export interface MessengerConversationSummary {
   id: number;
   name?: string | null;
+  isDirect: boolean;
   archivedAt?: Date | null;
   createdAt: Date;
   lastMessage?: MessengerMessengerMessage;
   unreadCount: number;
+  participants: MessengerConversationParticipant[];
 }

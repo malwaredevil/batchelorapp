@@ -7,13 +7,7 @@
  */
 
 export type GetConversationMessagesParams = {
-/**
- * ISO timestamp — return only messages created after this time
- */
 since?: string;
-/**
- * ISO timestamp — paginate backward before this time
- */
 before?: string;
 limit?: number;
 };

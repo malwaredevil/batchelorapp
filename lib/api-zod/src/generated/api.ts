@@ -4206,11 +4206,12 @@ export const UpdateAppConfigValueResponse = zod.object({
 
 
 /**
- * @summary List all household conversations with unread counts
+ * @summary List conversations the current user participates in
  */
 export const ListConversationsResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string().nullish(),
+  "isDirect": zod.boolean(),
   "archivedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date(),
   "lastMessage": zod.object({
@@ -4232,21 +4233,59 @@ export const ListConversationsResponseItem = zod.object({
   "url": zod.string()
 })).optional()
 }).optional(),
-  "unreadCount": zod.number()
+  "unreadCount": zod.number(),
+  "participants": zod.array(zod.object({
+  "id": zod.number(),
+  "displayName": zod.string().nullish()
+}))
 })
 export const ListConversationsResponse = zod.array(ListConversationsResponseItem)
 
 
 /**
- * @summary Create a new conversation
+ * @summary Create a new conversation (DM or group)
  */
 export const CreateConversationBody = zod.object({
-  "name": zod.string()
+  "name": zod.string().nullish(),
+  "isDirect": zod.boolean().optional(),
+  "participantIds": zod.array(zod.number())
+})
+
+export const CreateConversationResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string().nullish(),
+  "isDirect": zod.boolean(),
+  "archivedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "lastMessage": zod.object({
+  "id": zod.number(),
+  "conversationId": zod.number(),
+  "senderId": zod.number().nullish(),
+  "senderName": zod.string().nullish(),
+  "body": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "readAt": zod.coerce.date().nullish(),
+  "deletedAt": zod.coerce.date().nullish(),
+  "editedAt": zod.coerce.date().nullish(),
+  "attachments": zod.array(zod.object({
+  "id": zod.number(),
+  "messageId": zod.number(),
+  "mimeType": zod.string(),
+  "fileName": zod.string(),
+  "sizeBytes": zod.number().optional(),
+  "url": zod.string()
+})).optional()
+}).optional(),
+  "unreadCount": zod.number(),
+  "participants": zod.array(zod.object({
+  "id": zod.number(),
+  "displayName": zod.string().nullish()
+}))
 })
 
 
 /**
- * @summary Total unread message count (for badge)
+ * @summary Total unread message count across all participant conversations (for badge)
  */
 export const GetUnreadCountResponse = zod.object({
   "count": zod.number()
@@ -4268,6 +4307,7 @@ export const UpdateConversationBody = zod.object({
 export const UpdateConversationResponse = zod.object({
   "id": zod.number(),
   "name": zod.string().nullish(),
+  "isDirect": zod.boolean(),
   "archivedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date(),
   "lastMessage": zod.object({
@@ -4289,7 +4329,11 @@ export const UpdateConversationResponse = zod.object({
   "url": zod.string()
 })).optional()
 }).optional(),
-  "unreadCount": zod.number()
+  "unreadCount": zod.number(),
+  "participants": zod.array(zod.object({
+  "id": zod.number(),
+  "displayName": zod.string().nullish()
+}))
 })
 
 
@@ -4309,8 +4353,8 @@ export const GetConversationMessagesParams = zod.object({
 })
 
 export const GetConversationMessagesQueryParams = zod.object({
-  "since": zod.coerce.string().optional().describe('ISO timestamp — return only messages created after this time'),
-  "before": zod.coerce.string().optional().describe('ISO timestamp — paginate backward before this time'),
+  "since": zod.coerce.string().optional(),
+  "before": zod.coerce.string().optional(),
   "limit": zod.coerce.number().optional()
 })
 
@@ -4355,7 +4399,7 @@ export const SendMessageBody = zod.object({
 
 
 /**
- * @summary Clear all messages in a conversation (soft-deletes everything, keeps the conversation)
+ * @summary Clear all messages (soft-delete only, keeps conversation)
  */
 export const ClearConversationParams = zod.object({
   "id": zod.coerce.number()
@@ -4383,7 +4427,7 @@ export const DeleteMessageParams = zod.object({
 
 
 /**
- * @summary Edit the body of your own last message (only allowed if no later message exists)
+ * @summary Edit the body of your own last message
  */
 export const EditMessageParams = zod.object({
   "id": zod.coerce.number()
@@ -4400,7 +4444,7 @@ export const EditMessageResponse = zod.object({
 
 
 /**
- * @summary Upload a file attachment (returns storage info to include in sendMessage)
+ * @summary Upload a file attachment
  */
 export const UploadAttachmentBody = zod.object({
   "file": zod.instanceof(File)
@@ -4408,7 +4452,7 @@ export const UploadAttachmentBody = zod.object({
 
 
 /**
- * @summary List all household member accounts (for @mention and contacts panel)
+ * @summary List all household member accounts
  */
 export const ListHouseholdMembersResponseItem = zod.object({
   "id": zod.number(),

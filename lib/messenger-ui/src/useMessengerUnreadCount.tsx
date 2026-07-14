@@ -6,7 +6,7 @@ import {
 
 export function useMessengerUnreadCount() {
   const { data } = useGetUnreadCount({
-    query: { queryKey: getGetUnreadCountQueryKey(), refetchInterval: 30_000 },
+    query: { queryKey: getGetUnreadCountQueryKey(), refetchInterval: 10_000 },
   });
 
   const count = data?.count ?? 0;

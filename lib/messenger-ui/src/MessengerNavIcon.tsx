@@ -3,6 +3,11 @@ import { createPortal } from "react-dom";
 import { MessageSquare, X, ExternalLink, Users } from "lucide-react";
 import { useAuth } from "@workspace/web-core/auth";
 import { useMessengerUnreadCount } from "./useMessengerUnreadCount";
+import { useMessengerNewMessageDetector } from "./useMessengerNewMessageDetector";
+import {
+  MessengerToastContainer,
+  type MessengerToastItem,
+} from "./MessengerToast";
 import { MessengerChatPanel } from "./MessengerChatPanel";
 import { MessengerContactsPanel } from "./MessengerContactsPanel";
 
@@ -14,6 +19,7 @@ interface MessengerNavIconProps {
 
 const PANEL_W = 380;
 const PANEL_H = 500;
+let toastIdCounter = 0;
 
 export function MessengerNavIcon({
   messengerPageHref = "/modules/office/messenger",
@@ -25,6 +31,7 @@ export function MessengerNavIcon({
   const [isOpen, setIsOpen] = useState(false);
   const [view, setView] = useState<"chat" | "contacts">("chat");
   const [pendingPrefill, setPendingPrefill] = useState("");
+  const [toasts, setToasts] = useState<MessengerToastItem[]>([]);
   const unreadCount = useMessengerUnreadCount();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -52,9 +59,6 @@ export function MessengerNavIcon({
     if (!isOpen) return;
     const handleOutside = (e: MouseEvent) => {
       const target = e.target as Node;
-      // If the target was unmounted by React before this native event reached
-      // the document (e.g. an autocomplete item that React removed on mousedown),
-      // it will no longer be in the document. Treat that as an inside click.
       if (!document.contains(target)) return;
       if (triggerRef.current?.contains(target)) return;
       if (panelRef.current?.contains(target)) return;
@@ -63,6 +67,26 @@ export function MessengerNavIcon({
     document.addEventListener("mousedown", handleOutside);
     return () => document.removeEventListener("mousedown", handleOutside);
   }, [isOpen]);
+
+  // New message notifications — only fire when the panel is NOT open
+  useMessengerNewMessageDetector({
+    currentUserId,
+    enabled: !isOpen && currentUserId > 0,
+    onNewMessage: useCallback(
+      (event) => {
+        if (!event.body) return;
+        const id = `toast-${++toastIdCounter}`;
+        setToasts((prev) =>
+          [...prev, { id, convId: event.convId, convName: event.convName, senderName: event.senderName, body: event.body }].slice(-3),
+        );
+      },
+      [],
+    ),
+  });
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   const handleContactSelect = useCallback((prefill: string) => {
     setPendingPrefill(prefill);
@@ -110,18 +134,12 @@ export function MessengerNavIcon({
               </span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-              {/* Contacts toggle */}
               <button
-                onClick={() =>
-                  setView((v) => (v === "contacts" ? "chat" : "contacts"))
-                }
-                aria-label={
-                  view === "contacts" ? "Back to chat" : "View contacts"
-                }
+                onClick={() => setView((v) => (v === "contacts" ? "chat" : "contacts"))}
+                aria-label={view === "contacts" ? "Back to chat" : "View contacts"}
                 title={view === "contacts" ? "Back to chat" : "Contacts"}
                 style={{
-                  background:
-                    view === "contacts" ? "rgba(255,255,255,0.25)" : "none",
+                  background: view === "contacts" ? "rgba(255,255,255,0.25)" : "none",
                   border: "none",
                   cursor: "pointer",
                   color: "rgba(255,255,255,0.9)",
@@ -238,6 +256,14 @@ export function MessengerNavIcon({
         )}
       </button>
       {panel}
+      {createPortal(
+        <MessengerToastContainer
+          toasts={toasts}
+          onDismiss={dismissToast}
+          messengerHref={messengerPageHref}
+        />,
+        document.body,
+      )}
     </>
   );
 }

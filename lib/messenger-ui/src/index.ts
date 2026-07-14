@@ -9,3 +9,7 @@ export { ImageModal } from "./ImageModal";
 export { LinkPreviewCard } from "./LinkPreviewCard";
 export { useMessengerChat } from "./useMessengerChat";
 export { useMessengerUnreadCount } from "./useMessengerUnreadCount";
+export { useMessengerNewMessageDetector } from "./useMessengerNewMessageDetector";
+export type { NewMessageEvent } from "./useMessengerNewMessageDetector";
+export { MessengerToastContainer } from "./MessengerToast";
+export type { MessengerToastItem } from "./MessengerToast";

@@ -1394,4 +1394,30 @@ export const STATEMENTS: string[] = [
     image_url       TEXT,
     fetched_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
+
+  `ALTER TABLE messenger_conversations ADD COLUMN IF NOT EXISTS is_direct BOOLEAN NOT NULL DEFAULT FALSE`,
+
+  `CREATE TABLE IF NOT EXISTS messenger_conversation_participants (
+    id              SERIAL PRIMARY KEY,
+    conversation_id INTEGER NOT NULL REFERENCES messenger_conversations(id) ON DELETE CASCADE,
+    user_id         INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+    joined_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (conversation_id, user_id)
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS messenger_conv_participants_user_idx
+     ON messenger_conversation_participants (user_id)`,
+
+  // Migrate existing conversations: add every household member to any conversation
+  // that currently has no participant rows (backward-compatible one-time migration).
+  // ON CONFLICT DO NOTHING makes this idempotent.
+  `INSERT INTO messenger_conversation_participants (conversation_id, user_id)
+   SELECT mc.id, au.id
+   FROM messenger_conversations mc
+   CROSS JOIN app_users au
+   WHERE NOT EXISTS (
+     SELECT 1 FROM messenger_conversation_participants p
+     WHERE p.conversation_id = mc.id
+   )
+   ON CONFLICT DO NOTHING`,
 ];

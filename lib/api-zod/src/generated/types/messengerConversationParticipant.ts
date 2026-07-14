@@ -6,8 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface MessengerCreateConversationBody {
-  name?: string | null;
-  isDirect?: boolean;
-  participantIds: number[];
+export interface MessengerConversationParticipant {
+  id: number;
+  displayName?: string | null;
 }

@@ -1,8 +1,9 @@
 import { Router, type IRouter } from "express";
-import { and, desc, eq, gt, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import {
   db,
   messengerConversations,
+  messengerConversationParticipants,
   messengerMessages,
   messengerAttachments,
   appUsers,
@@ -19,24 +20,56 @@ import { logger } from "../../lib/logger";
 
 const router: IRouter = Router();
 
-// Ensure at least one conversation exists; return its id.
-async function ensureDefaultConversation(): Promise<number> {
-  const existing = await db
-    .select({ id: messengerConversations.id })
-    .from(messengerConversations)
-    .where(isNull(messengerConversations.archivedAt))
-    .orderBy(messengerConversations.id)
-    .limit(1);
-  if (existing[0]) return existing[0].id;
-  // No active conversation — create default
-  const [created] = await db
-    .insert(messengerConversations)
-    .values({ name: "Group Chat" })
-    .returning({ id: messengerConversations.id });
-  return created.id;
+// ---------------------------------------------------------------------------
+// Participant helpers
+// ---------------------------------------------------------------------------
+
+/** Return all conversation IDs the user participates in, sorted by id. */
+async function getParticipantConvIds(userId: number): Promise<number[]> {
+  const rows = await db
+    .select({ conversationId: messengerConversationParticipants.conversationId })
+    .from(messengerConversationParticipants)
+    .where(eq(messengerConversationParticipants.userId, userId));
+  return rows.map((r) => r.conversationId);
 }
 
-// Serialize a DB message row + attachments rows into the API shape.
+/** Return true if userId is a participant of convId. */
+async function isParticipant(convId: number, userId: number): Promise<boolean> {
+  const rows = await db
+    .select({ id: messengerConversationParticipants.id })
+    .from(messengerConversationParticipants)
+    .where(
+      and(
+        eq(messengerConversationParticipants.conversationId, convId),
+        eq(messengerConversationParticipants.userId, userId),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
+/** Fetch participants for a conversation as {id, displayName} array. */
+async function getParticipants(
+  convId: number,
+): Promise<{ id: number; displayName: string | null }[]> {
+  const rows = await db
+    .select({
+      id: messengerConversationParticipants.userId,
+      displayName: appUsers.displayName,
+    })
+    .from(messengerConversationParticipants)
+    .leftJoin(
+      appUsers,
+      eq(appUsers.id, messengerConversationParticipants.userId),
+    )
+    .where(eq(messengerConversationParticipants.conversationId, convId));
+  return rows.map((r) => ({ id: r.id, displayName: r.displayName ?? null }));
+}
+
+// ---------------------------------------------------------------------------
+// Serialize helpers
+// ---------------------------------------------------------------------------
+
 async function serializeMessages(
   msgRows: Array<{
     id: number;
@@ -100,48 +133,50 @@ async function serializeMessages(
   }));
 }
 
-// Build a ConversationSummary for a given conversation row + userId.
 async function buildConversationSummary(
   conv: {
     id: number;
     name: string | null;
+    isDirect: boolean;
     archivedAt: Date | null;
     createdAt: Date;
   },
   userId: number,
 ) {
-  const unreadCount = await db
-    .select({ count: sql<string>`count(*)` })
-    .from(messengerMessages)
-    .where(
-      and(
-        eq(messengerMessages.conversationId, conv.id),
-        isNull(messengerMessages.readAt),
-        isNull(messengerMessages.deletedAt),
-        or(
-          isNull(messengerMessages.senderId),
-          ne(messengerMessages.senderId, userId),
+  const [unreadResult, lastMsgs, participants] = await Promise.all([
+    db
+      .select({ count: sql<string>`count(*)` })
+      .from(messengerMessages)
+      .where(
+        and(
+          eq(messengerMessages.conversationId, conv.id),
+          isNull(messengerMessages.readAt),
+          isNull(messengerMessages.deletedAt),
+          or(
+            isNull(messengerMessages.senderId),
+            ne(messengerMessages.senderId, userId),
+          ),
         ),
       ),
-    );
-
-  const lastMsgs = await db
-    .select({
-      id: messengerMessages.id,
-      conversationId: messengerMessages.conversationId,
-      senderId: messengerMessages.senderId,
-      senderName: appUsers.displayName,
-      body: messengerMessages.body,
-      createdAt: messengerMessages.createdAt,
-      readAt: messengerMessages.readAt,
-      deletedAt: messengerMessages.deletedAt,
-      editedAt: messengerMessages.editedAt,
-    })
-    .from(messengerMessages)
-    .leftJoin(appUsers, eq(appUsers.id, messengerMessages.senderId))
-    .where(eq(messengerMessages.conversationId, conv.id))
-    .orderBy(desc(messengerMessages.createdAt))
-    .limit(1);
+    db
+      .select({
+        id: messengerMessages.id,
+        conversationId: messengerMessages.conversationId,
+        senderId: messengerMessages.senderId,
+        senderName: appUsers.displayName,
+        body: messengerMessages.body,
+        createdAt: messengerMessages.createdAt,
+        readAt: messengerMessages.readAt,
+        deletedAt: messengerMessages.deletedAt,
+        editedAt: messengerMessages.editedAt,
+      })
+      .from(messengerMessages)
+      .leftJoin(appUsers, eq(appUsers.id, messengerMessages.senderId))
+      .where(eq(messengerMessages.conversationId, conv.id))
+      .orderBy(desc(messengerMessages.createdAt))
+      .limit(1),
+    getParticipants(conv.id),
+  ]);
 
   const lastMsg = lastMsgs[0] ?? null;
   let lastMsgSerialized = null;
@@ -157,25 +192,31 @@ async function buildConversationSummary(
   return {
     id: conv.id,
     name: conv.name ?? null,
+    isDirect: conv.isDirect,
     archivedAt: conv.archivedAt?.toISOString() ?? null,
     createdAt: conv.createdAt.toISOString(),
-    unreadCount: Number(unreadCount[0]?.count ?? 0),
-    lastMessage: lastMsgSerialized,
+    unreadCount: Number(unreadResult[0]?.count ?? 0),
+    lastMessage: lastMsgSerialized ?? undefined,
+    participants,
   };
 }
 
-// -----------------------------------------------------------------------
-// GET /conversations — list with last message + unread count
-// -----------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// GET /conversations — only convs the user participates in
+// ---------------------------------------------------------------------------
 router.get("/conversations", async (req, res) => {
   const userId = req.session?.userId as number;
+  const convIds = await getParticipantConvIds(userId);
 
-  // Ensure at least one conversation exists
-  await ensureDefaultConversation();
+  if (convIds.length === 0) {
+    res.json([]);
+    return;
+  }
 
   const convRows = await db
     .select()
     .from(messengerConversations)
+    .where(inArray(messengerConversations.id, convIds))
     .orderBy(messengerConversations.id);
 
   const summaries = await Promise.all(
@@ -185,31 +226,90 @@ router.get("/conversations", async (req, res) => {
   res.json(summaries);
 });
 
-// -----------------------------------------------------------------------
-// POST /conversations — create a new conversation
-// -----------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// POST /conversations — create DM or group; DMs are deduped
+// ---------------------------------------------------------------------------
 router.post("/conversations", async (req, res) => {
   const parsed = CreateConversationBody.safeParse(req.body);
   if (!parsed.success) {
-    res
-      .status(400)
-      .json({ error: "Invalid body", details: parsed.error.flatten() });
+    res.status(400).json({ error: "Invalid body", details: parsed.error.flatten() });
     return;
   }
 
   const userId = req.session?.userId as number;
+  const { name, isDirect = false, participantIds } = parsed.data;
+
+  // Build the full participant set: creator + specified members (deduped)
+  const allParticipantIds = Array.from(new Set([userId, ...participantIds]));
+
+  if (isDirect) {
+    if (allParticipantIds.length !== 2) {
+      res.status(400).json({ error: "A direct message must have exactly two participants" });
+      return;
+    }
+    const otherId = allParticipantIds.find((id) => id !== userId)!;
+
+    // Check if a DM between these two already exists
+    const existingRows = await db
+      .select({ conversationId: messengerConversationParticipants.conversationId })
+      .from(messengerConversationParticipants)
+      .where(eq(messengerConversationParticipants.userId, userId));
+
+    for (const row of existingRows) {
+      const convRow = await db
+        .select()
+        .from(messengerConversations)
+        .where(
+          and(
+            eq(messengerConversations.id, row.conversationId),
+            eq(messengerConversations.isDirect, true),
+          ),
+        )
+        .limit(1);
+      if (!convRow[0]) continue;
+
+      const otherParticipants = await db
+        .select({ userId: messengerConversationParticipants.userId })
+        .from(messengerConversationParticipants)
+        .where(
+          and(
+            eq(messengerConversationParticipants.conversationId, row.conversationId),
+            ne(messengerConversationParticipants.userId, userId),
+          ),
+        );
+
+      if (otherParticipants.length === 1 && otherParticipants[0].userId === otherId) {
+        // Existing DM found — return it
+        const summary = await buildConversationSummary(convRow[0], userId);
+        res.status(200).json(summary);
+        return;
+      }
+    }
+  } else {
+    if (!name || !name.trim()) {
+      res.status(400).json({ error: "Group conversations require a name" });
+      return;
+    }
+  }
+
+  // Create conversation
   const [conv] = await db
     .insert(messengerConversations)
-    .values({ name: parsed.data.name })
+    .values({ name: isDirect ? null : name!.trim(), isDirect })
     .returning();
+
+  // Add participants
+  await db.insert(messengerConversationParticipants).values(
+    allParticipantIds.map((uid) => ({ conversationId: conv.id, userId: uid })),
+  );
 
   const summary = await buildConversationSummary(conv, userId);
   res.status(201).json(summary);
 });
 
-// -----------------------------------------------------------------------
+// ---------------------------------------------------------------------------
 // GET /conversations/members — MUST be before /:id routes
-// -----------------------------------------------------------------------
+// ---------------------------------------------------------------------------
 router.get("/conversations/members", async (_req, res) => {
   const members = await db
     .select({
@@ -222,19 +322,24 @@ router.get("/conversations/members", async (_req, res) => {
   res.json(members);
 });
 
-// -----------------------------------------------------------------------
-// GET /conversations/unread-count — MUST be before /:id routes
-// -----------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// GET /conversations/unread-count — total across all participant convs
+// ---------------------------------------------------------------------------
 router.get("/conversations/unread-count", async (req, res) => {
-  const convId = await ensureDefaultConversation();
   const userId = req.session?.userId as number;
+  const convIds = await getParticipantConvIds(userId);
+
+  if (convIds.length === 0) {
+    res.json({ count: 0 });
+    return;
+  }
 
   const result = await db
     .select({ count: sql<string>`count(*)` })
     .from(messengerMessages)
     .where(
       and(
-        eq(messengerMessages.conversationId, convId),
+        inArray(messengerMessages.conversationId, convIds),
         isNull(messengerMessages.readAt),
         isNull(messengerMessages.deletedAt),
         or(
@@ -247,9 +352,9 @@ router.get("/conversations/unread-count", async (req, res) => {
   res.json({ count: Number(result[0]?.count ?? 0) });
 });
 
-// -----------------------------------------------------------------------
-// PATCH /conversations/:id — rename or archive/unarchive
-// -----------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// PATCH /conversations/:id — rename or archive/unarchive (participants only)
+// ---------------------------------------------------------------------------
 router.patch("/conversations/:id", async (req, res) => {
   const convId = Number(req.params.id);
   if (!Number.isFinite(convId) || convId <= 0) {
@@ -257,11 +362,15 @@ router.patch("/conversations/:id", async (req, res) => {
     return;
   }
 
+  const userId = req.session?.userId as number;
+  if (!(await isParticipant(convId, userId))) {
+    res.status(403).json({ error: "Not a participant" });
+    return;
+  }
+
   const parsed = UpdateConversationBody.safeParse(req.body);
   if (!parsed.success) {
-    res
-      .status(400)
-      .json({ error: "Invalid body", details: parsed.error.flatten() });
+    res.status(400).json({ error: "Invalid body", details: parsed.error.flatten() });
     return;
   }
 
@@ -275,14 +384,8 @@ router.patch("/conversations/:id", async (req, res) => {
     return;
   }
 
-  const updates: Partial<{
-    name: string | null;
-    archivedAt: Date | null;
-  }> = {};
-
-  if (parsed.data.name !== undefined) {
-    updates.name = parsed.data.name ?? null;
-  }
+  const updates: Partial<{ name: string | null; archivedAt: Date | null }> = {};
+  if (parsed.data.name !== undefined) updates.name = parsed.data.name ?? null;
   if (parsed.data.archived !== undefined) {
     updates.archivedAt = parsed.data.archived ? new Date() : null;
   }
@@ -293,14 +396,13 @@ router.patch("/conversations/:id", async (req, res) => {
     .where(eq(messengerConversations.id, convId))
     .returning();
 
-  const userId = req.session?.userId as number;
   const summary = await buildConversationSummary(updated, userId);
   res.json(summary);
 });
 
-// -----------------------------------------------------------------------
-// DELETE /conversations/:id — permanently delete conversation + messages
-// -----------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// DELETE /conversations/:id — permanently delete (participants only)
+// ---------------------------------------------------------------------------
 router.delete("/conversations/:id", async (req, res) => {
   const convId = Number(req.params.id);
   if (!Number.isFinite(convId) || convId <= 0) {
@@ -308,26 +410,35 @@ router.delete("/conversations/:id", async (req, res) => {
     return;
   }
 
-  // Delete all messages first, then the conversation
-  await db
-    .delete(messengerMessages)
-    .where(eq(messengerMessages.conversationId, convId));
+  const userId = req.session?.userId as number;
+  if (!(await isParticipant(convId, userId))) {
+    res.status(403).json({ error: "Not a participant" });
+    return;
+  }
 
+  await db.delete(messengerMessages).where(eq(messengerMessages.conversationId, convId));
   await db
-    .delete(messengerConversations)
-    .where(eq(messengerConversations.id, convId));
+    .delete(messengerConversationParticipants)
+    .where(eq(messengerConversationParticipants.conversationId, convId));
+  await db.delete(messengerConversations).where(eq(messengerConversations.id, convId));
 
   logger.info({ conversationId: convId }, "messenger: conversation deleted");
   res.status(204).send();
 });
 
-// -----------------------------------------------------------------------
-// DELETE /conversations/:id/messages — clear all messages (soft-delete)
-// -----------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// DELETE /conversations/:id/messages — clear messages (participants only)
+// ---------------------------------------------------------------------------
 router.delete("/conversations/:id/messages", async (req, res) => {
   const convId = Number(req.params.id);
   if (!Number.isFinite(convId) || convId <= 0) {
     res.status(400).json({ error: "Invalid conversation id" });
+    return;
+  }
+
+  const userId = req.session?.userId as number;
+  if (!(await isParticipant(convId, userId))) {
+    res.status(403).json({ error: "Not a participant" });
     return;
   }
 
@@ -345,13 +456,19 @@ router.delete("/conversations/:id/messages", async (req, res) => {
   res.status(204).send();
 });
 
-// -----------------------------------------------------------------------
-// GET /conversations/:id/messages
-// -----------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// GET /conversations/:id/messages — participants only
+// ---------------------------------------------------------------------------
 router.get("/conversations/:id/messages", async (req, res) => {
   const convId = Number(req.params.id);
   if (isNaN(convId)) {
     res.status(400).json({ error: "Invalid conversation id" });
+    return;
+  }
+
+  const userId = req.session?.userId as number;
+  if (!(await isParticipant(convId, userId))) {
+    res.status(403).json({ error: "Not a participant" });
     return;
   }
 
@@ -360,28 +477,14 @@ router.get("/conversations/:id/messages", async (req, res) => {
   const before = qp.success ? qp.data.before : undefined;
   const limit = qp.success && qp.data.limit ? Math.min(qp.data.limit, 100) : 50;
 
-  const conv = await db
-    .select({ id: messengerConversations.id })
-    .from(messengerConversations)
-    .where(eq(messengerConversations.id, convId))
-    .limit(1);
-  if (!conv[0]) {
-    res.status(404).json({ error: "Conversation not found" });
-    return;
-  }
-
   const filters = [eq(messengerMessages.conversationId, convId)];
   if (since) {
     const sinceDate = new Date(since);
-    if (!isNaN(sinceDate.getTime())) {
-      filters.push(gt(messengerMessages.createdAt, sinceDate));
-    }
+    if (!isNaN(sinceDate.getTime())) filters.push(gt(messengerMessages.createdAt, sinceDate));
   }
   if (before && !since) {
     const beforeDate = new Date(before);
-    if (!isNaN(beforeDate.getTime())) {
-      filters.push(lt(messengerMessages.createdAt, beforeDate));
-    }
+    if (!isNaN(beforeDate.getTime())) filters.push(lt(messengerMessages.createdAt, beforeDate));
   }
 
   const msgRows = await db
@@ -419,9 +522,9 @@ router.get("/conversations/:id/messages", async (req, res) => {
   res.json(serialized.reverse());
 });
 
-// -----------------------------------------------------------------------
-// POST /conversations/:id/messages
-// -----------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// POST /conversations/:id/messages — participants only
+// ---------------------------------------------------------------------------
 router.post("/conversations/:id/messages", async (req, res) => {
   const convId = Number(req.params.id);
   if (isNaN(convId)) {
@@ -429,26 +532,19 @@ router.post("/conversations/:id/messages", async (req, res) => {
     return;
   }
 
+  const userId = req.session?.userId as number;
+  if (!(await isParticipant(convId, userId))) {
+    res.status(403).json({ error: "Not a participant" });
+    return;
+  }
+
   const parsed = SendMessageBody.safeParse(req.body);
   if (!parsed.success) {
-    res
-      .status(400)
-      .json({ error: "Invalid request body", details: parsed.error.flatten() });
+    res.status(400).json({ error: "Invalid request body", details: parsed.error.flatten() });
     return;
   }
 
-  const userId = req.session?.userId as number;
   const { body, attachments: attachmentInputs = [] } = parsed.data;
-
-  const conv = await db
-    .select({ id: messengerConversations.id })
-    .from(messengerConversations)
-    .where(eq(messengerConversations.id, convId))
-    .limit(1);
-  if (!conv[0]) {
-    res.status(404).json({ error: "Conversation not found" });
-    return;
-  }
 
   const [msg] = await db
     .insert(messengerMessages)
@@ -467,16 +563,14 @@ router.post("/conversations/:id/messages", async (req, res) => {
     );
   }
 
-  const attRows = await db
-    .select()
-    .from(messengerAttachments)
-    .where(eq(messengerAttachments.messageId, msg.id));
-
-  const [senderRow] = await db
-    .select({ displayName: appUsers.displayName })
-    .from(appUsers)
-    .where(eq(appUsers.id, userId))
-    .limit(1);
+  const [attRows, senderRow] = await Promise.all([
+    db.select().from(messengerAttachments).where(eq(messengerAttachments.messageId, msg.id)),
+    db
+      .select({ displayName: appUsers.displayName })
+      .from(appUsers)
+      .where(eq(appUsers.id, userId))
+      .limit(1),
+  ]);
 
   const [serialized] = await serializeMessages(
     [
@@ -484,7 +578,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
         id: msg.id,
         conversationId: msg.conversationId,
         senderId: msg.senderId,
-        senderName: senderRow?.displayName ?? null,
+        senderName: senderRow[0]?.displayName ?? null,
         body: msg.body,
         createdAt: msg.createdAt,
         readAt: msg.readAt,
@@ -497,9 +591,8 @@ router.post("/conversations/:id/messages", async (req, res) => {
 
   res.status(201).json(serialized);
 
-  // If message mentions @elaine, spawn an async AI reply (fire-and-forget)
   if (/@elaine\b/i.test(body)) {
-    const senderName = senderRow?.displayName ?? "a household member";
+    const senderName = senderRow[0]?.displayName ?? "a household member";
     generateElaineReply(convId, body, senderName).catch((err) =>
       logger.error(err, "messenger: @elaine reply error"),
     );
@@ -535,10 +628,7 @@ async function generateElaineReply(
     body: replyBody,
   });
 
-  logger.info(
-    { conversationId, chars: replyBody.length },
-    "messenger: @elaine reply saved",
-  );
+  logger.info({ conversationId, chars: replyBody.length }, "messenger: @elaine reply saved");
 }
 
 export default router;

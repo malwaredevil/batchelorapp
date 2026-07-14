@@ -1,9 +1,10 @@
 import { Link, useLocation } from "wouter";
-import { LogOut, Sun, Moon } from "lucide-react";
+import { LogOut, Sun, Moon, Mail, CalendarDays, Settings } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   useLogout,
+  useGetCurrentUser,
   getGetCurrentUserQueryKey,
 } from "@workspace/api-client-react";
 import {
@@ -14,6 +15,15 @@ import {
   SearchTrigger,
 } from "@workspace/elaine-ui";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { getNavItemsByGroup } from "@/features/registry";
 
@@ -32,6 +42,15 @@ export function Header() {
   const queryClient = useQueryClient();
   const { isDark, toggleTheme } = useTheme();
   const mainNav = getNavItemsByGroup().main;
+  const { data: currentUser } = useGetCurrentUser();
+  const displayName =
+    currentUser?.displayName?.trim() || currentUser?.email || "Account";
+  const initials = displayName
+    .split(" ")
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
   const logout = useLogout({
     mutation: {
       onMutate: async () => {
@@ -114,13 +133,75 @@ export function Header() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => logout.mutate()}
-            disabled={logout.isPending}
-            title="Sign out"
-            data-testid="button-logout"
+            onClick={() => {
+              window.location.href = "/modules/office/gmail";
+            }}
+            aria-label="Open Gmail"
+            className="text-muted-foreground hover:text-foreground"
           >
-            <LogOut className="h-4 w-4" />
+            <Mail className="h-4 w-4" />
           </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              window.location.href = "/modules/travels/travel-calendar";
+            }}
+            aria-label="Travel Calendar"
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <CalendarDays className="h-4 w-4" />
+          </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-2 pl-3 ml-1 border-l border-border outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm">
+                <div className="hidden sm:flex flex-col items-end">
+                  <span className="text-sm font-medium leading-none">
+                    {displayName}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {currentUser?.email}
+                  </span>
+                </div>
+                <Avatar className="h-8 w-8 border border-border">
+                  <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>
+                <div className="flex flex-col">
+                  <span className="font-medium">{displayName}</span>
+                  <span className="text-xs font-normal text-muted-foreground">
+                    {currentUser?.email}
+                  </span>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => {
+                  window.location.href = "/account";
+                }}
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                Account settings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => logout.mutate()}
+                disabled={logout.isPending}
+                className="text-destructive focus:text-destructive"
+                data-testid="button-logout"
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </header>

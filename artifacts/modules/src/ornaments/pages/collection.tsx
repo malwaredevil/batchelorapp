@@ -74,7 +74,7 @@ function NextHallmarkEventCard() {
           <div className="text-sm text-muted-foreground">{dateRangeLabel}</div>
         </div>
         <div className="text-center flex-shrink-0">
-          <div className="text-3xl font-bold text-rose-600 dark:text-rose-400 tabular-nums leading-none">
+          <div className={`text-3xl font-bold tabular-nums leading-none ${isLive ? "text-red-700 dark:text-red-400" : "text-rose-600 dark:text-rose-400"}`}>
             {isLive ? "Live" : daysAway}
           </div>
           {!isLive && (

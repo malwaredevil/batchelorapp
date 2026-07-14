@@ -1,10 +1,16 @@
 import { type ReactNode, type ComponentType, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { AppSwitcher, type AppId } from "@workspace/elaine-ui";
+import {
+  AppSwitcher,
+  type AppId,
+  useTheme,
+  SearchTrigger,
+} from "@workspace/elaine-ui";
 import { useBackgroundTasks } from "@/lib/background-tasks";
 import { InstallBanner } from "@workspace/web-core";
 import {
   useLogout,
+  useGetCurrentUser,
   getGetCurrentUserQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -16,6 +22,7 @@ import {
   ShoppingBag,
   PenTool,
   Settings2,
+  Settings,
   Home,
   Compass,
   CalendarDays,
@@ -28,13 +35,18 @@ import {
   Mail,
   NotebookPen,
   Menu,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -179,6 +191,16 @@ export function ModuleShell({ children }: { children: ReactNode }) {
       onError: () => toast.error("Could not sign out. Please try again."),
     },
   });
+  const { isDark, toggleTheme } = useTheme();
+  const { data: currentUser } = useGetCurrentUser();
+  const displayName =
+    currentUser?.displayName?.trim() || currentUser?.email || "Account";
+  const initials = displayName
+    .split(" ")
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 
   function go(item: ResolvedNavEntry) {
     if (item.external) {
@@ -276,6 +298,92 @@ export function ModuleShell({ children }: { children: ReactNode }) {
           </nav>
 
           <div className="flex items-center gap-1">
+            {/* Desktop icon strip — hidden on mobile */}
+            <div className="hidden md:flex items-center gap-1">
+              <SearchTrigger />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleTheme}
+                aria-label="Toggle dark mode"
+                className="text-muted-foreground hover:text-foreground"
+              >
+                {isDark ? (
+                  <Sun className="h-4 w-4" />
+                ) : (
+                  <Moon className="h-4 w-4" />
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  window.location.href = "/modules/office/gmail";
+                }}
+                aria-label="Open Gmail"
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <Mail className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  window.location.href = "/modules/travels/travel-calendar";
+                }}
+                aria-label="Travel Calendar"
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <CalendarDays className="h-4 w-4" />
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex items-center gap-2 pl-3 ml-1 border-l border-border outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm">
+                    <div className="hidden sm:flex flex-col items-end">
+                      <span className="text-sm font-medium leading-none">
+                        {displayName}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {currentUser?.email}
+                      </span>
+                    </div>
+                    <Avatar className="h-8 w-8 border border-border">
+                      <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                        {initials}
+                      </AvatarFallback>
+                    </Avatar>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>
+                    <div className="flex flex-col">
+                      <span className="font-medium">{displayName}</span>
+                      <span className="text-xs font-normal text-muted-foreground">
+                        {currentUser?.email}
+                      </span>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      window.location.href = "/account";
+                    }}
+                  >
+                    <Settings className="h-4 w-4 mr-2" />
+                    Account settings
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={() => logout.mutate()}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
             {/* Hamburger — mobile only */}
             <Button
               variant="ghost"
@@ -285,15 +393,6 @@ export function ModuleShell({ children }: { children: ReactNode }) {
               aria-label="Open navigation"
             >
               <Menu className="h-5 w-5" />
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => logout.mutate()}
-              aria-label="Log out"
-            >
-              <LogOut className="h-4 w-4" />
             </Button>
           </div>
         </div>

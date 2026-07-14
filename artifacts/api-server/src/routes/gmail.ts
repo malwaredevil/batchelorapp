@@ -86,8 +86,13 @@ router.get("/status", async (req, res) => {
     }
   }
 
+  // tokenExpired: true when a connection row exists but the token refresh
+  // failed (e.g. invalid_grant after Google revokes long-lived access).
+  // Clients use this to show a "reconnect" prompt without waiting for a
+  // downstream fetch to return 401.
   res.json({
     connected: true,
+    tokenExpired: !token,
     email: row.googleEmail,
     profile,
   });

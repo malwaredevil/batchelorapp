@@ -28,8 +28,6 @@ export function MessengerWidget({ messengerPageHref }: MessengerWidgetProps) {
   const [selectedConvId, setSelectedConvId] = useState<number | null>(null);
   const unreadCount = useMessengerUnreadCount();
 
-  // Fetch conversations so we can auto-select the first active one and keep
-  // the sidebar in sync with the chat panel from the moment the widget opens.
   const { data: conversations } = useListConversations({
     query: {
       queryKey: getListConversationsQueryKey(),
@@ -37,11 +35,9 @@ export function MessengerWidget({ messengerPageHref }: MessengerWidgetProps) {
     } as UseQueryOptions<MessengerConversationSummary[]>,
   });
   const firstActiveId = conversations?.find((c) => !c.archivedAt)?.id ?? null;
-  // effectiveConvId is what BOTH the sidebar and chat panel use: the
-  // explicitly-selected conversation, or the first active one as fallback.
   const effectiveConvId = selectedConvId ?? firstActiveId;
 
-  // Position state (bubble anchor point, bottom-left by default)
+  // Position state (bubble anchor: bottom-left corner of bubble, distance from left/bottom)
   const [pos, setPos] = useState({ x: EDGE_PAD, y: EDGE_PAD });
   const dragging = useRef(false);
   const dragOffset = useRef({ x: 0, y: 0 });
@@ -87,20 +83,16 @@ export function MessengerWidget({ messengerPageHref }: MessengerWidgetProps) {
     };
   }, []);
 
-  // Compute panel position from bubble position
   const bubbleBottom = window.innerHeight - pos.y - BUBBLE_SIZE;
   const bubbleRight = window.innerWidth - pos.x - BUBBLE_SIZE;
 
   let panelLeft = pos.x;
   let panelBottom = pos.y + BUBBLE_SIZE + 8;
 
-  // Clamp panel within viewport
   if (panelLeft + PANEL_W > window.innerWidth - EDGE_PAD) {
     panelLeft = window.innerWidth - PANEL_W - EDGE_PAD;
   }
   if (panelBottom + PANEL_H > window.innerHeight - EDGE_PAD) {
-    panelBottom = window.innerHeight - panelBottom - PANEL_H;
-    // flip above bubble
     panelBottom = pos.y - PANEL_H - 8;
     if (panelBottom < EDGE_PAD) panelBottom = EDGE_PAD;
   }
@@ -121,14 +113,14 @@ export function MessengerWidget({ messengerPageHref }: MessengerWidgetProps) {
         border: "1px solid rgba(59,130,246,0.15)",
         display: "flex",
         flexDirection: "column",
-        background: "#fff",
+        background: "hsl(var(--card))",
       }}
     >
-      {/* Panel header */}
+      {/* Panel header — keeps the brand gradient */}
       <div
         style={{
           padding: "12px 14px 10px",
-          borderBottom: "1px solid #f0f0f0",
+          borderBottom: "1px solid hsl(var(--border))",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -186,6 +178,7 @@ export function MessengerWidget({ messengerPageHref }: MessengerWidgetProps) {
             currentUserId={currentUserId}
             isOpen={isOpen}
             conversationId={effectiveConvId ?? undefined}
+            showParticipants={true}
           />
         </div>
       </div>
@@ -239,7 +232,7 @@ export function MessengerWidget({ messengerPageHref }: MessengerWidgetProps) {
             alignItems: "center",
             justifyContent: "center",
             padding: "0 4px",
-            border: "2px solid #fff",
+            border: "2px solid hsl(var(--background))",
             lineHeight: 1,
           }}
         >

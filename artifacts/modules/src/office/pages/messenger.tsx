@@ -63,16 +63,7 @@ export default function MessengerPage() {
   };
 
   return (
-    <div
-      style={{
-        display: "flex",
-        height: "calc(100vh - 120px)",
-        overflow: "hidden",
-        border: "1px solid #f0f0f0",
-        borderRadius: 12,
-        background: "#fff",
-      }}
-    >
+    <div className="flex overflow-hidden rounded-xl border border-border bg-card" style={{ height: "calc(100vh - 120px)" }}>
       {/* Left sidebar — collapsible */}
       {sidebarOpen && (
         <MessengerConversationSidebar
@@ -85,40 +76,14 @@ export default function MessengerPage() {
       )}
 
       {/* Right: header + body */}
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-          minWidth: 0,
-        }}
-      >
+      <div className="flex flex-1 flex-col overflow-hidden min-w-0">
         {/* Panel header */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "10px 16px",
-            borderBottom: "1px solid #f0f0f0",
-            flexShrink: 0,
-          }}
-        >
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border flex-shrink-0">
           {/* Sidebar toggle */}
           <button
             onClick={() => setSidebarOpen((v) => !v)}
             title={sidebarOpen ? "Hide chat list" : "Show chat list"}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "#9ca3af",
-              padding: 2,
-              display: "flex",
-              alignItems: "center",
-              flexShrink: 0,
-            }}
+            className="flex items-center text-muted-foreground hover:text-foreground transition-colors p-0.5 flex-shrink-0"
           >
             {sidebarOpen ? (
               <PanelLeftClose size={16} />
@@ -131,60 +96,25 @@ export default function MessengerPage() {
             <>
               <button
                 onClick={() => setView("chat")}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "#6b7280",
-                  padding: "2px 4px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                  fontSize: 13,
-                }}
+                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors px-1 py-0.5"
               >
                 <ArrowLeft size={14} />
                 Back
               </button>
-              <span style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>
+              <span className="text-sm font-semibold text-foreground">
                 Contacts
               </span>
             </>
           ) : (
             <>
-              <div
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 1,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 14,
-                    fontWeight: 600,
-                    color: "#111827",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
+              <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                <span className="text-sm font-semibold text-foreground truncate">
                   {selectedConvId ? convName : "Messenger"}
                 </span>
                 {participantLine && (
-                  <span
-                    style={{
-                      fontSize: 11,
-                      color: "#6b7280",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
+                  <span className="text-[11px] text-muted-foreground truncate">
                     {selectedConv?.isDirect ? "Chat with " : "Members: "}
-                    <span style={{ color: "#374151", fontWeight: 500 }}>
+                    <span className="text-foreground/80 font-medium">
                       {participantLine}
                     </span>
                   </span>
@@ -193,19 +123,7 @@ export default function MessengerPage() {
               <button
                 onClick={() => setView("contacts")}
                 title="Contacts"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 5,
-                  background: "#f3f4f6",
-                  border: "none",
-                  borderRadius: 8,
-                  padding: "5px 10px",
-                  fontSize: 12,
-                  fontWeight: 500,
-                  color: "#374151",
-                  cursor: "pointer",
-                }}
+                className="flex items-center gap-1.5 bg-muted hover:bg-muted/80 rounded-lg px-2.5 py-1 text-xs font-medium text-foreground transition-colors"
               >
                 <Users size={13} />
                 Contacts
@@ -215,7 +133,7 @@ export default function MessengerPage() {
         </div>
 
         {/* Body */}
-        <div style={{ flex: 1, overflow: "hidden" }}>
+        <div className="flex-1 overflow-hidden">
           {view === "contacts" ? (
             <MessengerContactsPanel onSelect={handleContactSelect} />
           ) : selectedConvId ? (
@@ -223,20 +141,12 @@ export default function MessengerPage() {
               currentUserId={user.id}
               conversationId={selectedConvId}
               isOpen={true}
+              showParticipants={false}
               prefillInput={pendingPrefill}
               onPrefillApplied={() => setPendingPrefill("")}
             />
           ) : (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                height: "100%",
-                color: "#9ca3af",
-                fontSize: 13,
-              }}
-            >
+            <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
               Select a chat or create a new one
             </div>
           )}

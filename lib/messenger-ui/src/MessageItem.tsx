@@ -48,19 +48,23 @@ export function MessageItem({
   const urls = isDeleted ? [] : extractUrls(message.body);
   const firstUrl = urls[0] ?? null;
 
+  // Bubble colours:
+  //  - Own messages & Elaine: brand gradient (always on dark bg, so white text is fine)
+  //  - Other members: theme muted bg with theme foreground text
+  //  - Deleted: muted bg with muted-foreground text
   const bubbleBg = isDeleted
-    ? "#f3f4f6"
+    ? "hsl(var(--muted))"
     : isElaine
       ? "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)"
       : isOwn
         ? "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)"
-        : "#f3f4f6";
+        : "hsl(var(--muted))";
 
   const bubbleColor = isDeleted
-    ? "#9ca3af"
+    ? "hsl(var(--muted-foreground))"
     : isElaine || isOwn
       ? "#fff"
-      : "#111827";
+      : "hsl(var(--foreground))";
 
   const handleSaveEdit = async () => {
     if (!onEdit || !editValue.trim() || editValue.trim() === message.body) {
@@ -108,7 +112,7 @@ export function MessageItem({
         <div
           style={{
             fontSize: 11,
-            color: "#6b7280",
+            color: "hsl(var(--muted-foreground))",
             marginBottom: 2,
             paddingLeft: 4,
           }}
@@ -145,7 +149,7 @@ export function MessageItem({
                   background: "none",
                   border: "none",
                   cursor: "pointer",
-                  color: "#6b7280",
+                  color: "hsl(var(--muted-foreground))",
                   padding: 4,
                   borderRadius: 4,
                   display: "flex",
@@ -201,6 +205,8 @@ export function MessageItem({
                   outline: "none",
                   fontFamily: "inherit",
                   minWidth: 180,
+                  background: "hsl(var(--background))",
+                  color: "hsl(var(--foreground))",
                 }}
               />
               <div
@@ -211,8 +217,8 @@ export function MessageItem({
                   disabled={saving}
                   aria-label="Cancel edit"
                   style={{
-                    background: "#f3f4f6",
-                    border: "1px solid #e5e7eb",
+                    background: "hsl(var(--muted))",
+                    border: "1px solid hsl(var(--border))",
                     borderRadius: 6,
                     cursor: "pointer",
                     padding: "2px 8px",
@@ -220,6 +226,7 @@ export function MessageItem({
                     display: "flex",
                     alignItems: "center",
                     gap: 3,
+                    color: "hsl(var(--foreground))",
                   }}
                 >
                   <X size={11} /> Cancel
@@ -308,7 +315,7 @@ export function MessageItem({
                           objectFit: "cover",
                           borderRadius: 8,
                           cursor: "pointer",
-                          border: "1px solid rgba(0,0,0,0.1)",
+                          border: "1px solid hsl(var(--border))",
                         }}
                       />
                     );
@@ -324,11 +331,11 @@ export function MessageItem({
                         alignItems: "center",
                         gap: 6,
                         padding: "6px 10px",
-                        background: "#f3f4f6",
-                        border: "1px solid #e5e7eb",
+                        background: "hsl(var(--muted))",
+                        border: "1px solid hsl(var(--border))",
                         borderRadius: 8,
                         textDecoration: "none",
-                        color: "#374151",
+                        color: "hsl(var(--foreground))",
                         fontSize: 12,
                       }}
                     >
@@ -355,12 +362,13 @@ export function MessageItem({
       <div
         style={{
           fontSize: 10,
-          color: "#9ca3af",
+          color: "hsl(var(--muted-foreground))",
           marginTop: 2,
           paddingRight: isOwn ? 4 : 0,
           paddingLeft: isOwn ? 0 : 4,
           display: "flex",
           gap: 4,
+          opacity: 0.7,
         }}
       >
         <span>

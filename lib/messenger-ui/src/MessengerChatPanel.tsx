@@ -20,6 +20,10 @@ interface MessengerChatPanelProps {
   currentUserId: number;
   conversationId?: number;
   isOpen: boolean;
+  /** When false the participants strip below the header is hidden.
+   *  Use false in contexts (like the full messenger page) where the
+   *  parent header already shows the participant list. Defaults to true. */
+  showParticipants?: boolean;
   prefillInput?: string;
   onPrefillApplied?: () => void;
 }
@@ -103,6 +107,7 @@ export function MessengerChatPanel({
   currentUserId,
   conversationId,
   isOpen,
+  showParticipants = true,
   prefillInput,
   onPrefillApplied,
 }: MessengerChatPanelProps) {
@@ -215,9 +220,6 @@ export function MessengerChatPanel({
   const selectMention = useCallback(
     (member: MemberEntry) => {
       if (!mentionAnchor) return;
-      // Use first name only so @mentions never contain spaces — keeps them
-      // unambiguous to parse server-side if we add per-person routing later.
-      // The popup still shows the full name for disambiguation.
       const name = memberName(member).split(" ")[0] ?? memberName(member);
       const before = input.slice(0, mentionAnchor.start);
       const after = input.slice(
@@ -342,12 +344,13 @@ export function MessengerChatPanel({
         flexDirection: "column",
         height: "100%",
         overflow: "hidden",
-        background: "#fff",
+        background: "hsl(var(--card))",
         position: "relative",
       }}
     >
-      {/* Participants strip */}
-      {currentConversation?.participants &&
+      {/* Participants strip — only shown when requested (e.g. widget) */}
+      {showParticipants &&
+        currentConversation?.participants &&
         currentConversation.participants.length > 0 && (
           <div
             style={{
@@ -355,27 +358,27 @@ export function MessengerChatPanel({
               alignItems: "center",
               gap: 5,
               padding: "4px 12px",
-              borderBottom: "1px solid #f0f4ff",
-              background: "#f8faff",
+              borderBottom: "1px solid hsl(var(--border))",
+              background: "hsl(var(--muted))",
               flexShrink: 0,
               minHeight: 28,
             }}
           >
             <Users
               size={11}
-              style={{ color: "#6b7280", flexShrink: 0, marginTop: 1 }}
+              style={{ color: "hsl(var(--muted-foreground))", flexShrink: 0, marginTop: 1 }}
             />
             <span
               style={{
                 fontSize: 11,
-                color: "#6b7280",
+                color: "hsl(var(--muted-foreground))",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
               }}
             >
               {currentConversation.isDirect ? "Chat with " : "Members: "}
-              <span style={{ color: "#374151", fontWeight: 500 }}>
+              <span style={{ color: "hsl(var(--foreground))", fontWeight: 500 }}>
                 {participantLabel(
                   currentConversation.participants,
                   currentUserId,
@@ -392,8 +395,8 @@ export function MessengerChatPanel({
           style={{
             display: "flex",
             justifyContent: "flex-end",
-            padding: "4px 12px 0",
-            borderBottom: "1px solid #f3f4f6",
+            padding: "3px 12px",
+            borderBottom: "1px solid hsl(var(--border))",
           }}
         >
           {showClearConfirm ? (
@@ -403,7 +406,7 @@ export function MessengerChatPanel({
                 alignItems: "center",
                 gap: 6,
                 fontSize: 12,
-                color: "#374151",
+                color: "hsl(var(--foreground))",
               }}
             >
               <span>Clear all messages?</span>
@@ -424,12 +427,13 @@ export function MessengerChatPanel({
               <button
                 onClick={() => setShowClearConfirm(false)}
                 style={{
-                  background: "#f3f4f6",
-                  border: "1px solid #e5e7eb",
+                  background: "hsl(var(--muted))",
+                  border: "1px solid hsl(var(--border))",
                   borderRadius: 5,
                   padding: "2px 8px",
                   fontSize: 11,
                   cursor: "pointer",
+                  color: "hsl(var(--foreground))",
                 }}
               >
                 Cancel
@@ -443,7 +447,7 @@ export function MessengerChatPanel({
                 background: "none",
                 border: "none",
                 cursor: "pointer",
-                color: "#9ca3af",
+                color: "hsl(var(--muted-foreground))",
                 padding: "2px 4px",
                 display: "flex",
                 alignItems: "center",
@@ -479,7 +483,7 @@ export function MessengerChatPanel({
               justifyContent: "center",
               alignItems: "center",
               height: "100%",
-              color: "#9ca3af",
+              color: "hsl(var(--muted-foreground))",
             }}
           >
             <Loader2
@@ -496,13 +500,13 @@ export function MessengerChatPanel({
               justifyContent: "center",
               height: "100%",
               gap: 8,
-              color: "#9ca3af",
+              color: "hsl(var(--muted-foreground))",
               fontSize: 13,
             }}
           >
             <MessageSquare size={28} strokeWidth={1.5} />
             <span>No messages yet</span>
-            <span style={{ fontSize: 11, color: "#d1d5db" }}>
+            <span style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", opacity: 0.6 }}>
               Say hi, or try @elaine
             </span>
           </div>
@@ -513,7 +517,7 @@ export function MessengerChatPanel({
                 style={{
                   textAlign: "center",
                   fontSize: 11,
-                  color: "#9ca3af",
+                  color: "hsl(var(--muted-foreground))",
                   padding: "8px 0 4px",
                   userSelect: "none",
                 }}
@@ -548,7 +552,7 @@ export function MessengerChatPanel({
             display: "flex",
             flexWrap: "wrap",
             gap: 6,
-            borderTop: "1px solid #f3f4f6",
+            borderTop: "1px solid hsl(var(--border))",
           }}
         >
           {pendingAttachments.map((a, i) => (
@@ -558,12 +562,12 @@ export function MessengerChatPanel({
                 display: "flex",
                 alignItems: "center",
                 gap: 4,
-                background: "#eff6ff",
-                border: "1px solid #bfdbfe",
+                background: "rgba(59,130,246,0.1)",
+                border: "1px solid rgba(59,130,246,0.3)",
                 borderRadius: 6,
                 padding: "3px 8px",
                 fontSize: 11,
-                color: "#1d4ed8",
+                color: "#3b82f6",
               }}
             >
               <span
@@ -586,7 +590,8 @@ export function MessengerChatPanel({
                   background: "none",
                   border: "none",
                   cursor: "pointer",
-                  color: "#93c5fd",
+                  color: "#3b82f6",
+                  opacity: 0.6,
                   padding: 0,
                   fontSize: 12,
                   lineHeight: 1,
@@ -607,8 +612,8 @@ export function MessengerChatPanel({
             bottom: 58,
             left: 8,
             right: 8,
-            background: "#fff",
-            border: "1px solid #e5e7eb",
+            background: "hsl(var(--card))",
+            border: "1px solid hsl(var(--border))",
             borderRadius: 10,
             boxShadow:
               "0 -4px 20px rgba(0,0,0,0.10), 0 4px 16px rgba(0,0,0,0.06)",
@@ -622,11 +627,11 @@ export function MessengerChatPanel({
             style={{
               padding: "5px 12px 3px",
               fontSize: 10,
-              color: "#9ca3af",
+              color: "hsl(var(--muted-foreground))",
               fontWeight: 600,
               letterSpacing: "0.05em",
               textTransform: "uppercase",
-              borderBottom: "1px solid #f3f4f6",
+              borderBottom: "1px solid hsl(var(--border))",
             }}
           >
             Mention
@@ -648,10 +653,12 @@ export function MessengerChatPanel({
                   alignItems: "center",
                   gap: 8,
                   cursor: "pointer",
-                  background: isSelected ? "#eff6ff" : "transparent",
+                  background: isSelected
+                    ? "rgba(59,130,246,0.1)"
+                    : "transparent",
                   borderBottom:
                     i < filteredMembers.length - 1
-                      ? "1px solid #f9fafb"
+                      ? "1px solid hsl(var(--border))"
                       : "none",
                 }}
                 onMouseEnter={() =>
@@ -680,7 +687,7 @@ export function MessengerChatPanel({
                   {isElaine ? "✦" : (name[0]?.toUpperCase() ?? "?")}
                 </div>
                 <span
-                  style={{ fontSize: 13, fontWeight: 500, color: "#111827" }}
+                  style={{ fontSize: 13, fontWeight: 500, color: "hsl(var(--foreground))" }}
                 >
                   {name}
                 </span>
@@ -689,7 +696,7 @@ export function MessengerChatPanel({
                     style={{
                       fontSize: 10,
                       color: "#7c3aed",
-                      background: "#f3e8ff",
+                      background: "rgba(124,58,237,0.1)",
                       borderRadius: 4,
                       padding: "1px 5px",
                       fontWeight: 600,
@@ -709,11 +716,11 @@ export function MessengerChatPanel({
       <div
         style={{
           padding: "8px 10px",
-          borderTop: "1px solid #f0f0f0",
+          borderTop: "1px solid hsl(var(--border))",
           display: "flex",
           alignItems: "flex-end",
           gap: 6,
-          background: "#fafafa",
+          background: "hsl(var(--muted))",
         }}
       >
         <input
@@ -732,7 +739,7 @@ export function MessengerChatPanel({
             background: "none",
             border: "none",
             cursor: "pointer",
-            color: "#9ca3af",
+            color: "hsl(var(--muted-foreground))",
             padding: "6px",
             borderRadius: 8,
             display: "flex",
@@ -748,7 +755,6 @@ export function MessengerChatPanel({
             <Paperclip size={18} />
           )}
         </button>
-
         <textarea
           ref={textareaRef}
           value={input}
@@ -759,57 +765,51 @@ export function MessengerChatPanel({
           style={{
             flex: 1,
             resize: "none",
-            border: "1px solid #e5e7eb",
-            borderRadius: 12,
-            padding: "8px 12px",
-            fontSize: 13,
-            lineHeight: 1.4,
-            fontFamily: "inherit",
+            border: "1px solid hsl(var(--border))",
+            borderRadius: 10,
+            padding: "7px 12px",
+            fontSize: 14,
+            lineHeight: 1.5,
             outline: "none",
-            background: "#fff",
+            fontFamily: "inherit",
+            background: "hsl(var(--card))",
+            color: "hsl(var(--foreground))",
             maxHeight: 100,
             overflowY: "auto",
           }}
-          onInput={(e) => {
-            const t = e.target as HTMLTextAreaElement;
-            t.style.height = "auto";
-            t.style.height = `${Math.min(t.scrollHeight, 100)}px`;
-          }}
         />
-
         <button
-          onClick={handleSend}
-          disabled={
-            isSending || (!input.trim() && pendingAttachments.length === 0)
-          }
+          onClick={() => void handleSend()}
+          disabled={isSending || (!input.trim() && pendingAttachments.length === 0)}
           aria-label="Send message"
           style={{
             background:
               isSending || (!input.trim() && pendingAttachments.length === 0)
-                ? "#e5e7eb"
-                : "linear-gradient(135deg, #3b82f6, #2563eb)",
+                ? "hsl(var(--muted-foreground))"
+                : "#3b82f6",
             border: "none",
             borderRadius: 10,
-            width: 36,
-            height: 36,
+            cursor:
+              isSending || (!input.trim() && pendingAttachments.length === 0)
+                ? "default"
+                : "pointer",
+            color: "#fff",
+            padding: "8px 10px",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            cursor:
-              isSending || (!input.trim() && pendingAttachments.length === 0)
-                ? "not-allowed"
-                : "pointer",
-            color: "#fff",
             flexShrink: 0,
+            opacity:
+              isSending || (!input.trim() && pendingAttachments.length === 0)
+                ? 0.45
+                : 1,
+            transition: "opacity 0.15s, background 0.15s",
           }}
         >
           {isSending ? (
-            <Loader2
-              size={16}
-              style={{ animation: "spin 1s linear infinite" }}
-            />
+            <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} />
           ) : (
-            <Send size={15} />
+            <Send size={16} />
           )}
         </button>
       </div>

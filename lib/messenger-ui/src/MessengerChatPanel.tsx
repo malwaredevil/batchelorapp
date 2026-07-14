@@ -174,7 +174,10 @@ export function MessengerChatPanel({
   const selectMention = useCallback(
     (member: MemberEntry) => {
       if (!mentionAnchor) return;
-      const name = memberName(member);
+      // Use first name only so @mentions never contain spaces — keeps them
+      // unambiguous to parse server-side if we add per-person routing later.
+      // The popup still shows the full name for disambiguation.
+      const name = memberName(member).split(" ")[0] ?? memberName(member);
       const before = input.slice(0, mentionAnchor.start);
       const after = input.slice(
         mentionAnchor.start + 1 + mentionAnchor.query.length,

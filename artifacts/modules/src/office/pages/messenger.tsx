@@ -38,6 +38,24 @@ export default function MessengerPage() {
   const selectedConv = conversations.find((c) => c.id === selectedConvId);
   const convName = selectedConv?.name ?? "Group Chat";
 
+  function participantSubtitle(
+    conv: typeof selectedConv,
+    currentId: number,
+  ): string {
+    if (!conv?.participants?.length) return "";
+    const subset = conv.isDirect
+      ? conv.participants.filter((p) => p.id !== currentId)
+      : conv.participants;
+    const names = subset.map((p) => p.displayName ?? `User ${p.id}`);
+    if (names.length === 0) return "";
+    if (names.length <= 4) return names.join(", ");
+    return `${names.slice(0, 4).join(", ")} +${names.length - 4} more`;
+  }
+
+  const participantLine = selectedConv
+    ? participantSubtitle(selectedConv, user.id)
+    : "";
+
   const handleContactSelect = (prefill: string) => {
     setPendingPrefill(prefill);
     setView("chat");
@@ -109,19 +127,44 @@ export default function MessengerPage() {
             </>
           ) : (
             <>
-              <span
+              <div
                 style={{
                   flex: 1,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  color: "#111827",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
+                  minWidth: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 1,
                 }}
               >
-                {selectedConvId ? convName : "Messenger"}
-              </span>
+                <span
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: "#111827",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {selectedConvId ? convName : "Messenger"}
+                </span>
+                {participantLine && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: "#6b7280",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {selectedConv?.isDirect ? "Chat with " : "Members: "}
+                    <span style={{ color: "#374151", fontWeight: 500 }}>
+                      {participantLine}
+                    </span>
+                  </span>
+                )}
+              </div>
               <button
                 onClick={() => setView("contacts")}
                 title="Contacts"

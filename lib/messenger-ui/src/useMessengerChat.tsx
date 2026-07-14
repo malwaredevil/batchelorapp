@@ -128,8 +128,12 @@ export function useMessengerChat(isOpen: boolean, conversationId?: number) {
     qc.invalidateQueries({ queryKey: getListConversationsQueryKey() });
   }, [clearConversationMutation, qc, convId]);
 
+  const currentConversation =
+    conversations?.find((c) => c.id === convId) ?? null;
+
   return {
     convId,
+    currentConversation,
     messages: messages as MessengerMessengerMessage[],
     isLoading: isFetching && messages.length === 0,
     isSending,

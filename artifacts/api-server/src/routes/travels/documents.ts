@@ -77,6 +77,8 @@ type ItineraryActivity = {
   status?: "tentative" | "confirmed";
   sourceDocumentId?: number;
   sourceField?: string;
+  /** Stored alongside each activity so dedup comparisons work across resync calls. */
+  dataRichness?: number;
 };
 
 type ItineraryDay = {
@@ -109,6 +111,39 @@ function parseDateTime(
   return null;
 }
 
+// Fields that indicate genuine booking detail (vs filler / "not found" notes).
+// More of these present = richer document. Used to pick the winner when two
+// documents describe the same real-world event.
+const RICHNESS_FIELDS = [
+  "flightNumber",
+  "returnFlightNumber",
+  "referenceNumber",
+  "seatNumbers",
+  "passengerNames",
+  "fromLocation",
+  "toLocation",
+  "returnFromLocation",
+  "returnToLocation",
+  "departureDateTime",
+  "arrivalDateTime",
+  "returnDepartureDateTime",
+  "returnArrivalDateTime",
+  "checkInDate",
+  "checkOutDate",
+  "pickupDateTime",
+  "dropoffDateTime",
+  "hotelName",
+  "providerName",
+] as const;
+
+function computeDataRichness(ed: Record<string, unknown>): number {
+  return RICHNESS_FIELDS.filter((k) => {
+    const v = ed[k];
+    if (Array.isArray(v)) return v.length > 0;
+    return typeof v === "string" && v.trim().length > 0;
+  }).length;
+}
+
 type DocumentActivityCandidate = {
   sourceField: string;
   dateStr: string;
@@ -117,6 +152,7 @@ type DocumentActivityCandidate = {
   description: string;
   proximity: string;
   tip: string;
+  dataRichness: number;
 };
 
 function computeDocumentActivities(
@@ -131,6 +167,11 @@ function computeDocumentActivities(
   const hotelName = str(ed.hotelName) || provider;
   const notes = str(ed.notes);
   const arrival = str(ed.arrivalDateTime);
+
+  // Computed once for the whole document — shared across all candidates so
+  // that the dedup logic in syncItineraryFromDocument can compare documents
+  // on the number of genuine booking-detail fields rather than formatted text.
+  const dataRichness = computeDataRichness(ed);
 
   const candidates: DocumentActivityCandidate[] = [];
 
@@ -154,6 +195,7 @@ function computeDocumentActivities(
       description: provider,
       proximity: "✈️",
       tip: tipParts.join(" — "),
+      dataRichness,
     });
   }
 
@@ -169,6 +211,7 @@ function computeDocumentActivities(
       description: provider,
       proximity: "🏨",
       tip: notes,
+      dataRichness,
     });
   }
 
@@ -184,6 +227,7 @@ function computeDocumentActivities(
       description: provider,
       proximity: "🏨",
       tip: notes,
+      dataRichness,
     });
   }
 
@@ -199,6 +243,7 @@ function computeDocumentActivities(
       description: str(ed.pickupLocation),
       proximity: "🚗",
       tip: notes,
+      dataRichness,
     });
   }
 
@@ -214,6 +259,7 @@ function computeDocumentActivities(
       description: str(ed.dropoffLocation),
       proximity: "🚗",
       tip: notes,
+      dataRichness,
     });
   }
 
@@ -246,6 +292,7 @@ function computeDocumentActivities(
       description: provider,
       proximity: "✈️",
       tip: tipParts.join(" — "),
+      dataRichness,
     });
   }
 
@@ -268,17 +315,6 @@ function isItinerary(value: unknown): value is Itinerary {
  */
 function activityDedupeKey(date: string, sourceField: string): string {
   return `${date}::${sourceField}`;
-}
-
-/**
- * How "rich" an activity is — more characters in the combined name + tip +
- * description means more extracted detail. Used to pick the winner when two
- * documents both produce an activity for the same real-world event.
- */
-function activityRichness(a: ItineraryActivity): number {
-  return (
-    (a.name?.length ?? 0) + (a.tip?.length ?? 0) + (a.description?.length ?? 0)
-  );
 }
 
 export async function syncItineraryFromDocument(
@@ -337,12 +373,16 @@ export async function syncItineraryFromDocument(
       status: "tentative",
       sourceDocumentId: docId,
       sourceField: c.sourceField,
+      dataRichness: c.dataRichness,
     };
 
     if (existing) {
       // Same real-world event from two different documents. Keep the richer
       // one and discard the thinner one — no duplicate in the itinerary.
-      if (activityRichness(newActivity) > activityRichness(existing.activity)) {
+      // Compare dataRichness (count of genuine booking-detail fields);
+      // existing activities without dataRichness (old rows) default to 0,
+      // so any newly-synced candidate automatically wins over them.
+      if (c.dataRichness > (existing.activity.dataRichness ?? 0)) {
         // New candidate is richer: replace the existing activity in-place.
         existing.day.activities = existing.day.activities.map((a) =>
           a === existing.activity ? newActivity : a,

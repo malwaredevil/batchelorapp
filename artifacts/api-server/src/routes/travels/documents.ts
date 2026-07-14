@@ -351,11 +351,27 @@ export async function syncItineraryFromDocument(
     string,
     { day: ItineraryDay; activity: ItineraryActivity }
   >();
+  // Secondary map for legacy activities that pre-date sourceField/sourceDocumentId
+  // tracking (they have proximity set but no sourceField). Keyed by date::proximity
+  // since each proximity emoji maps to a distinct event type and dates are unique
+  // per event (departure vs return are on different days; check-in vs check-out too).
+  const existingByProximity = new Map<
+    string,
+    { day: ItineraryDay; activity: ItineraryActivity }
+  >();
   for (const day of itinerary.days) {
     for (const a of day.activities) {
       if (a.sourceDocumentId !== undefined && a.sourceField) {
         const key = activityDedupeKey(day.date, a.sourceField);
         existingByKey.set(key, { day, activity: a });
+      } else if (a.proximity) {
+        // Legacy auto-synced activity (old code, no sourceField/sourceDocumentId).
+        // Index by date::proximity so we can match and replace it rather than
+        // adding a new activity alongside it.
+        existingByProximity.set(`${day.date}::${a.proximity}`, {
+          day,
+          activity: a,
+        });
       }
     }
   }
@@ -391,14 +407,38 @@ export async function syncItineraryFromDocument(
       }
       // Existing is richer (or equal): skip this candidate entirely.
     } else {
-      // No duplicate — add normally.
-      let day = itinerary.days.find((d) => d.date === c.dateStr);
-      if (!day) {
-        day = { date: c.dateStr, title: "Travel Day", activities: [] };
-        itinerary.days.push(day);
+      // Check whether a legacy activity (no sourceField tracking) covers the
+      // same event. Use >= so that equal-richness new activities replace the
+      // legacy ghost rather than stacking alongside it — this also upgrades
+      // legacy activities to have proper sourceDocumentId/sourceField tracking.
+      const proxKey = `${c.dateStr}::${c.proximity}`;
+      const legacyExisting = existingByProximity.get(proxKey);
+      if (legacyExisting) {
+        if (c.dataRichness >= (legacyExisting.activity.dataRichness ?? 0)) {
+          // Replace legacy ghost with the new properly-tracked activity.
+          legacyExisting.day.activities = legacyExisting.day.activities.map(
+            (a) => (a === legacyExisting.activity ? newActivity : a),
+          );
+          existingByProximity.set(proxKey, {
+            day: legacyExisting.day,
+            activity: newActivity,
+          });
+          existingByKey.set(key, {
+            day: legacyExisting.day,
+            activity: newActivity,
+          });
+        }
+        // Legacy is richer: skip this candidate entirely.
+      } else {
+        // No duplicate — add normally.
+        let day = itinerary.days.find((d) => d.date === c.dateStr);
+        if (!day) {
+          day = { date: c.dateStr, title: "Travel Day", activities: [] };
+          itinerary.days.push(day);
+        }
+        day.activities.push(newActivity);
+        existingByKey.set(key, { day, activity: newActivity });
       }
-      day.activities.push(newActivity);
-      existingByKey.set(key, { day, activity: newActivity });
     }
   }
 

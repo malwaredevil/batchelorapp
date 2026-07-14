@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Send, Paperclip, Loader2, MessageSquare, Trash2 } from "lucide-react";
+import { Send, Paperclip, Loader2, MessageSquare, Trash2, Users } from "lucide-react";
 import { useMessengerChat } from "./useMessengerChat";
 import { MessageItem } from "./MessageItem";
 import {
@@ -45,6 +45,20 @@ function findMentionAnchor(
     if (/\s/.test(text[i])) break;
   }
   return null;
+}
+
+function participantLabel(
+  participants: Array<{ id: number; displayName?: string | null }>,
+  currentUserId: number,
+  isDirect: boolean,
+): string {
+  const subset = isDirect
+    ? participants.filter((p) => p.id !== currentUserId)
+    : participants;
+  const names = subset.map((p) => p.displayName ?? `User ${p.id}`);
+  if (names.length === 0) return "";
+  if (names.length <= 3) return names.join(", ");
+  return `${names.slice(0, 3).join(", ")} +${names.length - 3} more`;
 }
 
 function formatDateLabel(dateStr: string): string {
@@ -102,6 +116,7 @@ export function MessengerChatPanel({
 
   const {
     convId,
+    currentConversation,
     messages,
     isLoading,
     isSending,
@@ -324,6 +339,46 @@ export function MessengerChatPanel({
         position: "relative",
       }}
     >
+      {/* Participants strip */}
+      {currentConversation?.participants &&
+        currentConversation.participants.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
+              padding: "4px 12px",
+              borderBottom: "1px solid #f0f4ff",
+              background: "#f8faff",
+              flexShrink: 0,
+              minHeight: 28,
+            }}
+          >
+            <Users
+              size={11}
+              style={{ color: "#6b7280", flexShrink: 0, marginTop: 1 }}
+            />
+            <span
+              style={{
+                fontSize: 11,
+                color: "#6b7280",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {currentConversation.isDirect ? "Chat with " : "Members: "}
+              <span style={{ color: "#374151", fontWeight: 500 }}>
+                {participantLabel(
+                  currentConversation.participants,
+                  currentUserId,
+                  currentConversation.isDirect ?? false,
+                )}
+              </span>
+            </span>
+          </div>
+        )}
+
       {/* Clear history bar */}
       {nonDeletedMessages.length > 0 && (
         <div

@@ -62,9 +62,8 @@ export function MessageItem({
         ? "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)"
         : "hsl(var(--muted))";
 
-  const bubbleBorder = isElaine && !isDeleted
-    ? "1px solid rgba(109, 40, 217, 0.15)"
-    : undefined;
+  const bubbleBorder =
+    isElaine && !isDeleted ? "1px solid rgba(109, 40, 217, 0.15)" : undefined;
 
   const bubbleColor = isDeleted
     ? "hsl(var(--muted-foreground))"
@@ -277,11 +276,13 @@ export function MessageItem({
                 fontStyle: isDeleted ? "italic" : undefined,
               }}
             >
-              {isDeleted
-                ? "Message deleted"
-                : isElaine
-                  ? <MarkdownMessage text={message.body} />
-                  : message.body}
+              {isDeleted ? (
+                "Message deleted"
+              ) : isElaine ? (
+                <MarkdownMessage text={message.body} />
+              ) : (
+                message.body
+              )}
             </div>
           )}
 

@@ -218,6 +218,41 @@ CREATE TABLE IF NOT EXISTS office_notes (
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Messenger
+CREATE TABLE IF NOT EXISTS messenger_conversations (
+  id         SERIAL PRIMARY KEY,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS messenger_messages (
+  id              SERIAL PRIMARY KEY,
+  conversation_id INTEGER NOT NULL REFERENCES messenger_conversations(id),
+  sender_id       INTEGER REFERENCES app_users(id),
+  body            TEXT NOT NULL DEFAULT '',
+  read_at         TIMESTAMPTZ,
+  deleted_at      TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS messenger_attachments (
+  id           SERIAL PRIMARY KEY,
+  message_id   INTEGER NOT NULL REFERENCES messenger_messages(id) ON DELETE CASCADE,
+  storage_path TEXT NOT NULL,
+  mime_type    TEXT NOT NULL,
+  file_name    TEXT NOT NULL,
+  size_bytes   INTEGER NOT NULL DEFAULT 0,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS messenger_link_previews (
+  id          SERIAL PRIMARY KEY,
+  url         TEXT NOT NULL UNIQUE,
+  title       TEXT,
+  description TEXT,
+  image_url   TEXT,
+  fetched_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS ornaments_hallmark_events (
   id               SERIAL PRIMARY KEY,
   user_id          INTEGER,

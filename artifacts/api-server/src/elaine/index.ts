@@ -4681,7 +4681,8 @@ Keep replies concise and easy to read in a chat bubble.`;
               JSON.parse(call.args),
             );
             if (!parsed.success) {
-              resultText = "Invalid URL — ask the user to provide a valid https:// link.";
+              resultText =
+                "Invalid URL — ask the user to provide a valid https:// link.";
             } else {
               resultText = await fetchPage(parsed.data.url);
             }

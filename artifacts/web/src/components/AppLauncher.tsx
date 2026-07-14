@@ -551,7 +551,7 @@ function HallmarkEventStatTile() {
           window.location.href = href;
         }
       }}
-      className={`flex-[2] flex flex-col justify-between p-3 rounded-lg min-w-0 cursor-pointer ${
+      className={`flex-[2] flex flex-col justify-between p-3 rounded-lg min-w-0 cursor-pointer h-[76px] overflow-hidden ${
         isLive
           ? "bg-red-100 dark:bg-red-900/40 hover:bg-red-200 dark:hover:bg-red-900/60"
           : "bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50"

@@ -587,10 +587,14 @@ function HallmarkEventStatTile() {
       </div>
       {/* Bottom: event name + date range */}
       <div className="mt-2 min-w-0">
-        <span className={`text-xs font-semibold uppercase tracking-wide truncate block ${isLive ? "text-red-900/80 dark:text-red-100/70" : "text-amber-900/80 dark:text-amber-100/70"}`}>
+        <span
+          className={`text-xs font-semibold uppercase tracking-wide truncate block ${isLive ? "text-red-900/80 dark:text-red-100/70" : "text-amber-900/80 dark:text-amber-100/70"}`}
+        >
           {shortTitle || current.title}
         </span>
-        <span className={`text-[9px] block mt-0.5 ${isLive ? "text-red-700/60 dark:text-red-300/50" : "text-amber-700/55 dark:text-amber-300/50"}`}>
+        <span
+          className={`text-[9px] block mt-0.5 ${isLive ? "text-red-700/60 dark:text-red-300/50" : "text-amber-700/55 dark:text-amber-300/50"}`}
+        >
           {dateRange}
         </span>
       </div>

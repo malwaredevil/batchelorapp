@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Send, Paperclip, Loader2, MessageSquare, Trash2, Users } from "lucide-react";
+import {
+  Send,
+  Paperclip,
+  Loader2,
+  MessageSquare,
+  Trash2,
+  Users,
+} from "lucide-react";
 import { useMessengerChat } from "./useMessengerChat";
 import { MessageItem } from "./MessageItem";
 import {

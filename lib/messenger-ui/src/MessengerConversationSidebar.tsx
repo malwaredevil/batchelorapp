@@ -47,7 +47,8 @@ function relativeTime(iso: string): string {
   if (diffHours < 24) return `${diffHours}h`;
   const diffDays = Math.floor(diffHours / 24);
   if (diffDays === 1) return "Yesterday";
-  if (diffDays < 7) return d.toLocaleDateString(undefined, { weekday: "short" });
+  if (diffDays < 7)
+    return d.toLocaleDateString(undefined, { weekday: "short" });
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
@@ -157,7 +158,9 @@ export function MessengerConversationSidebar({
     const isConfirmingDelete = confirmDeleteId === c.id;
     const name = convDisplayName(c, currentUserId);
     const preview = lastMessagePreview(c);
-    const time = c.lastMessage?.createdAt ? relativeTime(c.lastMessage.createdAt) : "";
+    const time = c.lastMessage?.createdAt
+      ? relativeTime(c.lastMessage.createdAt)
+      : "";
 
     return (
       <div
@@ -172,19 +175,42 @@ export function MessengerConversationSidebar({
           padding: "8px 10px",
           borderRadius: 8,
           cursor: "pointer",
-          background: isSelected ? "#eff6ff" : isHovered ? "#f9fafb" : "transparent",
-          borderLeft: isSelected ? "2px solid #3b82f6" : "2px solid transparent",
+          background: isSelected
+            ? "#eff6ff"
+            : isHovered
+              ? "#f9fafb"
+              : "transparent",
+          borderLeft: isSelected
+            ? "2px solid #3b82f6"
+            : "2px solid transparent",
           position: "relative",
           transition: "background 0.1s",
         }}
       >
         {/* Name + time row */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4, marginBottom: 2 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 4, flex: 1, minWidth: 0 }}>
-            {c.isDirect
-              ? <User size={10} style={{ color: "#9ca3af", flexShrink: 0 }} />
-              : <Users size={10} style={{ color: "#9ca3af", flexShrink: 0 }} />
-            }
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 4,
+            marginBottom: 2,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              flex: 1,
+              minWidth: 0,
+            }}
+          >
+            {c.isDirect ? (
+              <User size={10} style={{ color: "#9ca3af", flexShrink: 0 }} />
+            ) : (
+              <Users size={10} style={{ color: "#9ca3af", flexShrink: 0 }} />
+            )}
             <span
               style={{
                 fontSize: 13,
@@ -198,7 +224,14 @@ export function MessengerConversationSidebar({
               {name}
             </span>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              flexShrink: 0,
+            }}
+          >
             {c.unreadCount > 0 && (
               <span
                 style={{
@@ -215,7 +248,9 @@ export function MessengerConversationSidebar({
                 {c.unreadCount}
               </span>
             )}
-            {time && <span style={{ fontSize: 10, color: "#9ca3af" }}>{time}</span>}
+            {time && (
+              <span style={{ fontSize: 10, color: "#9ca3af" }}>{time}</span>
+            )}
           </div>
         </div>
 
@@ -236,17 +271,46 @@ export function MessengerConversationSidebar({
 
         {/* Delete confirm */}
         {isConfirmingDelete && (
-          <div style={{ fontSize: 11, color: "#ef4444", display: "flex", alignItems: "center", gap: 6 }}>
+          <div
+            style={{
+              fontSize: 11,
+              color: "#ef4444",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
             <span>Delete this chat?</span>
             <button
-              onClick={(e) => { e.stopPropagation(); void handleDelete(c.id); }}
-              style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 4, padding: "1px 6px", fontSize: 10, cursor: "pointer" }}
+              onClick={(e) => {
+                e.stopPropagation();
+                void handleDelete(c.id);
+              }}
+              style={{
+                background: "#ef4444",
+                color: "#fff",
+                border: "none",
+                borderRadius: 4,
+                padding: "1px 6px",
+                fontSize: 10,
+                cursor: "pointer",
+              }}
             >
               Delete
             </button>
             <button
-              onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null); }}
-              style={{ background: "#f3f4f6", border: "1px solid #e5e7eb", borderRadius: 4, padding: "1px 6px", fontSize: 10, cursor: "pointer" }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setConfirmDeleteId(null);
+              }}
+              style={{
+                background: "#f3f4f6",
+                border: "1px solid #e5e7eb",
+                borderRadius: 4,
+                padding: "1px 6px",
+                fontSize: 10,
+                cursor: "pointer",
+              }}
             >
               Cancel
             </button>
@@ -255,18 +319,50 @@ export function MessengerConversationSidebar({
 
         {/* Hover actions */}
         {isHovered && !isConfirmingDelete && (
-          <div style={{ position: "absolute", right: 8, bottom: 6, display: "flex", gap: 2 }}>
+          <div
+            style={{
+              position: "absolute",
+              right: 8,
+              bottom: 6,
+              display: "flex",
+              gap: 2,
+            }}
+          >
             <button
               title={isArchived ? "Unarchive" : "Archive"}
-              onClick={(e) => { e.stopPropagation(); void handleArchive(c.id, !isArchived); }}
-              style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", padding: 2, borderRadius: 4, display: "flex", alignItems: "center" }}
+              onClick={(e) => {
+                e.stopPropagation();
+                void handleArchive(c.id, !isArchived);
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "#9ca3af",
+                padding: 2,
+                borderRadius: 4,
+                display: "flex",
+                alignItems: "center",
+              }}
             >
               {isArchived ? <ArchiveX size={12} /> : <Archive size={12} />}
             </button>
             <button
               title="Delete"
-              onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(c.id); }}
-              style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", padding: 2, borderRadius: 4, display: "flex", alignItems: "center" }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setConfirmDeleteId(c.id);
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "#9ca3af",
+                padding: 2,
+                borderRadius: 4,
+                display: "flex",
+                alignItems: "center",
+              }}
             >
               <Trash2 size={12} />
             </button>
@@ -310,18 +406,39 @@ export function MessengerConversationSidebar({
           >
             <button
               onClick={() => setCreateStep(null)}
-              style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", padding: 2, display: "flex" }}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "#9ca3af",
+                padding: 2,
+                display: "flex",
+              }}
             >
               <ArrowLeft size={13} />
             </button>
-            <span style={{ fontSize: 11, fontWeight: 600, color: "#374151", flex: 1 }}>
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: "#374151",
+                flex: 1,
+              }}
+            >
               {selectedIds.length === 0
                 ? "Select people"
                 : `${selectedIds.length} selected`}
             </span>
             <button
               onClick={() => setCreateStep(null)}
-              style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", padding: 2, display: "flex" }}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "#9ca3af",
+                padding: 2,
+                display: "flex",
+              }}
             >
               <X size={13} />
             </button>
@@ -330,7 +447,9 @@ export function MessengerConversationSidebar({
           {/* Member list */}
           <div style={{ maxHeight: 140, overflowY: "auto", padding: "0 6px" }}>
             {otherMembers.length === 0 && (
-              <div style={{ fontSize: 11, color: "#9ca3af", padding: "8px 4px" }}>
+              <div
+                style={{ fontSize: 11, color: "#9ca3af", padding: "8px 4px" }}
+              >
                 No other household members.
               </div>
             )}
@@ -355,7 +474,9 @@ export function MessengerConversationSidebar({
                       width: 14,
                       height: 14,
                       borderRadius: 3,
-                      border: checked ? "2px solid #3b82f6" : "2px solid #d1d5db",
+                      border: checked
+                        ? "2px solid #3b82f6"
+                        : "2px solid #d1d5db",
                       background: checked ? "#3b82f6" : "#fff",
                       display: "flex",
                       alignItems: "center",
@@ -430,10 +551,24 @@ export function MessengerConversationSidebar({
             borderBottom: "1px solid #f3f4f6",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              marginBottom: 4,
+            }}
+          >
             <button
               onClick={() => setCreateStep({ step: "picker", selectedIds })}
-              style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", padding: 2, display: "flex" }}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "#9ca3af",
+                padding: 2,
+                display: "flex",
+              }}
             >
               <ArrowLeft size={13} />
             </button>
@@ -446,10 +581,15 @@ export function MessengerConversationSidebar({
               autoFocus
               value={name}
               onChange={(e) =>
-                setCreateStep({ step: "group-name", selectedIds, name: e.target.value })
+                setCreateStep({
+                  step: "group-name",
+                  selectedIds,
+                  name: e.target.value,
+                })
               }
               onKeyDown={(e) => {
-                if (e.key === "Enter") void handleCreateGroup(selectedIds, name);
+                if (e.key === "Enter")
+                  void handleCreateGroup(selectedIds, name);
                 if (e.key === "Escape") setCreateStep(null);
               }}
               placeholder="e.g. Family Trip Planning"
@@ -464,13 +604,27 @@ export function MessengerConversationSidebar({
             />
             <button
               onClick={() => void handleCreateGroup(selectedIds, name)}
-              style={{ background: "none", border: "none", cursor: "pointer", color: "#3b82f6", padding: 2, display: "flex" }}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "#3b82f6",
+                padding: 2,
+                display: "flex",
+              }}
             >
               <Check size={14} />
             </button>
             <button
               onClick={() => setCreateStep(null)}
-              style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", padding: 2, display: "flex" }}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "#9ca3af",
+                padding: 2,
+                display: "flex",
+              }}
             >
               <X size={14} />
             </button>
@@ -508,12 +662,16 @@ export function MessengerConversationSidebar({
       >
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <MessageSquare size={14} style={{ color: "#6b7280" }} />
-          <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>Chats</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>
+            Chats
+          </span>
         </div>
         <button
           title="New conversation"
           onClick={() =>
-            setCreateStep(createStep ? null : { step: "picker", selectedIds: [] })
+            setCreateStep(
+              createStep ? null : { step: "picker", selectedIds: [] },
+            )
           }
           style={{
             background: createStep ? "#eff6ff" : "none",
@@ -536,13 +694,27 @@ export function MessengerConversationSidebar({
       {/* Conversation list */}
       <div style={{ flex: 1, overflowY: "auto", padding: "4px 6px" }}>
         {isLoading && (
-          <div style={{ textAlign: "center", color: "#9ca3af", fontSize: 12, padding: "16px 0" }}>
+          <div
+            style={{
+              textAlign: "center",
+              color: "#9ca3af",
+              fontSize: 12,
+              padding: "16px 0",
+            }}
+          >
             Loading…
           </div>
         )}
 
         {!isLoading && active.length === 0 && (
-          <div style={{ textAlign: "center", color: "#9ca3af", fontSize: 11, padding: "16px 8px" }}>
+          <div
+            style={{
+              textAlign: "center",
+              color: "#9ca3af",
+              fontSize: 11,
+              padding: "16px 8px",
+            }}
+          >
             No chats yet.
             <br />
             Click + to create one.
@@ -569,7 +741,11 @@ export function MessengerConversationSidebar({
                 width: "100%",
               }}
             >
-              {showArchived ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+              {showArchived ? (
+                <ChevronDown size={11} />
+              ) : (
+                <ChevronRight size={11} />
+              )}
               Archived ({archived.length})
             </button>
             {showArchived && archived.map((c) => renderItem(c, true))}

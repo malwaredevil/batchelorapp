@@ -72,16 +72,22 @@ export function MessengerNavIcon({
   useMessengerNewMessageDetector({
     currentUserId,
     enabled: !isOpen && currentUserId > 0,
-    onNewMessage: useCallback(
-      (event) => {
-        if (!event.body) return;
-        const id = `toast-${++toastIdCounter}`;
-        setToasts((prev) =>
-          [...prev, { id, convId: event.convId, convName: event.convName, senderName: event.senderName, body: event.body }].slice(-3),
-        );
-      },
-      [],
-    ),
+    onNewMessage: useCallback((event) => {
+      if (!event.body) return;
+      const id = `toast-${++toastIdCounter}`;
+      setToasts((prev) =>
+        [
+          ...prev,
+          {
+            id,
+            convId: event.convId,
+            convName: event.convName,
+            senderName: event.senderName,
+            body: event.body,
+          },
+        ].slice(-3),
+      );
+    }, []),
   });
 
   const dismissToast = useCallback((id: string) => {
@@ -135,11 +141,16 @@ export function MessengerNavIcon({
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
               <button
-                onClick={() => setView((v) => (v === "contacts" ? "chat" : "contacts"))}
-                aria-label={view === "contacts" ? "Back to chat" : "View contacts"}
+                onClick={() =>
+                  setView((v) => (v === "contacts" ? "chat" : "contacts"))
+                }
+                aria-label={
+                  view === "contacts" ? "Back to chat" : "View contacts"
+                }
                 title={view === "contacts" ? "Back to chat" : "Contacts"}
                 style={{
-                  background: view === "contacts" ? "rgba(255,255,255,0.25)" : "none",
+                  background:
+                    view === "contacts" ? "rgba(255,255,255,0.25)" : "none",
                   border: "none",
                   cursor: "pointer",
                   color: "rgba(255,255,255,0.9)",

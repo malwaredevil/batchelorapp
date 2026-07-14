@@ -366,7 +366,11 @@ export function MessengerChatPanel({
           >
             <Users
               size={11}
-              style={{ color: "hsl(var(--muted-foreground))", flexShrink: 0, marginTop: 1 }}
+              style={{
+                color: "hsl(var(--muted-foreground))",
+                flexShrink: 0,
+                marginTop: 1,
+              }}
             />
             <span
               style={{
@@ -378,7 +382,9 @@ export function MessengerChatPanel({
               }}
             >
               {currentConversation.isDirect ? "Chat with " : "Members: "}
-              <span style={{ color: "hsl(var(--foreground))", fontWeight: 500 }}>
+              <span
+                style={{ color: "hsl(var(--foreground))", fontWeight: 500 }}
+              >
                 {participantLabel(
                   currentConversation.participants,
                   currentUserId,
@@ -506,7 +512,13 @@ export function MessengerChatPanel({
           >
             <MessageSquare size={28} strokeWidth={1.5} />
             <span>No messages yet</span>
-            <span style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", opacity: 0.6 }}>
+            <span
+              style={{
+                fontSize: 11,
+                color: "hsl(var(--muted-foreground))",
+                opacity: 0.6,
+              }}
+            >
               Say hi, or try @elaine
             </span>
           </div>
@@ -687,7 +699,11 @@ export function MessengerChatPanel({
                   {isElaine ? "✦" : (name[0]?.toUpperCase() ?? "?")}
                 </div>
                 <span
-                  style={{ fontSize: 13, fontWeight: 500, color: "hsl(var(--foreground))" }}
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: "hsl(var(--foreground))",
+                  }}
                 >
                   {name}
                 </span>
@@ -780,7 +796,9 @@ export function MessengerChatPanel({
         />
         <button
           onClick={() => void handleSend()}
-          disabled={isSending || (!input.trim() && pendingAttachments.length === 0)}
+          disabled={
+            isSending || (!input.trim() && pendingAttachments.length === 0)
+          }
           aria-label="Send message"
           style={{
             background:
@@ -807,7 +825,10 @@ export function MessengerChatPanel({
           }}
         >
           {isSending ? (
-            <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} />
+            <Loader2
+              size={16}
+              style={{ animation: "spin 1s linear infinite" }}
+            />
           ) : (
             <Send size={16} />
           )}

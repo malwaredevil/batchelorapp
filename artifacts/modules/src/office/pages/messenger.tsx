@@ -63,7 +63,10 @@ export default function MessengerPage() {
   };
 
   return (
-    <div className="flex overflow-hidden rounded-xl border border-border bg-card" style={{ height: "calc(100vh - 120px)" }}>
+    <div
+      className="flex overflow-hidden rounded-xl border border-border bg-card"
+      style={{ height: "calc(100vh - 120px)" }}
+    >
       {/* Left sidebar — collapsible */}
       {sidebarOpen && (
         <MessengerConversationSidebar

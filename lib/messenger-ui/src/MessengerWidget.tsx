@@ -5,6 +5,12 @@ import { useAuth } from "@workspace/web-core/auth";
 import { useMessengerUnreadCount } from "./useMessengerUnreadCount";
 import { MessengerChatPanel } from "./MessengerChatPanel";
 import { MessengerConversationSidebar } from "./MessengerConversationSidebar";
+import {
+  useListConversations,
+  getListConversationsQueryKey,
+} from "@workspace/api-client-react";
+import type { UseQueryOptions } from "@tanstack/react-query";
+import type { MessengerConversationSummary } from "@workspace/api-client-react";
 
 interface MessengerWidgetProps {
   messengerPageHref?: string;
@@ -21,6 +27,20 @@ export function MessengerWidget({ messengerPageHref }: MessengerWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedConvId, setSelectedConvId] = useState<number | null>(null);
   const unreadCount = useMessengerUnreadCount();
+
+  // Fetch conversations so we can auto-select the first active one and keep
+  // the sidebar in sync with the chat panel from the moment the widget opens.
+  const { data: conversations } = useListConversations({
+    query: {
+      queryKey: getListConversationsQueryKey(),
+      refetchInterval: isOpen ? 5_000 : 60_000,
+    } as UseQueryOptions<MessengerConversationSummary[]>,
+  });
+  const firstActiveId =
+    conversations?.find((c) => !c.archivedAt)?.id ?? null;
+  // effectiveConvId is what BOTH the sidebar and chat panel use: the
+  // explicitly-selected conversation, or the first active one as fallback.
+  const effectiveConvId = selectedConvId ?? firstActiveId;
 
   // Position state (bubble anchor point, bottom-left by default)
   const [pos, setPos] = useState({ x: EDGE_PAD, y: EDGE_PAD });
@@ -159,14 +179,14 @@ export function MessengerWidget({ messengerPageHref }: MessengerWidgetProps) {
       {/* Chat body — sidebar + messages */}
       <div style={{ flex: 1, overflow: "hidden", display: "flex" }}>
         <MessengerConversationSidebar
-          selectedConvId={selectedConvId}
+          selectedConvId={effectiveConvId}
           onSelect={setSelectedConvId}
         />
         <div style={{ flex: 1, overflow: "hidden" }}>
           <MessengerChatPanel
             currentUserId={currentUserId}
             isOpen={isOpen}
-            conversationId={selectedConvId ?? undefined}
+            conversationId={effectiveConvId ?? undefined}
           />
         </div>
       </div>

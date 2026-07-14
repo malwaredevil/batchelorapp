@@ -70,7 +70,7 @@ import {
   SmsRegistrationPendingError,
   SmsOptedOutError,
 } from "../lib/sms";
-import { webSearch } from "../lib/web-search";
+import { webSearch, fetchPage } from "../lib/web-search";
 import { consultExperts } from "../lib/expert-consult";
 import {
   getWeatherForecast,
@@ -2898,6 +2898,12 @@ const WebSearchToolPayload = z.object({
   query: z.string().min(1).max(500),
 });
 
+const FETCH_PAGE_TOOL_NAME = "fetch_page";
+
+const FetchPageToolPayload = z.object({
+  url: z.string().url().max(2000),
+});
+
 const CONSULT_EXPERTS_TOOL_NAME = "consult_experts";
 
 const ConsultExpertsToolPayload = z.object({
@@ -3419,6 +3425,25 @@ const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           },
         },
         required: ["name"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: FETCH_PAGE_TOOL_NAME,
+      description:
+        "Read the full text content of a specific web page — use this after web_search returns a promising source URL and you want more detail from it, or when the user pastes a URL and asks you to summarise or answer questions about what's on it. Returns the page content as clean markdown text, trimmed at 6 000 characters for long pages. Only call this with real URLs from search results or the user's own message — never invent a URL.",
+      parameters: {
+        type: "object",
+        properties: {
+          url: {
+            type: "string",
+            description:
+              "The full URL of the page to read, including https:// (e.g. https://example.com/article)",
+          },
+        },
+        required: ["url"],
       },
     },
   },
@@ -4268,7 +4293,7 @@ CONTROL PANEL: The Control Panel ("/control-panel", hub app, owner-only) holds e
 
 PROACTIVE CONFIG WARNINGS: When the on-screen page context already includes an "App config snapshot" section and a setting there looks likely to cause problems for what the current page does — for example, a very short request timeout on a page that runs AI analysis, or a very low token limit on a page that generates long text — volunteer a one-sentence observation early in your reply (e.g. "By the way, your AI timeout is set to 5 s, which may be why ornament analysis keeps timing out — the app owner can raise it in the Control Panel."). Only do this when the config value is genuinely out of range for the task at hand and is visible in the current page context; do not speculate about settings you haven't seen, and don't repeat the warning in the same conversation if you've already mentioned it.
 
-WEB SEARCH: You have a real-time web_search tool, unlike a plain language model — use it proactively (no need to ask permission first) whenever a question depends on current information you can't be confident about from memory alone: opening hours, current prices, weather, visa/entry rules, local events, news, or anything else that changes over time. Don't use it for stable general knowledge or for things already visible in the on-screen state above. Call it as many times as needed for different sub-questions (e.g. rephrase or split into multiple focused searches for a broad question, so you get a fuller picture rather than one narrow result), then write your visible reply based on what it returns — never paste raw search output, and never fabricate a current fact instead of searching for it.
+WEB SEARCH & PAGE READING: You have a real-time web_search tool AND a fetch_page tool — use them actively. Never tell the user to search Google or visit a website themselves; if you catch yourself writing "you could Google this" or "you might want to visit X", stop and call web_search instead. Use web_search proactively (no permission needed) for ANY question that benefits from current or specific information — prices, opening hours, product details, how-to guides, reviews, news, events, visa rules, recipes, recommendations, anything — not just travel topics. Call it multiple times if needed for different angles on the same question. If search results point to a specific page that would have more detail than the summary (e.g. an official site, a how-to article, a product listing), use fetch_page to read that URL and extract the relevant details before you answer. Once you have all the information: write your answer based on what you found, cite sources naturally (e.g. "according to [Site Name]"), and at the very end of your reply always include one Google search link formatted as: 🔍 [Search Google for "your query"](https://www.google.com/search?q=url+encoded+query) — this gives the user a quick way to explore further on their own. Never paste raw search output verbatim, never fabricate a fact instead of searching, and do not use web_search or fetch_page for things already in the on-screen state or for stable general knowledge that definitely hasn't changed.
 
 EXPERT ADVICE: For genuine expertise/advice/recommendation questions — a judgment call where being one-sided could actually steer the user wrong (packing/gear advice for specific constraints, which option to book, negotiating tactics, whether something is a good idea, etc.) — use consult_experts rather than just answering solo; it cross-checks more than one independent source and gives you back a single synthesized answer to relay. Don't use it for simple facts, small talk, or anything that needs web_search instead (current/live data). It takes a bit longer than a normal reply — that's expected, not a malfunction.
 
@@ -4376,7 +4401,7 @@ Keep replies concise and easy to read in a chat bubble.`;
   // confused model can't loop indefinitely on our AI spend — one search
   // round plus one mandatory final-answer round covers "look this up, then
   // tell me" without unbounded cost.
-  const MAX_ROUNDS = 2;
+  const MAX_ROUNDS = 4;
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
     // Indices already turned into a proposed action, so the post-stream pass
@@ -4468,6 +4493,7 @@ Keep replies concise and easy to read in a chat bubble.`;
     // calls arrive as a structured field separate from the reply text.
     const HARD_TOOL_NAMES = new Set([
       WEB_SEARCH_TOOL_NAME,
+      FETCH_PAGE_TOOL_NAME,
       CONSULT_EXPERTS_TOOL_NAME,
       GET_WEATHER_TOOL_NAME,
       FIND_NEARBY_PLACES_TOOL_NAME,
@@ -4585,6 +4611,7 @@ Keep replies concise and easy to read in a chat bubble.`;
     const distinctHardToolNames = new Set(hardToolCalls.map((c) => c.name));
     const STATUS_LABELS: Record<string, string> = {
       [WEB_SEARCH_TOOL_NAME]: "searching the web",
+      [FETCH_PAGE_TOOL_NAME]: "reading that page",
       [CONSULT_EXPERTS_TOOL_NAME]: "checking in with a couple of experts",
       [GET_WEATHER_TOOL_NAME]: "checking the forecast",
       [FIND_NEARBY_PLACES_TOOL_NAME]: "looking up places",
@@ -4648,6 +4675,15 @@ Keep replies concise and easy to read in a chat bubble.`;
                   })),
                 });
               }
+            }
+          } else if (call.name === FETCH_PAGE_TOOL_NAME) {
+            const parsed = FetchPageToolPayload.safeParse(
+              JSON.parse(call.args),
+            );
+            if (!parsed.success) {
+              resultText = "Invalid URL — ask the user to provide a valid https:// link.";
+            } else {
+              resultText = await fetchPage(parsed.data.url);
             }
           } else if (call.name === CONSULT_EXPERTS_TOOL_NAME) {
             const parsed = ConsultExpertsToolPayload.safeParse(
@@ -6172,6 +6208,7 @@ const AGENTPHONE_ACTION_TOOLS = ACTION_TOOLS.filter(
 const RESTRICTED_SOFT_TOOL_NAMES = new Set<string>([
   QUERY_HOUSEHOLD_TOOL_NAME,
   WEB_SEARCH_TOOL_NAME,
+  FETCH_PAGE_TOOL_NAME,
   GET_EXCHANGE_RATE_TOOL_NAME,
   SEARCH_TRIP_DOCUMENTS_TOOL_NAME,
   GET_WEATHER_TOOL_NAME,
@@ -6384,6 +6421,13 @@ async function executeRestrictedSoftTool(
           ? `${answer}\n\nSources:\n${citations.map((url, i) => `[${i + 1}] ${url}`).join("\n")}`
           : answer
         : "No results found for this search.";
+    }
+
+    if (name === FETCH_PAGE_TOOL_NAME) {
+      const parsed = FetchPageToolPayload.safeParse(JSON.parse(args));
+      if (!parsed.success)
+        return "Invalid URL — ask the user to provide a valid https:// link.";
+      return await fetchPage(parsed.data.url);
     }
 
     if (name === CONSULT_EXPERTS_TOOL_NAME) {

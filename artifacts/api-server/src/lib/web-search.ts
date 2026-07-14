@@ -1,5 +1,7 @@
 import { callModel, getModels } from "./ai-client";
 import { getConfig } from "./app-config";
+import { env } from "./env";
+import { withRetry } from "./retry";
 
 /**
  * Live web search / current-events lookups for elAIne, backed by Perplexity
@@ -32,6 +34,54 @@ const DEFAULT_SEARCH_TIMEOUT_MS = 15_000;
 // a small, chat-bubble-sized preview, not a gallery.
 const MAX_IMAGES = 4;
 
+// Jina Reader API converts any URL to clean markdown text for LLM consumption.
+// We trim to 6 000 chars so a long page doesn't blow the context window.
+const FETCH_PAGE_MAX_CHARS = 6_000;
+const FETCH_PAGE_TIMEOUT_MS = 20_000;
+
+/**
+ * Fetch and return the text content of a specific web page using Jina Reader
+ * (`r.jina.ai`). Jina converts the page to clean, LLM-friendly markdown.
+ * Requires JINA_API_KEY; returns an error string when the key is absent so
+ * the model can relay a graceful message instead of crashing.
+ */
+export async function fetchPage(url: string): Promise<string> {
+  if (!env.jinaApiKey) {
+    return "Page reading is unavailable right now (no reader API key configured).";
+  }
+  const cleanUrl = url.trim();
+  const readerUrl = `https://r.jina.ai/${cleanUrl}`;
+  try {
+    const resp = await withRetry(
+      () =>
+        fetch(readerUrl, {
+          headers: {
+            Authorization: `Bearer ${env.jinaApiKey}`,
+            Accept: "text/plain",
+            "X-Return-Format": "markdown",
+          },
+          signal: AbortSignal.timeout(FETCH_PAGE_TIMEOUT_MS),
+        }),
+      { label: "jina-reader" },
+    );
+    if (!resp.ok) {
+      return `Could not read that page (HTTP ${resp.status}). The URL may require login or be unavailable.`;
+    }
+    const text = await resp.text();
+    const trimmed = text.trim();
+    if (!trimmed) {
+      return "The page loaded but contained no readable text content.";
+    }
+    if (trimmed.length > FETCH_PAGE_MAX_CHARS) {
+      return trimmed.slice(0, FETCH_PAGE_MAX_CHARS) + "\n\n[...page content truncated for length...]";
+    }
+    return trimmed;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return `Failed to read the page: ${msg}`;
+  }
+}
+
 export async function webSearch(query: string): Promise<WebSearchResult> {
   const trimmed = query.trim().slice(0, 500);
   if (!trimmed) return { answer: "", citations: [], images: [] };
@@ -45,7 +95,7 @@ export async function webSearch(query: string): Promise<WebSearchResult> {
           {
             role: "system",
             content:
-              "You are a live web search tool for a travel-planning assistant. Answer the user's query using current, up-to-date web results. Be concise and factual (a few sentences to a short paragraph). Prioritize recency for anything time-sensitive (prices, hours, weather, events, news). If you can't find a reliable answer, say so plainly instead of guessing.",
+              "You are a live web search tool for a household AI assistant. Answer the user's query using current, up-to-date web results. Be concise and factual (a few sentences to a short paragraph). Prioritize recency for anything time-sensitive (prices, hours, weather, events, news). If you can't find a reliable answer, say so plainly instead of guessing.",
           },
           { role: "user", content: trimmed },
         ],

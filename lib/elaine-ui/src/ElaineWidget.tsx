@@ -211,7 +211,12 @@ export function ElaineWidget({
   });
 
   useEffect(() => {
-    if (open) chat.endRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (open)
+      chat.endRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "nearest",
+      });
   }, [messages, open, isStreaming, streamingContent, chat.endRef]);
 
   // Close the history panel whenever the widget itself closes, so reopening
@@ -275,9 +280,9 @@ export function ElaineWidget({
             className="flex flex-col overflow-hidden rounded-2xl border border-card-border bg-card shadow-2xl"
             style={{
               width: isDesktop ? `${currentSize.w}px` : "calc(100vw - 2rem)",
-              height: isDesktop ? `${currentSize.h}px` : "calc(100vh - 6rem)",
+              height: isDesktop ? `${currentSize.h}px` : "calc(100svh - 5rem)",
               maxWidth: "calc(100vw - 2rem)",
-              maxHeight: "calc(100vh - 6rem)",
+              maxHeight: "calc(100svh - 5rem)",
               position: "relative",
             }}
           >

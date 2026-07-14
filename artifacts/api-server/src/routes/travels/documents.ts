@@ -317,6 +317,15 @@ function activityDedupeKey(date: string, sourceField: string): string {
   return `${date}::${sourceField}`;
 }
 
+/** Sort a day's activities chronologically. Activities with no time sort last. */
+function sortActivitiesByTime(
+  activities: ItineraryActivity[],
+): ItineraryActivity[] {
+  return [...activities].sort((a, b) =>
+    (a.time || "99:99").localeCompare(b.time || "99:99"),
+  );
+}
+
 export async function syncItineraryFromDocument(
   tripId: number,
   docId: number,
@@ -446,6 +455,14 @@ export async function syncItineraryFromDocument(
     (d) => !(d.title === "Travel Day" && d.activities.length === 0),
   );
   itinerary.days.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+
+  // Sort activities within each day chronologically so that e.g. a 10:25 AM
+  // flight appears before a 3:00 PM hotel check-in regardless of which
+  // document was processed first. Activities without a time sort to the end.
+  itinerary.days = itinerary.days.map((day) => ({
+    ...day,
+    activities: sortActivitiesByTime(day.activities),
+  }));
 
   await db
     .update(travelsTrips)

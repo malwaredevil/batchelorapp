@@ -238,6 +238,25 @@ If dates are unspecified, create 5 days labelled Day 1, Day 2, etc. Return ONLY 
     newItinerary = parsed;
   }
 
+  // Sort activities within each day chronologically before persisting.
+  // AI output is usually ordered, but this guarantees it regardless.
+  if (
+    typeof newItinerary === "object" &&
+    newItinerary !== null &&
+    "days" in newItinerary
+  ) {
+    const itin = newItinerary as {
+      days: Array<{ activities?: Array<{ time?: string }> }>;
+    };
+    for (const day of itin.days) {
+      if (Array.isArray(day.activities)) {
+        day.activities.sort((a, b) =>
+          (a.time || "99:99").localeCompare(b.time || "99:99"),
+        );
+      }
+    }
+  }
+
   await db
     .update(travelsTrips)
     .set({ itinerary: newItinerary as Record<string, unknown> })

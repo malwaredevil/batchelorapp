@@ -52,6 +52,7 @@ import type {
   MergeQuiltingCategory200,
   MessengerAttachmentUploadResult,
   MessengerConversationSummary,
+  MessengerCreateConversationBody,
   MessengerEditMessageBody,
   MessengerEditMessageResponse,
   MessengerHouseholdMember,
@@ -59,6 +60,7 @@ import type {
   MessengerMessengerMessage,
   MessengerSendMessageBody,
   MessengerUnreadCountResponse,
+  MessengerUpdateConversationBody,
   OfficeNote,
   OfficeNoteInput,
   OrnamentsBarcodeLookupInput,
@@ -13160,6 +13162,77 @@ export function useListConversations<TData = Awaited<ReturnType<typeof listConve
 
 
 
+export const getCreateConversationUrl = () => {
+
+
+
+
+  return `/api/messenger/conversations`
+}
+
+/**
+ * @summary Create a new conversation
+ */
+export const createConversation = async (messengerCreateConversationBody: MessengerCreateConversationBody, options?: RequestInit): Promise<MessengerConversationSummary> => {
+
+  return customFetch<MessengerConversationSummary>(getCreateConversationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      messengerCreateConversationBody,)
+  }
+);}
+
+
+
+
+export const getCreateConversationMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createConversation>>, TError,{data: BodyType<MessengerCreateConversationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createConversation>>, TError,{data: BodyType<MessengerCreateConversationBody>}, TContext> => {
+
+const mutationKey = ['createConversation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createConversation>>, {data: BodyType<MessengerCreateConversationBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createConversation(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateConversationMutationResult = NonNullable<Awaited<ReturnType<typeof createConversation>>>
+    export type CreateConversationMutationBody = BodyType<MessengerCreateConversationBody>
+    export type CreateConversationMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a new conversation
+ */
+export const useCreateConversation = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createConversation>>, TError,{data: BodyType<MessengerCreateConversationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createConversation>>,
+        TError,
+        {data: BodyType<MessengerCreateConversationBody>},
+        TContext
+      > => {
+      return useMutation(getCreateConversationMutationOptions(options));
+    }
+
 export const getGetUnreadCountUrl = () => {
 
 
@@ -13236,6 +13309,148 @@ export function useGetUnreadCount<TData = Awaited<ReturnType<typeof getUnreadCou
 
 
 
+
+export const getUpdateConversationUrl = (id: number,) => {
+
+
+
+
+  return `/api/messenger/conversations/${id}`
+}
+
+/**
+ * @summary Rename or archive/unarchive a conversation
+ */
+export const updateConversation = async (id: number,
+    messengerUpdateConversationBody: MessengerUpdateConversationBody, options?: RequestInit): Promise<MessengerConversationSummary> => {
+
+  return customFetch<MessengerConversationSummary>(getUpdateConversationUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      messengerUpdateConversationBody,)
+  }
+);}
+
+
+
+
+export const getUpdateConversationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateConversation>>, TError,{id: number;data: BodyType<MessengerUpdateConversationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateConversation>>, TError,{id: number;data: BodyType<MessengerUpdateConversationBody>}, TContext> => {
+
+const mutationKey = ['updateConversation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateConversation>>, {id: number;data: BodyType<MessengerUpdateConversationBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateConversation(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateConversationMutationResult = NonNullable<Awaited<ReturnType<typeof updateConversation>>>
+    export type UpdateConversationMutationBody = BodyType<MessengerUpdateConversationBody>
+    export type UpdateConversationMutationError = ErrorType<void>
+
+    /**
+ * @summary Rename or archive/unarchive a conversation
+ */
+export const useUpdateConversation = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateConversation>>, TError,{id: number;data: BodyType<MessengerUpdateConversationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateConversation>>,
+        TError,
+        {id: number;data: BodyType<MessengerUpdateConversationBody>},
+        TContext
+      > => {
+      return useMutation(getUpdateConversationMutationOptions(options));
+    }
+
+export const getDeleteConversationUrl = (id: number,) => {
+
+
+
+
+  return `/api/messenger/conversations/${id}`
+}
+
+/**
+ * @summary Permanently delete a conversation and all its messages
+ */
+export const deleteConversation = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteConversationUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteConversationMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteConversation>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteConversation>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteConversation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteConversation>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteConversation(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteConversationMutationResult = NonNullable<Awaited<ReturnType<typeof deleteConversation>>>
+
+    export type DeleteConversationMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Permanently delete a conversation and all its messages
+ */
+export const useDeleteConversation = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteConversation>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteConversation>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteConversationMutationOptions(options));
+    }
 
 export const getGetConversationMessagesUrl = (id: number,
     params?: GetConversationMessagesParams,) => {
@@ -13398,6 +13613,76 @@ export const useSendMessage = <TError = ErrorType<unknown>,
       return useMutation(getSendMessageMutationOptions(options));
     }
 
+export const getClearConversationUrl = (id: number,) => {
+
+
+
+
+  return `/api/messenger/conversations/${id}/messages`
+}
+
+/**
+ * @summary Clear all messages in a conversation (soft-deletes everything, keeps the conversation)
+ */
+export const clearConversation = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getClearConversationUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getClearConversationMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearConversation>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof clearConversation>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['clearConversation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof clearConversation>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  clearConversation(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ClearConversationMutationResult = NonNullable<Awaited<ReturnType<typeof clearConversation>>>
+
+    export type ClearConversationMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Clear all messages in a conversation (soft-deletes everything, keeps the conversation)
+ */
+export const useClearConversation = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearConversation>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof clearConversation>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getClearConversationMutationOptions(options));
+    }
+
 export const getMarkMessageReadUrl = (id: number,) => {
 
 
@@ -13466,76 +13751,6 @@ export const useMarkMessageRead = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getMarkMessageReadMutationOptions(options));
-    }
-
-export const getClearConversationUrl = (id: number,) => {
-
-
-
-
-  return `/api/messenger/conversations/${id}`
-}
-
-/**
- * @summary Clear all messages in a conversation (soft-deletes everything)
- */
-export const clearConversation = async (id: number, options?: RequestInit): Promise<void> => {
-
-  return customFetch<void>(getClearConversationUrl(id),
-  {
-    ...options,
-    method: 'DELETE'
-
-
-  }
-);}
-
-
-
-
-export const getClearConversationMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearConversation>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof clearConversation>>, TError,{id: number}, TContext> => {
-
-const mutationKey = ['clearConversation'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof clearConversation>>, {id: number}> = (props) => {
-          const {id} = props ?? {};
-
-          return  clearConversation(id,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type ClearConversationMutationResult = NonNullable<Awaited<ReturnType<typeof clearConversation>>>
-
-    export type ClearConversationMutationError = ErrorType<unknown>
-
-    /**
- * @summary Clear all messages in a conversation (soft-deletes everything)
- */
-export const useClearConversation = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearConversation>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof clearConversation>>,
-        TError,
-        {id: number},
-        TContext
-      > => {
-      return useMutation(getClearConversationMutationOptions(options));
     }
 
 export const getDeleteMessageUrl = (id: number,) => {

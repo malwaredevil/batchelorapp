@@ -11,6 +11,7 @@ import type { MessengerSendMessageBody } from "@workspace/api-client-react";
 
 interface MessengerChatPanelProps {
   currentUserId: number;
+  conversationId?: number;
   isOpen: boolean;
   prefillInput?: string;
   onPrefillApplied?: () => void;
@@ -79,6 +80,7 @@ function groupByDate(
 
 export function MessengerChatPanel({
   currentUserId,
+  conversationId,
   isOpen,
   prefillInput,
   onPrefillApplied,
@@ -108,7 +110,7 @@ export function MessengerChatPanel({
     deleteMessage,
     editMessage,
     clearConversation,
-  } = useMessengerChat(isOpen);
+  } = useMessengerChat(isOpen, conversationId);
 
   // The only editable message: the last non-deleted message sent by the current user,
   // AND it must be the last non-deleted message in the conversation overall.

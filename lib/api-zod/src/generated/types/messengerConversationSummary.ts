@@ -9,6 +9,8 @@ import type { MessengerMessengerMessage } from './messengerMessengerMessage';
 
 export interface MessengerConversationSummary {
   id: number;
+  name?: string | null;
+  archivedAt?: Date | null;
   createdAt: Date;
   lastMessage?: MessengerMessengerMessage;
   unreadCount: number;

@@ -3,6 +3,7 @@ export { MessengerNavIcon } from "./MessengerNavIcon";
 export { MessengerNotification } from "./MessengerNotification";
 export { MessengerChatPanel } from "./MessengerChatPanel";
 export { MessengerContactsPanel } from "./MessengerContactsPanel";
+export { MessengerConversationSidebar } from "./MessengerConversationSidebar";
 export { MessageItem } from "./MessageItem";
 export { ImageModal } from "./ImageModal";
 export { LinkPreviewCard } from "./LinkPreviewCard";

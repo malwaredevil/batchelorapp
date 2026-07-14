@@ -36,8 +36,7 @@ export function MessengerWidget({ messengerPageHref }: MessengerWidgetProps) {
       refetchInterval: isOpen ? 5_000 : 60_000,
     } as UseQueryOptions<MessengerConversationSummary[]>,
   });
-  const firstActiveId =
-    conversations?.find((c) => !c.archivedAt)?.id ?? null;
+  const firstActiveId = conversations?.find((c) => !c.archivedAt)?.id ?? null;
   // effectiveConvId is what BOTH the sidebar and chat panel use: the
   // explicitly-selected conversation, or the first active one as fallback.
   const effectiveConvId = selectedConvId ?? firstActiveId;

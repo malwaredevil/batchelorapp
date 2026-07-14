@@ -1860,6 +1860,7 @@ export interface MessengerMessengerMessage {
   createdAt: string;
   readAt?: string | null;
   deletedAt?: string | null;
+  editedAt?: string | null;
   attachments?: MessengerMessengerAttachment[];
 }
 
@@ -1898,6 +1899,15 @@ export interface MessengerHouseholdMember {
   id: number;
   displayName?: string | null;
   email: string;
+}
+
+export interface MessengerEditMessageBody {
+  body: string;
+}
+
+export interface MessengerEditMessageResponse {
+  id: number;
+  editedAt: string;
 }
 
 export interface MessengerLinkPreview {

@@ -397,4 +397,28 @@ async function generateElaineReply(
   );
 }
 
+// -----------------------------------------------------------------------
+// DELETE /conversations/:id — soft-delete all messages (clear history)
+// -----------------------------------------------------------------------
+router.delete("/conversations/:id", async (req, res) => {
+  const convId = Number(req.params.id);
+  if (!Number.isFinite(convId) || convId <= 0) {
+    res.status(400).json({ error: "Invalid conversation id" });
+    return;
+  }
+
+  await db
+    .update(messengerMessages)
+    .set({ deletedAt: new Date() })
+    .where(
+      and(
+        eq(messengerMessages.conversationId, convId),
+        isNull(messengerMessages.deletedAt),
+      ),
+    );
+
+  logger.info({ conversationId: convId }, "messenger: conversation cleared");
+  res.status(204).send();
+});
+
 export default router;

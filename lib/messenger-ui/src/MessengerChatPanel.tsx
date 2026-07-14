@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Send, Paperclip, Loader2, MessageSquare } from "lucide-react";
+import { Send, Paperclip, Loader2, MessageSquare, Trash2 } from "lucide-react";
 import { useMessengerChat } from "./useMessengerChat";
 import { MessageItem } from "./MessageItem";
 import {
@@ -96,14 +96,31 @@ export function MessengerChatPanel({
   const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+
   const {
+    convId,
     messages,
     isLoading,
     isSending,
     sendMessage,
     markRead,
     deleteMessage,
+    editMessage,
+    clearConversation,
   } = useMessengerChat(isOpen);
+
+  // The only editable message: the last non-deleted message sent by the current user,
+  // AND it must be the last non-deleted message in the conversation overall.
+  const nonDeletedMessages = messages.filter((m) => !m.deletedAt);
+  const lastMsg = nonDeletedMessages[nonDeletedMessages.length - 1];
+  const editableMessageId =
+    lastMsg && lastMsg.senderId === currentUserId ? lastMsg.id : null;
+
+  const handleClear = useCallback(async () => {
+    await clearConversation();
+    setShowClearConfirm(false);
+  }, [clearConversation]);
 
   const { mutateAsync: uploadAttachment } = useUploadAttachment();
   const { data: rawMembers = [] } = useListHouseholdMembers();
@@ -305,6 +322,79 @@ export function MessengerChatPanel({
         position: "relative",
       }}
     >
+      {/* Clear history bar */}
+      {nonDeletedMessages.length > 0 && (
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            padding: "4px 12px 0",
+            borderBottom: "1px solid #f3f4f6",
+          }}
+        >
+          {showClearConfirm ? (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 12,
+                color: "#374151",
+              }}
+            >
+              <span>Clear all messages?</span>
+              <button
+                onClick={() => void handleClear()}
+                style={{
+                  background: "#ef4444",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 5,
+                  padding: "2px 8px",
+                  fontSize: 11,
+                  cursor: "pointer",
+                }}
+              >
+                Clear
+              </button>
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                style={{
+                  background: "#f3f4f6",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 5,
+                  padding: "2px 8px",
+                  fontSize: 11,
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowClearConfirm(true)}
+              title="Clear conversation history"
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "#9ca3af",
+                padding: "2px 4px",
+                display: "flex",
+                alignItems: "center",
+                gap: 3,
+                fontSize: 11,
+                borderRadius: 4,
+              }}
+            >
+              <Trash2 size={11} />
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Message list */}
       <div
         ref={listRef}
@@ -374,7 +464,9 @@ export function MessengerChatPanel({
                     key={msg.id}
                     message={msg}
                     isOwn={msg.senderId === currentUserId}
+                    canEdit={msg.id === editableMessageId}
                     onDelete={deleteMessage}
+                    onEdit={editMessage}
                   />
                 );
               })}

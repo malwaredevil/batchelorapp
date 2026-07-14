@@ -4027,6 +4027,21 @@ paths:
                 properties:
                   markedCount:
                     type: integer
+  /messenger/conversations/{id}:
+    delete:
+      operationId: clearConversation
+      tags:
+        - messenger
+      summary: Clear all messages in a conversation (soft-deletes everything)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Cleared
   /messenger/messages/{id}:
     delete:
       operationId: deleteMessage
@@ -4042,6 +4057,34 @@ paths:
       responses:
         "204":
           description: Deleted
+    patch:
+      operationId: editMessage
+      tags:
+        - messenger
+      summary: Edit the body of your own last message (only allowed if no later message exists)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessengerEditMessageBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessengerEditMessageResponse"
+        "403":
+          description: Not your message
+        "409":
+          description: A later message exists — edit not allowed
   /messenger/attachments/upload:
     post:
       operationId: uploadAttachment
@@ -7454,6 +7497,10 @@ components:
           type: string
           format: date-time
           nullable: true
+        editedAt:
+          type: string
+          format: date-time
+          nullable: true
         attachments:
           type: array
           items:
@@ -7545,6 +7592,24 @@ components:
           nullable: true
         email:
           type: string
+    MessengerEditMessageBody:
+      type: object
+      required:
+        - body
+      properties:
+        body:
+          type: string
+    MessengerEditMessageResponse:
+      type: object
+      required:
+        - id
+        - editedAt
+      properties:
+        id:
+          type: integer
+        editedAt:
+          type: string
+          format: date-time
     MessengerLinkPreview:
       type: object
       required:

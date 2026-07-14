@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Trash2, FileText, Sparkles } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Trash2, FileText, Sparkles, Pencil, Check, X } from "lucide-react";
 import type { MessengerMessengerMessage } from "@workspace/api-client-react";
 import { LinkPreviewCard } from "./LinkPreviewCard";
 import { ImageModal } from "./ImageModal";
@@ -7,7 +7,9 @@ import { ImageModal } from "./ImageModal";
 interface MessageItemProps {
   message: MessengerMessengerMessage;
   isOwn: boolean;
+  canEdit?: boolean;
   onDelete?: (id: number) => void;
+  onEdit?: (id: number, newBody: string) => Promise<void>;
 }
 
 const URL_RE = /https?:\/\/[^\s]+/g;
@@ -16,15 +18,32 @@ function extractUrls(text: string): string[] {
   return Array.from(new Set(text.match(URL_RE) ?? []));
 }
 
-export function MessageItem({ message, isOwn, onDelete }: MessageItemProps) {
+export function MessageItem({
+  message,
+  isOwn,
+  canEdit,
+  onDelete,
+  onEdit,
+}: MessageItemProps) {
   const [hovered, setHovered] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState(message.body);
+  const [saving, setSaving] = useState(false);
   const [imageModal, setImageModal] = useState<{
     url: string;
     name: string;
   } | null>(null);
+  const editRef = useRef<HTMLTextAreaElement>(null);
 
   const isElaine = message.senderId === null;
   const isDeleted = !!message.deletedAt;
+
+  useEffect(() => {
+    if (editing && editRef.current) {
+      editRef.current.focus();
+      editRef.current.select();
+    }
+  }, [editing]);
 
   const urls = isDeleted ? [] : extractUrls(message.body);
   const firstUrl = urls[0] ?? null;
@@ -42,6 +61,35 @@ export function MessageItem({ message, isOwn, onDelete }: MessageItemProps) {
     : isElaine || isOwn
       ? "#fff"
       : "#111827";
+
+  const handleSaveEdit = async () => {
+    if (!onEdit || !editValue.trim() || editValue.trim() === message.body) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      await onEdit(message.id, editValue.trim());
+    } finally {
+      setSaving(false);
+      setEditing(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditValue(message.body);
+    setEditing(false);
+  };
+
+  const handleEditKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      void handleSaveEdit();
+    }
+    if (e.key === "Escape") {
+      handleCancelEdit();
+    }
+  };
 
   return (
     <div
@@ -87,43 +135,136 @@ export function MessageItem({ message, isOwn, onDelete }: MessageItemProps) {
 
       {/* Bubble row */}
       <div style={{ display: "flex", alignItems: "flex-end", gap: 6 }}>
-        {isOwn && hovered && onDelete && !isDeleted && (
-          <button
-            onClick={() => onDelete(message.id)}
-            aria-label="Delete message"
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "#ef4444",
-              padding: 4,
-              borderRadius: 4,
-              display: "flex",
-            }}
-          >
-            <Trash2 size={13} />
-          </button>
+        {isOwn && hovered && !isDeleted && !editing && (
+          <div style={{ display: "flex", gap: 2 }}>
+            {canEdit && onEdit && (
+              <button
+                onClick={() => setEditing(true)}
+                aria-label="Edit message"
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "#6b7280",
+                  padding: 4,
+                  borderRadius: 4,
+                  display: "flex",
+                }}
+              >
+                <Pencil size={13} />
+              </button>
+            )}
+            {onDelete && (
+              <button
+                onClick={() => onDelete(message.id)}
+                aria-label="Delete message"
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "#ef4444",
+                  padding: 4,
+                  borderRadius: 4,
+                  display: "flex",
+                }}
+              >
+                <Trash2 size={13} />
+              </button>
+            )}
+          </div>
         )}
 
         <div style={{ maxWidth: 280 }}>
-          {/* Bubble */}
-          <div
-            style={{
-              background: bubbleBg,
-              color: bubbleColor,
-              borderRadius: isOwn ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
-              padding: isDeleted ? "6px 12px" : "8px 12px",
-              fontSize: 14,
-              lineHeight: 1.5,
-              wordBreak: "break-word",
-              fontStyle: isDeleted ? "italic" : undefined,
-            }}
-          >
-            {isDeleted ? "Message deleted" : message.body}
-          </div>
+          {/* Bubble — normal or edit mode */}
+          {editing ? (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+                minWidth: 180,
+              }}
+            >
+              <textarea
+                ref={editRef}
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onKeyDown={handleEditKeyDown}
+                rows={2}
+                style={{
+                  resize: "none",
+                  border: "1.5px solid #3b82f6",
+                  borderRadius: 8,
+                  padding: "6px 10px",
+                  fontSize: 14,
+                  lineHeight: 1.5,
+                  outline: "none",
+                  fontFamily: "inherit",
+                  minWidth: 180,
+                }}
+              />
+              <div
+                style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}
+              >
+                <button
+                  onClick={handleCancelEdit}
+                  disabled={saving}
+                  aria-label="Cancel edit"
+                  style={{
+                    background: "#f3f4f6",
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                    padding: "2px 8px",
+                    fontSize: 12,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 3,
+                  }}
+                >
+                  <X size={11} /> Cancel
+                </button>
+                <button
+                  onClick={() => void handleSaveEdit()}
+                  disabled={saving || !editValue.trim()}
+                  aria-label="Save edit"
+                  style={{
+                    background: "#3b82f6",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 6,
+                    cursor: saving ? "not-allowed" : "pointer",
+                    padding: "2px 8px",
+                    fontSize: 12,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 3,
+                    opacity: saving ? 0.7 : 1,
+                  }}
+                >
+                  <Check size={11} /> Save
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div
+              style={{
+                background: bubbleBg,
+                color: bubbleColor,
+                borderRadius: isOwn ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+                padding: isDeleted ? "6px 12px" : "8px 12px",
+                fontSize: 14,
+                lineHeight: 1.5,
+                wordBreak: "break-word",
+                fontStyle: isDeleted ? "italic" : undefined,
+              }}
+            >
+              {isDeleted ? "Message deleted" : message.body}
+            </div>
+          )}
 
           {/* Link preview */}
-          {firstUrl && !isDeleted && (
+          {!editing && firstUrl && !isDeleted && (
             <div
               style={{
                 display: "flex",
@@ -135,7 +276,7 @@ export function MessageItem({ message, isOwn, onDelete }: MessageItemProps) {
           )}
 
           {/* Attachments */}
-          {!isDeleted &&
+          {!editing && !isDeleted &&
             message.attachments &&
             message.attachments.length > 0 && (
               <div
@@ -207,7 +348,7 @@ export function MessageItem({ message, isOwn, onDelete }: MessageItemProps) {
         </div>
       </div>
 
-      {/* Timestamp */}
+      {/* Timestamp + edited indicator */}
       <div
         style={{
           fontSize: 10,
@@ -215,12 +356,19 @@ export function MessageItem({ message, isOwn, onDelete }: MessageItemProps) {
           marginTop: 2,
           paddingRight: isOwn ? 4 : 0,
           paddingLeft: isOwn ? 0 : 4,
+          display: "flex",
+          gap: 4,
         }}
       >
-        {new Date(message.createdAt).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        })}
+        <span>
+          {new Date(message.createdAt).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </span>
+        {message.editedAt && !isDeleted && (
+          <span style={{ fontStyle: "italic" }}>edited</span>
+        )}
       </div>
 
       {/* Image modal */}

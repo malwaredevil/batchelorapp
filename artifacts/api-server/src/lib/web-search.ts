@@ -73,7 +73,10 @@ export async function fetchPage(url: string): Promise<string> {
       return "The page loaded but contained no readable text content.";
     }
     if (trimmed.length > FETCH_PAGE_MAX_CHARS) {
-      return trimmed.slice(0, FETCH_PAGE_MAX_CHARS) + "\n\n[...page content truncated for length...]";
+      return (
+        trimmed.slice(0, FETCH_PAGE_MAX_CHARS) +
+        "\n\n[...page content truncated for length...]"
+      );
     }
     return trimmed;
   } catch (err) {

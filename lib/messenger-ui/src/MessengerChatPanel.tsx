@@ -2,12 +2,48 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Send, Paperclip, Loader2, MessageSquare } from "lucide-react";
 import { useMessengerChat } from "./useMessengerChat";
 import { MessageItem } from "./MessageItem";
-import { useUploadAttachment } from "@workspace/api-client-react";
+import {
+  useUploadAttachment,
+  useListHouseholdMembers,
+  type MessengerHouseholdMember,
+} from "@workspace/api-client-react";
 import type { MessengerSendMessageBody } from "@workspace/api-client-react";
 
 interface MessengerChatPanelProps {
   currentUserId: number;
   isOpen: boolean;
+  prefillInput?: string;
+  onPrefillApplied?: () => void;
+}
+
+interface MentionAnchor {
+  start: number;
+  query: string;
+  selectIdx: number;
+}
+
+type MemberEntry = { id: number; displayName: string | null; email: string };
+const ELAINE_ENTRY: MemberEntry = {
+  id: -1,
+  displayName: "Elaine",
+  email: "elaine@app.batchelor.app",
+};
+
+function memberName(m: MemberEntry): string {
+  return m.displayName ?? m.email.split("@")[0] ?? "?";
+}
+
+function findMentionAnchor(
+  text: string,
+  cursor: number,
+): { start: number; query: string } | null {
+  for (let i = cursor - 1; i >= 0; i--) {
+    if (text[i] === "@") {
+      return { start: i, query: text.slice(i + 1, cursor) };
+    }
+    if (/\s/.test(text[i])) break;
+  }
+  return null;
 }
 
 function formatDateLabel(dateStr: string): string {
@@ -44,15 +80,21 @@ function groupByDate(
 export function MessengerChatPanel({
   currentUserId,
   isOpen,
+  prefillInput,
+  onPrefillApplied,
 }: MessengerChatPanelProps) {
   const [input, setInput] = useState("");
   const [pendingAttachments, setPendingAttachments] = useState<
     NonNullable<MessengerSendMessageBody["attachments"]>
   >([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [mentionAnchor, setMentionAnchor] = useState<MentionAnchor | null>(
+    null,
+  );
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const {
     messages,
@@ -61,10 +103,44 @@ export function MessengerChatPanel({
     sendMessage,
     markRead,
     deleteMessage,
-    convId,
   } = useMessengerChat(isOpen);
 
   const { mutateAsync: uploadAttachment } = useUploadAttachment();
+  const { data: rawMembers = [] } = useListHouseholdMembers();
+
+  const allMembers: MemberEntry[] = [
+    ELAINE_ENTRY,
+    ...(rawMembers as MessengerHouseholdMember[]).map((m) => ({
+      id: m.id,
+      displayName: m.displayName ?? null,
+      email: m.email,
+    })),
+  ];
+
+  const filteredMembers = mentionAnchor
+    ? allMembers.filter((m) =>
+        memberName(m)
+          .toLowerCase()
+          .startsWith(mentionAnchor.query.toLowerCase()),
+      )
+    : [];
+
+  // Apply prefillInput from contacts panel
+  useEffect(() => {
+    if (!prefillInput) return;
+    setInput(prefillInput);
+    setMentionAnchor(null);
+    setTimeout(() => {
+      const ta = textareaRef.current;
+      if (ta) {
+        ta.style.height = "auto";
+        ta.style.height = `${Math.min(ta.scrollHeight, 100)}px`;
+        ta.focus();
+        ta.setSelectionRange(prefillInput.length, prefillInput.length);
+      }
+      onPrefillApplied?.();
+    }, 30);
+  }, [prefillInput, onPrefillApplied]);
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -91,10 +167,90 @@ export function MessengerChatPanel({
     const attachments = [...pendingAttachments];
     setInput("");
     setPendingAttachments([]);
+    setMentionAnchor(null);
     await sendMessage(body, attachments);
   }, [input, pendingAttachments, sendMessage]);
 
+  const selectMention = useCallback(
+    (member: MemberEntry) => {
+      if (!mentionAnchor) return;
+      const name = memberName(member);
+      const before = input.slice(0, mentionAnchor.start);
+      const after = input.slice(
+        mentionAnchor.start + 1 + mentionAnchor.query.length,
+      );
+      const newInput = `${before}@${name} ${after}`;
+      setInput(newInput);
+      setMentionAnchor(null);
+      setTimeout(() => {
+        const ta = textareaRef.current;
+        if (ta) {
+          ta.style.height = "auto";
+          ta.style.height = `${Math.min(ta.scrollHeight, 100)}px`;
+          ta.focus();
+          const pos = before.length + name.length + 2;
+          ta.setSelectionRange(pos, pos);
+        }
+      }, 0);
+    },
+    [input, mentionAnchor],
+  );
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    const cursor = e.target.selectionStart ?? val.length;
+    setInput(val);
+    const anchor = findMentionAnchor(val, cursor);
+    if (anchor) {
+      const q = anchor.query;
+      const matches = allMembers.filter((m) =>
+        memberName(m).toLowerCase().startsWith(q.toLowerCase()),
+      );
+      setMentionAnchor(matches.length > 0 ? { ...anchor, selectIdx: 0 } : null);
+    } else {
+      setMentionAnchor(null);
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionAnchor && filteredMembers.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setMentionAnchor((prev) =>
+          prev
+            ? {
+                ...prev,
+                selectIdx: (prev.selectIdx + 1) % filteredMembers.length,
+              }
+            : null,
+        );
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setMentionAnchor((prev) =>
+          prev
+            ? {
+                ...prev,
+                selectIdx:
+                  (prev.selectIdx - 1 + filteredMembers.length) %
+                  filteredMembers.length,
+              }
+            : null,
+        );
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        selectMention(filteredMembers[mentionAnchor.selectIdx]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setMentionAnchor(null);
+        return;
+      }
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -143,6 +299,7 @@ export function MessengerChatPanel({
         height: "100%",
         overflow: "hidden",
         background: "#fff",
+        position: "relative",
       }}
     >
       {/* Message list */}
@@ -283,6 +440,110 @@ export function MessengerChatPanel({
         </div>
       )}
 
+      {/* @mention autocomplete popup */}
+      {mentionAnchor && filteredMembers.length > 0 && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 58,
+            left: 8,
+            right: 8,
+            background: "#fff",
+            border: "1px solid #e5e7eb",
+            borderRadius: 10,
+            boxShadow:
+              "0 -4px 20px rgba(0,0,0,0.10), 0 4px 16px rgba(0,0,0,0.06)",
+            zIndex: 100,
+            overflow: "hidden",
+            maxHeight: 220,
+            overflowY: "auto",
+          }}
+        >
+          <div
+            style={{
+              padding: "5px 12px 3px",
+              fontSize: 10,
+              color: "#9ca3af",
+              fontWeight: 600,
+              letterSpacing: "0.05em",
+              textTransform: "uppercase",
+              borderBottom: "1px solid #f3f4f6",
+            }}
+          >
+            Mention
+          </div>
+          {filteredMembers.map((m, i) => {
+            const name = memberName(m);
+            const isElaine = m.id === -1;
+            const isSelected = i === mentionAnchor.selectIdx;
+            return (
+              <div
+                key={m.id}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  selectMention(m);
+                }}
+                style={{
+                  padding: "7px 12px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  cursor: "pointer",
+                  background: isSelected ? "#eff6ff" : "transparent",
+                  borderBottom:
+                    i < filteredMembers.length - 1
+                      ? "1px solid #f9fafb"
+                      : "none",
+                }}
+                onMouseEnter={() =>
+                  setMentionAnchor((prev) =>
+                    prev ? { ...prev, selectIdx: i } : null,
+                  )
+                }
+              >
+                <div
+                  style={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: "50%",
+                    background: isElaine
+                      ? "linear-gradient(135deg, #7c3aed, #4f46e5)"
+                      : "linear-gradient(135deg, #3b82f6, #2563eb)",
+                    color: "#fff",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: isElaine ? 11 : 12,
+                    fontWeight: 700,
+                    flexShrink: 0,
+                  }}
+                >
+                  {isElaine ? "✦" : (name[0]?.toUpperCase() ?? "?")}
+                </div>
+                <span style={{ fontSize: 13, fontWeight: 500, color: "#111827" }}>
+                  {name}
+                </span>
+                {isElaine && (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      color: "#7c3aed",
+                      background: "#f3e8ff",
+                      borderRadius: 4,
+                      padding: "1px 5px",
+                      fontWeight: 600,
+                      marginLeft: "auto",
+                    }}
+                  >
+                    AI
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Composer */}
       <div
         style={{
@@ -328,8 +589,9 @@ export function MessengerChatPanel({
         </button>
 
         <textarea
+          ref={textareaRef}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={handleChange}
           onKeyDown={handleKeyDown}
           placeholder="Message… (@elaine to ask AI)"
           rows={1}

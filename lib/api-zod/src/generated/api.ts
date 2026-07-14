@@ -4323,6 +4323,17 @@ export const UploadAttachmentBody = zod.object({
 
 
 /**
+ * @summary List all household member accounts (for @mention and contacts panel)
+ */
+export const ListHouseholdMembersResponseItem = zod.object({
+  "id": zod.number(),
+  "displayName": zod.string().nullish(),
+  "email": zod.string()
+})
+export const ListHouseholdMembersResponse = zod.array(ListHouseholdMembersResponseItem)
+
+
+/**
  * @summary Get cached OG link preview for a URL
  */
 export const GetLinkPreviewQueryParams = zod.object({

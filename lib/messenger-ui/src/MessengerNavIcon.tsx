@@ -1,14 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { MessageSquare, X, ExternalLink } from "lucide-react";
+import { MessageSquare, X, ExternalLink, Users } from "lucide-react";
 import { useAuth } from "@workspace/web-core/auth";
 import { useMessengerUnreadCount } from "./useMessengerUnreadCount";
 import { MessengerChatPanel } from "./MessengerChatPanel";
+import { MessengerContactsPanel } from "./MessengerContactsPanel";
 
 interface MessengerNavIconProps {
   messengerPageHref?: string;
   iconSize?: number;
-  /** className forwarded to the trigger button, e.g. Tailwind text-color + hover utilities */
   buttonClassName?: string;
 }
 
@@ -23,6 +23,8 @@ export function MessengerNavIcon({
   const { user } = useAuth();
   const currentUserId = user?.id ?? 0;
   const [isOpen, setIsOpen] = useState(false);
+  const [view, setView] = useState<"chat" | "contacts">("chat");
+  const [pendingPrefill, setPendingPrefill] = useState("");
   const unreadCount = useMessengerUnreadCount();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -40,7 +42,10 @@ export function MessengerNavIcon({
   }, []);
 
   useEffect(() => {
-    if (isOpen) calcPosition();
+    if (isOpen) {
+      calcPosition();
+      setView("chat");
+    }
   }, [isOpen, calcPosition]);
 
   useEffect(() => {
@@ -54,6 +59,11 @@ export function MessengerNavIcon({
     document.addEventListener("mousedown", handleOutside);
     return () => document.removeEventListener("mousedown", handleOutside);
   }, [isOpen]);
+
+  const handleContactSelect = useCallback((prefill: string) => {
+    setPendingPrefill(prefill);
+    setView("chat");
+  }, []);
 
   const panel = isOpen
     ? createPortal(
@@ -76,6 +86,7 @@ export function MessengerNavIcon({
             background: "var(--background, #fff)",
           }}
         >
+          {/* Header */}
           <div
             style={{
               padding: "12px 14px 10px",
@@ -90,9 +101,36 @@ export function MessengerNavIcon({
           >
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <MessageSquare size={18} />
-              <span style={{ fontWeight: 600, fontSize: 15 }}>Messenger</span>
+              <span style={{ fontWeight: 600, fontSize: 15 }}>
+                {view === "contacts" ? "Contacts" : "Messenger"}
+              </span>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+              {/* Contacts toggle */}
+              <button
+                onClick={() =>
+                  setView((v) => (v === "contacts" ? "chat" : "contacts"))
+                }
+                aria-label={
+                  view === "contacts" ? "Back to chat" : "View contacts"
+                }
+                title={view === "contacts" ? "Back to chat" : "Contacts"}
+                style={{
+                  background:
+                    view === "contacts"
+                      ? "rgba(255,255,255,0.25)"
+                      : "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "rgba(255,255,255,0.9)",
+                  padding: 4,
+                  borderRadius: 6,
+                  display: "flex",
+                }}
+              >
+                <Users size={15} />
+              </button>
+
               {messengerPageHref && (
                 <a
                   href={messengerPageHref}
@@ -127,8 +165,18 @@ export function MessengerNavIcon({
             </div>
           </div>
 
+          {/* Body */}
           <div style={{ flex: 1, overflow: "hidden" }}>
-            <MessengerChatPanel currentUserId={currentUserId} isOpen={isOpen} />
+            {view === "contacts" ? (
+              <MessengerContactsPanel onSelect={handleContactSelect} />
+            ) : (
+              <MessengerChatPanel
+                currentUserId={currentUserId}
+                isOpen={isOpen && view === "chat"}
+                prefillInput={pendingPrefill}
+                onPrefillApplied={() => setPendingPrefill("")}
+              />
+            )}
           </div>
         </div>,
         document.body,

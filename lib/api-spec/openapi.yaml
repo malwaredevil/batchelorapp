@@ -4067,6 +4067,21 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MessengerAttachmentUploadResult"
+  /messenger/conversations/members:
+    get:
+      operationId: listHouseholdMembers
+      tags:
+        - messenger
+      summary: List all household member accounts (for @mention and contacts panel)
+      responses:
+        "200":
+          description: Member list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MessengerHouseholdMember"
   /messenger/link-preview:
     get:
       operationId: getLinkPreview
@@ -7517,6 +7532,19 @@ components:
       properties:
         count:
           type: integer
+    MessengerHouseholdMember:
+      type: object
+      required:
+        - id
+        - email
+      properties:
+        id:
+          type: integer
+        displayName:
+          type: string
+          nullable: true
+        email:
+          type: string
     MessengerLinkPreview:
       type: object
       required:

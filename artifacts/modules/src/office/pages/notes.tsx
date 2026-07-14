@@ -148,7 +148,7 @@ export default function OfficeNotes() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8 space-y-6">
+    <div className="py-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="flex items-center gap-2 font-serif text-2xl text-foreground">

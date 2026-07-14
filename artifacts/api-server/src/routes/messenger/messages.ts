@@ -1,7 +1,12 @@
 import { Router, type IRouter } from "express";
-import { eq, and, lte, isNull } from "drizzle-orm";
+import { eq, and, lte, isNull, gt } from "drizzle-orm";
 import { db, messengerMessages } from "@workspace/db";
-import { MarkMessageReadParams, DeleteMessageParams } from "@workspace/api-zod";
+import {
+  MarkMessageReadParams,
+  DeleteMessageParams,
+  EditMessageParams,
+  EditMessageBody,
+} from "@workspace/api-zod";
 import { logger } from "../../lib/logger";
 
 const router: IRouter = Router();
@@ -76,6 +81,82 @@ router.delete("/messages/:id", async (req, res) => {
 
   logger.info({ messageId: parsed.data.id }, "messenger: message soft-deleted");
   res.status(204).send();
+});
+
+router.patch("/messages/:id", async (req, res) => {
+  const parsed = EditMessageParams.safeParse({ id: Number(req.params.id) });
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid message id" });
+    return;
+  }
+
+  const bodyParsed = EditMessageBody.safeParse(req.body);
+  if (!bodyParsed.success) {
+    res.status(400).json({ error: "Invalid body" });
+    return;
+  }
+
+  const userId = req.session?.userId;
+
+  const msg = await db
+    .select({
+      id: messengerMessages.id,
+      senderId: messengerMessages.senderId,
+      conversationId: messengerMessages.conversationId,
+    })
+    .from(messengerMessages)
+    .where(
+      and(
+        eq(messengerMessages.id, parsed.data.id),
+        isNull(messengerMessages.deletedAt),
+      ),
+    )
+    .limit(1);
+
+  if (!msg[0]) {
+    res.status(404).json({ error: "Message not found" });
+    return;
+  }
+
+  if (msg[0].senderId !== userId) {
+    res.status(403).json({ error: "Cannot edit another user's message" });
+    return;
+  }
+
+  // Only the last non-deleted message in the conversation may be edited
+  const laterMessages = await db
+    .select({ id: messengerMessages.id })
+    .from(messengerMessages)
+    .where(
+      and(
+        eq(messengerMessages.conversationId, msg[0].conversationId),
+        gt(messengerMessages.id, parsed.data.id),
+        isNull(messengerMessages.deletedAt),
+      ),
+    )
+    .limit(1);
+
+  if (laterMessages.length > 0) {
+    res
+      .status(409)
+      .json({ error: "Cannot edit — a later message exists in this conversation" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(messengerMessages)
+    .set({ body: bodyParsed.data.body.trim(), editedAt: new Date() })
+    .where(eq(messengerMessages.id, parsed.data.id))
+    .returning({
+      id: messengerMessages.id,
+      editedAt: messengerMessages.editedAt,
+    });
+
+  logger.info({ messageId: parsed.data.id }, "messenger: message edited");
+  res.json({
+    id: updated.id,
+    editedAt: updated.editedAt?.toISOString() ?? new Date().toISOString(),
+  });
 });
 
 export default router;

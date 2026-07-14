@@ -6,6 +6,8 @@ import {
   useSendMessage,
   useMarkMessageRead,
   useDeleteMessage,
+  useEditMessage,
+  useClearConversation,
   getGetConversationMessagesQueryKey,
   getGetUnreadCountQueryKey,
   getListConversationsQueryKey,
@@ -49,6 +51,8 @@ export function useMessengerChat(isOpen: boolean) {
   const { mutateAsync: sendMessageMutation } = useSendMessage();
   const { mutateAsync: markReadMutation } = useMarkMessageRead();
   const { mutateAsync: deleteMessageMutation } = useDeleteMessage();
+  const { mutateAsync: editMessageMutation } = useEditMessage();
+  const { mutateAsync: clearConversationMutation } = useClearConversation();
 
   const sendMessage = useCallback(
     async (
@@ -99,6 +103,28 @@ export function useMessengerChat(isOpen: boolean) {
     [deleteMessageMutation, qc, convId],
   );
 
+  const editMessage = useCallback(
+    async (messageId: number, body: string) => {
+      await editMessageMutation({ id: messageId, data: { body } });
+      if (convId) {
+        qc.invalidateQueries({
+          queryKey: getGetConversationMessagesQueryKey(convId),
+        });
+      }
+    },
+    [editMessageMutation, qc, convId],
+  );
+
+  const clearConversation = useCallback(async () => {
+    if (!convId) return;
+    await clearConversationMutation({ id: convId });
+    qc.invalidateQueries({
+      queryKey: getGetConversationMessagesQueryKey(convId),
+    });
+    qc.invalidateQueries({ queryKey: getGetUnreadCountQueryKey() });
+    qc.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+  }, [clearConversationMutation, qc, convId]);
+
   return {
     convId,
     messages: messages as MessengerMessengerMessage[],
@@ -107,6 +133,8 @@ export function useMessengerChat(isOpen: boolean) {
     sendMessage,
     markRead,
     deleteMessage,
+    editMessage,
+    clearConversation,
     refetchMessages,
   };
 }

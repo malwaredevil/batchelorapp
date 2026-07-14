@@ -4220,6 +4220,7 @@ export const ListConversationsResponseItem = zod.object({
   "createdAt": zod.coerce.date(),
   "readAt": zod.coerce.date().nullish(),
   "deletedAt": zod.coerce.date().nullish(),
+  "editedAt": zod.coerce.date().nullish(),
   "attachments": zod.array(zod.object({
   "id": zod.number(),
   "messageId": zod.number(),
@@ -4264,6 +4265,7 @@ export const GetConversationMessagesResponseItem = zod.object({
   "createdAt": zod.coerce.date(),
   "readAt": zod.coerce.date().nullish(),
   "deletedAt": zod.coerce.date().nullish(),
+  "editedAt": zod.coerce.date().nullish(),
   "attachments": zod.array(zod.object({
   "id": zod.number(),
   "messageId": zod.number(),
@@ -4307,10 +4309,35 @@ export const MarkMessageReadResponse = zod.object({
 
 
 /**
+ * @summary Clear all messages in a conversation (soft-deletes everything)
+ */
+export const ClearConversationParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
  * @summary Soft-delete a message
  */
 export const DeleteMessageParams = zod.object({
   "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Edit the body of your own last message (only allowed if no later message exists)
+ */
+export const EditMessageParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const EditMessageBody = zod.object({
+  "body": zod.string()
+})
+
+export const EditMessageResponse = zod.object({
+  "id": zod.number(),
+  "editedAt": zod.coerce.date()
 })
 
 

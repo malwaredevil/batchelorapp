@@ -52,6 +52,8 @@ import type {
   MergeQuiltingCategory200,
   MessengerAttachmentUploadResult,
   MessengerConversationSummary,
+  MessengerEditMessageBody,
+  MessengerEditMessageResponse,
   MessengerHouseholdMember,
   MessengerLinkPreview,
   MessengerMessengerMessage,
@@ -13466,6 +13468,76 @@ export const useMarkMessageRead = <TError = ErrorType<unknown>,
       return useMutation(getMarkMessageReadMutationOptions(options));
     }
 
+export const getClearConversationUrl = (id: number,) => {
+
+
+
+
+  return `/api/messenger/conversations/${id}`
+}
+
+/**
+ * @summary Clear all messages in a conversation (soft-deletes everything)
+ */
+export const clearConversation = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getClearConversationUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getClearConversationMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearConversation>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof clearConversation>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['clearConversation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof clearConversation>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  clearConversation(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ClearConversationMutationResult = NonNullable<Awaited<ReturnType<typeof clearConversation>>>
+
+    export type ClearConversationMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Clear all messages in a conversation (soft-deletes everything)
+ */
+export const useClearConversation = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearConversation>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof clearConversation>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getClearConversationMutationOptions(options));
+    }
+
 export const getDeleteMessageUrl = (id: number,) => {
 
 
@@ -13534,6 +13606,78 @@ export const useDeleteMessage = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDeleteMessageMutationOptions(options));
+    }
+
+export const getEditMessageUrl = (id: number,) => {
+
+
+
+
+  return `/api/messenger/messages/${id}`
+}
+
+/**
+ * @summary Edit the body of your own last message (only allowed if no later message exists)
+ */
+export const editMessage = async (id: number,
+    messengerEditMessageBody: MessengerEditMessageBody, options?: RequestInit): Promise<MessengerEditMessageResponse> => {
+
+  return customFetch<MessengerEditMessageResponse>(getEditMessageUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      messengerEditMessageBody,)
+  }
+);}
+
+
+
+
+export const getEditMessageMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof editMessage>>, TError,{id: number;data: BodyType<MessengerEditMessageBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof editMessage>>, TError,{id: number;data: BodyType<MessengerEditMessageBody>}, TContext> => {
+
+const mutationKey = ['editMessage'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof editMessage>>, {id: number;data: BodyType<MessengerEditMessageBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  editMessage(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type EditMessageMutationResult = NonNullable<Awaited<ReturnType<typeof editMessage>>>
+    export type EditMessageMutationBody = BodyType<MessengerEditMessageBody>
+    export type EditMessageMutationError = ErrorType<void>
+
+    /**
+ * @summary Edit the body of your own last message (only allowed if no later message exists)
+ */
+export const useEditMessage = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof editMessage>>, TError,{id: number;data: BodyType<MessengerEditMessageBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof editMessage>>,
+        TError,
+        {id: number;data: BodyType<MessengerEditMessageBody>},
+        TContext
+      > => {
+      return useMutation(getEditMessageMutationOptions(options));
     }
 
 export const getUploadAttachmentUrl = () => {

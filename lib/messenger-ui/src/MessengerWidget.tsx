@@ -4,12 +4,13 @@ import { MessageSquare, X, ExternalLink } from "lucide-react";
 import { useAuth } from "@workspace/web-core/auth";
 import { useMessengerUnreadCount } from "./useMessengerUnreadCount";
 import { MessengerChatPanel } from "./MessengerChatPanel";
+import { MessengerConversationSidebar } from "./MessengerConversationSidebar";
 
 interface MessengerWidgetProps {
   messengerPageHref?: string;
 }
 
-const PANEL_W = 380;
+const PANEL_W = 560;
 const PANEL_H = 500;
 const BUBBLE_SIZE = 52;
 const EDGE_PAD = 20;
@@ -18,6 +19,7 @@ export function MessengerWidget({ messengerPageHref }: MessengerWidgetProps) {
   const { user } = useAuth();
   const currentUserId = user?.id ?? 0;
   const [isOpen, setIsOpen] = useState(false);
+  const [selectedConvId, setSelectedConvId] = useState<number | null>(null);
   const unreadCount = useMessengerUnreadCount();
 
   // Position state (bubble anchor point, bottom-left by default)
@@ -154,9 +156,19 @@ export function MessengerWidget({ messengerPageHref }: MessengerWidgetProps) {
         </div>
       </div>
 
-      {/* Chat body */}
-      <div style={{ flex: 1, overflow: "hidden" }}>
-        <MessengerChatPanel currentUserId={currentUserId} isOpen={isOpen} />
+      {/* Chat body — sidebar + messages */}
+      <div style={{ flex: 1, overflow: "hidden", display: "flex" }}>
+        <MessengerConversationSidebar
+          selectedConvId={selectedConvId}
+          onSelect={setSelectedConvId}
+        />
+        <div style={{ flex: 1, overflow: "hidden" }}>
+          <MessengerChatPanel
+            currentUserId={currentUserId}
+            isOpen={isOpen}
+            conversationId={selectedConvId ?? undefined}
+          />
+        </div>
       </div>
     </div>
   ) : null;

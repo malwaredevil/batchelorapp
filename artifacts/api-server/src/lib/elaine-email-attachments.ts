@@ -3,7 +3,11 @@ import { db, travelsTripDocuments } from "@workspace/db";
 import { env } from "./env";
 import { logger } from "./logger";
 import { uploadDocument } from "./travels-storage";
-import { extractFromImage, extractFromPdf } from "./travel-document-extraction";
+import {
+  extractFromImage,
+  extractFromPdf,
+  extractFromEmailText,
+} from "./travel-document-extraction";
 import { suggestTripId } from "./gmail-scan";
 import {
   syncItineraryFromDocument,
@@ -182,4 +186,120 @@ export async function processEmailAttachments(params: {
   }
 
   return outcomes;
+}
+
+// Sanitise an email subject into a safe filename stem (no path separators,
+// control chars, or runs of whitespace that look odd in storage).
+function subjectToFilename(subject: string): string {
+  return (
+    subject
+      .replace(/[/\\:*?"<>|]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 80) || "email"
+  );
+}
+
+/**
+ * Processes the plain-text body of a forwarded email as a travel document.
+ * Runs extractFromEmailText to decide whether the body contains a genuine
+ * booking confirmation; if so, uploads the body as a .txt file to Supabase
+ * Storage, creates a travelsTripDocuments row, and syncs the itinerary — the
+ * same pipeline as processEmailAttachments but sourced from body text rather
+ * than a file attachment.
+ *
+ * Returns an outcome object on success (linked | unmatched | skipped), or
+ * null if the email body doesn't look like a booking confirmation at all.
+ */
+export async function processEmailBodyAsDocument(params: {
+  emailId: string;
+  userId: number;
+  fromEmail: string;
+  subject: string;
+  bodyText: string;
+}): Promise<EmailAttachmentOutcome | null> {
+  const trimmed = params.bodyText.trim();
+  if (!trimmed) return null;
+
+  let extractedData: Record<string, unknown> & { isTravelRelated: boolean };
+  try {
+    extractedData = await extractFromEmailText(
+      params.subject,
+      params.fromEmail,
+      trimmed.slice(0, 6000),
+    );
+  } catch (err) {
+    logger.warn(
+      { err, emailId: params.emailId },
+      "elaine-email-body: extraction failed",
+    );
+    return null;
+  }
+
+  if (!extractedData.isTravelRelated) {
+    logger.info(
+      { emailId: params.emailId },
+      "elaine-email-body: not a travel booking, skipping document creation",
+    );
+    return null;
+  }
+
+  const filename = `${subjectToFilename(params.subject)}.txt`;
+
+  let storagePath: string;
+  try {
+    const bodyBuffer = Buffer.from(trimmed, "utf8");
+    storagePath = await uploadDocument(bodyBuffer, "text/plain", filename);
+  } catch (err) {
+    logger.warn(
+      { err, emailId: params.emailId },
+      "elaine-email-body: storage upload failed",
+    );
+    return null;
+  }
+
+  const suggestedTripId = await suggestTripId(extractedData);
+
+  const [doc] = await db
+    .insert(travelsTripDocuments)
+    .values({
+      tripId: suggestedTripId,
+      userId: params.userId,
+      storagePath,
+      title: (extractedData.title as string | undefined) ?? null,
+      documentType: (extractedData.documentType as string | undefined) ?? null,
+      originalFilename: filename,
+      extractedData,
+      rawText: trimmed.slice(0, 20000),
+      status: suggestedTripId ? "linked" : "unmatched",
+      source: "email_forward",
+      sourceEmailFrom: params.fromEmail,
+      sourceEmailSubject: params.subject,
+      sourceReceivedAt: new Date(),
+    })
+    .returning();
+
+  if (doc && suggestedTripId) {
+    try {
+      await syncItineraryFromDocument(suggestedTripId, doc.id, extractedData);
+    } catch (err) {
+      logger.warn(
+        { err, docId: doc.id },
+        "elaine-email-body: itinerary sync failed",
+      );
+    }
+  }
+
+  if (doc) {
+    const rawText = trimmed.slice(0, 20000);
+    indexDocumentChunks(doc.id, rawText).catch(() => {});
+  }
+
+  return {
+    filename,
+    outcome: suggestedTripId ? "linked" : "unmatched",
+    tripTitle: suggestedTripId
+      ? ((extractedData.providerName as string | undefined) ?? undefined)
+      : undefined,
+  };
 }

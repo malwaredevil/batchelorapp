@@ -15,6 +15,7 @@ import { sendElaineEmailReply } from "../lib/email";
 import { runElaineEmailTurn, type ElaineEmailChatMessage } from "../elaine";
 import {
   processEmailAttachments,
+  processEmailBodyAsDocument,
   type EmailAttachmentOutcome,
 } from "../lib/elaine-email-attachments";
 
@@ -334,6 +335,33 @@ router.post("/email-webhook", async (req: Request, res: Response) => {
       logger.error(
         { err, deliveryId, emailId },
         "elaine-email: attachment processing failed",
+      );
+    }
+  }
+
+  // Also try to extract a booking document from the email body text itself.
+  // Many hotel/tour confirmations arrive as HTML-only emails with no PDF
+  // attachment — extractFromEmailText classifies whether the body is a genuine
+  // booking confirmation before creating any document, so non-travel emails
+  // are filtered out cheaply. If the same booking is also in an attachment,
+  // the itinerary dedup logic (syncItineraryFromDocument) keeps the richer
+  // source and discards the thinner one — no duplicate itinerary entries.
+  if (cleanedText && emailId) {
+    try {
+      const bodyOutcome = await processEmailBodyAsDocument({
+        emailId,
+        userId: user.id,
+        fromEmail: user.email,
+        subject,
+        bodyText: cleanedText,
+      });
+      if (bodyOutcome) {
+        attachmentOutcomes = [...attachmentOutcomes, bodyOutcome];
+      }
+    } catch (err) {
+      logger.error(
+        { err, deliveryId, emailId },
+        "elaine-email: body document processing failed",
       );
     }
   }

@@ -52,6 +52,10 @@ export function MessengerNavIcon({
     if (!isOpen) return;
     const handleOutside = (e: MouseEvent) => {
       const target = e.target as Node;
+      // If the target was unmounted by React before this native event reached
+      // the document (e.g. an autocomplete item that React removed on mousedown),
+      // it will no longer be in the document. Treat that as an inside click.
+      if (!document.contains(target)) return;
       if (triggerRef.current?.contains(target)) return;
       if (panelRef.current?.contains(target)) return;
       setIsOpen(false);

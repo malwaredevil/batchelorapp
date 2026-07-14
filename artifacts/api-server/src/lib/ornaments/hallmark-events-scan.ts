@@ -64,6 +64,16 @@ function isValidIsoDate(value: string | null): value is string {
 }
 
 /**
+ * Returns true for artist signing / autograph events that should never be
+ * imported — these are individual store-level visits, not household-relevant
+ * collector events. Acts as a post-extraction safety net complementing the AI
+ * prompt instruction.
+ */
+function isArtistSigningEvent(title: string): boolean {
+  return /artist\s+sign(ing|ature|s)?|autograph/i.test(title);
+}
+
+/**
  * Gathers current web search results for each targeted query. Best-effort
  * per query — one failing query (timeout, no results) doesn't sink the scan.
  */
@@ -104,11 +114,11 @@ async function extractEventsWithConsensus(
     {
       role: "system" as const,
       content:
-        "You are extracting a precise, dated event calendar for a Hallmark ornament collector household from raw web search results. Only include an event if you have a specific, well-supported start date. If sources disagree or a date is vague (e.g. only a month, or a past year with no confirmed recurrence), omit it rather than guessing. Do not invent events not present in the source text.",
+        "You are extracting a precise, dated event calendar for a Hallmark ornament collector household from raw web search results. Only include an event if you have a specific, well-supported start date. If sources disagree or a date is vague (e.g. only a month, or a past year with no confirmed recurrence), omit it rather than guessing. Do not invent events not present in the source text. IMPORTANT: Do NOT include any artist signing, artist signature, or autograph events — these are individual store-level signings where Hallmark artists sign ornaments in person and are not relevant to this household.",
     },
     {
       role: "user" as const,
-      content: `Web search results about upcoming Hallmark ornament/collector events:\n\n${searchContext}\n\nExtract every specific, dated event (Keepsake Ornament Premiere, Ornament Debut Days, Collector's Club convention, Gold Crown store open houses/sale events, etc). Return ONLY valid JSON in this exact shape, with no extra text:\n{\n  "events": [\n    {\n      "title": "Short event title",\n      "description": "1-2 sentence description or null",\n      "startDate": "YYYY-MM-DD or null if not confidently known",\n      "endDate": "YYYY-MM-DD or same as startDate if single-day or unknown"\n    }\n  ]\n}\nIf no dated events are found, return {"events": []}.`,
+      content: `Web search results about upcoming Hallmark ornament/collector events:\n\n${searchContext}\n\nExtract every specific, dated event (Keepsake Ornament Premiere, Ornament Debut Days, Collector's Club convention, Gold Crown store open houses/sale events, etc). Skip any artist signing, artist signature, or autograph events. Return ONLY valid JSON in this exact shape, with no extra text:\n{\n  "events": [\n    {\n      "title": "Short event title",\n      "description": "1-2 sentence description or null",\n      "startDate": "YYYY-MM-DD or null if not confidently known",\n      "endDate": "YYYY-MM-DD or same as startDate if single-day or unknown"\n    }\n  ]\n}\nIf no dated events are found, return {"events": []}.`,
     },
   ];
 
@@ -136,6 +146,7 @@ async function extractEventsWithConsensus(
         (e): e is DiscoveredEvent =>
           typeof e?.title === "string" && e.title.trim().length > 0,
       )
+      .filter((e) => !isArtistSigningEvent(e.title))
       .filter((e) => isValidIsoDate(e.startDate))
       .map((e) => ({
         title: e.title.trim(),

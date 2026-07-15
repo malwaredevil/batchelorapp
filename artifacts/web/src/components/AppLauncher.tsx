@@ -902,7 +902,7 @@ export function AppLauncher() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-sans flex flex-col">
+    <div className="min-h-screen bg-background text-foreground font-sans flex flex-col overflow-x-hidden">
       {(connectedCalendarsData ?? []).map((cal) => (
         <UpcomingCalendarEventsLoader
           key={cal.id}
@@ -1250,7 +1250,7 @@ export function AppLauncher() {
                         }
                       : undefined
                   }
-                  className={`relative transition-all duration-150 ${
+                  className={`relative transition-[opacity,transform,box-shadow] duration-150 ${
                     arranging ? "cursor-grab" : ""
                   } ${isDragged ? "opacity-40 scale-95" : ""} ${
                     isOver && !isDragged

@@ -62,6 +62,27 @@ export function MessengerNotification() {
   });
   const unreadCount = unreadData?.count ?? 0;
 
+  // Keep the installed PWA's home-screen icon badge in sync with unread count.
+  useEffect(() => {
+    try {
+      if (unreadCount > 0) {
+        if ("setAppBadge" in navigator) {
+          (
+            navigator as Navigator & { setAppBadge: (n: number) => void }
+          ).setAppBadge(unreadCount);
+        }
+      } else {
+        if ("clearAppBadge" in navigator) {
+          (
+            navigator as Navigator & { clearAppBadge: () => void }
+          ).clearAppBadge();
+        }
+      }
+    } catch {
+      // not supported
+    }
+  }, [unreadCount]);
+
   const { data: conversations } = useListConversations({
     query: {
       queryKey: getListConversationsQueryKey(),

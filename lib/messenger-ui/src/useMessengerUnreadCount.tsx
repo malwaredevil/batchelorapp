@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import {
   useGetUnreadCount,
   getGetUnreadCountQueryKey,
@@ -10,32 +10,24 @@ export function useMessengerUnreadCount() {
   });
 
   const count = data?.count ?? 0;
-  const prevRef = useRef(0);
 
   useEffect(() => {
-    const prev = prevRef.current;
-    prevRef.current = count;
-
-    if (count > prev) {
-      try {
+    try {
+      if (count > 0) {
         if ("setAppBadge" in navigator) {
           (
             navigator as Navigator & { setAppBadge: (n: number) => void }
           ).setAppBadge(count);
         }
-      } catch {
-        // not supported
-      }
-    } else if (count === 0) {
-      try {
+      } else {
         if ("clearAppBadge" in navigator) {
           (
             navigator as Navigator & { clearAppBadge: () => void }
           ).clearAppBadge();
         }
-      } catch {
-        // not supported
       }
+    } catch {
+      // API not supported in this browser
     }
   }, [count]);
 

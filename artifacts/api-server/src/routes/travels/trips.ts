@@ -206,6 +206,11 @@ router.patch("/trips/:id", async (req, res) => {
     updateData.travelers = body.travelers ?? null;
   }
 
+  if (Object.keys(updateData).length === 0) {
+    res.status(400).json({ error: "No fields to update" });
+    return;
+  }
+
   const [updated] = await db
     .update(travelsTrips)
     .set(updateData)

@@ -10,4 +10,6 @@ import type { UpdateAccountInputThemePreference } from './updateAccountInputThem
 export interface UpdateAccountInput {
   displayName?: string | null;
   themePreference?: UpdateAccountInputThemePreference;
+  /** Birthday as MM-DD (e.g. 03-15 for March 15th). Year is omitted. */
+  birthday?: string | null;
 }

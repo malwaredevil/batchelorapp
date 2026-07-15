@@ -1889,6 +1889,10 @@ components:
           nullable: true
         phoneVerified:
           type: boolean
+        birthday:
+          type: string
+          nullable: true
+          description: "Birthday as MM-DD (e.g. 03-15 for March 15th). Year is omitted."
 
     UpdateAccountInput:
       type: object
@@ -1900,6 +1904,10 @@ components:
           type: string
           enum: [light, dark]
           nullable: true
+        birthday:
+          type: string
+          nullable: true
+          description: "Birthday as MM-DD (e.g. 03-15 for March 15th). Year is omitted."
 
     SendPhoneCodeInput:
       type: object

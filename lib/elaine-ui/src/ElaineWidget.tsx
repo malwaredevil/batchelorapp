@@ -250,7 +250,10 @@ export function ElaineWidget({
     <div
       style={{
         position: "fixed",
-        inset: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
         zIndex: 999999,
         isolation: "isolate",
         pointerEvents: "none",

@@ -7,6 +7,7 @@ import { startCalendarTripScanScheduler } from "./lib/travels-calendar-scan";
 import { startGmailScanScheduler } from "./lib/gmail-scan";
 import { startErrorRateSummary } from "./lib/error-tracker";
 import { startHallmarkEventsScanScheduler } from "./lib/ornaments/hallmark-events-scan";
+import { startBirthdayScheduler } from "./lib/birthday-scheduler";
 
 const rawPort = process.env["PORT"];
 
@@ -36,6 +37,7 @@ function startListening(): void {
     startGmailScanScheduler();
     startErrorRateSummary();
     startHallmarkEventsScanScheduler();
+    startBirthdayScheduler();
   });
 
   function shutdown(signal: string): void {

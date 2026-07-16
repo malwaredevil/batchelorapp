@@ -23,6 +23,7 @@ import {
   useGmailDisconnect,
   useMarkThreadRead,
   useBulkModify,
+  type GmailLabel,
   useBulkTrash,
   type ThreadSummary,
   type ThreadMessage,
@@ -166,7 +167,7 @@ function labelToApi(id: LabelId): { labelIds?: string[] } {
   }
 }
 
-function labelDisplayName(id: LabelId): string {
+function labelDisplayName(id: LabelId, userLabels?: GmailLabel[]): string {
   switch (id) {
     case "INBOX":
       return "Inbox";
@@ -183,7 +184,7 @@ function labelDisplayName(id: LabelId): string {
     case "ALL":
       return "All Mail";
     default:
-      return id;
+      return userLabels?.find((l) => l.id === id)?.name ?? id;
   }
 }
 
@@ -338,7 +339,7 @@ export default function OfficeGmailPage() {
   usePageAssistantContext(
     "office-gmail",
     connected
-      ? `On the Office Gmail page (a full webmail client for the user's own connected Gmail account, separate from the Travels app's Gmail auto-scan feature). Viewing the "${labelDisplayName(selectedLabel)}" label.` +
+      ? `On the Office Gmail page (a full webmail client for the user's own connected Gmail account, separate from the Travels app's Gmail auto-scan feature). Viewing the "${labelDisplayName(selectedLabel, labelsData)}" label.` +
           (activeSearch ? ` Search filter applied: "${activeSearch}".` : "") +
           (threadListData?.threads
             ? ` ${threadListData.threads.length} thread(s) loaded in the current page.`
@@ -534,7 +535,7 @@ export default function OfficeGmailPage() {
     onRefresh: () => refetchThreads(),
     labelName: activeSearch
       ? `Search: "${activeSearch}"`
-      : labelDisplayName(selectedLabel),
+      : labelDisplayName(selectedLabel, labelsData),
     layoutMode,
     onLayoutChange: handleLayoutChange,
     resultSizeEstimate: threadListData?.resultSizeEstimate ?? null,

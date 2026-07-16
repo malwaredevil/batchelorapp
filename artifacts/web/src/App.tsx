@@ -21,6 +21,7 @@ import OwnerPanel from "@/pages/owner-panel";
 import ControlPanel from "@/pages/control-panel";
 import GoogleApisDemo from "@/pages/google-apis-demo";
 import NotFound from "@/pages/not-found";
+import { BirthdayBanner } from "@/components/BirthdayBanner";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -72,6 +73,7 @@ function Routes() {
   return (
     <>
       <ThemeSync />
+      <BirthdayBanner />
       <Switch>
         <Route path="/" component={AppLauncher} />
         <Route path="/account" component={Account} />

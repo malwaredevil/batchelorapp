@@ -19,6 +19,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   CalendarDays,
+  Cake,
   CheckCircle2,
   ChevronRight,
   ExternalLink,
@@ -52,10 +53,19 @@ function extractError(err: unknown, fallback: string): string {
   return fallback;
 }
 
+const BIRTHDAY_RE = /^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+function formatBirthdayDisplay(mmdd: string): string {
+  const [mm, dd] = mmdd.split("-");
+  const date = new Date(2000, Number(mm) - 1, Number(dd));
+  return date.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+}
+
 function ProfileCard() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [displayName, setDisplayName] = useState(user?.displayName ?? "");
+  const [birthday, setBirthday] = useState(user?.birthday ?? "");
 
   const update = useUpdateCurrentUser({
     mutation: {
@@ -81,7 +91,17 @@ function ProfileCard() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    update.mutate({ data: { displayName: displayName.trim() || null } });
+    const trimmedBirthday = birthday.trim();
+    if (trimmedBirthday && !BIRTHDAY_RE.test(trimmedBirthday)) {
+      toast.error("Birthday must be in MM-DD format, e.g. 03-15 for March 15th.");
+      return;
+    }
+    update.mutate({
+      data: {
+        displayName: displayName.trim() || null,
+        birthday: trimmedBirthday || null,
+      },
+    });
   }
 
   return (
@@ -108,6 +128,26 @@ function ProfileCard() {
             maxLength={100}
             data-testid="input-display-name"
           />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <Cake className="h-3.5 w-3.5" />
+              Birthday
+            </span>
+          </Label>
+          <Input
+            value={birthday}
+            onChange={(e) => setBirthday(e.target.value)}
+            placeholder="MM-DD (e.g. 03-15 for March 15th)"
+            maxLength={5}
+            data-testid="input-birthday"
+          />
+          {birthday && BIRTHDAY_RE.test(birthday.trim()) && (
+            <p className="text-xs text-muted-foreground">
+              {formatBirthdayDisplay(birthday.trim())} — Elaine will send you a birthday email and a banner will appear when you log in! 🎂
+            </p>
+          )}
         </div>
         <div className="flex gap-3">
           <Button

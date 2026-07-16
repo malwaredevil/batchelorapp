@@ -49,6 +49,9 @@ export const appUsers = pgTable("app_users", {
   // outbound SMS send path (verification code, test SMS, reminder alerts)
   // must skip this number. Cleared when the number replies START/UNSTOP/YES.
   smsOptedOutAt: timestamp("sms_opted_out_at", { withTimezone: true }),
+  // Birthday as "MM-DD" string (year omitted — just month and day).
+  // Used to show a birthday banner on login and trigger a birthday email from Elaine.
+  birthday: text("birthday"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

@@ -259,6 +259,63 @@ export async function sendElaineEmailReply(
   return data?.id;
 }
 
+// Birthday email sent from Elaine on the household member's birthday.
+export async function sendBirthdayEmail(
+  toEmail: string,
+  displayName: string | null,
+): Promise<void> {
+  const from = ELAINE_FROM_EMAIL;
+  const name = displayName ?? toEmail.split("@")[0];
+
+  const { error } = await getResend().emails.send({
+    from,
+    to: toEmail,
+    subject: `Happy Birthday, ${name}! 🎂`,
+    html: `
+<!DOCTYPE html>
+<html>
+  <head><meta charset="utf-8" /></head>
+  <body style="font-family: sans-serif; background: #f9f9f9; padding: 40px 0; margin: 0;">
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td align="center">
+          <table width="560" cellpadding="0" cellspacing="0"
+            style="background: #ffffff; border-radius: 8px; padding: 48px 40px;
+                   box-shadow: 0 1px 4px rgba(0,0,0,0.08); text-align: center;">
+            <tr>
+              <td>
+                <div style="font-size: 56px; line-height: 1; margin-bottom: 16px;">🎂</div>
+                <h2 style="margin: 0 0 12px; font-size: 26px; color: #111;">
+                  Happy Birthday, ${escapeHtml(name)}!
+                </h2>
+                <p style="margin: 0 0 24px; font-size: 16px; color: #555; line-height: 1.6;">
+                  Wishing you a wonderful day filled with joy and celebration.
+                  Hope this birthday is the best one yet! 🎉
+                </p>
+                <p style="margin: 0 0 24px; font-size: 14px; color: #888;">
+                  With love from the whole Batchelor household 💛
+                </p>
+                <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+                <p style="margin: 0; font-size: 11px; color: #bbb;">
+                  Elaine, your Batchelor household assistant
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`,
+    text: `Happy Birthday, ${name}! 🎂\n\nWishing you a wonderful day filled with joy and celebration. Hope this birthday is the best one yet! 🎉\n\nWith love from the whole Batchelor household 💛\n\n— Elaine, your Batchelor household assistant`,
+  });
+
+  if (error) {
+    logger.error({ err: error }, "resend birthday email send failed");
+    throw new Error(`Failed to send birthday email: ${error.message}`);
+  }
+}
+
 // Simple connectivity-check email used by the account settings "Send test
 // email" button. Uses the same sender as password-reset emails since that's
 // the one guaranteed to be configured whenever resendConfigured() is true.

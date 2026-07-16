@@ -172,11 +172,14 @@ router.get("/auth/me", requireAuth, async (req, res) => {
       isOwner: user.isOwner ?? false,
       phoneNumber: user.phoneNumber ?? null,
       phoneVerified: user.phoneVerified ?? false,
+      birthday: user.birthday ?? null,
     }),
   );
 });
 
 const VALID_THEMES = new Set(["light", "dark"]);
+// MM-DD format, e.g. "01-15" for January 15th.
+const BIRTHDAY_RE = /^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
 router.patch("/auth/me", requireAuth, async (req, res) => {
   const parsed = UpdateCurrentUserBody.safeParse(req.body);
@@ -188,6 +191,7 @@ router.patch("/auth/me", requireAuth, async (req, res) => {
   const updates: Partial<{
     displayName: string | null;
     themePreference: string | null;
+    birthday: string | null;
   }> = {};
 
   if (parsed.data.displayName !== undefined) {
@@ -198,6 +202,17 @@ router.patch("/auth/me", requireAuth, async (req, res) => {
   if (parsed.data.themePreference !== undefined) {
     const theme = parsed.data.themePreference;
     updates.themePreference = theme && VALID_THEMES.has(theme) ? theme : null;
+  }
+  if (parsed.data.birthday !== undefined) {
+    const bday = parsed.data.birthday;
+    if (bday === null || bday === "") {
+      updates.birthday = null;
+    } else if (BIRTHDAY_RE.test(bday)) {
+      updates.birthday = bday;
+    } else {
+      res.status(400).json({ error: "Birthday must be in MM-DD format." });
+      return;
+    }
   }
 
   let user;
@@ -228,6 +243,7 @@ router.patch("/auth/me", requireAuth, async (req, res) => {
       isOwner: user.isOwner ?? false,
       phoneNumber: user.phoneNumber ?? null,
       phoneVerified: user.phoneVerified ?? false,
+      birthday: user.birthday ?? null,
     }),
   );
 });

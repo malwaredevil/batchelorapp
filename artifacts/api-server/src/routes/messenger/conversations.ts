@@ -28,6 +28,7 @@ import {
 import { callModel, getModels } from "../../lib/ai-client";
 import { getSignedUrls } from "../../lib/messenger/storage";
 import { logger } from "../../lib/logger";
+import { fanOutPushNotifications } from "./push";
 
 const router: IRouter = Router();
 
@@ -631,6 +632,13 @@ router.post("/conversations/:id/messages", async (req, res) => {
   );
 
   res.status(201).json(serialized);
+
+  fanOutPushNotifications(
+    convId,
+    userId,
+    body,
+    senderRow[0]?.displayName ?? null,
+  ).catch((err) => logger.error(err, "messenger: push fan-out error"));
 
   if (/@elaine\b/i.test(body)) {
     const senderName = senderRow[0]?.displayName ?? "a household member";

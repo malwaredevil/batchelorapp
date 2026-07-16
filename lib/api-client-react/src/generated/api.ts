@@ -59,6 +59,8 @@ import type {
   MessengerHouseholdMember,
   MessengerLinkPreview,
   MessengerMessengerMessage,
+  MessengerPushSubscribeBody,
+  MessengerPushUnsubscribeBody,
   MessengerSendMessageBody,
   MessengerUnreadCountResponse,
   MessengerUpdateConversationBody,
@@ -14136,6 +14138,148 @@ export function useListHouseholdMembers<TData = Awaited<ReturnType<typeof listHo
 
 
 
+
+export const getPushSubscribeUrl = () => {
+
+
+
+
+  return `/api/messenger/push-subscribe`
+}
+
+/**
+ * @summary Save (or update) a browser push subscription
+ */
+export const pushSubscribe = async (messengerPushSubscribeBody: MessengerPushSubscribeBody, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getPushSubscribeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      messengerPushSubscribeBody,)
+  }
+);}
+
+
+
+
+export const getPushSubscribeMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof pushSubscribe>>, TError,{data: BodyType<MessengerPushSubscribeBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof pushSubscribe>>, TError,{data: BodyType<MessengerPushSubscribeBody>}, TContext> => {
+
+const mutationKey = ['pushSubscribe'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof pushSubscribe>>, {data: BodyType<MessengerPushSubscribeBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  pushSubscribe(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PushSubscribeMutationResult = NonNullable<Awaited<ReturnType<typeof pushSubscribe>>>
+    export type PushSubscribeMutationBody = BodyType<MessengerPushSubscribeBody>
+    export type PushSubscribeMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Save (or update) a browser push subscription
+ */
+export const usePushSubscribe = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof pushSubscribe>>, TError,{data: BodyType<MessengerPushSubscribeBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof pushSubscribe>>,
+        TError,
+        {data: BodyType<MessengerPushSubscribeBody>},
+        TContext
+      > => {
+      return useMutation(getPushSubscribeMutationOptions(options));
+    }
+
+export const getPushUnsubscribeUrl = () => {
+
+
+
+
+  return `/api/messenger/push-subscribe`
+}
+
+/**
+ * @summary Remove a browser push subscription
+ */
+export const pushUnsubscribe = async (messengerPushUnsubscribeBody: MessengerPushUnsubscribeBody, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getPushUnsubscribeUrl(),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      messengerPushUnsubscribeBody,)
+  }
+);}
+
+
+
+
+export const getPushUnsubscribeMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof pushUnsubscribe>>, TError,{data: BodyType<MessengerPushUnsubscribeBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof pushUnsubscribe>>, TError,{data: BodyType<MessengerPushUnsubscribeBody>}, TContext> => {
+
+const mutationKey = ['pushUnsubscribe'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof pushUnsubscribe>>, {data: BodyType<MessengerPushUnsubscribeBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  pushUnsubscribe(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PushUnsubscribeMutationResult = NonNullable<Awaited<ReturnType<typeof pushUnsubscribe>>>
+    export type PushUnsubscribeMutationBody = BodyType<MessengerPushUnsubscribeBody>
+    export type PushUnsubscribeMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Remove a browser push subscription
+ */
+export const usePushUnsubscribe = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof pushUnsubscribe>>, TError,{data: BodyType<MessengerPushUnsubscribeBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof pushUnsubscribe>>,
+        TError,
+        {data: BodyType<MessengerPushUnsubscribeBody>},
+        TContext
+      > => {
+      return useMutation(getPushUnsubscribeMutationOptions(options));
+    }
 
 export const getGetLinkPreviewUrl = (params: GetLinkPreviewParams,) => {
   const normalizedParams = new URLSearchParams();

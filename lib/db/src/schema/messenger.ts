@@ -6,6 +6,7 @@ import {
   timestamp,
   boolean,
   unique,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { appUsers } from "./users";
 
@@ -82,3 +83,26 @@ export type InsertMessengerAttachment =
 export type MessengerLinkPreviewRow = typeof messengerLinkPreviews.$inferSelect;
 export type InsertMessengerLinkPreview =
   typeof messengerLinkPreviews.$inferInsert;
+
+export const messengerPushSubscriptions = pgTable(
+  "messenger_push_subscriptions",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => appUsers.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull().unique(),
+    keys: jsonb("keys").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+).enableRLS();
+
+export type MessengerPushSubscriptionRow =
+  typeof messengerPushSubscriptions.$inferSelect;
+export type InsertMessengerPushSubscription =
+  typeof messengerPushSubscriptions.$inferInsert;

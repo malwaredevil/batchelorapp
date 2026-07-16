@@ -1422,4 +1422,16 @@ export const STATEMENTS: string[] = [
      WHERE p.conversation_id = mc.id
    )
    ON CONFLICT DO NOTHING`,
+
+  `CREATE TABLE IF NOT EXISTS messenger_push_subscriptions (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+    endpoint    TEXT NOT NULL UNIQUE,
+    keys        JSONB NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS messenger_push_subs_user_idx
+     ON messenger_push_subscriptions (user_id)`,
 ];

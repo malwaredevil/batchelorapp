@@ -1941,6 +1941,20 @@ export interface MessengerLinkPreview {
   imageUrl?: string | null;
 }
 
+export type MessengerPushSubscribeBodyKeys = {
+  p256dh: string;
+  auth: string;
+};
+
+export interface MessengerPushSubscribeBody {
+  endpoint: string;
+  keys: MessengerPushSubscribeBodyKeys;
+}
+
+export interface MessengerPushUnsubscribeBody {
+  endpoint: string;
+}
+
 export type ListPotteryParams = {
 /**
  * Text search across name, pattern description, style, shape, maker, and motifs

@@ -55,6 +55,7 @@
     "@workspace/gmail-ui": "workspace:*",
     "@workspace/image-capture": "workspace:*",
     "@workspace/ui": "workspace:*",
+    "@workspace/vite-config": "workspace:*",
     "@workspace/web-core": "workspace:*",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",

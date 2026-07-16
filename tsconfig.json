@@ -32,6 +32,9 @@
     },
     {
       "path": "./lib/image-capture"
+    },
+    {
+      "path": "./lib/vite-config"
     }
   ]
 }

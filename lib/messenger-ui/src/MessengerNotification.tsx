@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { X, MessageSquare, Send, ChevronUp } from "lucide-react";
+import { X, MessageSquare, Send, ChevronUp, Bell } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { UseQueryOptions } from "@tanstack/react-query";
 import {
@@ -79,6 +79,93 @@ interface ActiveNotification {
 }
 
 const AUTO_DISMISS_MS = 8_000;
+
+// ─── Push permission banner ───────────────────────────────────────────────
+function PushPermissionBanner() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      !("Notification" in window) ||
+      !("PushManager" in window) ||
+      !("serviceWorker" in navigator)
+    )
+      return;
+    if ((Notification as typeof Notification).permission !== "default") return;
+    // Show after a short delay so it doesn't appear on every page load
+    const t = setTimeout(() => setVisible(true), 3000);
+    return () => clearTimeout(t);
+  }, []);
+
+  if (!visible) return null;
+
+  async function handleEnable() {
+    setVisible(false);
+    const permission = await Notification.requestPermission();
+    if (permission === "granted") {
+      window.dispatchEvent(new CustomEvent("batchelor:push-permitted"));
+    }
+  }
+
+  return createPortal(
+    <div
+      style={{
+        position: "fixed",
+        bottom: 24,
+        right: 24,
+        zIndex: 9996,
+        background: "var(--background, #fff)",
+        border: "1px solid rgba(0,0,0,0.09)",
+        borderRadius: 12,
+        boxShadow: "0 4px 20px rgba(0,0,0,0.12)",
+        padding: "10px 14px",
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        fontFamily: "inherit",
+        maxWidth: 300,
+      }}
+    >
+      <Bell size={15} style={{ color: "#3b82f6", flexShrink: 0 }} />
+      <span style={{ fontSize: 12, color: "var(--foreground, #111)", flex: 1 }}>
+        Get notified when messages arrive
+      </span>
+      <button
+        onClick={handleEnable}
+        style={{
+          background: "#3b82f6",
+          color: "#fff",
+          border: "none",
+          borderRadius: 7,
+          padding: "5px 10px",
+          fontSize: 11,
+          fontWeight: 600,
+          cursor: "pointer",
+          whiteSpace: "nowrap",
+        }}
+      >
+        Enable
+      </button>
+      <button
+        onClick={() => setVisible(false)}
+        aria-label="Dismiss"
+        style={{
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          padding: 2,
+          color: "rgba(0,0,0,0.35)",
+          display: "flex",
+          lineHeight: 0,
+        }}
+      >
+        <X size={13} />
+      </button>
+    </div>,
+    document.body,
+  );
+}
 
 export function MessengerNotification() {
   const { user } = useAuth();
@@ -252,7 +339,7 @@ export function MessengerNotification() {
     }
   }, [notification, replyText, isSending, sendMessageMutation, qc, dismiss]);
 
-  if (!notification) return null;
+  if (!notification) return <PushPermissionBanner />;
 
   const senderName = notification.message.senderName ?? "Someone";
   const body = notification.message.body;

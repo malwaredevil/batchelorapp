@@ -361,17 +361,25 @@ function AppHeroCard({
   arranging?: boolean;
 }) {
   return (
-    <a
-      href={arranging ? undefined : app.href}
-      className="group block"
+    <div
+      role="link"
+      tabIndex={arranging ? undefined : 0}
+      className="group block cursor-pointer"
       onClick={(e) => {
-        if (arranging) {
-          e.preventDefault();
-          return;
-        }
+        if (arranging) return;
         const t = e.target as HTMLElement;
-        if (t.closest("[data-accordion]")) e.preventDefault();
-        if (t.closest("[data-stat]")) e.preventDefault();
+        if (t.closest("[data-accordion]")) return;
+        if (t.closest("[data-stat]")) return;
+        window.location.href = app.href;
+      }}
+      onKeyDown={(e) => {
+        if (arranging) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          const t = e.target as HTMLElement;
+          if (t.closest("[data-accordion]") || t.closest("[data-stat]")) return;
+          window.location.href = app.href;
+        }
       }}
     >
       <Card className="h-full overflow-hidden border-border bg-card shadow-sm hover:shadow-md transition-all duration-200 flex flex-col cursor-pointer">
@@ -494,7 +502,7 @@ function AppHeroCard({
           </CardFooter>
         )}
       </Card>
-    </a>
+    </div>
   );
 }
 
@@ -748,7 +756,7 @@ export function AppLauncher() {
               ? String(potteryCategoriesData.length)
               : "—",
           label: "Categories",
-          href: `${base}modules/pottery/`,
+          href: `${base}modules/pottery/categories`,
         },
       ];
     }
@@ -825,7 +833,7 @@ export function AppLauncher() {
         {
           value: notesData != null ? String(notesData.length) : "—",
           label: "Notes",
-          href: `${base}modules/office/`,
+          href: `${base}modules/office/notes`,
         },
         {
           value:

@@ -47,8 +47,7 @@ import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
 
 /** URL for the server-rasterised PNG preview of a block. */
 function blockPreviewUrl(blockId: number, sizePx: number): string {
-  const base = import.meta.env.BASE_URL ?? "/";
-  return `${base}api/quilting/blocks/${blockId}/preview.png?size=${sizePx}`;
+  return `/api/quilting/blocks/${blockId}/preview.png?size=${sizePx}`;
 }
 
 export default function BlockDetail() {

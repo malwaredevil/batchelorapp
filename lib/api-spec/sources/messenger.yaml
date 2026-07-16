@@ -276,6 +276,35 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/HouseholdMember"
+  /push-subscribe:
+    post:
+      operationId: pushSubscribe
+      tags:
+        - messenger
+      summary: Save (or update) a browser push subscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PushSubscribeBody"
+      responses:
+        "204":
+          description: Saved
+    delete:
+      operationId: pushUnsubscribe
+      tags:
+        - messenger
+      summary: Remove a browser push subscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PushUnsubscribeBody"
+      responses:
+        "204":
+          description: Removed
   /link-preview:
     get:
       operationId: getLinkPreview
@@ -520,3 +549,28 @@ components:
         imageUrl:
           type: string
           nullable: true
+    PushSubscribeBody:
+      type: object
+      required:
+        - endpoint
+        - keys
+      properties:
+        endpoint:
+          type: string
+        keys:
+          type: object
+          required:
+            - p256dh
+            - auth
+          properties:
+            p256dh:
+              type: string
+            auth:
+              type: string
+    PushUnsubscribeBody:
+      type: object
+      required:
+        - endpoint
+      properties:
+        endpoint:
+          type: string

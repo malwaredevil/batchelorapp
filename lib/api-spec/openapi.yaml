@@ -4223,6 +4223,35 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/MessengerHouseholdMember"
+  /messenger/push-subscribe:
+    post:
+      operationId: pushSubscribe
+      tags:
+        - messenger
+      summary: Save (or update) a browser push subscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessengerPushSubscribeBody"
+      responses:
+        "204":
+          description: Saved
+    delete:
+      operationId: pushUnsubscribe
+      tags:
+        - messenger
+      summary: Remove a browser push subscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessengerPushUnsubscribeBody"
+      responses:
+        "204":
+          description: Removed
   /messenger/link-preview:
     get:
       operationId: getLinkPreview
@@ -7779,6 +7808,31 @@ components:
         imageUrl:
           type: string
           nullable: true
+    MessengerPushSubscribeBody:
+      type: object
+      required:
+        - endpoint
+        - keys
+      properties:
+        endpoint:
+          type: string
+        keys:
+          type: object
+          required:
+            - p256dh
+            - auth
+          properties:
+            p256dh:
+              type: string
+            auth:
+              type: string
+    MessengerPushUnsubscribeBody:
+      type: object
+      required:
+        - endpoint
+      properties:
+        endpoint:
+          type: string
   parameters:
     IdParam:
       name: id

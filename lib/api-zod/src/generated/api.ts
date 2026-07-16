@@ -4488,6 +4488,26 @@ export const ListHouseholdMembersResponse = zod.array(ListHouseholdMembersRespon
 
 
 /**
+ * @summary Save (or update) a browser push subscription
+ */
+export const PushSubscribeBody = zod.object({
+  "endpoint": zod.string(),
+  "keys": zod.object({
+  "p256dh": zod.string(),
+  "auth": zod.string()
+})
+})
+
+
+/**
+ * @summary Remove a browser push subscription
+ */
+export const PushUnsubscribeBody = zod.object({
+  "endpoint": zod.string()
+})
+
+
+/**
  * @summary Get cached OG link preview for a URL
  */
 export const GetLinkPreviewQueryParams = zod.object({

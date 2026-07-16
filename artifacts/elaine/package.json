@@ -52,6 +52,7 @@
     "@workspace/ui": "workspace:*",
     "@workspace/elaine-ui": "workspace:*",
     "@workspace/messenger-ui": "workspace:*",
+    "@workspace/vite-config": "workspace:*",
     "@workspace/web-core": "workspace:*",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",

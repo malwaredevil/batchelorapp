@@ -2,6 +2,12 @@ import { z } from "zod/v4";
 import { and, eq, isNull, or } from "drizzle-orm";
 import type OpenAI from "openai";
 import {
+  createLockFieldExecutor,
+  createUpdateItemCategoriesExecutor,
+  createDeletePhotoExecutor,
+  type ActionExecutor,
+} from "./collection-action-helpers";
+import {
   db,
   ornamentsItems,
   ornamentsCategories,
@@ -181,11 +187,6 @@ async function getOrnamentCategoryLabelInfo(
   return row ?? null;
 }
 
-type ActionExecutor = (
-  payload: never,
-  userId: number,
-) => Promise<{ status: number; body: unknown }>;
-
 export const ornamentActionExecutors: Record<
   OrnamentActionType,
   ActionExecutor
@@ -286,104 +287,80 @@ export const ornamentActionExecutors: Record<
     };
   }) as ActionExecutor,
 
-  lock_ornament_field: (async (
-    payload: z.infer<typeof LockOrnamentFieldActionPayload>,
-  ) => {
-    const [existing] = await db
-      .select({ lockedFields: ornamentsItems.lockedFields })
-      .from(ornamentsItems)
-      .where(eq(ornamentsItems.id, payload.itemId));
-    if (!existing) return { status: 404, body: { error: "Item not found" } };
+  lock_ornament_field: createLockFieldExecutor({
+    fetchLockedFields: async (itemId) => {
+      const [r] = await db
+        .select({ lockedFields: ornamentsItems.lockedFields })
+        .from(ornamentsItems)
+        .where(eq(ornamentsItems.id, itemId));
+      return r ?? null;
+    },
+    updateLockedFields: async (itemId, fields) => {
+      const [r] = await db
+        .update(ornamentsItems)
+        .set({ lockedFields: fields })
+        .where(eq(ornamentsItems.id, itemId))
+        .returning();
+      return r;
+    },
+    actionType: "lock_ornament_field",
+  }),
 
-    const current = new Set(existing.lockedFields ?? []);
-    if (payload.locked) current.add(payload.field);
-    else current.delete(payload.field);
+  update_ornament_item_categories: createUpdateItemCategoriesExecutor({
+    fetchItem: async (itemId) => {
+      const [r] = await db
+        .select({ id: ornamentsItems.id })
+        .from(ornamentsItems)
+        .where(eq(ornamentsItems.id, itemId));
+      return r ?? null;
+    },
+    fetchAllCategoryIds: async () => {
+      const rows = await db
+        .select({ id: ornamentsCategories.id })
+        .from(ornamentsCategories);
+      return rows.map((r) => r.id);
+    },
+    replaceItemCategories: async (itemId, safeCategoryIds) => {
+      await db.transaction(async (tx) => {
+        await tx
+          .delete(ornamentsItemCategories)
+          .where(eq(ornamentsItemCategories.itemId, itemId));
+        if (safeCategoryIds.length > 0) {
+          await tx
+            .insert(ornamentsItemCategories)
+            .values(
+              safeCategoryIds.map((categoryId) => ({ itemId, categoryId })),
+            );
+        }
+      });
+    },
+    actionType: "update_ornament_item_categories",
+  }),
 
-    const [row] = await db
-      .update(ornamentsItems)
-      .set({ lockedFields: [...current] })
-      .where(eq(ornamentsItems.id, payload.itemId))
-      .returning();
-    return {
-      status: 200,
-      body: { type: "lock_ornament_field", result: row },
-    };
-  }) as ActionExecutor,
-
-  update_ornament_item_categories: (async (
-    payload: z.infer<typeof UpdateOrnamentItemCategoriesActionPayload>,
-  ) => {
-    const [existing] = await db
-      .select({ id: ornamentsItems.id })
-      .from(ornamentsItems)
-      .where(eq(ornamentsItems.id, payload.itemId));
-    if (!existing) return { status: 404, body: { error: "Item not found" } };
-
-    // Categories are a shared household set — only guard against IDs that
-    // don't exist at all, same as the REST route.
-    const allCats = await db
-      .select({ id: ornamentsCategories.id })
-      .from(ornamentsCategories);
-    const allCatIds = new Set(allCats.map((c) => c.id));
-    const safeCategoryIds = payload.categoryIds.filter((id) =>
-      allCatIds.has(id),
-    );
-
-    await db.transaction(async (tx) => {
-      await tx
-        .delete(ornamentsItemCategories)
-        .where(eq(ornamentsItemCategories.itemId, payload.itemId));
-      if (safeCategoryIds.length > 0) {
-        await tx.insert(ornamentsItemCategories).values(
-          safeCategoryIds.map((categoryId) => ({
-            itemId: payload.itemId,
-            categoryId,
-          })),
-        );
-      }
-    });
-
-    return {
-      status: 200,
-      body: {
-        type: "update_ornament_item_categories",
-        result: { itemId: payload.itemId, categoryIds: safeCategoryIds },
-      },
-    };
-  }) as ActionExecutor,
-
-  delete_ornament_photo: (async (
-    payload: z.infer<typeof DeleteOrnamentPhotoActionPayload>,
-  ) => {
-    const [item] = await db
-      .select({ id: ornamentsItems.id })
-      .from(ornamentsItems)
-      .where(eq(ornamentsItems.id, payload.itemId));
-    if (!item) return { status: 404, body: { error: "Item not found" } };
-
-    const [imageRow] = await db
-      .select({
-        storagePath: ornamentsImages.storagePath,
-        itemId: ornamentsImages.itemId,
-      })
-      .from(ornamentsImages)
-      .where(eq(ornamentsImages.id, payload.imageId));
-    if (!imageRow || imageRow.itemId !== payload.itemId)
-      return { status: 404, body: { error: "Photo not found" } };
-
-    await db
-      .delete(ornamentsImages)
-      .where(eq(ornamentsImages.id, payload.imageId));
-    await deleteImage(imageRow.storagePath).catch(() => {});
-
-    return {
-      status: 200,
-      body: {
-        type: "delete_ornament_photo",
-        result: { itemId: payload.itemId, imageId: payload.imageId },
-      },
-    };
-  }) as ActionExecutor,
+  delete_ornament_photo: createDeletePhotoExecutor({
+    fetchItem: async (itemId) => {
+      const [r] = await db
+        .select({ id: ornamentsItems.id })
+        .from(ornamentsItems)
+        .where(eq(ornamentsItems.id, itemId));
+      return r ?? null;
+    },
+    fetchImage: async (imageId) => {
+      const [r] = await db
+        .select({
+          storagePath: ornamentsImages.storagePath,
+          itemId: ornamentsImages.itemId,
+        })
+        .from(ornamentsImages)
+        .where(eq(ornamentsImages.id, imageId));
+      return r ?? null;
+    },
+    deleteDbImage: async (imageId) => {
+      await db.delete(ornamentsImages).where(eq(ornamentsImages.id, imageId));
+    },
+    deleteStorageImage: deleteImage,
+    actionType: "delete_ornament_photo",
+  }),
 
   promote_ornament_photo: (async (
     payload: z.infer<typeof PromoteOrnamentPhotoActionPayload>,

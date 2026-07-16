@@ -2,6 +2,12 @@ import { z } from "zod/v4";
 import { and, eq, isNull, or } from "drizzle-orm";
 import type OpenAI from "openai";
 import {
+  createLockFieldExecutor,
+  createUpdateItemCategoriesExecutor,
+  createDeletePhotoExecutor,
+  type ActionExecutor,
+} from "./collection-action-helpers";
+import {
   db,
   potteryItems,
   potteryCategories,
@@ -186,11 +192,6 @@ async function getPotteryCategoryLabelInfo(
   return row ?? null;
 }
 
-type ActionExecutor = (
-  payload: never,
-  userId: number,
-) => Promise<{ status: number; body: unknown }>;
-
 export const potteryActionExecutors: Record<PotteryActionType, ActionExecutor> =
   {
     update_pottery_item: (async (
@@ -293,104 +294,80 @@ export const potteryActionExecutors: Record<PotteryActionType, ActionExecutor> =
       };
     }) as ActionExecutor,
 
-    lock_pottery_field: (async (
-      payload: z.infer<typeof LockPotteryFieldActionPayload>,
-    ) => {
-      const [existing] = await db
-        .select({ lockedFields: potteryItems.lockedFields })
-        .from(potteryItems)
-        .where(eq(potteryItems.id, payload.itemId));
-      if (!existing) return { status: 404, body: { error: "Item not found" } };
+    lock_pottery_field: createLockFieldExecutor({
+      fetchLockedFields: async (itemId) => {
+        const [r] = await db
+          .select({ lockedFields: potteryItems.lockedFields })
+          .from(potteryItems)
+          .where(eq(potteryItems.id, itemId));
+        return r ?? null;
+      },
+      updateLockedFields: async (itemId, fields) => {
+        const [r] = await db
+          .update(potteryItems)
+          .set({ lockedFields: fields })
+          .where(eq(potteryItems.id, itemId))
+          .returning();
+        return r;
+      },
+      actionType: "lock_pottery_field",
+    }),
 
-      const current = new Set(existing.lockedFields ?? []);
-      if (payload.locked) current.add(payload.field);
-      else current.delete(payload.field);
+    update_pottery_item_categories: createUpdateItemCategoriesExecutor({
+      fetchItem: async (itemId) => {
+        const [r] = await db
+          .select({ id: potteryItems.id })
+          .from(potteryItems)
+          .where(eq(potteryItems.id, itemId));
+        return r ?? null;
+      },
+      fetchAllCategoryIds: async () => {
+        const rows = await db
+          .select({ id: potteryCategories.id })
+          .from(potteryCategories);
+        return rows.map((r) => r.id);
+      },
+      replaceItemCategories: async (itemId, safeCategoryIds) => {
+        await db.transaction(async (tx) => {
+          await tx
+            .delete(potteryItemCategories)
+            .where(eq(potteryItemCategories.itemId, itemId));
+          if (safeCategoryIds.length > 0) {
+            await tx
+              .insert(potteryItemCategories)
+              .values(
+                safeCategoryIds.map((categoryId) => ({ itemId, categoryId })),
+              );
+          }
+        });
+      },
+      actionType: "update_pottery_item_categories",
+    }),
 
-      const [row] = await db
-        .update(potteryItems)
-        .set({ lockedFields: [...current] })
-        .where(eq(potteryItems.id, payload.itemId))
-        .returning();
-      return {
-        status: 200,
-        body: { type: "lock_pottery_field", result: row },
-      };
-    }) as ActionExecutor,
-
-    update_pottery_item_categories: (async (
-      payload: z.infer<typeof UpdatePotteryItemCategoriesActionPayload>,
-    ) => {
-      const [existing] = await db
-        .select({ id: potteryItems.id })
-        .from(potteryItems)
-        .where(eq(potteryItems.id, payload.itemId));
-      if (!existing) return { status: 404, body: { error: "Item not found" } };
-
-      // Categories are a shared household set — only guard against IDs that
-      // don't exist at all, same as the REST route.
-      const allCats = await db
-        .select({ id: potteryCategories.id })
-        .from(potteryCategories);
-      const allCatIds = new Set(allCats.map((c) => c.id));
-      const safeCategoryIds = payload.categoryIds.filter((id) =>
-        allCatIds.has(id),
-      );
-
-      await db.transaction(async (tx) => {
-        await tx
-          .delete(potteryItemCategories)
-          .where(eq(potteryItemCategories.itemId, payload.itemId));
-        if (safeCategoryIds.length > 0) {
-          await tx.insert(potteryItemCategories).values(
-            safeCategoryIds.map((categoryId) => ({
-              itemId: payload.itemId,
-              categoryId,
-            })),
-          );
-        }
-      });
-
-      return {
-        status: 200,
-        body: {
-          type: "update_pottery_item_categories",
-          result: { itemId: payload.itemId, categoryIds: safeCategoryIds },
-        },
-      };
-    }) as ActionExecutor,
-
-    delete_pottery_photo: (async (
-      payload: z.infer<typeof DeletePotteryPhotoActionPayload>,
-    ) => {
-      const [item] = await db
-        .select({ id: potteryItems.id })
-        .from(potteryItems)
-        .where(eq(potteryItems.id, payload.itemId));
-      if (!item) return { status: 404, body: { error: "Item not found" } };
-
-      const [imageRow] = await db
-        .select({
-          storagePath: potteryImages.storagePath,
-          itemId: potteryImages.itemId,
-        })
-        .from(potteryImages)
-        .where(eq(potteryImages.id, payload.imageId));
-      if (!imageRow || imageRow.itemId !== payload.itemId)
-        return { status: 404, body: { error: "Photo not found" } };
-
-      await db
-        .delete(potteryImages)
-        .where(eq(potteryImages.id, payload.imageId));
-      await deleteImage(imageRow.storagePath).catch(() => {});
-
-      return {
-        status: 200,
-        body: {
-          type: "delete_pottery_photo",
-          result: { itemId: payload.itemId, imageId: payload.imageId },
-        },
-      };
-    }) as ActionExecutor,
+    delete_pottery_photo: createDeletePhotoExecutor({
+      fetchItem: async (itemId) => {
+        const [r] = await db
+          .select({ id: potteryItems.id })
+          .from(potteryItems)
+          .where(eq(potteryItems.id, itemId));
+        return r ?? null;
+      },
+      fetchImage: async (imageId) => {
+        const [r] = await db
+          .select({
+            storagePath: potteryImages.storagePath,
+            itemId: potteryImages.itemId,
+          })
+          .from(potteryImages)
+          .where(eq(potteryImages.id, imageId));
+        return r ?? null;
+      },
+      deleteDbImage: async (imageId) => {
+        await db.delete(potteryImages).where(eq(potteryImages.id, imageId));
+      },
+      deleteStorageImage: deleteImage,
+      actionType: "delete_pottery_photo",
+    }),
 
     promote_pottery_photo: (async (
       payload: z.infer<typeof PromotePotteryPhotoActionPayload>,

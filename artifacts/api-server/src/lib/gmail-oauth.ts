@@ -1,5 +1,5 @@
-import { OAuth2Client } from "google-auth-library";
-import { env } from "./env";
+import type { OAuth2Client } from "google-auth-library";
+import { createGoogleClient, googleEnabled } from "./google-oauth";
 
 // Gmail access requires its own consent (separate from login and Calendar
 // scopes) and offline access so scans can run without the user present.
@@ -23,7 +23,7 @@ export const GMAIL_SCOPES = [
 ];
 
 export function gmailOAuthEnabled(): boolean {
-  return Boolean(env.googleClientId && env.googleClientSecret);
+  return googleEnabled();
 }
 
 /**
@@ -31,11 +31,10 @@ export function gmailOAuthEnabled(): boolean {
  * google-calendar-oauth.ts's per-request redirect URI pattern but scoped
  * separately for Gmail read access. Reuses the same shared Google OAuth
  * client id/secret — no new secrets needed.
+ *
+ * Delegates to `createGoogleClient` — scope differences are applied when
+ * building the authorisation URL in the route, not here.
  */
 export function createGmailOAuthClient(redirectUri: string): OAuth2Client {
-  return new OAuth2Client({
-    clientId: env.googleClientId,
-    clientSecret: env.googleClientSecret,
-    redirectUri,
-  });
+  return createGoogleClient(redirectUri);
 }

@@ -12,7 +12,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
+} from "@workspace/ui";
 import { ElaineAvatar } from "./ElaineAvatar";
 
 export type AppId =

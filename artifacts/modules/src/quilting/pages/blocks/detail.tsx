@@ -31,7 +31,6 @@ import {
   useCreateBlock,
   useUpdateBlock,
   useCreateBlockTemplate,
-  useListFabrics,
   useListQuiltingCategories,
   getListBlocksQueryKey,
   getGetBlockQueryKey,
@@ -41,12 +40,16 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { fmtInch } from "@/quilting/lib/cell-parser";
-import { buildFabricUrlMap } from "@/quilting/components/FabricPicker";
-import { BlockPreviewSvg } from "@/quilting/components/BlockPreviewSvg";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { TagSelector } from "@/quilting/components/tag-selector";
 import type { QuiltingCategory } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
+
+/** URL for the server-rasterised PNG preview of a block. */
+function blockPreviewUrl(blockId: number, sizePx: number): string {
+  const base = import.meta.env.BASE_URL ?? "/";
+  return `${base}api/quilting/blocks/${blockId}/preview.png?size=${sizePx}`;
+}
 
 export default function BlockDetail() {
   const { id } = useParams<{ id: string }>();
@@ -66,12 +69,7 @@ export default function BlockDetail() {
     isError,
   } = useGetBlock(Number.isFinite(blockId) ? blockId : 0);
 
-  const { data: fabricsData } = useListFabrics({ pageSize: 200 });
-  const fabrics = fabricsData?.items ?? [];
   const { data: allCategories } = useListQuiltingCategories();
-  const numMap = buildFabricUrlMap(
-    fabrics as Parameters<typeof buildFabricUrlMap>[0],
-  );
 
   usePageAssistantContext(
     "quilting-block-detail",
@@ -240,13 +238,10 @@ export default function BlockDetail() {
           className="relative flex aspect-square cursor-zoom-in items-center justify-center overflow-hidden rounded-2xl border border-card-border bg-white p-4 group"
           onClick={() => setZoomOpen(true)}
         >
-          <BlockPreviewSvg
-            cells={cells}
-            gridSize={gridSize}
-            size={280}
-            tileCount={1}
-            fabricUrlMap={numMap}
-            patternPrefix="det-th-"
+          <img
+            src={blockPreviewUrl(blockId!, 280)}
+            alt={b.name}
+            className="max-h-full max-w-full object-contain"
           />
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/20 group-hover:opacity-100">
             <ZoomIn className="h-10 w-10 text-white drop-shadow-lg" />
@@ -476,13 +471,10 @@ export default function BlockDetail() {
         onClose={() => setZoomOpen(false)}
         title={b.name}
       >
-        <BlockPreviewSvg
-          cells={cells}
-          gridSize={gridSize}
-          size={700}
-          tileCount={1}
-          fabricUrlMap={numMap}
-          patternPrefix="det-zm-"
+        <img
+          src={blockPreviewUrl(blockId!, 700)}
+          alt={b.name}
+          className="max-h-full max-w-full object-contain"
         />
       </PreviewZoomModal>
       <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>

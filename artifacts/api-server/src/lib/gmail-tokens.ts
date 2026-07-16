@@ -4,10 +4,8 @@
 import { eq } from "drizzle-orm";
 import { db, travelsGmailConnections } from "@workspace/db";
 import { createGmailOAuthClient } from "./gmail-oauth";
+import { OAUTH_EXPIRY_BUFFER_MS, refreshGoogleToken } from "./google-oauth";
 import { logger } from "./logger";
-
-// Refresh a little before actual expiry to avoid races against in-flight requests.
-const EXPIRY_BUFFER_MS = 60_000;
 
 export interface GmailConnection {
   id: number;
@@ -62,27 +60,25 @@ export async function getValidGmailAccessToken(
   const notExpired =
     row.accessToken &&
     row.accessTokenExpiresAt &&
-    row.accessTokenExpiresAt.getTime() - EXPIRY_BUFFER_MS > Date.now();
+    row.accessTokenExpiresAt.getTime() - OAUTH_EXPIRY_BUFFER_MS > Date.now();
   if (notExpired) return row.accessToken;
 
   try {
     const client = createGmailOAuthClient("");
     client.setCredentials({ refresh_token: row.refreshToken });
-    const { credentials } = await client.refreshAccessToken();
-    if (!credentials.access_token) return null;
+    const refreshed = await refreshGoogleToken(client);
+    if (!refreshed) return null;
 
     await db
       .update(travelsGmailConnections)
       .set({
-        accessToken: credentials.access_token,
-        accessTokenExpiresAt: credentials.expiry_date
-          ? new Date(credentials.expiry_date)
-          : null,
+        accessToken: refreshed.accessToken,
+        accessTokenExpiresAt: refreshed.expiresAt,
         updatedAt: new Date(),
       })
       .where(eq(travelsGmailConnections.userId, userId));
 
-    return credentials.access_token;
+    return refreshed.accessToken;
   } catch (err) {
     logger.warn(
       { errMessage: err instanceof Error ? err.message : String(err), userId },

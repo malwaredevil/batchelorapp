@@ -49,11 +49,11 @@ import {
   useListBlockTemplates,
   type QuiltingBlockTemplate,
 } from "@workspace/api-client-react";
-import { BlockPreviewSvg } from "@/quilting/components/BlockPreviewSvg";
 import {
   FabricPicker,
   buildFabricUrlMap,
 } from "@/quilting/components/FabricPicker";
+import { BlockPreviewSvg } from "@/quilting/components/BlockPreviewSvg";
 import type { QuiltingCategory } from "@workspace/api-client-react";
 import { TagSelector } from "@/quilting/components/tag-selector";
 import { useQueryClient } from "@tanstack/react-query";
@@ -87,6 +87,12 @@ type BlockSummary = {
   seams?: BlockSeamLine[];
   blockSizeInches?: number | null;
 };
+
+/** URL for the server-rasterised PNG preview of a block. */
+function blockPreviewUrl(blockId: number, sizePx: number): string {
+  const base = import.meta.env.BASE_URL ?? "/";
+  return `${base}api/quilting/blocks/${blockId}/preview.png?size=${sizePx}`;
+}
 
 // ---------------------------------------------------------------------------
 // Quilt dimension display — includes sashing + border in total size
@@ -335,120 +341,19 @@ function SvgCell({
 function BlockMini({
   block,
   size = 48,
-  fabricUrlMap = {},
 }: {
   block: BlockSummary;
   size?: number;
-  fabricUrlMap?: Record<number, string>;
 }) {
-  const tileCount = 1;
-  const gridH = Math.max(1, Math.ceil(block.cells.length / block.gridSize));
-  const cellPx = size / (block.gridSize * tileCount);
-  const svgH = gridH * tileCount * cellPx;
-  const tiles = Array.from({ length: tileCount * tileCount }, (_, t) => t);
-  const sw = Math.max(0.3, cellPx * 0.08);
-
-  const fabIds = (() => {
-    const ids = new Set<number>();
-    const FAB_RE = /fab:(\d+)/g;
-    for (const c of block.cells) {
-      let m: RegExpExecArray | null;
-      FAB_RE.lastIndex = 0;
-      while ((m = FAB_RE.exec(c)) !== null) {
-        const n = parseInt(m[1], 10);
-        if (!isNaN(n) && fabricUrlMap[n]) ids.add(n);
-      }
-    }
-    return Array.from(ids);
-  })();
-
   return (
-    <svg width={size} height={svgH} xmlns="http://www.w3.org/2000/svg">
-      {fabIds.length > 0 && (
-        <defs>
-          {fabIds.map((fabId) => (
-            <pattern
-              key={fabId}
-              id={`mini-fab-${fabId}`}
-              patternUnits="userSpaceOnUse"
-              x="0"
-              y="0"
-              width={cellPx}
-              height={cellPx}
-            >
-              <image
-                href={fabricUrlMap[fabId]}
-                x="0"
-                y="0"
-                width={cellPx}
-                height={cellPx}
-                preserveAspectRatio="xMidYMid slice"
-              />
-            </pattern>
-          ))}
-        </defs>
-      )}
-      <rect width={size} height={svgH} fill="#FFFFFF" />
-      {tiles.map((tile) => {
-        const tr = Math.floor(tile / tileCount);
-        const tc = tile % tileCount;
-        const offX = tc * block.gridSize * cellPx;
-        const offY = tr * gridH * cellPx;
-        return (
-          <g key={tile}>
-            {block.cells.map((cell, i) => {
-              const row = Math.floor(i / block.gridSize);
-              const col = i % block.gridSize;
-              return (
-                <SvgCell
-                  key={`${tile}-${i}`}
-                  id={`${tile}-${i}`}
-                  x={offX + col * cellPx}
-                  y={offY + row * cellPx}
-                  w={cellPx}
-                  h={cellPx}
-                  cell={cell}
-                  fabricUrlMap={fabricUrlMap}
-                  patternPrefix="mini-"
-                />
-              );
-            })}
-            {(block.seams ?? []).map((seam, si) => {
-              const cs = seam.clipStart ?? 0,
-                ce = seam.clipEnd ?? 1;
-              if (seam.axis === "h") {
-                const sy = offY + (seam.pos / 2) * cellPx;
-                return (
-                  <line
-                    key={si}
-                    x1={offX + (seam.cellIdx + cs) * cellPx}
-                    y1={sy}
-                    x2={offX + (seam.cellIdx + ce) * cellPx}
-                    y2={sy}
-                    stroke="#333"
-                    strokeWidth={sw}
-                    strokeLinecap="round"
-                  />
-                );
-              }
-              const sx = offX + (seam.pos / 2) * cellPx;
-              return (
-                <line
-                  key={si}
-                  x1={sx}
-                  y1={offY + (seam.cellIdx + cs) * cellPx}
-                  x2={sx}
-                  y2={offY + (seam.cellIdx + ce) * cellPx}
-                  stroke="#333"
-                  strokeWidth={sw}
-                  strokeLinecap="round"
-                />
-              );
-            })}
-          </g>
-        );
-      })}
-    </svg>
+    <img
+      src={blockPreviewUrl(block.id, size)}
+      alt={block.name}
+      width={size}
+      height={size}
+      className="block object-contain"
+      style={{ width: size, height: size }}
+    />
   );
 }
 
@@ -1826,11 +1731,7 @@ export default function LayoutComposer() {
                   }`}
                 >
                   <div className="shrink-0 overflow-hidden rounded">
-                    <BlockMini
-                      block={block}
-                      size={40}
-                      fabricUrlMap={fabricUrlMap}
-                    />
+                    <BlockMini block={block} size={40} />
                   </div>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{block.name}</p>

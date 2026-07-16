@@ -27,15 +27,15 @@ import {
 } from "@workspace/api-client-react";
 import { useVoiceInput } from "./useVoiceInput";
 import { useTTS, DEFAULT_VOICE_PREVIEW_KEY } from "./useTTS";
-import { Button } from "./ui/button";
-import { Textarea } from "./ui/textarea";
+import { Button } from "@workspace/ui";
+import { Textarea } from "@workspace/ui";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
-} from "./ui/dropdown-menu";
+} from "@workspace/ui";
 import { ElaineAvatar, ElaineName } from "./ElaineAvatar";
 import type { ElaineChat } from "./useElaineChat";
 import { MarkdownMessage } from "./MarkdownMessage";

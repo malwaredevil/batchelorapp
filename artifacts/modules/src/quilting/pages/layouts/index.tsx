@@ -62,6 +62,12 @@ import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { CategoryEditDialog } from "@/quilting/components/CategoryEditDialog";
 import { cn } from "@/lib/utils";
 
+/** URL for the server-rasterised PNG preview of a block. */
+function blockPreviewUrl(blockId: number, sizePx: number): string {
+  const base = import.meta.env.BASE_URL ?? "/";
+  return `${base}api/quilting/blocks/${blockId}/preview.png?size=${sizePx}`;
+}
+
 type LayoutCell = { blockId: number | null; rotation: 0 | 90 | 180 | 270 };
 
 type LayoutSummary = {
@@ -447,27 +453,18 @@ function LayoutPreview({
               strokeWidth="0.5"
             />
           );
-        const bCellPx = cellPx / block.gridSize;
         const cx = x + cellPx / 2;
         const cy = y + cellPx / 2;
         return (
           <g key={i} transform={`rotate(${cell.rotation}, ${cx}, ${cy})`}>
-            {block.cells.map((blockCell, j) => {
-              const br = Math.floor(j / block.gridSize);
-              const bc = j % block.gridSize;
-              return (
-                <SvgCell
-                  key={j}
-                  x={x + bc * bCellPx}
-                  y={y + br * bCellPx}
-                  w={bCellPx}
-                  h={bCellPx}
-                  cell={blockCell}
-                  fabricUrlMap={fabricUrlMap}
-                  patternPrefix={patternPrefix}
-                />
-              );
-            })}
+            <image
+              href={blockPreviewUrl(block.id, Math.round(cellPx))}
+              x={x}
+              y={y}
+              width={cellPx}
+              height={cellPx}
+              preserveAspectRatio="xMidYMid slice"
+            />
           </g>
         );
       })}

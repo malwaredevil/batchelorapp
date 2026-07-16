@@ -1,5 +1,5 @@
-import { OAuth2Client } from "google-auth-library";
-import { env } from "./env";
+import type { OAuth2Client } from "google-auth-library";
+import { createGoogleClient, googleEnabled } from "./google-oauth";
 
 // Full mailbox access for the hub webmail feature. Uses the same shared Google
 // OAuth client id/secret as login, Calendar, and the travels Gmail scanner —
@@ -12,7 +12,7 @@ import { env } from "./env";
 export const APP_GMAIL_SCOPES = ["https://mail.google.com/", "email"];
 
 export function appGmailOAuthEnabled(): boolean {
-  return Boolean(env.googleClientId && env.googleClientSecret);
+  return googleEnabled();
 }
 
 /**
@@ -20,11 +20,10 @@ export function appGmailOAuthEnabled(): boolean {
  * shared client id/secret but a different redirect URI and scope set from the
  * travels Gmail scanner. Mirrors the per-request redirect URI pattern of the
  * other OAuth helpers.
+ *
+ * Delegates to `createGoogleClient` — scope differences are applied when
+ * building the authorisation URL in the route, not here.
  */
 export function createAppGmailOAuthClient(redirectUri: string): OAuth2Client {
-  return new OAuth2Client({
-    clientId: env.googleClientId,
-    clientSecret: env.googleClientSecret,
-    redirectUri,
-  });
+  return createGoogleClient(redirectUri);
 }

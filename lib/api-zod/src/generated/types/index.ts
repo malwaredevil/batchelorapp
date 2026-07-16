@@ -22,6 +22,7 @@ export * from './deletePotteryUnusedCategories200';
 export * from './deleteQuiltingUnusedCategories200';
 export * from './error';
 export * from './forgotPasswordInput';
+export * from './getBlockPreviewPngParams';
 export * from './getConversationMessagesParams';
 export * from './getLinkPreviewParams';
 export * from './getUnmatchedDocumentsCount200';

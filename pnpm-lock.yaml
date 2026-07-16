@@ -1079,6 +1079,9 @@ importers:
       '@workspace/api-client-react':
         specifier: workspace:*
         version: link:../api-client-react
+      '@workspace/ui':
+        specifier: workspace:*
+        version: link:../ui
       '@workspace/web-core':
         specifier: workspace:*
         version: link:../web-core
@@ -1197,6 +1200,9 @@ importers:
       '@workspace/elaine-ui':
         specifier: workspace:*
         version: link:../elaine-ui
+      '@workspace/ui':
+        specifier: workspace:*
+        version: link:../ui
       '@workspace/web-core':
         specifier: workspace:*
         version: link:../web-core

@@ -8,7 +8,9 @@
     "./utils": "./src/utils.ts",
     "./auth": "./src/auth.tsx",
     "./use-mobile": "./src/use-mobile.tsx",
-    "./colors": "./src/colors.ts"
+    "./colors": "./src/colors.ts",
+    "./mount-app": "./src/mount-app.tsx",
+    "./not-found": "./src/not-found.tsx"
   },
   "dependencies": {
     "@workspace/api-client-react": "workspace:*",
@@ -16,9 +18,11 @@
     "tailwind-merge": "catalog:"
   },
   "peerDependencies": {
-    "react": ">=18"
+    "react": ">=18",
+    "react-dom": ">=18"
   },
   "devDependencies": {
-    "@types/react": "catalog:"
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:"
   }
 }

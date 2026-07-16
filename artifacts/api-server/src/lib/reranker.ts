@@ -87,6 +87,58 @@ export async function rerankCandidates(
 }
 
 /**
+ * Reciprocal Rank Fusion across an arbitrary number of ranked lanes.
+ *
+ * Each lane is an array of `{ id, similarity }` items already sorted by
+ * descending score. The first lane is treated as the "text lane" — its
+ * similarity value is preserved on the output for downstream use (more
+ * interpretable than the composite RRF score). Items that appear in multiple
+ * lanes rise higher; items missing from a lane are simply skipped for that
+ * lane's contribution.
+ *
+ * Gracefully degrades: passing a single lane returns its items re-ordered by
+ * their 1/(k+rank) RRF contribution, which is equivalent to the original order.
+ *
+ * @param lanes  One entry per ranking source; order matters (first = text).
+ * @param k      RRF smoothing constant (default 60).
+ * @param topK   Maximum results to return (default 10).
+ */
+export function reciprocalRankFusion(
+  lanes: Array<Array<{ id: number; similarity: number }>>,
+  k = 60,
+  topK = 10,
+): Array<{ id: number; rrfScore: number; textSimilarity: number }> {
+  const scores = new Map<
+    number,
+    { rrfScore: number; textSimilarity: number }
+  >();
+
+  const textLane = lanes[0] ?? [];
+  for (const { id, similarity } of textLane) {
+    scores.set(id, { rrfScore: 0, textSimilarity: similarity });
+  }
+  for (const lane of lanes.slice(1)) {
+    for (const { id } of lane) {
+      if (!scores.has(id)) scores.set(id, { rrfScore: 0, textSimilarity: 0 });
+    }
+  }
+  for (const lane of lanes) {
+    for (let i = 0; i < lane.length; i++) {
+      scores.get(lane[i].id)!.rrfScore += 1 / (k + i + 1);
+    }
+  }
+
+  return Array.from(scores.entries())
+    .map(([id, { rrfScore, textSimilarity }]) => ({
+      id,
+      rrfScore,
+      textSimilarity,
+    }))
+    .sort((a, b) => b.rrfScore - a.rrfScore)
+    .slice(0, topK);
+}
+
+/**
  * Build a plain-text document string from a fabric's structured attributes.
  * This is what Voyage compares against the query.
  */

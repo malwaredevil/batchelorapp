@@ -21,7 +21,7 @@ import {
   generateVisualEmbedding,
   generateZoneEmbedding,
 } from "../../lib/visual-embed";
-import { rerankCandidates } from "../../lib/reranker";
+import { rerankCandidates, reciprocalRankFusion } from "../../lib/reranker";
 import { downloadAndShrinkImageForAi } from "../../lib/pottery/storage";
 import { serializeItems } from "../../lib/pottery/serialize";
 import { getThresholds } from "../../lib/ai-client";
@@ -52,52 +52,6 @@ const {
   zoneEmbedding: _zoneEmbedding,
   ...itemColumns
 } = getTableColumns(potteryItems);
-
-// ---------------------------------------------------------------------------
-// Reciprocal Rank Fusion (k=60) — blends text and visual ranking lists.
-// Pieces appearing in both lists rise higher; textSimilarity from the text lane
-// is preserved for the GPT prompt and verdict flooring (more interpretable than
-// the RRF score).
-// ---------------------------------------------------------------------------
-function reciprocalRankFusion(
-  textRanked: Array<{ id: number; similarity: number }>,
-  visualRanked: Array<{ id: number; similarity: number }>,
-  zoneRanked: Array<{ id: number; similarity: number }>,
-  k = 60,
-): Array<{ id: number; rrfScore: number; textSimilarity: number }> {
-  const scores = new Map<
-    number,
-    { rrfScore: number; textSimilarity: number }
-  >();
-
-  for (const { id, similarity } of textRanked) {
-    scores.set(id, { rrfScore: 0, textSimilarity: similarity });
-  }
-  for (const { id } of visualRanked) {
-    if (!scores.has(id)) scores.set(id, { rrfScore: 0, textSimilarity: 0 });
-  }
-  for (const { id } of zoneRanked) {
-    if (!scores.has(id)) scores.set(id, { rrfScore: 0, textSimilarity: 0 });
-  }
-  for (let i = 0; i < textRanked.length; i++) {
-    scores.get(textRanked[i].id)!.rrfScore += 1 / (k + i + 1);
-  }
-  for (let i = 0; i < visualRanked.length; i++) {
-    scores.get(visualRanked[i].id)!.rrfScore += 1 / (k + i + 1);
-  }
-  for (let i = 0; i < zoneRanked.length; i++) {
-    scores.get(zoneRanked[i].id)!.rrfScore += 1 / (k + i + 1);
-  }
-
-  return Array.from(scores.entries())
-    .map(([id, { rrfScore, textSimilarity }]) => ({
-      id,
-      rrfScore,
-      textSimilarity,
-    }))
-    .sort((a, b) => b.rrfScore - a.rrfScore)
-    .slice(0, TOP_K);
-}
 
 /**
  * Build a plain-text document from a pottery piece's structured attributes —
@@ -239,11 +193,11 @@ router.post(
 
     // Three-way RRF: text + whole-piece visual + body-zone pattern.
     // Gracefully degrades to 2-way or text-only when lanes are empty.
-    const mergedRanking = reciprocalRankFusion(
+    const mergedRanking = reciprocalRankFusion([
       textRanked,
       visualRanked,
       zoneRanked,
-    );
+    ]);
 
     if (mergedRanking.length === 0) {
       res.json(

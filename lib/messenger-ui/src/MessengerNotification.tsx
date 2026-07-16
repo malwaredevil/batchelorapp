@@ -16,6 +16,48 @@ import {
 } from "@workspace/api-client-react";
 import { useAuth } from "@workspace/web-core/auth";
 
+// ─── Notification sound via Web Audio API ────────────────────────────────────
+function playNotificationSound(): void {
+  try {
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext })
+        .webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const playTone = (
+      freq: number,
+      start: number,
+      duration: number,
+      vol = 0.22,
+    ) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(vol, start + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+      osc.start(start);
+      osc.stop(start + duration);
+    };
+    const t = ctx.currentTime;
+    playTone(880, t, 0.18);
+    playTone(1108, t + 0.14, 0.24);
+    setTimeout(() => ctx.close().catch(() => {}), 1200);
+  } catch {
+    // AudioContext not available
+  }
+}
+
+// ─── Document title badge helpers ────────────────────────────────────────────
+// Strips any existing "(N) " prefix so we always work with the clean base title.
+function stripBadge(title: string): string {
+  return title.replace(/^\(\d+\)\s/, "");
+}
+
 let styleInjected = false;
 function injectStyle() {
   if (styleInjected || typeof document === "undefined") return;
@@ -62,7 +104,7 @@ export function MessengerNotification() {
   });
   const unreadCount = unreadData?.count ?? 0;
 
-  // Keep the installed PWA's home-screen icon badge in sync with unread count.
+  // ── PWA home-screen badge ────────────────────────────────────────────────
   useEffect(() => {
     try {
       if (unreadCount > 0) {
@@ -82,6 +124,31 @@ export function MessengerNotification() {
       // not supported
     }
   }, [unreadCount]);
+
+  // ── Browser tab title badge ──────────────────────────────────────────────
+  // Prefixes document.title with "(N) " while unread > 0 so the user sees
+  // the count in the tab when they switch away. Restores the clean title
+  // when the count drops to zero or the tab is focused.
+  useEffect(() => {
+    const base = stripBadge(document.title);
+    if (unreadCount > 0) {
+      document.title = `(${unreadCount}) ${base}`;
+    } else {
+      document.title = base;
+    }
+  }, [unreadCount]);
+
+  // Restore clean title when tab regains focus (in case the user returns
+  // before the next unreadCount poll brings the count to 0).
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        document.title = stripBadge(document.title);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
 
   const { data: conversations } = useListConversations({
     query: {
@@ -134,6 +201,9 @@ export function MessengerNotification() {
     prevCountRef.current = unreadCount;
 
     if (unreadCount <= prev) return;
+
+    // Play a notification sound when a new message arrives.
+    playNotificationSound();
 
     const currentUserId = user?.id ?? 0;
     const unread = (messages as MessengerMessengerMessage[])

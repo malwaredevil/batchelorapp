@@ -457,7 +457,10 @@ function LayoutPreview({
         return (
           <g key={i} transform={`rotate(${cell.rotation}, ${cx}, ${cy})`}>
             <image
-              href={blockPreviewUrl(block.id, Math.round(cellPx))}
+              href={blockPreviewUrl(
+                block.id,
+                Math.max(160, Math.round(cellPx * 2)),
+              )}
               x={x}
               y={y}
               width={cellPx}

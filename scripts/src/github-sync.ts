@@ -60,7 +60,19 @@ function gh<T>(method: string, apiPath: string, body?: unknown): Promise<T> {
         r.on("data", (c) => (d += c));
         r.on("end", () => {
           try {
-            res(JSON.parse(d) as T);
+            const parsed = JSON.parse(d) as T;
+            if (
+              r.statusCode !== undefined &&
+              (r.statusCode < 200 || r.statusCode >= 300)
+            ) {
+              rej(
+                new Error(
+                  `GitHub API ${r.statusCode} for ${method} ${apiPath}: ${d.slice(0, 300)}`,
+                ),
+              );
+            } else {
+              res(parsed);
+            }
           } catch {
             rej(
               new Error(
@@ -111,6 +123,9 @@ const EXCLUDED_EXTENSIONS = new Set([
 function isExcluded(filePath: string): boolean {
   if (EXCLUDED_EXACT.includes(filePath)) return true;
   if (EXCLUDED_PREFIXES.some((p) => filePath.startsWith(p))) return true;
+  // Also exclude nested node_modules/ and dist/ directories (e.g. lib/ui/node_modules/, artifacts/api-server/dist/)
+  if (filePath.includes("/node_modules/") || filePath.includes("/dist/"))
+    return true;
   const ext = path.extname(filePath).toLowerCase();
   return EXCLUDED_EXTENSIONS.has(ext);
 }
@@ -219,7 +234,10 @@ async function main() {
     `\nBase commit: ${headSha.slice(0, 8)}, tree: ${headCommit.tree.sha.slice(0, 8)}`,
   );
 
-  // Create all blobs
+  // Create all blobs, deduplicating by content SHA to avoid redundant API calls
+  // (e.g. 3 artifacts with identical stub files only need 1 blob upload each)
+  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+  const uploadedByLocalSha = new Map<string, string>(); // localSha -> ghBlobSha
   const treeEntries: {
     path: string;
     mode: string;
@@ -227,19 +245,33 @@ async function main() {
     sha: string;
   }[] = [];
   for (const filePath of changedFiles) {
-    const content = fs
-      .readFileSync(path.join(root, filePath))
-      .toString("base64");
-    const blob = await gh<{ sha: string }>("POST", "/git/blobs", {
-      content,
-      encoding: "base64",
-    });
-    console.log(`  blob ${path.basename(filePath)}: ${blob.sha.slice(0, 8)}`);
+    const localSha = localBlobSha(path.join(root, filePath));
+    let ghBlobSha: string;
+    if (uploadedByLocalSha.has(localSha)) {
+      ghBlobSha = uploadedByLocalSha.get(localSha)!;
+      console.log(
+        `  blob ${path.basename(filePath)}: ${ghBlobSha.slice(0, 8)} (deduped)`,
+      );
+    } else {
+      await sleep(80); // stay under GitHub secondary rate limit
+      const content = fs
+        .readFileSync(path.join(root, filePath))
+        .toString("base64");
+      const blob = await gh<{ sha: string }>("POST", "/git/blobs", {
+        content,
+        encoding: "base64",
+      });
+      ghBlobSha = blob.sha;
+      uploadedByLocalSha.set(localSha, ghBlobSha);
+      console.log(
+        `  blob ${path.basename(filePath)}: ${ghBlobSha.slice(0, 8)}`,
+      );
+    }
     treeEntries.push({
       path: filePath,
       mode: "100644",
       type: "blob",
-      sha: blob.sha,
+      sha: ghBlobSha,
     });
   }
 

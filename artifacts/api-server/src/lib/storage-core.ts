@@ -198,3 +198,35 @@ export class ImageStorageService {
     this.invalidateImageCache(path);
   }
 }
+
+// ---------------------------------------------------------------------------
+// buildStorageAdapter
+//
+// Factory that wraps ImageStorageService into a plain named-export object so
+// domain storage modules can be reduced to a single call instead of hand-writing
+// the same three forwarding functions for every new bucket. Specialised helpers
+// (downloadAndShrinkImageForAi, downloadImageAsDataUrl) that require domain-
+// specific image-processing utilities are not included here — each domain adds
+// them on top of the three base exports.
+//
+// Usage:
+//   const adapter = buildStorageAdapter("pottery");
+//   export const { uploadImage, downloadImageBuffer, deleteImage } = adapter;
+// ---------------------------------------------------------------------------
+
+export function buildStorageAdapter(bucket: string) {
+  const svc = new ImageStorageService(bucket);
+  return {
+    uploadImage: (
+      buffer: Buffer,
+      contentType: SupportedImageType,
+    ): Promise<string> => svc.uploadImage(buffer, contentType),
+    downloadImageBuffer: (
+      path: string,
+    ): Promise<{ buffer: Buffer; contentType: string }> =>
+      svc.downloadImageBuffer(path),
+    deleteImage: (path: string): Promise<void> => svc.deleteImage(path),
+    invalidateImageCache: (path: string): void =>
+      svc.invalidateImageCache(path),
+  };
+}

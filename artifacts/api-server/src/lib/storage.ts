@@ -1,20 +1,12 @@
-import { ImageStorageService } from "./storage-core";
+import { buildStorageAdapter } from "./storage-core";
 import { sniffImageType, toAiDataUrl, type SupportedImageType } from "./image";
 
-const storage = new ImageStorageService("quilting");
+const adapter = buildStorageAdapter("quilting");
 
-export async function uploadImage(
-  buffer: Buffer,
-  contentType: SupportedImageType,
-): Promise<string> {
-  return storage.uploadImage(buffer, contentType);
-}
-
-export async function downloadImageBuffer(
-  path: string,
-): Promise<{ buffer: Buffer; contentType: string }> {
-  return storage.downloadImageBuffer(path);
-}
+export const uploadImage = adapter.uploadImage;
+export const downloadImageBuffer = adapter.downloadImageBuffer;
+export const deleteImage = adapter.deleteImage;
+export type { SupportedImageType };
 
 /**
  * Download an image from private storage and return a data URL bounded to the
@@ -22,14 +14,10 @@ export async function downloadImageBuffer(
  * before resolution limits were enforced cannot bloat a vision-model request.
  */
 export async function downloadImageAsDataUrl(path: string): Promise<string> {
-  const { buffer } = await storage.downloadImageBuffer(path);
+  const { buffer } = await adapter.downloadImageBuffer(path);
   const contentType = sniffImageType(buffer);
   if (!contentType) {
     throw new Error(`Stored object is not a supported image: ${path}`);
   }
   return toAiDataUrl(buffer, contentType);
-}
-
-export async function deleteImage(path: string): Promise<void> {
-  return storage.deleteImage(path);
 }

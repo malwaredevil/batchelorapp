@@ -88,9 +88,23 @@ const EXCLUDED_PREFIXES = [
 const EXCLUDED_EXACT = ["threat_model.md"];
 // Binary/media files — large and not meaningful to diff
 const EXCLUDED_EXTENSIONS = new Set([
-  ".jpg", ".jpeg", ".png", ".gif", ".webp", ".ico", ".bmp",
-  ".pdf", ".xlsx", ".xls", ".docx", ".doc",
-  ".mp3", ".mp4", ".mov", ".avi", ".webm",
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".gif",
+  ".webp",
+  ".ico",
+  ".bmp",
+  ".pdf",
+  ".xlsx",
+  ".xls",
+  ".docx",
+  ".doc",
+  ".mp3",
+  ".mp4",
+  ".mov",
+  ".avi",
+  ".webm",
   ".tsbuildinfo",
 ]);
 

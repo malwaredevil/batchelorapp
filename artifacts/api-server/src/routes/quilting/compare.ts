@@ -14,7 +14,11 @@ import {
   type CompareMatchInput,
 } from "../../lib/openai";
 import { generateVisualEmbedding } from "../../lib/visual-embed";
-import { rerankCandidates, buildFabricDocument } from "../../lib/reranker";
+import {
+  rerankCandidates,
+  buildFabricDocument,
+  reciprocalRankFusion,
+} from "../../lib/reranker";
 import { downloadImageAsDataUrl } from "../../lib/storage";
 import { serializeFabrics } from "../../lib/serialize";
 
@@ -39,44 +43,6 @@ const {
   visualEmbedding: _ve,
   ...fabricColumns
 } = getTableColumns(fabrics);
-
-// ---------------------------------------------------------------------------
-// Reciprocal Rank Fusion (k=60) — blends text and visual ranking lists.
-// Fabrics appearing in both lists rise higher; textSimilarity from the text
-// lane is preserved for the GPT prompt (more interpretable than RRF score).
-// ---------------------------------------------------------------------------
-function reciprocalRankFusion(
-  textRanked: Array<{ id: number; similarity: number }>,
-  visualRanked: Array<{ id: number; similarity: number }>,
-  k = 60,
-): Array<{ id: number; rrfScore: number; textSimilarity: number }> {
-  const scores = new Map<
-    number,
-    { rrfScore: number; textSimilarity: number }
-  >();
-
-  for (const { id, similarity } of textRanked) {
-    scores.set(id, { rrfScore: 0, textSimilarity: similarity });
-  }
-  for (const { id } of visualRanked) {
-    if (!scores.has(id)) scores.set(id, { rrfScore: 0, textSimilarity: 0 });
-  }
-  for (let i = 0; i < textRanked.length; i++) {
-    scores.get(textRanked[i].id)!.rrfScore += 1 / (k + i + 1);
-  }
-  for (let i = 0; i < visualRanked.length; i++) {
-    scores.get(visualRanked[i].id)!.rrfScore += 1 / (k + i + 1);
-  }
-
-  return Array.from(scores.entries())
-    .map(([id, { rrfScore, textSimilarity }]) => ({
-      id,
-      rrfScore,
-      textSimilarity,
-    }))
-    .sort((a, b) => b.rrfScore - a.rrfScore)
-    .slice(0, TOP_K);
-}
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -151,7 +117,7 @@ router.post(
 
     // Merge via RRF. Falls back to text-only when the visual lane is empty
     // (no JINA_API_KEY or no visual embeddings yet stored).
-    const mergedRanking = reciprocalRankFusion(textRanked, visualRanked);
+    const mergedRanking = reciprocalRankFusion([textRanked, visualRanked]);
 
     if (mergedRanking.length === 0) {
       res.json(

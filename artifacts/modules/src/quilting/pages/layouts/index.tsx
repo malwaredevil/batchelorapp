@@ -64,8 +64,7 @@ import { cn } from "@/lib/utils";
 
 /** URL for the server-rasterised PNG preview of a block. */
 function blockPreviewUrl(blockId: number, sizePx: number): string {
-  const base = import.meta.env.BASE_URL ?? "/";
-  return `${base}api/quilting/blocks/${blockId}/preview.png?size=${sizePx}`;
+  return `/api/quilting/blocks/${blockId}/preview.png?size=${sizePx}`;
 }
 
 type LayoutCell = { blockId: number | null; rotation: 0 | 90 | 180 | 270 };

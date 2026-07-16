@@ -15,6 +15,22 @@ import { db, blocks, fabrics } from "@workspace/db";
 import { downloadImageBuffer } from "./storage";
 import { logger } from "./logger";
 
+// ─── In-memory PNG cache ────────────────────────────────────────────────────
+// Keyed by ETag string (encodes blockId + createdAt + sizePx).
+// Avoids re-fetching Supabase fabric images + re-rasterising on every request
+// once a block has been rendered at a given size.
+// Max 500 entries; evicts oldest (Map insertion order) when full.
+const PNG_CACHE = new Map<string, Buffer>();
+const PNG_CACHE_MAX = 500;
+
+function pngCacheSet(key: string, buf: Buffer): void {
+  if (PNG_CACHE.size >= PNG_CACHE_MAX) {
+    const oldest = PNG_CACHE.keys().next().value;
+    if (oldest !== undefined) PNG_CACHE.delete(oldest);
+  }
+  PNG_CACHE.set(key, buf);
+}
+
 // ─── parseCell (ported from cell-parser.ts) ────────────────────────────────
 // Must be kept in sync with the canonical version in the modules artifact.
 
@@ -356,6 +372,22 @@ export async function renderBlockPreviewPng(
     .limit(1);
   if (!row) return null;
 
+  // 1a. Check in-memory cache — keyed by (blockId, createdAt, size).
+  // This avoids re-fetching fabric images from Supabase + re-rasterising on
+  // every request after the first render at each size.
+  const cacheKey = `blk-${blockId}-${row.createdAt?.getTime() ?? 0}-${clampedSize}`;
+  const cached = PNG_CACHE.get(cacheKey);
+  if (cached) {
+    const etag = `"${cacheKey}"`;
+    const gridH = Math.max(
+      1,
+      Math.ceil(((row.cells as string[]) ?? []).length / row.gridSize),
+    );
+    const cellPx = clampedSize / row.gridSize;
+    const heightPx = Math.round(gridH * cellPx);
+    return { png: cached, etag, heightPx };
+  }
+
   const cells = (row.cells as string[]) ?? [];
   const gridSize = row.gridSize;
   const seams = (row.seams ?? []) as SeamLine[];
@@ -407,6 +439,7 @@ export async function renderBlockPreviewPng(
     .png({ compressionLevel: 6 })
     .toBuffer();
 
-  const etag = `"blk-${blockId}-${row.createdAt?.getTime() ?? 0}-${clampedSize}"`;
+  const etag = `"${cacheKey}"`;
+  pngCacheSet(cacheKey, png);
   return { png, etag, heightPx };
 }

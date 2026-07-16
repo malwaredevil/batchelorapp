@@ -344,9 +344,10 @@ function BlockMini({
   block: BlockSummary;
   size?: number;
 }) {
+  const fetchSize = Math.max(size * 2, 96);
   return (
     <img
-      src={blockPreviewUrl(block.id, size)}
+      src={blockPreviewUrl(block.id, fetchSize)}
       alt={block.name}
       width={size}
       height={size}

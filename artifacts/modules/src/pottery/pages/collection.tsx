@@ -26,6 +26,7 @@ import {
   Users,
   ChevronLeft,
   ChevronRight,
+  ZoomIn,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +44,9 @@ import { QuickEditSheet } from "@/pottery/components/quick-edit-sheet";
 import { colorToHex } from "@/pottery/lib/colors";
 import { usePageAssistantContext } from "@/pottery/lib/assistant-context";
 import { useAppConfigSummary } from "@workspace/elaine-ui";
+import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
+import { DominantColorDots } from "@/components/collection/DominantColorDots";
+import { QuantityBadge } from "@/components/collection/QuantityBadge";
 
 // ---------------------------------------------------------------------------
 // Collection compare modal
@@ -209,9 +213,10 @@ function PieceCard({
   activeColor: string | null;
 }) {
   const [imgLoaded, setImgLoaded] = useState(false);
+  const [zoomOpen, setZoomOpen] = useState(false);
   return (
     <div className="relative group">
-      {/* Selection checkbox */}
+      {/* Selection checkbox (selecting mode) — top-left */}
       {selecting && (
         <button
           type="button"
@@ -228,7 +233,23 @@ function PieceCard({
         </button>
       )}
 
-      {/* Card actions menu */}
+      {/* Zoom button — top-left, only when not in selection mode */}
+      {!selecting && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setZoomOpen(true);
+          }}
+          className="absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/70"
+          title="Zoom preview"
+        >
+          <ZoomIn className="h-3.5 w-3.5" />
+        </button>
+      )}
+
+      {/* Card actions menu — top-right */}
       {!selecting && (
         <div className="absolute right-2 top-2 z-10 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition">
           <DropdownMenu>
@@ -339,30 +360,12 @@ function PieceCard({
               Uncategorized
             </Badge>
           )}
-          {item.dominantColors.length > 0 && (
-            <div className="flex items-center gap-1">
-              {item.dominantColors.slice(0, 5).map((c, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onColorFilter(c);
-                  }}
-                  className={cn(
-                    "h-3.5 w-3.5 rounded-full border transition hover:scale-125 focus:outline-none",
-                    activeColor === c
-                      ? "border-primary ring-2 ring-primary/50 scale-125"
-                      : "border-black/15 hover:border-black/30",
-                  )}
-                  style={{ backgroundColor: colorToHex(c) }}
-                  title={`Filter by ${c}`}
-                  aria-label={`Filter by ${c}`}
-                />
-              ))}
-            </div>
-          )}
+          <DominantColorDots
+            colors={item.dominantColors}
+            activeColor={activeColor}
+            onColorClick={onColorFilter}
+            toHex={colorToHex}
+          />
           <div className="flex items-center justify-between gap-1">
             {item.shape ? (
               <p className="truncate text-xs text-muted-foreground">
@@ -371,14 +374,22 @@ function PieceCard({
             ) : (
               <span />
             )}
-            {(item.quantity ?? 1) > 1 && (
-              <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                ×{item.quantity}
-              </span>
-            )}
+            <QuantityBadge quantity={item.quantity} />
           </div>
         </div>
       </Link>
+
+      <PreviewZoomModal
+        open={zoomOpen}
+        onClose={() => setZoomOpen(false)}
+        title={item.name}
+      >
+        <img
+          src={item.imageUrl}
+          alt={item.name}
+          className="max-h-full max-w-full object-contain"
+        />
+      </PreviewZoomModal>
     </div>
   );
 }

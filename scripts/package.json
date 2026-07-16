@@ -12,6 +12,9 @@
     "check-ci-status": "tsx ./src/check-ci-status.ts",
     "check-raw-fetch": "tsx ./src/check-raw-fetch.ts",
     "cleanup-app-config-defaults": "tsx ./src/cleanup-app-config-defaults.ts",
+    "sentry-baseline": "tsx ./src/sentry-baseline.ts",
+    "github-sync": "tsx ./src/github-sync.ts",
+    "pre-publish": "bash ./src/pre-publish.sh",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

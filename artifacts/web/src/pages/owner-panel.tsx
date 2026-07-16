@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, Code2, Globe, Map, Settings2 } from "lucide-react";
+import { ArrowLeft, Code2, Globe, Map, Settings2, Puzzle } from "lucide-react";
 import { GlobalConfigCard } from "@workspace/elaine-ui";
 import {
   ReminderEmailCard,
@@ -13,14 +13,21 @@ import { useAuth } from "@/lib/auth";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 import { ControlPanelContent } from "@/pages/control-panel";
 import { GoogleApisDemoContent } from "@/pages/google-apis-demo";
+import { ServicesCatalogContent } from "@/pages/services-catalog";
 
-type Tab = "travels" | "global-config" | "control-panel" | "google-apis";
+type Tab =
+  | "travels"
+  | "global-config"
+  | "control-panel"
+  | "google-apis"
+  | "services";
 
 const ALL_TABS: { id: Tab; label: string; icon: typeof Globe }[] = [
   { id: "travels", label: "Travels", icon: Globe },
   { id: "global-config", label: "Global Config", icon: Settings2 },
   { id: "control-panel", label: "Control Panel", icon: Code2 },
   { id: "google-apis", label: "Google APIs", icon: Map },
+  { id: "services", label: "Services", icon: Puzzle },
 ];
 
 export default function OwnerPanel() {
@@ -126,6 +133,8 @@ export default function OwnerPanel() {
         {safeTab === "control-panel" && isOwner && <ControlPanelContent />}
 
         {safeTab === "google-apis" && isOwner && <GoogleApisDemoContent />}
+
+        {safeTab === "services" && isOwner && <ServicesCatalogContent />}
       </main>
     </div>
   );

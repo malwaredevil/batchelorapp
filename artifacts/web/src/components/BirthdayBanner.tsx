@@ -29,7 +29,8 @@ export function BirthdayBanner() {
         left: 0,
         right: 0,
         zIndex: 9999,
-        background: "linear-gradient(135deg, #f97316 0%, #ec4899 50%, #a855f7 100%)",
+        background:
+          "linear-gradient(135deg, #f97316 0%, #ec4899 50%, #a855f7 100%)",
         color: "#fff",
         padding: "14px 20px",
         display: "flex",
@@ -40,7 +41,13 @@ export function BirthdayBanner() {
       }}
     >
       <span style={{ fontSize: "1.5rem", lineHeight: 1 }}>🎂</span>
-      <span style={{ fontWeight: 600, fontSize: "1.05rem", letterSpacing: "0.01em" }}>
+      <span
+        style={{
+          fontWeight: 600,
+          fontSize: "1.05rem",
+          letterSpacing: "0.01em",
+        }}
+      >
         Happy Birthday, {name}! Wishing you a wonderful day! 🎉
       </span>
       <button

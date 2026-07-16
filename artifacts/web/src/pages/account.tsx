@@ -93,7 +93,9 @@ function ProfileCard() {
     e.preventDefault();
     const trimmedBirthday = birthday.trim();
     if (trimmedBirthday && !BIRTHDAY_RE.test(trimmedBirthday)) {
-      toast.error("Birthday must be in MM-DD format, e.g. 03-15 for March 15th.");
+      toast.error(
+        "Birthday must be in MM-DD format, e.g. 03-15 for March 15th.",
+      );
       return;
     }
     update.mutate({
@@ -145,7 +147,8 @@ function ProfileCard() {
           />
           {birthday && BIRTHDAY_RE.test(birthday.trim()) && (
             <p className="text-xs text-muted-foreground">
-              {formatBirthdayDisplay(birthday.trim())} — Elaine will send you a birthday email and a banner will appear when you log in! 🎂
+              {formatBirthdayDisplay(birthday.trim())} — Elaine will send you a
+              birthday email and a banner will appear when you log in! 🎂
             </p>
           )}
         </div>

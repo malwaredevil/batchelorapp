@@ -26,6 +26,12 @@
     },
     {
       "path": "./lib/travels-settings-ui"
+    },
+    {
+      "path": "./lib/ui"
+    },
+    {
+      "path": "./lib/image-capture"
     }
   ]
 }

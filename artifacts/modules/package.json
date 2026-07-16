@@ -53,6 +53,8 @@
     "@workspace/messenger-ui": "workspace:*",
     "@workspace/travels-settings-ui": "workspace:*",
     "@workspace/gmail-ui": "workspace:*",
+    "@workspace/image-capture": "workspace:*",
+    "@workspace/ui": "workspace:*",
     "@workspace/web-core": "workspace:*",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",

@@ -1,267 +1,196 @@
-import { Router, type IRouter } from "express";
-import { asc, eq, count as sqlCount, notInArray } from "drizzle-orm";
+import { asc, eq, count as sqlCount, notInArray, type SQL } from "drizzle-orm";
 import {
   db,
-  quiltingCategories as categories,
-  entityCategories,
+  quiltingCategories as cats,
+  entityCategories as joinTable,
 } from "@workspace/db";
 import {
-  ListQuiltingCategoriesResponse as ListCategoriesResponse,
-  ListQuiltingCategoriesResponseItem as ListCategoriesResponseItem,
-  CreateQuiltingCategoryBody as CreateCategoryBody,
-  DeleteQuiltingCategoryParams as DeleteCategoryParams,
-  RenameQuiltingCategoryParams as RenameCategoryParams,
-  RenameQuiltingCategoryBody as RenameCategoryBody,
-  MergeQuiltingCategoryBody as MergeCategoryBody,
-  UpdateQuiltingCategoryColorsBody as UpdateCategoryColorsBody,
-  UpdateQuiltingCategoryColorsParams as UpdateCategoryColorsParams,
+  ListQuiltingCategoriesResponse,
+  ListQuiltingCategoriesResponseItem,
+  CreateQuiltingCategoryBody,
+  DeleteQuiltingCategoryParams,
+  RenameQuiltingCategoryParams,
+  RenameQuiltingCategoryBody,
+  MergeQuiltingCategoryBody,
+  UpdateQuiltingCategoryColorsBody,
+  UpdateQuiltingCategoryColorsParams,
 } from "@workspace/api-zod";
-import { requireAuth } from "../../middleware/auth";
+import {
+  buildCategoryRouter,
+  normalizeCategoryNameAggressive,
+  type CategoryOps,
+  type RenameResult,
+  type MergeResult,
+} from "../../lib/category-router-factory";
 
-function isUniqueConstraintViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code: string }).code === "23505"
-  );
-}
+// ---------------------------------------------------------------------------
+// Domain-specific DB ops
+// Quilting uses entityCategories (polymorphic: entityId + entityType)
+// ---------------------------------------------------------------------------
 
-function normalizeCategoryName(raw: string): string {
-  const t = raw
-    .replace(
-      /[\u201C\u201D\u201E\u201F\u2033\u2036\u275D\u275E\u301D\u301E\u02BA\uFF02″]/g,
-      '"',
-    )
-    .replace(
-      /[\u2018\u2019\u201A\u201B\u2032\u2035\u275B\u275C\u02B9\u02BC\uFF07′]/g,
-      "'",
-    )
-    .replace(/[\u2013\u2014\u2015\u2012]/g, "-")
-    .replace(/\u2026/g, "...")
-    .trim();
-  if (!t) return t;
-  return t.charAt(0).toUpperCase() + t.slice(1);
-}
-
-const router: IRouter = Router();
-router.use(requireAuth);
-
-/** Fetch a single category row with its assigned-entity count. Categories are shared household-wide. */
-async function fetchWithCount(id: number) {
-  const [row] = await db
-    .select({
-      id: categories.id,
-      name: categories.name,
-      bgColor: categories.bgColor,
-      textColor: categories.textColor,
-      count: sqlCount(entityCategories.entityId),
-    })
-    .from(categories)
-    .leftJoin(entityCategories, eq(entityCategories.categoryId, categories.id))
-    .where(eq(categories.id, id))
-    .groupBy(
-      categories.id,
-      categories.name,
-      categories.bgColor,
-      categories.textColor,
-    );
-  return row ?? null;
-}
-
-router.get("/categories", async (_req, res) => {
-  const rows = await db
-    .select({
-      id: categories.id,
-      name: categories.name,
-      bgColor: categories.bgColor,
-      textColor: categories.textColor,
-      count: sqlCount(entityCategories.entityId),
-    })
-    .from(categories)
-    .leftJoin(entityCategories, eq(entityCategories.categoryId, categories.id))
-    .groupBy(
-      categories.id,
-      categories.name,
-      categories.bgColor,
-      categories.textColor,
-    )
-    .orderBy(asc(categories.name));
-  res.json(ListCategoriesResponse.parse(rows));
-});
-
-router.post("/categories", async (req, res) => {
-  const userId = req.session.userId!;
-  const body = CreateCategoryBody.parse(req.body);
-  const name = normalizeCategoryName(body.name);
-  try {
-    const [row] = await db
-      .insert(categories)
-      .values({
-        userId,
-        name,
-        bgColor: body.bgColor ?? null,
-        textColor: body.textColor ?? null,
+const ops: CategoryOps = {
+  async listWithCounts() {
+    return db
+      .select({
+        id: cats.id,
+        name: cats.name,
+        bgColor: cats.bgColor,
+        textColor: cats.textColor,
+        count: sqlCount(joinTable.entityId),
       })
-      .returning({ id: categories.id });
-    const withCount = await fetchWithCount(row.id);
-    res.status(201).json(ListCategoriesResponseItem.parse(withCount));
-  } catch (err) {
-    if (isUniqueConstraintViolation(err)) {
-      res
-        .status(409)
-        .json({ error: "A category with that name already exists." });
-      return;
-    }
-    throw err;
-  }
-});
+      .from(cats)
+      .leftJoin(joinTable, eq(joinTable.categoryId, cats.id))
+      .groupBy(cats.id, cats.name, cats.bgColor, cats.textColor)
+      .orderBy(asc(cats.name));
+  },
 
-/** Rename a quilting category. Shared by the REST route and Elaine's
- * rename_quilting_category action. */
-export async function renameQuiltingCategory(
-  id: number,
-  rawName: string,
-): Promise<{ status: number; error?: string; row?: { id: number } }> {
-  const name = normalizeCategoryName(rawName);
-  try {
+  async fetchWithCount(id) {
+    const [row] = await db
+      .select({
+        id: cats.id,
+        name: cats.name,
+        bgColor: cats.bgColor,
+        textColor: cats.textColor,
+        count: sqlCount(joinTable.entityId),
+      })
+      .from(cats)
+      .leftJoin(joinTable, eq(joinTable.categoryId, cats.id))
+      .where(eq(cats.id, id))
+      .groupBy(cats.id, cats.name, cats.bgColor, cats.textColor);
+    return row ?? null;
+  },
+
+  async create(userId, name, bgColor, textColor) {
+    const [row] = await db
+      .insert(cats)
+      .values({ userId, name, bgColor, textColor })
+      .returning({ id: cats.id });
+    return row.id;
+  },
+
+  async rename(id, name) {
     const [updated] = await db
-      .update(categories)
+      .update(cats)
       .set({ name })
-      .where(eq(categories.id, id))
-      .returning({ id: categories.id });
-    if (!updated) return { status: 404, error: "Category not found." };
-    return { status: 200, row: updated };
-  } catch (err) {
-    if (isUniqueConstraintViolation(err)) {
-      return {
-        status: 409,
-        error: "A category with that name already exists.",
-      };
-    }
-    throw err;
-  }
-}
+      .where(eq(cats.id, id))
+      .returning({ id: cats.id });
+    return !!updated;
+  },
 
-router.patch("/categories/:id", async (req, res) => {
-  const { id } = RenameCategoryParams.parse(req.params);
-  const body = RenameCategoryBody.parse(req.body);
-  const result = await renameQuiltingCategory(id, body.name);
-  if (result.status !== 200) {
-    res.status(result.status).json({ error: result.error });
-    return;
-  }
-  const withCount = await fetchWithCount(id);
-  res.json(ListCategoriesResponseItem.parse(withCount));
-});
+  async updateColors(id, bgColor, textColor) {
+    const [updated] = await db
+      .update(cats)
+      .set({ bgColor, textColor })
+      .where(eq(cats.id, id))
+      .returning({ id: cats.id });
+    return !!updated;
+  },
 
-router.put("/categories/:id/colors", async (req, res) => {
-  const { id } = UpdateCategoryColorsParams.parse(req.params);
-  const body = UpdateCategoryColorsBody.parse(req.body);
-  const [updated] = await db
-    .update(categories)
-    .set({ bgColor: body.bgColor ?? null, textColor: body.textColor ?? null })
-    .where(eq(categories.id, id))
-    .returning({ id: categories.id });
-  if (!updated) {
-    res.status(404).json({ error: "Category not found." });
-    return;
-  }
-  const withCount = await fetchWithCount(id);
-  res.json(ListCategoriesResponseItem.parse(withCount));
-});
+  async deleteById(id) {
+    const [row] = await db
+      .delete(cats)
+      .where(eq(cats.id, id))
+      .returning({ id: cats.id });
+    return !!row;
+  },
 
-// Must be before DELETE /categories/:id so "unused" is not treated as :id
-router.delete("/categories/unused", async (_req, res) => {
-  // Find category IDs used by any entity across the shared household collection.
-  const usedRows = await db
-    .select({ categoryId: entityCategories.categoryId })
-    .from(entityCategories);
-  const usedIds = [...new Set(usedRows.map((r) => r.categoryId))];
+  async deleteUnused() {
+    const usedRows = await db
+      .select({ categoryId: joinTable.categoryId })
+      .from(joinTable);
+    const usedIds = [...new Set(usedRows.map((r) => r.categoryId))];
+    const where: SQL | undefined =
+      usedIds.length > 0 ? notInArray(cats.id, usedIds) : undefined;
+    const deleted = await db
+      .delete(cats)
+      .where(where)
+      .returning({ id: cats.id });
+    return deleted.length;
+  },
 
-  const deletedRows = await db
-    .delete(categories)
-    .where(usedIds.length > 0 ? notInArray(categories.id, usedIds) : undefined)
-    .returning({ id: categories.id });
-  res.json({ deleted: deletedRows.length });
-});
+  async categoryExists(id) {
+    const [row] = await db
+      .select({ id: cats.id })
+      .from(cats)
+      .where(eq(cats.id, id));
+    return !!row;
+  },
 
-router.delete("/categories/:id", async (req, res) => {
-  const { id } = DeleteCategoryParams.parse(req.params);
-  const [row] = await db
-    .delete(categories)
-    .where(eq(categories.id, id))
-    .returning({ id: categories.id });
-  if (!row) {
-    res.status(404).json({ error: "Category not found." });
-    return;
-  }
-  res.status(204).end();
-});
+  async getAssignmentsForCategory(categoryId) {
+    return db
+      .select({
+        entityType: joinTable.entityType,
+        entityId: joinTable.entityId,
+      })
+      .from(joinTable)
+      .where(eq(joinTable.categoryId, categoryId));
+  },
 
-/** Merge one quilting category into another, reassigning entities then
- * deleting the source. Shared by the REST route and Elaine's
- * merge_quilting_categories action. */
-export async function mergeQuiltingCategories(
-  id: number,
-  targetId: number,
-): Promise<{ status: number; error?: string; merged?: number }> {
-  if (id === targetId) {
-    return { status: 400, error: "Cannot merge a category into itself." };
-  }
-
-  const [source, target] = await Promise.all([
-    db
-      .select({ id: categories.id })
-      .from(categories)
-      .where(eq(categories.id, id))
-      .then((r) => r[0]),
-    db
-      .select({ id: categories.id })
-      .from(categories)
-      .where(eq(categories.id, targetId))
-      .then((r) => r[0]),
-  ]);
-
-  if (!source || !target) {
-    return { status: 404, error: "Category not found." };
-  }
-
-  const sourceAssignments = await db
-    .select({
-      entityType: entityCategories.entityType,
-      entityId: entityCategories.entityId,
-    })
-    .from(entityCategories)
-    .where(eq(entityCategories.categoryId, id));
-
-  if (sourceAssignments.length > 0) {
+  async reattachAssignments(assignments, targetId) {
+    const rows = assignments as {
+      entityType: string;
+      entityId: number;
+    }[];
+    if (rows.length === 0) return;
     await db
-      .insert(entityCategories)
+      .insert(joinTable)
       .values(
-        sourceAssignments.map((r) => ({
+        rows.map((r) => ({
           entityType: r.entityType,
           entityId: r.entityId,
           categoryId: targetId,
         })),
       )
       .onConflictDoNothing();
-  }
+  },
 
-  await db.delete(categories).where(eq(categories.id, id));
+  async deleteCategoryRow(id) {
+    await db.delete(cats).where(eq(cats.id, id));
+  },
+};
 
-  return { status: 200, merged: sourceAssignments.length };
+// ---------------------------------------------------------------------------
+// Build router + exported helpers for Elaine actions
+// ---------------------------------------------------------------------------
+
+const { router, merge, rename } = buildCategoryRouter({
+  ops,
+  normalize: normalizeCategoryNameAggressive,
+  schemas: {
+    listResponse: ListQuiltingCategoriesResponse,
+    listItem: ListQuiltingCategoriesResponseItem,
+    createBody: CreateQuiltingCategoryBody,
+    deleteParams: DeleteQuiltingCategoryParams,
+    renameParams: RenameQuiltingCategoryParams,
+    renameBody: RenameQuiltingCategoryBody,
+    mergeBody: MergeQuiltingCategoryBody,
+    mergeSourceIdField: "targetId",
+    updateColorsBody: UpdateQuiltingCategoryColorsBody,
+    updateColorsParams: UpdateQuiltingCategoryColorsParams,
+  },
+  mergeResponse: "json-count",
+});
+
+/**
+ * Rename a quilting category.
+ * Shared by the REST route and Elaine's rename_quilting_category action.
+ */
+export async function renameQuiltingCategory(
+  id: number,
+  rawName: string,
+): Promise<RenameResult> {
+  return rename(id, rawName);
 }
 
-router.post("/categories/:id/merge", async (req, res) => {
-  const { id } = DeleteCategoryParams.parse(req.params);
-  const { targetId } = MergeCategoryBody.parse(req.body);
-  const result = await mergeQuiltingCategories(id, targetId);
-  if (result.status !== 200) {
-    res.status(result.status).json({ error: result.error });
-    return;
-  }
-  res.json({ merged: result.merged });
-});
+/**
+ * Merge one quilting category into another.
+ * Shared by the REST route and Elaine's merge_quilting_categories action.
+ */
+export async function mergeQuiltingCategories(
+  id: number,
+  targetId: number,
+): Promise<MergeResult> {
+  return merge(id, targetId);
+}
 
 export default router;

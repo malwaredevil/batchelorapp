@@ -1,9 +1,8 @@
-import { Router, type IRouter } from "express";
-import { asc, eq, count as sqlCount, notInArray } from "drizzle-orm";
+import { asc, eq, count as sqlCount, notInArray, type SQL } from "drizzle-orm";
 import {
   db,
-  ornamentsCategories as categories,
-  ornamentsItemCategories as itemCategories,
+  ornamentsCategories as cats,
+  ornamentsItemCategories as joinTable,
 } from "@workspace/db";
 import {
   ListOrnamentCategoriesResponse,
@@ -16,209 +15,156 @@ import {
   UpdateOrnamentCategoryColorsBody,
   UpdateOrnamentCategoryColorsParams,
 } from "@workspace/api-zod";
-import { requireAuth } from "../../middleware/auth";
+import {
+  buildCategoryRouter,
+  normalizeCategoryNameSimple,
+  type CategoryOps,
+} from "../../lib/category-router-factory";
 
-function isUniqueConstraintViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code: string }).code === "23505"
-  );
-}
+// ---------------------------------------------------------------------------
+// Domain-specific DB ops
+// ---------------------------------------------------------------------------
 
-function normalizeCategoryName(raw: string): string {
-  const t = raw.trim().replace(/[″\u201C\u201D]/g, '"');
-  if (!t) return t;
-  return t.charAt(0).toUpperCase() + t.slice(1);
-}
-
-const router: IRouter = Router();
-router.use(requireAuth);
-
-async function fetchWithCount(id: number) {
-  const [row] = await db
-    .select({
-      id: categories.id,
-      name: categories.name,
-      bgColor: categories.bgColor,
-      textColor: categories.textColor,
-      count: sqlCount(itemCategories.itemId),
-    })
-    .from(categories)
-    .leftJoin(itemCategories, eq(itemCategories.categoryId, categories.id))
-    .where(eq(categories.id, id))
-    .groupBy(
-      categories.id,
-      categories.name,
-      categories.bgColor,
-      categories.textColor,
-    );
-  return row ?? null;
-}
-
-router.get("/categories", async (_req, res) => {
-  const rows = await db
-    .select({
-      id: categories.id,
-      name: categories.name,
-      bgColor: categories.bgColor,
-      textColor: categories.textColor,
-      count: sqlCount(itemCategories.itemId),
-    })
-    .from(categories)
-    .leftJoin(itemCategories, eq(itemCategories.categoryId, categories.id))
-    .groupBy(
-      categories.id,
-      categories.name,
-      categories.bgColor,
-      categories.textColor,
-    )
-    .orderBy(asc(categories.name));
-  res.json(ListOrnamentCategoriesResponse.parse(rows));
-});
-
-router.post("/categories", async (req, res) => {
-  const userId = req.session.userId!;
-  const body = CreateOrnamentCategoryBody.parse(req.body);
-  const name = normalizeCategoryName(body.name);
-  try {
-    const [row] = await db
-      .insert(categories)
-      .values({
-        userId,
-        name,
-        bgColor: body.bgColor ?? null,
-        textColor: body.textColor ?? null,
+const ops: CategoryOps = {
+  async listWithCounts() {
+    return db
+      .select({
+        id: cats.id,
+        name: cats.name,
+        bgColor: cats.bgColor,
+        textColor: cats.textColor,
+        count: sqlCount(joinTable.itemId),
       })
-      .returning({ id: categories.id });
-    const withCount = await fetchWithCount(row.id);
-    res.status(201).json(ListOrnamentCategoriesResponseItem.parse(withCount));
-  } catch (err) {
-    if (isUniqueConstraintViolation(err)) {
-      res
-        .status(409)
-        .json({ error: "A category with that name already exists." });
-      return;
-    }
-    throw err;
-  }
-});
+      .from(cats)
+      .leftJoin(joinTable, eq(joinTable.categoryId, cats.id))
+      .groupBy(cats.id, cats.name, cats.bgColor, cats.textColor)
+      .orderBy(asc(cats.name));
+  },
 
-router.patch("/categories/:id", async (req, res) => {
-  const { id } = RenameOrnamentCategoryParams.parse(req.params);
-  const body = RenameOrnamentCategoryBody.parse(req.body);
-  const name = normalizeCategoryName(body.name);
-  try {
+  async fetchWithCount(id) {
+    const [row] = await db
+      .select({
+        id: cats.id,
+        name: cats.name,
+        bgColor: cats.bgColor,
+        textColor: cats.textColor,
+        count: sqlCount(joinTable.itemId),
+      })
+      .from(cats)
+      .leftJoin(joinTable, eq(joinTable.categoryId, cats.id))
+      .where(eq(cats.id, id))
+      .groupBy(cats.id, cats.name, cats.bgColor, cats.textColor);
+    return row ?? null;
+  },
+
+  async create(userId, name, bgColor, textColor) {
+    const [row] = await db
+      .insert(cats)
+      .values({ userId, name, bgColor, textColor })
+      .returning({ id: cats.id });
+    return row.id;
+  },
+
+  async rename(id, name) {
     const [updated] = await db
-      .update(categories)
+      .update(cats)
       .set({ name })
-      .where(eq(categories.id, id))
-      .returning({ id: categories.id });
-    if (!updated) {
-      res.status(404).json({ error: "Category not found." });
-      return;
-    }
-    const withCount = await fetchWithCount(id);
-    res.json(ListOrnamentCategoriesResponseItem.parse(withCount));
-  } catch (err) {
-    if (isUniqueConstraintViolation(err)) {
-      res
-        .status(409)
-        .json({ error: "A category with that name already exists." });
-      return;
-    }
-    throw err;
-  }
-});
+      .where(eq(cats.id, id))
+      .returning({ id: cats.id });
+    return !!updated;
+  },
 
-router.put("/categories/:id/colors", async (req, res) => {
-  const { id } = UpdateOrnamentCategoryColorsParams.parse(req.params);
-  const body = UpdateOrnamentCategoryColorsBody.parse(req.body);
-  const [updated] = await db
-    .update(categories)
-    .set({ bgColor: body.bgColor ?? null, textColor: body.textColor ?? null })
-    .where(eq(categories.id, id))
-    .returning({ id: categories.id });
-  if (!updated) {
-    res.status(404).json({ error: "Category not found." });
-    return;
-  }
-  const withCount = await fetchWithCount(id);
-  res.json(ListOrnamentCategoriesResponseItem.parse(withCount));
-});
+  async updateColors(id, bgColor, textColor) {
+    const [updated] = await db
+      .update(cats)
+      .set({ bgColor, textColor })
+      .where(eq(cats.id, id))
+      .returning({ id: cats.id });
+    return !!updated;
+  },
 
-// Must be registered before DELETE /categories/:id so Express doesn't treat
-// "unused" as an :id parameter.
-router.delete("/categories/unused", async (_req, res) => {
-  const usedRows = await db
-    .select({ categoryId: itemCategories.categoryId })
-    .from(itemCategories);
-  const usedIds = [...new Set(usedRows.map((r) => r.categoryId))];
+  async deleteById(id) {
+    const [row] = await db
+      .delete(cats)
+      .where(eq(cats.id, id))
+      .returning({ id: cats.id });
+    return !!row;
+  },
 
-  const deletedRows = await db
-    .delete(categories)
-    .where(usedIds.length > 0 ? notInArray(categories.id, usedIds) : undefined)
-    .returning({ id: categories.id });
-  res.json({ deleted: deletedRows.length });
-});
+  async deleteUnused() {
+    const usedRows = await db
+      .select({ categoryId: joinTable.categoryId })
+      .from(joinTable);
+    const usedIds = [...new Set(usedRows.map((r) => r.categoryId))];
+    const where: SQL | undefined =
+      usedIds.length > 0 ? notInArray(cats.id, usedIds) : undefined;
+    const deleted = await db
+      .delete(cats)
+      .where(where)
+      .returning({ id: cats.id });
+    return deleted.length;
+  },
 
-router.delete("/categories/:id", async (req, res) => {
-  const { id } = DeleteOrnamentCategoryParams.parse(req.params);
-  const [row] = await db
-    .delete(categories)
-    .where(eq(categories.id, id))
-    .returning({ id: categories.id });
-  if (!row) {
-    res.status(404).json({ error: "Category not found." });
-    return;
-  }
-  res.status(204).end();
-});
+  async categoryExists(id) {
+    const [row] = await db
+      .select({ id: cats.id })
+      .from(cats)
+      .where(eq(cats.id, id));
+    return !!row;
+  },
 
-router.post("/categories/:id/merge", async (req, res) => {
-  const { id } = DeleteOrnamentCategoryParams.parse(req.params);
-  const { intoId } = MergeOrnamentCategoryBody.parse(req.body);
+  async getAssignmentsForCategory(categoryId) {
+    return db
+      .select({ itemId: joinTable.itemId })
+      .from(joinTable)
+      .where(eq(joinTable.categoryId, categoryId));
+  },
 
-  if (id === intoId) {
-    res.status(400).json({ error: "Cannot merge a category into itself." });
-    return;
-  }
-
-  const [source, target] = await Promise.all([
-    db
-      .select({ id: categories.id })
-      .from(categories)
-      .where(eq(categories.id, id))
-      .then((r) => r[0]),
-    db
-      .select({ id: categories.id })
-      .from(categories)
-      .where(eq(categories.id, intoId))
-      .then((r) => r[0]),
-  ]);
-
-  if (!source || !target) {
-    res.status(404).json({ error: "Category not found." });
-    return;
-  }
-
-  const sourceItems = await db
-    .select({ itemId: itemCategories.itemId })
-    .from(itemCategories)
-    .where(eq(itemCategories.categoryId, id));
-
-  if (sourceItems.length > 0) {
+  async reattachAssignments(assignments, targetId) {
+    const rows = assignments as { itemId: number }[];
+    if (rows.length === 0) return;
     await db
-      .insert(itemCategories)
-      .values(
-        sourceItems.map((r) => ({ itemId: r.itemId, categoryId: intoId })),
-      )
+      .insert(joinTable)
+      .values(rows.map((r) => ({ itemId: r.itemId, categoryId: targetId })))
       .onConflictDoNothing();
-  }
+  },
 
-  await db.delete(categories).where(eq(categories.id, id));
-  res.status(204).end();
+  async deleteCategoryRow(id) {
+    await db.delete(cats).where(eq(cats.id, id));
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Build router + exported helpers for Elaine actions
+// ---------------------------------------------------------------------------
+
+const { router, merge } = buildCategoryRouter({
+  ops,
+  normalize: normalizeCategoryNameSimple,
+  schemas: {
+    listResponse: ListOrnamentCategoriesResponse,
+    listItem: ListOrnamentCategoriesResponseItem,
+    createBody: CreateOrnamentCategoryBody,
+    deleteParams: DeleteOrnamentCategoryParams,
+    renameParams: RenameOrnamentCategoryParams,
+    renameBody: RenameOrnamentCategoryBody,
+    mergeBody: MergeOrnamentCategoryBody,
+    mergeSourceIdField: "intoId",
+    updateColorsBody: UpdateOrnamentCategoryColorsBody,
+    updateColorsParams: UpdateOrnamentCategoryColorsParams,
+  },
+  mergeResponse: "no-content",
 });
+
+/**
+ * Merge ornament category `id` into category `intoId`.
+ * Shared by the REST route and Elaine's ornament category action executor.
+ */
+export async function mergeOrnamentCategories(
+  id: number,
+  intoId: number,
+): Promise<{ status: number; error?: string }> {
+  return merge(id, intoId);
+}
 
 export default router;

@@ -65,6 +65,7 @@ import {
   useListPotteryCategories,
   useGetStats,
   useGetTravelsStats,
+  useGetUnreadCount,
   useGetOrnamentStats,
   useListNotes,
   useListConnectedCalendars,
@@ -72,7 +73,6 @@ import {
   useGetElaineNudgesUnseenCount,
   useListElaineMemory,
 } from "@workspace/api-client-react";
-import { useGmailLabels } from "@workspace/gmail-ui";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 
 const base = import.meta.env.BASE_URL;
@@ -342,7 +342,7 @@ function AppHeroCard({
     description: string;
     cta?: string;
   };
-  stats: { value: string; label: string }[];
+  stats: { value: string; label: string; href?: string }[];
   quickLinks: {
     label: string;
     icon: React.FC<{ className?: string }>;
@@ -371,6 +371,7 @@ function AppHeroCard({
         }
         const t = e.target as HTMLElement;
         if (t.closest("[data-accordion]")) e.preventDefault();
+        if (t.closest("[data-stat]")) e.preventDefault();
       }}
     >
       <Card className="h-full overflow-hidden border-border bg-card shadow-sm hover:shadow-md transition-all duration-200 flex flex-col cursor-pointer">
@@ -402,7 +403,30 @@ function AppHeroCard({
             {stats.map((s) => (
               <div
                 key={s.label}
-                className="flex-1 flex flex-col space-y-1 p-3 rounded-lg bg-secondary/50"
+                data-stat={s.href && !arranging ? "true" : undefined}
+                role={s.href && !arranging ? "link" : undefined}
+                tabIndex={s.href && !arranging ? 0 : undefined}
+                onClick={
+                  s.href && !arranging
+                    ? (e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        window.location.href = s.href!;
+                      }
+                    : undefined
+                }
+                onKeyDown={
+                  s.href && !arranging
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          window.location.href = s.href!;
+                        }
+                      }
+                    : undefined
+                }
+                className={`flex-1 flex flex-col space-y-1 p-3 rounded-lg bg-secondary/50 transition-colors${s.href && !arranging ? " cursor-pointer hover:bg-secondary hover:ring-1 hover:ring-primary/25" : ""}`}
               >
                 <span className="text-2xl font-bold text-primary">
                   {s.value}
@@ -672,13 +696,10 @@ export function AppLauncher() {
   const { data: travelsStatsData } = useGetTravelsStats();
   const { data: ornamentsStatsData } = useGetOrnamentStats();
   const { data: notesData } = useListNotes();
-  const { data: gmailLabelsData } = useGmailLabels();
+  const { data: messengerUnreadData } = useGetUnreadCount();
   const { data: connectedCalendarsData } = useListConnectedCalendars();
   const { data: elaineNudgesData } = useGetElaineNudgesUnseenCount();
   const { data: elaineMemoryData } = useListElaineMemory();
-
-  const unreadEmailCount =
-    gmailLabelsData?.find((l) => l.id === "UNREAD")?.threadsUnread ?? null;
 
   const upcomingEventsRangeStart = useMemo(() => new Date().toISOString(), []);
   const upcomingEventsRangeEnd = useMemo(
@@ -700,7 +721,9 @@ export function AppLauncher() {
     ? Object.values(upcomingEventsByCalendar).reduce((a, b) => a + b, 0)
     : null;
 
-  function liveStats(appId: string): { value: string; label: string }[] {
+  function liveStats(
+    appId: string,
+  ): { value: string; label: string; href?: string }[] {
     if (appId === "pottery") {
       return [
         {
@@ -709,6 +732,7 @@ export function AppLauncher() {
               ? String(potteryStatsData.totalItems)
               : "—",
           label: "Total",
+          href: `${base}modules/pottery/`,
         },
         {
           value:
@@ -716,6 +740,7 @@ export function AppLauncher() {
               ? String(potteryStatsData.uniqueItems)
               : "—",
           label: "Unique",
+          href: `${base}modules/pottery/`,
         },
         {
           value:
@@ -723,6 +748,7 @@ export function AppLauncher() {
               ? String(potteryCategoriesData.length)
               : "—",
           label: "Categories",
+          href: `${base}modules/pottery/`,
         },
       ];
     }
@@ -734,6 +760,7 @@ export function AppLauncher() {
               ? String(quiltingStatsData.totalFabrics)
               : "—",
           label: "Fabrics",
+          href: `${base}modules/quilting/fabrics`,
         },
         {
           value:
@@ -741,6 +768,7 @@ export function AppLauncher() {
               ? String(quiltingStatsData.totalBlocks)
               : "—",
           label: "Blocks",
+          href: `${base}modules/quilting/blocks`,
         },
         {
           value:
@@ -748,6 +776,7 @@ export function AppLauncher() {
               ? String(quiltingStatsData.totalLayouts)
               : "—",
           label: "Layouts",
+          href: `${base}modules/quilting/layouts`,
         },
       ];
     }
@@ -759,6 +788,7 @@ export function AppLauncher() {
               ? String(travelsStatsData.totalTrips)
               : "—",
           label: "Trips",
+          href: `${base}modules/travels/trips`,
         },
         {
           value:
@@ -766,6 +796,7 @@ export function AppLauncher() {
               ? String(travelsStatsData.completedTrips)
               : "—",
           label: "Done",
+          href: `${base}modules/travels/trips`,
         },
         {
           value:
@@ -773,6 +804,7 @@ export function AppLauncher() {
               ? String(travelsStatsData.upcomingTrips)
               : "—",
           label: "Upcoming",
+          href: `${base}modules/travels/trips`,
         },
       ];
     }
@@ -784,6 +816,7 @@ export function AppLauncher() {
               ? String(ornamentsStatsData.totalQuantity)
               : "—",
           label: "Quantity",
+          href: `${base}modules/ornaments/`,
         },
       ];
     }
@@ -792,15 +825,21 @@ export function AppLauncher() {
         {
           value: notesData != null ? String(notesData.length) : "—",
           label: "Notes",
+          href: `${base}modules/office/`,
         },
         {
-          value: unreadEmailCount != null ? String(unreadEmailCount) : "—",
+          value:
+            messengerUnreadData?.count != null
+              ? String(messengerUnreadData.count)
+              : "—",
           label: "Unread",
+          href: `${base}modules/office/messenger`,
         },
         {
           value:
             upcomingEventsTotal != null ? String(upcomingEventsTotal) : "—",
           label: "Upcoming",
+          href: `${base}modules/office/calendar`,
         },
       ];
     }
@@ -812,11 +851,13 @@ export function AppLauncher() {
               ? String(elaineNudgesData.count)
               : "—",
           label: "Nudges",
+          href: `${base}elaine/`,
         },
         {
           value:
             elaineMemoryData != null ? String(elaineMemoryData.length) : "—",
           label: "Memory",
+          href: `${base}elaine/`,
         },
       ];
     }

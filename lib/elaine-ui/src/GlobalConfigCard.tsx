@@ -12,17 +12,17 @@ import {
   type ElaineFeaturesConfig,
   type ElaineThresholdsConfig,
 } from "@workspace/api-client-react";
-import { Button } from "./ui/button";
+import { Button } from "@workspace/ui";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "./ui/select";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
-import { Switch } from "./ui/switch";
+} from "@workspace/ui";
+import { Input } from "@workspace/ui";
+import { Label } from "@workspace/ui";
+import { Switch } from "@workspace/ui";
 import { ElaineName } from "./ElaineAvatar";
 
 /**

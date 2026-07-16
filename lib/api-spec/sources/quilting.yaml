@@ -1616,6 +1616,43 @@ paths:
               schema:
                 $ref: "#/components/schemas/DetectedSeams"
 
+  /blocks/{id}/preview.png:
+    get:
+      operationId: getBlockPreviewPng
+      tags: [blocks]
+      summary: Server-rasterised PNG preview of a block design
+      description: >
+        Returns a PNG image of the block at the requested size with fabric
+        photos embedded. Suitable for use in `<img>` tags, layout thumbnails,
+        and PDF/email export. The live block editor should continue to use the
+        client-side SVG renderer for real-time feedback.
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - in: query
+          name: size
+          schema:
+            type: integer
+            minimum: 50
+            maximum: 800
+            default: 300
+          description: Width of the PNG in pixels (height is derived from the block's aspect ratio).
+      responses:
+        "200":
+          description: PNG image
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "304":
+          description: Not Modified (ETag matched)
+        "404":
+          description: Block not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /blocks/{id}:
     get:
       operationId: getBlock

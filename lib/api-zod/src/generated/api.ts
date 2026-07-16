@@ -2460,6 +2460,26 @@ export const DetectBlockSeamsResponse = zod.object({
 
 
 /**
+ * Returns a PNG image of the block at the requested size with fabric photos embedded. Suitable for use in `<img>` tags, layout thumbnails, and PDF/email export. The live block editor should continue to use the client-side SVG renderer for real-time feedback.
+
+ * @summary Server-rasterised PNG preview of a block design
+ */
+export const GetBlockPreviewPngParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const getBlockPreviewPngQuerySizeDefault = 300;
+export const getBlockPreviewPngQuerySizeMin = 50;
+export const getBlockPreviewPngQuerySizeMax = 800;
+
+
+
+export const GetBlockPreviewPngQueryParams = zod.object({
+  "size": zod.coerce.number().min(getBlockPreviewPngQuerySizeMin).max(getBlockPreviewPngQuerySizeMax).default(getBlockPreviewPngQuerySizeDefault).describe('Width of the PNG in pixels (height is derived from the block\'s aspect ratio).')
+})
+
+
+/**
  * @summary Get a block design by ID
  */
 export const GetBlockParams = zod.object({

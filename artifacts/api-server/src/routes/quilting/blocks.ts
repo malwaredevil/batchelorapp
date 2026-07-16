@@ -11,6 +11,7 @@ import {
 import { requireAuth } from "../../middleware/auth";
 import { aiLimiter } from "../../middleware/rateLimit";
 import { detectBlockSeams } from "../../lib/openai";
+import { renderBlockPreviewPng } from "../../lib/block-preview";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -264,6 +265,44 @@ router.post("/blocks/detect-seams", aiLimiter, async (req, res) => {
   }
   const { seams, diagSeams } = await detectBlockSeams(image, gridW, gridH);
   res.json({ seams, diagSeams });
+});
+
+// ---------------------------------------------------------------------------
+// Block preview PNG endpoint
+// Declared BEFORE /:id so Express does not match "preview.png" as an ID.
+// ---------------------------------------------------------------------------
+
+// GET /blocks/:id/preview.png — server-rasterised PNG at a controlled resolution.
+// size: 50–800px wide (default 300). Height is derived from the block's
+// aspect ratio. ETag is based on block createdAt so the browser caches
+// aggressively while still revalidating after the server has replaced it.
+router.get("/blocks/:id/preview.png", async (req, res) => {
+  const blockId = parseInt(String(req.params["id"]), 10);
+  if (!Number.isFinite(blockId)) {
+    res.status(400).json({ error: "Invalid block id." });
+    return;
+  }
+
+  const sizeRaw = parseInt(String(req.query["size"] ?? "300"), 10);
+  const sizePx = Number.isFinite(sizeRaw)
+    ? Math.min(800, Math.max(50, sizeRaw))
+    : 300;
+
+  const result = await renderBlockPreviewPng(blockId, sizePx);
+  if (!result) {
+    res.status(404).json({ error: "Block not found." });
+    return;
+  }
+
+  if (req.headers["if-none-match"] === result.etag) {
+    res.status(304).end();
+    return;
+  }
+
+  res.set("Content-Type", "image/png");
+  res.set("ETag", result.etag);
+  res.set("Cache-Control", "private, max-age=3600");
+  res.end(result.png);
 });
 
 // ---------------------------------------------------------------------------

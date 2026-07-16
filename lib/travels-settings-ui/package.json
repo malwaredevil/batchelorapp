@@ -16,7 +16,8 @@
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
     "lucide-react": "catalog:",
-    "tailwind-merge": "catalog:"
+    "tailwind-merge": "catalog:",
+    "@workspace/ui": "workspace:*"
   },
   "peerDependencies": {
     "@tanstack/react-query": "*",

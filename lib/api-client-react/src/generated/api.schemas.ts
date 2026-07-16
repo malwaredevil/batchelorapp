@@ -2032,6 +2032,15 @@ export type ImportPatternFromUrlBody = {
   url: string;
 };
 
+export type GetBlockPreviewPngParams = {
+/**
+ * Width of the PNG in pixels (height is derived from the block's aspect ratio).
+ * @minimum 50
+ * @maximum 800
+ */
+size?: number;
+};
+
 export type UploadTripDocumentBody = {
   file: Blob;
   title?: string;

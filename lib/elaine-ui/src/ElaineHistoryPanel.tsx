@@ -6,8 +6,8 @@ import {
   useDeleteElaineConversation,
   useListElaineConversations,
 } from "@workspace/api-client-react";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
+import { Button } from "@workspace/ui";
+import { Input } from "@workspace/ui";
 
 function formatConversationDate(iso: string): string {
   const date = new Date(iso);

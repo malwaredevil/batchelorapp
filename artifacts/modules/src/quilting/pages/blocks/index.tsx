@@ -51,7 +51,6 @@ import {
   useCreateBlock,
   useUpdateBlock,
   useListQuiltingCategories,
-  useListFabrics,
   useGetStats,
   getListBlocksQueryKey,
   QuiltingCreateBlockInputGridSize,
@@ -59,10 +58,15 @@ import {
 import type { QuiltingCategory } from "@workspace/api-client-react";
 import { parseCell, fmtInch } from "@/quilting/lib/cell-parser";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
-import { buildFabricUrlMap } from "@/quilting/components/FabricPicker";
 import { CategoryEditDialog } from "@/quilting/components/CategoryEditDialog";
 import { cn } from "@/lib/utils";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
+
+/** URL for the server-rasterised PNG preview of a block. */
+function blockPreviewUrl(blockId: number, sizePx: number): string {
+  const base = import.meta.env.BASE_URL ?? "/";
+  return `${base}api/quilting/blocks/${blockId}/preview.png?size=${sizePx}`;
+}
 
 type BlockSeamLine = {
   axis: "h" | "v";
@@ -422,7 +426,6 @@ function BlockCard({
   onDuplicate,
   onFilterByGridSize,
   onFilterByCategory,
-  fabricUrlMap = {},
   onEditCategories,
 }: {
   block: BlockSummary;
@@ -430,7 +433,6 @@ function BlockCard({
   onDuplicate: (block: BlockSummary) => void;
   onFilterByGridSize?: (gs: number) => void;
   onFilterByCategory?: (id: number) => void;
-  fabricUrlMap?: Record<number, string>;
   onEditCategories?: () => void;
 }) {
   const [, navigate] = useLocation();
@@ -440,14 +442,12 @@ function BlockCard({
       <div className="group relative overflow-hidden rounded-xl border border-card-border bg-card transition-shadow hover:shadow-md">
         <Link href={`/quilting/blocks/${block.id}`} className="block">
           <div className="relative flex items-center justify-center overflow-hidden bg-white">
-            <BlockPreviewSvg
-              cells={block.cells}
-              gridSize={block.gridSize}
-              seams={block.seams}
-              size={160}
-              tileCount={1}
-              fabricUrlMap={fabricUrlMap}
-              patternPrefix={`bth-${block.id}-`}
+            <img
+              src={blockPreviewUrl(block.id, 160)}
+              alt={block.name}
+              width={160}
+              height={160}
+              className="block object-contain"
             />
             <button
               onClick={(e) => {
@@ -618,14 +618,10 @@ function BlockCard({
         onClose={() => setZoomOpen(false)}
         title={block.name}
       >
-        <BlockPreviewSvg
-          cells={block.cells}
-          gridSize={block.gridSize}
-          seams={block.seams}
-          size={700}
-          tileCount={1}
-          fabricUrlMap={fabricUrlMap}
-          patternPrefix={`bzm-${block.id}-`}
+        <img
+          src={blockPreviewUrl(block.id, 700)}
+          alt={block.name}
+          className="max-h-full max-w-full object-contain"
         />
       </PreviewZoomModal>
     </>
@@ -709,8 +705,6 @@ export default function Blocks() {
   const [, navigate] = useLocation();
   const { data: blockList, isLoading, isError } = useListBlocks();
   const { data: allCategories } = useListQuiltingCategories();
-  const { data: fabricsData } = useListFabrics({ pageSize: 200 });
-  const fabricsList = fabricsData?.items;
   const { data: stats } = useGetStats();
 
   usePageAssistantContext(
@@ -726,11 +720,6 @@ export default function Blocks() {
             )
             .join(", ") || "none"
         }. You have create_block / delete_block action tools — but they only create/remove a blank grid template with metadata, they cannot design the block's actual pattern; direct the user to the designer here for that.`,
-  );
-
-  const fabricUrlMap = useMemo(
-    () => buildFabricUrlMap(fabricsList ?? []),
-    [fabricsList],
   );
 
   const [categoryEditItem, setCategoryEditItem] = useState<BlockSummary | null>(
@@ -1232,7 +1221,6 @@ export default function Blocks() {
                 })
               }
               onFilterByCategory={toggleCat}
-              fabricUrlMap={fabricUrlMap}
               onEditCategories={() => setCategoryEditItem(block)}
             />
           ))}

@@ -25,16 +25,16 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
+import { Button } from "@workspace/ui";
+import { Input } from "@workspace/ui";
+import { Label } from "@workspace/ui";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "./ui/select";
+} from "@workspace/ui";
 import {
   useGetTravelsSettings,
   useUpdateTravelsSettings,

@@ -14,7 +14,7 @@ import {
   type ConversationMessage,
   type ElaineAppId,
 } from "@workspace/api-client-react";
-import { Button } from "./ui/button";
+import { Button } from "@workspace/ui";
 import { ElaineAvatar, ElaineWordmark } from "./ElaineAvatar";
 import { useElaineChat } from "./useElaineChat";
 import { ElaineChatPanel } from "./ElaineChatPanel";

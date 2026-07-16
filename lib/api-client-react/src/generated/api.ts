@@ -33,6 +33,7 @@ import type {
   DeleteQuiltingUnusedCategories200,
   Error,
   ForgotPasswordInput,
+  GetBlockPreviewPngParams,
   GetConversationMessagesParams,
   GetLinkPreviewParams,
   GetUnmatchedDocumentsCount200,
@@ -7637,6 +7638,97 @@ export const useDetectBlockSeams = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getDetectBlockSeamsMutationOptions(options));
     }
+
+export const getGetBlockPreviewPngUrl = (id: number,
+    params?: GetBlockPreviewPngParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/quilting/blocks/${id}/preview.png?${stringifiedParams}` : `/api/quilting/blocks/${id}/preview.png`
+}
+
+/**
+ * Returns a PNG image of the block at the requested size with fabric photos embedded. Suitable for use in `<img>` tags, layout thumbnails, and PDF/email export. The live block editor should continue to use the client-side SVG renderer for real-time feedback.
+
+ * @summary Server-rasterised PNG preview of a block design
+ */
+export const getBlockPreviewPng = async (id: number,
+    params?: GetBlockPreviewPngParams, options?: RequestInit): Promise<Blob> => {
+
+  return customFetch<Blob>(getGetBlockPreviewPngUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBlockPreviewPngQueryKey = (id: number,
+    params?: GetBlockPreviewPngParams,) => {
+    return [
+    `/api/quilting/blocks/${id}/preview.png`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetBlockPreviewPngQueryOptions = <TData = Awaited<ReturnType<typeof getBlockPreviewPng>>, TError = ErrorType<void | Error>>(id: number,
+    params?: GetBlockPreviewPngParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBlockPreviewPng>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBlockPreviewPngQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBlockPreviewPng>>> = ({ signal }) => getBlockPreviewPng(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBlockPreviewPng>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBlockPreviewPngQueryResult = NonNullable<Awaited<ReturnType<typeof getBlockPreviewPng>>>
+export type GetBlockPreviewPngQueryError = ErrorType<void | Error>
+
+
+/**
+ * @summary Server-rasterised PNG preview of a block design
+ */
+
+export function useGetBlockPreviewPng<TData = Awaited<ReturnType<typeof getBlockPreviewPng>>, TError = ErrorType<void | Error>>(
+ id: number,
+    params?: GetBlockPreviewPngParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBlockPreviewPng>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBlockPreviewPngQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getGetBlockUrl = (id: number,) => {
 

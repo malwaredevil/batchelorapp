@@ -11,15 +11,15 @@ import {
   type ActionConfirmationMode,
   type ChatWindowSize,
 } from "@workspace/api-client-react";
-import { Button } from "./ui/button";
-import { Switch } from "./ui/switch";
+import { Button } from "@workspace/ui";
+import { Switch } from "@workspace/ui";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "./ui/select";
+} from "@workspace/ui";
 import { ElaineAvatar, ElaineWordmark, ElaineName } from "./ElaineAvatar";
 
 /**

@@ -1,28 +1,12 @@
-import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
 import type { OrnamentsOrnamentItem as OrnamentItem } from "@workspace/api-client-react";
+import {
+  generateCollectionPdf,
+  formatDate,
+  escHtml,
+  PAGE_WIDTH_PX,
+} from "../../lib/pdf-export";
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-function formatDate(d: string | null | undefined): string {
-  if (!d) return "—";
-  const dt = new Date(d);
-  return isNaN(dt.getTime())
-    ? "—"
-    : dt.toLocaleDateString("en-GB", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      });
-}
-
-function escHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
+const ITEMS_PER_PAGE = 5;
 
 function formatCurrency(amount: number | null | undefined): string {
   if (amount == null) return "—";
@@ -32,54 +16,6 @@ function formatCurrency(amount: number | null | undefined): string {
   }).format(amount);
 }
 
-/** Fetch one image as a data URL (uses session credentials). */
-async function fetchAsDataUrl(url: string): Promise<string | null> {
-  try {
-    const res = await fetch(url, { credentials: "include" });
-    if (!res.ok) return null;
-    const blob = await res.blob();
-    return new Promise<string | null>((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    return null;
-  }
-}
-
-/** Pre-fetch all item images in parallel batches. */
-async function prefetchImages(
-  items: OrnamentItem[],
-  onProgress: (loaded: number, total: number) => void,
-): Promise<(string | null)[]> {
-  const results: (string | null)[] = new Array(items.length).fill(null);
-  const BATCH = 8;
-  let loaded = 0;
-
-  for (let i = 0; i < items.length; i += BATCH) {
-    const slice = items.slice(i, i + BATCH);
-    const fetched = await Promise.all(
-      slice.map((item) =>
-        item.imageUrl ? fetchAsDataUrl(item.imageUrl) : Promise.resolve(null),
-      ),
-    );
-    fetched.forEach((dataUrl, j) => {
-      results[i + j] = dataUrl;
-    });
-    loaded += slice.length;
-    onProgress(Math.min(loaded, items.length), items.length);
-  }
-
-  return results;
-}
-
-// PDF page dimensions (A4 at 96dpi equivalent)
-const PAGE_WIDTH_PX = 794; // ~A4 width at 96dpi
-const ITEMS_PER_PAGE = 5; // safe chunk: 5 items × ~120px row ≈ 900px canvas height
-
-/** Build a single-page DOM container for a chunk of items. */
 function buildPageContainer(
   items: OrnamentItem[],
   imageDataUrls: (string | null)[],
@@ -150,7 +86,6 @@ function buildPageContainer(
         .filter(Boolean)
         .join(`<span style="color:#ddd;margin:0 5px;">·</span>`);
 
-      // Clean up the break hack above so it looks nice
       const cleanFields = fields.replace(
         /<span style="color:#ddd;margin:0 5px;">·<\/span><br\/>/g,
         "<br/>",
@@ -183,98 +118,39 @@ function buildPageContainer(
   return container;
 }
 
-/** Render a DOM container to a JPEG data URL via html2canvas. */
-async function containerToJpeg(el: HTMLElement): Promise<string> {
-  const canvas = await html2canvas(el, {
-    scale: 2,
-    useCORS: false,
-    allowTaint: false,
-    backgroundColor: "#ffffff",
-    logging: false,
-  });
-  return canvas.toDataURL("image/jpeg", 0.9);
-}
-
-// ── Main PDF generator ────────────────────────────────────────────────────────
-
 export async function generateInsurancePdf(
   items: OrnamentItem[],
   onProgress: (msg: string) => void,
 ): Promise<void> {
-  const exportDate = formatDate(new Date().toISOString());
-
-  // Calculate totals
   const totalEstimate = items.reduce(
     (sum, item) => sum + (item.bookValue || 0),
     0,
   );
+  const filename =
+    items.length === 1
+      ? `ornament-${items[0].id}-insurance.pdf`
+      : "ornaments-collection-insurance.pdf";
 
-  // Phase 1: fetch images
-  onProgress(`Loading images… 0 / ${items.length}`);
-  const imageDataUrls = await prefetchImages(items, (loaded, total) => {
-    onProgress(`Loading images… ${loaded} / ${total}`);
-  });
-
-  // Phase 2: paginate + rasterize per-page
-  const totalPages = Math.ceil(items.length / ITEMS_PER_PAGE);
-  const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
-  const pdfW = pdf.internal.pageSize.getWidth();
-  const pdfH = pdf.internal.pageSize.getHeight();
-
-  for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
-    const pageNum = pageIdx + 1;
-    onProgress(`Rendering page ${pageNum} of ${totalPages}…`);
-
-    const start = pageIdx * ITEMS_PER_PAGE;
-    const end = Math.min(start + ITEMS_PER_PAGE, items.length);
-    const pageItems = items.slice(start, end);
-    const pageImages = imageDataUrls.slice(start, end);
-
-    const container = buildPageContainer(
+  await generateCollectionPdf(items, {
+    itemsPerPage: ITEMS_PER_PAGE,
+    buildPageContainer: (
       pageItems,
       pageImages,
       pageNum,
       totalPages,
       exportDate,
-      items.length,
-      totalEstimate,
-    );
-    document.body.appendChild(container);
-
-    try {
-      const jpeg = await containerToJpeg(container);
-
-      if (pageIdx > 0) pdf.addPage();
-
-      // Scale image to fill A4 page
-      const tempCanvas = document.createElement("canvas");
-      const img = new Image();
-      await new Promise<void>((resolve) => {
-        img.onload = () => resolve();
-        img.src = jpeg;
-      });
-      tempCanvas.width = img.naturalWidth;
-      tempCanvas.height = img.naturalHeight;
-
-      const aspectRatio = img.naturalWidth / img.naturalHeight;
-      const imgWmm = pdfW;
-      const imgHmm = imgWmm / aspectRatio;
-      // If content is shorter than page, just place it at top; if taller, scale to fit
-      const finalH = Math.min(imgHmm, pdfH);
-      const finalW = finalH * aspectRatio;
-      const xOffset = (pdfW - finalW) / 2;
-
-      pdf.addImage(jpeg, "JPEG", xOffset, 0, finalW, finalH);
-    } finally {
-      document.body.removeChild(container);
-    }
-  }
-
-  onProgress("Saving PDF…");
-
-  if (items.length === 1) {
-    pdf.save(`ornament-${items[0].id}-insurance.pdf`);
-  } else {
-    pdf.save("ornaments-collection-insurance.pdf");
-  }
+      totalItems,
+    ) =>
+      buildPageContainer(
+        pageItems,
+        pageImages,
+        pageNum,
+        totalPages,
+        exportDate,
+        totalItems,
+        totalEstimate,
+      ),
+    filename,
+    onProgress,
+  });
 }

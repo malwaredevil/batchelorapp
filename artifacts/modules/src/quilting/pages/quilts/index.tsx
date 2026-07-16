@@ -1,13 +1,8 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import {
-  PlusCircle,
   Layers,
-  Search,
-  X,
   MoreVertical,
-  SortAsc,
-  SortDesc,
   RefreshCw,
   CheckSquare,
   Square,
@@ -17,13 +12,8 @@ import {
   Download,
   ZoomIn,
   Tag,
-  Sparkles,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,19 +38,9 @@ import {
 import type { QuiltingCategory } from "@workspace/api-client-react";
 import { downloadCollectionImage } from "@/quilting/lib/svg-export";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
-import { CategoryEditDialog } from "@/quilting/components/CategoryEditDialog";
-import { PaletteMatchModal } from "@/quilting/components/PaletteMatchModal";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
-import { cn } from "@/lib/utils";
-
-type SortOption = "newest" | "oldest" | "az" | "za";
-
-const SORT_LABELS: Record<SortOption, string> = {
-  newest: "Newest first",
-  oldest: "Oldest first",
-  az: "Name A → Z",
-  za: "Name Z → A",
-};
+import { useCollectionPage } from "@/quilting/hooks/useCollectionPage";
+import { CollectionPageShell } from "@/quilting/components/CollectionPageShell";
 
 type QuiltSummary = {
   id: number;
@@ -314,30 +294,42 @@ function QuiltCard({
 }
 
 export default function Quilts() {
-  const [search, setSearch] = useState("");
   const [recipientFilter, setRecipientFilter] = useState<string | null>(null);
-  const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
-  const [colorFilter, setColorFilter] = useState<string[]>([]);
-  const [sort, setSort] = useState<SortOption>("newest");
-  const [isBulkMode, setIsBulkMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [paletteMatchOpen, setPaletteMatchOpen] = useState(false);
-  const [pageSize, setPageSize] = useState<number>(() => {
-    const s = localStorage.getItem("quilting-quilts-page-size");
-    return s ? parseInt(s, 10) : 20;
-  });
-  const [page, setPage] = useState(1);
+  const [categoryEditItem, setCategoryEditItem] = useState<QuiltSummary | null>(
+    null,
+  );
   const queryClient = useQueryClient();
+
   const {
     data: quiltsData,
     isLoading,
     isError,
   } = useListQuilts({ pageSize: 200 });
-  const quilts = quiltsData?.items ?? [];
-  const [categoryEditItem, setCategoryEditItem] = useState<QuiltSummary | null>(
-    null,
-  );
+  const quilts = (quiltsData?.items ?? []) as QuiltSummary[];
+
   const { data: categoryApiList } = useListQuiltingCategories();
+  const { data: stats } = useGetStats();
+
+  const extraFilter = useCallback(
+    (q: QuiltSummary) => !recipientFilter || q.recipient === recipientFilter,
+    [recipientFilter],
+  );
+
+  const searchMatch = useCallback(
+    (q: QuiltSummary, query: string) =>
+      q.name.toLowerCase().includes(query) ||
+      (q.recipient ?? "").toLowerCase().includes(query),
+    [],
+  );
+
+  const pageState = useCollectionPage<QuiltSummary>({
+    items: quilts,
+    localStorageKey: "quilting-quilts-page-size",
+    searchMatch,
+    extraFilter,
+    extraHasFilter: recipientFilter !== null,
+    extraResetFilters: () => setRecipientFilter(null),
+  });
 
   const updateQuiltCategories = useUpdateQuilt({
     mutation: {
@@ -375,8 +367,8 @@ export default function Quilts() {
     mutation: {
       onSuccess: ({ succeeded, failed }) => {
         queryClient.invalidateQueries({ queryKey: getListQuiltsQueryKey() });
-        setSelectedIds(new Set());
-        setIsBulkMode(false);
+        pageState.setSelectedIds(new Set());
+        pageState.setIsBulkMode(false);
         if (failed.length === 0) {
           toast.success(
             `Refreshed AI for ${succeeded.length} quilt${succeeded.length !== 1 ? "s" : ""}`,
@@ -401,535 +393,97 @@ export default function Quilts() {
     toast.info("Refreshing AI analysis…");
   }
 
-  function toggleSelect(id: number) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  function toggleBulkMode() {
-    setIsBulkMode((v) => !v);
-    setSelectedIds(new Set());
-  }
-
-  const recipients =
-    quilts && quilts.length > 0
-      ? Array.from(
-          new Set(
-            (quilts as QuiltSummary[])
-              .map((q) => q.recipient)
-              .filter((r): r is string => Boolean(r)),
-          ),
-        ).sort()
-      : [];
-
-  const allCategories = quilts
+  const recipients = quilts
     ? Array.from(
-        new Map(
-          (quilts as QuiltSummary[])
-            .flatMap((q) => q.categories ?? [])
-            .map((c) => [c.id, c]),
-        ).values(),
-      )
+        new Set(
+          quilts.map((q) => q.recipient).filter((r): r is string => Boolean(r)),
+        ),
+      ).sort()
     : [];
-
-  const usedColors = useMemo(() => {
-    const seen = new Set<string>();
-    const result: string[] = [];
-    for (const q of (quilts ?? []) as QuiltSummary[]) {
-      for (const c of q.dominantColors ?? []) {
-        if (!seen.has(c)) {
-          seen.add(c);
-          result.push(c);
-        }
-      }
-    }
-    return result;
-  }, [quilts]);
-
-  const filtered = quilts
-    ? (quilts as QuiltSummary[]).filter((q) => {
-        const query = search.trim().toLowerCase();
-        const matchesSearch =
-          !query ||
-          q.name.toLowerCase().includes(query) ||
-          (q.recipient ?? "").toLowerCase().includes(query);
-        const matchesRecipient =
-          !recipientFilter || q.recipient === recipientFilter;
-        const matchesCat =
-          categoryFilter === null ||
-          (q.categories ?? []).some((c) => c.id === categoryFilter);
-        const matchesColor =
-          colorFilter.length === 0 ||
-          colorFilter.every((c) => (q.dominantColors ?? []).includes(c));
-        return matchesSearch && matchesRecipient && matchesCat && matchesColor;
-      })
-    : null;
-
-  const sorted = filtered
-    ? [...filtered].sort((a, b) => {
-        if (sort === "az") return a.name.localeCompare(b.name);
-        if (sort === "za") return b.name.localeCompare(a.name);
-        const ta = new Date(a.createdAt).getTime();
-        const tb = new Date(b.createdAt).getTime();
-        return sort === "oldest" ? ta - tb : tb - ta;
-      })
-    : null;
-
-  const totalPages =
-    !sorted || pageSize === 0
-      ? 1
-      : Math.max(1, Math.ceil(sorted.length / pageSize));
-  const paged = sorted
-    ? pageSize === 0
-      ? sorted
-      : sorted.slice((page - 1) * pageSize, page * pageSize)
-    : null;
-
-  useEffect(() => {
-    setPage(1);
-  }, [search, recipientFilter, categoryFilter, colorFilter, sort]);
-
-  const hasFilter =
-    search.trim().length > 0 ||
-    recipientFilter !== null ||
-    categoryFilter !== null ||
-    colorFilter.length > 0;
-
-  const { data: stats } = useGetStats();
 
   usePageAssistantContext(
     "quilting-quilts",
     isLoading
       ? undefined
-      : `Quilts page: ${quilts?.length ?? 0} finished/in-progress quilt(s)${hasFilter ? ` (${sorted?.length ?? 0} shown after filters)` : ""}. Visible quilts: ${
-          (sorted ?? [])
+      : `Quilts page: ${quilts?.length ?? 0} finished/in-progress quilt(s)${pageState.hasFilter ? ` (${pageState.sorted?.length ?? 0} shown after filters)` : ""}. Visible quilts: ${
+          (pageState.sorted ?? [])
             .slice(0, 30)
             .map((q) => `${q.name} (quiltId: ${q.id})`)
             .join(", ") || "none"
         }.`,
   );
 
+  const domainFilterPills =
+    recipients.length > 1 ? (
+      <>
+        {recipients.map((r) => (
+          <button
+            key={r}
+            onClick={() => setRecipientFilter(recipientFilter === r ? null : r)}
+            className={`rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors ${recipientFilter === r ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground"}`}
+          >
+            {r}
+          </button>
+        ))}
+      </>
+    ) : undefined;
+
   return (
-    <div>
-      {stats && (
-        <div className="mb-6 hidden sm:grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {[
-            {
-              label: "Fabrics",
-              value: stats.totalFabrics,
-              sub: "in your stash",
-              href: "/quilting/fabrics",
-            },
-            {
-              label: "Patterns",
-              value: stats.totalPatterns,
-              sub: "saved",
-              href: "/quilting/patterns",
-            },
-            {
-              label: "Quilts",
-              value: stats.totalQuilts,
-              sub: "in collection",
-              href: "/quilting/quilts",
-            },
-            {
-              label: "Blocks",
-              value: stats.totalBlocks,
-              sub: "designed",
-              href: "/quilting/blocks",
-            },
-            {
-              label: "Layouts",
-              value: stats.totalLayouts,
-              sub: "arranged",
-              href: "/quilting/layouts",
-            },
-          ].map(({ label, value, sub, href }) => (
-            <Link
-              key={label}
-              href={href}
-              className="rounded-xl border border-card-border bg-card p-4 block hover:shadow-sm hover:border-primary/30 transition-all"
-            >
-              <p className="text-2xl font-bold text-foreground">{value}</p>
-              <p className="text-sm font-medium text-foreground mt-0.5">
-                {label}
-              </p>
-              <p className="text-xs text-muted-foreground">{sub}</p>
-            </Link>
-          ))}
-        </div>
-      )}
-
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Finished Quilts</h1>
-          <p className="text-sm text-muted-foreground">
-            {sorted
-              ? hasFilter
-                ? `${sorted.length} of ${quilts!.length} quilt${quilts!.length !== 1 ? "s" : ""}`
-                : `${sorted.length} quilt${sorted.length !== 1 ? "s" : ""}`
-              : "Your finished quilts"}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {quilts && quilts.length > 0 && (
-            <Button
-              variant={isBulkMode ? "secondary" : "outline"}
-              size="sm"
-              onClick={toggleBulkMode}
-            >
-              {isBulkMode ? "Done" : "Select"}
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPaletteMatchOpen(true)}
-            title="Find quilts that match a photo's colour palette"
-          >
-            <Sparkles className="mr-0 sm:mr-2 h-4 w-4" />
-            <span className="hidden sm:inline">Match from photo</span>
-          </Button>
-          <Button asChild>
-            <Link href="/quilting/quilts/add">
-              <PlusCircle className="mr-0 sm:mr-2 h-4 w-4" />
-              <span className="hidden sm:inline">Add quilt</span>
-            </Link>
-          </Button>
-        </div>
-      </div>
-
-      {isBulkMode && (
-        <div className="mb-4 flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5">
-          <span className="flex-1 text-sm font-medium">
-            {selectedIds.size === 0
-              ? "Tap cards to select"
-              : `${selectedIds.size} selected`}
-          </span>
-          <button
-            onClick={() =>
-              sorted && setSelectedIds(new Set(sorted.map((q) => q.id)))
-            }
-            className="text-xs text-primary hover:underline"
-          >
-            All
-          </button>
-          <button
-            onClick={() => setSelectedIds(new Set())}
-            className="text-xs text-muted-foreground hover:underline"
-          >
-            None
-          </button>
-          {selectedIds.size > 0 && (
-            <Button
-              size="sm"
-              onClick={() =>
-                bulkReanalyze.mutate({ data: { ids: Array.from(selectedIds) } })
-              }
-              disabled={bulkReanalyze.isPending}
-            >
-              <RefreshCw
-                className={`mr-2 h-3.5 w-3.5 ${bulkReanalyze.isPending ? "animate-spin" : ""}`}
-              />
-              Refresh AI ({selectedIds.size})
-            </Button>
-          )}
-        </div>
-      )}
-
-      {quilts && quilts.length > 0 && (
-        <div className="mb-4 space-y-3">
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-              <Input
-                placeholder="Search by name or recipient…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="h-9 pl-9 pr-9"
-              />
-              {search && (
-                <button
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  onClick={() => setSearch("")}
-                  aria-label="Clear search"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-9 shrink-0 gap-1.5"
-                >
-                  {sort === "newest" || sort === "za" ? (
-                    <SortDesc className="h-3.5 w-3.5" />
-                  ) : (
-                    <SortAsc className="h-3.5 w-3.5" />
-                  )}
-                  <span className="hidden sm:inline">{SORT_LABELS[sort]}</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {(Object.keys(SORT_LABELS) as SortOption[]).map((s) => (
-                  <DropdownMenuItem
-                    key={s}
-                    onClick={() => setSort(s)}
-                    className={sort === s ? "font-medium text-primary" : ""}
-                  >
-                    {SORT_LABELS[s]}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {/* Page size selector */}
-            <div className="flex items-center gap-0.5">
-              {([20, 50, 100, 0] as const).map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => {
-                    localStorage.setItem(
-                      "quilting-quilts-page-size",
-                      String(n),
-                    );
-                    setPageSize(n);
-                    setPage(1);
-                  }}
-                  className={`px-2 py-1 text-xs rounded border transition-colors ${pageSize === n ? "bg-primary text-primary-foreground border-primary" : "border-input bg-background text-muted-foreground hover:bg-accent"}`}
-                >
-                  {n === 0 ? "All" : n}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {usedColors.length > 0 && (
-            <div className="flex flex-wrap gap-2 rounded-xl border border-card-border bg-card px-3 py-2.5">
-              {usedColors.map((c) => (
-                <button
-                  key={c}
-                  title={c}
-                  onClick={() =>
-                    setColorFilter((prev) =>
-                      prev.includes(c)
-                        ? prev.filter((x) => x !== c)
-                        : [...prev, c],
-                    )
-                  }
-                  className={cn(
-                    "h-7 w-7 rounded-full border-2 transition-transform hover:scale-110",
-                    colorFilter.includes(c)
-                      ? "border-foreground scale-110"
-                      : "border-transparent",
-                  )}
-                  style={{ backgroundColor: colorToHex(c) }}
-                />
-              ))}
-              {colorFilter.length > 0 && (
-                <button
-                  onClick={() => setColorFilter([])}
-                  className="ml-1 self-center rounded-full px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground"
-                >
-                  Clear colour
-                </button>
-              )}
-            </div>
-          )}
-
-          {(recipients.length > 1 || allCategories.length > 0) && (
-            <div className="flex flex-wrap gap-2">
-              {recipients.length > 1 &&
-                recipients.map((r) => (
-                  <button
-                    key={r}
-                    onClick={() =>
-                      setRecipientFilter(recipientFilter === r ? null : r)
-                    }
-                    className={`rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors ${recipientFilter === r ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground"}`}
-                  >
-                    {r}
-                  </button>
-                ))}
-              {allCategories.map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() =>
-                    setCategoryFilter(categoryFilter === cat.id ? null : cat.id)
-                  }
-                  className="rounded-full border px-3 py-1 text-xs font-medium transition"
-                  style={(() => {
-                    const palette = cat.bgColor
-                      ? {
-                          bgColor: cat.bgColor,
-                          textColor: cat.textColor ?? "#fff",
-                        }
-                      : getCategoryPalette(cat.name);
-                    const active = categoryFilter === cat.id;
-                    return {
-                      backgroundColor: active ? palette.bgColor : "transparent",
-                      color: active ? palette.textColor : palette.bgColor,
-                      borderColor: palette.bgColor,
-                    };
-                  })()}
-                >
-                  {cat.name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {isLoading && (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div
-              key={i}
-              className="overflow-hidden rounded-xl border border-card-border"
-            >
-              <Skeleton className="aspect-square w-full" />
-              <div className="space-y-2 p-3">
-                <Skeleton className="h-4 w-3/4" />
-                <Skeleton className="h-3 w-1/2" />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {isError && (
-        <div className="flex h-40 items-center justify-center rounded-xl border border-destructive/30 bg-destructive/5">
-          <p className="text-sm text-destructive">
-            Failed to load quilts. Please refresh.
-          </p>
-        </div>
-      )}
-
-      {sorted && sorted.length === 0 && quilts!.length === 0 && (
-        <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border py-20">
-          <Layers className="h-10 w-10 text-muted-foreground/40" />
-          <div className="text-center">
-            <p className="font-medium text-foreground">
-              No finished quilts yet
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Record your completed quilts here
-            </p>
-          </div>
-          <Button asChild>
-            <Link href="/quilting/quilts/add">
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Add quilt
-            </Link>
-          </Button>
-        </div>
-      )}
-
-      {sorted && sorted.length === 0 && quilts!.length > 0 && (
-        <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border py-16">
-          <Search className="h-8 w-8 text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">
-            No quilts match your filters
-          </p>
-          <button
-            onClick={() => {
-              setSearch("");
-              setRecipientFilter(null);
-              setCategoryFilter(null);
-              setColorFilter([]);
-            }}
-            className="text-xs font-medium text-primary hover:underline"
-          >
-            Clear filters
-          </button>
-        </div>
-      )}
-
-      {paged && paged.length > 0 && (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          {paged.map((quilt) => (
-            <QuiltCard
-              key={quilt.id}
-              quilt={quilt}
-              onDelete={handleDelete}
-              onReanalyze={handleReanalyze}
-              isBulkMode={isBulkMode}
-              isSelected={selectedIds.has(quilt.id)}
-              onToggleSelect={toggleSelect}
-              onFilterByRecipient={(r) =>
-                setRecipientFilter((prev) => (prev === r ? null : r))
-              }
-              onFilterByCategory={(id) =>
-                setCategoryFilter((prev) => (prev === id ? null : id))
-              }
-              onFilterByColor={(hex) =>
-                setColorFilter((prev) =>
-                  prev.includes(hex)
-                    ? prev.filter((c) => c !== hex)
-                    : [...prev, hex],
-                )
-              }
-              onEditCategories={() => setCategoryEditItem(quilt)}
-            />
-          ))}
-        </div>
-      )}
-      {totalPages > 1 && (
-        <div className="mt-6 flex items-center justify-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => p - 1)}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            Page {page} of {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
-      <CategoryEditDialog
-        open={categoryEditItem !== null}
-        onClose={() => setCategoryEditItem(null)}
-        title={categoryEditItem?.name ?? ""}
-        currentCategories={
-          (categoryEditItem?.categories ?? []) as unknown as QuiltingCategory[]
-        }
-        allCategories={categoryApiList ?? []}
-        onSave={(names) => {
-          if (categoryEditItem) {
-            updateQuiltCategories.mutate({
-              id: categoryEditItem.id,
-              data: { categories: names },
-            });
+    <CollectionPageShell
+      items={quilts}
+      isLoading={isLoading}
+      isError={isError}
+      {...pageState}
+      title="Finished Quilts"
+      singularNoun="quilt"
+      pluralNoun="quilts"
+      addHref="/quilting/quilts/add"
+      searchPlaceholder="Search by name or recipient…"
+      emptyIcon={<Layers className="h-10 w-10 text-muted-foreground/40" />}
+      emptyDescription="Record your completed quilts here"
+      localStorageKey="quilting-quilts-page-size"
+      onBulkReanalyze={(ids) => bulkReanalyze.mutate({ data: { ids } })}
+      isBulkReanalyzePending={bulkReanalyze.isPending}
+      renderCard={(quilt) => (
+        <QuiltCard
+          key={quilt.id}
+          quilt={quilt}
+          onDelete={handleDelete}
+          onReanalyze={handleReanalyze}
+          isBulkMode={pageState.isBulkMode}
+          isSelected={pageState.selectedIds.has(quilt.id)}
+          onToggleSelect={pageState.toggleSelect}
+          onFilterByRecipient={(r) =>
+            setRecipientFilter((prev) => (prev === r ? null : r))
           }
-        }}
-        isSaving={updateQuiltCategories.isPending}
-      />
-      <PaletteMatchModal
-        entity="quilt"
-        open={paletteMatchOpen}
-        onClose={() => setPaletteMatchOpen(false)}
-      />
-    </div>
+          onFilterByCategory={(id) =>
+            pageState.setCategoryFilter((prev) => (prev === id ? null : id))
+          }
+          onFilterByColor={(hex) =>
+            pageState.setColorFilter((prev) =>
+              prev.includes(hex)
+                ? prev.filter((c) => c !== hex)
+                : [...prev, hex],
+            )
+          }
+          onEditCategories={() => setCategoryEditItem(quilt)}
+        />
+      )}
+      domainFilterPills={domainFilterPills}
+      categoryEditItem={categoryEditItem}
+      onCloseCategoryEdit={() => setCategoryEditItem(null)}
+      allCategoryApiList={categoryApiList ?? []}
+      onSaveCategories={(names) => {
+        if (categoryEditItem) {
+          updateQuiltCategories.mutate({
+            id: categoryEditItem.id,
+            data: { categories: names },
+          });
+        }
+      }}
+      isSavingCategories={updateQuiltCategories.isPending}
+      paletteMatchEntity="quilt"
+      stats={stats}
+    />
   );
 }

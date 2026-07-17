@@ -2,6 +2,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
+@source "../../../lib/ui/src";
+@source "../../../lib/web-core/src";
 @source "../../../lib/elaine-ui/src";
 @source "../../../lib/messenger-ui/src";
 @import "../../../lib/elaine-ui/src/theme.css";

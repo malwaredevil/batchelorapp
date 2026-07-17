@@ -862,6 +862,7 @@ export const STATEMENTS: string[] = [
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
   `ALTER TABLE elaine_memory ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS type text NOT NULL DEFAULT 'fact'`,
 
   `CREATE TABLE IF NOT EXISTS elaine_nudges (
     id          SERIAL PRIMARY KEY,
@@ -991,6 +992,10 @@ export const STATEMENTS: string[] = [
   )`,
   `ALTER TABLE elaine_history_conversations ENABLE ROW LEVEL SECURITY`,
   `CREATE INDEX IF NOT EXISTS elaine_history_conversations_user_updated_idx ON elaine_history_conversations (user_id, updated_at DESC)`,
+  `ALTER TABLE elaine_history_conversations ADD COLUMN IF NOT EXISTS is_widget_default boolean NOT NULL DEFAULT false`,
+  `ALTER TABLE elaine_history_conversations ADD COLUMN IF NOT EXISTS summary text`,
+  `ALTER TABLE elaine_history_conversations ADD COLUMN IF NOT EXISTS summarized_up_to_id integer`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS elaine_history_conversations_widget_default_idx ON elaine_history_conversations (user_id) WHERE is_widget_default = true`,
 
   `CREATE TABLE IF NOT EXISTS elaine_history_messages (
     id              SERIAL PRIMARY KEY,

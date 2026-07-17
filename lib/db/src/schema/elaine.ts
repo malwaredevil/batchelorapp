@@ -64,6 +64,9 @@ export type InsertElaineSettings = typeof elaineSettings.$inferInsert;
 // Populated by the assistant itself via a remember_household_fact tool call.
 export const elaineMemory = pgTable("elaine_memory", {
   id: serial("id").primaryKey(),
+  // 'fact'    — an explicit factoid stored by the remember tool or auto-extracted
+  // 'summary' — the single maintained prose summary updated after every turn
+  type: text("type").notNull().default("fact"),
   content: text("content").notNull(),
   createdByUserId: integer("created_by_user_id").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true })
@@ -166,6 +169,16 @@ export const elaineHistoryConversations = pgTable(
     id: serial("id").primaryKey(),
     userId: integer("user_id").notNull(),
     title: text("title").notNull().default("New conversation"),
+    // When true, this conversation is the shared household widget thread used
+    // by the embedded chat widget across all apps. At most one row per user
+    // may have isWidgetDefault=true (enforced by a partial unique index in
+    // schema-statements.ts).
+    isWidgetDefault: boolean("is_widget_default").notNull().default(false),
+    // Cached summary of older messages when the thread exceeds 40 turns.
+    // summarizedUpToId is the elaineHistoryMessages.id of the last message
+    // covered by the summary — used to detect when the cache is stale.
+    summary: text("summary"),
+    summarizedUpToId: integer("summarized_up_to_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

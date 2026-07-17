@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
+    "dev": "cross-env NODE_ENV=development pnpm run build && pnpm run start",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "send-reminder-alerts": "node --enable-source-maps ./dist/scripts/send-reminder-alerts.mjs",
@@ -44,6 +44,7 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",
+    "cross-env": "catalog:",
     "@types/web-push": "^3.6.4",
     "@types/connect-pg-simple": "^7.0.3",
     "@types/cookie-parser": "^1.4.10",

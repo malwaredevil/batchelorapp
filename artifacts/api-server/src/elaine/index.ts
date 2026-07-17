@@ -1,6 +1,16 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod/v4";
-import { and, eq, desc, isNull, count, inArray, sql } from "drizzle-orm";
+import {
+  and,
+  eq,
+  desc,
+  isNull,
+  count,
+  inArray,
+  sql,
+  ilike,
+  or,
+} from "drizzle-orm";
 import type OpenAI from "openai";
 import {
   db,
@@ -2975,6 +2985,24 @@ const ShowDataCardToolPayload = z.object({
     .max(20),
 });
 
+const SEARCH_HOUSEHOLD_TOOL_NAME = "search_household_data";
+
+const SearchHouseholdToolPayload = z.object({
+  query: z.string().min(1).max(200),
+  include: z
+    .array(
+      z.enum([
+        "trips",
+        "pottery",
+        "ornaments",
+        "fabrics",
+        "patterns",
+        "quilts",
+      ]),
+    )
+    .optional(),
+});
+
 const SEARCH_TRIP_DOCUMENTS_TOOL_NAME = "search_trip_documents";
 
 const SearchTripDocumentsToolPayload = z.object({
@@ -2992,6 +3020,12 @@ const SHOW_FABRIC_SWATCH_TOOL_NAME = "show_fabric_swatch";
 
 const ShowFabricSwatchToolPayload = z.object({
   fabricId: z.number().int().positive(),
+});
+
+const SHOW_ORNAMENT_ITEM_TOOL_NAME = "show_ornament_item";
+
+const ShowOrnamentItemToolPayload = z.object({
+  itemId: z.number().int().positive(),
 });
 
 const SHOW_DESTINATION_CARD_TOOL_NAME = "show_destination_card";
@@ -3012,6 +3046,7 @@ const GetExchangeRateToolPayload = z.object({
 const SHOW_TRIP_CARD_TOOL_NAME = "show_trip_card";
 
 const ShowTripCardToolPayload = z.object({
+  tripId: z.number().int().positive().optional(),
   name: z.string().min(1).max(200),
   destination: z.string().max(200).optional(),
   startDate: z.string().optional(),
@@ -3399,10 +3434,15 @@ const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: SHOW_TRIP_CARD_TOOL_NAME,
       description:
-        "Render a compact visual trip card alongside your reply — showing the trip name, destination, dates, status, and a countdown. Use whenever discussing a specific trip so the user can see a summary at a glance. Calculate countdownDays from today to the start date (negative = past, 0 = today, positive = future).",
+        "Render a compact visual trip card alongside your reply — showing the trip name, destination, dates, status, and a countdown. Use whenever discussing a specific trip so the user can see a summary at a glance. If you have the tripId from search_household_data or context, always pass it so the card links to the trip detail page. Calculate countdownDays from today to the start date (negative = past, 0 = today, positive = future).",
       parameters: {
         type: "object",
         properties: {
+          tripId: {
+            type: "number",
+            description:
+              "Numeric trip ID from search_household_data or context — pass whenever you have it so the card is linkable",
+          },
           name: { type: "string", description: "Trip name" },
           destination: {
             type: "string",
@@ -3452,7 +3492,7 @@ const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: QUERY_HOUSEHOLD_TOOL_NAME,
       description:
-        "Look up live counts and recent items from the household's pottery collection, quilting stash, ornaments collection, and travel plans — use this when the user asks summary questions like 'how many pieces do I have', 'what's in my quilting stash', 'how many ornaments do I have', 'how many trips am I planning', etc. Returns real numbers and recent record names directly from the database. Do not estimate or guess counts — always call this instead. Also supports 'app_config' to fetch current Control Panel settings (AI token limits, timeouts) — use this when the user asks about or describes a performance/quality problem that a tuning constant might fix.",
+        "Look up live counts and recent items from the household's pottery collection, quilting stash, ornaments collection, and travel plans — use this when the user asks summary questions like 'how many pieces do I have', 'what's in my quilting stash', 'how many ornaments do I have', 'how many trips am I planning', etc. Returns real numbers and recent record names directly from the database. Do not estimate or guess counts — always call this instead. For questions about a SPECIFIC named item, use search_household_data first. Also supports 'app_config' to fetch current Control Panel settings (AI token limits, timeouts) — use this when the user asks about or describes a performance/quality problem that a tuning constant might fix.",
       parameters: {
         type: "object",
         properties: {
@@ -3479,9 +3519,44 @@ const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
+      name: SEARCH_HOUSEHOLD_TOOL_NAME,
+      description:
+        "Search the household database by keyword — trips (ALL statuses, not just active), pottery pieces, ornaments, fabrics, quilt patterns, and finished quilts. Call this as your FIRST step whenever the user mentions a specific item by name (e.g. 'my Croatia trip', 'the blue bowl', 'that star fabric', 'the snowman ornament') and you don't already have its ID in the current context. Returns matching items with their IDs so you can immediately follow up with show_trip_card (passing tripId), show_pottery_item, or show_fabric_swatch to display a rich visual card. NEVER ask clarifying questions about which item the user means before calling this — search first, then ask only if results are empty or multiple matches are ambiguous.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description:
+              "The distinctive name or identifier the user mentioned — extract ONLY the meaningful part, strip generic category words. Examples: user says 'the Catania trip' → query: 'Catania'; 'my Croatia trip' → query: 'Croatia'; 'the blue bowl' → query: 'blue bowl'; 'the snowman ornament' → query: 'snowman'; 'that star fabric' → query: 'star'. Never include words like trip, piece, ornament, fabric, quilt, pattern, item, my, the, a.",
+          },
+          include: {
+            type: "array",
+            items: {
+              type: "string",
+              enum: [
+                "trips",
+                "pottery",
+                "ornaments",
+                "fabrics",
+                "patterns",
+                "quilts",
+              ],
+            },
+            description:
+              "Collections to search. Omit to search all (trips + pottery + ornaments + fabrics + patterns + quilts).",
+          },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: SHOW_POTTERY_ITEM_TOOL_NAME,
       description:
-        "Render a rich visual pottery-item card for a specific piece from the collection — showing its photo, maker, style, AI description, and dominant colours. Use whenever the user asks about a specific pottery piece by name or ID, or when discussing a particular item. Fetch the itemId from query_household_data or from context in the conversation.",
+        "Render a rich visual pottery-item card for a specific piece from the collection — showing its photo, maker, style, AI description, and dominant colours. Use whenever the user asks about a specific pottery piece by name or ID, or when discussing a particular item. Fetch the itemId from search_household_data or from context in the conversation.",
       parameters: {
         type: "object",
         properties: {
@@ -3509,6 +3584,24 @@ const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           },
         },
         required: ["fabricId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: SHOW_ORNAMENT_ITEM_TOOL_NAME,
+      description:
+        "Render a rich visual ornament card for a specific item from the Hallmark/ornament collection — showing its photo, series/collection, year, brand, and AI description. Use when the user asks about a specific ornament by name or ID. Fetch the itemId from search_household_data or from context.",
+      parameters: {
+        type: "object",
+        properties: {
+          itemId: {
+            type: "number",
+            description: "ID of the ornament item to display",
+          },
+        },
+        required: ["itemId"],
       },
     },
   },
@@ -4259,6 +4352,8 @@ ${memoryBlock}
 
 TOOLS: You have tools available for navigation suggestions, remembering household facts, and proposing changes to trips/wishlist/packing lists/reminders. Each tool's own description explains exactly when and how to use it — follow those rules precisely, especially around never fabricating numeric ids and asking permission in your visible reply text before calling any trip/wishlist/packing/reminder tool. If a single request naturally involves more than one write-action (e.g. "add a reminder to book the hotel and add wine tasting to the wishlist"), call all of the relevant action tools in that same turn — don't limit yourself to one. Just make sure your visible reply names everything you're about to do before you call the tools, so nothing is a surprise. Navigation suggestions and remembering a fact can always accompany action tools.
 
+SEARCH FIRST — MANDATORY: Whenever the user asks about or references a specific trip, pottery piece, ornament, fabric, quilt, or pattern by name (e.g. "my Croatia trip", "what's left to do on Split Croatia", "the blue bowl", "the snowman ornament", "that star fabric") and you don't already have the item's numeric ID from the current page context, call search_household_data immediately as your FIRST tool call — before writing any reply text and before asking any clarifying question. Do not ask "which trip do you mean?" or "could you tell me more?" — just search. If the search returns a clear match, show a visual card (show_trip_card / show_pottery_item / show_fabric_swatch) and answer the question using the found data. Only ask for clarification if the search returns zero results or multiple equally plausible matches with no obvious winner.
+
 CONFIRMATION MODE: This user's current mode for confirming proposed actions is "${actionConfirmationMode}" — ${CONFIRMATION_MODE_EXPLANATION[actionConfirmationMode]} The three modes are: ${Object.values(CONFIRMATION_MODE_EXPLANATION).join(" | ")} If the user asks how you confirm actions, or asks to change it (e.g. "just do it automatically", "ask me one at a time", "show me everything together"), explain the modes in your visible reply and call ${SET_MODE_TOOL_NAME} once they've decided — never call it just to describe the options. Mention that they can also change this anytime from Settings.
 
 REMINDERS: Use add_reminder for requests like "remind me to check in for our flight" or "remind me to book the hotel by Friday" — it creates a new reminder and syncs it to the calendar by default; include recipientEmails only if the user asked to also notify someone. Use sync_reminder_to_calendar only to toggle calendar sync on or off for a reminder that already exists and whose numeric id you can see on screen (look for "reminderId: <number>" in the reminders listed for the current trip); never use it to create a reminder. Use edit_reminder for changes to an existing reminder (title, description, due date, done state, recipients, or calendar sync) — only include the fields the user asked to change, and never guess a reminder id. Use delete_reminder to permanently remove an existing reminder (also removes its calendar events); never guess a reminder id for either.
@@ -4492,6 +4587,11 @@ Keep replies concise and easy to read in a chat bubble.`;
     // longer needs cleanup here — unlike the old regex-directive scheme, tool
     // calls arrive as a structured field separate from the reply text.
     const HARD_TOOL_NAMES = new Set([
+      SEARCH_HOUSEHOLD_TOOL_NAME,
+      SHOW_TRIP_CARD_TOOL_NAME,
+      SHOW_POTTERY_ITEM_TOOL_NAME,
+      SHOW_FABRIC_SWATCH_TOOL_NAME,
+      SHOW_ORNAMENT_ITEM_TOOL_NAME,
       WEB_SEARCH_TOOL_NAME,
       FETCH_PAGE_TOOL_NAME,
       CONSULT_EXPERTS_TOOL_NAME,
@@ -4610,6 +4710,11 @@ Keep replies concise and easy to read in a chat bubble.`;
     // several sequential/parallel model calls before she writes anything.
     const distinctHardToolNames = new Set(hardToolCalls.map((c) => c.name));
     const STATUS_LABELS: Record<string, string> = {
+      [SEARCH_HOUSEHOLD_TOOL_NAME]: "searching your collection",
+      [SHOW_TRIP_CARD_TOOL_NAME]: "looking up that trip",
+      [SHOW_POTTERY_ITEM_TOOL_NAME]: "looking up that pottery piece",
+      [SHOW_FABRIC_SWATCH_TOOL_NAME]: "looking up that fabric",
+      [SHOW_ORNAMENT_ITEM_TOOL_NAME]: "looking up that ornament",
       [WEB_SEARCH_TOOL_NAME]: "searching the web",
       [FETCH_PAGE_TOOL_NAME]: "reading that page",
       [CONSULT_EXPERTS_TOOL_NAME]: "checking in with a couple of experts",
@@ -5332,6 +5437,67 @@ Keep replies concise and easy to read in a chat bubble.`;
                 resultText = `Fabric swatch card displayed for "${row.name}".`;
               }
             }
+          } else if (call.name === SHOW_ORNAMENT_ITEM_TOOL_NAME) {
+            const parsed = ShowOrnamentItemToolPayload.safeParse(
+              JSON.parse(call.args),
+            );
+            if (!parsed.success) {
+              resultText = "Invalid ornament item ID.";
+            } else {
+              const [row] = await db
+                .select({
+                  id: ornamentsItems.id,
+                  name: ornamentsItems.name,
+                  imagePath: ornamentsItems.imagePath,
+                  seriesOrCollection: ornamentsItems.seriesOrCollection,
+                  year: ornamentsItems.year,
+                  brand: ornamentsItems.brand,
+                  aiDescription: ornamentsItems.aiDescription,
+                  dominantColors: ornamentsItems.dominantColors,
+                })
+                .from(ornamentsItems)
+                .where(eq(ornamentsItems.id, parsed.data.itemId));
+              if (!row) {
+                resultText = `Ornament item #${parsed.data.itemId} not found.`;
+              } else {
+                let imageUrl: string | undefined;
+                try {
+                  const ONE_HOUR = 3600;
+                  const sc = createClient(
+                    env.supabaseUrl,
+                    env.supabaseServiceRoleKey,
+                    {
+                      auth: { persistSession: false, autoRefreshToken: false },
+                    },
+                  );
+                  if (row.imagePath) {
+                    const { data } = await sc.storage
+                      .from("ornaments")
+                      .createSignedUrl(row.imagePath, ONE_HOUR);
+                    imageUrl = data?.signedUrl ?? undefined;
+                  }
+                } catch {
+                  // non-fatal
+                }
+                sendEvent("widget", {
+                  type: "ornament_item",
+                  item: {
+                    itemId: row.id,
+                    name: row.name,
+                    seriesOrCollection: row.seriesOrCollection ?? undefined,
+                    year: row.year ?? undefined,
+                    brand: row.brand ?? undefined,
+                    aiDescription: row.aiDescription ?? undefined,
+                    dominantColors:
+                      row.dominantColors && row.dominantColors.length > 0
+                        ? row.dominantColors
+                        : undefined,
+                    imageUrl,
+                  },
+                });
+                resultText = `Ornament card displayed for "${row.name}".`;
+              }
+            }
           } else if (call.name === SHOW_DESTINATION_CARD_TOOL_NAME) {
             const parsed = ShowDestinationCardToolPayload.safeParse(
               JSON.parse(call.args),
@@ -5390,6 +5556,11 @@ Keep replies concise and easy to read in a chat bubble.`;
                 advice.choices[0]?.message.content ??
                 "Unable to generate clothing suggestions right now.";
             }
+          } else if (call.name === SEARCH_HOUSEHOLD_TOOL_NAME) {
+            resultText = await executeRestrictedSoftTool(
+              SEARCH_HOUSEHOLD_TOOL_NAME,
+              call.args,
+            );
           } else {
             resultText = "Unsupported tool.";
           }
@@ -6207,6 +6378,7 @@ const AGENTPHONE_ACTION_TOOLS = ACTION_TOOLS.filter(
 // confirmation modes to switch), and SUGGEST_CLOTHING_LAYERS (needs a
 // multi-step subagent flow not worth the added round-trip cost here).
 const RESTRICTED_SOFT_TOOL_NAMES = new Set<string>([
+  SEARCH_HOUSEHOLD_TOOL_NAME,
   QUERY_HOUSEHOLD_TOOL_NAME,
   WEB_SEARCH_TOOL_NAME,
   FETCH_PAGE_TOOL_NAME,
@@ -6313,6 +6485,201 @@ async function executeRestrictedSoftTool(
   args: string,
 ): Promise<string> {
   try {
+    if (name === SEARCH_HOUSEHOLD_TOOL_NAME) {
+      const parsed = SearchHouseholdToolPayload.safeParse(
+        JSON.parse(args || "{}"),
+      );
+      if (!parsed.success) return "Invalid search query.";
+      const { query, include } = parsed.data;
+      const domains = include ?? [
+        "trips",
+        "pottery",
+        "ornaments",
+        "fabrics",
+        "patterns",
+        "quilts",
+      ];
+      const pat = `%${query}%`;
+      const parts: string[] = [];
+
+      if (domains.includes("trips")) {
+        const rows = await db
+          .select({
+            id: travelsTrips.id,
+            title: travelsTrips.title,
+            destination: travelsTrips.destination,
+            status: travelsTrips.status,
+            startDate: travelsTrips.startDate,
+            endDate: travelsTrips.endDate,
+          })
+          .from(travelsTrips)
+          .where(
+            or(
+              ilike(travelsTrips.title, pat),
+              ilike(travelsTrips.destination, pat),
+            ),
+          )
+          .orderBy(desc(travelsTrips.startDate))
+          .limit(5);
+        if (rows.length > 0) {
+          const lines = rows.map((t) => {
+            const dates =
+              t.startDate && t.endDate
+                ? ` ${t.startDate} to ${t.endDate}`
+                : t.startDate
+                  ? ` starting ${t.startDate}`
+                  : "";
+            return `- "${t.title}" (${t.destination ?? "no destination"}), status: ${t.status}${dates}, tripId: ${t.id}`;
+          });
+          parts.push(
+            `Found ${rows.length} trip(s) matching "${query}":\n${lines.join("\n")}\nCall show_trip_card with the trip data and tripId to show a visual card.`,
+          );
+        } else {
+          parts.push(`No trips found matching "${query}".`);
+        }
+      }
+
+      if (domains.includes("pottery")) {
+        const rows = await db
+          .select({
+            id: potteryItems.id,
+            name: potteryItems.name,
+            maker: potteryItems.maker,
+            style: potteryItems.style,
+          })
+          .from(potteryItems)
+          .where(
+            or(ilike(potteryItems.name, pat), ilike(potteryItems.maker, pat)),
+          )
+          .limit(5);
+        if (rows.length > 0) {
+          const lines = rows.map(
+            (r) =>
+              `- "${r.name}"${r.maker ? ` by ${r.maker}` : ""}${r.style ? `, ${r.style}` : ""}, itemId: ${r.id}`,
+          );
+          parts.push(
+            `Found ${rows.length} pottery piece(s) matching "${query}":\n${lines.join("\n")}\nCall show_pottery_item with the itemId to show a visual card.`,
+          );
+        } else {
+          parts.push(`No pottery pieces found matching "${query}".`);
+        }
+      }
+
+      if (domains.includes("ornaments")) {
+        const rows = await db
+          .select({
+            id: ornamentsItems.id,
+            name: ornamentsItems.name,
+            seriesOrCollection: ornamentsItems.seriesOrCollection,
+            year: ornamentsItems.year,
+          })
+          .from(ornamentsItems)
+          .where(
+            or(
+              ilike(ornamentsItems.name, pat),
+              ilike(ornamentsItems.seriesOrCollection, pat),
+            ),
+          )
+          .limit(5);
+        if (rows.length > 0) {
+          const lines = rows.map(
+            (r) =>
+              `- "${r.name}"${r.seriesOrCollection ? `, ${r.seriesOrCollection}` : ""}${r.year ? ` (${r.year})` : ""}, itemId: ${r.id}`,
+          );
+          parts.push(
+            `Found ${rows.length} ornament(s) matching "${query}":\n${lines.join("\n")}`,
+          );
+        } else {
+          parts.push(`No ornaments found matching "${query}".`);
+        }
+      }
+
+      if (domains.includes("fabrics")) {
+        const rows = await db
+          .select({
+            id: fabrics.id,
+            name: fabrics.name,
+            designer: fabrics.designer,
+            manufacturer: fabrics.manufacturer,
+          })
+          .from(fabrics)
+          .where(
+            or(
+              ilike(fabrics.name, pat),
+              ilike(fabrics.designer, pat),
+              ilike(fabrics.manufacturer, pat),
+            ),
+          )
+          .limit(5);
+        if (rows.length > 0) {
+          const lines = rows.map(
+            (r) =>
+              `- "${r.name}"${r.designer ? ` by ${r.designer}` : ""}${r.manufacturer ? `, ${r.manufacturer}` : ""}, fabricId: ${r.id}`,
+          );
+          parts.push(
+            `Found ${rows.length} fabric(s) matching "${query}":\n${lines.join("\n")}\nCall show_fabric_swatch with the fabricId to show a visual card.`,
+          );
+        } else {
+          parts.push(`No fabrics found matching "${query}".`);
+        }
+      }
+
+      if (domains.includes("patterns")) {
+        const rows = await db
+          .select({
+            id: quiltPatterns.id,
+            name: quiltPatterns.name,
+            designer: quiltPatterns.designer,
+          })
+          .from(quiltPatterns)
+          .where(
+            or(
+              ilike(quiltPatterns.name, pat),
+              ilike(quiltPatterns.designer, pat),
+            ),
+          )
+          .limit(5);
+        if (rows.length > 0) {
+          const lines = rows.map(
+            (r) =>
+              `- "${r.name}"${r.designer ? ` by ${r.designer}` : ""}, patternId: ${r.id}`,
+          );
+          parts.push(
+            `Found ${rows.length} quilt pattern(s) matching "${query}":\n${lines.join("\n")}`,
+          );
+        } else {
+          parts.push(`No quilt patterns found matching "${query}".`);
+        }
+      }
+
+      if (domains.includes("quilts")) {
+        const rows = await db
+          .select({
+            id: finishedQuilts.id,
+            name: finishedQuilts.name,
+            dateCompleted: finishedQuilts.dateCompleted,
+          })
+          .from(finishedQuilts)
+          .where(ilike(finishedQuilts.name, pat))
+          .limit(5);
+        if (rows.length > 0) {
+          const lines = rows.map(
+            (r) =>
+              `- "${r.name}"${r.dateCompleted ? ` (completed ${r.dateCompleted})` : ""}, quiltId: ${r.id}`,
+          );
+          parts.push(
+            `Found ${rows.length} finished quilt(s) matching "${query}":\n${lines.join("\n")}`,
+          );
+        } else {
+          parts.push(`No finished quilts found matching "${query}".`);
+        }
+      }
+
+      return parts.length > 0
+        ? parts.join("\n\n")
+        : `No results found for "${query}".`;
+    }
+
     if (name === QUERY_HOUSEHOLD_TOOL_NAME) {
       const parsed = z
         .object({ include: z.array(z.string()).optional() })

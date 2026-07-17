@@ -42,6 +42,8 @@ async function fetchFromUpcItemDb(
   barcode: string,
 ): Promise<Omit<BarcodeLookupResult, "barcode" | "fromCache">> {
   const userKey = process.env.UPCITEMDB_USER_KEY;
+  // Free trial endpoint requires no API key and works for up to 100 lookups/day.
+  // If UPCITEMDB_USER_KEY is set, uses the paid endpoint for higher rate limits.
   const baseUrl = userKey
     ? "https://api.upcitemdb.com/prod/v1/lookup"
     : "https://api.upcitemdb.com/prod/trial/lookup";
@@ -63,6 +65,30 @@ async function fetchFromUpcItemDb(
       headers,
       signal: controller.signal,
     });
+
+    // Rate limit exceeded — free trial allows 100 lookups/day.
+    // Return not-found without caching so the caller can retry later.
+    if (resp.status === 429) {
+      const remaining = resp.headers.get("X-RateLimit-Remaining") ?? "?";
+      const reset = resp.headers.get("X-RateLimit-Reset");
+      const resetAt = reset
+        ? new Date(parseInt(reset, 10) * 1000).toISOString()
+        : "unknown";
+      logger.warn(
+        { barcode, remaining, resetAt, endpoint: userKey ? "paid" : "trial" },
+        "UPCitemdb rate limit exceeded — lookup skipped until quota resets",
+      );
+      return {
+        found: false,
+        name: null,
+        brand: null,
+        seriesOrCollection: null,
+        year: null,
+        description: null,
+        imageUrl: null,
+      };
+    }
+
     if (!resp.ok) {
       throw new Error(`UPCitemdb HTTP ${resp.status}`);
     }

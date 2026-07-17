@@ -56,3 +56,9 @@ attached_assets/
 
 # Security-sensitive docs (keep local only)
 threat_model.md
+
+# Local secrets — NEVER commit
+.env
+.env.local
+.env.*.local
+tmp-env-output/

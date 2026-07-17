@@ -326,9 +326,9 @@ export function ModuleShell({ children }: { children: ReactNode }) {
                 variant="ghost"
                 size="icon"
                 onClick={() => {
-                  window.location.href = "/modules/travels/travel-calendar";
+                  window.location.href = "/modules/office/calendar";
                 }}
-                aria-label="Travel Calendar"
+                aria-label="Calendar"
                 className="text-muted-foreground hover:text-foreground"
               >
                 <CalendarDays className="h-4 w-4" />

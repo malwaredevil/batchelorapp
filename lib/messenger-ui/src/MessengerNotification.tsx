@@ -113,7 +113,7 @@ function PushPermissionBanner() {
       style={{
         position: "fixed",
         bottom: 24,
-        right: 24,
+        left: 24,
         zIndex: 9996,
         background: "var(--background, #fff)",
         border: "1px solid rgba(0,0,0,0.09)",

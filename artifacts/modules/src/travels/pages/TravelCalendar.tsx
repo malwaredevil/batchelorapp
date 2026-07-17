@@ -815,53 +815,49 @@ export default function TravelCalendar() {
                           );
                         })}
                       </div>
-                      {weekEvents.length > 0 && (
-                        <div className="grid grid-cols-7 gap-y-0.5 pb-1.5 pt-0.5">
-                          {weekEvents.map((item) => {
-                            const startKey = displayEventStartKey(item);
-                            const endKey = displayEventEndKey(item);
-                            const isStart = startKey >= weekStartKey;
-                            const isEnd = endKey <= weekEndKey;
-                            const colStart = isStart
-                              ? week.findIndex((d) => dateKey(d) === startKey) +
-                                1
-                              : 1;
-                            const endIdx = week.findIndex(
-                              (d) => dateKey(d) === endKey,
-                            );
-                            const colEnd =
-                              isEnd && endIdx >= 0 ? endIdx + 2 : 8;
-                            const st = eventStyle(item);
-                            return (
-                              <button
-                                key={`${item.kind}-${item.calendar?.id ?? "t"}-${item.event.id}`}
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openEdit(item);
-                                }}
-                                style={{
-                                  gridColumn: `${colStart} / ${colEnd}`,
-                                  marginLeft: isStart ? 2 : 0,
-                                  marginRight: isEnd ? 2 : 0,
-                                  ...st.style,
-                                }}
-                                className={`h-5 flex items-center gap-1 truncate px-1.5 text-left text-[11px] ${st.className} ${isStart ? "rounded-l" : ""} ${isEnd ? "rounded-r" : ""}`}
-                                title={item.event.title}
-                              >
-                                {isStart && item.kind === "travel" && (
-                                  <Plane className="h-2.5 w-2.5 shrink-0" />
-                                )}
-                                {isStart && (
-                                  <span className="truncate">
-                                    {item.event.title}
-                                  </span>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
+                      <div className="grid grid-cols-7 gap-y-0.5 pb-1.5 pt-0.5 min-h-[28px]">
+                        {weekEvents.map((item) => {
+                          const startKey = displayEventStartKey(item);
+                          const endKey = displayEventEndKey(item);
+                          const isStart = startKey >= weekStartKey;
+                          const isEnd = endKey <= weekEndKey;
+                          const colStart = isStart
+                            ? week.findIndex((d) => dateKey(d) === startKey) + 1
+                            : 1;
+                          const endIdx = week.findIndex(
+                            (d) => dateKey(d) === endKey,
+                          );
+                          const colEnd = isEnd && endIdx >= 0 ? endIdx + 2 : 8;
+                          const st = eventStyle(item);
+                          return (
+                            <button
+                              key={`${item.kind}-${item.calendar?.id ?? "t"}-${item.event.id}`}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEdit(item);
+                              }}
+                              style={{
+                                gridColumn: `${colStart} / ${colEnd}`,
+                                marginLeft: isStart ? 2 : 0,
+                                marginRight: isEnd ? 2 : 0,
+                                ...st.style,
+                              }}
+                              className={`h-5 flex items-center gap-1 truncate px-1.5 text-left text-[11px] ${st.className} ${isStart ? "rounded-l" : ""} ${isEnd ? "rounded-r" : ""}`}
+                              title={item.event.title}
+                            >
+                              {isStart && item.kind === "travel" && (
+                                <Plane className="h-2.5 w-2.5 shrink-0" />
+                              )}
+                              {isStart && (
+                                <span className="truncate">
+                                  {item.event.title}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   );
                 })}

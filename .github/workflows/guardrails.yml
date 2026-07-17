@@ -1,0 +1,158 @@
+name: Guardrails
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: guardrails-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  guardrails:
+    name: Guardrails
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "Ban: drizzle-kit push"
+        run: |
+          if git diff --name-only origin/main...HEAD | xargs grep -l "drizzle-kit push" 2>/dev/null | grep -qv "guardrails.yml"; then
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "ERROR: 'drizzle-kit push' detected in changed files."
+            echo ""
+            echo "This command is permanently banned. It introspects ALL tables"
+            echo "in the shared Supabase database and silently drops any table"
+            echo "not in the current schema — including the other app's tables."
+            echo ""
+            echo "Use lib/db/src/schema-statements.ts with CREATE TABLE IF NOT EXISTS"
+            echo "and run: pnpm --filter @workspace/db run bootstrap"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            exit 1
+          fi
+          echo "✓ No drizzle-kit push usage found"
+
+      - name: "Ban: restricted files in PR diff"
+        run: |
+          RESTRICTED=$(git diff --name-only origin/main...HEAD | grep -E "^\.agents/|^\.local/|^threat_model\.md|^\.env$|^\.env\." || true)
+          if [ -n "$RESTRICTED" ]; then
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "ERROR: The following restricted files appear in this PR:"
+            echo "$RESTRICTED"
+            echo ""
+            echo "These files must never be committed or pushed:"
+            echo "  .agents/       — agent memory files (Replit-local)"
+            echo "  .local/        — Replit platform files (Replit-local)"
+            echo "  threat_model.md — security document (keep local only)"
+            echo "  .env / .env.*  — local secrets (NEVER commit secrets)"
+            echo ""
+            echo "Remove them from your branch and add them to .gitignore."
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            exit 1
+          fi
+          echo "✓ No restricted files in PR diff"
+
+      - name: "Ban: direct OpenAI SDK instantiation in server code"
+        run: |
+          VIOLATIONS=$(git diff --name-only origin/main...HEAD \
+            | grep -E "\.(ts|tsx)$" \
+            | xargs grep -n "new OpenAI(" 2>/dev/null \
+            | grep -v "node_modules" \
+            | grep -v "// openai-direct-ok" || true)
+          if [ -n "$VIOLATIONS" ]; then
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "ERROR: Direct OpenAI SDK instantiation found in changed files:"
+            echo "$VIOLATIONS"
+            echo ""
+            echo "All LLM calls must go through OpenRouter via:"
+            echo "  artifacts/api-server/src/lib/ai-client.ts"
+            echo ""
+            echo "Jina and Voyage are the only exceptions (they have their own clients)."
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            exit 1
+          fi
+          echo "✓ No direct OpenAI SDK instantiation found"
+
+      - name: "Ban: passOnStoreError: true in rate limiters"
+        run: |
+          VIOLATIONS=$(git diff --name-only origin/main...HEAD \
+            | grep -E "\.(ts|tsx)$" \
+            | xargs grep -n "passOnStoreError.*true\|passOnStoreError:true" 2>/dev/null \
+            | grep -v "node_modules" || true)
+          if [ -n "$VIOLATIONS" ]; then
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "ERROR: passOnStoreError: true found in changed files:"
+            echo "$VIOLATIONS"
+            echo ""
+            echo "Rate limiters must fail CLOSED (deny requests) when the store"
+            echo "is unavailable, not fail open (allow all through)."
+            echo "Remove passOnStoreError: true or set it to false."
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            exit 1
+          fi
+          echo "✓ No passOnStoreError: true found"
+
+      - name: "Ban: destructive SQL in schema-statements diff"
+        run: |
+          VIOLATIONS=$(git diff origin/main...HEAD -- lib/db/src/schema-statements.ts \
+            | grep "^+" \
+            | grep -v "^+++" \
+            | grep -iE "^\+\s*(DROP|TRUNCATE|DELETE FROM|ALTER TABLE.*DROP COLUMN)" \
+            | grep -v "^\+\s*--" \
+            | grep -v "^\+\s*//" || true)
+          if [ -n "$VIOLATIONS" ]; then
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "ERROR: Destructive SQL detected in schema-statements.ts:"
+            echo "$VIOLATIONS"
+            echo ""
+            echo "Only additive statements are permitted in schema-statements.ts:"
+            echo "  CREATE TABLE IF NOT EXISTS ..."
+            echo "  CREATE INDEX IF NOT EXISTS ..."
+            echo "  ALTER TABLE ... ADD COLUMN IF NOT EXISTS ..."
+            echo ""
+            echo "Destructive schema changes require a separate reviewed migration."
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            exit 1
+          fi
+          echo "✓ No destructive SQL in schema-statements diff"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: "pnpm"
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: "Ban: raw fetch('/api/...') in frontend artifacts"
+        run: pnpm --filter @workspace/scripts run check-raw-fetch
+
+      - name: "Guard: RESTRICTED_EXCLUDED_ACTION_TYPES must not shrink"
+        run: |
+          CURRENT=$(grep -A 30 "RESTRICTED_EXCLUDED_ACTION_TYPES" \
+            artifacts/api-server/src/elaine/index.ts 2>/dev/null \
+            | grep -c '"' || echo "0")
+          BASE=$(git show origin/main:artifacts/api-server/src/elaine/index.ts 2>/dev/null \
+            | grep -A 30 "RESTRICTED_EXCLUDED_ACTION_TYPES" \
+            | grep -c '"' || echo "0")
+          if [ "$CURRENT" -lt "$BASE" ]; then
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "ERROR: RESTRICTED_EXCLUDED_ACTION_TYPES has fewer entries than main."
+            echo "  main branch: $BASE entries"
+            echo "  this PR:     $CURRENT entries"
+            echo ""
+            echo "This set is a deliberate security boundary for AgentPhone SMS/voice"
+            echo "and inbound email channels. It cannot be reduced without a reviewed"
+            echo "security decision documented in the PR body."
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            exit 1
+          fi
+          echo "✓ RESTRICTED_EXCLUDED_ACTION_TYPES has not shrunk (main: $BASE, PR: $CURRENT)"

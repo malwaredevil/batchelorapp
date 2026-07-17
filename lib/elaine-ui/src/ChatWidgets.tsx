@@ -91,6 +91,17 @@ export interface FabricSwatchData {
   aiDescription?: string;
 }
 
+export interface OrnamentItemData {
+  itemId?: number;
+  name: string;
+  imageUrl?: string;
+  seriesOrCollection?: string;
+  year?: number;
+  brand?: string;
+  aiDescription?: string;
+  dominantColors?: string[];
+}
+
 export interface DestinationCardData {
   name: string;
   country?: string;
@@ -114,6 +125,7 @@ export type ChatWidget =
   | { type: "trip_card"; trip: TripCardData }
   | { type: "pottery_item"; item: PotteryItemData }
   | { type: "fabric_swatch"; swatch: FabricSwatchData }
+  | { type: "ornament_item"; item: OrnamentItemData }
   | { type: "destination_card"; card: DestinationCardData };
 
 // ── Weather condition → emoji mapping ──────────────────────────────────────
@@ -597,6 +609,17 @@ function TripCardWidget({ trip }: { trip: TripCardData }) {
           )}
         </div>
       </div>
+      {trip.tripId != null && (
+        <div className="border-t border-border/60 px-3 py-2">
+          <a
+            href={`/modules/travels/trips/${trip.tripId}`}
+            className="flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+          >
+            <ExternalLink className="h-3 w-3" />
+            Open trip
+          </a>
+        </div>
+      )}
     </div>
   );
 }
@@ -611,6 +634,15 @@ function PotteryItemWidget({ item }: { item: PotteryItemData }) {
         <span className="text-xs font-semibold text-foreground">
           Pottery Collection
         </span>
+        {item.itemId != null && (
+          <a
+            href={`/modules/pottery/piece/${item.itemId}`}
+            className="ml-auto flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
+          >
+            <ExternalLink className="h-3 w-3" />
+            Open
+          </a>
+        )}
       </div>
       <div className="flex gap-3 p-3">
         {item.imageUrl && (
@@ -663,6 +695,15 @@ function FabricSwatchWidget({ swatch }: { swatch: FabricSwatchData }) {
         <span className="text-xs font-semibold text-foreground">
           Fabric Swatch
         </span>
+        {swatch.fabricId != null && (
+          <a
+            href={`/modules/quilting/fabrics/${swatch.fabricId}`}
+            className="ml-auto flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
+          >
+            <ExternalLink className="h-3 w-3" />
+            Open
+          </a>
+        )}
       </div>
       <div className="flex gap-3 p-3">
         {swatch.imageUrl && (
@@ -694,6 +735,76 @@ function FabricSwatchWidget({ swatch }: { swatch: FabricSwatchData }) {
           {swatch.dominantColors && swatch.dominantColors.length > 0 && (
             <div className="mt-1.5 flex flex-wrap gap-1">
               {swatch.dominantColors.slice(0, 6).map((c) => (
+                <span
+                  key={c}
+                  className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] text-muted-foreground"
+                >
+                  {c}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Ornament Item Widget ─────────────────────────────────────────────────────
+
+function OrnamentItemWidget({ item }: { item: OrnamentItemData }) {
+  return (
+    <div className="mt-2 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      <div className="flex items-center gap-1.5 border-b border-border/60 bg-red-50/60 px-3 py-2 dark:bg-red-950/30">
+        <span className="text-base">🎄</span>
+        <span className="text-xs font-semibold text-foreground">
+          Ornament Collection
+        </span>
+        {item.itemId != null && (
+          <a
+            href={`/modules/ornaments/item/${item.itemId}`}
+            className="ml-auto flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
+          >
+            <ExternalLink className="h-3 w-3" />
+            Open
+          </a>
+        )}
+      </div>
+      <div className="flex gap-3 p-3">
+        {item.imageUrl && (
+          <img
+            src={item.imageUrl}
+            alt={item.name}
+            className="h-20 w-20 shrink-0 rounded-lg border border-border object-cover"
+          />
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-foreground">
+            {item.name}
+          </p>
+          {item.seriesOrCollection && (
+            <p className="text-xs text-muted-foreground">
+              {item.seriesOrCollection}
+            </p>
+          )}
+          <div className="mt-0.5 flex flex-wrap gap-2">
+            {item.brand && (
+              <span className="text-xs text-muted-foreground">
+                {item.brand}
+              </span>
+            )}
+            {item.year && (
+              <span className="text-xs text-muted-foreground">{item.year}</span>
+            )}
+          </div>
+          {item.aiDescription && (
+            <p className="mt-1 text-xs text-foreground/80 line-clamp-2">
+              {item.aiDescription}
+            </p>
+          )}
+          {item.dominantColors && item.dominantColors.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {item.dominantColors.slice(0, 5).map((c) => (
                 <span
                   key={c}
                   className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] text-muted-foreground"
@@ -788,6 +899,8 @@ export function ChatWidget({ widget }: { widget: ChatWidget }) {
       return <PotteryItemWidget item={widget.item} />;
     case "fabric_swatch":
       return <FabricSwatchWidget swatch={widget.swatch} />;
+    case "ornament_item":
+      return <OrnamentItemWidget item={widget.item} />;
     case "destination_card":
       return <DestinationCardWidget card={widget.card} />;
   }

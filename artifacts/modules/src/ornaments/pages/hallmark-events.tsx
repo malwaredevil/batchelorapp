@@ -369,13 +369,19 @@ export default function HallmarkEvents() {
   // Google Calendar is the sole source of truth. No DB fallback.
   const allNormalized = useMemo<GCalHallmarkEvent[]>(() => {
     if (!hallmarkCal) return [];
-    return gcalEvents.map((e) => ({
-      gcalId: e.id,
-      title: e.title,
-      startDate: e.start.slice(0, 10),
-      endDate: gcalEventEndKey(e),
-      description: e.description,
-    }));
+    return gcalEvents.map((e) => {
+      const startDate = e.start.slice(0, 10);
+      const endDate = gcalEventEndKey(e);
+      return {
+        gcalId: e.id,
+        title: e.title,
+        startDate,
+        // Guard against 0-duration GCal events (end = start, exclusive).
+        // After subtracting 1 day the end would be before the start — clamp.
+        endDate: endDate < startDate ? startDate : endDate,
+        description: e.description,
+      };
+    });
   }, [gcalEvents, hallmarkCal]);
 
   // Read view from URL params once on mount so deep-links work (e.g. ?view=list).

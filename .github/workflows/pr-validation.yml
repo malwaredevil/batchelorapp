@@ -1,0 +1,58 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  pr-validation:
+    name: PR Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: PR body must reference a GitHub issue
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          COMBINED="$PR_TITLE $PR_BODY"
+          if echo "$COMBINED" | grep -qiE "(fix(es)?|close[sd]?|resolve[sd]?|addresses?|part of|see|ref)?\s*#[0-9]+"; then
+            echo "✓ PR references at least one GitHub issue"
+          else
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "ERROR: PR title or body must reference a GitHub issue number."
+            echo ""
+            echo "Add one of these to your PR body:"
+            echo "  Addresses #123"
+            echo "  Closes #123"
+            echo "  Fixes #123"
+            echo "  Part of #123"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            exit 1
+          fi
+
+      - name: Branch name convention check
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          if echo "$BRANCH" | grep -qE "^(feat|fix|chore|perf|refactor|security|docs)/"; then
+            echo "✓ Branch name '$BRANCH' follows convention"
+          else
+            echo "⚠ WARNING: Branch name '$BRANCH' does not follow the convention:"
+            echo "  feat/*, fix/*, chore/*, perf/*, refactor/*, security/*, docs/*"
+            echo ""
+            echo "This is a warning only — the PR is not blocked."
+            echo "Recommended branch names for this project:"
+            echo "  feat/batch-quick-wins"
+            echo "  feat/epic-241-search-quality"
+            echo "  feat/epic-242-elaine-completeness"
+            echo "  feat/strategic-phase1"
+          fi
+
+      - name: Dependabot PRs are exempt from issue reference requirement
+        if: github.actor == 'dependabot[bot]'
+        run: echo "✓ Dependabot PR — issue reference check skipped"

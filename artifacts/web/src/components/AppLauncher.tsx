@@ -1034,10 +1034,10 @@ export function AppLauncher() {
               variant="ghost"
               size="icon"
               onClick={() => {
-                window.location.href = "/modules/travels/travel-calendar";
+                window.location.href = "/modules/office/calendar";
               }}
-              aria-label="Travel Calendar"
-              title="Travel Calendar"
+              aria-label="Calendar"
+              title="Calendar"
               className="text-muted-foreground hover:text-foreground"
             >
               <CalendarDays className="w-5 h-5" />

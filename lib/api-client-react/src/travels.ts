@@ -1643,6 +1643,7 @@ export interface ConnectedCalendar {
   source: "picked" | "manual";
   primaryColor: string;
   isTravelCalendar: boolean;
+  isHallmarkCalendar: boolean;
   createdAt: string;
   updatedAt: string;
 }

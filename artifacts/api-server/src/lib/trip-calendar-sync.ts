@@ -11,9 +11,9 @@
 // renaming an activity or changing its time changes its key, which is
 // treated as delete-old + create-new (acceptable, rare, and self-healing).
 //
-// Every trip save calls syncTripCalendarEvents(tripId) — best effort, never
-// throws past this module, so a Google Calendar hiccup never blocks a trip
-// save.
+// Every trip save calls syncTripCalendarEvents() — throws on GCal write
+// failure so the calling route can surface the error to the user instead of
+// silently swallowing it.
 import crypto from "node:crypto";
 import { eq, and } from "drizzle-orm";
 import { db, travelsTripCalendarEvents, travelsTrips } from "@workspace/db";
@@ -151,75 +151,70 @@ function buildDesiredItems(trip: TripForCalendarSync): DesiredItem[] {
 export async function syncTripCalendarEvents(
   trip: TripForCalendarSync,
 ): Promise<void> {
-  try {
-    const connection = await getTravelCalendarConnection();
-    if (!connection) return;
-    const accessToken = await getValidAccessToken(connection.userId);
-    if (!accessToken) return;
+  const connection = await getTravelCalendarConnection();
+  if (!connection) return;
+  const accessToken = await getValidAccessToken(connection.userId);
+  if (!accessToken) return;
 
-    const desired = buildDesiredItems(trip);
-    const desiredByKey = new Map(desired.map((d) => [d.itemKey, d]));
+  const desired = buildDesiredItems(trip);
+  const desiredByKey = new Map(desired.map((d) => [d.itemKey, d]));
 
-    const existing = await db
-      .select()
-      .from(travelsTripCalendarEvents)
-      .where(eq(travelsTripCalendarEvents.tripId, trip.id));
-    const existingByKey = new Map(existing.map((e) => [e.itemKey, e]));
+  const existing = await db
+    .select()
+    .from(travelsTripCalendarEvents)
+    .where(eq(travelsTripCalendarEvents.tripId, trip.id));
+  const existingByKey = new Map(existing.map((e) => [e.itemKey, e]));
 
-    // Delete mapping rows (and their Google events) for items no longer present.
-    for (const row of existing) {
-      if (!desiredByKey.has(row.itemKey)) {
-        await deleteCalendarEvent(
-          accessToken,
-          connection.googleCalendarId,
-          row.googleEventId,
-        ).catch((err: unknown) =>
-          logger.warn(
-            { err, tripId: trip.id, itemKey: row.itemKey },
-            "trip-calendar-sync: delete failed",
-          ),
-        );
-        await db
-          .delete(travelsTripCalendarEvents)
-          .where(eq(travelsTripCalendarEvents.id, row.id));
-      }
+  // Delete mapping rows (and their Google events) for items no longer present.
+  // Stale-event deletes are best-effort: a failed delete is non-fatal since
+  // the event is orphaned on GCal but doesn't block the save.
+  for (const row of existing) {
+    if (!desiredByKey.has(row.itemKey)) {
+      await deleteCalendarEvent(
+        accessToken,
+        connection.googleCalendarId,
+        row.googleEventId,
+      ).catch((err: unknown) =>
+        logger.warn(
+          { err, tripId: trip.id, itemKey: row.itemKey },
+          "trip-calendar-sync: stale-event delete failed (non-fatal)",
+        ),
+      );
+      await db
+        .delete(travelsTripCalendarEvents)
+        .where(eq(travelsTripCalendarEvents.id, row.id));
     }
+  }
 
-    // Create or update the rest.
-    for (const item of desired) {
-      const hash = contentHash(item.input);
-      const existingRow = existingByKey.get(item.itemKey);
-      if (!existingRow) {
-        const event = await createCalendarEvent(
-          accessToken,
-          connection.googleCalendarId,
-          item.input,
-        );
-        await db.insert(travelsTripCalendarEvents).values({
-          tripId: trip.id,
-          itemKey: item.itemKey,
-          kind: item.itemKey === "trip" ? "trip" : "itinerary_activity",
-          contentHash: hash,
-          googleEventId: event.id,
-        });
-      } else if (existingRow.contentHash !== hash) {
-        await updateCalendarEvent(
-          accessToken,
-          connection.googleCalendarId,
-          existingRow.googleEventId,
-          item.input,
-        );
-        await db
-          .update(travelsTripCalendarEvents)
-          .set({ contentHash: hash, updatedAt: new Date() })
-          .where(eq(travelsTripCalendarEvents.id, existingRow.id));
-      }
+  // Create or update the rest. Throws on failure so callers surface the error.
+  for (const item of desired) {
+    const hash = contentHash(item.input);
+    const existingRow = existingByKey.get(item.itemKey);
+    if (!existingRow) {
+      const event = await createCalendarEvent(
+        accessToken,
+        connection.googleCalendarId,
+        item.input,
+      );
+      await db.insert(travelsTripCalendarEvents).values({
+        tripId: trip.id,
+        itemKey: item.itemKey,
+        kind: item.itemKey === "trip" ? "trip" : "itinerary_activity",
+        contentHash: hash,
+        googleEventId: event.id,
+      });
+    } else if (existingRow.contentHash !== hash) {
+      await updateCalendarEvent(
+        accessToken,
+        connection.googleCalendarId,
+        existingRow.googleEventId,
+        item.input,
+      );
+      await db
+        .update(travelsTripCalendarEvents)
+        .set({ contentHash: hash, updatedAt: new Date() })
+        .where(eq(travelsTripCalendarEvents.id, existingRow.id));
     }
-  } catch (err) {
-    logger.warn(
-      { err, tripId: trip.id },
-      "trip-calendar-sync: reconciliation failed",
-    );
   }
 }
 

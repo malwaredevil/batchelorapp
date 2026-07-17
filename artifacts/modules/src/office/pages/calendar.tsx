@@ -14,6 +14,7 @@ import {
 import {
   CalendarCore,
   dateKey,
+  chunk,
   tintColor,
   type CalendarCoreContext,
 } from "@/components/CalendarCore";
@@ -65,6 +66,15 @@ function CalendarEventsLoader({
 function eventDayKey(event: TravelCalendarEvent): string {
   if (event.allDay) return event.start;
   return dateKey(new Date(event.start));
+}
+
+function gcalEventEndKey(event: TravelCalendarEvent): string {
+  if (event.allDay) {
+    const d = new Date(event.end + "T00:00:00");
+    d.setDate(d.getDate() - 1);
+    return dateKey(d);
+  }
+  return dateKey(new Date(event.end));
 }
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -120,17 +130,6 @@ export default function OfficeCalendar() {
         })),
       );
   }, [calendars, hiddenCalendarIds, eventsByCalendar]);
-
-  const eventsByDay = useMemo(() => {
-    const map = new Map<string, DisplayEvent[]>();
-    for (const item of displayEvents) {
-      const key = eventDayKey(item.event);
-      const list = map.get(key) ?? [];
-      list.push(item);
-      map.set(key, list);
-    }
-    return map;
-  }, [displayEvents]);
 
   const groups = useMemo(() => {
     const map = new Map<string, DisplayEvent[]>();
@@ -254,92 +253,143 @@ export default function OfficeCalendar() {
               )}
 
               {/* ── Month / Week grid ─────────────────────────────────── */}
-              {(view === "month" || view === "week") && (
-                <div className="overflow-hidden rounded-xl border border-card-border bg-card">
-                  <div className="grid grid-cols-7 border-b border-card-border">
-                    {DAY_LABELS.map((label) => (
-                      <div
-                        key={label}
-                        className="py-2 text-center text-xs font-semibold text-muted-foreground"
-                      >
-                        {label}
-                      </div>
-                    ))}
-                  </div>
-                  <div
-                    className={`grid grid-cols-7 ${
-                      view === "month"
-                        ? "auto-rows-[minmax(90px,1fr)]"
-                        : "auto-rows-[minmax(120px,1fr)]"
-                    }`}
-                  >
-                    {gridDays.map((day) => {
-                      const key = dateKey(day);
-                      const dayEvents = eventsByDay.get(key) ?? [];
-                      const outsideMonth =
-                        view === "month" && !isSameMonth(day, cursor);
-                      const today = isToday(day);
-                      const maxVisible = view === "month" ? 2 : 4;
-                      return (
-                        <div
-                          key={key}
-                          className={`border-b border-r border-card-border p-1 last:border-r-0 ${
-                            outsideMonth ? "bg-muted/30" : ""
-                          }`}
-                        >
-                          <div className="mb-1 flex items-center justify-end">
-                            <span
-                              className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
-                                today
-                                  ? "bg-primary text-primary-foreground"
-                                  : outsideMonth
-                                    ? "text-muted-foreground/50"
-                                    : "text-foreground"
-                              }`}
-                            >
-                              {day.getDate()}
-                            </span>
+              {(view === "month" || view === "week") &&
+                (() => {
+                  const weeks = chunk(gridDays, 7);
+                  return (
+                    <div className="overflow-hidden rounded-xl border border-card-border bg-card">
+                      <div className="grid grid-cols-7 border-b border-card-border">
+                        {DAY_LABELS.map((label) => (
+                          <div
+                            key={label}
+                            className="py-2 text-center text-xs font-semibold text-muted-foreground"
+                          >
+                            {label}
                           </div>
-                          <div className="space-y-0.5 overflow-hidden">
-                            {dayEvents.slice(0, maxVisible).map((item) => (
-                              <div
-                                key={`${item.calendar.id}-${item.event.id}`}
-                                className="truncate rounded px-1 py-0.5 text-[10px] font-medium leading-tight"
-                                style={{
-                                  backgroundColor: tintColor(
-                                    item.calendar.primaryColor,
-                                    0.2,
-                                  ),
-                                  color: item.calendar.primaryColor,
-                                  border: `1px solid ${tintColor(item.calendar.primaryColor, 0.4)}`,
-                                }}
-                                title={item.event.title}
-                              >
-                                {!item.event.allDay && (
-                                  <span className="mr-0.5 opacity-70">
-                                    {new Date(
-                                      item.event.start,
-                                    ).toLocaleTimeString(undefined, {
-                                      hour: "numeric",
-                                      minute: "2-digit",
-                                    })}
-                                  </span>
-                                )}
-                                {item.event.title}
-                              </div>
-                            ))}
-                            {dayEvents.length > maxVisible && (
-                              <div className="px-1 text-[10px] text-muted-foreground">
-                                +{dayEvents.length - maxVisible} more
+                        ))}
+                      </div>
+                      {weeks.map((week, wi) => {
+                        const weekStartKey = dateKey(week[0]);
+                        const weekEndKey = dateKey(week[6]);
+                        const isLastWeek = wi === weeks.length - 1;
+                        const weekEvents = displayEvents
+                          .filter((item) => {
+                            const startKey = item.event.start.slice(0, 10);
+                            const endKey = gcalEventEndKey(item.event);
+                            return (
+                              endKey >= weekStartKey && startKey <= weekEndKey
+                            );
+                          })
+                          .sort((a, b) =>
+                            a.event.start
+                              .slice(0, 10)
+                              .localeCompare(b.event.start.slice(0, 10)),
+                          );
+                        return (
+                          <div
+                            key={wi}
+                            className={
+                              isLastWeek ? "" : "border-b border-card-border"
+                            }
+                          >
+                            {/* Day number cells */}
+                            <div className="grid grid-cols-7">
+                              {week.map((day) => {
+                                const key = dateKey(day);
+                                const outsideMonth =
+                                  view === "month" && !isSameMonth(day, cursor);
+                                const today = isToday(day);
+                                return (
+                                  <div
+                                    key={key}
+                                    className={`border-r border-card-border/60 p-1.5 last:border-r-0 min-h-[36px] ${
+                                      outsideMonth ? "bg-muted/30" : ""
+                                    }`}
+                                  >
+                                    <span
+                                      className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
+                                        today
+                                          ? "bg-primary text-primary-foreground"
+                                          : outsideMonth
+                                            ? "text-muted-foreground/50"
+                                            : "text-foreground"
+                                      }`}
+                                    >
+                                      {day.getDate()}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            {/* Spanning event bars */}
+                            {weekEvents.length > 0 && (
+                              <div className="grid grid-cols-7 gap-y-0.5 pb-1.5 pt-0.5">
+                                {weekEvents.map((item) => {
+                                  const startKey = item.event.start.slice(
+                                    0,
+                                    10,
+                                  );
+                                  const endKey = gcalEventEndKey(item.event);
+                                  const isStart = startKey >= weekStartKey;
+                                  const isEnd = endKey <= weekEndKey;
+                                  const colStart = isStart
+                                    ? week.findIndex(
+                                        (d) => dateKey(d) === startKey,
+                                      ) + 1
+                                    : 1;
+                                  const endIdx = week.findIndex(
+                                    (d) => dateKey(d) === endKey,
+                                  );
+                                  const colEnd =
+                                    isEnd && endIdx >= 0 ? endIdx + 2 : 8;
+                                  return (
+                                    <div
+                                      key={`${item.calendar.id}-${item.event.id}`}
+                                      style={{
+                                        gridColumn: `${colStart} / ${colEnd}`,
+                                        marginLeft: isStart ? 2 : 0,
+                                        marginRight: isEnd ? 2 : 0,
+                                        backgroundColor: tintColor(
+                                          item.calendar.primaryColor,
+                                          0.2,
+                                        ),
+                                        color: item.calendar.primaryColor,
+                                        border: `1px solid ${tintColor(
+                                          item.calendar.primaryColor,
+                                          0.4,
+                                        )}`,
+                                      }}
+                                      className={`h-5 px-1.5 text-[10px] font-medium leading-tight flex items-center gap-1 truncate ${
+                                        isStart ? "rounded-l" : ""
+                                      } ${isEnd ? "rounded-r" : ""}`}
+                                      title={item.event.title}
+                                    >
+                                      {isStart && !item.event.allDay && (
+                                        <span className="mr-0.5 opacity-70 shrink-0">
+                                          {new Date(
+                                            item.event.start,
+                                          ).toLocaleTimeString(undefined, {
+                                            hour: "numeric",
+                                            minute: "2-digit",
+                                          })}
+                                        </span>
+                                      )}
+                                      {isStart && (
+                                        <span className="truncate">
+                                          {item.event.title}
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             )}
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
 
               {/* ── List view ─────────────────────────────────────────── */}
               {view === "list" && (

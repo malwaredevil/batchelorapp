@@ -3,7 +3,10 @@ import { Link } from "wouter";
 import {
   useListOrnaments,
   useListOrnamentCategories,
-  useListOrnamentsHallmarkEvents,
+  useListConnectedCalendars,
+  useListConnectedCalendarEvents,
+  getListConnectedCalendarEventsQueryKey,
+  type TravelCalendarEvent,
 } from "@workspace/api-client-react";
 import {
   Search,
@@ -34,30 +37,72 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 function NextHallmarkEventCard() {
-  const { data: events } = useListOrnamentsHallmarkEvents();
-  const now = Date.now();
+  const { data: connectedCalendars = [] } = useListConnectedCalendars();
+  const hallmarkCal =
+    connectedCalendars.find((c) => c.isHallmarkCalendar) ?? null;
 
-  const upcoming = (events ?? [])
-    .map((e) => ({
-      ...e,
-      start: new Date(`${e.startDate}T00:00:00`),
-      end: new Date(`${e.endDate}T23:59:59`),
-    }))
-    .filter((e) => e.end.getTime() >= now)
-    .sort((a, b) => a.start.getTime() - b.start.getTime());
+  const { rangeStart, rangeEnd } = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const end = new Date(today);
+    end.setFullYear(end.getFullYear() + 1);
+    return { rangeStart: today.toISOString(), rangeEnd: end.toISOString() };
+  }, []);
+
+  const { data: gcalEvents = [] } = useListConnectedCalendarEvents(
+    hallmarkCal?.id ?? 0,
+    rangeStart,
+    rangeEnd,
+    {
+      query: {
+        enabled: !!hallmarkCal,
+        queryKey: getListConnectedCalendarEventsQueryKey(
+          hallmarkCal?.id ?? 0,
+          rangeStart,
+          rangeEnd,
+        ),
+      },
+    },
+  );
+
+  const nowMs = Date.now();
+
+  const upcoming = gcalEvents
+    .map((e: TravelCalendarEvent) => {
+      const startDate = e.start.slice(0, 10);
+      const endDate = (() => {
+        if (e.allDay) {
+          const d = new Date(e.end + "T00:00:00");
+          d.setDate(d.getDate() - 1);
+          return d.toISOString().slice(0, 10);
+        }
+        return e.end.slice(0, 10);
+      })();
+      return {
+        title: e.title,
+        startDate,
+        endDate,
+        startMs: new Date(`${startDate}T00:00:00`).getTime(),
+        endMs: new Date(`${endDate}T23:59:59`).getTime(),
+      };
+    })
+    .filter((e) => e.endMs >= nowMs)
+    .sort((a, b) => a.startMs - b.startMs);
 
   const next = upcoming[0];
   if (!next) return null;
 
-  const isLive = now >= next.start.getTime() && now <= next.end.getTime();
+  const isLive = nowMs >= next.startMs && nowMs <= next.endMs;
   const daysAway = isLive
     ? 0
-    : Math.max(0, Math.ceil((next.start.getTime() - now) / 86_400_000));
+    : Math.max(0, Math.ceil((next.startMs - nowMs) / 86_400_000));
 
-  const dateRangeLabel = `${next.start.toLocaleDateString("en-US", {
+  const dateRangeLabel = `${new Date(
+    `${next.startDate}T00:00:00`,
+  ).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
-  })} – ${next.end.toLocaleDateString("en-US", {
+  })} – ${new Date(`${next.endDate}T00:00:00`).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",

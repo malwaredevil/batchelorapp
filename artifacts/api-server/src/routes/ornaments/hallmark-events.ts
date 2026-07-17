@@ -1,38 +1,25 @@
-// CRUD for household-shared major Hallmark collector events
-// (ornaments_hallmark_events). Any authenticated user may create/edit/
-// delete, per the household-shared model used elsewhere in Ornaments.
-// Writes are best-effort mirrored to the shared "Hallmark" Google Calendar
-// (travels_connected_calendars, is_hallmark_calendar = true) when one has
-// been designated — mirroring is never required for the local CRUD to
-// succeed, since the calendar is a convenience mirror, not the source of
-// truth.
+// GCal-direct CRUD for household-shared Hallmark collector events.
+// Google Calendar (the designated Hallmark calendar) is the sole source of
+// truth — the ornaments_hallmark_events DB table has been removed.
+// Any authenticated user may create/edit/delete; the backend proxies the
+// write through the calendar-owner's access token via
+// getHallmarkCalendarConnection(), consistent with the household-shared model.
 import { Router, type IRouter } from "express";
-import { asc, eq } from "drizzle-orm";
 import { z } from "zod/v4";
-import { db, ornamentsHallmarkEvents } from "@workspace/db";
+import {
+  getHallmarkCalendarConnection,
+  getValidAccessToken,
+} from "../../lib/google-calendar-tokens";
+import {
+  createCalendarEvent,
+  updateCalendarEvent,
+  deleteCalendarEvent,
+} from "../../lib/google-calendar";
 import { requireAuth } from "../../middleware/auth";
-import { syncHallmarkEventToGoogle as syncToGoogle } from "../../lib/ornaments/hallmark-calendar-sync";
-import { scanForHallmarkEvents } from "../../lib/ornaments/hallmark-events-scan";
 import { logger } from "../../lib/logger";
 
 const router: IRouter = Router();
 router.use(requireAuth);
-
-router.get("/hallmark-events", async (_req, res) => {
-  const rows = await db
-    .select()
-    .from(ornamentsHallmarkEvents)
-    .orderBy(asc(ornamentsHallmarkEvents.startDate));
-  res.json(rows);
-});
-
-// Manual trigger for the AI auto-discovery scan (mirrors the "Scan now"
-// pattern used by travels-calendar-scan). Best-effort — the scanner itself
-// never throws, so this always returns a summary rather than a 5xx.
-router.post("/hallmark-events/scan-now", async (_req, res) => {
-  const result = await scanForHallmarkEvents();
-  res.json(result);
-});
 
 const EventBody = z.object({
   title: z.string().min(1),
@@ -41,109 +28,95 @@ const EventBody = z.object({
   endDate: z.string().min(1),
 });
 
-router.post("/hallmark-events", async (req, res) => {
-  const userId = req.session.userId!;
-  const body = EventBody.parse(req.body);
+// GCal all-day events use an exclusive end date (next day after the actual
+// last day). Our form/UI uses inclusive end dates, so we add 1 day here.
+function toExclusiveEnd(endDate: string): string {
+  const d = new Date(`${endDate}T00:00:00`);
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
 
-  const [row] = await db
-    .insert(ornamentsHallmarkEvents)
-    .values({
-      userId,
+async function resolveConn(res: {
+  status: (n: number) => { json: (body: unknown) => void };
+}): Promise<{ calendarId: string; accessToken: string } | null> {
+  const calendar = await getHallmarkCalendarConnection();
+  if (!calendar) {
+    res.status(409).json({ error: "No Hallmark calendar is configured." });
+    return null;
+  }
+  const accessToken = await getValidAccessToken(calendar.userId);
+  if (!accessToken) {
+    res.status(502).json({ error: "Could not connect to Google Calendar." });
+    return null;
+  }
+  return { calendarId: calendar.googleCalendarId, accessToken };
+}
+
+router.post("/hallmark-events", async (req, res) => {
+  const body = EventBody.parse(req.body);
+  const conn = await resolveConn(res);
+  if (!conn) return;
+  try {
+    const event = await createCalendarEvent(conn.accessToken, conn.calendarId, {
       title: body.title,
       description: body.description ?? null,
-      startDate: body.startDate,
-      endDate: body.endDate,
-    })
-    .returning();
-
-  const googleEventId = await syncToGoogle("create", {
-    title: row.title,
-    description: row.description,
-    startDate: row.startDate,
-    endDate: row.endDate,
-    googleEventId: null,
-  });
-
-  if (googleEventId) {
-    const [updated] = await db
-      .update(ornamentsHallmarkEvents)
-      .set({ googleEventId })
-      .where(eq(ornamentsHallmarkEvents.id, row.id))
-      .returning();
-    res.status(201).json(updated);
-    return;
+      location: null,
+      allDay: true,
+      start: body.startDate,
+      end: toExclusiveEnd(body.endDate),
+      colorId: null,
+    });
+    res.status(201).json(event);
+  } catch (err) {
+    logger.error({ err }, "hallmark-events: create GCal event failed");
+    res
+      .status(502)
+      .json({ error: "Failed to create event in Google Calendar." });
   }
-  res.status(201).json(row);
 });
 
-const PatchBody = z.object({
-  title: z.string().min(1).optional(),
-  description: z.string().nullish(),
-  startDate: z.string().min(1).optional(),
-  endDate: z.string().min(1).optional(),
+router.patch("/hallmark-events/:eventId", async (req, res) => {
+  const eventId = req.params["eventId"] as string;
+  const body = EventBody.parse(req.body);
+  const conn = await resolveConn(res);
+  if (!conn) return;
+  try {
+    const event = await updateCalendarEvent(
+      conn.accessToken,
+      conn.calendarId,
+      eventId,
+      {
+        title: body.title,
+        description: body.description ?? null,
+        location: null,
+        allDay: true,
+        start: body.startDate,
+        end: toExclusiveEnd(body.endDate),
+        colorId: null,
+      },
+    );
+    res.json(event);
+  } catch (err) {
+    logger.error({ err, eventId }, "hallmark-events: update GCal event failed");
+    res
+      .status(502)
+      .json({ error: "Failed to update event in Google Calendar." });
+  }
 });
 
-router.patch("/hallmark-events/:id", async (req, res) => {
-  const id = Number(req.params["id"]);
-  const body = PatchBody.parse(req.body);
-
-  const [existing] = await db
-    .select()
-    .from(ornamentsHallmarkEvents)
-    .where(eq(ornamentsHallmarkEvents.id, id))
-    .limit(1);
-  if (!existing) {
-    res.status(404).json({ error: "Event not found." });
-    return;
+router.delete("/hallmark-events/:eventId", async (req, res) => {
+  const eventId = req.params["eventId"] as string;
+  const conn = await resolveConn(res);
+  if (!conn) return;
+  try {
+    await deleteCalendarEvent(conn.accessToken, conn.calendarId, eventId);
+    res.status(204).send();
+  } catch (err) {
+    logger.error({ err, eventId }, "hallmark-events: delete GCal event failed");
+    res
+      .status(502)
+      .json({ error: "Failed to delete event from Google Calendar." });
   }
-
-  const [row] = await db
-    .update(ornamentsHallmarkEvents)
-    .set({ ...body, updatedAt: new Date() })
-    .where(eq(ornamentsHallmarkEvents.id, id))
-    .returning();
-
-  const googleEventId = await syncToGoogle("update", {
-    title: row.title,
-    description: row.description,
-    startDate: row.startDate,
-    endDate: row.endDate,
-    googleEventId: row.googleEventId,
-  });
-
-  if (googleEventId !== row.googleEventId) {
-    const [updated] = await db
-      .update(ornamentsHallmarkEvents)
-      .set({ googleEventId })
-      .where(eq(ornamentsHallmarkEvents.id, id))
-      .returning();
-    res.json(updated);
-    return;
-  }
-  res.json(row);
-});
-
-router.delete("/hallmark-events/:id", async (req, res) => {
-  const id = Number(req.params["id"]);
-
-  const [row] = await db
-    .delete(ornamentsHallmarkEvents)
-    .where(eq(ornamentsHallmarkEvents.id, id))
-    .returning();
-  if (!row) {
-    res.status(404).json({ error: "Event not found." });
-    return;
-  }
-
-  await syncToGoogle("delete", {
-    title: row.title,
-    description: row.description,
-    startDate: row.startDate,
-    endDate: row.endDate,
-    googleEventId: row.googleEventId,
-  });
-
-  res.status(204).send();
 });
 
 export default router;

@@ -136,40 +136,6 @@ export const ornamentsBarcodeCache = pgTable("ornaments_barcode_cache", {
     .notNull(),
 }).enableRLS();
 
-/**
- * Household-shared major Hallmark collector events (Keepsake Ornament
- * Premiere / Open House, etc). The app's own source of truth for display
- * and editing; googleEventId links to a best-effort mirrored event on the
- * designated shared "Hallmark" calendar (travels_connected_calendars,
- * is_hallmark_calendar = true) when one exists.
- */
-export const ornamentsHallmarkEvents = pgTable(
-  "ornaments_hallmark_events",
-  {
-    id: serial("id").primaryKey(),
-    userId: integer("user_id"),
-    title: text("title").notNull(),
-    description: text("description"),
-    startDate: date("start_date").notNull(),
-    endDate: date("end_date").notNull(),
-    googleEventId: text("google_event_id"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    index("ornaments_hallmark_events_start_date_idx").on(table.startDate),
-  ],
-).enableRLS();
-
-export type OrnamentHallmarkEventRow =
-  typeof ornamentsHallmarkEvents.$inferSelect;
-export type InsertOrnamentHallmarkEvent =
-  typeof ornamentsHallmarkEvents.$inferInsert;
-
 export type OrnamentCategoryRow = typeof ornamentsCategories.$inferSelect;
 export type OrnamentItemCategoryRow =
   typeof ornamentsItemCategories.$inferSelect;

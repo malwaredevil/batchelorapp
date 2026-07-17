@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { isSameMonth, isToday } from "date-fns";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Loader2,
   Plus,
@@ -12,11 +13,14 @@ import {
   ExternalLink,
 } from "lucide-react";
 import {
-  useListOrnamentsHallmarkEvents,
-  useCreateOrnamentsHallmarkEvent,
-  useUpdateOrnamentsHallmarkEvent,
-  useDeleteOrnamentsHallmarkEvent,
-  type OrnamentsHallmarkEvent,
+  useCreateHallmarkGCalEvent,
+  useUpdateHallmarkGCalEvent,
+  useDeleteHallmarkGCalEvent,
+  useListConnectedCalendars,
+  useListConnectedCalendarEvents,
+  getListConnectedCalendarEventsQueryKey,
+  type TravelCalendarEvent,
+  type ConnectedCalendar,
 } from "@workspace/api-client-react";
 import { toast } from "sonner";
 import { usePageAssistantContext } from "@/ornaments/lib/assistant-context";
@@ -50,6 +54,50 @@ import {
   type CalendarCoreContext,
 } from "@/components/CalendarCore";
 
+// All events are now GCal events — the ornaments_hallmark_events DB table has
+// been removed. Google Calendar is the sole source of truth.
+type GCalHallmarkEvent = {
+  gcalId: string;
+  title: string;
+  startDate: string; // YYYY-MM-DD inclusive
+  endDate: string; // YYYY-MM-DD inclusive
+  description?: string | null;
+};
+
+// GCal all-day events have an exclusive end date; convert to inclusive.
+function gcalEventEndKey(e: TravelCalendarEvent): string {
+  if (e.allDay) {
+    const d = new Date(e.end + "T00:00:00");
+    d.setDate(d.getDate() - 1);
+    return dateKey(d);
+  }
+  return dateKey(new Date(e.end));
+}
+
+function HallmarkGCalLoader({
+  calendarId,
+  start,
+  end,
+  onEvents,
+}: {
+  calendarId: number;
+  start: string;
+  end: string;
+  onEvents: (events: TravelCalendarEvent[]) => void;
+}) {
+  const { data = [] } = useListConnectedCalendarEvents(calendarId, start, end, {
+    query: {
+      enabled: Boolean(calendarId && start && end),
+      queryKey: getListConnectedCalendarEventsQueryKey(calendarId, start, end),
+    },
+  });
+  useEffect(() => {
+    onEvents(data);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(data)]);
+  return null;
+}
+
 const eventSchema = z
   .object({
     title: z.string().min(1, "Title is required").max(200),
@@ -75,14 +123,17 @@ function EventFormDialog({
   onOpenChange,
   event,
   defaultDate,
+  hallmarkCalId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  event?: OrnamentsHallmarkEvent;
+  event?: GCalHallmarkEvent;
   defaultDate?: string;
+  hallmarkCalId: number | null;
 }) {
-  const createEvent = useCreateOrnamentsHallmarkEvent();
-  const updateEvent = useUpdateOrnamentsHallmarkEvent();
+  const queryClient = useQueryClient();
+  const createEvent = useCreateHallmarkGCalEvent();
+  const updateEvent = useUpdateHallmarkGCalEvent();
   const isEditing = !!event;
 
   const form = useForm<EventFormValues>({
@@ -109,11 +160,20 @@ function EventFormDialog({
   const onSubmit = async (values: EventFormValues) => {
     try {
       if (isEditing && event) {
-        await updateEvent.mutateAsync({ id: event.id, data: values });
+        await updateEvent.mutateAsync({ gcalId: event.gcalId, data: values });
         toast.success("Event updated");
       } else {
         await createEvent.mutateAsync(values);
         toast.success("Event added");
+      }
+      if (hallmarkCalId !== null) {
+        queryClient.invalidateQueries({
+          queryKey: [
+            "/api/travels/connected-calendars",
+            hallmarkCalId,
+            "events",
+          ],
+        });
       }
       onOpenChange(false);
       form.reset();
@@ -133,7 +193,7 @@ function EventFormDialog({
           </DialogTitle>
           <DialogDescription>
             Household-shared dates for Hallmark Keepsake events (Open House,
-            etc.). Best-effort synced to the shared Hallmark Google Calendar.
+            etc.), stored directly in Google Calendar.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -209,10 +269,10 @@ function EventViewDialog({
   onDelete,
 }: {
   open: boolean;
-  event: OrnamentsHallmarkEvent | null;
+  event: GCalHallmarkEvent | null;
   onOpenChange: (open: boolean) => void;
-  onEdit: (event: OrnamentsHallmarkEvent) => void;
-  onDelete: (event: OrnamentsHallmarkEvent) => void;
+  onEdit: (event: GCalHallmarkEvent) => void;
+  onDelete: (event: GCalHallmarkEvent) => void;
 }) {
   if (!event) return null;
   const now = Date.now();
@@ -296,8 +356,27 @@ function formatRange(start: string, end: string) {
 }
 
 export default function HallmarkEvents() {
-  const { data: events, isLoading } = useListOrnamentsHallmarkEvents();
-  const deleteEvent = useDeleteOrnamentsHallmarkEvent();
+  const queryClient = useQueryClient();
+  const deleteEvent = useDeleteHallmarkGCalEvent();
+
+  const [gcalEvents, setGcalEvents] = useState<TravelCalendarEvent[]>([]);
+  const { data: connectedCalendars = [] } = useListConnectedCalendars();
+  const hallmarkCal = useMemo<ConnectedCalendar | null>(
+    () => connectedCalendars.find((c) => c.isHallmarkCalendar) ?? null,
+    [connectedCalendars],
+  );
+
+  // Google Calendar is the sole source of truth. No DB fallback.
+  const allNormalized = useMemo<GCalHallmarkEvent[]>(() => {
+    if (!hallmarkCal) return [];
+    return gcalEvents.map((e) => ({
+      gcalId: e.id,
+      title: e.title,
+      startDate: e.start.slice(0, 10),
+      endDate: gcalEventEndKey(e),
+      description: e.description,
+    }));
+  }, [gcalEvents, hallmarkCal]);
 
   // Read view from URL params once on mount so deep-links work (e.g. ?view=list).
   const initialView = useMemo<ViewMode>(() => {
@@ -308,42 +387,32 @@ export default function HallmarkEvents() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<
-    OrnamentsHallmarkEvent | undefined
+    GCalHallmarkEvent | undefined
   >(undefined);
   const [defaultDate, setDefaultDate] = useState<string | undefined>(undefined);
-  const [deleteTarget, setDeleteTarget] =
-    useState<OrnamentsHallmarkEvent | null>(null);
-  const [viewingEvent, setViewingEvent] =
-    useState<OrnamentsHallmarkEvent | null>(null);
-
-  const hasHandledInitialParams = useRef(false);
+  const [deleteTarget, setDeleteTarget] = useState<GCalHallmarkEvent | null>(
+    null,
+  );
+  const [viewingEvent, setViewingEvent] = useState<GCalHallmarkEvent | null>(
+    null,
+  );
 
   const todayKey = useMemo(() => dateKey(new Date()), []);
 
-  const upcoming = useMemo(
+  const upcomingNormalized = useMemo(
     () =>
-      (events ?? [])
+      allNormalized
         .filter((e) => e.endDate >= todayKey)
         .sort((a, b) => a.startDate.localeCompare(b.startDate)),
-    [events, todayKey],
+    [allNormalized, todayKey],
   );
 
   usePageAssistantContext(
     "ornaments-hallmark-events",
-    `Hallmark events page: manage household-shared dates for Hallmark Keepsake events (Open House, etc.), best-effort synced to the shared Hallmark Google Calendar. Currently tracking ${
-      events?.length ?? 0
-    } event(s), ${upcoming.length} upcoming.`,
+    `Hallmark events page: manage household-shared dates for Hallmark Keepsake events (Open House, etc.)${hallmarkCal ? ", sourced from the connected Hallmark Google Calendar" : " — no Hallmark calendar connected yet"}. Currently tracking ${
+      allNormalized.length
+    } event(s), ${upcomingNormalized.length} upcoming.`,
   );
-
-  useEffect(() => {
-    if (hasHandledInitialParams.current || !events) return;
-    hasHandledInitialParams.current = true;
-    const eventId = new URLSearchParams(window.location.search).get("eventId");
-    if (eventId) {
-      const found = events.find((e) => String(e.id) === eventId);
-      if (found) setViewingEvent(found);
-    }
-  }, [events]);
 
   const openCreate = (date?: string) => {
     setEditingEvent(undefined);
@@ -351,17 +420,17 @@ export default function HallmarkEvents() {
     setFormOpen(true);
   };
 
-  const openEdit = (event: OrnamentsHallmarkEvent) => {
+  const openEdit = (event: GCalHallmarkEvent) => {
     setEditingEvent(event);
     setDefaultDate(undefined);
     setFormOpen(true);
   };
 
-  const openView = (event: OrnamentsHallmarkEvent) => {
+  const openView = (event: GCalHallmarkEvent) => {
     setViewingEvent(event);
   };
 
-  const openEditFromView = (event: OrnamentsHallmarkEvent) => {
+  const openEditFromView = (event: GCalHallmarkEvent) => {
     setViewingEvent(null);
     setEditingEvent(event);
     setDefaultDate(undefined);
@@ -371,7 +440,16 @@ export default function HallmarkEvents() {
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     try {
-      await deleteEvent.mutateAsync(deleteTarget.id);
+      await deleteEvent.mutateAsync(deleteTarget.gcalId);
+      if (hallmarkCal) {
+        queryClient.invalidateQueries({
+          queryKey: [
+            "/api/travels/connected-calendars",
+            hallmarkCal.id,
+            "events",
+          ],
+        });
+      }
       toast.success("Event removed");
     } catch {
       toast.error("Failed to remove event");
@@ -415,18 +493,20 @@ export default function HallmarkEvents() {
         listLabel="Upcoming events"
         disableNavInList
       >
-        {({ view, cursor, gridDays }: CalendarCoreContext) => {
-          if (isLoading) {
-            return (
-              <div className="flex justify-center py-12">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            );
-          }
+        {({ view, cursor, gridDays, range }: CalendarCoreContext) => {
+          const gcalLoader = hallmarkCal ? (
+            <HallmarkGCalLoader
+              calendarId={hallmarkCal.id}
+              start={range.start.toISOString()}
+              end={range.end.toISOString()}
+              onEvents={setGcalEvents}
+            />
+          ) : null;
 
           if (view === "month") {
             return (
               <div className="overflow-hidden rounded-xl border border-card-border bg-card">
+                {gcalLoader}
                 {/* Day-of-week header */}
                 <div className="grid grid-cols-7 border-b border-card-border bg-muted/40 text-center text-xs font-medium text-muted-foreground">
                   {gridDays.slice(0, 7).map((d) => (
@@ -439,7 +519,7 @@ export default function HallmarkEvents() {
                 {chunk(gridDays, 7).map((week, wi) => {
                   const weekStartKey = dateKey(week[0]);
                   const weekEndKey = dateKey(week[6]);
-                  const weekEvents = (events ?? [])
+                  const weekEvents = allNormalized
                     .filter(
                       (e) =>
                         e.endDate >= weekStartKey && e.startDate <= weekEndKey,
@@ -491,44 +571,40 @@ export default function HallmarkEvents() {
                       {/* Spanning event bars */}
                       {weekEvents.length > 0 && (
                         <div className="grid grid-cols-7 gap-y-0.5 pb-1.5 pt-0.5">
-                          {weekEvents.map((event) => {
-                            const isStart = event.startDate >= weekStartKey;
-                            const isEnd = event.endDate <= weekEndKey;
+                          {weekEvents.map((ev) => {
+                            const isStart = ev.startDate >= weekStartKey;
+                            const isEnd = ev.endDate <= weekEndKey;
                             const colStart = isStart
                               ? week.findIndex(
-                                  (d) => dateKey(d) === event.startDate,
+                                  (d) => dateKey(d) === ev.startDate,
                                 ) + 1
                               : 1;
                             const endIdx = week.findIndex(
-                              (d) => dateKey(d) === event.endDate,
+                              (d) => dateKey(d) === ev.endDate,
                             );
                             const colEnd =
                               isEnd && endIdx >= 0 ? endIdx + 2 : 8;
                             return (
                               <button
-                                key={event.id}
+                                key={ev.gcalId}
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  openView(event);
+                                  openView(ev);
                                 }}
                                 style={{
                                   gridColumn: `${colStart} / ${colEnd}`,
                                   marginLeft: isStart ? 2 : 0,
                                   marginRight: isEnd ? 2 : 0,
                                 }}
-                                className={`h-5 px-1.5 text-left text-[11px] truncate flex items-center gap-1 bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-900/60 ${
-                                  isStart ? "rounded-l" : ""
-                                } ${isEnd ? "rounded-r" : ""}`}
-                                title={event.title}
+                                className={`h-5 px-1.5 text-left text-[11px] truncate flex items-center gap-1 bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-900/60 ${isStart ? "rounded-l" : ""} ${isEnd ? "rounded-r" : ""}`}
+                                title={ev.title}
                               >
                                 {isStart && (
                                   <CalendarHeart className="h-2.5 w-2.5 shrink-0" />
                                 )}
                                 {isStart && (
-                                  <span className="truncate">
-                                    {event.title}
-                                  </span>
+                                  <span className="truncate">{ev.title}</span>
                                 )}
                               </button>
                             );
@@ -545,6 +621,7 @@ export default function HallmarkEvents() {
           if (view === "week") {
             return (
               <div className="overflow-hidden rounded-xl border border-card-border bg-card">
+                {gcalLoader}
                 {/* Day headers */}
                 <div className="grid grid-cols-7 divide-x divide-card-border/60 border-b border-card-border/60">
                   {gridDays.map((day) => {
@@ -578,7 +655,7 @@ export default function HallmarkEvents() {
                 {(() => {
                   const wStartKey = dateKey(gridDays[0]);
                   const wEndKey = dateKey(gridDays[6]);
-                  const wEvents = (events ?? [])
+                  const wEvents = allNormalized
                     .filter(
                       (e) => e.endDate >= wStartKey && e.startDate <= wEndKey,
                     )
@@ -586,35 +663,33 @@ export default function HallmarkEvents() {
                   if (wEvents.length === 0) return null;
                   return (
                     <div className="grid grid-cols-7 gap-y-0.5 py-1.5 border-b border-card-border/60">
-                      {wEvents.map((event) => {
-                        const isStart = event.startDate >= wStartKey;
-                        const isEnd = event.endDate <= wEndKey;
+                      {wEvents.map((ev) => {
+                        const isStart = ev.startDate >= wStartKey;
+                        const isEnd = ev.endDate <= wEndKey;
                         const colStart = isStart
                           ? gridDays.findIndex(
-                              (d) => dateKey(d) === event.startDate,
+                              (d) => dateKey(d) === ev.startDate,
                             ) + 1
                           : 1;
                         const endIdx = gridDays.findIndex(
-                          (d) => dateKey(d) === event.endDate,
+                          (d) => dateKey(d) === ev.endDate,
                         );
                         const colEnd = isEnd && endIdx >= 0 ? endIdx + 2 : 8;
                         return (
                           <button
-                            key={event.id}
+                            key={ev.gcalId}
                             type="button"
-                            onClick={() => openView(event)}
+                            onClick={() => openView(ev)}
                             style={{
                               gridColumn: `${colStart} / ${colEnd}`,
                               marginLeft: isStart ? 2 : 0,
                               marginRight: isEnd ? 2 : 0,
                             }}
-                            className={`h-5 px-1.5 text-left text-[11px] truncate flex items-center gap-1 bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-900/60 ${
-                              isStart ? "rounded-l" : ""
-                            } ${isEnd ? "rounded-r" : ""}`}
-                            title={event.title}
+                            className={`h-5 px-1.5 text-left text-[11px] truncate flex items-center gap-1 bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-900/60 ${isStart ? "rounded-l" : ""} ${isEnd ? "rounded-r" : ""}`}
+                            title={ev.title}
                           >
                             <CalendarHeart className="h-2.5 w-2.5 shrink-0" />
-                            <span className="truncate">{event.title}</span>
+                            <span className="truncate">{ev.title}</span>
                           </button>
                         );
                       })}
@@ -645,53 +720,59 @@ export default function HallmarkEvents() {
           }
 
           /* List view */
-          if (upcoming.length === 0) {
+          if (upcomingNormalized.length === 0) {
             return (
-              <div className="rounded-xl border border-dashed border-card-border p-10 text-center text-muted-foreground">
-                <CalendarHeart className="h-8 w-8 mx-auto mb-3 opacity-50" />
-                No upcoming Hallmark events. Add one to see it countdown on the
-                app launcher.
-              </div>
+              <>
+                {gcalLoader}
+                <div className="rounded-xl border border-dashed border-card-border p-10 text-center text-muted-foreground">
+                  <CalendarHeart className="h-8 w-8 mx-auto mb-3 opacity-50" />
+                  {hallmarkCal
+                    ? "No upcoming events found in the Hallmark Google Calendar."
+                    : "Connect a Hallmark Google Calendar in Settings to start tracking events here."}
+                </div>
+              </>
             );
           }
           return (
-            <ul className="divide-y divide-card-border rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
-              {upcoming.map((event) => (
-                <li
-                  key={event.id}
-                  className="flex items-center gap-4 px-5 py-4 hover:bg-muted/40 transition-colors"
-                >
-                  <div className="w-10 h-10 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center flex-shrink-0">
-                    <CalendarHeart className="h-5 w-5 text-rose-600 dark:text-rose-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium font-serif tracking-wide truncate">
-                      {event.title}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {formatRange(event.startDate, event.endDate)}
-                      {event.googleEventId ? "" : " · calendar sync pending"}
-                    </p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => openEdit(event)}
-                    aria-label="Edit event"
+            <>
+              {gcalLoader}
+              <ul className="divide-y divide-card-border rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
+                {upcomingNormalized.map((ev) => (
+                  <li
+                    key={ev.gcalId}
+                    className="flex items-center gap-4 px-5 py-4 hover:bg-muted/40 transition-colors"
                   >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setDeleteTarget(event)}
-                    aria-label="Delete event"
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </li>
-              ))}
-            </ul>
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-rose-100 dark:bg-rose-900/30">
+                      <CalendarHeart className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium font-serif tracking-wide truncate">
+                        {ev.title}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {formatRange(ev.startDate, ev.endDate)}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => openEdit(ev)}
+                      aria-label="Edit event"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setDeleteTarget(ev)}
+                      aria-label="Delete event"
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </>
           );
         }}
       </CalendarCore>
@@ -712,6 +793,7 @@ export default function HallmarkEvents() {
         onOpenChange={setFormOpen}
         event={editingEvent}
         defaultDate={defaultDate}
+        hallmarkCalId={hallmarkCal?.id ?? null}
       />
 
       <AlertDialog
@@ -722,8 +804,8 @@ export default function HallmarkEvents() {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove this event?</AlertDialogTitle>
             <AlertDialogDescription>
-              "{deleteTarget?.title}" will be removed for the whole household.
-              This can't be undone.
+              "{deleteTarget?.title}" will be removed from the Hallmark
+              Calendar. This can&apos;t be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

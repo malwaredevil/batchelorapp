@@ -322,68 +322,63 @@ export default function OfficeCalendar() {
                               })}
                             </div>
                             {/* Spanning event bars */}
-                            {weekEvents.length > 0 && (
-                              <div className="grid grid-cols-7 gap-y-0.5 pb-1.5 pt-0.5">
-                                {weekEvents.map((item) => {
-                                  const startKey = item.event.start.slice(
-                                    0,
-                                    10,
-                                  );
-                                  const endKey = gcalEventEndKey(item.event);
-                                  const isStart = startKey >= weekStartKey;
-                                  const isEnd = endKey <= weekEndKey;
-                                  const colStart = isStart
-                                    ? week.findIndex(
-                                        (d) => dateKey(d) === startKey,
-                                      ) + 1
-                                    : 1;
-                                  const endIdx = week.findIndex(
-                                    (d) => dateKey(d) === endKey,
-                                  );
-                                  const colEnd =
-                                    isEnd && endIdx >= 0 ? endIdx + 2 : 8;
-                                  return (
-                                    <div
-                                      key={`${item.calendar.id}-${item.event.id}`}
-                                      style={{
-                                        gridColumn: `${colStart} / ${colEnd}`,
-                                        marginLeft: isStart ? 2 : 0,
-                                        marginRight: isEnd ? 2 : 0,
-                                        backgroundColor: tintColor(
-                                          item.calendar.primaryColor,
-                                          0.2,
-                                        ),
-                                        color: item.calendar.primaryColor,
-                                        border: `1px solid ${tintColor(
-                                          item.calendar.primaryColor,
-                                          0.4,
-                                        )}`,
-                                      }}
-                                      className={`h-5 px-1.5 text-[10px] font-medium leading-tight flex items-center gap-1 truncate ${
-                                        isStart ? "rounded-l" : ""
-                                      } ${isEnd ? "rounded-r" : ""}`}
-                                      title={item.event.title}
-                                    >
-                                      {isStart && !item.event.allDay && (
-                                        <span className="mr-0.5 opacity-70 shrink-0">
-                                          {new Date(
-                                            item.event.start,
-                                          ).toLocaleTimeString(undefined, {
-                                            hour: "numeric",
-                                            minute: "2-digit",
-                                          })}
-                                        </span>
-                                      )}
-                                      {isStart && (
-                                        <span className="truncate">
-                                          {item.event.title}
-                                        </span>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
+                            <div className="grid grid-cols-7 gap-y-0.5 pb-1.5 pt-0.5 min-h-[28px]">
+                              {weekEvents.map((item) => {
+                                const startKey = item.event.start.slice(0, 10);
+                                const endKey = gcalEventEndKey(item.event);
+                                const isStart = startKey >= weekStartKey;
+                                const isEnd = endKey <= weekEndKey;
+                                const colStart = isStart
+                                  ? week.findIndex(
+                                      (d) => dateKey(d) === startKey,
+                                    ) + 1
+                                  : 1;
+                                const endIdx = week.findIndex(
+                                  (d) => dateKey(d) === endKey,
+                                );
+                                const colEnd =
+                                  isEnd && endIdx >= 0 ? endIdx + 2 : 8;
+                                return (
+                                  <div
+                                    key={`${item.calendar.id}-${item.event.id}`}
+                                    style={{
+                                      gridColumn: `${colStart} / ${colEnd}`,
+                                      marginLeft: isStart ? 2 : 0,
+                                      marginRight: isEnd ? 2 : 0,
+                                      backgroundColor: tintColor(
+                                        item.calendar.primaryColor,
+                                        0.2,
+                                      ),
+                                      color: item.calendar.primaryColor,
+                                      border: `1px solid ${tintColor(
+                                        item.calendar.primaryColor,
+                                        0.4,
+                                      )}`,
+                                    }}
+                                    className={`h-5 px-1.5 text-[10px] font-medium leading-tight flex items-center gap-1 truncate ${
+                                      isStart ? "rounded-l" : ""
+                                    } ${isEnd ? "rounded-r" : ""}`}
+                                    title={item.event.title}
+                                  >
+                                    {isStart && !item.event.allDay && (
+                                      <span className="mr-0.5 opacity-70 shrink-0">
+                                        {new Date(
+                                          item.event.start,
+                                        ).toLocaleTimeString(undefined, {
+                                          hour: "numeric",
+                                          minute: "2-digit",
+                                        })}
+                                      </span>
+                                    )}
+                                    {isStart && (
+                                      <span className="truncate">
+                                        {item.event.title}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
                         );
                       })}

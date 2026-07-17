@@ -459,7 +459,7 @@ export default function HallmarkEvents() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8 space-y-6">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="font-serif text-2xl text-foreground">
@@ -569,48 +569,45 @@ export default function HallmarkEvents() {
                         })}
                       </div>
                       {/* Spanning event bars */}
-                      {weekEvents.length > 0 && (
-                        <div className="grid grid-cols-7 gap-y-0.5 pb-1.5 pt-0.5">
-                          {weekEvents.map((ev) => {
-                            const isStart = ev.startDate >= weekStartKey;
-                            const isEnd = ev.endDate <= weekEndKey;
-                            const colStart = isStart
-                              ? week.findIndex(
-                                  (d) => dateKey(d) === ev.startDate,
-                                ) + 1
-                              : 1;
-                            const endIdx = week.findIndex(
-                              (d) => dateKey(d) === ev.endDate,
-                            );
-                            const colEnd =
-                              isEnd && endIdx >= 0 ? endIdx + 2 : 8;
-                            return (
-                              <button
-                                key={ev.gcalId}
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openView(ev);
-                                }}
-                                style={{
-                                  gridColumn: `${colStart} / ${colEnd}`,
-                                  marginLeft: isStart ? 2 : 0,
-                                  marginRight: isEnd ? 2 : 0,
-                                }}
-                                className={`h-5 px-1.5 text-left text-[11px] truncate flex items-center gap-1 bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-900/60 ${isStart ? "rounded-l" : ""} ${isEnd ? "rounded-r" : ""}`}
-                                title={ev.title}
-                              >
-                                {isStart && (
-                                  <CalendarHeart className="h-2.5 w-2.5 shrink-0" />
-                                )}
-                                {isStart && (
-                                  <span className="truncate">{ev.title}</span>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
+                      <div className="grid grid-cols-7 gap-y-0.5 pb-1.5 pt-0.5 min-h-[28px]">
+                        {weekEvents.map((ev) => {
+                          const isStart = ev.startDate >= weekStartKey;
+                          const isEnd = ev.endDate <= weekEndKey;
+                          const colStart = isStart
+                            ? week.findIndex(
+                                (d) => dateKey(d) === ev.startDate,
+                              ) + 1
+                            : 1;
+                          const endIdx = week.findIndex(
+                            (d) => dateKey(d) === ev.endDate,
+                          );
+                          const colEnd = isEnd && endIdx >= 0 ? endIdx + 2 : 8;
+                          return (
+                            <button
+                              key={ev.gcalId}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openView(ev);
+                              }}
+                              style={{
+                                gridColumn: `${colStart} / ${colEnd}`,
+                                marginLeft: isStart ? 2 : 0,
+                                marginRight: isEnd ? 2 : 0,
+                              }}
+                              className={`h-5 px-1.5 text-left text-[11px] truncate flex items-center gap-1 bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-900/60 ${isStart ? "rounded-l" : ""} ${isEnd ? "rounded-r" : ""}`}
+                              title={ev.title}
+                            >
+                              {isStart && (
+                                <CalendarHeart className="h-2.5 w-2.5 shrink-0" />
+                              )}
+                              {isStart && (
+                                <span className="truncate">{ev.title}</span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   );
                 })}

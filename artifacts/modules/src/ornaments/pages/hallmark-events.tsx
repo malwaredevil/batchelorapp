@@ -797,7 +797,7 @@ export default function HallmarkEvents() {
         open={!!deleteTarget}
         onOpenChange={(o) => !o && setDeleteTarget(null)}
       >
-        <AlertDialogContent>
+        <AlertDialogContent onClick={(e) => e.stopPropagation()}>
           <AlertDialogHeader>
             <AlertDialogTitle>Remove this event?</AlertDialogTitle>
             <AlertDialogDescription>

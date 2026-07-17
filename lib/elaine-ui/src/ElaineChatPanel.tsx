@@ -723,7 +723,7 @@ export function ElaineChatPanel({
             </Button>
           )}
           {tts.isSupported && tts.enabled && (
-            <DropdownMenu>
+            <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button
                   type="button"

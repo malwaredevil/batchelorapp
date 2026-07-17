@@ -157,7 +157,7 @@ export function Header() {
             iconSize={16}
           />
 
-          <DropdownMenu>
+          <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
               <button className="flex items-center gap-2 pl-3 ml-1 border-l border-border outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm">
                 <div className="hidden sm:flex flex-col items-end">

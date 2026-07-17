@@ -25,6 +25,7 @@ pnpm --filter @workspace/api-spec run codegen  # after any change to lib/api-spe
 ## STOP Gate Protocol
 
 When an issue body contains a "STOP GATE" section:
+
 1. Ask the user: "Have you completed all manual steps in issue #NNN? Reply YES when done."
 2. Do not write any code until the user replies YES.
 3. Run the specified verification script.
@@ -32,12 +33,12 @@ When an issue body contains a "STOP GATE" section:
 
 ## Campaign branches
 
-| Campaign | Branch | Issues |
-|---|---|---|
-| 1 — Quick wins | `feat/batch-quick-wins` | #244, #247, #253, #245, #248, #251, #243, #250, #252 |
-| 2A — Search quality | `feat/epic-241-search-quality` | #246, then #254 |
-| 2B — Elaine tools | `feat/epic-242-elaine-completeness` | #255, then #256 |
-| 3 — Strategic Phase 1 | `feat/strategic-phase1` | #257→#258→#223→#224→#225→#226→#227→#228 |
+| Campaign              | Branch                              | Issues                                               |
+| --------------------- | ----------------------------------- | ---------------------------------------------------- |
+| 1 — Quick wins        | `feat/batch-quick-wins`             | #244, #247, #253, #245, #248, #251, #243, #250, #252 |
+| 2A — Search quality   | `feat/epic-241-search-quality`      | #246, then #254                                      |
+| 2B — Elaine tools     | `feat/epic-242-elaine-completeness` | #255, then #256                                      |
+| 3 — Strategic Phase 1 | `feat/strategic-phase1`             | #257→#258→#223→#224→#225→#226→#227→#228              |
 
 ## Intentional patterns — do not flag these
 

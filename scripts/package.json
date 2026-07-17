@@ -15,6 +15,8 @@
     "sentry-baseline": "tsx ./src/sentry-baseline.ts",
     "github-sync": "tsx ./src/github-sync.ts",
     "pre-publish": "bash ./src/pre-publish.sh",
+    "verify-github-secrets": "tsx --env-file=.env ./src/verify-github-secrets.ts",
+    "verify-supabase-prerequisites": "tsx --env-file=.env ./src/verify-supabase-prerequisites.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

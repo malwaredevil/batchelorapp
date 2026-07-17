@@ -78,12 +78,11 @@ export async function getReminderSyncTarget(): Promise<{
   return { userId: connection.userId, calendarId: connection.googleCalendarId };
 }
 
-// Best-effort sync — reminders remain the source of truth even if the
-// Travel calendar owner's Google Calendar API call fails (revoked token,
-// expired, etc). Reconciles the single Travel-calendar event for this
-// reminder: creates it if missing, updates it in place, and deletes it (or
-// any stale copy left over from a since-changed Travel calendar owner) when
-// sync is off, there's no due date, or no Travel calendar is configured.
+// Syncs the single Travel-calendar event for this reminder: creates it if
+// missing, updates it in place, and deletes it (or any stale copy left over
+// from a since-changed Travel calendar owner) when sync is off, there's no
+// due date, or no Travel calendar is configured. Throws on GCal write
+// failure so callers surface the error rather than silently swallowing it.
 export async function syncReminderCalendarEvents(
   reminderId: number,
   tripTitle: string,
@@ -145,36 +144,32 @@ export async function syncReminderCalendarEvents(
       row.userId === target.userId && row.calendarId === target.calendarId,
   );
 
-  try {
-    if (current) {
-      await updateReminderEvent(
-        accessToken,
-        current.calendarId,
-        current.googleEventId,
-        {
-          title,
-          dueDate,
-          description: `Trip reminder: ${tripTitle}`,
-          alertDaysBefore,
-        },
-      );
-    } else {
-      const event = await createReminderEvent(accessToken, {
-        calendarId: target.calendarId,
+  if (current) {
+    await updateReminderEvent(
+      accessToken,
+      current.calendarId,
+      current.googleEventId,
+      {
         title,
         dueDate,
         description: `Trip reminder: ${tripTitle}`,
         alertDaysBefore,
-      });
-      await db.insert(travelsReminderCalendarEvents).values({
-        reminderId,
-        userId: target.userId,
-        calendarId: target.calendarId,
-        googleEventId: event.id,
-      });
-    }
-  } catch (err) {
-    logger.warn({ err, reminderId }, "reminders: Travel calendar sync failed");
+      },
+    );
+  } else {
+    const event = await createReminderEvent(accessToken, {
+      calendarId: target.calendarId,
+      title,
+      dueDate,
+      description: `Trip reminder: ${tripTitle}`,
+      alertDaysBefore,
+    });
+    await db.insert(travelsReminderCalendarEvents).values({
+      reminderId,
+      userId: target.userId,
+      calendarId: target.calendarId,
+      googleEventId: event.id,
+    });
   }
 }
 

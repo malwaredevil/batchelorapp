@@ -33,7 +33,6 @@ import {
 } from "lucide-react";
 import { AppSwitcher } from "@workspace/elaine-ui";
 import { MessengerNavIcon } from "@workspace/messenger-ui";
-import { useListOrnamentsHallmarkEvents } from "@workspace/api-client-react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -70,6 +69,7 @@ import {
   useListNotes,
   useListConnectedCalendars,
   useListConnectedCalendarEvents,
+  getListConnectedCalendarEventsQueryKey,
   useGetElaineNudgesUnseenCount,
   useListElaineMemory,
 } from "@workspace/api-client-react";
@@ -507,39 +507,65 @@ function AppHeroCard({
 }
 
 // ── Ornaments card extra: next Hallmark event countdown ─────────────────────
-// Pulls from the household-shared ornaments_hallmark_events table (editable
-// in the Ornaments app, best-effort synced to the shared Hallmark Google
-// Calendar). Falls back to the hardcoded HALLMARK_OPEN_HOUSE constant only
-// if no events have been entered yet or the request hasn't resolved.
-// Compact stat-square–sized tile that replaces the "Total" square for ornaments.
-// Yellow background while counting down, red background when live.
+// Reads from the designated Hallmark Google Calendar (GCal is now the sole
+// source of truth — the ornaments_hallmark_events DB table has been removed).
+// Falls back to the hardcoded HALLMARK_OPEN_HOUSE constant only when no
+// calendar is connected or no upcoming events are found within 90 days.
+// Compact stat-square–sized tile. Yellow while counting down, red when live.
 // Rotates through multiple upcoming events every 4 seconds.
+
+// Stable 90-day query window — computed once per page load so the query key
+// doesn't change on every render.
+const _hmToday = new Date();
+_hmToday.setHours(0, 0, 0, 0);
+const HM_TILE_RANGE_START = _hmToday.toISOString();
+const HM_TILE_RANGE_END = new Date(
+  _hmToday.getTime() + 90 * 86_400_000,
+).toISOString();
+
 function HallmarkEventStatTile() {
-  const { data: events } = useListOrnamentsHallmarkEvents();
   const now = Date.now();
   const [index, setIndex] = useState(0);
 
-  const cutoff = now + 90 * 86_400_000;
-  const upcoming = (events ?? [])
-    .map((e) => ({
-      id: e.id,
-      title: e.title,
-      start: new Date(`${e.startDate}T00:00:00`),
-      end: new Date(`${e.endDate}T23:59:59`),
-    }))
-    .filter(
-      (e) =>
-        e.end.getTime() >= now && // not already over
-        e.start.getTime() <= cutoff, // live now OR starts within 90 days
-    )
+  const { data: connectedCals = [] } = useListConnectedCalendars();
+  const hallmarkCal = connectedCals.find((c) => c.isHallmarkCalendar) ?? null;
+
+  const { data: gcalEvents = [] } = useListConnectedCalendarEvents(
+    hallmarkCal?.id ?? 0,
+    HM_TILE_RANGE_START,
+    HM_TILE_RANGE_END,
+    {
+      query: {
+        enabled: !!hallmarkCal,
+        queryKey: getListConnectedCalendarEventsQueryKey(
+          hallmarkCal?.id ?? 0,
+          HM_TILE_RANGE_START,
+          HM_TILE_RANGE_END,
+        ),
+      },
+    },
+  );
+
+  const upcoming = gcalEvents
+    .map((e) => {
+      const startDate = e.start.slice(0, 10);
+      const endDate = e.allDay
+        ? (() => {
+            const d = new Date(e.end + "T00:00:00");
+            d.setDate(d.getDate() - 1);
+            return d.toISOString().slice(0, 10);
+          })()
+        : e.end.slice(0, 10);
+      return {
+        title: e.title,
+        start: new Date(`${startDate}T00:00:00`),
+        end: new Date(`${endDate}T23:59:59`),
+      };
+    })
+    .filter((e) => e.end.getTime() >= now)
     .sort((a, b) => a.start.getTime() - b.start.getTime());
 
-  const list: Array<{
-    id?: number;
-    title: string;
-    start: Date;
-    end: Date;
-  }> =
+  const list: Array<{ title: string; start: Date; end: Date }> =
     upcoming.length > 0
       ? upcoming
       : [
@@ -563,9 +589,7 @@ function HallmarkEventStatTile() {
     : Math.max(0, Math.ceil((current.start.getTime() - now) / 86_400_000));
 
   const shortTitle = current.title.replace(/hallmark'?s?\s*/i, "").trim();
-  const href =
-    `/modules/ornaments/hallmark-events?view=month` +
-    (current.id != null ? `&eventId=${current.id}` : "");
+  const href = `/modules/ornaments/hallmark-events?view=month`;
 
   const dateRange =
     current.start.toLocaleDateString("en-US", {

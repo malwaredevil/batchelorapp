@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { Trash2, FileText, Sparkles, Pencil, Check, X } from "lucide-react";
 import type { MessengerMessengerMessage } from "@workspace/api-client-react";
-import { MarkdownMessage } from "@workspace/elaine-ui";
+import { MarkdownMessage, ChatWidget } from "@workspace/elaine-ui";
+import type { ChatWidget as ChatWidgetType } from "@workspace/elaine-ui";
 import { LinkPreviewCard } from "./LinkPreviewCard";
 import { ImageModal } from "./ImageModal";
 
@@ -48,6 +49,16 @@ export function MessageItem({
 
   const urls = isDeleted ? [] : extractUrls(message.body);
   const firstUrl = urls[0] ?? null;
+
+  const widgets: ChatWidgetType[] =
+    !isDeleted &&
+    isElaine &&
+    message.metadata &&
+    typeof message.metadata === "object" &&
+    "widgets" in message.metadata &&
+    Array.isArray((message.metadata as { widgets?: unknown }).widgets)
+      ? ((message.metadata as { widgets: ChatWidgetType[] }).widgets ?? [])
+      : [];
 
   // Bubble colours:
   //  - Own messages: blue gradient (dark bg, white text)
@@ -283,6 +294,15 @@ export function MessageItem({
               ) : (
                 message.body
               )}
+            </div>
+          )}
+
+          {/* Elaine widget cards */}
+          {!editing && widgets.length > 0 && (
+            <div style={{ marginTop: 4 }}>
+              {widgets.map((w, i) => (
+                <ChatWidget key={i} widget={w} />
+              ))}
             </div>
           )}
 

@@ -25,7 +25,7 @@ import {
   CreateConversationBody,
   UpdateConversationBody,
 } from "@workspace/api-zod";
-import { callModel, getModels } from "../../lib/ai-client";
+import { runMessengerElaineTurn } from "../../elaine";
 import { getSignedUrls } from "../../lib/messenger/storage";
 import { logger } from "../../lib/logger";
 import { fanOutPushNotifications } from "./push";
@@ -95,6 +95,7 @@ async function serializeMessages(
     readAt: Date | null;
     deletedAt: Date | null;
     editedAt?: Date | null;
+    metadata?: Record<string, unknown> | null;
   }>,
   attachmentRows: Array<{
     id: number;
@@ -143,6 +144,7 @@ async function serializeMessages(
     readAt: m.readAt?.toISOString() ?? null,
     deletedAt: m.deletedAt?.toISOString() ?? null,
     editedAt: m.editedAt?.toISOString() ?? null,
+    metadata: m.metadata ?? {},
     attachments: attachmentsByMessage.get(m.id) ?? [],
   }));
 }
@@ -183,6 +185,7 @@ async function buildConversationSummary(
         readAt: messengerMessages.readAt,
         deletedAt: messengerMessages.deletedAt,
         editedAt: messengerMessages.editedAt,
+        metadata: messengerMessages.metadata,
       })
       .from(messengerMessages)
       .leftJoin(appUsers, eq(appUsers.id, messengerMessages.senderId))
@@ -535,6 +538,7 @@ router.get("/conversations/:id/messages", async (req, res) => {
       readAt: messengerMessages.readAt,
       deletedAt: messengerMessages.deletedAt,
       editedAt: messengerMessages.editedAt,
+      metadata: messengerMessages.metadata,
     })
     .from(messengerMessages)
     .leftJoin(appUsers, eq(appUsers.id, messengerMessages.senderId))
@@ -642,7 +646,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
 
   if (/@elaine\b/i.test(body)) {
     const senderName = senderRow[0]?.displayName ?? "a household member";
-    generateElaineReply(convId, body, senderName).catch((err) =>
+    generateElaineReply(convId, body, senderName, userId).catch((err) =>
       logger.error(err, "messenger: @elaine reply error"),
     );
   }
@@ -652,33 +656,27 @@ async function generateElaineReply(
   conversationId: number,
   userMessage: string,
   senderName: string,
+  userId: number,
 ): Promise<void> {
-  const models = await getModels();
   const cleanMsg = userMessage.replace(/@elaine\b/gi, "").trim();
-  const systemPrompt = `You are Elaine, a warm and helpful AI assistant living in the Batchelor household group chat. A household member named ${senderName} has addressed you with @elaine. Respond helpfully and concisely. You assist with pottery collection management, quilting projects, travel planning, ornament cataloguing, household organisation, and general questions. Keep replies friendly and under 200 words unless detail is truly needed.`;
+  const { replyText, widgets } = await runMessengerElaineTurn({
+    userId,
+    conversationId,
+    inputText: cleanMsg || "Hello!",
+    senderName,
+  });
 
-  const result = await callModel(models.advisor, (client, m) =>
-    client.chat.completions.create({
-      model: m,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: cleanMsg || "Hello!" },
-      ],
-      max_tokens: 500,
-    }),
-  );
-
-  const replyBody = result.choices[0]?.message?.content?.trim() ?? "";
-  if (!replyBody) return;
+  if (!replyText) return;
 
   await db.insert(messengerMessages).values({
     conversationId,
     senderId: null,
-    body: replyBody,
+    body: replyText,
+    metadata: widgets.length > 0 ? { widgets } : {},
   });
 
   logger.info(
-    { conversationId, chars: replyBody.length },
+    { conversationId, chars: replyText.length, widgets: widgets.length },
     "messenger: @elaine reply saved",
   );
 }

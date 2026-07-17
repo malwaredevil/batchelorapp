@@ -1024,7 +1024,7 @@ export function AppLauncher() {
               iconSize={20}
             />
 
-            <DropdownMenu>
+            <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <button className="flex items-center gap-3 pl-3 border-l border-border outline-none">
                   <div className="flex-col items-end hidden sm:flex">
@@ -1149,7 +1149,7 @@ export function AppLauncher() {
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <DropdownMenu>
+            <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm">
                   <Plus className="w-4 h-4 mr-2" />
@@ -1170,7 +1170,7 @@ export function AppLauncher() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <DropdownMenu>
+            <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button variant="secondary">
                   <Camera className="w-4 h-4 mr-2" />

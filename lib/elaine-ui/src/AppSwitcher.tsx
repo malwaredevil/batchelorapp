@@ -346,7 +346,7 @@ export function AppSwitcher({
   const current = apps.find((a) => a.id === currentAppId) ?? apps[0];
 
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <button
           className={cn(

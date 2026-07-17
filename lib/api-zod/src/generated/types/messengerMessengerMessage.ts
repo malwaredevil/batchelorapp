@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { MessengerMessengerAttachment } from './messengerMessengerAttachment';
+import type { MessengerMessengerMessageMetadata } from './messengerMessengerMessageMetadata';
 
 export interface MessengerMessengerMessage {
   id: number;
@@ -17,5 +18,7 @@ export interface MessengerMessengerMessage {
   readAt?: Date | null;
   deletedAt?: Date | null;
   editedAt?: Date | null;
+  /** Optional structured data attached to the message (e.g. Elaine widget cards) */
+  metadata?: MessengerMessengerMessageMetadata;
   attachments?: MessengerMessengerAttachment[];
 }

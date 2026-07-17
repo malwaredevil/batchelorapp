@@ -1860,6 +1860,11 @@ export interface MessengerMessengerAttachment {
   url: string;
 }
 
+/**
+ * Optional structured data attached to the message (e.g. Elaine widget cards)
+ */
+export type MessengerMessengerMessageMetadata = { [key: string]: unknown } | null;
+
 export interface MessengerMessengerMessage {
   id: number;
   conversationId: number;
@@ -1870,6 +1875,8 @@ export interface MessengerMessengerMessage {
   readAt?: string | null;
   deletedAt?: string | null;
   editedAt?: string | null;
+  /** Optional structured data attached to the message (e.g. Elaine widget cards) */
+  metadata?: MessengerMessengerMessageMetadata;
   attachments?: MessengerMessengerAttachment[];
 }
 

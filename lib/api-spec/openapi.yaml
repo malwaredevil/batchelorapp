@@ -7683,6 +7683,11 @@ components:
           type: string
           format: date-time
           nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+          nullable: true
+          description: Optional structured data attached to the message (e.g. Elaine widget cards)
         attachments:
           type: array
           items:

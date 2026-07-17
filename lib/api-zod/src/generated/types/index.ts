@@ -55,6 +55,7 @@ export * from './messengerHouseholdMember';
 export * from './messengerLinkPreview';
 export * from './messengerMessengerAttachment';
 export * from './messengerMessengerMessage';
+export * from './messengerMessengerMessageMetadata';
 export * from './messengerPushSubscribeBody';
 export * from './messengerPushSubscribeBodyKeys';
 export * from './messengerPushUnsubscribeBody';

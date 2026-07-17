@@ -1352,7 +1352,7 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE messenger_conversations ADD COLUMN IF NOT EXISTS name TEXT`,
   `ALTER TABLE messenger_conversations ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`,
   `ALTER TABLE messenger_messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ`,
-
+  `ALTER TABLE messenger_messages ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb`,
   `CREATE INDEX IF NOT EXISTS messenger_messages_conv_created_idx
      ON messenger_messages (conversation_id, created_at DESC)`,
 

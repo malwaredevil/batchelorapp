@@ -4249,6 +4249,7 @@ export const ListConversationsResponseItem = zod.object({
   "readAt": zod.coerce.date().nullish(),
   "deletedAt": zod.coerce.date().nullish(),
   "editedAt": zod.coerce.date().nullish(),
+  "metadata": zod.record(zod.string(), zod.unknown()).nullish().describe('Optional structured data attached to the message (e.g. Elaine widget cards)'),
   "attachments": zod.array(zod.object({
   "id": zod.number(),
   "messageId": zod.number(),
@@ -4292,6 +4293,7 @@ export const CreateConversationResponse = zod.object({
   "readAt": zod.coerce.date().nullish(),
   "deletedAt": zod.coerce.date().nullish(),
   "editedAt": zod.coerce.date().nullish(),
+  "metadata": zod.record(zod.string(), zod.unknown()).nullish().describe('Optional structured data attached to the message (e.g. Elaine widget cards)'),
   "attachments": zod.array(zod.object({
   "id": zod.number(),
   "messageId": zod.number(),
@@ -4345,6 +4347,7 @@ export const UpdateConversationResponse = zod.object({
   "readAt": zod.coerce.date().nullish(),
   "deletedAt": zod.coerce.date().nullish(),
   "editedAt": zod.coerce.date().nullish(),
+  "metadata": zod.record(zod.string(), zod.unknown()).nullish().describe('Optional structured data attached to the message (e.g. Elaine widget cards)'),
   "attachments": zod.array(zod.object({
   "id": zod.number(),
   "messageId": zod.number(),
@@ -4393,6 +4396,7 @@ export const GetConversationMessagesResponseItem = zod.object({
   "readAt": zod.coerce.date().nullish(),
   "deletedAt": zod.coerce.date().nullish(),
   "editedAt": zod.coerce.date().nullish(),
+  "metadata": zod.record(zod.string(), zod.unknown()).nullish().describe('Optional structured data attached to the message (e.g. Elaine widget cards)'),
   "attachments": zod.array(zod.object({
   "id": zod.number(),
   "messageId": zod.number(),

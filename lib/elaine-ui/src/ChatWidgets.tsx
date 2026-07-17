@@ -214,6 +214,31 @@ function StarRating({ rating }: { rating: number }) {
   );
 }
 
+// ── Clickable card wrapper ──────────────────────────────────────────────────
+
+function CardWrapper({
+  href,
+  className,
+  children,
+}: {
+  href?: string;
+  className: string;
+  children: React.ReactNode;
+}) {
+  if (href) {
+    return (
+      <a
+        href={href}
+        className={`${className} cursor-pointer transition-shadow hover:shadow-md`}
+        style={{ textDecoration: "none", color: "inherit", display: "block" }}
+      >
+        {children}
+      </a>
+    );
+  }
+  return <div className={className}>{children}</div>;
+}
+
 // ── Widget renderers ────────────────────────────────────────────────────────
 
 function WeatherWidget({
@@ -575,8 +600,14 @@ function TripCardWidget({ trip }: { trip: TripCardData }) {
           : `${trip.countdownDays}d away`
       : null;
 
+  const href =
+    trip.tripId != null ? `/modules/travels/trips/${trip.tripId}` : undefined;
+
   return (
-    <div className="mt-2 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+    <CardWrapper
+      href={href}
+      className="mt-2 overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+    >
       <div className="flex items-start gap-2 px-3 py-3">
         <span className="mt-0.5 text-2xl">✈️</span>
         <div className="min-w-0 flex-1">
@@ -609,39 +640,31 @@ function TripCardWidget({ trip }: { trip: TripCardData }) {
           )}
         </div>
       </div>
-      {trip.tripId != null && (
-        <div className="border-t border-border/60 px-3 py-2">
-          <a
-            href={`/modules/travels/trips/${trip.tripId}`}
-            className="flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
-          >
-            <ExternalLink className="h-3 w-3" />
-            Open trip
-          </a>
-        </div>
-      )}
-    </div>
+    </CardWrapper>
   );
 }
 
 // ── Pottery Item Widget ──────────────────────────────────────────────────────
 
 function PotteryItemWidget({ item }: { item: PotteryItemData }) {
+  const href =
+    item.itemId != null ? `/modules/pottery/piece/${item.itemId}` : undefined;
+
   return (
-    <div className="mt-2 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+    <CardWrapper
+      href={href}
+      className="mt-2 overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+    >
       <div className="flex items-center gap-1.5 border-b border-border/60 bg-amber-50/60 px-3 py-2 dark:bg-amber-950/30">
         <span className="text-base">🏺</span>
         <span className="text-xs font-semibold text-foreground">
           Pottery Collection
         </span>
-        {item.itemId != null && (
-          <a
-            href={`/modules/pottery/piece/${item.itemId}`}
-            className="ml-auto flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
-          >
+        {href && (
+          <span className="ml-auto flex items-center gap-1 text-[10px] font-medium text-primary">
             <ExternalLink className="h-3 w-3" />
             Open
-          </a>
+          </span>
         )}
       </div>
       <div className="flex gap-3 p-3">
@@ -681,28 +704,33 @@ function PotteryItemWidget({ item }: { item: PotteryItemData }) {
           )}
         </div>
       </div>
-    </div>
+    </CardWrapper>
   );
 }
 
 // ── Fabric Swatch Widget ─────────────────────────────────────────────────────
 
 function FabricSwatchWidget({ swatch }: { swatch: FabricSwatchData }) {
+  const href =
+    swatch.fabricId != null
+      ? `/modules/quilting/fabrics/${swatch.fabricId}`
+      : undefined;
+
   return (
-    <div className="mt-2 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+    <CardWrapper
+      href={href}
+      className="mt-2 overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+    >
       <div className="flex items-center gap-1.5 border-b border-border/60 bg-purple-50/60 px-3 py-2 dark:bg-purple-950/30">
         <span className="text-base">🧵</span>
         <span className="text-xs font-semibold text-foreground">
           Fabric Swatch
         </span>
-        {swatch.fabricId != null && (
-          <a
-            href={`/modules/quilting/fabrics/${swatch.fabricId}`}
-            className="ml-auto flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
-          >
+        {href && (
+          <span className="ml-auto flex items-center gap-1 text-[10px] font-medium text-primary">
             <ExternalLink className="h-3 w-3" />
             Open
-          </a>
+          </span>
         )}
       </div>
       <div className="flex gap-3 p-3">
@@ -746,28 +774,31 @@ function FabricSwatchWidget({ swatch }: { swatch: FabricSwatchData }) {
           )}
         </div>
       </div>
-    </div>
+    </CardWrapper>
   );
 }
 
 // ── Ornament Item Widget ─────────────────────────────────────────────────────
 
 function OrnamentItemWidget({ item }: { item: OrnamentItemData }) {
+  const href =
+    item.itemId != null ? `/modules/ornaments/item/${item.itemId}` : undefined;
+
   return (
-    <div className="mt-2 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+    <CardWrapper
+      href={href}
+      className="mt-2 overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+    >
       <div className="flex items-center gap-1.5 border-b border-border/60 bg-red-50/60 px-3 py-2 dark:bg-red-950/30">
         <span className="text-base">🎄</span>
         <span className="text-xs font-semibold text-foreground">
           Ornament Collection
         </span>
-        {item.itemId != null && (
-          <a
-            href={`/modules/ornaments/item/${item.itemId}`}
-            className="ml-auto flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
-          >
+        {href && (
+          <span className="ml-auto flex items-center gap-1 text-[10px] font-medium text-primary">
             <ExternalLink className="h-3 w-3" />
             Open
-          </a>
+          </span>
         )}
       </div>
       <div className="flex gap-3 p-3">
@@ -816,7 +847,7 @@ function OrnamentItemWidget({ item }: { item: OrnamentItemData }) {
           )}
         </div>
       </div>
-    </div>
+    </CardWrapper>
   );
 }
 

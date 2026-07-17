@@ -41,6 +41,10 @@ export const messengerMessages = pgTable("messenger_messages", {
   readAt: timestamp("read_at", { withTimezone: true }),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   editedAt: timestamp("edited_at", { withTimezone: true }),
+  metadata: jsonb("metadata")
+    .$type<Record<string, unknown>>()
+    .notNull()
+    .default({}),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

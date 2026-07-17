@@ -1,5 +1,9 @@
 # Batchelor App — Copilot Code Review Context
 
+> **Using Copilot for implementation work?** Read `AGENTS.md` in the repo root instead.
+> This document is for code review sessions only. For campaign execution order, STOP GATE
+> protocol, prohibited commands, and branch names, see `AGENTS.md` and issue #260.
+
 Use this document as your full context before beginning any code review of this repository.
 Paste it at the start of a Copilot chat session, then ask Copilot to review specific files
 or areas. Each finding should be formatted as a GitHub Issue (template at the bottom).

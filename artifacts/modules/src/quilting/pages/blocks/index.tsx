@@ -43,7 +43,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
-import { getCategoryPalette } from "@workspace/web-core";
+import { getCategoryPalette, colorToHex } from "@workspace/web-core";
 import { toast } from "sonner";
 import {
   useListBlocks,
@@ -521,7 +521,7 @@ function BlockCard({
                   <span
                     key={i}
                     className="h-3.5 w-3.5 rounded-full border border-border/30 inline-block"
-                    style={{ backgroundColor: color }}
+                    style={{ backgroundColor: colorToHex(color) }}
                     title={color}
                   />
                 ))}
@@ -1078,7 +1078,7 @@ export default function Blocks() {
                       ? "ring-2 ring-primary ring-offset-2 scale-110"
                       : "border-border/40"
                   }`}
-                  style={{ backgroundColor: color }}
+                  style={{ backgroundColor: colorToHex(color) }}
                 />
               ))}
               {colorFilter.length > 0 && (

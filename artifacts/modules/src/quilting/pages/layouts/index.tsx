@@ -35,7 +35,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
-import { getCategoryPalette } from "@workspace/web-core";
+import { getCategoryPalette, colorToHex } from "@workspace/web-core";
 import { toast } from "sonner";
 import { parseCell, fmtInch } from "@/quilting/lib/cell-parser";
 import {
@@ -721,7 +721,7 @@ function LayoutCard({
                       onFilterByColor?.(hex);
                     }}
                     className="h-4 w-4 rounded-full border border-black/10 transition-transform hover:scale-110"
-                    style={{ backgroundColor: hex }}
+                    style={{ backgroundColor: colorToHex(hex) }}
                   />
                 ))}
               </div>
@@ -1152,7 +1152,7 @@ export default function Layouts() {
                       ? "border-primary scale-110 ring-2 ring-primary/40"
                       : "border-transparent",
                   )}
-                  style={{ backgroundColor: hex }}
+                  style={{ backgroundColor: colorToHex(hex) }}
                 />
               ))}
               {colorFilter.length > 0 && (

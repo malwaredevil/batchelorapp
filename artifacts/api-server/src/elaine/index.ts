@@ -183,7 +183,7 @@ const ChatBody = z.object({
   // Freeform description of what's currently on the user's screen — page
   // name plus any live/unsaved field values a page has chosen to publish via
   // usePageAssistantContext(). Never persisted; only used for this one call.
-  pageContext: z.string().max(6000).optional(),
+  pageContext: z.string().max(6000).nullish(),
   // Which app surface the user is currently chatting from, so navigation
   // suggestions stay scoped to real paths in that app. Defaults to "hub"
   // since Elaine is one continuous conversation shown everywhere.
@@ -4211,6 +4211,8 @@ const CONFIRMATION_MODE_EXPLANATION: Record<string, string> = {
 async function buildUserContext(userId: number): Promise<{
   userName: string;
   memoryBlock: string;
+  memorySummary: string | null;
+  existingFactContents: string[];
 }> {
   const [user] = await db
     .select({ displayName: appUsers.displayName, email: appUsers.email })
@@ -4218,17 +4220,28 @@ async function buildUserContext(userId: number): Promise<{
     .where(eq(appUsers.id, userId));
   const userName = user?.displayName || user?.email || "there";
 
-  const memoryRows = await db
-    .select({ content: elaineMemory.content })
-    .from(elaineMemory)
-    .orderBy(desc(elaineMemory.createdAt))
-    .limit(50);
-  const memoryBlock =
-    memoryRows.length > 0
-      ? memoryRows.map((m) => `- ${m.content}`).join("\n")
-      : "(nothing remembered yet)";
+  const [factRows, summaryRows] = await Promise.all([
+    db
+      .select({ content: elaineMemory.content })
+      .from(elaineMemory)
+      .where(eq(elaineMemory.type, "fact"))
+      .orderBy(desc(elaineMemory.createdAt))
+      .limit(50),
+    db
+      .select({ content: elaineMemory.content })
+      .from(elaineMemory)
+      .where(eq(elaineMemory.type, "summary"))
+      .limit(1),
+  ]);
 
-  return { userName, memoryBlock };
+  const existingFactContents = factRows.map((r) => r.content);
+  const memoryBlock =
+    existingFactContents.length > 0
+      ? existingFactContents.map((c) => `- ${c}`).join("\n")
+      : "(nothing remembered yet)";
+  const memorySummary = summaryRows[0]?.content ?? null;
+
+  return { userName, memoryBlock, memorySummary, existingFactContents };
 }
 
 function buildElaineCoreSystemPrompt(params: {
@@ -4237,6 +4250,7 @@ function buildElaineCoreSystemPrompt(params: {
   contextBlockLabel: string;
   contextBlock: string;
   memoryBlock: string;
+  memorySummary?: string | null;
   actionConfirmationMode: string;
   isTravelsApp: boolean;
   formattingNote?: string;
@@ -4248,6 +4262,7 @@ function buildElaineCoreSystemPrompt(params: {
     contextBlockLabel,
     contextBlock,
     memoryBlock,
+    memorySummary,
     actionConfirmationMode,
     isTravelsApp,
     formattingNote,
@@ -4326,7 +4341,12 @@ If the user asks "what is this page for", "what can I do here", or similar witho
 WHAT YOU CAN SEE RIGHT NOW (${contextBlockLabel}):
 ${contextBlock}
 
-SHARED FAMILY MEMORY (facts you've picked up from any family member — treat as true for the whole household, not just the person asking):
+SHARED FAMILY MEMORY:
+
+Conversation summary (a rolling prose summary maintained automatically after every turn — treat as reliable context about who this household is and what they care about):
+${memorySummary ?? "(no summary yet — builds up as conversations grow)"}
+
+Specific facts (things explicitly asked to be remembered, or noteworthy details extracted from conversations):
 ${memoryBlock}
 
 TOOLS: You have tools available for navigation suggestions, remembering household facts, and proposing changes to trips/wishlist/packing lists/reminders. Each tool's own description explains exactly when and how to use it — follow those rules precisely, especially around never fabricating numeric ids and asking permission in your visible reply text before calling any trip/wishlist/packing/reminder tool. If a single request naturally involves more than one write-action (e.g. "add a reminder to book the hotel and add wine tasting to the wishlist"), call all of the relevant action tools in that same turn — don't limit yourself to one. Just make sure your visible reply names everything you're about to do before you call the tools, so nothing is a surprise. Navigation suggestions and remembering a fact can always accompany action tools.
@@ -4382,6 +4402,115 @@ CITATIONS: When you use web_search, cite sources plainly in your visible reply w
 Keep replies concise and easy to read in a chat bubble.${channelAddendum ? `\n\n${channelAddendum}` : ""}`;
 }
 
+// ── Background memory-update helpers ────────────────────────────────────────
+// Both are fire-and-forget: called after res.end() so they never block the
+// streaming response. Errors are logged and swallowed.
+
+async function updateMemorySummary(
+  userId: number,
+  userMsg: string,
+  assistantMsg: string,
+): Promise<void> {
+  const config = await getElaineGlobalConfig();
+  const model = config.subagentModel || config.chatModel;
+
+  const [existing] = await db
+    .select({ id: elaineMemory.id, content: elaineMemory.content })
+    .from(elaineMemory)
+    .where(eq(elaineMemory.type, "summary"))
+    .limit(1);
+
+  const currentSummary =
+    existing?.content ??
+    "(no summary yet — this is the first conversation turn)";
+
+  const prompt = `You maintain a brief "memory summary" for Elaine, a household AI assistant. It is 3-5 sentences maximum — a knowledgeable friend's mental model of the household updated continuously after every turn. It captures who the household is, what they care about, what they have been working on, and any patterns or recurring context useful for future conversations.
+
+CURRENT SUMMARY:
+${currentSummary}
+
+NEW EXCHANGE:
+User: ${userMsg.slice(0, 600)}
+Elaine: ${assistantMsg.slice(0, 600)}
+
+Update the summary to incorporate anything worth remembering from this exchange. If nothing significant happened in this turn, return the summary unchanged. Return ONLY the updated summary text — no preamble, no explanation, no quotes.`;
+
+  const newSummary = await callModel(model, async (client, mdl) => {
+    const resp = await client.chat.completions.create({
+      model: mdl,
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 250,
+    });
+    return resp.choices[0]?.message?.content?.trim() ?? null;
+  });
+
+  if (!newSummary) return;
+
+  if (existing) {
+    await db
+      .update(elaineMemory)
+      .set({ content: newSummary })
+      .where(eq(elaineMemory.id, existing.id));
+  } else {
+    await db.insert(elaineMemory).values({
+      type: "summary",
+      content: newSummary,
+      createdByUserId: userId,
+    });
+  }
+}
+
+async function extractAndSaveMemoryFacts(
+  userId: number,
+  userMsg: string,
+  assistantMsg: string,
+  existingFactContents: string[],
+): Promise<void> {
+  const config = await getElaineGlobalConfig();
+  const model = config.subagentModel || config.chatModel;
+
+  const knownFacts =
+    existingFactContents.length > 0
+      ? existingFactContents.map((c) => `- ${c}`).join("\n")
+      : "(none yet)";
+
+  const prompt = `You help maintain a household memory system for an AI assistant called Elaine. After each conversation turn, extract any NEW facts, preferences, or household information worth storing permanently — things that would be useful context in a future conversation.
+
+ALREADY KNOWN:
+${knownFacts}
+
+NEW EXCHANGE:
+User: ${userMsg.slice(0, 600)}
+Elaine: ${assistantMsg.slice(0, 600)}
+
+List NEW facts not already covered by what is known. Good candidates: preferences, household names, important dates, ongoing plans, things to remember, interests, constraints. Skip anything ephemeral or already captured above. Return one fact per line starting with "- ". If nothing new is worth storing permanently, return exactly: NONE`;
+
+  const response = await callModel(model, async (client, mdl) => {
+    const resp = await client.chat.completions.create({
+      model: mdl,
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 200,
+    });
+    return resp.choices[0]?.message?.content?.trim() ?? null;
+  });
+
+  if (!response || response.toUpperCase() === "NONE") return;
+
+  const lines = response
+    .split("\n")
+    .map((l) => l.replace(/^-\s*/, "").trim())
+    .filter(Boolean)
+    .slice(0, 5);
+
+  for (const fact of lines) {
+    if (fact.length > 5 && fact.toUpperCase() !== "NONE") {
+      await db
+        .insert(elaineMemory)
+        .values({ type: "fact", content: fact, createdByUserId: userId });
+    }
+  }
+}
+
 router.post("/chat", async (req, res) => {
   const userId = req.session.userId!;
   const {
@@ -4394,20 +4523,45 @@ router.post("/chat", async (req, res) => {
     pageScreenshotUrl,
   } = ChatBody.parse(req.body);
 
+  // Fetch config early — needed for auto-summarise and other tasks.
+  const elaineConfig = await getElaineGlobalConfig();
+
   const [user] = await db
     .select({ displayName: appUsers.displayName, email: appUsers.email })
     .from(appUsers)
     .where(eq(appUsers.id, userId));
   const userName = user?.displayName || user?.email || "there";
 
-  // Resolve the named history conversation — create one if not provided.
+  // ── Resolve the named history conversation ───────────────────────────────
+  // When no conversationId is provided (embedded widget across all apps), use
+  // the shared "household" widget thread (isWidgetDefault=true) rather than
+  // creating a new conversation on every message. The standalone Elaine app
+  // always sends an explicit conversationId from its sidebar, so it is
+  // unaffected.
   let histConvId: number | null = conversationId ?? null;
   if (histConvId === null) {
-    const [newConv] = await db
-      .insert(elaineHistoryConversations)
-      .values({ userId, title: "New conversation" })
-      .returning({ id: elaineHistoryConversations.id });
-    histConvId = newConv?.id ?? null;
+    // Look up the existing widget thread for this user.
+    const [existing] = await db
+      .select({ id: elaineHistoryConversations.id })
+      .from(elaineHistoryConversations)
+      .where(
+        and(
+          eq(elaineHistoryConversations.userId, userId),
+          eq(elaineHistoryConversations.isWidgetDefault, true),
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      histConvId = existing.id;
+    } else {
+      // First widget message — create the shared household thread.
+      const [newConv] = await db
+        .insert(elaineHistoryConversations)
+        .values({ userId, title: "Household", isWidgetDefault: true })
+        .returning({ id: elaineHistoryConversations.id });
+      histConvId = newConv?.id ?? null;
+    }
   } else {
     // Verify the named conversation belongs to this user before loading it.
     const [conv] = await db
@@ -4422,36 +4576,117 @@ router.post("/chat", async (req, res) => {
     if (!conv) histConvId = null;
   }
 
-  // Load history from named conversation rows (preferred) or fall back to the
-  // rolling elaineConversations table for backward compat with pre-history sends.
+  // ── Load history + auto-summarise long threads ───────────────────────────
+  // When a named thread exceeds 40 messages, we summarise everything except
+  // the last 20 turns into a single system block. The summary is cached on
+  // the conversation row (summarizedUpToId) so it is only re-generated when
+  // new messages have been added since the last summarisation.
   let history: ChatMessage[] = [];
+  let summaryPrefixBlock: string | null = null;
+
   if (histConvId !== null) {
-    const histMsgs = await db
-      .select({
-        role: elaineHistoryMessages.role,
-        content: elaineHistoryMessages.content,
-      })
-      .from(elaineHistoryMessages)
-      .where(eq(elaineHistoryMessages.conversationId, histConvId))
-      .orderBy(elaineHistoryMessages.createdAt);
-    history = histMsgs.map((m) => ({
-      role: m.role as "user" | "assistant",
-      content: m.content,
-    }));
+    // Load with IDs so we can detect whether the cached summary is stale.
+    const [convRow, histMsgsRaw] = await Promise.all([
+      db
+        .select({
+          summary: elaineHistoryConversations.summary,
+          summarizedUpToId: elaineHistoryConversations.summarizedUpToId,
+        })
+        .from(elaineHistoryConversations)
+        .where(eq(elaineHistoryConversations.id, histConvId))
+        .then((rows) => rows[0] ?? null),
+      db
+        .select({
+          id: elaineHistoryMessages.id,
+          role: elaineHistoryMessages.role,
+          content: elaineHistoryMessages.content,
+        })
+        .from(elaineHistoryMessages)
+        .where(eq(elaineHistoryMessages.conversationId, histConvId))
+        .orderBy(elaineHistoryMessages.createdAt),
+    ]);
+
+    if (histMsgsRaw.length > 40) {
+      // Everything except the last 20 messages will be summarised.
+      const cutoffMsg = histMsgsRaw[histMsgsRaw.length - 21];
+      const recentMsgs = histMsgsRaw.slice(-20);
+
+      const cachedSummary =
+        convRow?.summarizedUpToId === cutoffMsg.id && convRow.summary
+          ? convRow.summary
+          : null;
+
+      if (cachedSummary) {
+        summaryPrefixBlock = cachedSummary;
+      } else {
+        // Generate a fresh summary using the cheaper subagent model.
+        const toSummarise = histMsgsRaw.slice(0, histMsgsRaw.length - 20);
+        const summaryPrompt = `Summarise the following conversation between a user and Elaine (a household AI assistant) in 4-6 sentences. Focus on: decisions made, topics discussed, actions taken, and context that would help Elaine understand a follow-up. Be concise but specific.\n\n${toSummarise
+          .map(
+            (m) =>
+              `${m.role === "user" ? "User" : "Elaine"}: ${m.content.slice(0, 300)}`,
+          )
+          .join("\n\n")}`;
+
+        const generated = await callModel(
+          elaineConfig.subagentModel || elaineConfig.chatModel,
+          async (client, mdl) => {
+            const resp = await client.chat.completions.create({
+              model: mdl,
+              messages: [{ role: "user", content: summaryPrompt }],
+              max_tokens: 350,
+            });
+            return resp.choices[0]?.message?.content?.trim() ?? null;
+          },
+        );
+
+        if (generated) {
+          summaryPrefixBlock = generated;
+          // Cache it — don't await, just fire off.
+          db.update(elaineHistoryConversations)
+            .set({ summary: generated, summarizedUpToId: cutoffMsg.id })
+            .where(eq(elaineHistoryConversations.id, histConvId))
+            .catch((err) =>
+              req.log.error({ err }, "Failed to cache conversation summary"),
+            );
+        }
+      }
+
+      history = recentMsgs.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      }));
+    } else {
+      history = histMsgsRaw.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      }));
+    }
   } else {
     const conversation = await getOrCreateConversation(userId);
     history = (conversation?.messages as ChatMessage[] | null) ?? [];
   }
 
-  const memoryRows = await db
-    .select({ content: elaineMemory.content })
-    .from(elaineMemory)
-    .orderBy(desc(elaineMemory.createdAt))
-    .limit(50);
+  // ── Load memory (facts + rolling summary) ───────────────────────────────
+  const [factRows, memorySummaryRows] = await Promise.all([
+    db
+      .select({ content: elaineMemory.content })
+      .from(elaineMemory)
+      .where(eq(elaineMemory.type, "fact"))
+      .orderBy(desc(elaineMemory.createdAt))
+      .limit(50),
+    db
+      .select({ content: elaineMemory.content })
+      .from(elaineMemory)
+      .where(eq(elaineMemory.type, "summary"))
+      .limit(1),
+  ]);
+  const existingFactContents = factRows.map((r) => r.content);
   const memoryBlock =
-    memoryRows.length > 0
-      ? memoryRows.map((m) => `- ${m.content}`).join("\n")
+    existingFactContents.length > 0
+      ? existingFactContents.map((c) => `- ${c}`).join("\n")
       : "(nothing remembered yet)";
+  const memorySummary = memorySummaryRows[0]?.content ?? null;
 
   const [settingsRow] = await db
     .select({
@@ -4464,8 +4699,6 @@ router.post("/chat", async (req, res) => {
       | ActionConfirmationMode
       | undefined) ?? "one_by_one";
 
-  const elaineConfig = await getElaineGlobalConfig();
-
   const appLabel = CURRENT_APP_LABEL[appId];
   const systemPrompt = buildElaineCoreSystemPrompt({
     userName,
@@ -4473,6 +4706,7 @@ router.post("/chat", async (req, res) => {
     contextBlockLabel: `live, possibly unsaved, on-screen state in ${appLabel}`,
     contextBlock: pageContext ?? "(no page context was shared for this screen)",
     memoryBlock,
+    memorySummary,
     actionConfirmationMode,
     isTravelsApp: appId === "travels",
   });
@@ -4531,6 +4765,17 @@ router.post("/chat", async (req, res) => {
 
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: systemPrompt },
+    // When an older thread was summarised, inject the summary as a system
+    // message so the model has full context without the token cost of the
+    // original turns.
+    ...(summaryPrefixBlock
+      ? [
+          {
+            role: "system" as const,
+            content: `[EARLIER CONVERSATION — SUMMARISED]\n${summaryPrefixBlock}`,
+          },
+        ]
+      : []),
     ...history.map((m) => ({ role: m.role, content: m.content })),
     { role: "user", content: userTurnContent },
   ];
@@ -5748,6 +5993,21 @@ router.post("/chat", async (req, res) => {
     conversationId: histConvId,
   });
   res.end();
+
+  // Fire-and-forget memory updates — these never block the response.
+  // updateMemorySummary maintains the rolling 3-5 sentence household summary.
+  // extractAndSaveMemoryFacts pulls out any new facts worth storing long-term.
+  updateMemorySummary(userId, message, content).catch((err) =>
+    req.log.error({ err }, "updateMemorySummary background task failed"),
+  );
+  extractAndSaveMemoryFacts(
+    userId,
+    message,
+    content,
+    existingFactContents,
+  ).catch((err) =>
+    req.log.error({ err }, "extractAndSaveMemoryFacts background task failed"),
+  );
 });
 
 // Action types that send a real SMS (real per-message cost + abuse surface),
@@ -7275,10 +7535,8 @@ async function runRestrictedElaineTurn(params: {
     onWidget,
   } = params;
   const config = await getElaineGlobalConfig();
-  const [{ userName, memoryBlock }, contextBlock] = await Promise.all([
-    buildUserContext(userId),
-    buildAgentphoneContext(),
-  ]);
+  const [{ userName, memoryBlock, memorySummary }, contextBlock] =
+    await Promise.all([buildUserContext(userId), buildAgentphoneContext()]);
 
   const systemPrompt = buildElaineCoreSystemPrompt({
     userName,
@@ -7286,6 +7544,7 @@ async function runRestrictedElaineTurn(params: {
     contextBlockLabel: `household data snapshot (replying over ${channelLabel} — no screen state available)`,
     contextBlock,
     memoryBlock,
+    memorySummary,
     actionConfirmationMode: "auto_run",
     isTravelsApp: false,
     formattingNote,

@@ -302,6 +302,36 @@ export async function listCalendarEvents(
     .map(fromGoogleEvent);
 }
 
+// List ALL events in a calendar across all time, with full pagination.
+// Use this for admin/cleanup operations only — for display, use
+// listCalendarEvents() which is bounded by a date range.
+export async function listAllCalendarEvents(
+  accessToken: string,
+  calendarId: string,
+): Promise<CalendarEvent[]> {
+  const all: CalendarEvent[] = [];
+  let pageToken: string | undefined;
+  do {
+    const params = new URLSearchParams({
+      singleEvents: "true",
+      maxResults: "2500",
+      ...(pageToken ? { pageToken } : {}),
+    });
+    const data = await calendarApiJson<{
+      items?: RawGoogleEvent[];
+      nextPageToken?: string;
+    }>(
+      accessToken,
+      `/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`,
+    );
+    for (const item of data.items ?? []) {
+      if (item.status !== "cancelled") all.push(fromGoogleEvent(item));
+    }
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+  return all;
+}
+
 export async function createCalendarEvent(
   accessToken: string,
   calendarId: string,

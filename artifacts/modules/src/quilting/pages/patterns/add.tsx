@@ -1,8 +1,5 @@
 import { useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import {
   ArrowLeft,
   Camera,
@@ -26,41 +23,21 @@ import { useQueryClient } from "@tanstack/react-query";
 import { TagSelector } from "@/quilting/components/tag-selector";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
 
-const patternFormSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  designer: z.string().optional(),
-  blockSize: z.string().optional(),
-  difficulty: z.string().optional(),
-  sourceType: z.string().optional(),
-  sourceReference: z.string().optional(),
-  notes: z.string().optional(),
-});
-
-type PatternFormValues = z.infer<typeof patternFormSchema>;
-
 export default function AddPattern() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [selectedCatIds, setSelectedCatIds] = useState<number[]>([]);
-  const form = useForm<PatternFormValues>({
-    resolver: zodResolver(patternFormSchema),
-    defaultValues: {
-      name: "",
-      designer: "",
-      blockSize: "",
-      difficulty: "",
-      sourceType: "",
-      sourceReference: "",
-      notes: "",
-    },
-  });
 
   // URL import state
   const [importUrl, setImportUrl] = useState("");
   const [importing, setImporting] = useState(false);
+
+  // Pre-filled field values (used after import)
+  const [fields, setFields] = useState<Record<string, string>>({});
 
   const { data: allCategories } = useListQuiltingCategories();
 
@@ -110,7 +87,7 @@ export default function AddPattern() {
         next.blockSize = `${info.blockSizeInches}"`;
       if (info.style) next.sourceType = info.style;
       if (info.notes) next.notes = info.notes;
-      form.reset({ ...form.getValues(), ...next });
+      setFields(next);
       toast.success("Pattern info imported! Review the fields below.");
     } catch {
       toast.error(
@@ -121,38 +98,37 @@ export default function AddPattern() {
     }
   }
 
-  function handleSubmit(values: PatternFormValues) {
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const get = (k: string) => (fd.get(k) as string | null) || undefined;
     const categoryNames = (allCategories ?? [])
       .filter((c) => selectedCatIds.includes(c.id))
       .map((c) => c.name);
     create.mutate({
       data: {
         image: file ?? undefined,
-        name: values.name,
-        designer: values.designer || undefined,
-        blockSize: values.blockSize || undefined,
-        difficulty: values.difficulty || undefined,
-        sourceType: values.sourceType || undefined,
-        sourceReference: values.sourceReference || undefined,
-        notes: values.notes || undefined,
+        name: fd.get("name") as string,
+        designer: get("designer"),
+        blockSize: get("blockSize"),
+        difficulty: get("difficulty"),
+        sourceType: get("sourceType"),
+        sourceReference: get("sourceReference"),
+        notes: get("notes"),
         categories:
           categoryNames.length > 0 ? JSON.stringify(categoryNames) : undefined,
       },
     });
   }
 
-  function handleCancel() {
-    const dirty =
-      form.formState.isDirty || file !== null || selectedCatIds.length > 0;
-    if (!dirty || window.confirm("Discard changes?")) {
-      navigate("/quilting/patterns");
-    }
-  }
-
   return (
     <div className="mx-auto max-w-xl">
       <div className="mb-6 flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={handleCancel}>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => navigate("/quilting/patterns")}
+        >
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <h1 className="text-xl font-bold">Add pattern</h1>
@@ -200,7 +176,7 @@ export default function AddPattern() {
         </div>
       </div>
 
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+      <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
         {/* Optional photo */}
         <div>
           <Label className="mb-2 block">Photo (optional)</Label>
@@ -252,57 +228,63 @@ export default function AddPattern() {
             </Label>
             <Input
               id="name"
-              {...form.register("name")}
+              name="name"
+              required
               placeholder="e.g. Flying Geese, Log Cabin"
               className="mt-1.5"
+              defaultValue={fields.name ?? ""}
+              key={`name-${fields.name}`}
             />
-            {form.formState.errors.name && (
-              <p className="mt-1 text-xs text-destructive">
-                {form.formState.errors.name.message}
-              </p>
-            )}
           </div>
           <div>
             <Label htmlFor="designer">Designer</Label>
             <Input
               id="designer"
-              {...form.register("designer")}
+              name="designer"
               placeholder="e.g. Bonnie Hunter"
               className="mt-1.5"
+              defaultValue={fields.designer ?? ""}
+              key={`designer-${fields.designer}`}
             />
           </div>
           <div>
             <Label htmlFor="blockSize">Block size</Label>
             <Input
               id="blockSize"
-              {...form.register("blockSize")}
+              name="blockSize"
               placeholder='e.g. 6", 12.5"'
               className="mt-1.5"
+              defaultValue={fields.blockSize ?? ""}
+              key={`blockSize-${fields.blockSize}`}
             />
           </div>
           <div>
             <Label htmlFor="difficulty">Difficulty</Label>
             <Input
               id="difficulty"
-              {...form.register("difficulty")}
+              name="difficulty"
               placeholder="e.g. beginner, intermediate"
               className="mt-1.5"
+              defaultValue={fields.difficulty ?? ""}
+              key={`difficulty-${fields.difficulty}`}
             />
           </div>
           <div>
             <Label htmlFor="sourceType">Source type / style</Label>
             <Input
               id="sourceType"
-              {...form.register("sourceType")}
+              name="sourceType"
               placeholder="e.g. book, magazine, PDF, HST"
               className="mt-1.5"
+              defaultValue={fields.sourceType ?? ""}
+              key={`sourceType-${fields.sourceType}`}
             />
           </div>
           <div className="sm:col-span-2">
             <Label htmlFor="sourceReference">Source reference</Label>
             <Input
               id="sourceReference"
-              {...form.register("sourceReference")}
+              name="sourceReference"
               placeholder="e.g. 'Easy Does It' p.42"
               className="mt-1.5"
             />
@@ -311,10 +293,12 @@ export default function AddPattern() {
             <Label htmlFor="notes">Notes</Label>
             <Textarea
               id="notes"
-              {...form.register("notes")}
+              name="notes"
               placeholder="Any personal notes..."
               className="mt-1.5"
               rows={3}
+              defaultValue={fields.notes ?? ""}
+              key={`notes-${fields.notes}`}
             />
           </div>
         </div>

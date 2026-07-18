@@ -5,9 +5,9 @@
  * api-server startup self-healing migration. Keeping one list prevents a
  * split-brain where one entrypoint creates only a subset of tables.
  *
- * SAFE replacement for the banned `drizzle-kit` force-push command. The Supabase DB is SHARED by
+ * SAFE replacement for `drizzle-kit push --force`. The Supabase DB is SHARED by
  * both apps and `app_users` / `password_reset_tokens` are shared between them.
- * Running `drizzle-kit` with `--force` introspects EVERY table and auto-confirms
+ * `drizzle-kit push --force` introspects EVERY table and auto-confirms
  * destructive DDL, so on this shared DB it tries to DROP the other app's tables
  * and wipes data on every publish. `tablesFilter` does not reliably stop this —
  * so force push is permanently banned. These statements are all additive and
@@ -1326,8 +1326,6 @@ export const STATEMENTS: string[] = [
     ('openrouter',  'model_fetch_timeout_ms',         '8000',    'integer', 'OpenRouter model list fetch timeout (ms)',      'AbortController timeout when fetching the OpenRouter model catalogue for the admin UI.'),
     ('openrouter',  'model_list_cache_ttl_ms',        '3600000', 'integer', 'OpenRouter model list cache TTL (ms)',          'How long to keep the OpenRouter model catalogue in-memory (default 1 h).'),
     ('ornaments',   'barcode_fetch_timeout_ms',       '8000',    'integer', 'Barcode lookup fetch timeout (ms)',             'AbortController timeout for UPCitemdb barcode lookup calls.'),
-    ('ornaments',   'barcode_trial_url',              'https://api.upcitemdb.com/prod/trial/lookup', 'string', 'UPCitemdb trial lookup URL', 'Base URL used for barcode lookups when UPCITEMDB_USER_KEY is not set.'),
-    ('ornaments',   'barcode_paid_url',               'https://api.upcitemdb.com/prod/v1/lookup', 'string', 'UPCitemdb paid lookup URL', 'Base URL used for barcode lookups when UPCITEMDB_USER_KEY is set.'),
     ('quilting',    'color_suggestion_max_tokens',    '200',     'integer', 'Colour suggestion AI max tokens',               'max_tokens cap for the fabric colour-suggestion vision call (quilting tools).'),
     ('quilting',    'pattern_import_max_tokens',      '400',     'integer', 'Pattern import AI max tokens',                  'max_tokens cap for the quilting pattern-import AI extraction call.'),
     ('quilting',    'reranker_timeout_ms',            '10000',   'integer', 'Voyage reranker timeout (ms)',                  'AbortSignal.timeout value for Voyage AI rerank calls (fabric Compare).'),

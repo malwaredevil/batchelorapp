@@ -490,14 +490,6 @@ export function ControlPanelContent() {
             ? "Amber rows have been changed from their defaults — use the reset button to restore."
             : "All values are at their defaults."}
         </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link href="/control-panel/jobs">Durable jobs</Link>
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link href="/control-panel/operations">Provider operations</Link>
-          </Button>
-        </div>
       </div>
 
       {showReconnectBanner && (

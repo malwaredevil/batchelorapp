@@ -1,10 +1,16 @@
 /**
- * Startup migration health gate.
+ * Startup self-healing migration.
  *
- * Runs before the HTTP server starts. The repository-owned migration runner
- * applies the historical additive baseline plus numbered migrations under an
- * advisory lock and records checksums in app_schema_migrations. Startup fails
- * closed if migrations cannot be verified/applied.
+ * Runs before the HTTP server starts. Executes the SINGLE source of DDL truth
+ * (`STATEMENTS` from @workspace/db) so the merged server can never boot with a
+ * partial schema — it ensures BOTH pottery_* and quilting_* tables plus the
+ * shared app_users / password_reset_tokens, identical to what
+ * `pnpm --filter @workspace/db run bootstrap` runs.
+ *
+ * Every statement is additive and idempotent (CREATE TABLE/INDEX IF NOT EXISTS,
+ * ADD COLUMN IF NOT EXISTS, ENABLE ROW LEVEL SECURITY). It NEVER issues DROP,
+ * TRUNCATE, or any destructive DDL — safe to run on every boot and after any
+ * database restore.
  *
  * After the schema migration, setupKeepaliveCron() runs as a best-effort
  * optional step: it schedules a pg_cron job that pings /api/healthz every
@@ -14,18 +20,12 @@
  * — it never blocks startup.
  */
 
-import { applyMigrations, pool, type MigrationStatus } from "@workspace/db";
+import { pool, STATEMENTS } from "@workspace/db";
 import { logger } from "./logger";
 
 const KEEPALIVE_URL = "https://app.batchelor.app/api/healthz";
 const KEEPALIVE_JOB = "batchelor-keepalive";
 const KEEPALIVE_SCHEDULE = "*/5 * * * *"; // every 5 minutes
-
-let migrationStatus: MigrationStatus | null = null;
-
-export function getStartupMigrationStatus(): MigrationStatus | null {
-  return migrationStatus;
-}
 
 /**
  * Best-effort pg_cron keepalive setup. Schedules a 5-minute ping to
@@ -70,23 +70,30 @@ async function setupKeepaliveCron(): Promise<void> {
 }
 
 export async function runStartupMigration(): Promise<void> {
-  logger.info("startup-migrate: applying ordered migration ledger");
-  migrationStatus = await applyMigrations();
-  if (
-    migrationStatus.pending.length > 0 ||
-    migrationStatus.checksumErrors.length > 0
-  ) {
-    throw new Error(
-      `Migration health is not clean: pending=${migrationStatus.pending.length} checksumErrors=${migrationStatus.checksumErrors.length}`,
+  const client = await pool.connect().catch((err) => {
+    logger.warn({ err }, "startup-migrate: could not connect to DB — skipping");
+    return null;
+  });
+  if (!client) return;
+
+  logger.info("startup-migrate: running idempotent table check");
+
+  try {
+    await client.query("BEGIN");
+    for (const statement of STATEMENTS) {
+      await client.query(statement);
+    }
+    await client.query("COMMIT");
+    logger.info("startup-migrate: all tables verified / created successfully");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    logger.error(
+      { err },
+      "startup-migrate: migration failed — server will still start but some tables may be missing",
     );
+  } finally {
+    client.release();
   }
-  logger.info(
-    {
-      latest: migrationStatus.appliedLatestVersion,
-      expected: migrationStatus.expectedLatestVersion,
-    },
-    "startup-migrate: migration ledger clean",
-  );
 
   // Optional keepalive cron — runs after the schema migration in its own
   // connection so a failure never rolls back the table work above.

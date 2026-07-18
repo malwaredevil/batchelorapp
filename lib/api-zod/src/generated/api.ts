@@ -206,7 +206,8 @@ export const ListPotteryResponse = zod.object({
 })),
   "total": zod.number().describe('Total number of items matching the query (before pagination)'),
   "page": zod.number(),
-  "pageSize": zod.number()
+  "pageSize": zod.number(),
+  "searchMode": zod.enum(['semantic', 'keyword'])
 })
 
 
@@ -441,8 +442,13 @@ export const BulkReanalyzePotteryBody = zod.object({
 })
 
 export const BulkReanalyzePotteryResponse = zod.object({
+  "total": zod.number(),
   "succeeded": zod.array(zod.number()),
-  "failed": zod.array(zod.number())
+  "failed": zod.array(zod.number()),
+  "errors": zod.array(zod.object({
+  "id": zod.number(),
+  "error": zod.string()
+}))
 })
 
 
@@ -3441,7 +3447,8 @@ export const ListOrnamentsResponse = zod.object({
 })),
   "total": zod.number().describe('Total number of items matching the query (before pagination)'),
   "page": zod.number(),
-  "pageSize": zod.number()
+  "pageSize": zod.number(),
+  "searchMode": zod.enum(['semantic', 'keyword'])
 })
 
 
@@ -3468,8 +3475,13 @@ export const BulkReanalyzeOrnamentsBody = zod.object({
 })
 
 export const BulkReanalyzeOrnamentsResponse = zod.object({
+  "total": zod.number(),
   "succeeded": zod.array(zod.number()),
-  "failed": zod.array(zod.number())
+  "failed": zod.array(zod.number()),
+  "errors": zod.array(zod.object({
+  "id": zod.number(),
+  "error": zod.string()
+}))
 })
 
 

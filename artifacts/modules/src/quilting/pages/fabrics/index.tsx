@@ -374,17 +374,17 @@ export default function Fabrics() {
 
   const bulkReanalyze = useBulkReanalyzeFabrics({
     mutation: {
-      onSuccess: ({ total, succeeded, failed }) => {
+      onSuccess: ({ succeeded, failed }) => {
         queryClient.invalidateQueries({ queryKey: getListFabricsQueryKey() });
         setSelectedIds(new Set());
         setIsBulkMode(false);
         if (failed.length === 0) {
           toast.success(
-            `Re-analysed ${succeeded.length}/${total} fabric${total !== 1 ? "s" : ""}.`,
+            `Refreshed AI for ${succeeded.length} fabric${succeeded.length !== 1 ? "s" : ""}`,
           );
         } else {
           toast.success(
-            `Re-analysed ${succeeded.length}/${total} fabrics. ${failed.length} failed — try again.`,
+            `Refreshed ${succeeded.length}, failed ${failed.length}`,
           );
         }
       },

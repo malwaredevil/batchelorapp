@@ -3,7 +3,6 @@ import { env } from "./env";
 import { getElaineGlobalConfig } from "./elaine-config";
 import { getConfig } from "./app-config";
 import { logger } from "./logger";
-import { withExternalOperation } from "./operations";
 
 /**
  * Every AI call in this app goes through OpenRouter, using OpenRouter's model
@@ -89,7 +88,7 @@ export type OpenRouterServerTool =
 const REQUEST_TIMEOUT_MS_DEFAULT = 12_000;
 
 function makeOpenRouterClient(timeoutMs: number): OpenAI {
-  return new OpenAI({  // openai-direct-ok
+  return new OpenAI({
     apiKey: env.openrouterApiKey,
     baseURL: "https://openrouter.ai/api/v1",
     timeout: timeoutMs,
@@ -119,16 +118,7 @@ export async function callModel<T>(
   model: string,
   fn: (client: OpenAI, model: string) => Promise<T>,
 ): Promise<T> {
-  return withExternalOperation(
-    {
-      provider: "openrouter",
-      operation: "chat.completions",
-      feature: "ai",
-      module: "shared",
-      modelOrActor: model,
-    },
-    async () => fn(await getOpenRouterClient(), model),
-  );
+  return fn(await getOpenRouterClient(), model);
 }
 
 /**
@@ -150,16 +140,7 @@ export async function callModelWithAdvisor<T>(
 ): Promise<T> {
   const config = await getElaineGlobalConfig();
   if (!config.features.enableAdvisor) {
-    return withExternalOperation(
-      {
-        provider: "openrouter",
-        operation: "chat.completions",
-        feature: "ai-advisor-disabled",
-        module: "shared",
-        modelOrActor: model,
-      },
-      async () => fn(await getOpenRouterClient(), model, undefined),
-    );
+    return fn(await getOpenRouterClient(), model, undefined);
   }
   const tools: OpenRouterServerTool[] = [
     {
@@ -170,16 +151,7 @@ export async function callModelWithAdvisor<T>(
       },
     },
   ];
-  return withExternalOperation(
-    {
-      provider: "openrouter",
-      operation: "chat.completions.with_advisor_tool",
-      feature: "ai-advisor",
-      module: "shared",
-      modelOrActor: model,
-    },
-    async () => fn(await getOpenRouterClient(), model, tools),
-  );
+  return fn(await getOpenRouterClient(), model, tools);
 }
 
 /**
@@ -211,16 +183,7 @@ export async function callModelWithSubagent<T>(
         },
       ]
     : [];
-  return withExternalOperation(
-    {
-      provider: "openrouter",
-      operation: "chat.completions.with_subagent_tool",
-      feature: "ai-subagent",
-      module: "shared",
-      modelOrActor: model,
-    },
-    async () => fn(await getOpenRouterClient(), model, tools),
-  );
+  return fn(await getOpenRouterClient(), model, tools);
 }
 
 /**

@@ -1,4 +1,7 @@
 import { useState, useRef } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { useLocation } from "wouter";
 import { ArrowLeft, Upload, Loader2, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,6 +19,14 @@ import { TagSelector } from "@/quilting/components/tag-selector";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
 import { useAppConfigSummary } from "@workspace/elaine-ui";
 
+const AddFabricSchema = z.object({
+  name: z.string().optional(),
+  quantity: z.coerce.number().min(0).default(1),
+  quantityUnit: z.string().default("yards"),
+  notes: z.string().optional(),
+});
+type AddFabricFields = z.infer<typeof AddFabricSchema>;
+
 export default function AddFabric() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
@@ -32,6 +43,15 @@ export default function AddFabric() {
     "quilting-fabrics-add",
     `Add Fabric page: a form to add one new fabric to the stash with a required photo (for AI cataloguing) plus optional name/quantity/notes/categories. This is a photo-upload form — you cannot submit it on the user's behalf from chat.${configSummary ? ` ${configSummary}` : ""}`,
   );
+
+  const {
+    register,
+    handleSubmit: rhfHandleSubmit,
+    formState: { errors },
+  } = useForm<AddFabricFields>({
+    resolver: zodResolver(AddFabricSchema),
+    defaultValues: { quantity: 1, quantityUnit: "yards" },
+  });
 
   const create = useCreateFabric({
     mutation: {
@@ -52,24 +72,21 @@ export default function AddFabric() {
     setPreview(url);
   }
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  function handleFormSubmit(data: AddFabricFields) {
     if (!file) {
       toast.error("Please add a photo of the fabric.");
       return;
     }
-    const fd = new FormData(e.currentTarget);
-    const get = (k: string) => (fd.get(k) as string | null) || undefined;
     const categoryNames = (allCategories ?? [])
       .filter((c) => selectedCatIds.includes(c.id))
       .map((c) => c.name);
     create.mutate({
       data: {
         image: file,
-        name: get("name"),
-        quantity: get("quantity"),
-        quantityUnit: get("quantityUnit"),
-        notes: get("notes"),
+        name: data.name?.trim() || undefined,
+        quantity: String(data.quantity ?? 1),
+        quantityUnit: data.quantityUnit?.trim() || "yards",
+        notes: data.notes?.trim() || undefined,
         categories:
           categoryNames.length > 0 ? JSON.stringify(categoryNames) : undefined,
       },
@@ -89,7 +106,7 @@ export default function AddFabric() {
         <h1 className="text-xl font-bold">Add fabric</h1>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={rhfHandleSubmit(handleFormSubmit)} className="space-y-6">
         {/* Photo picker */}
         <div>
           <Label className="mb-2 block">
@@ -150,41 +167,44 @@ export default function AddFabric() {
             <Label htmlFor="name">Name (optional — AI fills this)</Label>
             <Input
               id="name"
-              name="name"
               placeholder="e.g. Moda Floral Blue"
               className="mt-1.5"
+              {...register("name")}
             />
           </div>
           <div>
             <Label htmlFor="quantity">Quantity</Label>
             <Input
               id="quantity"
-              name="quantity"
               type="number"
               step="0.25"
               min="0"
-              defaultValue="1"
               className="mt-1.5"
+              {...register("quantity", { valueAsNumber: true })}
             />
+            {errors.quantity && (
+              <p className="mt-1 text-xs text-destructive">
+                {errors.quantity.message}
+              </p>
+            )}
           </div>
           <div>
             <Label htmlFor="quantityUnit">Unit</Label>
             <Input
               id="quantityUnit"
-              name="quantityUnit"
-              defaultValue="yards"
               placeholder="yards"
               className="mt-1.5"
+              {...register("quantityUnit")}
             />
           </div>
           <div className="sm:col-span-2">
             <Label htmlFor="notes">Notes</Label>
             <Textarea
               id="notes"
-              name="notes"
               placeholder="Any personal notes..."
               className="mt-1.5"
               rows={3}
+              {...register("notes")}
             />
           </div>
         </div>

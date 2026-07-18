@@ -72,6 +72,10 @@ import {
 } from "../../lib/openai";
 import { generateVisualEmbedding } from "../../lib/visual-embed";
 import { serializeFabric, serializeFabrics } from "../../lib/serialize";
+import {
+  semanticCollectionSearch,
+  buildFabricSearchDocument,
+} from "../../lib/collection-search";
 
 const {
   embedding: _e,
@@ -393,6 +397,62 @@ router.get("/fabrics", async (req, res) => {
     Math.max(1, parseInt(String(req.query.pageSize ?? "50"), 10) || 50),
   );
   const offset = (page - 1) * pageSize;
+
+  // When a text query is provided, try hybrid semantic search first.
+  // Falls back to ILIKE when embeddings are unavailable or the result is empty.
+  if (q) {
+    try {
+      const rankedIds = await semanticCollectionSearch({
+        query: q,
+        table: fabrics,
+        textEmbeddingCol: "embedding",
+        visualEmbeddingCol: "visual_embedding",
+        db,
+        fetchDocuments: async (ids) => {
+          const rows = await db
+            .select(fabricColumns)
+            .from(fabrics)
+            .where(inArray(fabrics.id, ids));
+          return rows.map((r) => ({
+            id: r.id,
+            text: buildFabricSearchDocument(
+              r as Parameters<typeof buildFabricSearchDocument>[0],
+            ),
+          }));
+        },
+      });
+
+      if (rankedIds.length > 0) {
+        const total = rankedIds.length;
+        const pageIds = rankedIds.slice(offset, offset + pageSize);
+
+        if (pageIds.length === 0) {
+          res.json(
+            ListFabricsResponse.parse({ items: [], total, page, pageSize }),
+          );
+          return;
+        }
+
+        const pageRows = await db
+          .select(fabricColumns)
+          .from(fabrics)
+          .where(inArray(fabrics.id, pageIds));
+        const byId = new Map(pageRows.map((r) => [r.id, r]));
+        const orderedRows = pageIds
+          .filter((id) => byId.has(id))
+          .map((id) => byId.get(id)!);
+        const items = await serializeFabrics(
+          orderedRows as Array<
+            Omit<FabricRow, "embedding" | "visualEmbedding">
+          >,
+        );
+        res.json(ListFabricsResponse.parse({ items, total, page, pageSize }));
+        return;
+      }
+    } catch {
+      // Semantic search unavailable — fall through to ILIKE.
+    }
+  }
 
   const where = q ? ilike(fabrics.name, `%${q}%`) : undefined;
 

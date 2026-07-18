@@ -42,11 +42,20 @@ async function fetchFromUpcItemDb(
   barcode: string,
 ): Promise<Omit<BarcodeLookupResult, "barcode" | "fromCache">> {
   const userKey = process.env.UPCITEMDB_USER_KEY;
-  // Free trial endpoint requires no API key and works for up to 100 lookups/day.
+  // Read endpoint URLs from the admin config panel, falling back to hardcoded defaults.
+  // Free trial endpoint requires no API key (up to 100 lookups/day).
   // If UPCITEMDB_USER_KEY is set, uses the paid endpoint for higher rate limits.
   const baseUrl = userKey
-    ? "https://api.upcitemdb.com/prod/v1/lookup"
-    : "https://api.upcitemdb.com/prod/trial/lookup";
+    ? await getConfig(
+        "ornaments",
+        "upcitemdb_paid_url",
+        "https://api.upcitemdb.com/prod/v1/lookup",
+      )
+    : await getConfig(
+        "ornaments",
+        "upcitemdb_trial_url",
+        "https://api.upcitemdb.com/prod/trial/lookup",
+      );
 
   const controller = new AbortController();
   const fetchTimeoutMs = await getConfig(
@@ -130,6 +139,62 @@ async function fetchFromUpcItemDb(
   }
 }
 
+/**
+ * Web-scraping fallback using Open Food Facts (free, no quota).
+ * Covers non-Hallmark barcodes that UPCitemdb may rate-limit or miss.
+ * Returns found:false without throwing when the product is simply not in the
+ * database — only throws on network/HTTP errors so the caller can distinguish
+ * a genuine service failure from a not-found result.
+ */
+async function fetchFromOpenFoodFacts(
+  barcode: string,
+): Promise<Omit<BarcodeLookupResult, "barcode" | "fromCache">> {
+  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,generic_name,image_url`;
+  const resp = await fetch(url, {
+    headers: {
+      "User-Agent": "Batchelor-App/1.0 (https://app.batchelor.app)",
+      Accept: "application/json",
+    },
+    signal: AbortSignal.timeout(6_000),
+  });
+  if (!resp.ok) throw new Error(`Open Food Facts HTTP ${resp.status}`);
+
+  const body = (await resp.json()) as {
+    status?: number;
+    product?: {
+      product_name?: string;
+      brands?: string;
+      generic_name?: string;
+      image_url?: string;
+    };
+  };
+
+  if (body.status !== 1 || !body.product) {
+    return {
+      found: false,
+      name: null,
+      brand: null,
+      seriesOrCollection: null,
+      year: null,
+      description: null,
+      imageUrl: null,
+    };
+  }
+
+  const product = body.product;
+  const name =
+    product.product_name?.trim() || product.generic_name?.trim() || null;
+  return {
+    found: !!name,
+    name,
+    brand: product.brands?.trim() || null,
+    seriesOrCollection: null,
+    year: null,
+    description: null,
+    imageUrl: product.image_url?.trim() || null,
+  };
+}
+
 export async function lookupBarcode(
   rawBarcode: string,
 ): Promise<BarcodeLookupResult> {
@@ -158,20 +223,31 @@ export async function lookupBarcode(
   let result: Omit<BarcodeLookupResult, "barcode" | "fromCache">;
   try {
     result = await fetchFromUpcItemDb(barcode);
-  } catch (err) {
-    logger.warn({ err, barcode }, "UPCitemdb lookup failed");
-    // Don't cache transient failures — only cache genuine not-found results.
-    return {
-      barcode,
-      found: false,
-      name: null,
-      brand: null,
-      seriesOrCollection: null,
-      year: null,
-      description: null,
-      imageUrl: null,
-      fromCache: false,
-    };
+  } catch (primaryErr) {
+    logger.warn(
+      { err: primaryErr, barcode },
+      "UPCitemdb lookup failed — trying Open Food Facts fallback",
+    );
+    try {
+      result = await fetchFromOpenFoodFacts(barcode);
+    } catch (fallbackErr) {
+      logger.warn(
+        { err: fallbackErr, barcode },
+        "Open Food Facts fallback also failed",
+      );
+      // Don't cache transient failures — only cache genuine not-found results.
+      return {
+        barcode,
+        found: false,
+        name: null,
+        brand: null,
+        seriesOrCollection: null,
+        year: null,
+        description: null,
+        imageUrl: null,
+        fromCache: false,
+      };
+    }
   }
 
   await db

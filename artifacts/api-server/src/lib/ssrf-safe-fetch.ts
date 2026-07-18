@@ -208,6 +208,113 @@ export async function fetchPageText(
   return Promise.race([fetchPromise, deadlinePromise]);
 }
 
+/**
+ * Fetches a URL and returns the parsed JSON body. Uses the same SSRF-safe
+ * DNS resolver and IP-block-list as fetchPageText, making it safe to call
+ * with any URL — including hardcoded ones — so internal network destinations
+ * are consistently rejected regardless of the call site.
+ * Throws on any SSRF-blocked, redirect, non-2xx, timed-out, or invalid-JSON response.
+ */
+export async function fetchJsonSafe<T = unknown>(
+  url: string,
+  options: {
+    headers?: Record<string, string>;
+    timeoutMs?: number;
+  } = {},
+): Promise<T> {
+  const parsed = new URL(url);
+  const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+
+  if (BLOCKED_HOSTNAMES.has(hostname) || hostname.endsWith(".local")) {
+    throw new Error("URL hostname is not allowed");
+  }
+
+  const ipVersion = isIP(hostname);
+  if (ipVersion === 4 && isPrivateAddress(hostname, 4)) {
+    throw new Error("URL resolves to a private address");
+  }
+  if (ipVersion === 6 && isPrivateAddress(hostname, 6)) {
+    throw new Error("URL resolves to a private address");
+  }
+
+  let destroyReq: (() => void) | null = null;
+  const absoluteTimeoutMs = options.timeoutMs ?? FETCH_ABSOLUTE_TIMEOUT_MS;
+
+  const fetchPromise = new Promise<T>((resolve, reject) => {
+    const mod = parsed.protocol === "https:" ? https : http;
+    const port = parsed.port
+      ? Number(parsed.port)
+      : parsed.protocol === "https:"
+        ? 443
+        : 80;
+
+    const reqOptions: https.RequestOptions = {
+      hostname: parsed.hostname,
+      port,
+      path: parsed.pathname + parsed.search,
+      method: "GET",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (compatible; BatchelorApp/1.0; +https://app.batchelor.app)",
+        Accept: "application/json",
+        ...options.headers,
+      },
+      lookup: safeLookup,
+      timeout: 10000,
+    };
+
+    const req = mod.request(reqOptions, (res) => {
+      if (
+        res.statusCode !== undefined &&
+        res.statusCode >= 300 &&
+        res.statusCode < 400
+      ) {
+        res.destroy();
+        reject(new Error(`Redirect not followed (${res.statusCode})`));
+        return;
+      }
+
+      if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+        res.destroy();
+        reject(new Error(`HTTP ${res.statusCode ?? "unknown"}`));
+        return;
+      }
+
+      res.setEncoding("utf8");
+      let body = "";
+      res.on("data", (chunk: string) => {
+        body += chunk;
+        if (body.length > MAX_BODY_BYTES) res.destroy();
+      });
+      res.on("end", () => {
+        try {
+          resolve(JSON.parse(body) as T);
+        } catch {
+          reject(new Error("Invalid JSON response"));
+        }
+      });
+      res.on("error", reject);
+    });
+
+    destroyReq = () => req.destroy();
+    req.on("timeout", () => {
+      req.destroy();
+      reject(new Error("Request timed out"));
+    });
+    req.on("error", reject);
+    req.end();
+  });
+
+  const deadlinePromise = new Promise<never>((_, reject) => {
+    setTimeout(() => {
+      destroyReq?.();
+      reject(new Error("Request timed out"));
+    }, absoluteTimeoutMs);
+  });
+
+  return Promise.race([fetchPromise, deadlinePromise]);
+}
+
 /** True if an error thrown by fetchPageText represents an SSRF/policy block. */
 export function isSafeFetchBlockedError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);

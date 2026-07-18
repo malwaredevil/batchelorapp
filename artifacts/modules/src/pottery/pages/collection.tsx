@@ -636,6 +636,7 @@ export default function Collection() {
     data: listData,
     isLoading,
     isError,
+    refetch,
   } = useListPottery({ pageSize: 200 });
   const data = listData?.items;
   const { data: allCategories = [] } = useListCategories();
@@ -972,9 +973,14 @@ export default function Collection() {
           </div>
         </>
       ) : isError ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">
-          Could not load your collection. Please refresh.
-        </p>
+        <div className="flex flex-col items-center gap-3 py-10">
+          <p className="text-sm text-muted-foreground">
+            Could not load your collection.
+          </p>
+          <Button variant="outline" size="sm" onClick={() => void refetch()}>
+            Try again
+          </Button>
+        </div>
       ) : !data || data.length === 0 ? (
         <EmptyState />
       ) : (

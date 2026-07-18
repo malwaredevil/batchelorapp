@@ -129,6 +129,29 @@ export function buildPotterySearchDocument(attrs: {
   return parts.join(". ") || "Unknown pottery piece";
 }
 
+export function buildFabricSearchDocument(attrs: {
+  name: string | null;
+  designer?: string | null;
+  manufacturer?: string | null;
+  colorway?: string | null;
+  notes?: string | null;
+  dominantColors?: unknown;
+  aiDescription?: string | null;
+}): string {
+  const parts: string[] = [];
+  if (attrs.name) parts.push(`Name: ${attrs.name}`);
+  if (attrs.designer) parts.push(`Designer: ${attrs.designer}`);
+  if (attrs.manufacturer) parts.push(`Manufacturer: ${attrs.manufacturer}`);
+  if (attrs.colorway) parts.push(`Colorway: ${attrs.colorway}`);
+  const colors = Array.isArray(attrs.dominantColors)
+    ? (attrs.dominantColors as string[])
+    : [];
+  if (colors.length) parts.push(`Colours: ${colors.join(", ")}`);
+  if (attrs.notes) parts.push(`Notes: ${attrs.notes}`);
+  if (attrs.aiDescription) parts.push(attrs.aiDescription);
+  return parts.join(". ") || "Unknown fabric";
+}
+
 export function buildOrnamentSearchDocument(attrs: {
   name: string | null;
   brand?: string | null;

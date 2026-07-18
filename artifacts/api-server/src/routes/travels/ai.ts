@@ -13,6 +13,7 @@ import {
 } from "../../lib/ai-client";
 import { getTimeZone } from "../../lib/travels/google-maps";
 import { getConfig } from "../../lib/app-config";
+import { fetchJsonSafe } from "../../lib/ssrf-safe-fetch";
 
 // Guidance for the openrouter:subagent server tool: the chat assistant can
 // delegate self-contained lookups (e.g. "list typical costs for X",
@@ -299,14 +300,10 @@ router.post("/explore", aiLimiter, async (req, res) => {
   let lat = 0;
   let lng = 0;
   try {
-    const geoResp = await fetch(
+    const geoData = await fetchJsonSafe<Array<{ lat: string; lon: string }>>(
       `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(destination)}&format=json&limit=1`,
       { headers: { "User-Agent": "Batchelor-App/1.0 (app.batchelor.app)" } },
     );
-    const geoData = (await geoResp.json()) as Array<{
-      lat: string;
-      lon: string;
-    }>;
     if (geoData.length > 0) {
       lat = parseFloat(geoData[0].lat);
       lng = parseFloat(geoData[0].lon);

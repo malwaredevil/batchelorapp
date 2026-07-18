@@ -6,6 +6,7 @@ import { requireAuth } from "../middleware/auth";
 import dns from "node:dns";
 import { isIP } from "node:net";
 import { Agent, fetch as undiciFetch } from "undici";
+import { XMLParser } from "fast-xml-parser";
 
 const router: IRouter = Router();
 
@@ -326,6 +327,14 @@ function extractText(raw: string): string {
     .trim();
 }
 
+const xmlParserInstance = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: "@_",
+  processEntities: true,
+  htmlEntities: true,
+  isArray: (_, jpath) => jpath === "rss.channel.item" || jpath === "feed.entry",
+});
+
 function parseRss(xml: string): {
   feedTitle: string;
   items: Array<{
@@ -335,43 +344,82 @@ function parseRss(xml: string): {
     description: string;
   }>;
 } {
-  const feedTitleMatch = xml.match(
-    /<channel[^>]*>[\s\S]*?<title[^>]*>([\s\S]*?)<\/title>/,
-  );
-  const feedTitle = feedTitleMatch
-    ? extractText(feedTitleMatch[1])
-    : "RSS Feed";
+  try {
+    const parsed = xmlParserInstance.parse(xml) as Record<string, unknown>;
 
-  // Handle both RSS <item> and Atom <entry>
-  const tagRe = /<(?:item|entry)[^>]*>([\s\S]*?)<\/(?:item|entry)>/g;
-  const itemMatches = [...xml.matchAll(tagRe)];
+    // RSS 2.0: rss.channel
+    const channel = (parsed as { rss?: { channel?: Record<string, unknown> } })
+      ?.rss?.channel;
+    if (channel) {
+      const feedTitle = extractText(String(channel.title ?? "RSS Feed")).slice(
+        0,
+        200,
+      );
+      const rawItems = (channel.item as unknown[]) ?? [];
+      return {
+        feedTitle,
+        items: rawItems.slice(0, 8).map((raw) => {
+          const item = raw as Record<string, unknown>;
+          return {
+            title: extractText(String(item.title ?? "")).slice(0, 200),
+            link: extractText(String(item.link ?? ""))
+              .trim()
+              .slice(0, 500),
+            pubDate: String(item.pubDate ?? "")
+              .trim()
+              .slice(0, 100),
+            description: extractText(String(item.description ?? "")).slice(
+              0,
+              300,
+            ),
+          };
+        }),
+      };
+    }
 
-  const items = itemMatches.slice(0, 8).map((m) => {
-    const item = m[1];
-    const titleRaw = item.match(/<title[^>]*>([\s\S]*?)<\/title>/)?.[1] ?? "";
-    // RSS uses <link>, Atom uses <link href="..."/>
-    const linkRaw =
-      item.match(/<link[^>]*>([\s\S]*?)<\/link>/)?.[1] ??
-      item.match(/<link[^>]+href=["']([^"']+)["']/i)?.[1] ??
-      "";
-    const pubDateRaw =
-      item.match(/<pubDate[^>]*>([\s\S]*?)<\/pubDate>/)?.[1] ??
-      item.match(/<published[^>]*>([\s\S]*?)<\/published>/)?.[1] ??
-      item.match(/<updated[^>]*>([\s\S]*?)<\/updated>/)?.[1] ??
-      "";
-    const descRaw =
-      item.match(/<description[^>]*>([\s\S]*?)<\/description>/)?.[1] ??
-      item.match(/<summary[^>]*>([\s\S]*?)<\/summary>/)?.[1] ??
-      "";
-    return {
-      title: extractText(titleRaw).slice(0, 200),
-      link: extractText(linkRaw).trim().slice(0, 500),
-      pubDate: pubDateRaw.trim().slice(0, 100),
-      description: extractText(descRaw).slice(0, 300),
-    };
-  });
+    // Atom: feed.entry
+    const feed = (parsed as { feed?: Record<string, unknown> })?.feed;
+    if (feed) {
+      const feedTitle = extractText(String(feed.title ?? "RSS Feed")).slice(
+        0,
+        200,
+      );
+      const rawEntries = (feed.entry as unknown[]) ?? [];
+      return {
+        feedTitle,
+        items: rawEntries.slice(0, 8).map((raw) => {
+          const entry = raw as Record<string, unknown>;
+          const links = (
+            Array.isArray(entry.link)
+              ? entry.link
+              : entry.link
+                ? [entry.link]
+                : []
+          ) as Array<Record<string, string> | string>;
+          const altLink =
+            links.find(
+              (l) => typeof l === "object" && l["@_rel"] === "alternate",
+            ) ?? links[0];
+          const link =
+            typeof altLink === "string"
+              ? altLink
+              : ((altLink as Record<string, string>)?.["@_href"] ?? "");
+          return {
+            title: extractText(String(entry.title ?? "")).slice(0, 200),
+            link: extractText(link).trim().slice(0, 500),
+            pubDate: String(entry.published ?? entry.updated ?? "")
+              .trim()
+              .slice(0, 100),
+            description: extractText(String(entry.summary ?? "")).slice(0, 300),
+          };
+        }),
+      };
+    }
+  } catch {
+    // Fall through to empty result on any parse error
+  }
 
-  return { feedTitle, items };
+  return { feedTitle: "RSS Feed", items: [] };
 }
 
 function formatRelativeDate(raw: string): string {

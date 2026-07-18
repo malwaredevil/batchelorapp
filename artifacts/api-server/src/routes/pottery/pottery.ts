@@ -70,6 +70,11 @@ import {
 } from "../../lib/visual-embed";
 import { serializeItem, serializeItems } from "../../lib/pottery/serialize";
 import { logger } from "../../lib/logger";
+import pLimit from "p-limit";
+import {
+  semanticCollectionSearch,
+  buildPotterySearchDocument,
+} from "../../lib/collection-search";
 
 // All columns except the three embedding vectors — the 1536-dim text embedding,
 // the 1024-dim whole-piece visual embedding, and the 1024-dim zone embedding are
@@ -131,7 +136,78 @@ router.get("/items", async (req, res) => {
   }
   const { q, categoryId, page, pageSize } = parsed.data;
 
-  // Build WHERE conditions for server-side filtering.
+  // When a text query is provided, try hybrid semantic search first.
+  // Uses vector embeddings + Voyage reranking for ranked relevance ordering.
+  // Falls back to ILIKE when embeddings are unavailable or the result set is empty.
+  if (q && q.trim()) {
+    try {
+      let catItemIds: Set<number> | null = null;
+      if (categoryId !== undefined) {
+        const catRows = await db
+          .select({ itemId: itemCategories.itemId })
+          .from(itemCategories)
+          .where(eq(itemCategories.categoryId, categoryId));
+        catItemIds = new Set(catRows.map((r) => r.itemId));
+        if (catItemIds.size === 0) {
+          res.json(
+            ListPotteryResponse.parse({ items: [], total: 0, page, pageSize }),
+          );
+          return;
+        }
+      }
+
+      const rankedIds = await semanticCollectionSearch({
+        query: q.trim(),
+        table: potteryItems,
+        textEmbeddingCol: "embedding",
+        visualEmbeddingCol: "visual_embedding",
+        db,
+        fetchDocuments: async (ids) => {
+          const rows = await db
+            .select(itemColumns)
+            .from(potteryItems)
+            .where(inArray(potteryItems.id, ids));
+          return rows.map((r) => ({
+            id: r.id,
+            text: buildPotterySearchDocument(r),
+          }));
+        },
+      });
+
+      if (rankedIds.length > 0) {
+        const filteredIds = catItemIds
+          ? rankedIds.filter((id) => catItemIds!.has(id))
+          : rankedIds;
+
+        const total = filteredIds.length;
+        const offset = (page - 1) * pageSize;
+        const pageIds = filteredIds.slice(offset, offset + pageSize);
+
+        if (pageIds.length === 0) {
+          res.json(
+            ListPotteryResponse.parse({ items: [], total, page, pageSize }),
+          );
+          return;
+        }
+
+        const pageRows = await db
+          .select(itemColumns)
+          .from(potteryItems)
+          .where(inArray(potteryItems.id, pageIds));
+        const byId = new Map(pageRows.map((r) => [r.id, r]));
+        const orderedRows = pageIds
+          .filter((id) => byId.has(id))
+          .map((id) => byId.get(id)!);
+        const items = await serializeItems(orderedRows);
+        res.json(ListPotteryResponse.parse({ items, total, page, pageSize }));
+        return;
+      }
+    } catch {
+      // Semantic search unavailable (embeddings missing/AI down) — fall through to ILIKE.
+    }
+  }
+
+  // ILIKE fallback: plain text match on name/style/shape/maker/pattern.
   const conditions: SQL<unknown>[] = [];
   if (q && q.trim()) {
     const term = `%${q.trim().toLowerCase()}%`;
@@ -989,21 +1065,22 @@ export async function bulkReanalyzePotteryItems(
   const succeeded: number[] = [];
   const failed: number[] = [];
 
-  for (let i = 0; i < capped.length; i++) {
-    const id = capped[i]!;
-    try {
-      await runItemAnalysis(id);
-      succeeded.push(id);
-    } catch (err) {
-      logger.error({ itemId: id, err }, "bulk-reanalyze: item failed");
-      failed.push(id);
-    }
-    // Brief pause between items so we don't burst-fire Jina/OpenRouter
-    // requests fast enough to trigger their rate limiters.
-    if (i < capped.length - 1) {
-      await new Promise((resolve) => setTimeout(resolve, 300));
-    }
-  }
+  // Run up to 3 analyses concurrently instead of sequentially, so a
+  // 20-item bulk-reanalyze finishes in ~7 batches rather than ~20 serial steps.
+  const limit = pLimit(3);
+  await Promise.all(
+    capped.map((id) =>
+      limit(async () => {
+        try {
+          await runItemAnalysis(id);
+          succeeded.push(id);
+        } catch (err) {
+          logger.error({ itemId: id, err }, "bulk-reanalyze: item failed");
+          failed.push(id);
+        }
+      }),
+    ),
+  );
 
   return { succeeded, failed };
 }

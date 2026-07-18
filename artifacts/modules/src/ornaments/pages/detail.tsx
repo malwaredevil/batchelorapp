@@ -8,6 +8,7 @@ import {
   Lock,
   Unlock,
   Search,
+  ShoppingBag,
   Wand2,
   Download,
   Image as ImageIcon,
@@ -19,6 +20,7 @@ import {
   useUpdateOrnament,
   useDeleteOrnament,
   useLookupOrnamentBookValue,
+  useLookupOrnamentEbayPrice,
   useReanalyzeOrnament,
   getGetOrnamentQueryKey,
   getListOrnamentsQueryKey,
@@ -65,6 +67,7 @@ export default function OrnamentDetail() {
   const updateOrnament = useUpdateOrnament();
   const deleteOrnament = useDeleteOrnament();
   const lookupBookValue = useLookupOrnamentBookValue();
+  const lookupEbay = useLookupOrnamentEbayPrice();
   const reanalyze = useReanalyzeOrnament();
 
   const addImage = useUploadOrnamentImage(id);
@@ -73,6 +76,13 @@ export default function OrnamentDetail() {
 
   const [isDeleting, setIsDeleting] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [ebayResult, setEbayResult] = useState<{
+    priceMinUsd: number;
+    priceMaxUsd: number;
+    priceMedianUsd: number;
+    listingCount: number;
+    searchQuery?: string;
+  } | null>(null);
 
   // Auto-save state
   const [title, setTitle] = useState("");
@@ -277,6 +287,27 @@ export default function OrnamentDetail() {
     } catch (err) {
       toast.dismiss("price");
       toast.error("Failed to lookup book value");
+    }
+  };
+
+  const handleLookupEbayPrice = async () => {
+    if (!ornament?.name) return;
+    try {
+      toast.loading("Searching eBay sold listings…", { id: "ebay" });
+      const result = await lookupEbay.mutateAsync({ id });
+      toast.dismiss("ebay");
+      if (result.listingCount > 0) {
+        setEbayResult(result);
+        toast.success(
+          `Found ${result.listingCount} sold listing${result.listingCount !== 1 ? "s" : ""} — median $${result.priceMedianUsd.toFixed(0)}`,
+        );
+        queryClient.invalidateQueries({ queryKey: getGetOrnamentQueryKey(id) });
+      } else {
+        toast.error("No eBay sold listings found for this ornament.");
+      }
+    } catch {
+      toast.dismiss("ebay");
+      toast.error("Failed to look up eBay price");
     }
   };
 
@@ -499,7 +530,7 @@ export default function OrnamentDetail() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-2">
             <Button
               variant="outline"
               className="h-auto py-3 flex flex-col gap-1 items-center justify-center bg-card shadow-sm"
@@ -511,7 +542,20 @@ export default function OrnamentDetail() {
               ) : (
                 <Search className="h-5 w-5 text-primary" />
               )}
-              <span className="text-xs">Price Check</span>
+              <span className="text-xs">Book Value</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-auto py-3 flex flex-col gap-1 items-center justify-center bg-card shadow-sm"
+              onClick={handleLookupEbayPrice}
+              disabled={lookupEbay.isPending}
+            >
+              {lookupEbay.isPending ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <ShoppingBag className="h-5 w-5 text-primary" />
+              )}
+              <span className="text-xs">eBay Price</span>
             </Button>
             <Button
               variant="outline"
@@ -540,6 +584,47 @@ export default function OrnamentDetail() {
                 Source: {ornament.bookValueSource} <br />
                 Updated:{" "}
                 {new Date(ornament.bookValueUpdatedAt!).toLocaleDateString()}
+              </p>
+            </div>
+          )}
+
+          {ebayResult && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium text-amber-900 uppercase tracking-wider">
+                  eBay Sold Listings
+                </p>
+                <button
+                  onClick={() => setEbayResult(null)}
+                  className="text-amber-500 hover:text-amber-700 text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <p className="text-lg font-bold text-amber-800">
+                    ${ebayResult.priceMinUsd.toFixed(0)}
+                  </p>
+                  <p className="text-[10px] text-amber-600">Low</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-amber-800">
+                    ${ebayResult.priceMedianUsd.toFixed(0)}
+                  </p>
+                  <p className="text-[10px] text-amber-600">Median</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-amber-800">
+                    ${ebayResult.priceMaxUsd.toFixed(0)}
+                  </p>
+                  <p className="text-[10px] text-amber-600">High</p>
+                </div>
+              </div>
+              <p className="text-[10px] text-amber-600 mt-2 text-center">
+                {ebayResult.listingCount} sold listing
+                {ebayResult.listingCount !== 1 ? "s" : ""} · "
+                {ebayResult.searchQuery}"
               </p>
             </div>
           )}

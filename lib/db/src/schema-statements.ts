@@ -2319,4 +2319,72 @@ export const STATEMENTS: string[] = [
   )`,
   `ALTER TABLE quilting_fabric_identity_research ENABLE ROW LEVEL SECURITY`,
   `CREATE INDEX IF NOT EXISTS quilting_fabric_identity_research_fabric_idx ON quilting_fabric_identity_research (fabric_id)`,
+
+  // ---------------------------------------------------------------------------
+  // #213 / #214 — eBay market-value cache on pottery_items and ornaments_items
+  // ---------------------------------------------------------------------------
+  `ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS ebay_price_min_usd    NUMERIC(10,2)`,
+  `ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS ebay_price_max_usd    NUMERIC(10,2)`,
+  `ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS ebay_price_median_usd NUMERIC(10,2)`,
+  `ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS ebay_price_cached_at  TIMESTAMPTZ`,
+  `ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS ebay_price_listings   JSONB`,
+
+  `ALTER TABLE ornaments_items ADD COLUMN IF NOT EXISTS ebay_price_min_usd    NUMERIC(10,2)`,
+  `ALTER TABLE ornaments_items ADD COLUMN IF NOT EXISTS ebay_price_max_usd    NUMERIC(10,2)`,
+  `ALTER TABLE ornaments_items ADD COLUMN IF NOT EXISTS ebay_price_median_usd NUMERIC(10,2)`,
+  `ALTER TABLE ornaments_items ADD COLUMN IF NOT EXISTS ebay_price_cached_at  TIMESTAMPTZ`,
+  `ALTER TABLE ornaments_items ADD COLUMN IF NOT EXISTS ebay_price_listings   JSONB`,
+
+  // ---------------------------------------------------------------------------
+  // #215 — Etsy price-suggestion cache on quilting_shopping_items
+  // ---------------------------------------------------------------------------
+  `ALTER TABLE quilting_shopping_items ADD COLUMN IF NOT EXISTS etsy_price_suggestion_usd REAL`,
+  `ALTER TABLE quilting_shopping_items ADD COLUMN IF NOT EXISTS etsy_price_cached_at      TIMESTAMPTZ`,
+  `ALTER TABLE quilting_shopping_items ADD COLUMN IF NOT EXISTS etsy_price_listings        JSONB`,
+
+  // ---------------------------------------------------------------------------
+  // #216 — Flight price cache on travels_wishlist
+  // ---------------------------------------------------------------------------
+  `ALTER TABLE travels_wishlist ADD COLUMN IF NOT EXISTS flight_origin_iata    TEXT`,
+  `ALTER TABLE travels_wishlist ADD COLUMN IF NOT EXISTS flight_price_min_usd  NUMERIC(10,2)`,
+  `ALTER TABLE travels_wishlist ADD COLUMN IF NOT EXISTS flight_price_cached_at TIMESTAMPTZ`,
+  `ALTER TABLE travels_wishlist ADD COLUMN IF NOT EXISTS flight_price_options   JSONB`,
+
+  // ---------------------------------------------------------------------------
+  // #249 — Pottery marketplace watchlist
+  // ---------------------------------------------------------------------------
+  `CREATE TABLE IF NOT EXISTS pottery_watchlist_items (
+    id                   SERIAL PRIMARY KEY,
+    created_by_user_id   INTEGER,
+    title                TEXT NOT NULL,
+    keywords             TEXT NOT NULL,
+    price_min_usd        NUMERIC(10,2),
+    price_max_usd        NUMERIC(10,2),
+    active               BOOLEAN NOT NULL DEFAULT true,
+    last_checked_at      TIMESTAMPTZ,
+    last_alert_at        TIMESTAMPTZ,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE pottery_watchlist_items ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS pottery_watchlist_active_idx ON pottery_watchlist_items (active)`,
+  `CREATE INDEX IF NOT EXISTS pottery_watchlist_user_idx   ON pottery_watchlist_items (created_by_user_id)`,
+
+  `CREATE TABLE IF NOT EXISTS pottery_watchlist_alerts (
+    id                SERIAL PRIMARY KEY,
+    watchlist_item_id INTEGER NOT NULL REFERENCES pottery_watchlist_items(id) ON DELETE CASCADE,
+    platform          TEXT NOT NULL,
+    listing_id        TEXT NOT NULL,
+    title             TEXT NOT NULL,
+    price_usd         NUMERIC(10,2),
+    condition         TEXT,
+    image_url         TEXT,
+    listing_url       TEXT NOT NULL,
+    sold_at           TIMESTAMPTZ,
+    seen_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    dismissed         BOOLEAN NOT NULL DEFAULT false
+  )`,
+  `ALTER TABLE pottery_watchlist_alerts ENABLE ROW LEVEL SECURITY`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS pottery_watchlist_alerts_dedup_idx
+    ON pottery_watchlist_alerts (watchlist_item_id, platform, listing_id)`,
+  `CREATE INDEX IF NOT EXISTS pottery_watchlist_alerts_item_idx ON pottery_watchlist_alerts (watchlist_item_id)`,
 ];

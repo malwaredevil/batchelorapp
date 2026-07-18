@@ -4,6 +4,8 @@ import { z } from "zod/v4";
 import { db, travelsWishlist } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { fetchJsonSafe } from "../../lib/ssrf-safe-fetch";
+import { lookupFlightPrices } from "../../lib/travels/flights";
+import { env } from "../../lib/env";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -110,6 +112,73 @@ router.delete("/wishlist/:id", async (req, res) => {
   }
   await db.delete(travelsWishlist).where(eq(travelsWishlist.id, id));
   res.status(204).send();
+});
+
+// ---------------------------------------------------------------------------
+// #216 — Cheapest flight prices (on-demand, cached on wishlist item)
+// ---------------------------------------------------------------------------
+
+const CheckFlightsParams = z.object({ id: z.coerce.number().int().positive() });
+const CheckFlightsBody = z.object({
+  originIata: z
+    .string()
+    .min(3)
+    .max(4)
+    .transform((s) => s.toUpperCase()),
+});
+
+router.post("/wishlist/:id/check-flights", async (req, res) => {
+  const { id } = CheckFlightsParams.parse(req.params);
+
+  if (!env.apifyApiToken) {
+    res.status(503).json({ error: "Apify integration not configured." });
+    return;
+  }
+
+  const [row] = await db
+    .select()
+    .from(travelsWishlist)
+    .where(eq(travelsWishlist.id, id));
+  if (!row) {
+    res.status(404).json({ error: "Wishlist item not found." });
+    return;
+  }
+
+  const { originIata } = CheckFlightsBody.parse(req.body);
+  const result = await lookupFlightPrices(
+    originIata,
+    row.destination,
+    env.apifyApiToken,
+  );
+
+  if (!result) {
+    res.status(422).json({
+      error: `No flight options found from ${originIata} to ${row.destination}.`,
+    });
+    return;
+  }
+
+  const [updated] = await db
+    .update(travelsWishlist)
+    .set({
+      flightOriginIata: originIata,
+      flightPriceMinUsd: String(result.priceMinUsd),
+      flightPriceCachedAt: new Date(),
+      flightPriceOptions: result.options as unknown as Record<string, unknown>,
+    })
+    .where(eq(travelsWishlist.id, id))
+    .returning();
+
+  res.json({
+    originIata: updated.flightOriginIata,
+    destination: updated.destination,
+    priceMinUsd: updated.flightPriceMinUsd
+      ? Number(updated.flightPriceMinUsd)
+      : null,
+    cachedAt: updated.flightPriceCachedAt?.toISOString() ?? null,
+    currency: result.currency,
+    options: result.options,
+  });
 });
 
 export default router;

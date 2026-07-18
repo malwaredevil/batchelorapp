@@ -153,6 +153,35 @@ CREATE TABLE IF NOT EXISTS pottery_item_categories (
   PRIMARY KEY (item_id, category_id)
 );
 
+CREATE TABLE IF NOT EXISTS pottery_watchlist_items (
+  id                  SERIAL PRIMARY KEY,
+  created_by_user_id  INTEGER,
+  title               TEXT NOT NULL,
+  keywords            TEXT NOT NULL,
+  price_min_usd       NUMERIC(10,2),
+  price_max_usd       NUMERIC(10,2),
+  active              BOOLEAN NOT NULL DEFAULT TRUE,
+  last_checked_at     TIMESTAMPTZ,
+  last_alert_at       TIMESTAMPTZ,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS pottery_watchlist_alerts (
+  id                SERIAL PRIMARY KEY,
+  watchlist_item_id INTEGER NOT NULL REFERENCES pottery_watchlist_items(id) ON DELETE CASCADE,
+  platform          TEXT NOT NULL,
+  listing_id        TEXT NOT NULL,
+  title             TEXT NOT NULL,
+  price_usd         NUMERIC(10,2),
+  condition         TEXT,
+  image_url         TEXT,
+  listing_url       TEXT NOT NULL,
+  sold_at           TIMESTAMPTZ,
+  seen_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  dismissed         BOOLEAN NOT NULL DEFAULT FALSE,
+  UNIQUE (watchlist_item_id, platform, listing_id)
+);
+
 -- Ornaments
 CREATE TABLE IF NOT EXISTS ornaments_categories (
   id         SERIAL PRIMARY KEY,
@@ -1564,6 +1593,44 @@ async function main() {
     table: "pottery_item_categories",
     columns: ["item_id", "category_id"],
   });
+
+  summary["pottery_watchlist_items"] = await copyTable(source, dest, {
+    table: "pottery_watchlist_items",
+    columns: [
+      "id",
+      "created_by_user_id",
+      "title",
+      "keywords",
+      "price_min_usd",
+      "price_max_usd",
+      "active",
+      "last_checked_at",
+      "last_alert_at",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "pottery_watchlist_items", "id");
+
+  summary["pottery_watchlist_alerts"] = await copyTable(source, dest, {
+    table: "pottery_watchlist_alerts",
+    columns: [
+      "id",
+      "watchlist_item_id",
+      "platform",
+      "listing_id",
+      "title",
+      "price_usd",
+      "condition",
+      "image_url",
+      "listing_url",
+      "sold_at",
+      "seen_at",
+      "dismissed",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "pottery_watchlist_alerts", "id");
 
   // ── Ornaments ─────────────────────────────────────────────────────────────
   summary["ornaments_categories"] = await copyTable(source, dest, {

@@ -8,6 +8,7 @@ servers:
     description: Base API path
 tags:
   - name: travels
+  - name: wishlist
     description: Travel planning operations
 paths:
   /trips:
@@ -1049,6 +1050,130 @@ paths:
               schema:
                 $ref: "#/components/schemas/TravelsMonitoringPreferences"
 
+  # ---------------------------------------------------------------------------
+  # Wishlist
+  # ---------------------------------------------------------------------------
+
+  /wishlist:
+    get:
+      operationId: listWishlist
+      tags: [wishlist]
+      summary: List all wishlist destinations (household-shared)
+      responses:
+        "200":
+          description: Wishlist items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WishlistItem"
+    post:
+      operationId: createWishlistItem
+      tags: [wishlist]
+      summary: Add a new wishlist destination
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWishlistBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WishlistItem"
+
+  /wishlist/{id}:
+    patch:
+      operationId: updateWishlistItem
+      tags: [wishlist]
+      summary: Update a wishlist item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWishlistBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WishlistItem"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deleteWishlistItem
+      tags: [wishlist]
+      summary: Delete a wishlist item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # #216 — Cheapest flight prices
+  /wishlist/{id}/check-flights:
+    post:
+      operationId: checkWishlistFlights
+      tags: [wishlist]
+      summary: Look up cheapest round-trip flights for a wishlist destination and cache them
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckFlightsBody"
+      responses:
+        "200":
+          description: Flight price data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlightPriceResult"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: No flights found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Apify not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
 components:
   parameters:
     TripId:
@@ -1071,6 +1196,123 @@ components:
       properties:
         error:
           type: string
+
+    WishlistItem:
+      type: object
+      required: [id, destination, done, sortOrder, createdAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: ["integer", "null"]
+        destination:
+          type: string
+        targetDate:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        lat:
+          type: ["number", "null"]
+        lng:
+          type: ["number", "null"]
+        done:
+          type: boolean
+        sortOrder:
+          type: integer
+        flightOriginIata:
+          type: ["string", "null"]
+        flightPriceMinUsd:
+          type: ["string", "null"]
+        flightPriceCachedAt:
+          type: ["string", "null"]
+        flightPriceOptions:
+          nullable: true
+        createdAt:
+          type: string
+
+    CreateWishlistBody:
+      type: object
+      required: [destination]
+      properties:
+        destination:
+          type: string
+          minLength: 1
+        targetDate:
+          type: string
+        notes:
+          type: string
+        sortOrder:
+          type: integer
+          default: 0
+
+    UpdateWishlistBody:
+      type: object
+      properties:
+        destination:
+          type: string
+          minLength: 1
+        targetDate:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        lat:
+          type: ["number", "null"]
+        lng:
+          type: ["number", "null"]
+        done:
+          type: boolean
+        sortOrder:
+          type: integer
+
+    CheckFlightsBody:
+      type: object
+      required: [originIata]
+      properties:
+        originIata:
+          type: string
+          minLength: 3
+          maxLength: 4
+          description: IATA airport code for the departure airport (e.g. "LAX", "JFK")
+
+    FlightOption:
+      type: object
+      required: [price, currency]
+      properties:
+        price:
+          type: number
+        currency:
+          type: string
+        airline:
+          type: ["string", "null"]
+        departureDate:
+          type: ["string", "null"]
+        returnDate:
+          type: ["string", "null"]
+        durationMinutes:
+          type: ["integer", "null"]
+        stops:
+          type: ["integer", "null"]
+        deepLink:
+          type: ["string", "null"]
+
+    FlightPriceResult:
+      type: object
+      required: [originIata, destination, options]
+      properties:
+        originIata:
+          type: string
+        destination:
+          type: string
+        priceMinUsd:
+          type: ["number", "null"]
+        cachedAt:
+          type: ["string", "null"]
+        currency:
+          type: string
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/FlightOption"
 
     Trip:
       type: object

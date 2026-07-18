@@ -376,6 +376,45 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BarcodeLookupResult"
+  # #214 — eBay sold-listings fallback
+  /items/{id}/ebay-price-lookup:
+    post:
+      operationId: lookupOrnamentEbayPrice
+      tags:
+        - ornaments
+      summary: Look up eBay sold-listing prices and cache them on the ornament
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: eBay price data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EbayPriceResult"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: No eBay listings found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Apify not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /items/{id}/book-value-lookup:
     post:
       operationId: lookupOrnamentBookValue
@@ -784,6 +823,47 @@ paths:
 
 components:
   schemas:
+    EbayListing:
+      type: object
+      required: [title, soldPrice, currency]
+      properties:
+        title:
+          type: string
+        soldPrice:
+          type: number
+        currency:
+          type: string
+        soldDate:
+          type: ["string", "null"]
+        condition:
+          type: ["string", "null"]
+        imageUrl:
+          type: ["string", "null"]
+        itemUrl:
+          type: ["string", "null"]
+
+    EbayPriceResult:
+      type: object
+      required:
+        [priceMinUsd, priceMaxUsd, priceMedianUsd, listingCount, listings]
+      properties:
+        priceMinUsd:
+          type: number
+        priceMaxUsd:
+          type: number
+        priceMedianUsd:
+          type: number
+        listingCount:
+          type: integer
+        listings:
+          type: array
+          items:
+            $ref: "#/components/schemas/EbayListing"
+        cachedAt:
+          type: ["string", "null"]
+        searchQuery:
+          type: string
+
     Category:
       type: object
       required:

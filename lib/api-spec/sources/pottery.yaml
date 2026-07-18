@@ -474,6 +474,221 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  # #213 — eBay market-value estimate
+  /pottery/{id}/estimate-market-value:
+    post:
+      operationId: estimatePotteryMarketValue
+      tags: [pottery]
+      summary: Look up eBay sold-listing prices and cache them on the item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: eBay price data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EbayPriceResult"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: No eBay listings found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Apify integration not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # #249 — Pottery marketplace watchlist
+  /watchlist:
+    get:
+      operationId: listWatchlistItems
+      tags: [pottery]
+      summary: List all pottery watchlist items (household-shared)
+      responses:
+        "200":
+          description: Watchlist items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WatchlistItem"
+    post:
+      operationId: createWatchlistItem
+      tags: [pottery]
+      summary: Create a new watchlist item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWatchlistItemBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatchlistItem"
+
+  /watchlist/{id}:
+    patch:
+      operationId: updateWatchlistItem
+      tags: [pottery]
+      summary: Update a watchlist item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWatchlistItemBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatchlistItem"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deleteWatchlistItem
+      tags: [pottery]
+      summary: Delete a watchlist item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /watchlist/{id}/scan:
+    post:
+      operationId: scanWatchlistItem
+      tags: [pottery]
+      summary: Run an on-demand eBay scan and upsert new alerts
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Scan results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatchlistScanResult"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Apify integration not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /watchlist/{id}/alerts:
+    get:
+      operationId: listWatchlistAlerts
+      tags: [pottery]
+      summary: List alerts for a watchlist item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WatchlistAlert"
+
+  /watchlist/{id}/alerts/{alertId}/dismiss:
+    patch:
+      operationId: dismissWatchlistAlert
+      tags: [pottery]
+      summary: Dismiss a watchlist alert
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: alertId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Dismissed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dismissed:
+                    type: boolean
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /watchlist/alerts/unseen:
+    get:
+      operationId: listUnseenWatchlistAlerts
+      tags: [pottery]
+      summary: List all undismissed alerts across all watchlist items
+      responses:
+        "200":
+          description: Undismissed alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WatchlistAlert"
+
   /categories:
     get:
       operationId: listCategories
@@ -676,6 +891,153 @@ paths:
                 $ref: "#/components/schemas/CollectionStats"
 components:
   schemas:
+    EbayListing:
+      type: object
+      required: [title, soldPrice, currency]
+      properties:
+        title:
+          type: string
+        soldPrice:
+          type: number
+        currency:
+          type: string
+        soldDate:
+          type: ["string", "null"]
+        condition:
+          type: ["string", "null"]
+        imageUrl:
+          type: ["string", "null"]
+        itemUrl:
+          type: ["string", "null"]
+
+    EbayPriceResult:
+      type: object
+      required:
+        [priceMinUsd, priceMaxUsd, priceMedianUsd, listingCount, listings]
+      properties:
+        priceMinUsd:
+          type: number
+        priceMaxUsd:
+          type: number
+        priceMedianUsd:
+          type: number
+        listingCount:
+          type: integer
+        listings:
+          type: array
+          items:
+            $ref: "#/components/schemas/EbayListing"
+        cachedAt:
+          type: ["string", "null"]
+        searchQuery:
+          type: string
+
+    WatchlistItem:
+      type: object
+      required: [id, title, keywords, active, createdAt]
+      properties:
+        id:
+          type: integer
+        createdByUserId:
+          type: ["integer", "null"]
+        title:
+          type: string
+        keywords:
+          type: string
+        priceMinUsd:
+          type: ["string", "null"]
+        priceMaxUsd:
+          type: ["string", "null"]
+        active:
+          type: boolean
+        lastCheckedAt:
+          type: ["string", "null"]
+        lastAlertAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    WatchlistAlert:
+      type: object
+      required:
+        [
+          id,
+          watchlistItemId,
+          platform,
+          listingId,
+          title,
+          listingUrl,
+          dismissed,
+          seenAt,
+        ]
+      properties:
+        id:
+          type: integer
+        watchlistItemId:
+          type: integer
+        platform:
+          type: string
+        listingId:
+          type: string
+        title:
+          type: string
+        priceUsd:
+          type: ["string", "null"]
+        condition:
+          type: ["string", "null"]
+        imageUrl:
+          type: ["string", "null"]
+        listingUrl:
+          type: string
+        soldAt:
+          type: ["string", "null"]
+        seenAt:
+          type: string
+        dismissed:
+          type: boolean
+
+    WatchlistScanResult:
+      type: object
+      required: [newAlerts, totalListings]
+      properties:
+        newAlerts:
+          type: integer
+        totalListings:
+          type: integer
+        searchQuery:
+          type: string
+
+    CreateWatchlistItemBody:
+      type: object
+      required: [title, keywords]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        keywords:
+          type: string
+          minLength: 1
+          maxLength: 500
+        priceMinUsd:
+          type: ["number", "null"]
+        priceMaxUsd:
+          type: ["number", "null"]
+
+    UpdateWatchlistItemBody:
+      type: object
+      properties:
+        title:
+          type: string
+        keywords:
+          type: string
+        priceMinUsd:
+          type: ["number", "null"]
+        priceMaxUsd:
+          type: ["number", "null"]
+        active:
+          type: boolean
+
     HealthStatus:
       type: object
       properties:

@@ -34,6 +34,7 @@ import type {
   DeleteOrnamentUnusedCategories200,
   DeletePotteryUnusedCategories200,
   DeleteQuiltingUnusedCategories200,
+  DismissWatchlistAlert200,
   Error,
   ExtractPatternRequirements200,
   ForgotPasswordInput,
@@ -102,6 +103,7 @@ import type {
   OrnamentsCategory,
   OrnamentsCategoryColorInput,
   OrnamentsCategoryInput,
+  OrnamentsEbayPriceResult,
   OrnamentsMergeCategoryInput,
   OrnamentsOrnamentIdentityResearch,
   OrnamentsOrnamentImage,
@@ -125,6 +127,8 @@ import type {
   PotteryCategoryInput,
   PotteryCollectionStats,
   PotteryCompareResult,
+  PotteryCreateWatchlistItemBody,
+  PotteryEbayPriceResult,
   PotteryMergeCategoryInput,
   PotteryPotteryBulkReanalyzeInput,
   PotteryPotteryBulkReanalyzeResult,
@@ -135,6 +139,10 @@ import type {
   PotteryPotteryUpdate,
   PotteryPrimaryImageSelection,
   PotteryStragglers,
+  PotteryUpdateWatchlistItemBody,
+  PotteryWatchlistAlert,
+  PotteryWatchlistItem,
+  PotteryWatchlistScanResult,
   QuiltingAddImageInput,
   QuiltingApplyFabricResearchInput,
   QuiltingBlock,
@@ -155,6 +163,7 @@ import type {
   QuiltingDetectSeamsInput,
   QuiltingDetectedSeams,
   QuiltingEntityImage,
+  QuiltingEtsyPriceSuggestion,
   QuiltingExtractBlocksResult,
   QuiltingFabric,
   QuiltingFabricIdentifier,
@@ -179,6 +188,7 @@ import type {
   QuiltingShoppingItem,
   QuiltingShoppingStats,
   QuiltingStaleCount,
+  QuiltingSuggestPriceBody,
   QuiltingUpdateBlockInput,
   QuiltingUpdateBlockTemplateInput,
   QuiltingUpdateCategoryColorsInput,
@@ -194,12 +204,15 @@ import type {
   SavePatternRequirementsBody,
   SendPhoneCodeInput,
   TravelsBulkCreatePackingItemsBody,
+  TravelsCheckFlightsBody,
   TravelsCheckReservationNow200,
   TravelsCreatePackingItemBody,
   TravelsCreatePackingTemplateBody,
   TravelsCreateTripBody,
+  TravelsCreateWishlistBody,
   TravelsExploreDestinationBody,
   TravelsExploreDestinationResult,
+  TravelsFlightPriceResult,
   TravelsGenerateItineraryBody,
   TravelsGmailMessageDetail,
   TravelsItineraryResult,
@@ -225,6 +238,8 @@ import type {
   TravelsUpdatePackingItemBody,
   TravelsUpdateReservationMonitoringBody,
   TravelsUpdateTripBody,
+  TravelsUpdateWishlistBody,
+  TravelsWishlistItem,
   UpdateAccountInput,
   UpdateTripDocumentBody,
   UploadAttachmentBody,
@@ -2061,6 +2076,662 @@ export const useSetPrimaryImage = <TError = ErrorType<Error>,
       > => {
       return useMutation(getSetPrimaryImageMutationOptions(options));
     }
+
+export const getEstimatePotteryMarketValueUrl = (id: number,) => {
+
+
+
+
+  return `/api/pottery/items/${id}/estimate-market-value`
+}
+
+/**
+ * @summary Look up eBay sold-listing prices and cache them on the item
+ */
+export const estimatePotteryMarketValue = async (id: number, options?: RequestInit): Promise<PotteryEbayPriceResult> => {
+
+  return customFetch<PotteryEbayPriceResult>(getEstimatePotteryMarketValueUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getEstimatePotteryMarketValueMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof estimatePotteryMarketValue>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof estimatePotteryMarketValue>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['estimatePotteryMarketValue'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof estimatePotteryMarketValue>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  estimatePotteryMarketValue(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type EstimatePotteryMarketValueMutationResult = NonNullable<Awaited<ReturnType<typeof estimatePotteryMarketValue>>>
+
+    export type EstimatePotteryMarketValueMutationError = ErrorType<Error>
+
+    /**
+ * @summary Look up eBay sold-listing prices and cache them on the item
+ */
+export const useEstimatePotteryMarketValue = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof estimatePotteryMarketValue>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof estimatePotteryMarketValue>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getEstimatePotteryMarketValueMutationOptions(options));
+    }
+
+export const getListWatchlistItemsUrl = () => {
+
+
+
+
+  return `/api/pottery/watchlist`
+}
+
+/**
+ * @summary List all pottery watchlist items (household-shared)
+ */
+export const listWatchlistItems = async ( options?: RequestInit): Promise<PotteryWatchlistItem[]> => {
+
+  return customFetch<PotteryWatchlistItem[]>(getListWatchlistItemsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListWatchlistItemsQueryKey = () => {
+    return [
+    `/api/pottery/watchlist`
+    ] as const;
+    }
+
+
+export const getListWatchlistItemsQueryOptions = <TData = Awaited<ReturnType<typeof listWatchlistItems>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWatchlistItems>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListWatchlistItemsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listWatchlistItems>>> = ({ signal }) => listWatchlistItems({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listWatchlistItems>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListWatchlistItemsQueryResult = NonNullable<Awaited<ReturnType<typeof listWatchlistItems>>>
+export type ListWatchlistItemsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all pottery watchlist items (household-shared)
+ */
+
+export function useListWatchlistItems<TData = Awaited<ReturnType<typeof listWatchlistItems>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWatchlistItems>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListWatchlistItemsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateWatchlistItemUrl = () => {
+
+
+
+
+  return `/api/pottery/watchlist`
+}
+
+/**
+ * @summary Create a new watchlist item
+ */
+export const createWatchlistItem = async (potteryCreateWatchlistItemBody: PotteryCreateWatchlistItemBody, options?: RequestInit): Promise<PotteryWatchlistItem> => {
+
+  return customFetch<PotteryWatchlistItem>(getCreateWatchlistItemUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      potteryCreateWatchlistItemBody,)
+  }
+);}
+
+
+
+
+export const getCreateWatchlistItemMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWatchlistItem>>, TError,{data: BodyType<PotteryCreateWatchlistItemBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createWatchlistItem>>, TError,{data: BodyType<PotteryCreateWatchlistItemBody>}, TContext> => {
+
+const mutationKey = ['createWatchlistItem'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createWatchlistItem>>, {data: BodyType<PotteryCreateWatchlistItemBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createWatchlistItem(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateWatchlistItemMutationResult = NonNullable<Awaited<ReturnType<typeof createWatchlistItem>>>
+    export type CreateWatchlistItemMutationBody = BodyType<PotteryCreateWatchlistItemBody>
+    export type CreateWatchlistItemMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a new watchlist item
+ */
+export const useCreateWatchlistItem = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWatchlistItem>>, TError,{data: BodyType<PotteryCreateWatchlistItemBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createWatchlistItem>>,
+        TError,
+        {data: BodyType<PotteryCreateWatchlistItemBody>},
+        TContext
+      > => {
+      return useMutation(getCreateWatchlistItemMutationOptions(options));
+    }
+
+export const getUpdateWatchlistItemUrl = (id: number,) => {
+
+
+
+
+  return `/api/pottery/watchlist/${id}`
+}
+
+/**
+ * @summary Update a watchlist item
+ */
+export const updateWatchlistItem = async (id: number,
+    potteryUpdateWatchlistItemBody: PotteryUpdateWatchlistItemBody, options?: RequestInit): Promise<PotteryWatchlistItem> => {
+
+  return customFetch<PotteryWatchlistItem>(getUpdateWatchlistItemUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      potteryUpdateWatchlistItemBody,)
+  }
+);}
+
+
+
+
+export const getUpdateWatchlistItemMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateWatchlistItem>>, TError,{id: number;data: BodyType<PotteryUpdateWatchlistItemBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateWatchlistItem>>, TError,{id: number;data: BodyType<PotteryUpdateWatchlistItemBody>}, TContext> => {
+
+const mutationKey = ['updateWatchlistItem'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateWatchlistItem>>, {id: number;data: BodyType<PotteryUpdateWatchlistItemBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateWatchlistItem(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateWatchlistItemMutationResult = NonNullable<Awaited<ReturnType<typeof updateWatchlistItem>>>
+    export type UpdateWatchlistItemMutationBody = BodyType<PotteryUpdateWatchlistItemBody>
+    export type UpdateWatchlistItemMutationError = ErrorType<Error>
+
+    /**
+ * @summary Update a watchlist item
+ */
+export const useUpdateWatchlistItem = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateWatchlistItem>>, TError,{id: number;data: BodyType<PotteryUpdateWatchlistItemBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateWatchlistItem>>,
+        TError,
+        {id: number;data: BodyType<PotteryUpdateWatchlistItemBody>},
+        TContext
+      > => {
+      return useMutation(getUpdateWatchlistItemMutationOptions(options));
+    }
+
+export const getDeleteWatchlistItemUrl = (id: number,) => {
+
+
+
+
+  return `/api/pottery/watchlist/${id}`
+}
+
+/**
+ * @summary Delete a watchlist item
+ */
+export const deleteWatchlistItem = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteWatchlistItemUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteWatchlistItemMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteWatchlistItem>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteWatchlistItem>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteWatchlistItem'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteWatchlistItem>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteWatchlistItem(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteWatchlistItemMutationResult = NonNullable<Awaited<ReturnType<typeof deleteWatchlistItem>>>
+
+    export type DeleteWatchlistItemMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a watchlist item
+ */
+export const useDeleteWatchlistItem = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteWatchlistItem>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteWatchlistItem>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteWatchlistItemMutationOptions(options));
+    }
+
+export const getScanWatchlistItemUrl = (id: number,) => {
+
+
+
+
+  return `/api/pottery/watchlist/${id}/scan`
+}
+
+/**
+ * @summary Run an on-demand eBay scan and upsert new alerts
+ */
+export const scanWatchlistItem = async (id: number, options?: RequestInit): Promise<PotteryWatchlistScanResult> => {
+
+  return customFetch<PotteryWatchlistScanResult>(getScanWatchlistItemUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getScanWatchlistItemMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof scanWatchlistItem>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof scanWatchlistItem>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['scanWatchlistItem'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof scanWatchlistItem>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  scanWatchlistItem(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ScanWatchlistItemMutationResult = NonNullable<Awaited<ReturnType<typeof scanWatchlistItem>>>
+
+    export type ScanWatchlistItemMutationError = ErrorType<Error>
+
+    /**
+ * @summary Run an on-demand eBay scan and upsert new alerts
+ */
+export const useScanWatchlistItem = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof scanWatchlistItem>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof scanWatchlistItem>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getScanWatchlistItemMutationOptions(options));
+    }
+
+export const getListWatchlistAlertsUrl = (id: number,) => {
+
+
+
+
+  return `/api/pottery/watchlist/${id}/alerts`
+}
+
+/**
+ * @summary List alerts for a watchlist item
+ */
+export const listWatchlistAlerts = async (id: number, options?: RequestInit): Promise<PotteryWatchlistAlert[]> => {
+
+  return customFetch<PotteryWatchlistAlert[]>(getListWatchlistAlertsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListWatchlistAlertsQueryKey = (id: number,) => {
+    return [
+    `/api/pottery/watchlist/${id}/alerts`
+    ] as const;
+    }
+
+
+export const getListWatchlistAlertsQueryOptions = <TData = Awaited<ReturnType<typeof listWatchlistAlerts>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWatchlistAlerts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListWatchlistAlertsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listWatchlistAlerts>>> = ({ signal }) => listWatchlistAlerts(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listWatchlistAlerts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListWatchlistAlertsQueryResult = NonNullable<Awaited<ReturnType<typeof listWatchlistAlerts>>>
+export type ListWatchlistAlertsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List alerts for a watchlist item
+ */
+
+export function useListWatchlistAlerts<TData = Awaited<ReturnType<typeof listWatchlistAlerts>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWatchlistAlerts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListWatchlistAlertsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getDismissWatchlistAlertUrl = (id: number,
+    alertId: number,) => {
+
+
+
+
+  return `/api/pottery/watchlist/${id}/alerts/${alertId}/dismiss`
+}
+
+/**
+ * @summary Dismiss a watchlist alert
+ */
+export const dismissWatchlistAlert = async (id: number,
+    alertId: number, options?: RequestInit): Promise<DismissWatchlistAlert200> => {
+
+  return customFetch<DismissWatchlistAlert200>(getDismissWatchlistAlertUrl(id,alertId),
+  {
+    ...options,
+    method: 'PATCH'
+
+
+  }
+);}
+
+
+
+
+export const getDismissWatchlistAlertMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof dismissWatchlistAlert>>, TError,{id: number;alertId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof dismissWatchlistAlert>>, TError,{id: number;alertId: number}, TContext> => {
+
+const mutationKey = ['dismissWatchlistAlert'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof dismissWatchlistAlert>>, {id: number;alertId: number}> = (props) => {
+          const {id,alertId} = props ?? {};
+
+          return  dismissWatchlistAlert(id,alertId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DismissWatchlistAlertMutationResult = NonNullable<Awaited<ReturnType<typeof dismissWatchlistAlert>>>
+
+    export type DismissWatchlistAlertMutationError = ErrorType<Error>
+
+    /**
+ * @summary Dismiss a watchlist alert
+ */
+export const useDismissWatchlistAlert = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof dismissWatchlistAlert>>, TError,{id: number;alertId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof dismissWatchlistAlert>>,
+        TError,
+        {id: number;alertId: number},
+        TContext
+      > => {
+      return useMutation(getDismissWatchlistAlertMutationOptions(options));
+    }
+
+export const getListUnseenWatchlistAlertsUrl = () => {
+
+
+
+
+  return `/api/pottery/watchlist/alerts/unseen`
+}
+
+/**
+ * @summary List all undismissed alerts across all watchlist items
+ */
+export const listUnseenWatchlistAlerts = async ( options?: RequestInit): Promise<PotteryWatchlistAlert[]> => {
+
+  return customFetch<PotteryWatchlistAlert[]>(getListUnseenWatchlistAlertsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListUnseenWatchlistAlertsQueryKey = () => {
+    return [
+    `/api/pottery/watchlist/alerts/unseen`
+    ] as const;
+    }
+
+
+export const getListUnseenWatchlistAlertsQueryOptions = <TData = Awaited<ReturnType<typeof listUnseenWatchlistAlerts>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listUnseenWatchlistAlerts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListUnseenWatchlistAlertsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listUnseenWatchlistAlerts>>> = ({ signal }) => listUnseenWatchlistAlerts({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listUnseenWatchlistAlerts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListUnseenWatchlistAlertsQueryResult = NonNullable<Awaited<ReturnType<typeof listUnseenWatchlistAlerts>>>
+export type ListUnseenWatchlistAlertsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all undismissed alerts across all watchlist items
+ */
+
+export function useListUnseenWatchlistAlerts<TData = Awaited<ReturnType<typeof listUnseenWatchlistAlerts>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listUnseenWatchlistAlerts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListUnseenWatchlistAlertsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getListPotteryCategoriesUrl = () => {
 
@@ -7036,6 +7707,78 @@ export const useDeleteShoppingItem = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDeleteShoppingItemMutationOptions(options));
+    }
+
+export const getSuggestShoppingItemPriceUrl = (id: number,) => {
+
+
+
+
+  return `/api/quilting/shopping/${id}/suggest-price`
+}
+
+/**
+ * @summary Look up Etsy listings and suggest a price for this shopping item
+ */
+export const suggestShoppingItemPrice = async (id: number,
+    quiltingSuggestPriceBody?: QuiltingSuggestPriceBody, options?: RequestInit): Promise<QuiltingEtsyPriceSuggestion> => {
+
+  return customFetch<QuiltingEtsyPriceSuggestion>(getSuggestShoppingItemPriceUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      quiltingSuggestPriceBody,)
+  }
+);}
+
+
+
+
+export const getSuggestShoppingItemPriceMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof suggestShoppingItemPrice>>, TError,{id: number;data?: BodyType<QuiltingSuggestPriceBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof suggestShoppingItemPrice>>, TError,{id: number;data?: BodyType<QuiltingSuggestPriceBody>}, TContext> => {
+
+const mutationKey = ['suggestShoppingItemPrice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof suggestShoppingItemPrice>>, {id: number;data?: BodyType<QuiltingSuggestPriceBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  suggestShoppingItemPrice(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SuggestShoppingItemPriceMutationResult = NonNullable<Awaited<ReturnType<typeof suggestShoppingItemPrice>>>
+    export type SuggestShoppingItemPriceMutationBody = BodyType<QuiltingSuggestPriceBody> | undefined
+    export type SuggestShoppingItemPriceMutationError = ErrorType<Error>
+
+    /**
+ * @summary Look up Etsy listings and suggest a price for this shopping item
+ */
+export const useSuggestShoppingItemPrice = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof suggestShoppingItemPrice>>, TError,{id: number;data?: BodyType<QuiltingSuggestPriceBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof suggestShoppingItemPrice>>,
+        TError,
+        {id: number;data?: BodyType<QuiltingSuggestPriceBody>},
+        TContext
+      > => {
+      return useMutation(getSuggestShoppingItemPriceMutationOptions(options));
     }
 
 export const getListLayoutsUrl = () => {
@@ -12835,6 +13578,368 @@ export const useTravelsUpdateMonitoringPreferences = <TError = ErrorType<unknown
       return useMutation(getTravelsUpdateMonitoringPreferencesMutationOptions(options));
     }
 
+export const getListWishlistUrl = () => {
+
+
+
+
+  return `/api/travels/wishlist`
+}
+
+/**
+ * @summary List all wishlist destinations (household-shared)
+ */
+export const listWishlist = async ( options?: RequestInit): Promise<TravelsWishlistItem[]> => {
+
+  return customFetch<TravelsWishlistItem[]>(getListWishlistUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListWishlistQueryKey = () => {
+    return [
+    `/api/travels/wishlist`
+    ] as const;
+    }
+
+
+export const getListWishlistQueryOptions = <TData = Awaited<ReturnType<typeof listWishlist>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWishlist>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListWishlistQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listWishlist>>> = ({ signal }) => listWishlist({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listWishlist>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListWishlistQueryResult = NonNullable<Awaited<ReturnType<typeof listWishlist>>>
+export type ListWishlistQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all wishlist destinations (household-shared)
+ */
+
+export function useListWishlist<TData = Awaited<ReturnType<typeof listWishlist>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWishlist>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListWishlistQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateWishlistItemUrl = () => {
+
+
+
+
+  return `/api/travels/wishlist`
+}
+
+/**
+ * @summary Add a new wishlist destination
+ */
+export const createWishlistItem = async (travelsCreateWishlistBody: TravelsCreateWishlistBody, options?: RequestInit): Promise<TravelsWishlistItem> => {
+
+  return customFetch<TravelsWishlistItem>(getCreateWishlistItemUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      travelsCreateWishlistBody,)
+  }
+);}
+
+
+
+
+export const getCreateWishlistItemMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWishlistItem>>, TError,{data: BodyType<TravelsCreateWishlistBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createWishlistItem>>, TError,{data: BodyType<TravelsCreateWishlistBody>}, TContext> => {
+
+const mutationKey = ['createWishlistItem'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createWishlistItem>>, {data: BodyType<TravelsCreateWishlistBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createWishlistItem(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateWishlistItemMutationResult = NonNullable<Awaited<ReturnType<typeof createWishlistItem>>>
+    export type CreateWishlistItemMutationBody = BodyType<TravelsCreateWishlistBody>
+    export type CreateWishlistItemMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Add a new wishlist destination
+ */
+export const useCreateWishlistItem = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWishlistItem>>, TError,{data: BodyType<TravelsCreateWishlistBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createWishlistItem>>,
+        TError,
+        {data: BodyType<TravelsCreateWishlistBody>},
+        TContext
+      > => {
+      return useMutation(getCreateWishlistItemMutationOptions(options));
+    }
+
+export const getUpdateWishlistItemUrl = (id: number,) => {
+
+
+
+
+  return `/api/travels/wishlist/${id}`
+}
+
+/**
+ * @summary Update a wishlist item
+ */
+export const updateWishlistItem = async (id: number,
+    travelsUpdateWishlistBody: TravelsUpdateWishlistBody, options?: RequestInit): Promise<TravelsWishlistItem> => {
+
+  return customFetch<TravelsWishlistItem>(getUpdateWishlistItemUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      travelsUpdateWishlistBody,)
+  }
+);}
+
+
+
+
+export const getUpdateWishlistItemMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateWishlistItem>>, TError,{id: number;data: BodyType<TravelsUpdateWishlistBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateWishlistItem>>, TError,{id: number;data: BodyType<TravelsUpdateWishlistBody>}, TContext> => {
+
+const mutationKey = ['updateWishlistItem'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateWishlistItem>>, {id: number;data: BodyType<TravelsUpdateWishlistBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateWishlistItem(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateWishlistItemMutationResult = NonNullable<Awaited<ReturnType<typeof updateWishlistItem>>>
+    export type UpdateWishlistItemMutationBody = BodyType<TravelsUpdateWishlistBody>
+    export type UpdateWishlistItemMutationError = ErrorType<Error>
+
+    /**
+ * @summary Update a wishlist item
+ */
+export const useUpdateWishlistItem = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateWishlistItem>>, TError,{id: number;data: BodyType<TravelsUpdateWishlistBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateWishlistItem>>,
+        TError,
+        {id: number;data: BodyType<TravelsUpdateWishlistBody>},
+        TContext
+      > => {
+      return useMutation(getUpdateWishlistItemMutationOptions(options));
+    }
+
+export const getDeleteWishlistItemUrl = (id: number,) => {
+
+
+
+
+  return `/api/travels/wishlist/${id}`
+}
+
+/**
+ * @summary Delete a wishlist item
+ */
+export const deleteWishlistItem = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteWishlistItemUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteWishlistItemMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteWishlistItem>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteWishlistItem>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteWishlistItem'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteWishlistItem>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteWishlistItem(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteWishlistItemMutationResult = NonNullable<Awaited<ReturnType<typeof deleteWishlistItem>>>
+
+    export type DeleteWishlistItemMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a wishlist item
+ */
+export const useDeleteWishlistItem = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteWishlistItem>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteWishlistItem>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteWishlistItemMutationOptions(options));
+    }
+
+export const getCheckWishlistFlightsUrl = (id: number,) => {
+
+
+
+
+  return `/api/travels/wishlist/${id}/check-flights`
+}
+
+/**
+ * @summary Look up cheapest round-trip flights for a wishlist destination and cache them
+ */
+export const checkWishlistFlights = async (id: number,
+    travelsCheckFlightsBody: TravelsCheckFlightsBody, options?: RequestInit): Promise<TravelsFlightPriceResult> => {
+
+  return customFetch<TravelsFlightPriceResult>(getCheckWishlistFlightsUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      travelsCheckFlightsBody,)
+  }
+);}
+
+
+
+
+export const getCheckWishlistFlightsMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof checkWishlistFlights>>, TError,{id: number;data: BodyType<TravelsCheckFlightsBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof checkWishlistFlights>>, TError,{id: number;data: BodyType<TravelsCheckFlightsBody>}, TContext> => {
+
+const mutationKey = ['checkWishlistFlights'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof checkWishlistFlights>>, {id: number;data: BodyType<TravelsCheckFlightsBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  checkWishlistFlights(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CheckWishlistFlightsMutationResult = NonNullable<Awaited<ReturnType<typeof checkWishlistFlights>>>
+    export type CheckWishlistFlightsMutationBody = BodyType<TravelsCheckFlightsBody>
+    export type CheckWishlistFlightsMutationError = ErrorType<Error>
+
+    /**
+ * @summary Look up cheapest round-trip flights for a wishlist destination and cache them
+ */
+export const useCheckWishlistFlights = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof checkWishlistFlights>>, TError,{id: number;data: BodyType<TravelsCheckFlightsBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof checkWishlistFlights>>,
+        TError,
+        {id: number;data: BodyType<TravelsCheckFlightsBody>},
+        TContext
+      > => {
+      return useMutation(getCheckWishlistFlightsMutationOptions(options));
+    }
+
 export const getListOrnamentsUrl = (params?: ListOrnamentsParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -13855,6 +14960,76 @@ export const useLookupBarcode = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getLookupBarcodeMutationOptions(options));
+    }
+
+export const getLookupOrnamentEbayPriceUrl = (id: number,) => {
+
+
+
+
+  return `/api/ornaments/items/${id}/ebay-price-lookup`
+}
+
+/**
+ * @summary Look up eBay sold-listing prices and cache them on the ornament
+ */
+export const lookupOrnamentEbayPrice = async (id: number, options?: RequestInit): Promise<OrnamentsEbayPriceResult> => {
+
+  return customFetch<OrnamentsEbayPriceResult>(getLookupOrnamentEbayPriceUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getLookupOrnamentEbayPriceMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof lookupOrnamentEbayPrice>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof lookupOrnamentEbayPrice>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['lookupOrnamentEbayPrice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof lookupOrnamentEbayPrice>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  lookupOrnamentEbayPrice(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LookupOrnamentEbayPriceMutationResult = NonNullable<Awaited<ReturnType<typeof lookupOrnamentEbayPrice>>>
+
+    export type LookupOrnamentEbayPriceMutationError = ErrorType<Error>
+
+    /**
+ * @summary Look up eBay sold-listing prices and cache them on the ornament
+ */
+export const useLookupOrnamentEbayPrice = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof lookupOrnamentEbayPrice>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof lookupOrnamentEbayPrice>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getLookupOrnamentEbayPriceMutationOptions(options));
     }
 
 export const getLookupOrnamentBookValueUrl = (id: number,) => {

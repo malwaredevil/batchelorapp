@@ -6,6 +6,7 @@ import {
   useListPottery,
   useUpdatePottery,
   useDeletePottery,
+  useEstimatePotteryMarketValue,
   useReanalyzePottery,
   useSetPrimaryImage,
   useListPotteryCategories as useListCategories,
@@ -32,6 +33,7 @@ import {
   RefreshCcw,
   Save,
   Star,
+  TrendingUp,
   Trash2,
   X,
 } from "lucide-react";
@@ -834,6 +836,34 @@ export default function PieceDetail() {
     },
   });
 
+  const estimateMarketValue = useEstimatePotteryMarketValue();
+  const [ebayResult, setEbayResult] = useState<{
+    priceMinUsd: number;
+    priceMaxUsd: number;
+    priceMedianUsd: number;
+    listingCount: number;
+    searchQuery?: string;
+  } | null>(null);
+
+  async function handleEstimateMarketValue() {
+    try {
+      toast.loading("Searching eBay sold listings…", { id: "ebay" });
+      const result = await estimateMarketValue.mutateAsync({ id });
+      toast.dismiss("ebay");
+      if (result.listingCount > 0) {
+        setEbayResult(result);
+        toast.success(
+          `Found ${result.listingCount} listing${result.listingCount !== 1 ? "s" : ""} — median $${result.priceMedianUsd.toFixed(0)}`,
+        );
+      } else {
+        toast.error("No eBay sold listings found for this piece.");
+      }
+    } catch {
+      toast.dismiss("ebay");
+      toast.error("Failed to look up eBay price");
+    }
+  }
+
   const update = useUpdatePottery({
     mutation: {
       onSuccess: () => {
@@ -993,6 +1023,19 @@ export default function PieceDetail() {
                 <Button
                   variant="outline"
                   size="icon"
+                  onClick={handleEstimateMarketValue}
+                  disabled={estimateMarketValue.isPending}
+                  title="Look up eBay market value"
+                >
+                  {estimateMarketValue.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <TrendingUp className="h-4 w-4" />
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
                   onClick={() => reanalyze.mutate({ id })}
                   disabled={reanalyze.isPending}
                   title="Re-run AI analysis"
@@ -1068,6 +1111,48 @@ export default function PieceDetail() {
               </div>
             )}
           </div>
+
+          {ebayResult && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium text-amber-900 flex items-center gap-1.5">
+                  <TrendingUp className="h-4 w-4" />
+                  eBay Market Value
+                </p>
+                <button
+                  onClick={() => setEbayResult(null)}
+                  className="text-amber-500 hover:text-amber-700 text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <p className="text-lg font-bold text-amber-800">
+                    ${ebayResult.priceMinUsd.toFixed(0)}
+                  </p>
+                  <p className="text-[10px] text-amber-600">Low</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-amber-800">
+                    ${ebayResult.priceMedianUsd.toFixed(0)}
+                  </p>
+                  <p className="text-[10px] text-amber-600">Median</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-amber-800">
+                    ${ebayResult.priceMaxUsd.toFixed(0)}
+                  </p>
+                  <p className="text-[10px] text-amber-600">High</p>
+                </div>
+              </div>
+              <p className="text-[10px] text-amber-600 mt-2 text-center">
+                {ebayResult.listingCount} sold listing
+                {ebayResult.listingCount !== 1 ? "s" : ""} · "
+                {ebayResult.searchQuery}"
+              </p>
+            </div>
+          )}
 
           {/* AI description */}
           {editing ? (

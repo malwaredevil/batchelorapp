@@ -112,6 +112,101 @@ export interface ChangePasswordInput {
   newPassword: string;
 }
 
+export interface PotteryEbayListing {
+  title: string;
+  soldPrice: number;
+  currency: string;
+  /** @nullable */
+  soldDate?: string | null;
+  /** @nullable */
+  condition?: string | null;
+  /** @nullable */
+  imageUrl?: string | null;
+  /** @nullable */
+  itemUrl?: string | null;
+}
+
+export interface PotteryEbayPriceResult {
+  priceMinUsd: number;
+  priceMaxUsd: number;
+  priceMedianUsd: number;
+  listingCount: number;
+  listings: PotteryEbayListing[];
+  /** @nullable */
+  cachedAt?: string | null;
+  searchQuery?: string;
+}
+
+export interface PotteryWatchlistItem {
+  id: number;
+  /** @nullable */
+  createdByUserId?: number | null;
+  title: string;
+  keywords: string;
+  /** @nullable */
+  priceMinUsd?: string | null;
+  /** @nullable */
+  priceMaxUsd?: string | null;
+  active: boolean;
+  /** @nullable */
+  lastCheckedAt?: string | null;
+  /** @nullable */
+  lastAlertAt?: string | null;
+  createdAt: string;
+}
+
+export interface PotteryWatchlistAlert {
+  id: number;
+  watchlistItemId: number;
+  platform: string;
+  listingId: string;
+  title: string;
+  /** @nullable */
+  priceUsd?: string | null;
+  /** @nullable */
+  condition?: string | null;
+  /** @nullable */
+  imageUrl?: string | null;
+  listingUrl: string;
+  /** @nullable */
+  soldAt?: string | null;
+  seenAt: string;
+  dismissed: boolean;
+}
+
+export interface PotteryWatchlistScanResult {
+  newAlerts: number;
+  totalListings: number;
+  searchQuery?: string;
+}
+
+export interface PotteryCreateWatchlistItemBody {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  title: string;
+  /**
+     * @minLength 1
+     * @maxLength 500
+     */
+  keywords: string;
+  /** @nullable */
+  priceMinUsd?: number | null;
+  /** @nullable */
+  priceMaxUsd?: number | null;
+}
+
+export interface PotteryUpdateWatchlistItemBody {
+  title?: string;
+  keywords?: string;
+  /** @nullable */
+  priceMinUsd?: number | null;
+  /** @nullable */
+  priceMaxUsd?: number | null;
+  active?: boolean;
+}
+
 export type PotteryStragglerItemReasonsItem = typeof PotteryStragglerItemReasonsItem[keyof typeof PotteryStragglerItemReasonsItem];
 
 
@@ -356,6 +451,50 @@ export interface PotteryCollectionStats {
   uniqueItems: number;
   topMotifs: PotteryMotifCount[];
   topColors: PotteryColorCount[];
+}
+
+export type QuiltingSuggestPriceBodyItemType = typeof QuiltingSuggestPriceBodyItemType[keyof typeof QuiltingSuggestPriceBodyItemType];
+
+
+export const QuiltingSuggestPriceBodyItemType = {
+  pattern: 'pattern',
+  fabric: 'fabric',
+  other: 'other',
+} as const;
+
+export interface QuiltingSuggestPriceBody {
+  itemType?: QuiltingSuggestPriceBodyItemType;
+  /** @nullable */
+  designer?: string | null;
+  /** @nullable */
+  manufacturer?: string | null;
+  /** @nullable */
+  colorway?: string | null;
+}
+
+export interface QuiltingEtsyListing {
+  title: string;
+  priceUsd: number;
+  currency: string;
+  /** @nullable */
+  rating?: number | null;
+  /** @nullable */
+  reviewCount?: number | null;
+  /** @nullable */
+  seller?: string | null;
+  /** @nullable */
+  listingUrl?: string | null;
+  /** @nullable */
+  imageUrl?: string | null;
+}
+
+export interface QuiltingEtsyPriceSuggestion {
+  suggestionUsd: number;
+  listingCount: number;
+  listings: QuiltingEtsyListing[];
+  /** @nullable */
+  cachedAt?: string | null;
+  searchQuery?: string;
 }
 
 export interface QuiltingCategory {
@@ -1384,6 +1523,91 @@ export interface QuiltingApplyFabricResearchInput {
   fields?: string[];
 }
 
+export interface TravelsWishlistItem {
+  id: number;
+  /** @nullable */
+  userId?: number | null;
+  destination: string;
+  /** @nullable */
+  targetDate?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  lat?: number | null;
+  /** @nullable */
+  lng?: number | null;
+  done: boolean;
+  sortOrder: number;
+  /** @nullable */
+  flightOriginIata?: string | null;
+  /** @nullable */
+  flightPriceMinUsd?: string | null;
+  /** @nullable */
+  flightPriceCachedAt?: string | null;
+  flightPriceOptions?: unknown | null;
+  createdAt: string;
+}
+
+export interface TravelsCreateWishlistBody {
+  /** @minLength 1 */
+  destination: string;
+  targetDate?: string;
+  notes?: string;
+  sortOrder?: number;
+}
+
+export interface TravelsUpdateWishlistBody {
+  /** @minLength 1 */
+  destination?: string;
+  /** @nullable */
+  targetDate?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  lat?: number | null;
+  /** @nullable */
+  lng?: number | null;
+  done?: boolean;
+  sortOrder?: number;
+}
+
+export interface TravelsCheckFlightsBody {
+  /**
+     * IATA airport code for the departure airport (e.g. "LAX", "JFK")
+     * @minLength 3
+     * @maxLength 4
+     */
+  originIata: string;
+}
+
+export interface TravelsFlightOption {
+  price: number;
+  currency: string;
+  /** @nullable */
+  airline?: string | null;
+  /** @nullable */
+  departureDate?: string | null;
+  /** @nullable */
+  returnDate?: string | null;
+  /** @nullable */
+  durationMinutes?: number | null;
+  /** @nullable */
+  stops?: number | null;
+  /** @nullable */
+  deepLink?: string | null;
+}
+
+export interface TravelsFlightPriceResult {
+  originIata: string;
+  destination: string;
+  /** @nullable */
+  priceMinUsd?: number | null;
+  /** @nullable */
+  cachedAt?: string | null;
+  currency?: string;
+  options: TravelsFlightOption[];
+}
+
 export type TravelsTripStatus = typeof TravelsTripStatus[keyof typeof TravelsTripStatus];
 
 
@@ -1879,6 +2103,31 @@ export interface TravelsTravelsMonitoringPreferences {
   minSeverity?: TravelsTravelsMonitoringPreferencesMinSeverity;
   notifyChannels?: TravelsTravelsMonitoringPreferencesNotifyChannels;
   scheduleChangeThresholdMinutes?: number;
+}
+
+export interface OrnamentsEbayListing {
+  title: string;
+  soldPrice: number;
+  currency: string;
+  /** @nullable */
+  soldDate?: string | null;
+  /** @nullable */
+  condition?: string | null;
+  /** @nullable */
+  imageUrl?: string | null;
+  /** @nullable */
+  itemUrl?: string | null;
+}
+
+export interface OrnamentsEbayPriceResult {
+  priceMinUsd: number;
+  priceMaxUsd: number;
+  priceMedianUsd: number;
+  listingCount: number;
+  listings: OrnamentsEbayListing[];
+  /** @nullable */
+  cachedAt?: string | null;
+  searchQuery?: string;
 }
 
 export interface OrnamentsCategory {
@@ -2621,6 +2870,10 @@ page?: number;
  * @maximum 200
  */
 pageSize?: number;
+};
+
+export type DismissWatchlistAlert200 = {
+  dismissed?: boolean;
 };
 
 export type DeletePotteryUnusedCategories200 = {

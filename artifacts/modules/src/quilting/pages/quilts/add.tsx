@@ -1,5 +1,8 @@
 import { useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { ArrowLeft, Camera, Upload, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +18,17 @@ import { useQueryClient } from "@tanstack/react-query";
 import { TagSelector } from "@/quilting/components/tag-selector";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
 
+const quiltFormSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  dateCompleted: z.string().optional(),
+  recipient: z.string().optional(),
+  sizeWidth: z.string().optional(),
+  sizeHeight: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+type QuiltFormValues = z.infer<typeof quiltFormSchema>;
+
 export default function AddQuilt() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
@@ -22,6 +36,17 @@ export default function AddQuilt() {
   const [preview, setPreview] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [selectedCatIds, setSelectedCatIds] = useState<number[]>([]);
+  const form = useForm<QuiltFormValues>({
+    resolver: zodResolver(quiltFormSchema),
+    defaultValues: {
+      name: "",
+      dateCompleted: "",
+      recipient: "",
+      sizeWidth: "",
+      sizeHeight: "",
+      notes: "",
+    },
+  });
 
   const { data: allCategories } = useListQuiltingCategories();
 
@@ -48,46 +73,47 @@ export default function AddQuilt() {
     setPreview(URL.createObjectURL(f));
   }
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  function handleSubmit(values: QuiltFormValues) {
     if (!file) {
       toast.error("Please add a photo of the quilt.");
       return;
     }
-    const fd = new FormData(e.currentTarget);
-    const get = (k: string) => (fd.get(k) as string | null) || undefined;
     const categoryNames = (allCategories ?? [])
       .filter((c) => selectedCatIds.includes(c.id))
       .map((c) => c.name);
     create.mutate({
       data: {
         image: file,
-        name: fd.get("name") as string,
-        dateCompleted: get("dateCompleted"),
-        recipient: get("recipient"),
-        sizeWidth: get("sizeWidth"),
-        sizeHeight: get("sizeHeight"),
-        notes: get("notes"),
+        name: values.name,
+        dateCompleted: values.dateCompleted || undefined,
+        recipient: values.recipient || undefined,
+        sizeWidth: values.sizeWidth || undefined,
+        sizeHeight: values.sizeHeight || undefined,
+        notes: values.notes || undefined,
         categories:
           categoryNames.length > 0 ? JSON.stringify(categoryNames) : undefined,
       },
     });
   }
 
+  function handleCancel() {
+    const dirty =
+      form.formState.isDirty || file !== null || selectedCatIds.length > 0;
+    if (!dirty || window.confirm("Discard changes?")) {
+      navigate("/quilting/quilts");
+    }
+  }
+
   return (
     <div className="mx-auto max-w-xl">
       <div className="mb-6 flex items-center gap-3">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => navigate("/quilting/quilts")}
-        >
+        <Button variant="ghost" size="icon" onClick={handleCancel}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <h1 className="text-xl font-bold">Add finished quilt</h1>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
         <div>
           <Label className="mb-2 block">
             Photo <span className="text-destructive">*</span>
@@ -141,18 +167,22 @@ export default function AddQuilt() {
             </Label>
             <Input
               id="name"
-              name="name"
-              required
+              {...form.register("name")}
               placeholder="e.g. Grandma's Star Quilt"
               className="mt-1.5"
             />
+            {form.formState.errors.name && (
+              <p className="mt-1 text-xs text-destructive">
+                {form.formState.errors.name.message}
+              </p>
+            )}
           </div>
           <div>
             <Label htmlFor="dateCompleted">Date completed</Label>
             <Input
               id="dateCompleted"
-              name="dateCompleted"
               type="date"
+              {...form.register("dateCompleted")}
               className="mt-1.5"
             />
           </div>
@@ -160,7 +190,7 @@ export default function AddQuilt() {
             <Label htmlFor="recipient">Recipient</Label>
             <Input
               id="recipient"
-              name="recipient"
+              {...form.register("recipient")}
               placeholder="e.g. Given to Sarah"
               className="mt-1.5"
             />
@@ -169,9 +199,9 @@ export default function AddQuilt() {
             <Label htmlFor="sizeWidth">Width (inches)</Label>
             <Input
               id="sizeWidth"
-              name="sizeWidth"
               type="number"
               step="0.5"
+              {...form.register("sizeWidth")}
               placeholder="e.g. 60"
               className="mt-1.5"
             />
@@ -180,9 +210,9 @@ export default function AddQuilt() {
             <Label htmlFor="sizeHeight">Height (inches)</Label>
             <Input
               id="sizeHeight"
-              name="sizeHeight"
               type="number"
               step="0.5"
+              {...form.register("sizeHeight")}
               placeholder="e.g. 72"
               className="mt-1.5"
             />
@@ -191,7 +221,7 @@ export default function AddQuilt() {
             <Label htmlFor="notes">Notes</Label>
             <Textarea
               id="notes"
-              name="notes"
+              {...form.register("notes")}
               placeholder="Materials used, story behind the quilt..."
               className="mt-1.5"
               rows={3}

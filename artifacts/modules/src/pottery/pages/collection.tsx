@@ -47,6 +47,7 @@ import { useAppConfigSummary } from "@workspace/elaine-ui";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { DominantColorDots } from "@/components/collection/DominantColorDots";
 import { QuantityBadge } from "@/components/collection/QuantityBadge";
+import { CollectionErrorState } from "@/components/CollectionErrorState";
 
 // ---------------------------------------------------------------------------
 // Collection compare modal
@@ -636,6 +637,7 @@ export default function Collection() {
     data: listData,
     isLoading,
     isError,
+    refetch,
   } = useListPottery({ pageSize: 200 });
   const data = listData?.items;
   const { data: allCategories = [] } = useListCategories();
@@ -972,9 +974,10 @@ export default function Collection() {
           </div>
         </>
       ) : isError ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">
-          Could not load your collection. Please refresh.
-        </p>
+        <CollectionErrorState
+          onRetry={refetch}
+          message="Couldn't load your pottery collection. Check your connection and try again."
+        />
       ) : !data || data.length === 0 ? (
         <EmptyState />
       ) : (

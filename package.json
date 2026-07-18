@@ -9,14 +9,19 @@
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
     "lint": "prettier --check . && pnpm --filter @workspace/scripts run check-raw-fetch",
     "lint:fix": "prettier --write .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:e2e": "playwright test --project=chromium-critical",
+    "test:a11y": "playwright test --project=accessibility",
+    "test:visual": "playwright test --project=visual"
   },
   "private": true,
   "devDependencies": {
     "husky": "^9.1.7",
     "lint-staged": "^17.0.8",
     "prettier": "^3.8.3",
-    "typescript": "~5.9.3"
+    "typescript": "~5.9.3",
+    "@axe-core/playwright": "^4.12.1",
+    "@playwright/test": "^1.61.1"
   },
   "dependencies": {
     "@replit/connectors-sdk": "^0.4.1"

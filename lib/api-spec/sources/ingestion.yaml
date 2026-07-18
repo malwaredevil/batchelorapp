@@ -1,0 +1,325 @@
+openapi: 3.1.0
+info:
+  title: Ingestion
+  version: 0.1.0
+paths:
+  /sources:
+    get:
+      operationId: listIngestionSources
+      tags: [ingestion]
+      summary: List all configured ingestion sources (owner only)
+      responses:
+        "200":
+          description: Source list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestionSourcesResponse"
+    post:
+      operationId: createIngestionSource
+      tags: [ingestion]
+      summary: Create a new ingestion source (owner only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIngestionSourceBody"
+      responses:
+        "201":
+          description: Created source
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestionSourceRow"
+
+  /sources/{id}:
+    get:
+      operationId: getIngestionSource
+      tags: [ingestion]
+      summary: Get a single ingestion source (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Source detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestionSourceRow"
+    put:
+      operationId: updateIngestionSource
+      tags: [ingestion]
+      summary: Update an ingestion source (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateIngestionSourceBody"
+      responses:
+        "200":
+          description: Updated source
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestionSourceRow"
+    delete:
+      operationId: deleteIngestionSource
+      tags: [ingestion]
+      summary: Delete an ingestion source (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Deleted
+
+  /sources/{id}/run:
+    post:
+      operationId: triggerIngestionRun
+      tags: [ingestion]
+      summary: Trigger an immediate ingestion run for a source (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "202":
+          description: Run enqueued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  runId: { type: integer }
+                  message: { type: string }
+
+  /sources/{id}/runs:
+    get:
+      operationId: listIngestionRunsForSource
+      tags: [ingestion]
+      summary: List ingestion runs for a specific source (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer, maximum: 100 }
+      responses:
+        "200":
+          description: Run list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestionRunsResponse"
+
+  /runs:
+    get:
+      operationId: listAllIngestionRuns
+      tags: [ingestion]
+      summary: List all ingestion runs across sources (owner only)
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, maximum: 200 }
+      responses:
+        "200":
+          description: Run list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestionRunsResponse"
+
+  /runs/{id}:
+    get:
+      operationId: getIngestionRun
+      tags: [ingestion]
+      summary: Get a single ingestion run with its candidates (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Run detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestionRunDetailResponse"
+
+  /candidates/{id}/accept:
+    post:
+      operationId: acceptIngestionCandidate
+      tags: [ingestion]
+      summary: Accept an ingestion candidate (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+
+  /candidates/{id}/reject:
+    post:
+      operationId: rejectIngestionCandidate
+      tags: [ingestion]
+      summary: Reject an ingestion candidate (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        "200":
+          description: Rejected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+
+  /stats:
+    get:
+      operationId: getIngestionStats
+      tags: [ingestion]
+      summary: Aggregate ingestion statistics across all sources (owner only)
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestionStatsResponse"
+
+components:
+  schemas:
+    IngestionSourceRow:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        adapter: { type: string }
+        enabled: { type: boolean }
+        schedule: { type: string, nullable: true }
+        config: {}
+        lastRunAt: { type: string, format: date-time, nullable: true }
+        lastRunStatus: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    IngestionSourcesResponse:
+      type: object
+      properties:
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/IngestionSourceRow"
+
+    CreateIngestionSourceBody:
+      type: object
+      required: [name, adapter]
+      properties:
+        name: { type: string }
+        adapter: { type: string }
+        enabled: { type: boolean }
+        schedule: { type: string }
+        config: {}
+
+    UpdateIngestionSourceBody:
+      type: object
+      properties:
+        name: { type: string }
+        enabled: { type: boolean }
+        schedule: { type: string }
+        config: {}
+
+    IngestionRunRow:
+      type: object
+      properties:
+        id: { type: integer }
+        sourceId: { type: integer }
+        sourceName: { type: string }
+        status: { type: string }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time, nullable: true }
+        durationMs: { type: integer, nullable: true }
+        candidatesFound: { type: integer }
+        candidatesAccepted: { type: integer }
+        candidatesRejected: { type: integer }
+        errorMessage: { type: string, nullable: true }
+
+    IngestionRunsResponse:
+      type: object
+      properties:
+        runs:
+          type: array
+          items:
+            $ref: "#/components/schemas/IngestionRunRow"
+
+    IngestionCandidateRow:
+      type: object
+      properties:
+        id: { type: integer }
+        externalId: { type: string }
+        targetType: { type: string }
+        targetId: { type: integer, nullable: true }
+        rawData: {}
+        normalizedData: {}
+        status: { type: string }
+        confidence: { type: number, nullable: true }
+        reviewedAt: { type: string, format: date-time, nullable: true }
+
+    IngestionRunDetailResponse:
+      type: object
+      properties:
+        run:
+          $ref: "#/components/schemas/IngestionRunRow"
+        candidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/IngestionCandidateRow"
+
+    IngestionStatsResponse:
+      type: object
+      properties:
+        totalSources: { type: integer }
+        enabledSources: { type: integer }
+        totalRuns: { type: integer }
+        successfulRuns: { type: integer }
+        totalCandidates: { type: integer }
+        acceptedCandidates: { type: integer }
+        rejectedCandidates: { type: integer }
+        pendingCandidates: { type: integer }

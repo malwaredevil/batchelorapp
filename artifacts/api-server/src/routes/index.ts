@@ -17,6 +17,9 @@ import configRouter from "./config";
 import messengerRouter from "./messenger";
 import jobsRouter from "./jobs";
 import operationsRouter from "./operations";
+import aiEvidenceRouter from "./ai-evidence";
+import ingestionRouter from "./ingestion";
+import searchFeedbackRouter from "./search-feedback";
 
 const router: IRouter = Router();
 
@@ -34,6 +37,9 @@ router.use("/config", configRouter);
 router.use("/messenger", messengerRouter);
 router.use("/jobs", jobsRouter);
 router.use("/operations", operationsRouter);
+router.use("/ai-evidence", aiEvidenceRouter);
+router.use("/ingestion", ingestionRouter);
+router.use(searchFeedbackRouter);
 // Must be mounted before elaineRouter: elaineRouter applies a blanket
 // requireAuth middleware to every /elaine/* path, which would otherwise
 // swallow this unauthenticated (signature-gated) webhook route before it's

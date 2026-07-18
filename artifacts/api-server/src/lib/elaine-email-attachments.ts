@@ -97,6 +97,7 @@ export async function processEmailAttachments(params: {
       );
 
       let extractedData: Record<string, unknown> = {};
+      let attachmentSourceSpans: unknown = null;
       let rawText: string | null = null;
       try {
         if (isPdf) {
@@ -107,12 +108,16 @@ export async function processEmailAttachments(params: {
           } catch {
             // non-fatal
           }
-          extractedData = await extractFromPdf(buffer);
+          const result = await extractFromPdf(buffer);
+          extractedData = result.data;
+          attachmentSourceSpans = result.sourceSpans;
         } else {
-          extractedData = await extractFromImage(
+          const result = await extractFromImage(
             buffer,
             attachment.content_type,
           );
+          extractedData = result.data;
+          attachmentSourceSpans = result.sourceSpans;
           const parts = Object.entries(extractedData)
             .filter(([, v]) => v != null && v !== "")
             .map(([k, v]) => `${k}: ${String(v)}`);
@@ -138,6 +143,7 @@ export async function processEmailAttachments(params: {
             (extractedData.documentType as string | undefined) ?? null,
           originalFilename: filename,
           extractedData,
+          sourceSpans: attachmentSourceSpans,
           rawText,
           status: suggestedTripId ? "linked" : "unmatched",
           source: "email_forward",

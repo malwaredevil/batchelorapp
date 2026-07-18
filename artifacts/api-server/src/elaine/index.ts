@@ -103,8 +103,17 @@ import {
   quiltingActionExecutors,
   buildQuiltingActionLabel,
   quiltingActionTools,
+  executeFindFabricsByColor,
+  FindFabricsByColorPayload,
   type QuiltingActionType,
 } from "./quilting-actions";
+import {
+  executeOfficeTool,
+  officeActionTools,
+  SUMMARIZE_INBOX_TOOL_NAME,
+  FIND_EMAILS_ABOUT_TOPIC_TOOL_NAME,
+  GET_EMAIL_DETAIL_TOOL_NAME,
+} from "./office-actions";
 import {
   ornamentActionSchemas,
   ornamentActionExecutors,
@@ -172,6 +181,7 @@ const APP_IDS = [
   "pottery",
   "quilting",
   "ornaments",
+  "office",
   "hub",
   "elaine",
 ] as const;
@@ -736,15 +746,29 @@ const POTTERY_ACTION_TYPES = new Set<string>([
   "bulk_reanalyze_pottery",
 ]);
 const QUILTING_ACTION_TYPES = new Set<string>([
+  "add_fabric",
   "update_fabric",
+  "update_fabric_fields",
   "delete_fabric",
   "update_pattern",
   "delete_pattern",
   "create_shopping_item",
+  "add_fabric_to_shopping_list",
   "update_shopping_item",
   "delete_shopping_item",
   "create_quilting_category",
   "delete_quilting_category",
+  "create_pattern",
+  "delete_quilt",
+  "rename_quilting_category",
+  "merge_quilting_categories",
+  "create_block",
+  "delete_block",
+  "create_layout",
+  "create_quilt_layout",
+  "delete_layout",
+  "bulk_reanalyze_quilting",
+  "find_fabrics_by_color",
 ]);
 const ORNAMENT_ACTION_TYPES = new Set<string>([
   "update_ornament_item",
@@ -2762,6 +2786,7 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   },
   ...potteryActionTools,
   ...quiltingActionTools,
+  ...officeActionTools,
   ...ornamentActionTools,
   {
     type: "function",
@@ -2850,6 +2875,7 @@ const NAVIGATE_ALLOWED_PATHS_BY_APP: Record<AppId, readonly string[]> = {
     "/settings",
   ],
   hub: ["/", "/account"],
+  office: ["/", "/gmail", "/calendar", "/notes", "/messenger"],
   elaine: ["/"],
 };
 
@@ -2863,6 +2889,7 @@ const NAVIGATE_PATH_RE_BY_APP: Record<AppId, RegExp> = {
   ornaments:
     /^\/(ornament\/\d+|add|scan|stats|categories|maintenance|settings)?$/,
   hub: /^\/(account)?$/,
+  office: /^\/(gmail|calendar|notes|messenger)?$/,
   elaine: /^\/$/,
 };
 
@@ -2871,7 +2898,7 @@ const NAVIGATE_PATH_RE_BY_APP: Record<AppId, RegExp> = {
 // The client detects these prefixes and uses window.location.href instead of
 // the SPA router so the correct React bundle loads.
 const CROSS_APP_NAVIGATE_RE =
-  /^\/(pottery|quilting|travels|ornaments|elaine)(\/[^?#]*)?(\?[a-zA-Z0-9=+%._~!$&'()*+,;:-]*)?\/?$/;
+  /^\/(pottery|quilting|travels|ornaments|office|elaine)(\/[^?#]*)?(\?[a-zA-Z0-9=+%._~!$&'()*+,;:-]*)?\/?$/;
 
 function navigatePayloadSchemaFor(appId: AppId) {
   return z.object({
@@ -3083,7 +3110,7 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: NAVIGATE_TOOL_NAME,
       description:
-        'Suggest navigating the user to a screen — either in the CURRENT app or in a DIFFERENT app. You are never allowed to navigate them yourself — the UI only offers a button the user must click. First ASK in plain language in your visible reply (e.g. "Want me to open your pottery collection?"). Only call this after asking permission in your visible text.\n\nFor the current app, use relative paths: e.g. "/trips/42", "/piece/7", "/fabrics".\nFor cross-app navigation use the app\'s base path prefix:\n  • Pottery collection → "/pottery/" (add ?search=term to pre-filter, e.g. "/pottery/?search=polish")\n  • Pottery piece detail → "/pottery/piece/42"\n  • Quilting fabrics → "/quilting/fabrics"\n  • Quilting root → "/quilting/"\n  • Travels → "/travels/"\n  • Elaine chat → "/elaine/"\nNever use paths from another app without the prefix.',
+        'Suggest navigating the user to a screen — either in the CURRENT app or in a DIFFERENT app. You are never allowed to navigate them yourself — the UI only offers a button the user must click. First ASK in plain language in your visible reply (e.g. "Want me to open your pottery collection?"). Only call this after asking permission in your visible text.\n\nFor the current app, use relative paths: e.g. "/trips/42", "/piece/7", "/fabrics".\nFor cross-app navigation use the app\'s base path prefix:\n  • Pottery collection → "/pottery/" (add ?search=term to pre-filter, e.g. "/pottery/?search=polish")\n  • Pottery piece detail → "/pottery/piece/42"\n  • Quilting fabrics → "/quilting/fabrics"\n  • Quilting root → "/quilting/"\n  • Travels → "/travels/"\n  • Office Gmail → "/office/gmail"\n  • Elaine chat → "/elaine/"\nNever use paths from another app without the prefix.',
       parameters: {
         type: "object",
         properties: {
@@ -3687,6 +3714,28 @@ const ACTION_TOOL_NAMES = new Set<string>(
   ),
 );
 
+const HARD_TOOL_NAMES = new Set([
+  SEARCH_HOUSEHOLD_TOOL_NAME,
+  SHOW_TRIP_CARD_TOOL_NAME,
+  SHOW_POTTERY_ITEM_TOOL_NAME,
+  SHOW_FABRIC_SWATCH_TOOL_NAME,
+  SHOW_ORNAMENT_ITEM_TOOL_NAME,
+  WEB_SEARCH_TOOL_NAME,
+  FETCH_PAGE_TOOL_NAME,
+  CONSULT_EXPERTS_TOOL_NAME,
+  GET_WEATHER_TOOL_NAME,
+  FIND_NEARBY_PLACES_TOOL_NAME,
+  GET_ROUTE_INFO_TOOL_NAME,
+  GET_AIR_QUALITY_TOOL_NAME,
+  GET_POLLEN_FORECAST_TOOL_NAME,
+  CALCULATE_YARDAGE_TOOL_NAME,
+  QUERY_HOUSEHOLD_TOOL_NAME,
+  "find_fabrics_by_color",
+  SUMMARIZE_INBOX_TOOL_NAME,
+  FIND_EMAILS_ABOUT_TOPIC_TOOL_NAME,
+  GET_EMAIL_DETAIL_TOOL_NAME,
+]);
+
 async function getOrCreateConversation(userId: number) {
   const [existing] = await db
     .select()
@@ -4195,6 +4244,7 @@ const CURRENT_APP_LABEL: Record<AppId, string> = {
   pottery: "Pottery",
   quilting: "Quilting",
   ornaments: "Ornaments",
+  office: "Office",
   hub: "the Batchelor hub (app launcher)",
   elaine: "her own dedicated space (the Elaine app)",
 };
@@ -4306,6 +4356,13 @@ Pottery app:
 - Maintenance ("/maintenance"): bulk AI re-analysis and other collection upkeep tools.
 - Settings ("/settings"): account/profile settings, plus an "Export for insurance" action that downloads a PDF of every piece's photos and details for insurance/provenance records.
 
+Office app:
+- Office Home ("/"): the Office launcher/home area.
+- Gmail ("/gmail"): the current user's connected Gmail inbox for household admin and general email triage. Gmail access is per-user, not household-shared.
+- Calendar ("/calendar"): Office calendar tools.
+- Notes ("/notes"): household/office notes.
+- Messenger ("/messenger"): household group messages.
+
 Quilting app:
 - Home ("/"): overview/dashboard for the quilting collection.
 - Fabrics ("/fabrics", "/fabrics/add", "/fabrics/bulk-add", "/fabrics/:id"): the fabric stash — browse, add one or many fabrics (with AI photo analysis), and view/edit a fabric's details.
@@ -4349,7 +4406,7 @@ ${memorySummary ?? "(no summary yet — builds up as conversations grow)"}
 Specific facts (things explicitly asked to be remembered, or noteworthy details extracted from conversations):
 ${memoryBlock}
 
-TOOLS: You have tools available for navigation suggestions, remembering household facts, and proposing changes to trips/wishlist/packing lists/reminders. Each tool's own description explains exactly when and how to use it — follow those rules precisely, especially around never fabricating numeric ids and asking permission in your visible reply text before calling any trip/wishlist/packing/reminder tool. If a single request naturally involves more than one write-action (e.g. "add a reminder to book the hotel and add wine tasting to the wishlist"), call all of the relevant action tools in that same turn — don't limit yourself to one. Just make sure your visible reply names everything you're about to do before you call the tools, so nothing is a surprise. Navigation suggestions and remembering a fact can always accompany action tools.
+TOOLS: You have tools available for navigation suggestions, remembering household facts, reading/searching household data, reading the current user's connected Office Gmail inbox, and proposing changes to trips/wishlist/packing lists/reminders/collections. Each tool's own description explains exactly when and how to use it — follow those rules precisely, especially around never fabricating numeric ids and asking permission in your visible reply text before calling any write-action tool. If a single request naturally involves more than one write-action (e.g. "add a reminder to book the hotel and add wine tasting to the wishlist"), call all of the relevant action tools in that same turn — don't limit yourself to one. Just make sure your visible reply names everything you're about to do before you call the tools, so nothing is a surprise. Navigation suggestions, read-only tools, and remembering a fact can always accompany action tools.
 
 SEARCH FIRST — MANDATORY: Whenever the user asks about or references a specific trip, pottery piece, ornament, fabric, quilt, or pattern by name (e.g. "my Croatia trip", "what's left to do on Split Croatia", "the blue bowl", "the snowman ornament", "that star fabric") and you don't already have the item's numeric ID from the current page context, call search_household_data immediately as your FIRST tool call — before writing any reply text and before asking any clarifying question. Do not ask "which trip do you mean?" or "could you tell me more?" — just search. If the search returns a clear match, show a visual card (show_trip_card / show_pottery_item / show_fabric_swatch) and answer the question using the found data. Only ask for clarification if the search returns zero results or multiple equally plausible matches with no obvious winner.
 
@@ -4371,9 +4428,11 @@ ${isTravelsApp ? `MAGNET CHECK: If the user asks whether they already own a souv
 
 POTTERY ITEMS: Use update_pottery_item to edit an existing piece (name, notes, quantity, style, shape, maker, condition, origin, era) — only include fields that actually change, and only if the piece's numeric id is visible on screen (look for "itemId: <number>"); never guess one. This also works right after an upload if the user tells you details in chat instead of typing them into the form. Use delete_pottery_item to permanently remove a piece and its photos — say clearly in your visible reply that this deletes the item, since it's destructive. Use create_pottery_category / delete_pottery_category to manage the categories used to organize the collection; never guess a category id for deletion. Use update_pottery_item_categories to replace the full set of categories assigned to one piece (pass every category id that should end up assigned, not just the ones to add). Use merge_pottery_categories to fold one category into another (e.g. "merge Vases into Vessels") — this deletes the source category, so say so clearly since it's destructive; never guess either category id. Use lock_pottery_field to lock or unlock one AI-derived field (name, patternDescription, style, shape, maker, makerInfo, dimensions, dominantColors, motifs, aiDescription, glazeType) on a piece so future AI re-analysis will or won't overwrite it — only with a visible itemId. Use delete_pottery_photo to remove one supplemental photo from a piece, and promote_pottery_photo to make a supplemental photo the new primary photo (this re-runs AI analysis with the new primary image, subject to locked fields) — both need a visible itemId and imageId, never guessed. Use bulk_reanalyze_pottery to re-run AI analysis on several pieces at once; pass itemIds if specific ones are visible on screen, or omit it to run against every piece still missing AI analysis (capped at 20) — mention in your visible reply that this takes a while and calls AI per item.
 
-QUILTING ITEMS: Use update_fabric / delete_fabric, update_pattern / delete_pattern for editing or removing an existing fabric or pattern — only if its numeric id is visible on screen, never guessed, and be clear in your visible reply that a delete is permanent. You can't create a brand-new fabric or finished quilt from chat since both require an uploaded photo you have no way to attach — but use create_pattern to add a new quilt pattern record (name, designer, block size, difficulty, source, notes; no image) since a pattern's image is optional. Use delete_quilt to permanently remove a finished quilt and its photos — only with a visible quiltId, and say clearly it's permanent. Use create_shopping_item / update_shopping_item / delete_shopping_item to manage the fabric/supplies shopping list. Use create_quilting_category / delete_quilting_category to manage categories; never guess a category id for deletion. Use rename_quilting_category to rename one, and merge_quilting_categories to fold one category into another (destructive to the source category — say so clearly); never guess either category id. Use create_block / create_layout to add a new blank block template or quilt layout (metadata + an empty grid only — this does NOT design the block's pattern or place blocks into the layout, since chat-driven geometry editing isn't supported; tell the user to open the block/layout editor in the app to actually design it). Use delete_block / delete_layout to remove one, only with a visible id. Use bulk_reanalyze_quilting to re-run AI analysis on fabrics, patterns, or finished quilts — pass specific ids when visible on screen, or omit ids to run against everything of that type still needing analysis; mention this takes a while. Use calculate_yardage whenever the user asks how much backing or binding fabric they need for a given quilt size — never do this arithmetic yourself, always call the tool so the numbers are accurate; it's a read-only estimate, not a saved record.
+QUILTING ITEMS: Use find_fabrics_by_color as a read-only tool whenever the user asks for fabrics by color, style, designer, line, or stash-matching wording and you don't already have visible matching fabric ids; then answer using the returned fabricId markers. Use add_fabric to create a metadata-only stash fabric from chat when the user gives a name and details but no photo; tell them they can later replace the placeholder image in the app. Use update_fabric / update_fabric_fields / delete_fabric, update_pattern / delete_pattern for editing or removing an existing fabric or pattern — only if its numeric id is visible on screen or returned by search, never guessed, and be clear in your visible reply that a delete is permanent. Use create_pattern to add a new quilt pattern record (name, designer, block size, difficulty, source, notes; no image) since a pattern's image is optional. Use delete_quilt to permanently remove a finished quilt and its photos — only with a visible quiltId, and say clearly it's permanent. Use create_shopping_item / add_fabric_to_shopping_list / update_shopping_item / delete_shopping_item to manage the fabric/supplies shopping list. Use create_quilting_category / delete_quilting_category to manage categories; never guess a category id for deletion. Use rename_quilting_category to rename one, and merge_quilting_categories to fold one category into another (destructive to the source category — say so clearly); never guess either category id. Use create_block / create_layout to add a new blank block template or layout from existing legacy tools, and use create_quilt_layout when the user asks to start a quilt project/layout with a name, optional pattern id, size, status, notes, or planned finish date (metadata + an empty grid only — this does NOT design the block's pattern or place blocks into the layout, since chat-driven geometry editing isn't supported; tell the user to open the block/layout editor in the app to actually design it). Use delete_block / delete_layout to remove one, only with a visible id. Use bulk_reanalyze_quilting to re-run AI analysis on fabrics, patterns, or finished quilts — pass specific ids when visible on screen, or omit ids to run against everything of that type still needing analysis; mention this takes a while. Use calculate_yardage whenever the user asks how much backing or binding fabric they need for a given quilt size — never do this arithmetic yourself, always call the tool so the numbers are accurate; it's a read-only estimate, not a saved record.
 
 ORNAMENTS ITEMS: Use update_ornament_item to edit an existing ornament (name, notes, quantity, series/collection, year, brand, condition, origin, dimensions) — only include fields that actually change, and only if the ornament's numeric id is visible on screen (look for "itemId: <number>"); never guess one. This also works right after an upload if the user tells you details in chat instead of typing them into the form. Use delete_ornament_item to permanently remove an ornament and its photos — say clearly in your visible reply that this deletes the item, since it's destructive. Use create_ornament_category / delete_ornament_category to manage the categories used to organize the collection; never guess a category id for deletion. Use update_ornament_item_categories to replace the full set of categories assigned to one ornament (pass every category id that should end up assigned, not just the ones to add). Use merge_ornament_categories to fold one category into another — this deletes the source category, so say so clearly since it's destructive; never guess either category id. Use lock_ornament_field to lock or unlock one AI-derived field (name, seriesOrCollection, year, dimensions, dominantColors, motifs, aiDescription, barcodeValue) on an ornament so future AI re-analysis will or won't overwrite it — only with a visible itemId. Use delete_ornament_photo to remove one supplemental photo from an ornament, and promote_ornament_photo to make a supplemental photo the new primary photo (this re-runs AI analysis with the new primary image, subject to locked fields) — both need a visible itemId and imageId, never guessed. Use bulk_reanalyze_ornaments to re-run AI analysis on several ornaments at once; pass itemIds if specific ones are visible on screen, or omit it to run against every ornament still missing AI analysis (capped at 20) — mention in your visible reply that this takes a while and calls AI per item.
+
+OFFICE GMAIL: Office Gmail tools only read the current user's connected Gmail account. Never imply you can see another household member's inbox, and never ask for or expose Gmail OAuth tokens. Use summarize_inbox for requests like "what's in my inbox?" or "summarize recent emails"; it returns a small set of recent message summaries. Use find_emails_about_topic for targeted searches like "find the email about the quilt show" or "look for my dentist appointment"; do not use it to search for secrets or tokens. Use get_email_detail only after summarize_inbox or find_emails_about_topic has returned a specific messageId marker in this conversation; use it to answer follow-up questions about that email. Keep quoted email text brief and relevant rather than dumping full message bodies into the visible reply.
 
 EMAIL: Whenever you've just given the user something substantial worth keeping — a list of recommendations, an itinerary summary, packing tips, etc. — offer to email it to them, e.g. "Want me to email you this list?" Only call send_email once they say yes; never call it unprompted or assume they want it. It always goes to their own registered account email, so never ask for an address and never offer to send it to anyone else. Write a short subject and a plain-text body (no markdown/HTML, blank line between paragraphs) — it gets formatted into a nice email automatically. You have no way to export a PDF or Word document, so don't offer that; email is the only export option available.
 
@@ -4881,7 +4940,8 @@ router.post("/chat", async (req, res) => {
               if (
                 actionConfirmationMode !== "auto_run" &&
                 !sentActionIndices.has(tc.index) &&
-                ACTION_TOOL_NAMES.has(acc.name)
+                ACTION_TOOL_NAMES.has(acc.name) &&
+                !HARD_TOOL_NAMES.has(acc.name)
               ) {
                 const early = await tryBuildAction(acc.name, acc.args);
                 if (early) {
@@ -4905,23 +4965,6 @@ router.post("/chat", async (req, res) => {
     // Resolve any tool calls not already handled mid-stream. Content no
     // longer needs cleanup here — unlike the old regex-directive scheme, tool
     // calls arrive as a structured field separate from the reply text.
-    const HARD_TOOL_NAMES = new Set([
-      SEARCH_HOUSEHOLD_TOOL_NAME,
-      SHOW_TRIP_CARD_TOOL_NAME,
-      SHOW_POTTERY_ITEM_TOOL_NAME,
-      SHOW_FABRIC_SWATCH_TOOL_NAME,
-      SHOW_ORNAMENT_ITEM_TOOL_NAME,
-      WEB_SEARCH_TOOL_NAME,
-      FETCH_PAGE_TOOL_NAME,
-      CONSULT_EXPERTS_TOOL_NAME,
-      GET_WEATHER_TOOL_NAME,
-      FIND_NEARBY_PLACES_TOOL_NAME,
-      GET_ROUTE_INFO_TOOL_NAME,
-      GET_AIR_QUALITY_TOOL_NAME,
-      GET_POLLEN_FORECAST_TOOL_NAME,
-      CALCULATE_YARDAGE_TOOL_NAME,
-      QUERY_HOUSEHOLD_TOOL_NAME,
-    ]);
     const hardToolCalls: Array<{ id: string; name: string; args: string }> = [];
 
     for (const [index, { id, name, args }] of toolCallAcc.entries()) {
@@ -5043,6 +5086,10 @@ router.post("/chat", async (req, res) => {
       [GET_AIR_QUALITY_TOOL_NAME]: "checking air quality",
       [GET_POLLEN_FORECAST_TOOL_NAME]: "checking pollen levels",
       [CALCULATE_YARDAGE_TOOL_NAME]: "calculating yardage",
+      find_fabrics_by_color: "searching your fabric stash",
+      [SUMMARIZE_INBOX_TOOL_NAME]: "checking your inbox",
+      [FIND_EMAILS_ABOUT_TOPIC_TOOL_NAME]: "searching your email",
+      [GET_EMAIL_DETAIL_TOOL_NAME]: "reading that email",
     };
     const statusMessage = [...distinctHardToolNames]
       .map((n) => STATUS_LABELS[n])
@@ -5074,7 +5121,22 @@ router.post("/chat", async (req, res) => {
         let _toolOk = false;
         let resultText: string;
         try {
-          if (call.name === WEB_SEARCH_TOOL_NAME) {
+          const officeResult = await executeOfficeTool(
+            call.name,
+            call.args,
+            userId,
+            messages,
+          );
+          if (officeResult !== null) {
+            resultText = officeResult;
+          } else if (call.name === "find_fabrics_by_color") {
+            const parsed = FindFabricsByColorPayload.safeParse(
+              JSON.parse(call.args || "{}"),
+            );
+            resultText = parsed.success
+              ? await executeFindFabricsByColor(parsed.data)
+              : "Invalid fabric color search.";
+          } else if (call.name === WEB_SEARCH_TOOL_NAME) {
             const parsed = WebSearchToolPayload.safeParse(
               JSON.parse(call.args),
             );
@@ -5879,6 +5941,8 @@ router.post("/chat", async (req, res) => {
             resultText = await executeRestrictedSoftTool(
               SEARCH_HOUSEHOLD_TOOL_NAME,
               call.args,
+              userId,
+              messages,
             );
           } else {
             resultText = "Unsupported tool.";
@@ -6729,6 +6793,10 @@ const RESTRICTED_SOFT_TOOL_NAMES = new Set<string>([
   GET_POLLEN_FORECAST_TOOL_NAME,
   CONSULT_EXPERTS_TOOL_NAME,
   CALCULATE_YARDAGE_TOOL_NAME,
+  "find_fabrics_by_color",
+  SUMMARIZE_INBOX_TOOL_NAME,
+  FIND_EMAILS_ABOUT_TOPIC_TOOL_NAME,
+  GET_EMAIL_DETAIL_TOOL_NAME,
   REMEMBER_TOOL_NAME,
   SHOW_DATA_CARD_TOOL_NAME,
 ]);
@@ -6751,7 +6819,7 @@ const RestrictedNavigatePayload = z.object({
     .max(200)
     .refine(
       (p) => CROSS_APP_NAVIGATE_RE.test(p),
-      "must be an app-prefixed path like /pottery/, /travels/trips/42, /quilting/fabrics",
+      "must be an app-prefixed path like /pottery/, /travels/trips/42, /quilting/fabrics, /office/gmail",
     ),
   reason: z.string().min(1).max(300),
 });
@@ -6761,7 +6829,7 @@ const RESTRICTED_NAVIGATE_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
   function: {
     name: RESTRICTED_NAVIGATE_TOOL_NAME,
     description:
-      'Give the user a direct link to a screen in the app — use this whenever you would otherwise tell them to "go to" or "check" a page (e.g. connecting a calendar, viewing photos, browsing the full collection). You can never navigate them yourself over email/SMS/voice, only hand them a URL. Always use an app-prefixed path: "/pottery/", "/pottery/piece/42", "/quilting/fabrics", "/quilting/fabrics/add", "/travels/", "/travels/trips/42", "/ornaments/", "/elaine/". Add query params like ?search=term where useful.',
+      'Give the user a direct link to a screen in the app — use this whenever you would otherwise tell them to "go to" or "check" a page (e.g. connecting a calendar, viewing photos, browsing the full collection). You can never navigate them yourself over email/SMS/voice, only hand them a URL. Always use an app-prefixed path: "/pottery/", "/pottery/piece/42", "/quilting/fabrics", "/quilting/fabrics/add", "/travels/", "/travels/trips/42", "/ornaments/", "/office/gmail", "/elaine/". Add query params like ?search=term where useful.',
     parameters: {
       type: "object",
       properties: {
@@ -6798,6 +6866,7 @@ const MODULE_LINK_PREFIXES = [
   "/quilting",
   "/travels",
   "/ornaments",
+  "/office",
 ];
 function resolveModuleLinkPath(path: string): string {
   const matchesModule = MODULE_LINK_PREFIXES.some(
@@ -6822,8 +6891,22 @@ const RESTRICTED_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
 async function executeRestrictedSoftTool(
   name: string,
   args: string,
+  userId: number,
+  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [],
 ): Promise<string> {
   try {
+    const officeResult = await executeOfficeTool(name, args, userId, messages);
+    if (officeResult !== null) return officeResult;
+
+    if (name === "find_fabrics_by_color") {
+      const parsed = FindFabricsByColorPayload.safeParse(
+        JSON.parse(args || "{}"),
+      );
+      return parsed.success
+        ? executeFindFabricsByColor(parsed.data)
+        : "Invalid fabric color search.";
+    }
+
     if (name === SEARCH_HOUSEHOLD_TOOL_NAME) {
       const parsed = SearchHouseholdToolPayload.safeParse(
         JSON.parse(args || "{}"),
@@ -7827,6 +7910,8 @@ async function runRestrictedElaineTurn(params: {
         resultText = await executeRestrictedSoftTool(
           name,
           call.function.arguments,
+          userId,
+          messages,
         );
       } else if (AGENTPHONE_ACTION_TYPES.has(name)) {
         try {

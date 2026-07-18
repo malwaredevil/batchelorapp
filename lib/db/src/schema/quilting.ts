@@ -349,6 +349,12 @@ export const layouts = pgTable("quilting_layouts", {
   id: serial("id").primaryKey(),
   userId: integer("user_id"),
   name: text("name").notNull(),
+  patternId: integer("pattern_id").references(() => quiltPatterns.id, {
+    onDelete: "set null",
+  }),
+  plannedFinishDate: date("planned_finish_date"),
+  notes: text("notes"),
+  status: text("status").notNull().default("planned"),
   rows: integer("rows").notNull().default(5),
   cols: integer("cols").notNull().default(5),
   cells: jsonb("cells")

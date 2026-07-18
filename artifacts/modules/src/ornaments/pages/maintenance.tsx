@@ -113,17 +113,9 @@ export default function Maintenance() {
 
       // Since it could be a lot of items, let's chunk them conceptually or just show a spinner
       // For now, we'll just send them all to the bulk endpoint which handles its own logic
-      const result = await bulkReanalyze.mutateAsync({ data: { ids } });
+      await bulkReanalyze.mutateAsync({ data: { ids } });
 
-      if (result.failed.length > 0) {
-        toast.success(
-          `Re-analysed ${result.succeeded.length}/${result.total} items. ${result.failed.length} failed — try again.`,
-        );
-      } else {
-        toast.success(
-          `Re-analysed ${result.succeeded.length}/${result.total} items.`,
-        );
-      }
+      toast.success(`Started reanalysis for ${ids.length} items`);
       queryClient.invalidateQueries({
         queryKey: getGetOrnamentStragglersQueryKey(),
       });

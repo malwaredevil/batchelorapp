@@ -1,6 +1,5 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
-import pLimit from "p-limit";
 import {
   and,
   count,
@@ -73,9 +72,6 @@ import {
 } from "../../lib/openai";
 import { generateVisualEmbedding } from "../../lib/visual-embed";
 import { serializeFabric, serializeFabrics } from "../../lib/serialize";
-import { buildFabricDocument } from "../../lib/reranker";
-import { semanticCollectionSearch } from "../../lib/collection-search";
-import { logger } from "../../lib/logger";
 
 const {
   embedding: _e,
@@ -396,87 +392,27 @@ router.get("/fabrics", async (req, res) => {
     500,
     Math.max(1, parseInt(String(req.query.pageSize ?? "50"), 10) || 50),
   );
+  const offset = (page - 1) * pageSize;
 
-  async function runKeywordSearch(searchMode: "keyword" = "keyword") {
-    const offset = (page - 1) * pageSize;
-    const where = q ? ilike(fabrics.name, `%${q}%`) : undefined;
+  const where = q ? ilike(fabrics.name, `%${q}%`) : undefined;
 
-    const [{ value: total }] = await db
-      .select({ value: count() })
-      .from(fabrics)
-      .where(where);
+  const [{ value: total }] = await db
+    .select({ value: count() })
+    .from(fabrics)
+    .where(where);
 
-    const rows = await db
-      .select(fabricColumns)
-      .from(fabrics)
-      .where(where)
-      .orderBy(desc(fabrics.createdAt))
-      .limit(pageSize)
-      .offset(offset);
+  const rows = await db
+    .select(fabricColumns)
+    .from(fabrics)
+    .where(where)
+    .orderBy(desc(fabrics.createdAt))
+    .limit(pageSize)
+    .offset(offset);
 
-    const items = await serializeFabrics(
-      rows as Array<Omit<FabricRow, "embedding" | "visualEmbedding">>,
-    );
-    res.json(
-      ListFabricsResponse.parse({ items, total, page, pageSize, searchMode }),
-    );
-  }
-
-  if (q) {
-    const rankedIds = await semanticCollectionSearch({
-      query: q,
-      table: fabrics,
-      textEmbeddingCol: "embedding",
-      visualEmbeddingCol: "visual_embedding",
-      limit: pageSize,
-      db,
-      fetchDocuments: async (ids) => {
-        const rows = await db
-          .select({
-            id: fabrics.id,
-            name: fabrics.name,
-            lineName: fabrics.lineName,
-            designer: fabrics.designer,
-            manufacturer: fabrics.manufacturer,
-            printType: fabrics.printType,
-            motifs: fabrics.motifs,
-            dominantColors: fabrics.dominantColors,
-            styleDescriptors: fabrics.styleDescriptors,
-            aiDescription: fabrics.aiDescription,
-          })
-          .from(fabrics)
-          .where(inArray(fabrics.id, ids));
-        return rows.map((row) => ({
-          id: row.id,
-          text: buildFabricDocument(row),
-        }));
-      },
-    });
-
-    if (rankedIds.length > 0) {
-      const rows = await db
-        .select(fabricColumns)
-        .from(fabrics)
-        .where(inArray(fabrics.id, rankedIds));
-      const idOrder = new Map(rankedIds.map((id, index) => [id, index]));
-      rows.sort((a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0));
-      const items = await serializeFabrics(
-        rows as Array<Omit<FabricRow, "embedding" | "visualEmbedding">>,
-      );
-      res.json(
-        ListFabricsResponse.parse({
-          items,
-          total: items.length,
-          page: 1,
-          pageSize: items.length,
-          searchMode: "semantic",
-        }),
-      );
-      return;
-    }
-  }
-
-  await runKeywordSearch();
+  const items = await serializeFabrics(
+    rows as Array<Omit<FabricRow, "embedding" | "visualEmbedding">>,
+  );
+  res.json(ListFabricsResponse.parse({ items, total, page, pageSize }));
 });
 
 // ---------------------------------------------------------------------------
@@ -1041,162 +977,126 @@ router.post("/fabrics/:id/reanalyze", aiLimiter, async (req, res) => {
 // ---------------------------------------------------------------------------
 
 const MAX_BULK_REANALYZE = 20;
-const BULK_REANALYZE_CONCURRENCY = 3;
-
-interface BulkReanalyzeResult {
-  total: number;
-  succeeded: number[];
-  failed: number[];
-  errors: Array<{ id: number; error: string }>;
-}
 
 /** Re-run AI analysis on a batch of fabrics. Shared by the REST route and
  * Elaine's bulk_reanalyze_quilting action. */
 export async function bulkReanalyzeFabrics(
   ids: number[],
-): Promise<BulkReanalyzeResult> {
+): Promise<{ succeeded: number[]; failed: number[] }> {
   const capped = [...new Set(ids)].slice(0, MAX_BULK_REANALYZE);
-  const limit = pLimit(BULK_REANALYZE_CONCURRENCY);
+  const succeeded: number[] = [];
+  const failed: number[] = [];
 
-  const results = await Promise.all(
-    capped.map((id) =>
-      limit(async () => {
-        try {
-          const [row] = await db
-            .select()
-            .from(fabrics)
-            .where(eq(fabrics.id, id))
-            .limit(1);
-          if (!row) {
-            return {
-              id,
-              status: "error" as const,
-              error: "Fabric not found.",
-            };
-          }
+  for (const id of capped) {
+    try {
+      const [row] = await db
+        .select()
+        .from(fabrics)
+        .where(eq(fabrics.id, id))
+        .limit(1);
+      if (!row) {
+        failed.push(id);
+        continue;
+      }
 
-          const supplementalPaths = await db
-            .select({ storagePath: quiltingImages.storagePath })
-            .from(quiltingImages)
-            .where(sql`entity_type = 'fabric' AND entity_id = ${id}`)
-            .orderBy(quiltingImages.position);
+      const supplementalPaths = await db
+        .select({ storagePath: quiltingImages.storagePath })
+        .from(quiltingImages)
+        .where(sql`entity_type = 'fabric' AND entity_id = ${id}`)
+        .orderBy(quiltingImages.position);
 
-          const allPaths = [
-            row.imagePath,
-            ...supplementalPaths.map((i) => i.storagePath),
-          ].slice(0, MAX_REANALYZE_IMAGES);
-          const settled = await Promise.allSettled(
-            allPaths.map(downloadImageAsDataUrl),
-          );
-          const dataUrls = settled
-            .filter(
-              (s): s is PromiseFulfilledResult<string> =>
-                s.status === "fulfilled",
-            )
-            .map((s) => s.value);
-          if (dataUrls.length === 0) {
-            return {
-              id,
-              status: "error" as const,
-              error: "Could not load any image for this fabric.",
-            };
-          }
+      const allPaths = [
+        row.imagePath,
+        ...supplementalPaths.map((i) => i.storagePath),
+      ].slice(0, MAX_REANALYZE_IMAGES);
+      const settled = await Promise.allSettled(
+        allPaths.map(downloadImageAsDataUrl),
+      );
+      const dataUrls = settled
+        .filter(
+          (s): s is PromiseFulfilledResult<string> => s.status === "fulfilled",
+        )
+        .map((s) => s.value);
+      if (dataUrls.length === 0) {
+        failed.push(id);
+        continue;
+      }
 
-          const lockedFields = (row.lockedFields as string[]) ?? [];
-          const context: AnalysisContext = {
-            lockedFields,
-            name: row.name,
-            lineName: row.lineName,
-            designer: row.designer,
-            manufacturer: row.manufacturer,
-            colorway: row.colorway,
-            printType: row.printType,
-            fiberContent: row.fiberContent,
-            dominantColors: row.dominantColors,
-            motifs: row.motifs,
-            styleDescriptors: row.styleDescriptors,
-          };
-          const [analysis, visualEmb] = await Promise.all([
-            analyzeImage(dataUrls, context),
-            generateVisualEmbedding(dataUrls[0]).catch(() => null),
-          ]);
-          const embedding = await embedText(buildEmbeddingText(analysis));
-          await db
-            .update(fabrics)
-            .set({
-              ...(lockedFields.includes("name") ? {} : { name: analysis.name }),
-              ...(lockedFields.includes("lineName")
-                ? {}
-                : { lineName: analysis.lineName }),
-              ...(lockedFields.includes("designer")
-                ? {}
-                : { designer: analysis.designer }),
-              ...(lockedFields.includes("manufacturer")
-                ? {}
-                : { manufacturer: analysis.manufacturer }),
-              ...(lockedFields.includes("colorway")
-                ? {}
-                : { colorway: analysis.colorway }),
-              ...(lockedFields.includes("printType")
-                ? {}
-                : { printType: analysis.printType }),
-              ...(lockedFields.includes("fiberContent")
-                ? {}
-                : { fiberContent: analysis.fiberContent }),
-              aiDescription: analysis.aiDescription,
-              ...(lockedFields.includes("dominantColors")
-                ? {}
-                : { dominantColors: analysis.dominantColors }),
-              ...(lockedFields.includes("motifs")
-                ? {}
-                : { motifs: analysis.motifs }),
-              ...(lockedFields.includes("styleDescriptors")
-                ? {}
-                : { styleDescriptors: analysis.styleDescriptors }),
-              embedding: sql`${`[${embedding.join(",")}]`}::vector`,
-              ...(visualEmb
-                ? {
-                    visualEmbedding: sql`${`[${visualEmb.join(",")}]`}::vector`,
-                  }
-                : {}),
-            })
-            .where(eq(fabrics.id, id));
-          return { id, status: "ok" as const };
-        } catch (err) {
-          logger.error({ itemId: id, err }, "bulk-reanalyze: item failed");
-          return {
-            id,
-            status: "error" as const,
-            error: err instanceof Error ? err.message : String(err),
-          };
-        }
-      }),
-    ),
-  );
+      const lockedFields = (row.lockedFields as string[]) ?? [];
+      const context: AnalysisContext = {
+        lockedFields,
+        name: row.name,
+        lineName: row.lineName,
+        designer: row.designer,
+        manufacturer: row.manufacturer,
+        colorway: row.colorway,
+        printType: row.printType,
+        fiberContent: row.fiberContent,
+        dominantColors: row.dominantColors,
+        motifs: row.motifs,
+        styleDescriptors: row.styleDescriptors,
+      };
+      const [analysis, visualEmb] = await Promise.all([
+        analyzeImage(dataUrls, context),
+        generateVisualEmbedding(dataUrls[0]).catch(() => null),
+      ]);
+      const embedding = await embedText(buildEmbeddingText(analysis));
+      await db
+        .update(fabrics)
+        .set({
+          ...(lockedFields.includes("name") ? {} : { name: analysis.name }),
+          ...(lockedFields.includes("lineName")
+            ? {}
+            : { lineName: analysis.lineName }),
+          ...(lockedFields.includes("designer")
+            ? {}
+            : { designer: analysis.designer }),
+          ...(lockedFields.includes("manufacturer")
+            ? {}
+            : { manufacturer: analysis.manufacturer }),
+          ...(lockedFields.includes("colorway")
+            ? {}
+            : { colorway: analysis.colorway }),
+          ...(lockedFields.includes("printType")
+            ? {}
+            : { printType: analysis.printType }),
+          ...(lockedFields.includes("fiberContent")
+            ? {}
+            : { fiberContent: analysis.fiberContent }),
+          aiDescription: analysis.aiDescription,
+          ...(lockedFields.includes("dominantColors")
+            ? {}
+            : { dominantColors: analysis.dominantColors }),
+          ...(lockedFields.includes("motifs")
+            ? {}
+            : { motifs: analysis.motifs }),
+          ...(lockedFields.includes("styleDescriptors")
+            ? {}
+            : { styleDescriptors: analysis.styleDescriptors }),
+          embedding: sql`${`[${embedding.join(",")}]`}::vector`,
+          ...(visualEmb
+            ? {
+                visualEmbedding: sql`${`[${visualEmb.join(",")}]`}::vector`,
+              }
+            : {}),
+        })
+        .where(eq(fabrics.id, id));
+      succeeded.push(id);
+    } catch {
+      failed.push(id);
+    }
+    if (capped.indexOf(id) < capped.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+  }
 
-  const succeeded = results
-    .filter((result) => result.status === "ok")
-    .map((result) => result.id);
-  const errors = results
-    .filter(
-      (
-        result,
-      ): result is Extract<(typeof results)[number], { status: "error" }> =>
-        result.status === "error",
-    )
-    .map((result) => ({ id: result.id, error: result.error }));
-
-  return {
-    total: capped.length,
-    succeeded,
-    failed: errors.map((error) => error.id),
-    errors,
-  };
+  return { succeeded, failed };
 }
 
 router.post("/fabrics/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
   const { ids } = BulkReanalyzeFabricsBody.parse(req.body);
-  res.json(BulkReanalyzeFabricsResponse.parse(await bulkReanalyzeFabrics(ids)));
+  const { succeeded, failed } = await bulkReanalyzeFabrics(ids);
+  res.json(BulkReanalyzeFabricsResponse.parse({ succeeded, failed }));
 });
 
 // ---------------------------------------------------------------------------

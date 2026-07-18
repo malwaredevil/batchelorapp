@@ -1,24 +1,5 @@
-import type { PageContext } from "@workspace/api-client-react";
-import {
+export {
   ElainePageContextProvider as AssistantContextProvider,
+  usePageElaineContext as usePageAssistantContext,
   useElainePageContextReader as useAssistantPageContextReader,
-  usePageElaineContext,
 } from "@workspace/elaine-ui";
-
-export { AssistantContextProvider, useAssistantPageContextReader };
-
-export function usePageAssistantContext(
-  pageId: string,
-  context: string | PageContext | undefined,
-) {
-  usePageElaineContext(
-    pageId,
-    typeof context === "string"
-      ? {
-          module: "ornaments",
-          description: `Viewing ${pageId}.`,
-          userNotes: context,
-        }
-      : context,
-  );
-}

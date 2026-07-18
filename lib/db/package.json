@@ -5,11 +5,17 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./schema": "./src/schema/index.ts"
+    "./schema": "./src/schema/index.ts",
+    "./migrations": "./src/migrations/index.ts"
   },
   "scripts": {
     "bootstrap": "tsx src/bootstrap.ts",
-    "push": "drizzle-kit push --config ./drizzle.config.ts"
+    "migrate:status": "tsx src/migrations/cli.ts status",
+    "migrate:plan": "tsx src/migrations/cli.ts plan",
+    "migrate:apply": "tsx src/migrations/cli.ts apply",
+    "migrate:test-clean": "tsx src/migrations/cli.ts test-clean",
+    "migrate:test-upgrade": "tsx src/migrations/cli.ts test-upgrade",
+    "schema:diff": "tsx src/migrations/cli.ts diff"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",

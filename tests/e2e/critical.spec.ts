@@ -7,7 +7,7 @@ test("anonymous users land on login instead of authenticated pages", async ({
   await mockAnonymousAuth(page);
   await page.goto("/");
   await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByRole("button", { name: /log in/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible();
 });
 
 test("login failure keeps a generic failure state", async ({ page }) => {
@@ -22,7 +22,7 @@ test("login failure keeps a generic failure state", async ({ page }) => {
   await page.goto("/login");
   await page.getByLabel(/email/i).fill("not-a-user@example.test");
   await page.getByLabel(/password/i).fill("wrong-password");
-  await page.getByRole("button", { name: /log in/i }).click();
+  await page.getByRole("button", { name: /sign in/i }).click();
   await expect(page.getByText(/incorrect email or password/i)).toBeVisible();
 });
 

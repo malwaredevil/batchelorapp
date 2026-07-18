@@ -1,7 +1,11 @@
 import { eq } from "drizzle-orm";
 import { db, ornamentsBarcodeCache } from "@workspace/db";
 import { logger } from "../logger";
-import { getConfig } from "../app-config";
+import {
+  DEFAULT_UPCITEMDB_PAID_URL,
+  DEFAULT_UPCITEMDB_TRIAL_URL,
+  getConfig,
+} from "../app-config";
 
 /**
  * UPCitemdb barcode lookup, cached per-UPC in ornaments_barcode_cache so
@@ -45,8 +49,16 @@ async function fetchFromUpcItemDb(
   // Free trial endpoint requires no API key and works for up to 100 lookups/day.
   // If UPCITEMDB_USER_KEY is set, uses the paid endpoint for higher rate limits.
   const baseUrl = userKey
-    ? "https://api.upcitemdb.com/prod/v1/lookup"
-    : "https://api.upcitemdb.com/prod/trial/lookup";
+    ? await getConfig(
+        "ornaments",
+        "barcode_paid_url",
+        DEFAULT_UPCITEMDB_PAID_URL,
+      )
+    : await getConfig(
+        "ornaments",
+        "barcode_trial_url",
+        DEFAULT_UPCITEMDB_TRIAL_URL,
+      );
 
   const controller = new AbortController();
   const fetchTimeoutMs = await getConfig(

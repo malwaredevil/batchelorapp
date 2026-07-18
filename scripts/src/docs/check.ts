@@ -9,7 +9,10 @@ const SECRET_RE =
 
 for (const file of fs.readdirSync(GENERATED_DIR)) {
   const full = path.join(GENERATED_DIR, file);
-  if (fs.statSync(full).isFile() && SECRET_RE.test(fs.readFileSync(full, "utf8"))) {
+  if (
+    fs.statSync(full).isFile() &&
+    SECRET_RE.test(fs.readFileSync(full, "utf8"))
+  ) {
     throw new Error(`Generated docs may contain a secret-like value: ${file}`);
   }
 }
@@ -23,10 +26,14 @@ try {
   console.error(
     "Generated documentation is out of date. Run pnpm --filter @workspace/scripts run docs:generate and commit the result.",
   );
-  execFileSync("git", ["--no-pager", "diff", "--stat", "--", "docs/generated"], {
-    cwd: ROOT,
-    stdio: "inherit",
-  });
+  execFileSync(
+    "git",
+    ["--no-pager", "diff", "--stat", "--", "docs/generated"],
+    {
+      cwd: ROOT,
+      stdio: "inherit",
+    },
+  );
   process.exit(1);
 }
 

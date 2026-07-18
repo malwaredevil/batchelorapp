@@ -32,7 +32,11 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (command === "diff" || command === "test-clean" || command === "test-upgrade") {
+  if (
+    command === "diff" ||
+    command === "test-clean" ||
+    command === "test-upgrade"
+  ) {
     if (status.checksumErrors.length > 0) {
       console.error(status.checksumErrors.join("\n"));
       process.exit(1);

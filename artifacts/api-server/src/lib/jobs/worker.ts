@@ -79,7 +79,10 @@ async function markFailed(job: ClaimedJob, err: unknown): Promise<void> {
   );
 }
 
-async function processOne(workerId: string, signal: AbortSignal): Promise<void> {
+async function processOne(
+  workerId: string,
+  signal: AbortSignal,
+): Promise<void> {
   const job = await claimJob(workerId);
   if (!job) return;
   const definition = JOB_REGISTRY_BY_TYPE.get(job.type);

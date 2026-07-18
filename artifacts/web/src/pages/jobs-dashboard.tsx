@@ -45,18 +45,21 @@ export default function JobsDashboard() {
         </div>
 
         <section className="grid gap-3 sm:grid-cols-4">
-          {["queued_count", "running_count", "dead_letter_count", "oldest_queued_at"].map(
-            (key) => (
-              <div key={key} className="rounded-lg border bg-card p-4">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                  {key.replace(/_/g, " ")}
-                </p>
-                <p className="mt-2 text-lg font-semibold">
-                  {value(healthRow, key)}
-                </p>
-              </div>
-            ),
-          )}
+          {[
+            "queued_count",
+            "running_count",
+            "dead_letter_count",
+            "oldest_queued_at",
+          ].map((key) => (
+            <div key={key} className="rounded-lg border bg-card p-4">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                {key.replace(/_/g, " ")}
+              </p>
+              <p className="mt-2 text-lg font-semibold">
+                {value(healthRow, key)}
+              </p>
+            </div>
+          ))}
         </section>
 
         <section className="rounded-lg border bg-card">

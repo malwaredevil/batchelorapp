@@ -82,7 +82,10 @@ function Routes() {
         <Route path="/owner-panel" component={OwnerPanel} />
         <Route path="/control-panel" component={ControlPanel} />
         <Route path="/control-panel/jobs" component={JobsDashboard} />
-        <Route path="/control-panel/operations" component={OperationsDashboard} />
+        <Route
+          path="/control-panel/operations"
+          component={OperationsDashboard}
+        />
         <Route path="/google-apis-demo" component={GoogleApisDemo} />
         <Route path="/login">
           <Redirect to="/" />

@@ -34,12 +34,19 @@ export const appJobs = pgTable(
     queue: text("queue").notNull().default("default"),
     status: text("status").notNull().default("queued"),
     priority: integer("priority").notNull().default(0),
-    payload: jsonb("payload").notNull().default(sql`'{}'::jsonb`),
-    payloadSchemaVersion: integer("payload_schema_version").notNull().default(1),
+    payload: jsonb("payload")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    payloadSchemaVersion: integer("payload_schema_version")
+      .notNull()
+      .default(1),
     idempotencyKey: text("idempotency_key"),
-    createdByUserId: integer("created_by_user_id").references(() => appUsers.id, {
-      onDelete: "set null",
-    }),
+    createdByUserId: integer("created_by_user_id").references(
+      () => appUsers.id,
+      {
+        onDelete: "set null",
+      },
+    ),
     domain: text("domain"),
     scheduledFor: timestamp("scheduled_for", { withTimezone: true })
       .defaultNow()
@@ -86,7 +93,9 @@ export const appJobAttempts = pgTable(
     completedAt: timestamp("completed_at", { withTimezone: true }),
     errorCode: text("error_code"),
     errorMessage: text("error_message"),
-    metadata: jsonb("metadata").notNull().default(sql`'{}'::jsonb`),
+    metadata: jsonb("metadata")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
   },
   (t) => [index("app_job_attempts_job_idx").on(t.jobId)],
 ).enableRLS();
@@ -127,7 +136,9 @@ export const externalOperationEvents = pgTable(
     currency: text("currency").notNull().default("USD"),
     pricingVersionAt: timestamp("pricing_version_at", { withTimezone: true }),
     providerRequestId: text("provider_request_id"),
-    metadata: jsonb("metadata").notNull().default(sql`'{}'::jsonb`),
+    metadata: jsonb("metadata")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -190,7 +201,9 @@ export const externalBudgetPolicies = pgTable(
       scale: 2,
     }).notNull(),
     warningPolicy: text("warning_policy").notNull().default("owner_dashboard"),
-    degradationAction: text("degradation_action").notNull().default("warn_only"),
+    degradationAction: text("degradation_action")
+      .notNull()
+      .default("warn_only"),
     enabled: boolean("enabled").notNull().default(true),
     overrideUntil: timestamp("override_until", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -200,7 +213,9 @@ export const externalBudgetPolicies = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (t) => [index("external_budget_policies_scope_idx").on(t.scope, t.scopeValue)],
+  (t) => [
+    index("external_budget_policies_scope_idx").on(t.scope, t.scopeValue),
+  ],
 ).enableRLS();
 
 export type AppJob = typeof appJobs.$inferSelect;

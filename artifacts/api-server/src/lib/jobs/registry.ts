@@ -45,7 +45,10 @@ export const JOB_REGISTRY = [
     idempotencyStrategy:
       "One row per deterministic scheduledWindow; reminder delivery uses existing alert ledgers.",
     handler: async (_payload, context) => {
-      await context.updateProgress(100, "Reminder scheduler checkpoint recorded.");
+      await context.updateProgress(
+        100,
+        "Reminder scheduler checkpoint recorded.",
+      );
     },
   },
   {
@@ -57,7 +60,10 @@ export const JOB_REGISTRY = [
     idempotencyStrategy:
       "Idempotency key gmail-scan:<userId>:<window>; message IDs remain the import ledger.",
     handler: async (_payload, context) => {
-      await context.updateProgress(100, "Gmail scan job placeholder completed.");
+      await context.updateProgress(
+        100,
+        "Gmail scan job placeholder completed.",
+      );
     },
   },
   {
@@ -72,7 +78,10 @@ export const JOB_REGISTRY = [
     idempotencyStrategy:
       "Parent job fans out deterministic child keys by module/record/model version.",
     handler: async (_payload, context) => {
-      await context.updateProgress(100, "Bulk AI reanalysis fan-out placeholder completed.");
+      await context.updateProgress(
+        100,
+        "Bulk AI reanalysis fan-out placeholder completed.",
+      );
     },
   },
   {
@@ -84,7 +93,10 @@ export const JOB_REGISTRY = [
     idempotencyStrategy:
       "Future Apify runs key by actor/run/dataset identifiers and snapshot hash.",
     handler: async (_payload, context) => {
-      await context.updateProgress(100, "Apify-compatible provider placeholder completed.");
+      await context.updateProgress(
+        100,
+        "Apify-compatible provider placeholder completed.",
+      );
     },
   },
   {
@@ -101,7 +113,10 @@ export const JOB_REGISTRY = [
     idempotencyStrategy:
       "Embeddings overwrite by module/record/modelVersion instead of appending duplicates.",
     handler: async (_payload, context) => {
-      await context.updateProgress(100, "Embedding generation placeholder completed.");
+      await context.updateProgress(
+        100,
+        "Embedding generation placeholder completed.",
+      );
     },
   },
   {
@@ -113,7 +128,10 @@ export const JOB_REGISTRY = [
     idempotencyStrategy:
       "Daily singleton key operations-aggregate-retention:<yyyy-mm-dd>.",
     handler: async (_payload, context) => {
-      await context.updateProgress(100, "Operations retention checkpoint recorded.");
+      await context.updateProgress(
+        100,
+        "Operations retention checkpoint recorded.",
+      );
     },
   },
 ] satisfies JobDefinition<z.ZodTypeAny>[];

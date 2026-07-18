@@ -52,4 +52,6 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log("Database security allowlist and hardening migration are consistent.");
+console.log(
+  "Database security allowlist and hardening migration are consistent.",
+);

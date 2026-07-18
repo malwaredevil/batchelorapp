@@ -10,7 +10,9 @@ const missing = ["/jobs", "/operations/summary", "/operations/events"].filter(
 );
 
 if (missing.length > 0) {
-  console.error(`OpenAPI route audit failed; missing paths: ${missing.join(", ")}`);
+  console.error(
+    `OpenAPI route audit failed; missing paths: ${missing.join(", ")}`,
+  );
   process.exit(1);
 }
 

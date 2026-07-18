@@ -13,9 +13,11 @@ router.get("/healthz", (_req, res) => {
       ? {
           expectedLatestVersion:
             getStartupMigrationStatus()!.expectedLatestVersion,
-          appliedLatestVersion: getStartupMigrationStatus()!.appliedLatestVersion,
+          appliedLatestVersion:
+            getStartupMigrationStatus()!.appliedLatestVersion,
           pendingCount: getStartupMigrationStatus()!.pending.length,
-          checksumErrorCount: getStartupMigrationStatus()!.checksumErrors.length,
+          checksumErrorCount:
+            getStartupMigrationStatus()!.checksumErrors.length,
         }
       : null,
   });

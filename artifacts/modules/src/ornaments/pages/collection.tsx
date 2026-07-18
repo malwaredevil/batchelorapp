@@ -35,6 +35,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { CollectionErrorState } from "@/components/CollectionErrorState";
 
 function NextHallmarkEventCard() {
   const { data: connectedCalendars = [] } = useListConnectedCalendars();
@@ -157,7 +158,7 @@ export default function Collection() {
   if (debouncedSearch) queryParams.q = debouncedSearch;
   if (selectedCat) queryParams.categoryId = selectedCat;
 
-  const { data, isLoading } = useListOrnaments(queryParams);
+  const { data, isLoading, isError, refetch } = useListOrnaments(queryParams);
   const items = data?.items || [];
 
   const { data: categories } = useListOrnamentCategories();
@@ -349,7 +350,14 @@ export default function Collection() {
       </div>
 
       {/* Grid View */}
-      {viewMode === "grid" && (
+      {isError && (
+        <CollectionErrorState
+          onRetry={refetch}
+          message="Couldn't load your ornament collection. Check your connection and try again."
+        />
+      )}
+
+      {viewMode === "grid" && !isError && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
           {sortedItems.map((item) => (
             <Link
@@ -397,7 +405,7 @@ export default function Collection() {
       )}
 
       {/* List View */}
-      {viewMode === "list" && (
+      {viewMode === "list" && !isError && (
         <div className="flex flex-col gap-3">
           {sortedItems.map((item) => (
             <Link
@@ -451,7 +459,7 @@ export default function Collection() {
         </div>
       )}
 
-      {!isLoading && sortedItems.length === 0 && (
+      {!isLoading && !isError && sortedItems.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 px-4 text-center border border-dashed border-border rounded-2xl bg-card shadow-sm">
           <div className="h-16 w-16 bg-muted rounded-full flex items-center justify-center mb-4">
             <ImageIcon className="h-8 w-8 text-muted-foreground opacity-50" />

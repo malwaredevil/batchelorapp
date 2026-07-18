@@ -304,6 +304,7 @@ export default function Quilts() {
     data: quiltsData,
     isLoading,
     isError,
+    refetch,
   } = useListQuilts({ pageSize: 200 });
   const quilts = (quiltsData?.items ?? []) as QuiltSummary[];
 
@@ -433,6 +434,7 @@ export default function Quilts() {
       items={quilts}
       isLoading={isLoading}
       isError={isError}
+      onRetry={refetch}
       {...pageState}
       title="Finished Quilts"
       singularNoun="quilt"

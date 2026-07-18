@@ -796,7 +796,9 @@ export default function Collection() {
         queryKey: getListPotteryQueryKey(),
       });
       setBulkStatus(
-        `Done — ${result.succeeded.length} refreshed${result.failed.length ? `, ${result.failed.length} failed` : ""}.`,
+        result.failed.length
+          ? `Re-analysed ${result.succeeded.length}/${result.total} items. ${result.failed.length} failed — try again.`
+          : `Re-analysed ${result.succeeded.length}/${result.total} items.`,
       );
       setBulkSelectedIds(new Set());
     } catch {

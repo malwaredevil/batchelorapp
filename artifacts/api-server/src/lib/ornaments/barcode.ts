@@ -45,8 +45,16 @@ async function fetchFromUpcItemDb(
   // Free trial endpoint requires no API key and works for up to 100 lookups/day.
   // If UPCITEMDB_USER_KEY is set, uses the paid endpoint for higher rate limits.
   const baseUrl = userKey
-    ? "https://api.upcitemdb.com/prod/v1/lookup"
-    : "https://api.upcitemdb.com/prod/trial/lookup";
+    ? await getConfig(
+        "ornaments",
+        "barcode_paid_url",
+        "https://api.upcitemdb.com/prod/v1/lookup",
+      )
+    : await getConfig(
+        "ornaments",
+        "barcode_trial_url",
+        "https://api.upcitemdb.com/prod/trial/lookup",
+      );
 
   const controller = new AbortController();
   const fetchTimeoutMs = await getConfig(

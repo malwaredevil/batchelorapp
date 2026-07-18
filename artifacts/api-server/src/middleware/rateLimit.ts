@@ -11,8 +11,8 @@ const jsonLimitMessage = {
 // an in-memory store would let an attacker reset their budget on every new
 // instance the load balancer routes them to. The shared `rate_limits` table
 // makes these caps a real, deployment-wide ceiling instead of a per-process
-// one. `passOnStoreError: true` fails OPEN if the DB is briefly unreachable,
-// so a database hiccup degrades to "unprotected" rather than "site down".
+// one. `passOnStoreError: false` fails CLOSED if the DB is briefly unreachable,
+// so a database hiccup returns 429 (deny) rather than allowing unlimited requests.
 export const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -20,7 +20,7 @@ export const loginLimiter = rateLimit({
   legacyHeaders: false,
   message: jsonLimitMessage,
   store: new PostgresRateLimitStore("login"),
-  passOnStoreError: true,
+  passOnStoreError: false,
 });
 
 // Covers fabric creation (AI cataloguing + embedding) and reanalyze — both
@@ -33,7 +33,7 @@ export const aiLimiter = rateLimit({
   legacyHeaders: false,
   message: jsonLimitMessage,
   store: new PostgresRateLimitStore("ai"),
-  passOnStoreError: true,
+  passOnStoreError: false,
 });
 
 // Bulk re-analyze endpoints send small batches (3 items each) due to the
@@ -46,7 +46,7 @@ export const bulkAiLimiter = rateLimit({
   legacyHeaders: false,
   message: jsonLimitMessage,
   store: new PostgresRateLimitStore("bulk-ai"),
-  passOnStoreError: true,
+  passOnStoreError: false,
 });
 
 // The compare endpoint is the most expensive request shape in the app: it fans
@@ -60,7 +60,7 @@ export const compareLimiter = rateLimit({
   legacyHeaders: false,
   message: jsonLimitMessage,
   store: new PostgresRateLimitStore("compare"),
-  passOnStoreError: true,
+  passOnStoreError: false,
 });
 
 // Phone verification codes send a real SMS via AgentPhone (cost + abuse
@@ -74,7 +74,7 @@ export const phoneVerifyLimiter = rateLimit({
   legacyHeaders: false,
   message: jsonLimitMessage,
   store: new PostgresRateLimitStore("phone-verify"),
-  passOnStoreError: true,
+  passOnStoreError: false,
 });
 
 // Supplemental image uploads attach extra photos to an existing pottery piece.
@@ -87,7 +87,7 @@ export const supplementalUploadLimiter = rateLimit({
   legacyHeaders: false,
   message: jsonLimitMessage,
   store: new PostgresRateLimitStore("supplemental-upload"),
-  passOnStoreError: true,
+  passOnStoreError: false,
 });
 
 // Password reset token submission. Each request runs bcrypt (cost 12) before
@@ -100,5 +100,5 @@ export const passwordResetLimiter = rateLimit({
   legacyHeaders: false,
   message: jsonLimitMessage,
   store: new PostgresRateLimitStore("password-reset"),
-  passOnStoreError: true,
+  passOnStoreError: false,
 });

@@ -1,4 +1,7 @@
 import { useRef, useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { useLocation } from "wouter";
 import { ArrowLeft, Camera, Upload, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,6 +18,16 @@ import { useQueryClient } from "@tanstack/react-query";
 import { TagSelector } from "@/quilting/components/tag-selector";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
 
+const AddQuiltSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  dateCompleted: z.string().optional(),
+  recipient: z.string().optional(),
+  sizeWidth: z.coerce.number().min(0).optional(),
+  sizeHeight: z.coerce.number().min(0).optional(),
+  notes: z.string().optional(),
+});
+type AddQuiltFields = z.infer<typeof AddQuiltSchema>;
+
 export default function AddQuilt() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
@@ -24,6 +37,15 @@ export default function AddQuilt() {
   const [selectedCatIds, setSelectedCatIds] = useState<number[]>([]);
 
   const { data: allCategories } = useListQuiltingCategories();
+
+  const {
+    register,
+    handleSubmit: rhfHandleSubmit,
+    formState: { errors },
+  } = useForm<AddQuiltFields>({
+    resolver: zodResolver(AddQuiltSchema),
+    defaultValues: { name: "" },
+  });
 
   usePageAssistantContext(
     "quilting-quilts-add",
@@ -48,26 +70,24 @@ export default function AddQuilt() {
     setPreview(URL.createObjectURL(f));
   }
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  function handleFormSubmit(data: AddQuiltFields) {
     if (!file) {
       toast.error("Please add a photo of the quilt.");
       return;
     }
-    const fd = new FormData(e.currentTarget);
-    const get = (k: string) => (fd.get(k) as string | null) || undefined;
     const categoryNames = (allCategories ?? [])
       .filter((c) => selectedCatIds.includes(c.id))
       .map((c) => c.name);
     create.mutate({
       data: {
         image: file,
-        name: fd.get("name") as string,
-        dateCompleted: get("dateCompleted"),
-        recipient: get("recipient"),
-        sizeWidth: get("sizeWidth"),
-        sizeHeight: get("sizeHeight"),
-        notes: get("notes"),
+        name: data.name,
+        dateCompleted: data.dateCompleted || undefined,
+        recipient: data.recipient || undefined,
+        sizeWidth: data.sizeWidth != null ? String(data.sizeWidth) : undefined,
+        sizeHeight:
+          data.sizeHeight != null ? String(data.sizeHeight) : undefined,
+        notes: data.notes || undefined,
         categories:
           categoryNames.length > 0 ? JSON.stringify(categoryNames) : undefined,
       },
@@ -87,7 +107,7 @@ export default function AddQuilt() {
         <h1 className="text-xl font-bold">Add finished quilt</h1>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={rhfHandleSubmit(handleFormSubmit)} className="space-y-6">
         <div>
           <Label className="mb-2 block">
             Photo <span className="text-destructive">*</span>
@@ -141,60 +161,74 @@ export default function AddQuilt() {
             </Label>
             <Input
               id="name"
-              name="name"
-              required
               placeholder="e.g. Grandma's Star Quilt"
               className="mt-1.5"
+              {...register("name")}
             />
+            {errors.name && (
+              <p className="mt-1 text-xs text-destructive">
+                {errors.name.message}
+              </p>
+            )}
           </div>
           <div>
             <Label htmlFor="dateCompleted">Date completed</Label>
             <Input
               id="dateCompleted"
-              name="dateCompleted"
               type="date"
               className="mt-1.5"
+              {...register("dateCompleted")}
             />
           </div>
           <div>
             <Label htmlFor="recipient">Recipient</Label>
             <Input
               id="recipient"
-              name="recipient"
               placeholder="e.g. Given to Sarah"
               className="mt-1.5"
+              {...register("recipient")}
             />
           </div>
           <div>
             <Label htmlFor="sizeWidth">Width (inches)</Label>
             <Input
               id="sizeWidth"
-              name="sizeWidth"
               type="number"
               step="0.5"
               placeholder="e.g. 60"
               className="mt-1.5"
+              {...register("sizeWidth", { valueAsNumber: true })}
             />
+            {errors.sizeWidth && (
+              <p className="mt-1 text-xs text-destructive">
+                {errors.sizeWidth.message}
+              </p>
+            )}
           </div>
           <div>
             <Label htmlFor="sizeHeight">Height (inches)</Label>
             <Input
               id="sizeHeight"
-              name="sizeHeight"
               type="number"
               step="0.5"
               placeholder="e.g. 72"
               className="mt-1.5"
+              {...register("sizeHeight", { valueAsNumber: true })}
             />
+            {errors.sizeHeight && (
+              <p className="mt-1 text-xs text-destructive">
+                {errors.sizeHeight.message}
+              </p>
+            )}
           </div>
           <div className="sm:col-span-2">
             <Label htmlFor="notes">Notes</Label>
             <Textarea
               id="notes"
-              name="notes"
               placeholder="Materials used, story behind the quilt..."
               className="mt-1.5"
               rows={3}
+              {...register("notes")}
             />
           </div>
         </div>

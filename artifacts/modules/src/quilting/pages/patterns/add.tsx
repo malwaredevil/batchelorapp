@@ -1,4 +1,7 @@
 import { useRef, useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { useLocation } from "wouter";
 import {
   ArrowLeft,
@@ -23,23 +26,39 @@ import { useQueryClient } from "@tanstack/react-query";
 import { TagSelector } from "@/quilting/components/tag-selector";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
 
+const AddPatternSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  designer: z.string().optional(),
+  blockSize: z.string().optional(),
+  difficulty: z.string().optional(),
+  sourceType: z.string().optional(),
+  sourceReference: z.string().optional(),
+  notes: z.string().optional(),
+});
+type AddPatternFields = z.infer<typeof AddPatternSchema>;
+
 export default function AddPattern() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const formRef = useRef<HTMLFormElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [selectedCatIds, setSelectedCatIds] = useState<number[]>([]);
 
-  // URL import state
   const [importUrl, setImportUrl] = useState("");
   const [importing, setImporting] = useState(false);
 
-  // Pre-filled field values (used after import)
-  const [fields, setFields] = useState<Record<string, string>>({});
-
   const { data: allCategories } = useListQuiltingCategories();
+
+  const {
+    register,
+    handleSubmit: rhfHandleSubmit,
+    setValue,
+    formState: { errors },
+  } = useForm<AddPatternFields>({
+    resolver: zodResolver(AddPatternSchema),
+    defaultValues: { name: "" },
+  });
 
   usePageAssistantContext(
     "quilting-patterns-add",
@@ -79,15 +98,13 @@ export default function AddPattern() {
     setImporting(true);
     try {
       const info = await importFromUrl.mutateAsync({ data: { url } });
-      const next: Record<string, string> = {};
-      if (info.name) next.name = info.name;
-      if (info.designer) next.designer = info.designer;
-      if (info.difficulty) next.difficulty = info.difficulty;
+      if (info.name) setValue("name", info.name);
+      if (info.designer) setValue("designer", info.designer);
+      if (info.difficulty) setValue("difficulty", info.difficulty);
       if (info.blockSizeInches != null)
-        next.blockSize = `${info.blockSizeInches}"`;
-      if (info.style) next.sourceType = info.style;
-      if (info.notes) next.notes = info.notes;
-      setFields(next);
+        setValue("blockSize", `${info.blockSizeInches}"`);
+      if (info.style) setValue("sourceType", info.style);
+      if (info.notes) setValue("notes", info.notes);
       toast.success("Pattern info imported! Review the fields below.");
     } catch {
       toast.error(
@@ -98,23 +115,20 @@ export default function AddPattern() {
     }
   }
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    const get = (k: string) => (fd.get(k) as string | null) || undefined;
+  function handleFormSubmit(data: AddPatternFields) {
     const categoryNames = (allCategories ?? [])
       .filter((c) => selectedCatIds.includes(c.id))
       .map((c) => c.name);
     create.mutate({
       data: {
         image: file ?? undefined,
-        name: fd.get("name") as string,
-        designer: get("designer"),
-        blockSize: get("blockSize"),
-        difficulty: get("difficulty"),
-        sourceType: get("sourceType"),
-        sourceReference: get("sourceReference"),
-        notes: get("notes"),
+        name: data.name,
+        designer: data.designer || undefined,
+        blockSize: data.blockSize || undefined,
+        difficulty: data.difficulty || undefined,
+        sourceType: data.sourceType || undefined,
+        sourceReference: data.sourceReference || undefined,
+        notes: data.notes || undefined,
         categories:
           categoryNames.length > 0 ? JSON.stringify(categoryNames) : undefined,
       },
@@ -153,13 +167,13 @@ export default function AddPattern() {
               placeholder="https://www.etsy.com/listing/…"
               className="pl-8 text-sm"
               onKeyDown={(e) =>
-                e.key === "Enter" && (e.preventDefault(), handleImport())
+                e.key === "Enter" && (e.preventDefault(), void handleImport())
               }
             />
           </div>
           <Button
             type="button"
-            onClick={handleImport}
+            onClick={() => void handleImport()}
             disabled={importing}
             className="shrink-0"
             size="sm"
@@ -176,7 +190,7 @@ export default function AddPattern() {
         </div>
       </div>
 
-      <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={rhfHandleSubmit(handleFormSubmit)} className="space-y-6">
         {/* Optional photo */}
         <div>
           <Label className="mb-2 block">Photo (optional)</Label>
@@ -228,77 +242,69 @@ export default function AddPattern() {
             </Label>
             <Input
               id="name"
-              name="name"
-              required
               placeholder="e.g. Flying Geese, Log Cabin"
               className="mt-1.5"
-              defaultValue={fields.name ?? ""}
-              key={`name-${fields.name}`}
+              {...register("name")}
             />
+            {errors.name && (
+              <p className="mt-1 text-xs text-destructive">
+                {errors.name.message}
+              </p>
+            )}
           </div>
           <div>
             <Label htmlFor="designer">Designer</Label>
             <Input
               id="designer"
-              name="designer"
               placeholder="e.g. Bonnie Hunter"
               className="mt-1.5"
-              defaultValue={fields.designer ?? ""}
-              key={`designer-${fields.designer}`}
+              {...register("designer")}
             />
           </div>
           <div>
             <Label htmlFor="blockSize">Block size</Label>
             <Input
               id="blockSize"
-              name="blockSize"
               placeholder='e.g. 6", 12.5"'
               className="mt-1.5"
-              defaultValue={fields.blockSize ?? ""}
-              key={`blockSize-${fields.blockSize}`}
+              {...register("blockSize")}
             />
           </div>
           <div>
             <Label htmlFor="difficulty">Difficulty</Label>
             <Input
               id="difficulty"
-              name="difficulty"
               placeholder="e.g. beginner, intermediate"
               className="mt-1.5"
-              defaultValue={fields.difficulty ?? ""}
-              key={`difficulty-${fields.difficulty}`}
+              {...register("difficulty")}
             />
           </div>
           <div>
             <Label htmlFor="sourceType">Source type / style</Label>
             <Input
               id="sourceType"
-              name="sourceType"
               placeholder="e.g. book, magazine, PDF, HST"
               className="mt-1.5"
-              defaultValue={fields.sourceType ?? ""}
-              key={`sourceType-${fields.sourceType}`}
+              {...register("sourceType")}
             />
           </div>
           <div className="sm:col-span-2">
             <Label htmlFor="sourceReference">Source reference</Label>
             <Input
               id="sourceReference"
-              name="sourceReference"
               placeholder="e.g. 'Easy Does It' p.42"
               className="mt-1.5"
+              {...register("sourceReference")}
             />
           </div>
           <div className="sm:col-span-2">
             <Label htmlFor="notes">Notes</Label>
             <Textarea
               id="notes"
-              name="notes"
               placeholder="Any personal notes..."
               className="mt-1.5"
               rows={3}
-              defaultValue={fields.notes ?? ""}
-              key={`notes-${fields.notes}`}
+              {...register("notes")}
             />
           </div>
         </div>

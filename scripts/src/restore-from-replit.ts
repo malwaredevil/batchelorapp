@@ -1406,6 +1406,96 @@ async function main() {
   });
   await resetSequence(dest, "market_watches", "id");
 
+  // ── Notifications ─────────────────────────────────────────────────────────
+  await copyTable(source, dest, {
+    table: "notification_events",
+    columns: [
+      "id",
+      "event_type",
+      "module",
+      "severity",
+      "scope",
+      "subject_type",
+      "subject_id",
+      "title",
+      "summary",
+      "action_url",
+      "action_label",
+      "payload",
+      "dedup_key",
+      "last_seen_at",
+      "expires_at",
+      "superseded_by",
+      "occurred_at",
+      "created_by",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "notification_events", "id");
+
+  await copyTable(source, dest, {
+    table: "notification_recipients",
+    columns: [
+      "id",
+      "event_id",
+      "user_id",
+      "read_at",
+      "acknowledged_at",
+      "dismissed_at",
+      "snoozed_until",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "notification_recipients", "id");
+
+  await copyTable(source, dest, {
+    table: "notification_deliveries",
+    columns: [
+      "id",
+      "recipient_id",
+      "event_id",
+      "channel",
+      "status",
+      "attempt_count",
+      "scheduled_at",
+      "sent_at",
+      "delivered_at",
+      "failed_at",
+      "failure_class",
+      "provider_message_id",
+      "idempotency_key",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "notification_deliveries", "id");
+
+  await copyTable(source, dest, {
+    table: "notification_preferences",
+    columns: [
+      "id",
+      "user_id",
+      "scope",
+      "scope_value",
+      "channel_in_app",
+      "channel_email",
+      "channel_sms",
+      "channel_push",
+      "quiet_hours_enabled",
+      "quiet_hours_timezone",
+      "quiet_hours_start",
+      "quiet_hours_end",
+      "critical_override",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "notification_preferences", "id");
+
   await dest.query("SET session_replication_role = DEFAULT");
 
   console.log("\n✓ Restore complete.");

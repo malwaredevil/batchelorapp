@@ -22,6 +22,7 @@ import {
 import { usePageAssistantContext } from "@/ornaments/lib/assistant-context";
 import { useAppConfigSummary } from "@workspace/elaine-ui";
 import { Button } from "@/components/ui/button";
+import { CollectionErrorState } from "@/components/CollectionErrorState";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -157,7 +158,7 @@ export default function Collection() {
   if (debouncedSearch) queryParams.q = debouncedSearch;
   if (selectedCat) queryParams.categoryId = selectedCat;
 
-  const { data, isLoading } = useListOrnaments(queryParams);
+  const { data, isLoading, isError, refetch } = useListOrnaments(queryParams);
   const items = data?.items || [];
 
   const { data: categories } = useListOrnamentCategories();
@@ -451,7 +452,14 @@ export default function Collection() {
         </div>
       )}
 
-      {!isLoading && sortedItems.length === 0 && (
+      {isError && (
+        <CollectionErrorState
+          onRetry={refetch}
+          message="Couldn't load your ornaments — check your connection."
+        />
+      )}
+
+      {!isLoading && !isError && sortedItems.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 px-4 text-center border border-dashed border-border rounded-2xl bg-card shadow-sm">
           <div className="h-16 w-16 bg-muted rounded-full flex items-center justify-center mb-4">
             <ImageIcon className="h-8 w-8 text-muted-foreground opacity-50" />

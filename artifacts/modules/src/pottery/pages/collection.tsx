@@ -46,6 +46,7 @@ import { usePageAssistantContext } from "@/pottery/lib/assistant-context";
 import { useAppConfigSummary } from "@workspace/elaine-ui";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { DominantColorDots } from "@/components/collection/DominantColorDots";
+import { CollectionErrorState } from "@/components/CollectionErrorState";
 import { QuantityBadge } from "@/components/collection/QuantityBadge";
 
 // ---------------------------------------------------------------------------
@@ -973,14 +974,7 @@ export default function Collection() {
           </div>
         </>
       ) : isError ? (
-        <div className="flex flex-col items-center gap-3 py-10">
-          <p className="text-sm text-muted-foreground">
-            Could not load your collection.
-          </p>
-          <Button variant="outline" size="sm" onClick={() => void refetch()}>
-            Try again
-          </Button>
-        </div>
+        <CollectionErrorState onRetry={refetch} />
       ) : !data || data.length === 0 ? (
         <EmptyState />
       ) : (

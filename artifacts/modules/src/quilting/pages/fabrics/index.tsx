@@ -53,7 +53,6 @@ import { colorToHex, getCategoryPalette } from "@workspace/web-core";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { CategoryEditDialog } from "@/quilting/components/CategoryEditDialog";
 import { PaletteMatchModal } from "@/quilting/components/PaletteMatchModal";
-import { CollectionErrorState } from "@/components/CollectionErrorState";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
 import { useAppConfigSummary } from "@workspace/elaine-ui";
 
@@ -327,7 +326,6 @@ export default function Fabrics() {
     data: fabricsData,
     isLoading,
     isError,
-    refetch,
   } = useListFabrics({ pageSize: 200 });
   const fabrics = fabricsData?.items ?? [];
   const { data: usedFabricIds } = useGetUsedFabricIds({
@@ -376,17 +374,17 @@ export default function Fabrics() {
 
   const bulkReanalyze = useBulkReanalyzeFabrics({
     mutation: {
-      onSuccess: ({ succeeded, failed }) => {
+      onSuccess: ({ total, succeeded, failed }) => {
         queryClient.invalidateQueries({ queryKey: getListFabricsQueryKey() });
         setSelectedIds(new Set());
         setIsBulkMode(false);
         if (failed.length === 0) {
           toast.success(
-            `Refreshed AI for ${succeeded.length} fabric${succeeded.length !== 1 ? "s" : ""}`,
+            `Re-analysed ${succeeded.length}/${total} fabric${total !== 1 ? "s" : ""}.`,
           );
         } else {
           toast.success(
-            `Refreshed ${succeeded.length}, failed ${failed.length}`,
+            `Re-analysed ${succeeded.length}/${total} fabrics. ${failed.length} failed — try again.`,
           );
         }
       },
@@ -873,10 +871,11 @@ export default function Fabrics() {
       )}
 
       {isError && (
-        <CollectionErrorState
-          onRetry={refetch}
-          message="Couldn't load your fabrics. Check your connection and try again."
-        />
+        <div className="flex h-40 items-center justify-center rounded-xl border border-destructive/30 bg-destructive/5">
+          <p className="text-sm text-destructive">
+            Failed to load fabrics. Please refresh.
+          </p>
+        </div>
       )}
 
       {sorted && sorted.length === 0 && fabrics!.length === 0 && (

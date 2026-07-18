@@ -47,7 +47,6 @@ import { useAppConfigSummary } from "@workspace/elaine-ui";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { DominantColorDots } from "@/components/collection/DominantColorDots";
 import { QuantityBadge } from "@/components/collection/QuantityBadge";
-import { CollectionErrorState } from "@/components/CollectionErrorState";
 
 // ---------------------------------------------------------------------------
 // Collection compare modal
@@ -637,7 +636,6 @@ export default function Collection() {
     data: listData,
     isLoading,
     isError,
-    refetch,
   } = useListPottery({ pageSize: 200 });
   const data = listData?.items;
   const { data: allCategories = [] } = useListCategories();
@@ -798,7 +796,9 @@ export default function Collection() {
         queryKey: getListPotteryQueryKey(),
       });
       setBulkStatus(
-        `Done — ${result.succeeded.length} refreshed${result.failed.length ? `, ${result.failed.length} failed` : ""}.`,
+        result.failed.length
+          ? `Re-analysed ${result.succeeded.length}/${result.total} items. ${result.failed.length} failed — try again.`
+          : `Re-analysed ${result.succeeded.length}/${result.total} items.`,
       );
       setBulkSelectedIds(new Set());
     } catch {
@@ -974,10 +974,9 @@ export default function Collection() {
           </div>
         </>
       ) : isError ? (
-        <CollectionErrorState
-          onRetry={refetch}
-          message="Couldn't load your pottery collection. Check your connection and try again."
-        />
+        <p className="py-10 text-center text-sm text-muted-foreground">
+          Could not load your collection. Please refresh.
+        </p>
       ) : !data || data.length === 0 ? (
         <EmptyState />
       ) : (

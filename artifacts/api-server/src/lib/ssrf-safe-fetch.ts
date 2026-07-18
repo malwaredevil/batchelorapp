@@ -165,7 +165,16 @@ function requestBodyFromInit(
   throw new Error("Unsupported request body type for ssrfSafeFetch");
 }
 
-function redirectInit(init: RequestInit, statusCode: number): RequestInit {
+function redirectInit(
+  init: RequestInit,
+  statusCode: number,
+  fromUrl: URL,
+  toUrl: URL,
+): RequestInit {
+  const headers =
+    fromUrl.origin === toUrl.origin
+      ? init.headers
+      : stripCredentialHeaders(init.headers);
   const method = init.method?.toUpperCase();
   if (
     statusCode === 303 ||
@@ -174,11 +183,23 @@ function redirectInit(init: RequestInit, statusCode: number): RequestInit {
     return {
       ...init,
       body: undefined,
+      headers,
       method: "GET",
     };
   }
 
-  return init;
+  return { ...init, headers };
+}
+
+function stripCredentialHeaders(
+  headers: RequestInit["headers"] | undefined,
+): RequestInit["headers"] {
+  if (!headers) return headers;
+  const next = new Headers(headers);
+  next.delete("authorization");
+  next.delete("cookie");
+  next.delete("cookie2");
+  return next;
 }
 
 async function ssrfSafeFetchInternal(
@@ -210,7 +231,7 @@ async function ssrfSafeFetchInternal(
     };
 
     let settled = false;
-    let req: http.ClientRequest;
+    let req: http.ClientRequest | undefined;
 
     const cleanup = () => {
       clearTimeout(deadline);
@@ -229,11 +250,11 @@ async function ssrfSafeFetchInternal(
       reject(err);
     };
     const abort = () => {
-      req.destroy();
+      req?.destroy();
       fail(new Error("Request aborted"));
     };
     const deadline = setTimeout(() => {
-      req.destroy();
+      req?.destroy();
       fail(new Error("Request timed out"));
     }, FETCH_ABSOLUTE_TIMEOUT_MS);
 
@@ -272,7 +293,7 @@ async function ssrfSafeFetchInternal(
 
         void ssrfSafeFetchInternal(
           nextUrl,
-          redirectInit(init, status),
+          redirectInit(init, status, parsed, nextUrl),
           redirectCount + 1,
         ).then(succeed, fail);
         return;
@@ -284,7 +305,7 @@ async function ssrfSafeFetchInternal(
       res.on("data", (chunk: Buffer) => {
         bodyBytes += chunk.length;
         if (bodyBytes > MAX_BODY_BYTES) {
-          req.destroy();
+          req?.destroy();
           fail(new Error("Response body too large"));
           return;
         }
@@ -316,7 +337,7 @@ async function ssrfSafeFetchInternal(
 
     init.signal?.addEventListener("abort", abort, { once: true });
     req.on("timeout", () => {
-      req.destroy();
+      req?.destroy();
       fail(new Error("Request timed out"));
     });
     req.on("error", fail);

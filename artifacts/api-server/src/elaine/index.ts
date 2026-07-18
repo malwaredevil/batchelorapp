@@ -4704,7 +4704,15 @@ router.post("/chat", async (req, res) => {
     userName,
     channelLabel: appLabel,
     contextBlockLabel: `live, possibly unsaved, on-screen state in ${appLabel}`,
-    contextBlock: pageContext ?? "(no page context was shared for this screen)",
+    contextBlock: pageContext
+      ? pageContext
+          .replace(/<script[\s\S]*?<\/script>/gi, "")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/&[a-zA-Z0-9#]+;/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 6000)
+      : "(no page context was shared for this screen)",
     memoryBlock,
     memorySummary,
     actionConfirmationMode,

@@ -70,6 +70,7 @@ import { lookupBarcode } from "../../lib/ornaments/barcode";
 import { lookupBookValue } from "../../lib/ornaments/book-value";
 import { serializeItem, serializeItems } from "../../lib/ornaments/serialize";
 import { logger } from "../../lib/logger";
+import pLimit from "p-limit";
 
 // Excludes the embedding + visualEmbedding vectors from list/detail queries —
 // they're large and only needed internally, never surfaced via the API.
@@ -928,19 +929,20 @@ export async function bulkReanalyzeOrnamentItems(
   const succeeded: number[] = [];
   const failed: number[] = [];
 
-  for (let i = 0; i < capped.length; i++) {
-    const id = capped[i]!;
-    try {
-      await runItemAnalysis(id);
-      succeeded.push(id);
-    } catch (err) {
-      logger.error({ itemId: id, err }, "bulk-reanalyze: item failed");
-      failed.push(id);
-    }
-    if (i < capped.length - 1) {
-      await new Promise((resolve) => setTimeout(resolve, 300));
-    }
-  }
+  const limit = pLimit(3);
+  await Promise.all(
+    capped.map((id) =>
+      limit(async () => {
+        try {
+          await runItemAnalysis(id);
+          succeeded.push(id);
+        } catch (err) {
+          logger.error({ itemId: id, err }, "bulk-reanalyze: item failed");
+          failed.push(id);
+        }
+      }),
+    ),
+  );
 
   return { succeeded, failed };
 }

@@ -1,4 +1,7 @@
 import { useState, useRef } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 import {
@@ -45,6 +48,14 @@ interface SuppPhoto {
   preview: string;
 }
 
+const AddPieceSchema = z.object({
+  name: z.string().optional(),
+  quantity: z.coerce.number().int().min(1).default(1),
+  notes: z.string().optional(),
+  dimensions: z.string().optional(),
+});
+type AddPieceFields = z.infer<typeof AddPieceSchema>;
+
 export default function AddPiece() {
   const [, navigate] = useLocation();
 
@@ -52,12 +63,18 @@ export default function AddPiece() {
   const [file, setFile] = useState<File | null>(null);
   const [editingFile, setEditingFile] = useState<File | null>(null);
 
-  // Form fields
-  const [name, setName] = useState("");
-  const [quantity, setQuantity] = useState(1);
-  const [notes, setNotes] = useState("");
-  const [dimensions, setDimensions] = useState("");
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
+
+  const {
+    register,
+    handleSubmit: rhfHandleSubmit,
+    watch,
+    formState: { errors },
+  } = useForm<AddPieceFields>({
+    resolver: zodResolver(AddPieceSchema),
+    defaultValues: { quantity: 1 },
+  });
+  const watchedFields = watch();
 
   // Supplemental photos
   const [suppPhotos, setSuppPhotos] = useState<SuppPhoto[]>([]);
@@ -142,8 +159,7 @@ export default function AddPiece() {
   // ---------------------------------------------------------------------------
   // Submit
   // ---------------------------------------------------------------------------
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleFormSubmit(data: AddPieceFields) {
     if (!file) {
       toast.error("Please choose a photo first.");
       return;
@@ -151,10 +167,10 @@ export default function AddPiece() {
     upload.mutate(
       {
         image: file,
-        name: name.trim() || undefined,
-        quantity: quantity > 1 ? quantity : undefined,
-        notes: notes.trim() || undefined,
-        dimensions: dimensions.trim() || undefined,
+        name: data.name?.trim() || undefined,
+        quantity: (data.quantity ?? 1) > 1 ? (data.quantity ?? 1) : undefined,
+        notes: data.notes?.trim() || undefined,
+        dimensions: data.dimensions?.trim() || undefined,
         categoryIds: selectedCategoryIds,
       },
       {
@@ -181,7 +197,7 @@ export default function AddPiece() {
 
   usePageAssistantContext(
     "pottery-add",
-    `Add a Piece page: form for cataloguing a new pottery piece. Primary photo ${file ? "selected" : "not yet selected (required before submit)"}, ${suppPhotos.length} additional photo(s) attached. Current field values — name: ${name.trim() || "(blank, will be AI-generated)"}, quantity: ${quantity}, dimensions: ${dimensions.trim() || "(blank, AI estimates from photo)"}, notes: ${notes.trim() || "(blank)"}, categories: ${
+    `Add a Piece page: form for cataloguing a new pottery piece. Primary photo ${file ? "selected" : "not yet selected (required before submit)"}, ${suppPhotos.length} additional photo(s) attached. Current field values — name: ${watchedFields.name?.trim() || "(blank, will be AI-generated)"}, quantity: ${watchedFields.quantity ?? 1}, dimensions: ${watchedFields.dimensions?.trim() || "(blank, AI estimates from photo)"}, notes: ${watchedFields.notes?.trim() || "(blank)"}, categories: ${
       selectedCategoryIds.length
         ? categories
             .filter((c) => selectedCategoryIds.includes(c.id))
@@ -230,7 +246,10 @@ export default function AddPiece() {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form
+          onSubmit={rhfHandleSubmit(handleFormSubmit)}
+          className="space-y-5"
+        >
           {/* Primary image */}
           <div className="space-y-2">
             <Label>
@@ -384,11 +403,15 @@ export default function AddPiece() {
             <Input
               id="name"
               placeholder="e.g. Blue floral teacup"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
               disabled={busy}
               data-testid="input-name"
+              {...register("name")}
             />
+            {errors.name && (
+              <p className="mt-1 text-xs text-destructive">
+                {errors.name.message}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -403,14 +426,16 @@ export default function AddPiece() {
               type="number"
               min={1}
               step={1}
-              value={quantity}
-              onChange={(e) =>
-                setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))
-              }
               onFocus={(e) => e.target.select()}
               disabled={busy}
               className="w-24"
+              {...register("quantity", { valueAsNumber: true })}
             />
+            {errors.quantity && (
+              <p className="mt-1 text-xs text-destructive">
+                {errors.quantity.message}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -425,11 +450,10 @@ export default function AddPiece() {
               <Input
                 id="dimensions"
                 placeholder="e.g. H 14 cm × D 22 cm"
-                value={dimensions}
-                onChange={(e) => setDimensions(e.target.value)}
                 disabled={busy}
                 className="pl-9"
                 data-testid="input-dimensions"
+                {...register("dimensions")}
               />
             </div>
           </div>
@@ -444,11 +468,10 @@ export default function AddPiece() {
             <Textarea
               id="notes"
               placeholder="Where you bought it, who made it, anything worth remembering…"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
               rows={3}
               disabled={busy}
               data-testid="input-notes"
+              {...register("notes")}
             />
           </div>
 

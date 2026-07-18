@@ -11,6 +11,7 @@ import {
   travelsPackingLists,
 } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
+import { fetchJsonSafe } from "../../lib/ssrf-safe-fetch";
 import { deleteTripPhoto } from "../../lib/travels/storage";
 import { deleteDocument } from "../../lib/travels-storage";
 import {
@@ -33,12 +34,10 @@ async function geocodeDestination(
 ): Promise<{ lat: number; lng: number } | null> {
   try {
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(destination)}&format=json&limit=1`;
-    const res = await fetch(url, {
+    const data = await fetchJsonSafe<Array<{ lat: string; lon: string }>>(url, {
       headers: { "User-Agent": "Batchelor-App/1.0" },
-      signal: AbortSignal.timeout(5000),
+      timeoutMs: 5000,
     });
-    if (!res.ok) return null;
-    const data = (await res.json()) as Array<{ lat: string; lon: string }>;
     if (data[0])
       return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
     return null;

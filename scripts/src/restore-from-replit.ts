@@ -1132,6 +1132,23 @@ async function main() {
   });
   await resetSequence(dest, "ai_field_decisions", "id");
 
+  await copyTable(source, dest, {
+    table: "ai_prompt_versions",
+    columns: [
+      "id",
+      "template_id",
+      "version",
+      "hash",
+      "schema_version",
+      "effective_from",
+      "effective_until",
+      "release_notes",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ai_prompt_versions", "id");
+
   // ── Phase 2: Ingestion ────────────────────────────────────────────────────
   await copyTable(source, dest, {
     table: "ingestion_sources",
@@ -1217,6 +1234,71 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "search_feedback", "id");
+
+  // ── Phase 2: Document evidence ────────────────────────────────────────────
+  await copyTable(source, dest, {
+    table: "travels_document_pages",
+    columns: [
+      "id",
+      "trip_document_id",
+      "page_index",
+      "media_type",
+      "width_px",
+      "height_px",
+      "extracted_text",
+      "ocr_engine",
+      "ocr_engine_version",
+      "extraction_status",
+      "extraction_warnings",
+      "content_hash",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_document_pages", "id");
+
+  await copyTable(source, dest, {
+    table: "travels_document_field_evidence",
+    columns: [
+      "id",
+      "candidate_id",
+      "document_page_id",
+      "evidence_kind",
+      "text_start",
+      "text_end",
+      "bbox",
+      "snippet",
+      "ocr_confidence",
+      "evidence_hash",
+      "source_timestamp",
+      "effective_timestamp",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_document_field_evidence", "id");
+
+  await copyTable(source, dest, {
+    table: "travels_field_conflicts",
+    columns: [
+      "id",
+      "trip_id",
+      "field_path",
+      "accepted_candidate_id",
+      "accepted_value",
+      "competing_candidate_ids",
+      "conflict_type",
+      "recommended_candidate_id",
+      "recommended_rationale",
+      "status",
+      "deciding_user_id",
+      "decided_at",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_field_conflicts", "id");
 
   await dest.query("SET session_replication_role = DEFAULT");
 

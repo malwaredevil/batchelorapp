@@ -19,6 +19,7 @@ const child = spawn(
   ],
   {
     stdio: "inherit",
+    shell: process.platform === "win32",
     env: {
       ...process.env,
       PORT: port,

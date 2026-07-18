@@ -290,17 +290,44 @@ exact sequence of issues to implement.
 
 ### 8.1 Batching — implement multiple issues per session
 
-**Preferred approach:** implement all issues for a campaign branch in a single session.
-List every issue URL in the prompt, separated by newlines. Tell Copilot not to create
-the PR until all issues are done. Copilot will implement each one in sequence and then
-open a single PR covering all of them.
+**Preferred approach:** implement all issues for a campaign branch in a single batch
+session. List every issue URL in the prompt. Copilot will implement them in sequence
+and open a single PR covering all of them.
+
+**CRITICAL — always use this exact prompt template.** Deviating from this wording has
+caused Copilot to push directly to the campaign branch and PR to `main` instead of
+creating its own working branch. Copy the template verbatim and only fill in the
+`<BATCH_BRANCH>`, `<CAMPAIGN_BRANCH>`, and `<ISSUE LIST>` placeholders:
+
+```
+Read AGENTS.md in full before writing any code.
+
+Create a new branch called <BATCH_BRANCH> from <CAMPAIGN_BRANCH>.
+Implement ALL of the following on that new branch. Do not create the PR until every item is done:
+
+<ISSUE LIST — one GitHub issue URL per line>
+
+When everything is done, create ONE pull request from <BATCH_BRANCH> targeting
+<CAMPAIGN_BRANCH> (NOT main).
+```
+
+**Example filled-in values:**
+
+- `<BATCH_BRANCH>` = `copilot/campaign1-batch2`
+- `<CAMPAIGN_BRANCH>` = `feat/batch-quick-wins`
+- Issue list = one URL per line, e.g. `https://github.com/malwaredevil/batchelorapp/issues/247`
 
 **PR base branch:** every PR must target the campaign branch (`feat/batch-quick-wins`,
-etc.), **never `main`**. If Copilot targets `main`, close the PR and redo it.
+etc.), **never `main`**. If Copilot targets `main`, close the PR without merging and
+ask Copilot to redo it with the correct template above.
 
-**One PR per campaign branch:** do not open multiple PRs against the same campaign branch
-in parallel — they will conflict. Finish and merge one PR before starting the next batch
-on the same branch.
+**One PR per campaign branch at a time:** do not open multiple PRs against the same
+campaign branch in parallel — they will conflict. Finish and merge one PR before
+starting the next batch on the same branch.
+
+**Leftover branches:** after each PR merges, GitHub may leave behind Copilot's working
+branch (e.g. `copilot/campaign1-batch2`). These can be deleted via the GitHub API or
+the Branches page — they serve no further purpose after the merge.
 
 ---
 

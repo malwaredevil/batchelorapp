@@ -2,7 +2,7 @@ name: Guardrails
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, feat/strategic-phase1]
 
 concurrency:
   group: guardrails-${{ github.ref }}

@@ -8,6 +8,7 @@ import { startGmailScanScheduler } from "./lib/gmail-scan";
 import { startErrorRateSummary } from "./lib/error-tracker";
 import { startHallmarkEventsScanScheduler } from "./lib/ornaments/hallmark-events-scan";
 import { startBirthdayScheduler } from "./lib/birthday-scheduler";
+import { startJobWorker, stopJobWorker } from "./lib/jobs/worker";
 
 const rawPort = process.env["PORT"];
 
@@ -31,6 +32,7 @@ function startListening(): void {
     }
 
     logger.info({ port }, "Server listening");
+    startJobWorker();
     startReminderScheduler();
     startNudgeScheduler();
     startCalendarTripScanScheduler();
@@ -42,6 +44,7 @@ function startListening(): void {
 
   function shutdown(signal: string): void {
     logger.info({ signal }, "shutdown: draining open connections...");
+    void stopJobWorker();
     server.close(() => {
       logger.info("shutdown: server closed, exiting cleanly");
       process.exit(0);
@@ -64,7 +67,7 @@ runStartupMigration()
   .catch((err) => {
     logger.error(
       { err },
-      "Startup migration threw unexpectedly — starting server anyway",
+      "Startup migration failed — refusing to start with unknown schema state",
     );
-    startListening();
+    process.exit(1);
   });

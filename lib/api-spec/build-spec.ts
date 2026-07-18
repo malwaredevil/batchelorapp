@@ -55,6 +55,10 @@ function deepClone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
 }
 
+function seenOpsFromSets(sets: Set<string>[]): Set<string> {
+  return new Set(sets.flatMap((set) => Array.from(set)));
+}
+
 /** Collect all schema names referenced (transitively) starting from a node. */
 function collectSchemaRefs(
   node: Json,
@@ -210,6 +214,15 @@ function remapMessengerPath(p: string): string {
   return "/messenger" + p;
 }
 
+function remapJobsPath(p: string): string {
+  if (p === "/") return "/jobs";
+  return "/jobs" + p;
+}
+
+function remapOperationsPath(p: string): string {
+  return "/operations" + p;
+}
+
 // ---------------------------------------------------------------------------
 // Build
 // ---------------------------------------------------------------------------
@@ -227,6 +240,8 @@ function main(): void {
   const hub = loadSpec("hub.yaml");
   const config = loadSpec("config.yaml");
   const messenger = loadSpec("messenger.yaml");
+  const jobs = loadSpec("jobs.yaml");
+  const operations = loadSpec("operations.yaml");
 
   const potterySchemas: Record<string, Json> = (pottery.components?.schemas ??
     {}) as Json;
@@ -241,6 +256,10 @@ function main(): void {
   const hubSchemas: Record<string, Json> = (hub.components?.schemas ??
     {}) as Json;
   const messengerSchemas: Record<string, Json> = (messenger.components
+    ?.schemas ?? {}) as Json;
+  const jobsSchemas: Record<string, Json> = (jobs.components?.schemas ??
+    {}) as Json;
+  const operationsSchemas: Record<string, Json> = (operations.components
     ?.schemas ?? {}) as Json;
 
   // ----- Shared schema set: transitive closure of refs from quilting shared paths
@@ -311,6 +330,20 @@ function main(): void {
   for (const name of Object.keys(messengerSchemas)) {
     if (!sharedSchemaNames.has(name)) {
       messengerSchemaRename.set(name, "Messenger" + name);
+    }
+  }
+
+  const jobsSchemaRename = new Map<string, string>();
+  for (const name of Object.keys(jobsSchemas)) {
+    if (!sharedSchemaNames.has(name)) {
+      jobsSchemaRename.set(name, "Jobs" + name);
+    }
+  }
+
+  const operationsSchemaRename = new Map<string, string>();
+  for (const name of Object.keys(operationsSchemas)) {
+    if (!sharedSchemaNames.has(name)) {
+      operationsSchemaRename.set(name, "Operations" + name);
     }
   }
 
@@ -436,6 +469,47 @@ function main(): void {
   for (const op of messengerFeatureOps) {
     if (allOtherOpsForMessenger.has(op)) {
       messengerOpRename.set(op, renameOpId(op, "messenger"));
+    }
+  }
+
+  const jobsFeatureOps = collectFeatureOpIds(jobs.paths as Json);
+  const jobsOpRename = new Map<string, string>();
+  for (const op of jobsFeatureOps) {
+    if (
+      seenOpsFromSets([
+        sharedOpIds,
+        potteryFeatureOps,
+        quiltingFeatureOps,
+        travelsFeatureOps,
+        ornamentsFeatureOps,
+        officeFeatureOps,
+        hubFeatureOps,
+        configFeatureOps,
+        messengerFeatureOps,
+      ]).has(op)
+    ) {
+      jobsOpRename.set(op, renameOpId(op, "jobs"));
+    }
+  }
+
+  const operationsFeatureOps = collectFeatureOpIds(operations.paths as Json);
+  const operationsOpRename = new Map<string, string>();
+  for (const op of operationsFeatureOps) {
+    if (
+      seenOpsFromSets([
+        sharedOpIds,
+        potteryFeatureOps,
+        quiltingFeatureOps,
+        travelsFeatureOps,
+        ornamentsFeatureOps,
+        officeFeatureOps,
+        hubFeatureOps,
+        configFeatureOps,
+        messengerFeatureOps,
+        jobsFeatureOps,
+      ]).has(op)
+    ) {
+      operationsOpRename.set(op, renameOpId(op, "operations"));
     }
   }
 
@@ -584,6 +658,30 @@ function main(): void {
     outPaths[newPath] = cloned;
   }
 
+  for (const [p, item] of Object.entries(jobs.paths as Record<string, Json>)) {
+    const newPath = remapJobsPath(p);
+    const cloned = deepClone(item);
+    rewriteSchemaRefs(cloned, jobsSchemaRename);
+    applyOpIdRenames(cloned, jobsOpRename);
+    if (outPaths[newPath] !== undefined) {
+      throw new Error(`Duplicate path key after jobs remap: ${newPath}`);
+    }
+    outPaths[newPath] = cloned;
+  }
+
+  for (const [p, item] of Object.entries(
+    operations.paths as Record<string, Json>,
+  )) {
+    const newPath = remapOperationsPath(p);
+    const cloned = deepClone(item);
+    rewriteSchemaRefs(cloned, operationsSchemaRename);
+    applyOpIdRenames(cloned, operationsOpRename);
+    if (outPaths[newPath] !== undefined) {
+      throw new Error(`Duplicate path key after operations remap: ${newPath}`);
+    }
+    outPaths[newPath] = cloned;
+  }
+
   // ----- Components: schemas
   const outSchemas: Record<string, Json> = {};
 
@@ -685,6 +783,28 @@ function main(): void {
     const newName = messengerSchemaRename.get(name)!;
     const cloned = deepClone(schema);
     rewriteSchemaRefs(cloned, messengerSchemaRename);
+    if (outSchemas[newName] !== undefined) {
+      throw new Error(`Duplicate schema key: ${newName}`);
+    }
+    outSchemas[newName] = cloned;
+  }
+
+  for (const [name, schema] of Object.entries(jobsSchemas)) {
+    if (sharedSchemaNames.has(name)) continue;
+    const newName = jobsSchemaRename.get(name)!;
+    const cloned = deepClone(schema);
+    rewriteSchemaRefs(cloned, jobsSchemaRename);
+    if (outSchemas[newName] !== undefined) {
+      throw new Error(`Duplicate schema key: ${newName}`);
+    }
+    outSchemas[newName] = cloned;
+  }
+
+  for (const [name, schema] of Object.entries(operationsSchemas)) {
+    if (sharedSchemaNames.has(name)) continue;
+    const newName = operationsSchemaRename.get(name)!;
+    const cloned = deepClone(schema);
+    rewriteSchemaRefs(cloned, operationsSchemaRename);
     if (outSchemas[newName] !== undefined) {
       throw new Error(`Duplicate schema key: ${newName}`);
     }

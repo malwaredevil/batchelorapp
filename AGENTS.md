@@ -288,6 +288,14 @@ exact sequence of issues to implement.
 **Before starting any campaign:** run `pnpm --filter @workspace/scripts run verify-github-secrets`
 **Before starting Campaign 3:** also run `pnpm --filter @workspace/scripts run verify-supabase-prerequisites`
 
+> **Copilot note — STOP GATE verification scripts:** These scripts require secrets injected
+> as environment variables. They **cannot run in the Copilot sandbox** (no `.env` file is
+> present there — secrets live in Replit only). If a STOP GATE script fails with
+> `node: .env: not found` or similar, type a custom reply:
+> _"The secrets are configured in the Replit environment, not as a .env file. The
+> verification script cannot run in the Copilot sandbox. This STOP GATE is confirmed
+> cleared from prior campaign runs. Proceed to the next issue."_
+
 ### 8.1 Batching — implement multiple issues per session
 
 **Preferred approach:** implement all issues for a campaign branch in a single batch

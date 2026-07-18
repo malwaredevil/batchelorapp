@@ -1,11 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db, ornamentsBarcodeCache } from "@workspace/db";
 import { logger } from "../logger";
-import {
-  DEFAULT_UPCITEMDB_PAID_URL,
-  DEFAULT_UPCITEMDB_TRIAL_URL,
-  getConfig,
-} from "../app-config";
+import { getConfig } from "../app-config";
 
 /**
  * UPCitemdb barcode lookup, cached per-UPC in ornaments_barcode_cache so
@@ -52,12 +48,12 @@ async function fetchFromUpcItemDb(
     ? await getConfig(
         "ornaments",
         "barcode_paid_url",
-        DEFAULT_UPCITEMDB_PAID_URL,
+        "https://api.upcitemdb.com/prod/v1/lookup",
       )
     : await getConfig(
         "ornaments",
         "barcode_trial_url",
-        DEFAULT_UPCITEMDB_TRIAL_URL,
+        "https://api.upcitemdb.com/prod/trial/lookup",
       );
 
   const controller = new AbortController();

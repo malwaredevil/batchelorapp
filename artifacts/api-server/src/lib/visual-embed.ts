@@ -198,6 +198,41 @@ export async function generateVisualEmbedding(
 }
 
 /**
+ * Generate a 1024-dim Jina CLIP text embedding in the same space as visual
+ * embeddings, allowing zero-shot text queries against stored image vectors.
+ */
+export async function getJinaTextEmbedding(
+  text: string,
+): Promise<number[] | null> {
+  if (!env.jinaApiKey) return null;
+
+  const response = await withRetry(
+    () =>
+      fetch("https://api.jina.ai/v1/embeddings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${env.jinaApiKey}`,
+        },
+        body: JSON.stringify({
+          model: "jina-clip-v2",
+          input: [{ text }],
+        }),
+        signal: AbortSignal.timeout(15_000),
+      }),
+    { label: "jina-text-embeddings" },
+  );
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Jina API error ${response.status}: ${body.slice(0, 200)}`);
+  }
+
+  const data = (await response.json()) as JinaEmbeddingResponse;
+  return data.data[0]?.embedding ?? null;
+}
+
+/**
  * Generate a 1024-dim visual embedding for the dominant body zone of a pottery
  * piece by cropping the central 70% of the image vertically (top 15%, height
  * 70%). This approximates the main decorative body, excluding rim text and foot

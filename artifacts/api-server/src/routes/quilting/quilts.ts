@@ -492,12 +492,16 @@ router.post("/quilts/:id/reanalyze", aiLimiter, async (req, res) => {
 
 /** Re-run AI analysis on a batch of finished quilts. Shared by the REST
  * route and Elaine's bulk_reanalyze_quilting action. */
-export async function bulkReanalyzeQuilts(
-  ids: number[],
-): Promise<{ succeeded: number[]; failed: number[] }> {
+export async function bulkReanalyzeQuilts(ids: number[]): Promise<{
+  total: number;
+  succeeded: number[];
+  failed: number[];
+  errors: Array<{ id: number; error: string }>;
+}> {
   const capped = [...new Set(ids)].slice(0, MAX_BULK_REANALYZE);
   const succeeded: number[] = [];
   const failed: number[] = [];
+  const errors: Array<{ id: number; error: string }> = [];
 
   for (const id of capped) {
     try {
@@ -508,6 +512,7 @@ export async function bulkReanalyzeQuilts(
         .limit(1);
       if (!row) {
         failed.push(id);
+        errors.push({ id, error: "Quilt not found." });
         continue;
       }
 
@@ -531,6 +536,7 @@ export async function bulkReanalyzeQuilts(
         .map((s) => s.value);
       if (dataUrls.length === 0) {
         failed.push(id);
+        errors.push({ id, error: "Could not load any image for this quilt." });
         continue;
       }
 
@@ -547,21 +553,24 @@ export async function bulkReanalyzeQuilts(
         })
         .where(eq(finishedQuilts.id, id));
       succeeded.push(id);
-    } catch {
+    } catch (err) {
       failed.push(id);
+      errors.push({
+        id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
     if (capped.indexOf(id) < capped.length - 1) {
       await new Promise((resolve) => setTimeout(resolve, 300));
     }
   }
 
-  return { succeeded, failed };
+  return { total: capped.length, succeeded, failed, errors };
 }
 
 router.post("/quilts/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
   const { ids } = BulkReanalyzeQuiltsBody.parse(req.body);
-  const { succeeded, failed } = await bulkReanalyzeQuilts(ids);
-  res.json(BulkReanalyzeQuiltsResponse.parse({ succeeded, failed }));
+  res.json(BulkReanalyzeQuiltsResponse.parse(await bulkReanalyzeQuilts(ids)));
 });
 
 // ---------------------------------------------------------------------------

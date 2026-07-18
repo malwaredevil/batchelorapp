@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { OrnamentsOrnamentItem } from './ornamentsOrnamentItem';
+import type { OrnamentsOrnamentListResponseSearchMode } from './ornamentsOrnamentListResponseSearchMode';
 
 export interface OrnamentsOrnamentListResponse {
   items: OrnamentsOrnamentItem[];
@@ -13,4 +14,5 @@ export interface OrnamentsOrnamentListResponse {
   total: number;
   page: number;
   pageSize: number;
+  searchMode: OrnamentsOrnamentListResponseSearchMode;
 }

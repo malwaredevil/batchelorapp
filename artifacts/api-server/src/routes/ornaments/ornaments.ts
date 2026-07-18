@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
+import pLimit from "p-limit";
 import {
   and,
   asc,
@@ -12,6 +13,7 @@ import {
   isNull,
   or,
   sql,
+  type SQL,
 } from "drizzle-orm";
 import {
   db,
@@ -70,6 +72,10 @@ import { lookupBarcode } from "../../lib/ornaments/barcode";
 import { lookupBookValue } from "../../lib/ornaments/book-value";
 import { serializeItem, serializeItems } from "../../lib/ornaments/serialize";
 import { logger } from "../../lib/logger";
+import {
+  buildOrnamentSearchDocument,
+  semanticCollectionSearch,
+} from "../../lib/collection-search";
 
 // Excludes the embedding + visualEmbedding vectors from list/detail queries —
 // they're large and only needed internally, never surfaced via the API.
@@ -87,6 +93,7 @@ const MAX_LABEL = 100;
 const MAX_SUPPLEMENTAL_IMAGES = 20;
 const MAX_AI_SUPPLEMENTAL = 5;
 export const MAX_BULK_REANALYZE = 20;
+const BULK_REANALYZE_CONCURRENCY = 3;
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -115,61 +122,167 @@ router.get("/items", async (req, res) => {
   const { q, categoryId, seriesOrCollection, year, page, pageSize } =
     parsed.data;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const conditions: any[] = [];
-  if (q && q.trim()) {
-    const term = `%${q.trim().toLowerCase()}%`;
-    conditions.push(
-      or(
-        ilike(ornamentsItems.name, term),
-        ilike(ornamentsItems.seriesOrCollection, term),
-        ilike(ornamentsItems.brand, term),
-        ilike(ornamentsItems.notes, term),
-      ),
-    );
-  }
-  if (seriesOrCollection) {
-    conditions.push(eq(ornamentsItems.seriesOrCollection, seriesOrCollection));
-  }
-  if (year !== undefined) {
-    conditions.push(eq(ornamentsItems.year, year));
-  }
-
-  if (categoryId !== undefined) {
+  async function getCategoryItemIds(): Promise<number[] | undefined> {
+    if (categoryId === undefined) return undefined;
     const catRows = await db
       .select({ itemId: itemCategories.itemId })
       .from(itemCategories)
       .where(eq(itemCategories.categoryId, categoryId));
-    const itemIdsForCategory = catRows.map((r) => r.itemId);
-    if (itemIdsForCategory.length === 0) {
+    return catRows.map((r) => r.itemId);
+  }
+
+  async function runKeywordSearch(searchMode: "keyword" = "keyword") {
+    const conditions: SQL<unknown>[] = [];
+    if (q && q.trim()) {
+      const term = `%${q.trim().toLowerCase()}%`;
+      conditions.push(
+        or(
+          ilike(ornamentsItems.name, term),
+          ilike(ornamentsItems.seriesOrCollection, term),
+          ilike(ornamentsItems.brand, term),
+          ilike(ornamentsItems.notes, term),
+        )!,
+      );
+    }
+    if (seriesOrCollection) {
+      conditions.push(
+        eq(ornamentsItems.seriesOrCollection, seriesOrCollection),
+      );
+    }
+    if (year !== undefined) {
+      conditions.push(eq(ornamentsItems.year, year));
+    }
+
+    const itemIdsForCategory = await getCategoryItemIds();
+    if (itemIdsForCategory?.length === 0) {
       res.json(
-        ListOrnamentsResponse.parse({ items: [], total: 0, page, pageSize }),
+        ListOrnamentsResponse.parse({
+          items: [],
+          total: 0,
+          page,
+          pageSize,
+          searchMode,
+        }),
       );
       return;
     }
-    conditions.push(inArray(ornamentsItems.id, itemIdsForCategory));
+    if (itemIdsForCategory) {
+      conditions.push(inArray(ornamentsItems.id, itemIdsForCategory));
+    }
+
+    const where =
+      conditions.length > 0
+        ? and(...(conditions as [SQL<unknown>, ...SQL<unknown>[]]))
+        : undefined;
+
+    const [{ value: total }] = await db
+      .select({ value: count() })
+      .from(ornamentsItems)
+      .where(where);
+
+    const offset = (page - 1) * pageSize;
+    const rows = await db
+      .select(itemColumns)
+      .from(ornamentsItems)
+      .where(where)
+      .orderBy(desc(ornamentsItems.createdAt))
+      .limit(pageSize)
+      .offset(offset);
+
+    const items = await serializeItems(rows);
+    res.json(
+      ListOrnamentsResponse.parse({
+        items,
+        total,
+        page,
+        pageSize,
+        searchMode,
+      }),
+    );
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where =
-    conditions.length > 0 ? and(...(conditions as [any, ...any[]])) : undefined;
+  if (q && q.trim()) {
+    const itemIdsForCategory = await getCategoryItemIds();
+    if (itemIdsForCategory?.length === 0) {
+      res.json(
+        ListOrnamentsResponse.parse({
+          items: [],
+          total: 0,
+          page,
+          pageSize,
+          searchMode: "semantic",
+        }),
+      );
+      return;
+    }
 
-  const [{ value: total }] = await db
-    .select({ value: count() })
-    .from(ornamentsItems)
-    .where(where);
+    const extraWhereConditions: SQL<unknown>[] = [];
+    if (seriesOrCollection) {
+      extraWhereConditions.push(
+        eq(ornamentsItems.seriesOrCollection, seriesOrCollection),
+      );
+    }
+    if (year !== undefined)
+      extraWhereConditions.push(eq(ornamentsItems.year, year));
+    if (itemIdsForCategory) {
+      extraWhereConditions.push(inArray(ornamentsItems.id, itemIdsForCategory));
+    }
 
-  const offset = (page - 1) * pageSize;
-  const rows = await db
-    .select(itemColumns)
-    .from(ornamentsItems)
-    .where(where)
-    .orderBy(desc(ornamentsItems.createdAt))
-    .limit(pageSize)
-    .offset(offset);
+    const rankedIds = await semanticCollectionSearch({
+      query: q.trim(),
+      table: ornamentsItems,
+      textEmbeddingCol: "embedding",
+      visualEmbeddingCol: "visual_embedding",
+      limit: pageSize,
+      extraWhere:
+        extraWhereConditions.length > 0
+          ? and(...(extraWhereConditions as [SQL<unknown>, ...SQL<unknown>[]]))
+          : undefined,
+      db,
+      fetchDocuments: async (ids) => {
+        const rows = await db
+          .select({
+            id: ornamentsItems.id,
+            name: ornamentsItems.name,
+            brand: ornamentsItems.brand,
+            seriesOrCollection: ornamentsItems.seriesOrCollection,
+            year: ornamentsItems.year,
+            notes: ornamentsItems.notes,
+            motifs: ornamentsItems.motifs,
+            dominantColors: ornamentsItems.dominantColors,
+            aiDescription: ornamentsItems.aiDescription,
+          })
+          .from(ornamentsItems)
+          .where(inArray(ornamentsItems.id, ids));
+        return rows.map((row) => ({
+          id: row.id,
+          text: buildOrnamentSearchDocument(row),
+        }));
+      },
+    });
 
-  const items = await serializeItems(rows);
-  res.json(ListOrnamentsResponse.parse({ items, total, page, pageSize }));
+    if (rankedIds.length > 0) {
+      const rows = await db
+        .select(itemColumns)
+        .from(ornamentsItems)
+        .where(inArray(ornamentsItems.id, rankedIds));
+      const idOrder = new Map(rankedIds.map((id, index) => [id, index]));
+      rows.sort((a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0));
+      const items = await serializeItems(rows);
+      res.json(
+        ListOrnamentsResponse.parse({
+          items,
+          total: items.length,
+          page: 1,
+          pageSize: items.length,
+          searchMode: "semantic",
+        }),
+      );
+      return;
+    }
+  }
+
+  await runKeywordSearch();
 });
 
 // Registered BEFORE /items/:id so the literal "stragglers" segment isn't
@@ -921,28 +1034,51 @@ router.post("/items/:id/reanalyze", aiLimiter, async (req, res) => {
   }
 });
 
-export async function bulkReanalyzeOrnamentItems(
-  ids: number[],
-): Promise<{ succeeded: number[]; failed: number[] }> {
+export async function bulkReanalyzeOrnamentItems(ids: number[]): Promise<{
+  total: number;
+  succeeded: number[];
+  failed: number[];
+  errors: Array<{ id: number; error: string }>;
+}> {
   const capped = [...new Set(ids)].slice(0, MAX_BULK_REANALYZE);
-  const succeeded: number[] = [];
-  const failed: number[] = [];
+  const limit = pLimit(BULK_REANALYZE_CONCURRENCY);
 
-  for (let i = 0; i < capped.length; i++) {
-    const id = capped[i]!;
-    try {
-      await runItemAnalysis(id);
-      succeeded.push(id);
-    } catch (err) {
-      logger.error({ itemId: id, err }, "bulk-reanalyze: item failed");
-      failed.push(id);
-    }
-    if (i < capped.length - 1) {
-      await new Promise((resolve) => setTimeout(resolve, 300));
-    }
-  }
+  const results = await Promise.all(
+    capped.map((id) =>
+      limit(async () => {
+        try {
+          await runItemAnalysis(id);
+          return { id, status: "ok" as const };
+        } catch (err) {
+          logger.error({ itemId: id, err }, "bulk-reanalyze: item failed");
+          return {
+            id,
+            status: "error" as const,
+            error: err instanceof Error ? err.message : String(err),
+          };
+        }
+      }),
+    ),
+  );
 
-  return { succeeded, failed };
+  const succeeded = results
+    .filter((result) => result.status === "ok")
+    .map((result) => result.id);
+  const errors = results
+    .filter(
+      (
+        result,
+      ): result is Extract<(typeof results)[number], { status: "error" }> =>
+        result.status === "error",
+    )
+    .map((result) => ({ id: result.id, error: result.error }));
+
+  return {
+    total: capped.length,
+    succeeded,
+    failed: errors.map((error) => error.id),
+    errors,
+  };
 }
 
 router.post("/items/bulk-reanalyze", bulkAiLimiter, async (req, res) => {

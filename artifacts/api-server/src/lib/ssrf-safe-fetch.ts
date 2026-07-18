@@ -52,8 +52,8 @@ const BLOCKED_HOSTNAMES = new Set([
 
 type LookupCallback = (
   err: NodeJS.ErrnoException | null,
-  address: string,
-  family: number,
+  address: string | { address: string; family: number }[],
+  family?: number,
 ) => void;
 
 function safeLookup(
@@ -87,13 +87,28 @@ function safeLookup(
       }
     }
 
+    if (list.length === 0) {
+      callback(new Error("DNS resolution returned no addresses"), "", 4);
+      return;
+    }
+
+    if (options.all) {
+      callback(
+        null,
+        list.map(({ address, family }) => ({ address, family })),
+      );
+      return;
+    }
+
     const first = list[0];
     callback(null, first.address, first.family);
   });
 }
 
 const FETCH_ABSOLUTE_TIMEOUT_MS = 12_000;
+const FETCH_SOCKET_TIMEOUT_MS = 10_000;
 const MAX_BODY_BYTES = 200_000;
+const MAX_REDIRECTS = 5;
 const MAX_TEXT_LENGTH = 6_000;
 
 export interface SafeFetchOptions {
@@ -102,16 +117,11 @@ export interface SafeFetchOptions {
   maxTextLength?: number;
 }
 
-/**
- * Fetches a page and returns whitespace-collapsed, tag-stripped plain text
- * (not raw HTML) — suitable for AI extraction or lightweight text scraping.
- * Throws on any SSRF-blocked, redirect, non-2xx, or timed-out response.
- */
-export async function fetchPageText(
-  url: string,
-  options: SafeFetchOptions = {},
-): Promise<string> {
-  const parsed = new URL(url);
+function assertSafeUrl(parsed: URL): void {
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    throw new Error("Only http/https URLs are allowed");
+  }
+
   const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
 
   if (BLOCKED_HOSTNAMES.has(hostname) || hostname.endsWith(".local")) {
@@ -125,6 +135,214 @@ export async function fetchPageText(
   if (ipVersion === 6 && isPrivateAddress(hostname, 6)) {
     throw new Error("URL resolves to a private address");
   }
+}
+
+function headersFromInit(
+  headers: RequestInit["headers"] | undefined,
+): http.OutgoingHttpHeaders {
+  const result: http.OutgoingHttpHeaders = {};
+  if (!headers) return result;
+
+  new Headers(headers).forEach((value, key) => {
+    result[key] = value;
+  });
+
+  return result;
+}
+
+function requestBodyFromInit(
+  body: RequestInit["body"] | undefined,
+): string | Buffer | undefined {
+  if (body == null) return undefined;
+  if (typeof body === "string") return body;
+  if (Buffer.isBuffer(body)) return body;
+  if (body instanceof URLSearchParams) return body.toString();
+  if (body instanceof ArrayBuffer) return Buffer.from(body);
+  if (ArrayBuffer.isView(body)) {
+    return Buffer.from(body.buffer, body.byteOffset, body.byteLength);
+  }
+
+  throw new Error("Unsupported request body type for ssrfSafeFetch");
+}
+
+function redirectInit(init: RequestInit, statusCode: number): RequestInit {
+  const method = init.method?.toUpperCase();
+  if (
+    statusCode === 303 ||
+    ((statusCode === 301 || statusCode === 302) && method === "POST")
+  ) {
+    return {
+      ...init,
+      body: undefined,
+      method: "GET",
+    };
+  }
+
+  return init;
+}
+
+async function ssrfSafeFetchInternal(
+  parsed: URL,
+  init: RequestInit,
+  redirectCount: number,
+): Promise<Response> {
+  assertSafeUrl(parsed);
+
+  return new Promise<Response>((resolve, reject) => {
+    const mod = parsed.protocol === "https:" ? https : http;
+    const port = parsed.port
+      ? Number(parsed.port)
+      : parsed.protocol === "https:"
+        ? 443
+        : 80;
+    const body = requestBodyFromInit(init.body);
+    const headers = headersFromInit(init.headers);
+    const method = init.method ?? "GET";
+
+    const reqOptions: http.RequestOptions = {
+      hostname: parsed.hostname,
+      port,
+      path: parsed.pathname + parsed.search,
+      method,
+      headers,
+      lookup: safeLookup,
+      timeout: FETCH_SOCKET_TIMEOUT_MS,
+    };
+
+    let settled = false;
+    let req: http.ClientRequest;
+
+    const cleanup = () => {
+      clearTimeout(deadline);
+      init.signal?.removeEventListener("abort", abort);
+    };
+    const succeed = (response: Response) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(response);
+    };
+    const fail = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(err);
+    };
+    const abort = () => {
+      req.destroy();
+      fail(new Error("Request aborted"));
+    };
+    const deadline = setTimeout(() => {
+      req.destroy();
+      fail(new Error("Request timed out"));
+    }, FETCH_ABSOLUTE_TIMEOUT_MS);
+
+    if (init.signal?.aborted) {
+      clearTimeout(deadline);
+      reject(new Error("Request aborted"));
+      return;
+    }
+
+    req = mod.request(reqOptions, (res) => {
+      const status = res.statusCode ?? 0;
+      const isRedirect = [301, 302, 303, 307, 308].includes(status);
+
+      if (isRedirect) {
+        res.resume();
+        const location = res.headers.location;
+        if (!location) {
+          fail(new Error(`Redirect without location (${status})`));
+          return;
+        }
+        if (redirectCount >= MAX_REDIRECTS) {
+          fail(new Error("Too many redirects"));
+          return;
+        }
+
+        let nextUrl: URL;
+        try {
+          nextUrl = new URL(
+            Array.isArray(location) ? location[0] : location,
+            parsed,
+          );
+        } catch {
+          fail(new Error("Invalid redirect target"));
+          return;
+        }
+
+        void ssrfSafeFetchInternal(
+          nextUrl,
+          redirectInit(init, status),
+          redirectCount + 1,
+        ).then(succeed, fail);
+        return;
+      }
+
+      const chunks: Buffer[] = [];
+      let bodyBytes = 0;
+
+      res.on("data", (chunk: Buffer) => {
+        bodyBytes += chunk.length;
+        if (bodyBytes > MAX_BODY_BYTES) {
+          req.destroy();
+          fail(new Error("Response body too large"));
+          return;
+        }
+        chunks.push(chunk);
+      });
+      res.on("end", () => {
+        const responseHeaders = new Headers();
+        for (const [key, value] of Object.entries(res.headers)) {
+          if (value === undefined) continue;
+          if (Array.isArray(value)) {
+            for (const item of value) responseHeaders.append(key, item);
+          } else {
+            responseHeaders.set(key, value);
+          }
+        }
+
+        const responseBody =
+          status === 204 || status === 304 ? null : Buffer.concat(chunks);
+        succeed(
+          new Response(responseBody, {
+            headers: responseHeaders,
+            status,
+            statusText: res.statusMessage,
+          }),
+        );
+      });
+      res.on("error", fail);
+    });
+
+    init.signal?.addEventListener("abort", abort, { once: true });
+    req.on("timeout", () => {
+      req.destroy();
+      fail(new Error("Request timed out"));
+    });
+    req.on("error", fail);
+    if (body !== undefined) req.write(body);
+    req.end();
+  });
+}
+
+export async function ssrfSafeFetch(
+  url: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  return ssrfSafeFetchInternal(new URL(url), init, 0);
+}
+
+/**
+ * Fetches a page and returns whitespace-collapsed, tag-stripped plain text
+ * (not raw HTML) — suitable for AI extraction or lightweight text scraping.
+ * Throws on any SSRF-blocked, redirect, non-2xx, or timed-out response.
+ */
+export async function fetchPageText(
+  url: string,
+  options: SafeFetchOptions = {},
+): Promise<string> {
+  const parsed = new URL(url);
+  assertSafeUrl(parsed);
 
   let destroyReq: (() => void) | null = null;
 

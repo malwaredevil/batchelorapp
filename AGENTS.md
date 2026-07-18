@@ -283,7 +283,7 @@ exact sequence of issues to implement.
 - Campaign 1 branch: `feat/batch-quick-wins` — issues #244, #247, #245, #248, #251, #243, #250, #252, #261
 - Campaign 2A branch: `feat/epic-241-search-quality` — issues #246, then #254
 - Campaign 2B branch: `feat/epic-242-elaine-completeness` — issues #255, then #256
-- Campaign 3 branch: `feat/strategic-phase1` — issues #257→#258→#223→#224→#225→#226→#227→#228
+- Campaign 3 branch: `feat/strategic-phase1` — issues #257→#258→#223→#224→#225→#226→#227→#228 ✅ COMPLETE (PR #269 merged)
 
 **Before starting any campaign:** run `pnpm --filter @workspace/scripts run verify-github-secrets`
 **Before starting Campaign 3:** also run `pnpm --filter @workspace/scripts run verify-supabase-prerequisites`

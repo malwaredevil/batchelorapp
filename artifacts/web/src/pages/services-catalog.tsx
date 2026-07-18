@@ -154,9 +154,18 @@ const SERVICES: ServiceEntry[] = [
   },
   {
     name: "UPCitemdb",
-    purpose: "Barcode / UPC product lookup",
+    purpose: "Barcode / UPC product lookup (primary)",
     usedFor:
-      "Ornaments barcode scanner: looks up product name, series, and year from a UPC code. Results are permanently cached per UPC so repeat scans never re-hit the API.",
+      "Ornaments barcode scanner: looks up product name, series, and year from a UPC code. Results are permanently cached per UPC so repeat scans never re-hit the API. Open Food Facts is used as a no-key fallback when UPCitemdb returns no result.",
+    implementedIn: ["artifacts/api-server/src/lib/ornaments/barcode.ts"],
+    modules: ["Ornaments"],
+    env: [],
+  },
+  {
+    name: "Open Food Facts",
+    purpose: "Barcode / UPC product lookup (fallback)",
+    usedFor:
+      "Fallback for the ornaments barcode scanner when UPCitemdb returns no result. Public API, no key required. Same permanent per-UPC cache applies.",
     implementedIn: ["artifacts/api-server/src/lib/ornaments/barcode.ts"],
     modules: ["Ornaments"],
     env: [],

@@ -53,6 +53,7 @@ import { colorToHex, getCategoryPalette } from "@workspace/web-core";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { CategoryEditDialog } from "@/quilting/components/CategoryEditDialog";
 import { PaletteMatchModal } from "@/quilting/components/PaletteMatchModal";
+import { CollectionErrorState } from "@/components/CollectionErrorState";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
 import { useAppConfigSummary } from "@workspace/elaine-ui";
 
@@ -326,6 +327,7 @@ export default function Fabrics() {
     data: fabricsData,
     isLoading,
     isError,
+    refetch,
   } = useListFabrics({ pageSize: 200 });
   const fabrics = fabricsData?.items ?? [];
   const { data: usedFabricIds } = useGetUsedFabricIds({
@@ -871,11 +873,10 @@ export default function Fabrics() {
       )}
 
       {isError && (
-        <div className="flex h-40 items-center justify-center rounded-xl border border-destructive/30 bg-destructive/5">
-          <p className="text-sm text-destructive">
-            Failed to load fabrics. Please refresh.
-          </p>
-        </div>
+        <CollectionErrorState
+          onRetry={refetch}
+          message="Couldn't load your fabrics. Check your connection and try again."
+        />
       )}
 
       {sorted && sorted.length === 0 && fabrics!.length === 0 && (

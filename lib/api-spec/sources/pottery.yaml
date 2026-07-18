@@ -848,7 +848,6 @@ components:
         - total
         - page
         - pageSize
-        - searchMode
       properties:
         items:
           type: array
@@ -861,9 +860,6 @@ components:
           type: integer
         pageSize:
           type: integer
-        searchMode:
-          type: string
-          enum: [semantic, keyword]
     PotteryItem:
       type: object
       required:

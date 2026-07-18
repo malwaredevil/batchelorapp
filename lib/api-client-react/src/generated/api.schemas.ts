@@ -180,14 +180,6 @@ export interface PotteryPotteryImageUpdate {
   position?: number;
 }
 
-export type PotteryPotteryListResponseSearchMode = typeof PotteryPotteryListResponseSearchMode[keyof typeof PotteryPotteryListResponseSearchMode];
-
-
-export const PotteryPotteryListResponseSearchMode = {
-  semantic: 'semantic',
-  keyword: 'keyword',
-} as const;
-
 /**
  * AI-detected decorative surface zone breakdown (zones, complexity, repeatPattern)
  * @nullable
@@ -242,7 +234,6 @@ export interface PotteryPotteryListResponse {
   total: number;
   page: number;
   pageSize: number;
-  searchMode: PotteryPotteryListResponseSearchMode;
 }
 
 export interface PotteryPotteryUpdate {
@@ -367,14 +358,6 @@ export interface PotteryCollectionStats {
   topColors: PotteryColorCount[];
 }
 
-export type QuiltingFabricsListResponseSearchMode = typeof QuiltingFabricsListResponseSearchMode[keyof typeof QuiltingFabricsListResponseSearchMode];
-
-
-export const QuiltingFabricsListResponseSearchMode = {
-  semantic: 'semantic',
-  keyword: 'keyword',
-} as const;
-
 export interface QuiltingCategory {
   id: number;
   name: string;
@@ -423,7 +406,6 @@ export interface QuiltingFabricsListResponse {
   total: number;
   page: number;
   pageSize: number;
-  searchMode: QuiltingFabricsListResponseSearchMode;
 }
 
 export interface QuiltingQuiltPattern {

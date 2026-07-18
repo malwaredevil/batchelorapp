@@ -1,6 +1,6 @@
 /**
  * Idempotent schema bootstrap CLI for the merged Batchelor monorepo (pottery +
- * quilting). SAFE replacement for `drizzle-kit push --force`.
+ * quilting). Safe, additive-only alternative to the banned force-push command.
  *
  * The actual DDL lives in `./schema-statements` (the single source of truth,
  * also consumed by the api-server startup self-healing migration). This file is

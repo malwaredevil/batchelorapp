@@ -236,6 +236,43 @@ export async function generateZoneEmbedding(
  * Compute the cosine similarity between two equal-length vectors. Returns a
  * value in [0, 1] where 1 is identical direction (same image appearance).
  */
+/**
+ * Generate a 1024-dim CLIP text embedding using the Jina CLIP v2 model.
+ * This produces embeddings in the same space as visual embeddings so text
+ * queries can be compared against the visual embedding lane.
+ * Returns null when JINA_API_KEY is not configured or on any error.
+ */
+export async function getJinaTextEmbedding(
+  text: string,
+): Promise<number[] | null> {
+  if (!env.jinaApiKey) return null;
+
+  const response = await withRetry(
+    () =>
+      fetch("https://api.jina.ai/v1/embeddings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${env.jinaApiKey}`,
+        },
+        body: JSON.stringify({
+          model: "jina-clip-v2",
+          input: [{ text }],
+        }),
+        signal: AbortSignal.timeout(15_000),
+      }),
+    { label: "jina-text-embeddings" },
+  );
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Jina API error ${response.status}: ${body.slice(0, 200)}`);
+  }
+
+  const data = (await response.json()) as JinaEmbeddingResponse;
+  return data.data[0]?.embedding ?? null;
+}
+
 export function cosineSimlarity(a: number[], b: number[]): number {
   let dot = 0;
   let magA = 0;

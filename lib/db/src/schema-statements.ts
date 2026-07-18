@@ -1418,6 +1418,142 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS messenger_push_subs_user_idx
      ON messenger_push_subscriptions (user_id)`,
 
+  // ── Operations: job queue + external operation tracking ──────────────────
+
+  `CREATE TABLE IF NOT EXISTS app_schema_migrations (
+    version         BIGINT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    checksum_sha256 TEXT NOT NULL,
+    applied_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    applied_by      TEXT,
+    execution_ms    INTEGER,
+    app_commit_sha  TEXT
+  )`,
+  `ALTER TABLE app_schema_migrations ENABLE ROW LEVEL SECURITY`,
+
+  `CREATE TABLE IF NOT EXISTS app_jobs (
+    id                    SERIAL PRIMARY KEY,
+    type                  TEXT NOT NULL,
+    queue                 TEXT NOT NULL DEFAULT 'default',
+    status                TEXT NOT NULL DEFAULT 'queued',
+    priority              INTEGER NOT NULL DEFAULT 0,
+    payload               JSONB NOT NULL DEFAULT '{}'::jsonb,
+    payload_schema_version INTEGER NOT NULL DEFAULT 1,
+    idempotency_key       TEXT,
+    created_by_user_id    INTEGER REFERENCES app_users(id) ON DELETE SET NULL,
+    domain                TEXT,
+    scheduled_for         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    attempt_count         INTEGER NOT NULL DEFAULT 0,
+    max_attempts          INTEGER NOT NULL DEFAULT 3,
+    lease_owner           TEXT,
+    lease_expires_at      TIMESTAMPTZ,
+    started_at            TIMESTAMPTZ,
+    completed_at          TIMESTAMPTZ,
+    progress_percent      INTEGER NOT NULL DEFAULT 0,
+    progress_message      TEXT,
+    last_error_code       TEXT,
+    last_error_message    TEXT,
+    provider_request_id   TEXT,
+    parent_job_id         INTEGER,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE app_jobs ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS app_jobs_status_scheduled_idx
+     ON app_jobs (status, scheduled_for)`,
+  `CREATE INDEX IF NOT EXISTS app_jobs_type_status_idx
+     ON app_jobs (type, status)`,
+  `CREATE INDEX IF NOT EXISTS app_jobs_parent_idx
+     ON app_jobs (parent_job_id)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS app_jobs_idempotency_idx
+     ON app_jobs (type, idempotency_key)`,
+
+  `CREATE TABLE IF NOT EXISTS app_job_attempts (
+    id             SERIAL PRIMARY KEY,
+    job_id         INTEGER NOT NULL REFERENCES app_jobs(id) ON DELETE CASCADE,
+    attempt_number INTEGER NOT NULL,
+    status         TEXT NOT NULL,
+    started_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at   TIMESTAMPTZ,
+    error_code     TEXT,
+    error_message  TEXT,
+    metadata       JSONB NOT NULL DEFAULT '{}'::jsonb
+  )`,
+  `ALTER TABLE app_job_attempts ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS app_job_attempts_job_idx
+     ON app_job_attempts (job_id)`,
+
+  `CREATE TABLE IF NOT EXISTS external_operation_events (
+    id                   SERIAL PRIMARY KEY,
+    provider             TEXT NOT NULL,
+    operation            TEXT NOT NULL,
+    model_or_actor       TEXT,
+    feature              TEXT NOT NULL,
+    module               TEXT NOT NULL,
+    user_id              INTEGER REFERENCES app_users(id) ON DELETE SET NULL,
+    request_id           TEXT,
+    job_id               INTEGER REFERENCES app_jobs(id) ON DELETE SET NULL,
+    parent_job_id        INTEGER,
+    status               TEXT NOT NULL,
+    error_code           TEXT,
+    started_at           TIMESTAMPTZ NOT NULL,
+    completed_at         TIMESTAMPTZ NOT NULL,
+    duration_ms          INTEGER NOT NULL,
+    attempt_number       INTEGER NOT NULL DEFAULT 1,
+    retry_count          INTEGER NOT NULL DEFAULT 0,
+    cache_status         TEXT NOT NULL DEFAULT 'not_applicable',
+    input_units          INTEGER,
+    output_units         INTEGER,
+    billed_units         NUMERIC(18,6),
+    estimated_cost_usd   NUMERIC(18,8),
+    actual_cost_usd      NUMERIC(18,8),
+    currency             TEXT NOT NULL DEFAULT 'USD',
+    pricing_version_at   TIMESTAMPTZ,
+    provider_request_id  TEXT,
+    metadata             JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE external_operation_events ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS external_operation_events_provider_created_idx
+     ON external_operation_events (provider, created_at)`,
+  `CREATE INDEX IF NOT EXISTS external_operation_events_job_idx
+     ON external_operation_events (job_id)`,
+  `CREATE INDEX IF NOT EXISTS external_operation_events_module_feature_idx
+     ON external_operation_events (module, feature)`,
+
+  `CREATE TABLE IF NOT EXISTS external_provider_pricing (
+    id               SERIAL PRIMARY KEY,
+    provider         TEXT NOT NULL,
+    operation        TEXT NOT NULL,
+    model_or_actor   TEXT,
+    unit_type        TEXT NOT NULL,
+    price_usd        NUMERIC(18,8) NOT NULL,
+    effective_from   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    effective_to     TIMESTAMPTZ,
+    source           TEXT NOT NULL DEFAULT 'manual',
+    notes            TEXT,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS external_provider_pricing_lookup_idx
+     ON external_provider_pricing (provider, operation, model_or_actor, effective_from)`,
+
+  `CREATE TABLE IF NOT EXISTS external_budget_policies (
+    id                    SERIAL PRIMARY KEY,
+    scope                 TEXT NOT NULL,
+    scope_value           TEXT,
+    period                TEXT NOT NULL,
+    soft_threshold_usd    NUMERIC(18,2) NOT NULL,
+    hard_threshold_usd    NUMERIC(18,2) NOT NULL,
+    warning_policy        TEXT NOT NULL DEFAULT 'owner_dashboard',
+    degradation_action    TEXT NOT NULL DEFAULT 'warn_only',
+    enabled               BOOLEAN NOT NULL DEFAULT true,
+    override_until        TIMESTAMPTZ,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS external_budget_policies_scope_idx
+     ON external_budget_policies (scope, scope_value)`,
+
   // ── Phase 2: AI provenance (#229) ────────────────────────────────────────
 
   `CREATE TABLE IF NOT EXISTS ai_generation_runs (

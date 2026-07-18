@@ -6,10 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { QuiltingFabric } from './quiltingFabric';
+import type { QuiltingFabricsListResponseSearchMode } from './quiltingFabricsListResponseSearchMode';
 
 export interface QuiltingFabricsListResponse {
   items: QuiltingFabric[];
   total: number;
   page: number;
   pageSize: number;
+  searchMode: QuiltingFabricsListResponseSearchMode;
 }

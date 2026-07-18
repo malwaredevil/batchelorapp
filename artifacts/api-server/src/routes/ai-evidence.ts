@@ -140,6 +140,31 @@ const DecisionBody = z.object({
   contextSource: z.string().optional(),
 });
 
+router.get("/candidates/:candidateId/evidence", async (req, res) => {
+  const candidateId = Number(req.params.candidateId);
+  if (!Number.isInteger(candidateId) || candidateId <= 0) {
+    res.status(400).json({ error: "Invalid candidate id" });
+    return;
+  }
+
+  const rows = await pool.query(
+    `SELECT e.id, e.evidence_kind,
+            e.text_start, e.text_end, e.bbox,
+            e.snippet, e.ocr_confidence,
+            e.evidence_hash, e.source_timestamp, e.effective_timestamp,
+            e.created_at,
+            p.page_index, p.media_type, p.ocr_engine, p.ocr_engine_version,
+            p.trip_document_id
+     FROM travels_document_field_evidence e
+     LEFT JOIN travels_document_pages p ON p.id = e.document_page_id
+     WHERE e.candidate_id = $1
+     ORDER BY e.created_at ASC`,
+    [candidateId],
+  );
+
+  res.json({ candidateId, evidence: rows.rows });
+});
+
 router.post("/candidates/:candidateId/decision", async (req, res) => {
   const candidateId = Number(req.params.candidateId);
   if (!Number.isInteger(candidateId) || candidateId <= 0) {

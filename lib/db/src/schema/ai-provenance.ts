@@ -153,3 +153,56 @@ export const aiPromptVersions = pgTable(
 
 export type AiPromptVersion = typeof aiPromptVersions.$inferSelect;
 export type InsertAiPromptVersion = typeof aiPromptVersions.$inferInsert;
+
+export const similarityEvaluations = pgTable(
+  "similarity_evaluations",
+  {
+    id: serial("id").primaryKey(),
+    module: text("module").notNull(),
+    workflow: text("workflow").notNull(),
+    queryArtifactType: text("query_artifact_type").notNull(),
+    queryArtifactId: integer("query_artifact_id"),
+    candidateTargetType: text("candidate_target_type").notNull(),
+    candidateTargetId: integer("candidate_target_id").notNull(),
+    searchConfigVersion: text("search_config_version"),
+    textEmbeddingModel: text("text_embedding_model"),
+    textCosineScore: numeric("text_cosine_score", { precision: 5, scale: 4 }),
+    textRank: integer("text_rank"),
+    visualEmbeddingModel: text("visual_embedding_model"),
+    visualCosineScore: numeric("visual_cosine_score", {
+      precision: 5,
+      scale: 4,
+    }),
+    visualRank: integer("visual_rank"),
+    zoneCosineScore: numeric("zone_cosine_score", { precision: 5, scale: 4 }),
+    zoneRank: integer("zone_rank"),
+    rrfScore: numeric("rrf_score", { precision: 8, scale: 6 }),
+    rerankerModel: text("reranker_model"),
+    rerankerScore: numeric("reranker_score", { precision: 7, scale: 4 }),
+    rerankerRank: integer("reranker_rank"),
+    userVerdict: text("user_verdict"),
+    userId: integer("user_id"),
+    recordedAt: timestamp("recorded_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("similarity_evaluations_module_workflow_idx").on(
+      table.module,
+      table.workflow,
+    ),
+    index("similarity_evaluations_query_idx").on(
+      table.queryArtifactType,
+      table.queryArtifactId,
+    ),
+    index("similarity_evaluations_candidate_idx").on(
+      table.candidateTargetType,
+      table.candidateTargetId,
+    ),
+    index("similarity_evaluations_recorded_at_idx").on(table.recordedAt),
+  ],
+).enableRLS();
+
+export type SimilarityEvaluation = typeof similarityEvaluations.$inferSelect;
+export type InsertSimilarityEvaluation =
+  typeof similarityEvaluations.$inferInsert;

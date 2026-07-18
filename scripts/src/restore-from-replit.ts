@@ -1300,6 +1300,112 @@ async function main() {
   });
   await resetSequence(dest, "travels_field_conflicts", "id");
 
+  // ── Phase 2: Similarity evaluations (#233) ────────────────────────────────
+  await copyTable(source, dest, {
+    table: "similarity_evaluations",
+    columns: [
+      "id",
+      "module",
+      "workflow",
+      "query_artifact_type",
+      "query_artifact_id",
+      "candidate_target_type",
+      "candidate_target_id",
+      "search_config_version",
+      "text_embedding_model",
+      "text_cosine_score",
+      "text_rank",
+      "visual_embedding_model",
+      "visual_cosine_score",
+      "visual_rank",
+      "zone_cosine_score",
+      "zone_rank",
+      "rrf_score",
+      "reranker_model",
+      "reranker_score",
+      "reranker_rank",
+      "user_verdict",
+      "user_id",
+      "recorded_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "similarity_evaluations", "id");
+
+  // ── Phase 3: Market intelligence (#234) ──────────────────────────────────
+  await copyTable(source, dest, {
+    table: "market_observations",
+    columns: [
+      "id",
+      "module",
+      "item_type",
+      "item_id",
+      "ingestion_candidate_id",
+      "platform",
+      "listing_url",
+      "listing_title",
+      "observed_price",
+      "currency",
+      "condition",
+      "listing_status",
+      "listed_at",
+      "sold_at",
+      "source_json",
+      "confidence_score",
+      "notes",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "market_observations", "id");
+
+  await copyTable(source, dest, {
+    table: "market_valuations",
+    columns: [
+      "id",
+      "module",
+      "item_type",
+      "item_id",
+      "valuation_method",
+      "estimated_value",
+      "value_low",
+      "value_high",
+      "currency",
+      "sample_size",
+      "observation_ids",
+      "valid_until",
+      "notes",
+      "created_by",
+      "computed_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "market_valuations", "id");
+
+  await copyTable(source, dest, {
+    table: "market_watches",
+    columns: [
+      "id",
+      "user_id",
+      "module",
+      "item_type",
+      "item_id",
+      "search_query",
+      "platforms",
+      "enabled",
+      "alert_threshold_low",
+      "alert_threshold_high",
+      "alert_currency",
+      "last_run_at",
+      "notes",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "market_watches", "id");
+
   await dest.query("SET session_replication_role = DEFAULT");
 
   console.log("\n✓ Restore complete.");

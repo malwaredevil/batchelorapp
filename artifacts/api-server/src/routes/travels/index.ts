@@ -19,6 +19,7 @@ import walletRouter from "./wallet";
 import cardLayoutRouter from "./card-layout";
 import documentTypesRouter from "./document-types";
 import packingRouter from "./packing";
+import documentEvidenceRouter from "./document-evidence";
 
 const router: IRouter = Router();
 
@@ -44,5 +45,6 @@ router.use(mapsRouter);
 router.use(walletRouter);
 router.use(documentTypesRouter);
 router.use(packingRouter);
+router.use(documentEvidenceRouter);
 
 export default router;

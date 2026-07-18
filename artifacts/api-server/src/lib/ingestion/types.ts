@@ -46,4 +46,10 @@ export type IngestionCandidateStatus =
   | "merged"
   | "rejected";
 
-export type IngestionAdapterType = "apify" | "rest" | "webhook" | "manual";
+export type IngestionAdapterType =
+  | "apify"
+  | "rest"
+  | "jina_reader"
+  | "web_search"
+  | "webhook"
+  | "manual";

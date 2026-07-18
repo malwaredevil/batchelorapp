@@ -26,7 +26,10 @@
  *             travels_gmail_connections,
  *             travels_gmail_scan_decisions, travels_card_layout_preferences,
  *             travels_trip_card_collapse_state, travels_custom_document_types,
- *             travels_calendar_trip_suggestions
+ *             travels_calendar_trip_suggestions,
+ *             travels_reservations, travel_monitoring_baselines,
+ *             travel_monitoring_observations, travel_change_events,
+ *             travels_monitoring_preferences
  *   Notifications: notification_events, notification_recipients, notification_deliveries,
  *                  notification_preferences
  *   Messenger: messenger_conversations, messenger_messages, messenger_attachments,
@@ -697,6 +700,91 @@ CREATE TABLE IF NOT EXISTS travels_calendar_trip_suggestions (
   is_from_shared_calendar  BOOLEAN NOT NULL DEFAULT false,
   created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS travels_reservations (
+  id                   SERIAL PRIMARY KEY,
+  trip_id              INTEGER NOT NULL,
+  document_id          INTEGER,
+  reservation_type     TEXT NOT NULL DEFAULT 'general',
+  status               TEXT NOT NULL DEFAULT 'confirmed',
+  provider_name        TEXT,
+  confirmation_ref     TEXT,
+  passenger_names      JSONB NOT NULL DEFAULT '[]'::jsonb,
+  segments             JSONB NOT NULL DEFAULT '[]'::jsonb,
+  check_in_date        DATE,
+  check_out_date       DATE,
+  destination_iata     TEXT,
+  origin_iata          TEXT,
+  raw_extracted        JSONB NOT NULL DEFAULT '{}'::jsonb,
+  monitoring_enabled   BOOLEAN NOT NULL DEFAULT true,
+  monitoring_policy    TEXT NOT NULL DEFAULT 'standard',
+  last_baseline_at     TIMESTAMPTZ,
+  last_checked_at      TIMESTAMPTZ,
+  created_by_user_id   INTEGER NOT NULL,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS travel_monitoring_baselines (
+  id                   SERIAL PRIMARY KEY,
+  reservation_id       INTEGER NOT NULL,
+  normalized_data      JSONB NOT NULL DEFAULT '{}'::jsonb,
+  schema_version       TEXT NOT NULL DEFAULT '1',
+  content_hash         TEXT,
+  confirmed_by         TEXT NOT NULL DEFAULT 'auto',
+  confirmed_by_user_id INTEGER,
+  source_refs          JSONB NOT NULL DEFAULT '[]'::jsonb,
+  effective_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS travel_monitoring_observations (
+  id                   SERIAL PRIMARY KEY,
+  reservation_id       INTEGER NOT NULL,
+  provider             TEXT NOT NULL,
+  external_record_id   TEXT,
+  observed_data        JSONB NOT NULL DEFAULT '{}'::jsonb,
+  observed_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  content_hash         TEXT,
+  authority            TEXT NOT NULL DEFAULT 'document',
+  raw_snapshot         JSONB DEFAULT '{}'::jsonb,
+  job_id               INTEGER,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS travel_change_events (
+  id                       SERIAL PRIMARY KEY,
+  reservation_id           INTEGER NOT NULL,
+  baseline_id              INTEGER,
+  previous_observation_id  INTEGER,
+  new_observation_id       INTEGER,
+  change_type              TEXT NOT NULL,
+  severity                 TEXT NOT NULL DEFAULT 'informational',
+  field_diffs              JSONB NOT NULL DEFAULT '[]'::jsonb,
+  materiality_reason       TEXT,
+  downstream_impacts       JSONB NOT NULL DEFAULT '[]'::jsonb,
+  state                    TEXT NOT NULL DEFAULT 'detected',
+  decided_by_user_id       INTEGER,
+  decided_at               TIMESTAMPTZ,
+  decision_notes           TEXT,
+  notification_event_id    INTEGER,
+  dedup_key                TEXT UNIQUE,
+  created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS travels_monitoring_preferences (
+  id                               SERIAL PRIMARY KEY,
+  user_id                          INTEGER NOT NULL UNIQUE,
+  monitoring_enabled               BOOLEAN NOT NULL DEFAULT true,
+  weather_alerts                   BOOLEAN NOT NULL DEFAULT true,
+  check_in_reminders               BOOLEAN NOT NULL DEFAULT true,
+  document_reminders               BOOLEAN NOT NULL DEFAULT true,
+  min_severity                     TEXT NOT NULL DEFAULT 'attention',
+  notify_channels                  JSONB NOT NULL DEFAULT '{"inApp":true,"email":false}'::jsonb,
+  schedule_change_threshold_minutes INTEGER NOT NULL DEFAULT 30,
+  updated_at                       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 ALTER TABLE travels_trip_documents ADD COLUMN IF NOT EXISTS title TEXT;
@@ -2306,6 +2394,122 @@ async function main() {
     jsonbColumns: ["related_event_ids"],
   });
   await resetSequence(dest, "travels_calendar_trip_suggestions", "id");
+
+  // ── Disruption monitoring ──────────────────────────────────────────────────
+  summary["travels_reservations"] = await copyTable(source, dest, {
+    table: "travels_reservations",
+    columns: [
+      "id",
+      "trip_id",
+      "document_id",
+      "reservation_type",
+      "status",
+      "provider_name",
+      "confirmation_ref",
+      "passenger_names",
+      "segments",
+      "check_in_date",
+      "check_out_date",
+      "destination_iata",
+      "origin_iata",
+      "raw_extracted",
+      "monitoring_enabled",
+      "monitoring_policy",
+      "last_baseline_at",
+      "last_checked_at",
+      "created_by_user_id",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["passenger_names", "segments", "raw_extracted"],
+  });
+  await resetSequence(dest, "travels_reservations", "id");
+
+  summary["travel_monitoring_baselines"] = await copyTable(source, dest, {
+    table: "travel_monitoring_baselines",
+    columns: [
+      "id",
+      "reservation_id",
+      "normalized_data",
+      "schema_version",
+      "content_hash",
+      "confirmed_by",
+      "confirmed_by_user_id",
+      "source_refs",
+      "effective_at",
+      "created_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["normalized_data", "source_refs"],
+  });
+  await resetSequence(dest, "travel_monitoring_baselines", "id");
+
+  summary["travel_monitoring_observations"] = await copyTable(source, dest, {
+    table: "travel_monitoring_observations",
+    columns: [
+      "id",
+      "reservation_id",
+      "provider",
+      "external_record_id",
+      "observed_data",
+      "observed_at",
+      "content_hash",
+      "authority",
+      "raw_snapshot",
+      "job_id",
+      "created_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["observed_data", "raw_snapshot"],
+  });
+  await resetSequence(dest, "travel_monitoring_observations", "id");
+
+  summary["travel_change_events"] = await copyTable(source, dest, {
+    table: "travel_change_events",
+    columns: [
+      "id",
+      "reservation_id",
+      "baseline_id",
+      "previous_observation_id",
+      "new_observation_id",
+      "change_type",
+      "severity",
+      "field_diffs",
+      "materiality_reason",
+      "downstream_impacts",
+      "state",
+      "decided_by_user_id",
+      "decided_at",
+      "decision_notes",
+      "notification_event_id",
+      "dedup_key",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["field_diffs", "downstream_impacts"],
+  });
+  await resetSequence(dest, "travel_change_events", "id");
+
+  summary["travels_monitoring_preferences"] = await copyTable(source, dest, {
+    table: "travels_monitoring_preferences",
+    columns: [
+      "id",
+      "user_id",
+      "monitoring_enabled",
+      "weather_alerts",
+      "check_in_reminders",
+      "document_reminders",
+      "min_severity",
+      "notify_channels",
+      "schedule_change_threshold_minutes",
+      "updated_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["notify_channels"],
+  });
+  await resetSequence(dest, "travels_monitoring_preferences", "id");
 
   // ── Messenger ─────────────────────────────────────────────────────────────
   summary["messenger_conversations"] = await copyTable(source, dest, {

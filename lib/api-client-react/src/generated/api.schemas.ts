@@ -1679,6 +1679,208 @@ export interface TravelsGmailMessageDetail {
   attachments: TravelsGmailMessageAttachment[];
 }
 
+export type TravelsTravelsReservationReservationType = typeof TravelsTravelsReservationReservationType[keyof typeof TravelsTravelsReservationReservationType];
+
+
+export const TravelsTravelsReservationReservationType = {
+  flight: 'flight',
+  hotel: 'hotel',
+  rental_car: 'rental_car',
+  rail: 'rail',
+  general: 'general',
+} as const;
+
+export type TravelsTravelsReservationSegmentsItem = { [key: string]: unknown };
+
+export type TravelsTravelsReservationMonitoringPolicy = typeof TravelsTravelsReservationMonitoringPolicy[keyof typeof TravelsTravelsReservationMonitoringPolicy];
+
+
+export const TravelsTravelsReservationMonitoringPolicy = {
+  minimal: 'minimal',
+  standard: 'standard',
+  aggressive: 'aggressive',
+  paused: 'paused',
+} as const;
+
+export interface TravelsTravelsReservation {
+  id: number;
+  tripId: number;
+  documentId?: number | null;
+  reservationType: TravelsTravelsReservationReservationType;
+  status: string;
+  providerName?: string | null;
+  confirmationRef?: string | null;
+  passengerNames?: string[];
+  segments?: TravelsTravelsReservationSegmentsItem[];
+  checkInDate?: string | null;
+  checkOutDate?: string | null;
+  destinationIata?: string | null;
+  originIata?: string | null;
+  monitoringEnabled: boolean;
+  monitoringPolicy: TravelsTravelsReservationMonitoringPolicy;
+  lastBaselineAt?: string | null;
+  lastCheckedAt?: string | null;
+  createdByUserId: number;
+  createdAt: string;
+  updatedAt: string;
+  openChangeCount?: number;
+}
+
+export type TravelsTravelsReservationDetailBaseline = { [key: string]: unknown } | null;
+
+export type TravelsTravelsReservationDetailRecentObservationsItem = { [key: string]: unknown };
+
+export type TravelsTravelsChangeEventSeverity = typeof TravelsTravelsChangeEventSeverity[keyof typeof TravelsTravelsChangeEventSeverity];
+
+
+export const TravelsTravelsChangeEventSeverity = {
+  informational: 'informational',
+  attention: 'attention',
+  important: 'important',
+  critical: 'critical',
+} as const;
+
+export type TravelsTravelsChangeEventState = typeof TravelsTravelsChangeEventState[keyof typeof TravelsTravelsChangeEventState];
+
+
+export const TravelsTravelsChangeEventState = {
+  detected: 'detected',
+  notified: 'notified',
+  under_review: 'under_review',
+  accepted: 'accepted',
+  rejected: 'rejected',
+  superseded: 'superseded',
+  resolved: 'resolved',
+} as const;
+
+export type TravelsTravelsChangeEventFieldDiffsItem = {
+  field?: string;
+  before?: unknown | null;
+  after?: unknown | null;
+  reason?: string | null;
+};
+
+export interface TravelsTravelsChangeEvent {
+  id: number;
+  reservationId: number;
+  baselineId?: number | null;
+  previousObservationId?: number | null;
+  newObservationId?: number | null;
+  changeType: string;
+  severity: TravelsTravelsChangeEventSeverity;
+  fieldDiffs?: TravelsTravelsChangeEventFieldDiffsItem[];
+  materialityReason?: string | null;
+  downstreamImpacts?: string[];
+  state: TravelsTravelsChangeEventState;
+  decidedByUserId?: number | null;
+  decidedAt?: string | null;
+  decisionNotes?: string | null;
+  dedupKey?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type TravelsTravelsReservationDetail = TravelsTravelsReservation & {
+  baseline?: TravelsTravelsReservationDetailBaseline;
+  recentObservations?: TravelsTravelsReservationDetailRecentObservationsItem[];
+  changes?: TravelsTravelsChangeEvent[];
+};
+
+export type TravelsTravelsReservationBodyReservationType = typeof TravelsTravelsReservationBodyReservationType[keyof typeof TravelsTravelsReservationBodyReservationType];
+
+
+export const TravelsTravelsReservationBodyReservationType = {
+  flight: 'flight',
+  hotel: 'hotel',
+  rental_car: 'rental_car',
+  rail: 'rail',
+  general: 'general',
+} as const;
+
+export type TravelsTravelsReservationBodySegmentsItem = { [key: string]: unknown };
+
+export type TravelsTravelsReservationBodyRawExtracted = { [key: string]: unknown };
+
+export type TravelsTravelsReservationBodyMonitoringPolicy = typeof TravelsTravelsReservationBodyMonitoringPolicy[keyof typeof TravelsTravelsReservationBodyMonitoringPolicy];
+
+
+export const TravelsTravelsReservationBodyMonitoringPolicy = {
+  minimal: 'minimal',
+  standard: 'standard',
+  aggressive: 'aggressive',
+  paused: 'paused',
+} as const;
+
+export interface TravelsTravelsReservationBody {
+  documentId?: number;
+  reservationType?: TravelsTravelsReservationBodyReservationType;
+  providerName?: string;
+  confirmationRef?: string;
+  passengerNames?: string[];
+  segments?: TravelsTravelsReservationBodySegmentsItem[];
+  checkInDate?: string;
+  checkOutDate?: string;
+  destinationIata?: string;
+  originIata?: string;
+  rawExtracted?: TravelsTravelsReservationBodyRawExtracted;
+  monitoringEnabled?: boolean;
+  monitoringPolicy?: TravelsTravelsReservationBodyMonitoringPolicy;
+}
+
+export type TravelsTravelsChangeEventDetailBaseline = { [key: string]: unknown } | null;
+
+export type TravelsTravelsChangeEventDetailPreviousObservation = { [key: string]: unknown } | null;
+
+export type TravelsTravelsChangeEventDetailNewObservation = { [key: string]: unknown } | null;
+
+export type TravelsTravelsChangeEventDetail = TravelsTravelsChangeEvent & ({
+  reservation?: TravelsTravelsReservation | null;
+  baseline?: TravelsTravelsChangeEventDetailBaseline;
+  previousObservation?: TravelsTravelsChangeEventDetailPreviousObservation;
+  newObservation?: TravelsTravelsChangeEventDetailNewObservation;
+});
+
+export type TravelsTravelsChangeDecisionBodyAction = typeof TravelsTravelsChangeDecisionBodyAction[keyof typeof TravelsTravelsChangeDecisionBodyAction];
+
+
+export const TravelsTravelsChangeDecisionBodyAction = {
+  accept: 'accept',
+  reject: 'reject',
+  keep_current: 'keep_current',
+  mark_source_incorrect: 'mark_source_incorrect',
+  disable_monitoring: 'disable_monitoring',
+} as const;
+
+export interface TravelsTravelsChangeDecisionBody {
+  action: TravelsTravelsChangeDecisionBodyAction;
+  notes?: string;
+}
+
+export type TravelsTravelsMonitoringPreferencesMinSeverity = typeof TravelsTravelsMonitoringPreferencesMinSeverity[keyof typeof TravelsTravelsMonitoringPreferencesMinSeverity];
+
+
+export const TravelsTravelsMonitoringPreferencesMinSeverity = {
+  informational: 'informational',
+  attention: 'attention',
+  important: 'important',
+  critical: 'critical',
+} as const;
+
+export type TravelsTravelsMonitoringPreferencesNotifyChannels = {
+  inApp?: boolean;
+  email?: boolean;
+};
+
+export interface TravelsTravelsMonitoringPreferences {
+  monitoringEnabled?: boolean;
+  weatherAlerts?: boolean;
+  checkInReminders?: boolean;
+  documentReminders?: boolean;
+  minSeverity?: TravelsTravelsMonitoringPreferencesMinSeverity;
+  notifyChannels?: TravelsTravelsMonitoringPreferencesNotifyChannels;
+  scheduleChangeThresholdMinutes?: number;
+}
+
 export interface OrnamentsCategory {
   id: number;
   name: string;
@@ -2552,6 +2754,31 @@ export type AssignUnmatchedDocumentBody = {
 
 export type ReorderPackingItems200 = {
   reordered: number;
+};
+
+export type TravelsListTripChangesParams = {
+state?: string;
+severity?: string;
+};
+
+export type TravelsUpdateReservationMonitoringBodyMonitoringPolicy = typeof TravelsUpdateReservationMonitoringBodyMonitoringPolicy[keyof typeof TravelsUpdateReservationMonitoringBodyMonitoringPolicy];
+
+
+export const TravelsUpdateReservationMonitoringBodyMonitoringPolicy = {
+  minimal: 'minimal',
+  standard: 'standard',
+  aggressive: 'aggressive',
+  paused: 'paused',
+} as const;
+
+export type TravelsUpdateReservationMonitoringBody = {
+  monitoringEnabled?: boolean;
+  monitoringPolicy?: TravelsUpdateReservationMonitoringBodyMonitoringPolicy;
+};
+
+export type TravelsCheckReservationNow200 = {
+  jobId: number;
+  message: string;
 };
 
 export type ListOrnamentsParams = {

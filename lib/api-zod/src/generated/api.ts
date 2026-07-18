@@ -3784,6 +3784,412 @@ export const DeletePackingTemplateParams = zod.object({
 
 
 /**
+ * @summary List reservations for a trip
+ */
+export const TravelsListReservationsParams = zod.object({
+  "tripId": zod.coerce.number()
+})
+
+export const TravelsListReservationsResponseItem = zod.object({
+  "id": zod.number(),
+  "tripId": zod.number(),
+  "documentId": zod.number().nullish(),
+  "reservationType": zod.enum(['flight', 'hotel', 'rental_car', 'rail', 'general']),
+  "status": zod.string(),
+  "providerName": zod.string().nullish(),
+  "confirmationRef": zod.string().nullish(),
+  "passengerNames": zod.array(zod.string()).optional(),
+  "segments": zod.array(zod.record(zod.string(), zod.unknown())).optional(),
+  "checkInDate": zod.coerce.date().nullish(),
+  "checkOutDate": zod.coerce.date().nullish(),
+  "destinationIata": zod.string().nullish(),
+  "originIata": zod.string().nullish(),
+  "monitoringEnabled": zod.boolean(),
+  "monitoringPolicy": zod.enum(['minimal', 'standard', 'aggressive', 'paused']),
+  "lastBaselineAt": zod.coerce.date().nullish(),
+  "lastCheckedAt": zod.coerce.date().nullish(),
+  "createdByUserId": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "openChangeCount": zod.number().optional()
+})
+export const TravelsListReservationsResponse = zod.array(TravelsListReservationsResponseItem)
+
+
+/**
+ * @summary Create a reservation linked to a trip
+ */
+export const TravelsCreateReservationParams = zod.object({
+  "tripId": zod.coerce.number()
+})
+
+export const TravelsCreateReservationBody = zod.object({
+  "documentId": zod.number().optional(),
+  "reservationType": zod.enum(['flight', 'hotel', 'rental_car', 'rail', 'general']).optional(),
+  "providerName": zod.string().optional(),
+  "confirmationRef": zod.string().optional(),
+  "passengerNames": zod.array(zod.string()).optional(),
+  "segments": zod.array(zod.record(zod.string(), zod.unknown())).optional(),
+  "checkInDate": zod.coerce.date().optional(),
+  "checkOutDate": zod.coerce.date().optional(),
+  "destinationIata": zod.string().optional(),
+  "originIata": zod.string().optional(),
+  "rawExtracted": zod.record(zod.string(), zod.unknown()).optional(),
+  "monitoringEnabled": zod.boolean().optional(),
+  "monitoringPolicy": zod.enum(['minimal', 'standard', 'aggressive', 'paused']).optional()
+})
+
+
+/**
+ * @summary List change events for all reservations on a trip
+ */
+export const TravelsListTripChangesParams = zod.object({
+  "tripId": zod.coerce.number()
+})
+
+export const TravelsListTripChangesQueryParams = zod.object({
+  "state": zod.coerce.string().optional(),
+  "severity": zod.coerce.string().optional()
+})
+
+export const TravelsListTripChangesResponseItem = zod.object({
+  "id": zod.number(),
+  "reservationId": zod.number(),
+  "baselineId": zod.number().nullish(),
+  "previousObservationId": zod.number().nullish(),
+  "newObservationId": zod.number().nullish(),
+  "changeType": zod.string(),
+  "severity": zod.enum(['informational', 'attention', 'important', 'critical']),
+  "fieldDiffs": zod.array(zod.object({
+  "field": zod.string().optional(),
+  "before": zod.unknown().nullish(),
+  "after": zod.unknown().nullish(),
+  "reason": zod.string().nullish()
+})).optional(),
+  "materialityReason": zod.string().nullish(),
+  "downstreamImpacts": zod.array(zod.string()).optional(),
+  "state": zod.enum(['detected', 'notified', 'under_review', 'accepted', 'rejected', 'superseded', 'resolved']),
+  "decidedByUserId": zod.number().nullish(),
+  "decidedAt": zod.coerce.date().nullish(),
+  "decisionNotes": zod.string().nullish(),
+  "dedupKey": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const TravelsListTripChangesResponse = zod.array(TravelsListTripChangesResponseItem)
+
+
+/**
+ * @summary Get a reservation with full context
+ */
+export const TravelsGetReservationParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const TravelsGetReservationResponse = zod.object({
+  "id": zod.number(),
+  "tripId": zod.number(),
+  "documentId": zod.number().nullish(),
+  "reservationType": zod.enum(['flight', 'hotel', 'rental_car', 'rail', 'general']),
+  "status": zod.string(),
+  "providerName": zod.string().nullish(),
+  "confirmationRef": zod.string().nullish(),
+  "passengerNames": zod.array(zod.string()).optional(),
+  "segments": zod.array(zod.record(zod.string(), zod.unknown())).optional(),
+  "checkInDate": zod.coerce.date().nullish(),
+  "checkOutDate": zod.coerce.date().nullish(),
+  "destinationIata": zod.string().nullish(),
+  "originIata": zod.string().nullish(),
+  "monitoringEnabled": zod.boolean(),
+  "monitoringPolicy": zod.enum(['minimal', 'standard', 'aggressive', 'paused']),
+  "lastBaselineAt": zod.coerce.date().nullish(),
+  "lastCheckedAt": zod.coerce.date().nullish(),
+  "createdByUserId": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "openChangeCount": zod.number().optional()
+}).and(zod.object({
+  "baseline": zod.record(zod.string(), zod.unknown()).nullish(),
+  "recentObservations": zod.array(zod.record(zod.string(), zod.unknown())).optional(),
+  "changes": zod.array(zod.object({
+  "id": zod.number(),
+  "reservationId": zod.number(),
+  "baselineId": zod.number().nullish(),
+  "previousObservationId": zod.number().nullish(),
+  "newObservationId": zod.number().nullish(),
+  "changeType": zod.string(),
+  "severity": zod.enum(['informational', 'attention', 'important', 'critical']),
+  "fieldDiffs": zod.array(zod.object({
+  "field": zod.string().optional(),
+  "before": zod.unknown().nullish(),
+  "after": zod.unknown().nullish(),
+  "reason": zod.string().nullish()
+})).optional(),
+  "materialityReason": zod.string().nullish(),
+  "downstreamImpacts": zod.array(zod.string()).optional(),
+  "state": zod.enum(['detected', 'notified', 'under_review', 'accepted', 'rejected', 'superseded', 'resolved']),
+  "decidedByUserId": zod.number().nullish(),
+  "decidedAt": zod.coerce.date().nullish(),
+  "decisionNotes": zod.string().nullish(),
+  "dedupKey": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})).optional()
+}))
+
+
+/**
+ * @summary Update a reservation
+ */
+export const TravelsUpdateReservationParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const TravelsUpdateReservationBody = zod.object({
+  "documentId": zod.number().optional(),
+  "reservationType": zod.enum(['flight', 'hotel', 'rental_car', 'rail', 'general']).optional(),
+  "providerName": zod.string().optional(),
+  "confirmationRef": zod.string().optional(),
+  "passengerNames": zod.array(zod.string()).optional(),
+  "segments": zod.array(zod.record(zod.string(), zod.unknown())).optional(),
+  "checkInDate": zod.coerce.date().optional(),
+  "checkOutDate": zod.coerce.date().optional(),
+  "destinationIata": zod.string().optional(),
+  "originIata": zod.string().optional(),
+  "rawExtracted": zod.record(zod.string(), zod.unknown()).optional(),
+  "monitoringEnabled": zod.boolean().optional(),
+  "monitoringPolicy": zod.enum(['minimal', 'standard', 'aggressive', 'paused']).optional()
+})
+
+export const TravelsUpdateReservationResponse = zod.object({
+  "id": zod.number(),
+  "tripId": zod.number(),
+  "documentId": zod.number().nullish(),
+  "reservationType": zod.enum(['flight', 'hotel', 'rental_car', 'rail', 'general']),
+  "status": zod.string(),
+  "providerName": zod.string().nullish(),
+  "confirmationRef": zod.string().nullish(),
+  "passengerNames": zod.array(zod.string()).optional(),
+  "segments": zod.array(zod.record(zod.string(), zod.unknown())).optional(),
+  "checkInDate": zod.coerce.date().nullish(),
+  "checkOutDate": zod.coerce.date().nullish(),
+  "destinationIata": zod.string().nullish(),
+  "originIata": zod.string().nullish(),
+  "monitoringEnabled": zod.boolean(),
+  "monitoringPolicy": zod.enum(['minimal', 'standard', 'aggressive', 'paused']),
+  "lastBaselineAt": zod.coerce.date().nullish(),
+  "lastCheckedAt": zod.coerce.date().nullish(),
+  "createdByUserId": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "openChangeCount": zod.number().optional()
+})
+
+
+/**
+ * @summary Delete a reservation
+ */
+export const TravelsDeleteReservationParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Enable, disable, or configure monitoring for a reservation
+ */
+export const TravelsUpdateReservationMonitoringParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const TravelsUpdateReservationMonitoringBody = zod.object({
+  "monitoringEnabled": zod.boolean().optional(),
+  "monitoringPolicy": zod.enum(['minimal', 'standard', 'aggressive', 'paused']).optional()
+})
+
+export const TravelsUpdateReservationMonitoringResponse = zod.object({
+  "id": zod.number(),
+  "tripId": zod.number(),
+  "documentId": zod.number().nullish(),
+  "reservationType": zod.enum(['flight', 'hotel', 'rental_car', 'rail', 'general']),
+  "status": zod.string(),
+  "providerName": zod.string().nullish(),
+  "confirmationRef": zod.string().nullish(),
+  "passengerNames": zod.array(zod.string()).optional(),
+  "segments": zod.array(zod.record(zod.string(), zod.unknown())).optional(),
+  "checkInDate": zod.coerce.date().nullish(),
+  "checkOutDate": zod.coerce.date().nullish(),
+  "destinationIata": zod.string().nullish(),
+  "originIata": zod.string().nullish(),
+  "monitoringEnabled": zod.boolean(),
+  "monitoringPolicy": zod.enum(['minimal', 'standard', 'aggressive', 'paused']),
+  "lastBaselineAt": zod.coerce.date().nullish(),
+  "lastCheckedAt": zod.coerce.date().nullish(),
+  "createdByUserId": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "openChangeCount": zod.number().optional()
+})
+
+
+/**
+ * @summary Manually trigger a monitoring check for a reservation
+ */
+export const TravelsCheckReservationNowParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const TravelsCheckReservationNowResponse = zod.object({
+  "jobId": zod.number(),
+  "message": zod.string()
+})
+
+
+/**
+ * @summary Get a change event with full context
+ */
+export const TravelsGetChangeEventParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const TravelsGetChangeEventResponse = zod.object({
+  "id": zod.number(),
+  "reservationId": zod.number(),
+  "baselineId": zod.number().nullish(),
+  "previousObservationId": zod.number().nullish(),
+  "newObservationId": zod.number().nullish(),
+  "changeType": zod.string(),
+  "severity": zod.enum(['informational', 'attention', 'important', 'critical']),
+  "fieldDiffs": zod.array(zod.object({
+  "field": zod.string().optional(),
+  "before": zod.unknown().nullish(),
+  "after": zod.unknown().nullish(),
+  "reason": zod.string().nullish()
+})).optional(),
+  "materialityReason": zod.string().nullish(),
+  "downstreamImpacts": zod.array(zod.string()).optional(),
+  "state": zod.enum(['detected', 'notified', 'under_review', 'accepted', 'rejected', 'superseded', 'resolved']),
+  "decidedByUserId": zod.number().nullish(),
+  "decidedAt": zod.coerce.date().nullish(),
+  "decisionNotes": zod.string().nullish(),
+  "dedupKey": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).and(zod.object({
+  "reservation": zod.object({
+  "id": zod.number(),
+  "tripId": zod.number(),
+  "documentId": zod.number().nullish(),
+  "reservationType": zod.enum(['flight', 'hotel', 'rental_car', 'rail', 'general']),
+  "status": zod.string(),
+  "providerName": zod.string().nullish(),
+  "confirmationRef": zod.string().nullish(),
+  "passengerNames": zod.array(zod.string()).optional(),
+  "segments": zod.array(zod.record(zod.string(), zod.unknown())).optional(),
+  "checkInDate": zod.coerce.date().nullish(),
+  "checkOutDate": zod.coerce.date().nullish(),
+  "destinationIata": zod.string().nullish(),
+  "originIata": zod.string().nullish(),
+  "monitoringEnabled": zod.boolean(),
+  "monitoringPolicy": zod.enum(['minimal', 'standard', 'aggressive', 'paused']),
+  "lastBaselineAt": zod.coerce.date().nullish(),
+  "lastCheckedAt": zod.coerce.date().nullish(),
+  "createdByUserId": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "openChangeCount": zod.number().optional()
+}).nullish(),
+  "baseline": zod.record(zod.string(), zod.unknown()).nullish(),
+  "previousObservation": zod.record(zod.string(), zod.unknown()).nullish(),
+  "newObservation": zod.record(zod.string(), zod.unknown()).nullish()
+}))
+
+
+/**
+ * @summary Accept, reject, or otherwise decide on a change event
+ */
+export const TravelsDecideChangeEventParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const TravelsDecideChangeEventBody = zod.object({
+  "action": zod.enum(['accept', 'reject', 'keep_current', 'mark_source_incorrect', 'disable_monitoring']),
+  "notes": zod.string().optional()
+})
+
+export const TravelsDecideChangeEventResponse = zod.object({
+  "id": zod.number(),
+  "reservationId": zod.number(),
+  "baselineId": zod.number().nullish(),
+  "previousObservationId": zod.number().nullish(),
+  "newObservationId": zod.number().nullish(),
+  "changeType": zod.string(),
+  "severity": zod.enum(['informational', 'attention', 'important', 'critical']),
+  "fieldDiffs": zod.array(zod.object({
+  "field": zod.string().optional(),
+  "before": zod.unknown().nullish(),
+  "after": zod.unknown().nullish(),
+  "reason": zod.string().nullish()
+})).optional(),
+  "materialityReason": zod.string().nullish(),
+  "downstreamImpacts": zod.array(zod.string()).optional(),
+  "state": zod.enum(['detected', 'notified', 'under_review', 'accepted', 'rejected', 'superseded', 'resolved']),
+  "decidedByUserId": zod.number().nullish(),
+  "decidedAt": zod.coerce.date().nullish(),
+  "decisionNotes": zod.string().nullish(),
+  "dedupKey": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get monitoring preferences for the current user
+ */
+export const TravelsGetMonitoringPreferencesResponse = zod.object({
+  "monitoringEnabled": zod.boolean().optional(),
+  "weatherAlerts": zod.boolean().optional(),
+  "checkInReminders": zod.boolean().optional(),
+  "documentReminders": zod.boolean().optional(),
+  "minSeverity": zod.enum(['informational', 'attention', 'important', 'critical']).optional(),
+  "notifyChannels": zod.object({
+  "inApp": zod.boolean().optional(),
+  "email": zod.boolean().optional()
+}).optional(),
+  "scheduleChangeThresholdMinutes": zod.number().optional()
+})
+
+
+/**
+ * @summary Update monitoring preferences for the current user
+ */
+export const TravelsUpdateMonitoringPreferencesBody = zod.object({
+  "monitoringEnabled": zod.boolean().optional(),
+  "weatherAlerts": zod.boolean().optional(),
+  "checkInReminders": zod.boolean().optional(),
+  "documentReminders": zod.boolean().optional(),
+  "minSeverity": zod.enum(['informational', 'attention', 'important', 'critical']).optional(),
+  "notifyChannels": zod.object({
+  "inApp": zod.boolean().optional(),
+  "email": zod.boolean().optional()
+}).optional(),
+  "scheduleChangeThresholdMinutes": zod.number().optional()
+})
+
+export const TravelsUpdateMonitoringPreferencesResponse = zod.object({
+  "monitoringEnabled": zod.boolean().optional(),
+  "weatherAlerts": zod.boolean().optional(),
+  "checkInReminders": zod.boolean().optional(),
+  "documentReminders": zod.boolean().optional(),
+  "minSeverity": zod.enum(['informational', 'attention', 'important', 'critical']).optional(),
+  "notifyChannels": zod.object({
+  "inApp": zod.boolean().optional(),
+  "email": zod.boolean().optional()
+}).optional(),
+  "scheduleChangeThresholdMinutes": zod.number().optional()
+})
+
+
+/**
  * @summary List ornaments
  */
 export const listOrnamentsQueryPageDefault = 1;

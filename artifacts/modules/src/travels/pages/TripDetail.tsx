@@ -82,6 +82,7 @@ import {
   DragHandle,
 } from "@/travels/components/trip-detail/section-controls";
 import { PackingSection } from "@/travels/components/trip-detail/PackingSection";
+import { ReservationMonitoringPanel } from "@/travels/components/trip-detail/ReservationMonitoringPanel";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -354,6 +355,7 @@ const DEFAULT_CARD_ORDER = [
   "documents",
   "notes",
   "packing-todo",
+  "monitoring",
   "photos",
   "magnets",
   "weather-nearby",
@@ -4469,6 +4471,21 @@ export default function TripDetail({ id }: { id: number }) {
                             </CardShell>
                           </div>
                         </div>
+                      );
+
+                    case "monitoring":
+                      return (
+                        <CardShell
+                          title="Reservations & Disruption Monitoring"
+                          collapsed={collapsedCards.has("monitoring")}
+                          onToggleCollapse={() =>
+                            toggleCardCollapse("monitoring")
+                          }
+                          dragHandleListeners={dragHandleListeners}
+                          dragHandleAttributes={dragHandleAttributes}
+                        >
+                          <ReservationMonitoringPanel tripId={id} />
+                        </CardShell>
                       );
 
                     default:

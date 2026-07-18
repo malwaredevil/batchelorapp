@@ -194,6 +194,7 @@ import type {
   SavePatternRequirementsBody,
   SendPhoneCodeInput,
   TravelsBulkCreatePackingItemsBody,
+  TravelsCheckReservationNow200,
   TravelsCreatePackingItemBody,
   TravelsCreatePackingTemplateBody,
   TravelsCreateTripBody,
@@ -203,17 +204,26 @@ import type {
   TravelsGmailMessageDetail,
   TravelsItineraryResult,
   TravelsListDocumentsResponse,
+  TravelsListTripChangesParams,
   TravelsListTripsResponse,
   TravelsLoadTemplateResult,
   TravelsPackingItem,
   TravelsPackingListWithItems,
   TravelsPackingTemplate,
   TravelsReorderPackingItemsBody,
+  TravelsTravelsChangeDecisionBody,
+  TravelsTravelsChangeEvent,
+  TravelsTravelsChangeEventDetail,
+  TravelsTravelsMonitoringPreferences,
+  TravelsTravelsReservation,
+  TravelsTravelsReservationBody,
+  TravelsTravelsReservationDetail,
   TravelsTravelsStatsResponse,
   TravelsTrip,
   TravelsTripDetail,
   TravelsTripDocument,
   TravelsUpdatePackingItemBody,
+  TravelsUpdateReservationMonitoringBody,
   TravelsUpdateTripBody,
   UpdateAccountInput,
   UpdateTripDocumentBody,
@@ -11927,6 +11937,902 @@ export const useDeletePackingTemplate = <TError = ErrorType<Error>,
         TContext
       > => {
       return useMutation(getDeletePackingTemplateMutationOptions(options));
+    }
+
+export const getTravelsListReservationsUrl = (tripId: number,) => {
+
+
+
+
+  return `/api/travels/trips/${tripId}/reservations`
+}
+
+/**
+ * @summary List reservations for a trip
+ */
+export const travelsListReservations = async (tripId: number, options?: RequestInit): Promise<TravelsTravelsReservation[]> => {
+
+  return customFetch<TravelsTravelsReservation[]>(getTravelsListReservationsUrl(tripId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getTravelsListReservationsQueryKey = (tripId: number,) => {
+    return [
+    `/api/travels/trips/${tripId}/reservations`
+    ] as const;
+    }
+
+
+export const getTravelsListReservationsQueryOptions = <TData = Awaited<ReturnType<typeof travelsListReservations>>, TError = ErrorType<unknown>>(tripId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof travelsListReservations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getTravelsListReservationsQueryKey(tripId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof travelsListReservations>>> = ({ signal }) => travelsListReservations(tripId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(tripId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof travelsListReservations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type TravelsListReservationsQueryResult = NonNullable<Awaited<ReturnType<typeof travelsListReservations>>>
+export type TravelsListReservationsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List reservations for a trip
+ */
+
+export function useTravelsListReservations<TData = Awaited<ReturnType<typeof travelsListReservations>>, TError = ErrorType<unknown>>(
+ tripId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof travelsListReservations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getTravelsListReservationsQueryOptions(tripId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getTravelsCreateReservationUrl = (tripId: number,) => {
+
+
+
+
+  return `/api/travels/trips/${tripId}/reservations`
+}
+
+/**
+ * @summary Create a reservation linked to a trip
+ */
+export const travelsCreateReservation = async (tripId: number,
+    travelsTravelsReservationBody: TravelsTravelsReservationBody, options?: RequestInit): Promise<TravelsTravelsReservation> => {
+
+  return customFetch<TravelsTravelsReservation>(getTravelsCreateReservationUrl(tripId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      travelsTravelsReservationBody,)
+  }
+);}
+
+
+
+
+export const getTravelsCreateReservationMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof travelsCreateReservation>>, TError,{tripId: number;data: BodyType<TravelsTravelsReservationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof travelsCreateReservation>>, TError,{tripId: number;data: BodyType<TravelsTravelsReservationBody>}, TContext> => {
+
+const mutationKey = ['travelsCreateReservation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof travelsCreateReservation>>, {tripId: number;data: BodyType<TravelsTravelsReservationBody>}> = (props) => {
+          const {tripId,data} = props ?? {};
+
+          return  travelsCreateReservation(tripId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TravelsCreateReservationMutationResult = NonNullable<Awaited<ReturnType<typeof travelsCreateReservation>>>
+    export type TravelsCreateReservationMutationBody = BodyType<TravelsTravelsReservationBody>
+    export type TravelsCreateReservationMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a reservation linked to a trip
+ */
+export const useTravelsCreateReservation = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof travelsCreateReservation>>, TError,{tripId: number;data: BodyType<TravelsTravelsReservationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof travelsCreateReservation>>,
+        TError,
+        {tripId: number;data: BodyType<TravelsTravelsReservationBody>},
+        TContext
+      > => {
+      return useMutation(getTravelsCreateReservationMutationOptions(options));
+    }
+
+export const getTravelsListTripChangesUrl = (tripId: number,
+    params?: TravelsListTripChangesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/travels/trips/${tripId}/changes?${stringifiedParams}` : `/api/travels/trips/${tripId}/changes`
+}
+
+/**
+ * @summary List change events for all reservations on a trip
+ */
+export const travelsListTripChanges = async (tripId: number,
+    params?: TravelsListTripChangesParams, options?: RequestInit): Promise<TravelsTravelsChangeEvent[]> => {
+
+  return customFetch<TravelsTravelsChangeEvent[]>(getTravelsListTripChangesUrl(tripId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getTravelsListTripChangesQueryKey = (tripId: number,
+    params?: TravelsListTripChangesParams,) => {
+    return [
+    `/api/travels/trips/${tripId}/changes`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getTravelsListTripChangesQueryOptions = <TData = Awaited<ReturnType<typeof travelsListTripChanges>>, TError = ErrorType<unknown>>(tripId: number,
+    params?: TravelsListTripChangesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof travelsListTripChanges>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getTravelsListTripChangesQueryKey(tripId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof travelsListTripChanges>>> = ({ signal }) => travelsListTripChanges(tripId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(tripId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof travelsListTripChanges>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type TravelsListTripChangesQueryResult = NonNullable<Awaited<ReturnType<typeof travelsListTripChanges>>>
+export type TravelsListTripChangesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List change events for all reservations on a trip
+ */
+
+export function useTravelsListTripChanges<TData = Awaited<ReturnType<typeof travelsListTripChanges>>, TError = ErrorType<unknown>>(
+ tripId: number,
+    params?: TravelsListTripChangesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof travelsListTripChanges>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getTravelsListTripChangesQueryOptions(tripId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getTravelsGetReservationUrl = (id: number,) => {
+
+
+
+
+  return `/api/travels/reservations/${id}`
+}
+
+/**
+ * @summary Get a reservation with full context
+ */
+export const travelsGetReservation = async (id: number, options?: RequestInit): Promise<TravelsTravelsReservationDetail> => {
+
+  return customFetch<TravelsTravelsReservationDetail>(getTravelsGetReservationUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getTravelsGetReservationQueryKey = (id: number,) => {
+    return [
+    `/api/travels/reservations/${id}`
+    ] as const;
+    }
+
+
+export const getTravelsGetReservationQueryOptions = <TData = Awaited<ReturnType<typeof travelsGetReservation>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof travelsGetReservation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getTravelsGetReservationQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof travelsGetReservation>>> = ({ signal }) => travelsGetReservation(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof travelsGetReservation>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type TravelsGetReservationQueryResult = NonNullable<Awaited<ReturnType<typeof travelsGetReservation>>>
+export type TravelsGetReservationQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get a reservation with full context
+ */
+
+export function useTravelsGetReservation<TData = Awaited<ReturnType<typeof travelsGetReservation>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof travelsGetReservation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getTravelsGetReservationQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getTravelsUpdateReservationUrl = (id: number,) => {
+
+
+
+
+  return `/api/travels/reservations/${id}`
+}
+
+/**
+ * @summary Update a reservation
+ */
+export const travelsUpdateReservation = async (id: number,
+    travelsTravelsReservationBody: TravelsTravelsReservationBody, options?: RequestInit): Promise<TravelsTravelsReservation> => {
+
+  return customFetch<TravelsTravelsReservation>(getTravelsUpdateReservationUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      travelsTravelsReservationBody,)
+  }
+);}
+
+
+
+
+export const getTravelsUpdateReservationMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof travelsUpdateReservation>>, TError,{id: number;data: BodyType<TravelsTravelsReservationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof travelsUpdateReservation>>, TError,{id: number;data: BodyType<TravelsTravelsReservationBody>}, TContext> => {
+
+const mutationKey = ['travelsUpdateReservation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof travelsUpdateReservation>>, {id: number;data: BodyType<TravelsTravelsReservationBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  travelsUpdateReservation(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TravelsUpdateReservationMutationResult = NonNullable<Awaited<ReturnType<typeof travelsUpdateReservation>>>
+    export type TravelsUpdateReservationMutationBody = BodyType<TravelsTravelsReservationBody>
+    export type TravelsUpdateReservationMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update a reservation
+ */
+export const useTravelsUpdateReservation = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof travelsUpdateReservation>>, TError,{id: number;data: BodyType<TravelsTravelsReservationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof travelsUpdateReservation>>,
+        TError,
+        {id: number;data: BodyType<TravelsTravelsReservationBody>},
+        TContext
+      > => {
+      return useMutation(getTravelsUpdateReservationMutationOptions(options));
+    }
+
+export const getTravelsDeleteReservationUrl = (id: number,) => {
+
+
+
+
+  return `/api/travels/reservations/${id}`
+}
+
+/**
+ * @summary Delete a reservation
+ */
+export const travelsDeleteReservation = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getTravelsDeleteReservationUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getTravelsDeleteReservationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof travelsDeleteReservation>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof travelsDeleteReservation>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['travelsDeleteReservation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof travelsDeleteReservation>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  travelsDeleteReservation(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TravelsDeleteReservationMutationResult = NonNullable<Awaited<ReturnType<typeof travelsDeleteReservation>>>
+
+    export type TravelsDeleteReservationMutationError = ErrorType<void>
+
+    /**
+ * @summary Delete a reservation
+ */
+export const useTravelsDeleteReservation = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof travelsDeleteReservation>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof travelsDeleteReservation>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getTravelsDeleteReservationMutationOptions(options));
+    }
+
+export const getTravelsUpdateReservationMonitoringUrl = (id: number,) => {
+
+
+
+
+  return `/api/travels/reservations/${id}/monitoring`
+}
+
+/**
+ * @summary Enable, disable, or configure monitoring for a reservation
+ */
+export const travelsUpdateReservationMonitoring = async (id: number,
+    travelsUpdateReservationMonitoringBody: TravelsUpdateReservationMonitoringBody, options?: RequestInit): Promise<TravelsTravelsReservation> => {
+
+  return customFetch<TravelsTravelsReservation>(getTravelsUpdateReservationMonitoringUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      travelsUpdateReservationMonitoringBody,)
+  }
+);}
+
+
+
+
+export const getTravelsUpdateReservationMonitoringMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof travelsUpdateReservationMonitoring>>, TError,{id: number;data: BodyType<TravelsUpdateReservationMonitoringBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof travelsUpdateReservationMonitoring>>, TError,{id: number;data: BodyType<TravelsUpdateReservationMonitoringBody>}, TContext> => {
+
+const mutationKey = ['travelsUpdateReservationMonitoring'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof travelsUpdateReservationMonitoring>>, {id: number;data: BodyType<TravelsUpdateReservationMonitoringBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  travelsUpdateReservationMonitoring(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TravelsUpdateReservationMonitoringMutationResult = NonNullable<Awaited<ReturnType<typeof travelsUpdateReservationMonitoring>>>
+    export type TravelsUpdateReservationMonitoringMutationBody = BodyType<TravelsUpdateReservationMonitoringBody>
+    export type TravelsUpdateReservationMonitoringMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Enable, disable, or configure monitoring for a reservation
+ */
+export const useTravelsUpdateReservationMonitoring = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof travelsUpdateReservationMonitoring>>, TError,{id: number;data: BodyType<TravelsUpdateReservationMonitoringBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof travelsUpdateReservationMonitoring>>,
+        TError,
+        {id: number;data: BodyType<TravelsUpdateReservationMonitoringBody>},
+        TContext
+      > => {
+      return useMutation(getTravelsUpdateReservationMonitoringMutationOptions(options));
+    }
+
+export const getTravelsCheckReservationNowUrl = (id: number,) => {
+
+
+
+
+  return `/api/travels/reservations/${id}/check-now`
+}
+
+/**
+ * @summary Manually trigger a monitoring check for a reservation
+ */
+export const travelsCheckReservationNow = async (id: number, options?: RequestInit): Promise<TravelsCheckReservationNow200> => {
+
+  return customFetch<TravelsCheckReservationNow200>(getTravelsCheckReservationNowUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getTravelsCheckReservationNowMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof travelsCheckReservationNow>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof travelsCheckReservationNow>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['travelsCheckReservationNow'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof travelsCheckReservationNow>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  travelsCheckReservationNow(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TravelsCheckReservationNowMutationResult = NonNullable<Awaited<ReturnType<typeof travelsCheckReservationNow>>>
+
+    export type TravelsCheckReservationNowMutationError = ErrorType<void>
+
+    /**
+ * @summary Manually trigger a monitoring check for a reservation
+ */
+export const useTravelsCheckReservationNow = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof travelsCheckReservationNow>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof travelsCheckReservationNow>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getTravelsCheckReservationNowMutationOptions(options));
+    }
+
+export const getTravelsGetChangeEventUrl = (id: number,) => {
+
+
+
+
+  return `/api/travels/changes/${id}`
+}
+
+/**
+ * @summary Get a change event with full context
+ */
+export const travelsGetChangeEvent = async (id: number, options?: RequestInit): Promise<TravelsTravelsChangeEventDetail> => {
+
+  return customFetch<TravelsTravelsChangeEventDetail>(getTravelsGetChangeEventUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getTravelsGetChangeEventQueryKey = (id: number,) => {
+    return [
+    `/api/travels/changes/${id}`
+    ] as const;
+    }
+
+
+export const getTravelsGetChangeEventQueryOptions = <TData = Awaited<ReturnType<typeof travelsGetChangeEvent>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof travelsGetChangeEvent>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getTravelsGetChangeEventQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof travelsGetChangeEvent>>> = ({ signal }) => travelsGetChangeEvent(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof travelsGetChangeEvent>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type TravelsGetChangeEventQueryResult = NonNullable<Awaited<ReturnType<typeof travelsGetChangeEvent>>>
+export type TravelsGetChangeEventQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get a change event with full context
+ */
+
+export function useTravelsGetChangeEvent<TData = Awaited<ReturnType<typeof travelsGetChangeEvent>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof travelsGetChangeEvent>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getTravelsGetChangeEventQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getTravelsDecideChangeEventUrl = (id: number,) => {
+
+
+
+
+  return `/api/travels/changes/${id}/decision`
+}
+
+/**
+ * @summary Accept, reject, or otherwise decide on a change event
+ */
+export const travelsDecideChangeEvent = async (id: number,
+    travelsTravelsChangeDecisionBody: TravelsTravelsChangeDecisionBody, options?: RequestInit): Promise<TravelsTravelsChangeEvent> => {
+
+  return customFetch<TravelsTravelsChangeEvent>(getTravelsDecideChangeEventUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      travelsTravelsChangeDecisionBody,)
+  }
+);}
+
+
+
+
+export const getTravelsDecideChangeEventMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof travelsDecideChangeEvent>>, TError,{id: number;data: BodyType<TravelsTravelsChangeDecisionBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof travelsDecideChangeEvent>>, TError,{id: number;data: BodyType<TravelsTravelsChangeDecisionBody>}, TContext> => {
+
+const mutationKey = ['travelsDecideChangeEvent'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof travelsDecideChangeEvent>>, {id: number;data: BodyType<TravelsTravelsChangeDecisionBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  travelsDecideChangeEvent(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TravelsDecideChangeEventMutationResult = NonNullable<Awaited<ReturnType<typeof travelsDecideChangeEvent>>>
+    export type TravelsDecideChangeEventMutationBody = BodyType<TravelsTravelsChangeDecisionBody>
+    export type TravelsDecideChangeEventMutationError = ErrorType<void>
+
+    /**
+ * @summary Accept, reject, or otherwise decide on a change event
+ */
+export const useTravelsDecideChangeEvent = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof travelsDecideChangeEvent>>, TError,{id: number;data: BodyType<TravelsTravelsChangeDecisionBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof travelsDecideChangeEvent>>,
+        TError,
+        {id: number;data: BodyType<TravelsTravelsChangeDecisionBody>},
+        TContext
+      > => {
+      return useMutation(getTravelsDecideChangeEventMutationOptions(options));
+    }
+
+export const getTravelsGetMonitoringPreferencesUrl = () => {
+
+
+
+
+  return `/api/travels/monitoring/preferences`
+}
+
+/**
+ * @summary Get monitoring preferences for the current user
+ */
+export const travelsGetMonitoringPreferences = async ( options?: RequestInit): Promise<TravelsTravelsMonitoringPreferences> => {
+
+  return customFetch<TravelsTravelsMonitoringPreferences>(getTravelsGetMonitoringPreferencesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getTravelsGetMonitoringPreferencesQueryKey = () => {
+    return [
+    `/api/travels/monitoring/preferences`
+    ] as const;
+    }
+
+
+export const getTravelsGetMonitoringPreferencesQueryOptions = <TData = Awaited<ReturnType<typeof travelsGetMonitoringPreferences>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof travelsGetMonitoringPreferences>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getTravelsGetMonitoringPreferencesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof travelsGetMonitoringPreferences>>> = ({ signal }) => travelsGetMonitoringPreferences({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof travelsGetMonitoringPreferences>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type TravelsGetMonitoringPreferencesQueryResult = NonNullable<Awaited<ReturnType<typeof travelsGetMonitoringPreferences>>>
+export type TravelsGetMonitoringPreferencesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get monitoring preferences for the current user
+ */
+
+export function useTravelsGetMonitoringPreferences<TData = Awaited<ReturnType<typeof travelsGetMonitoringPreferences>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof travelsGetMonitoringPreferences>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getTravelsGetMonitoringPreferencesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getTravelsUpdateMonitoringPreferencesUrl = () => {
+
+
+
+
+  return `/api/travels/monitoring/preferences`
+}
+
+/**
+ * @summary Update monitoring preferences for the current user
+ */
+export const travelsUpdateMonitoringPreferences = async (travelsTravelsMonitoringPreferences: TravelsTravelsMonitoringPreferences, options?: RequestInit): Promise<TravelsTravelsMonitoringPreferences> => {
+
+  return customFetch<TravelsTravelsMonitoringPreferences>(getTravelsUpdateMonitoringPreferencesUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      travelsTravelsMonitoringPreferences,)
+  }
+);}
+
+
+
+
+export const getTravelsUpdateMonitoringPreferencesMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof travelsUpdateMonitoringPreferences>>, TError,{data: BodyType<TravelsTravelsMonitoringPreferences>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof travelsUpdateMonitoringPreferences>>, TError,{data: BodyType<TravelsTravelsMonitoringPreferences>}, TContext> => {
+
+const mutationKey = ['travelsUpdateMonitoringPreferences'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof travelsUpdateMonitoringPreferences>>, {data: BodyType<TravelsTravelsMonitoringPreferences>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  travelsUpdateMonitoringPreferences(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TravelsUpdateMonitoringPreferencesMutationResult = NonNullable<Awaited<ReturnType<typeof travelsUpdateMonitoringPreferences>>>
+    export type TravelsUpdateMonitoringPreferencesMutationBody = BodyType<TravelsTravelsMonitoringPreferences>
+    export type TravelsUpdateMonitoringPreferencesMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update monitoring preferences for the current user
+ */
+export const useTravelsUpdateMonitoringPreferences = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof travelsUpdateMonitoringPreferences>>, TError,{data: BodyType<TravelsTravelsMonitoringPreferences>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof travelsUpdateMonitoringPreferences>>,
+        TError,
+        {data: BodyType<TravelsTravelsMonitoringPreferences>},
+        TContext
+      > => {
+      return useMutation(getTravelsUpdateMonitoringPreferencesMutationOptions(options));
     }
 
 export const getListOrnamentsUrl = (params?: ListOrnamentsParams,) => {

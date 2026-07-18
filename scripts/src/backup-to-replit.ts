@@ -1001,6 +1001,92 @@ CREATE TABLE IF NOT EXISTS search_feedback (
   notes        TEXT,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Phase 2: Similarity evaluations (#233)
+CREATE TABLE IF NOT EXISTS similarity_evaluations (
+  id                        SERIAL PRIMARY KEY,
+  module                    TEXT NOT NULL,
+  workflow                  TEXT NOT NULL,
+  query_artifact_type       TEXT NOT NULL,
+  query_artifact_id         INTEGER,
+  candidate_target_type     TEXT NOT NULL,
+  candidate_target_id       INTEGER NOT NULL,
+  search_config_version     TEXT,
+  text_embedding_model      TEXT,
+  text_cosine_score         NUMERIC(5,4),
+  text_rank                 INTEGER,
+  visual_embedding_model    TEXT,
+  visual_cosine_score       NUMERIC(5,4),
+  visual_rank               INTEGER,
+  zone_cosine_score         NUMERIC(5,4),
+  zone_rank                 INTEGER,
+  rrf_score                 NUMERIC(8,6),
+  reranker_model            TEXT,
+  reranker_score            NUMERIC(7,4),
+  reranker_rank             INTEGER,
+  user_verdict              TEXT,
+  user_id                   INTEGER,
+  recorded_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Phase 3: Market intelligence (#234)
+CREATE TABLE IF NOT EXISTS market_observations (
+  id                     SERIAL PRIMARY KEY,
+  module                 TEXT NOT NULL,
+  item_type              TEXT NOT NULL,
+  item_id                INTEGER,
+  ingestion_candidate_id INTEGER,
+  platform               TEXT NOT NULL,
+  listing_url            TEXT,
+  listing_title          TEXT,
+  observed_price         NUMERIC(12,2),
+  currency               TEXT NOT NULL DEFAULT 'USD',
+  condition              TEXT,
+  listing_status         TEXT NOT NULL DEFAULT 'active',
+  listed_at              TIMESTAMPTZ,
+  sold_at                TIMESTAMPTZ,
+  source_json            JSONB,
+  confidence_score       NUMERIC(4,3),
+  notes                  TEXT,
+  created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS market_valuations (
+  id                SERIAL PRIMARY KEY,
+  module            TEXT NOT NULL,
+  item_type         TEXT NOT NULL,
+  item_id           INTEGER,
+  valuation_method  TEXT NOT NULL DEFAULT 'median',
+  estimated_value   NUMERIC(12,2) NOT NULL,
+  value_low         NUMERIC(12,2),
+  value_high        NUMERIC(12,2),
+  currency          TEXT NOT NULL DEFAULT 'USD',
+  sample_size       INTEGER,
+  observation_ids   JSONB,
+  valid_until       TIMESTAMPTZ,
+  notes             TEXT,
+  created_by        INTEGER,
+  computed_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS market_watches (
+  id                    SERIAL PRIMARY KEY,
+  user_id               INTEGER,
+  module                TEXT NOT NULL,
+  item_type             TEXT,
+  item_id               INTEGER,
+  search_query          TEXT,
+  platforms             JSONB NOT NULL DEFAULT '[]'::jsonb,
+  enabled               BOOLEAN NOT NULL DEFAULT true,
+  alert_threshold_low   NUMERIC(12,2),
+  alert_threshold_high  NUMERIC(12,2),
+  alert_currency        TEXT NOT NULL DEFAULT 'USD',
+  last_run_at           TIMESTAMPTZ,
+  notes                 TEXT,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 `;
 
 async function copyTable(
@@ -2276,6 +2362,112 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "travels_field_conflicts", "id");
+
+  // ── Phase 2: Similarity evaluations (#233) ────────────────────────────────
+  summary["similarity_evaluations"] = await copyTable(source, dest, {
+    table: "similarity_evaluations",
+    columns: [
+      "id",
+      "module",
+      "workflow",
+      "query_artifact_type",
+      "query_artifact_id",
+      "candidate_target_type",
+      "candidate_target_id",
+      "search_config_version",
+      "text_embedding_model",
+      "text_cosine_score",
+      "text_rank",
+      "visual_embedding_model",
+      "visual_cosine_score",
+      "visual_rank",
+      "zone_cosine_score",
+      "zone_rank",
+      "rrf_score",
+      "reranker_model",
+      "reranker_score",
+      "reranker_rank",
+      "user_verdict",
+      "user_id",
+      "recorded_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "similarity_evaluations", "id");
+
+  // ── Phase 3: Market intelligence (#234) ──────────────────────────────────
+  summary["market_observations"] = await copyTable(source, dest, {
+    table: "market_observations",
+    columns: [
+      "id",
+      "module",
+      "item_type",
+      "item_id",
+      "ingestion_candidate_id",
+      "platform",
+      "listing_url",
+      "listing_title",
+      "observed_price",
+      "currency",
+      "condition",
+      "listing_status",
+      "listed_at",
+      "sold_at",
+      "source_json",
+      "confidence_score",
+      "notes",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "market_observations", "id");
+
+  summary["market_valuations"] = await copyTable(source, dest, {
+    table: "market_valuations",
+    columns: [
+      "id",
+      "module",
+      "item_type",
+      "item_id",
+      "valuation_method",
+      "estimated_value",
+      "value_low",
+      "value_high",
+      "currency",
+      "sample_size",
+      "observation_ids",
+      "valid_until",
+      "notes",
+      "created_by",
+      "computed_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "market_valuations", "id");
+
+  summary["market_watches"] = await copyTable(source, dest, {
+    table: "market_watches",
+    columns: [
+      "id",
+      "user_id",
+      "module",
+      "item_type",
+      "item_id",
+      "search_query",
+      "platforms",
+      "enabled",
+      "alert_threshold_low",
+      "alert_threshold_high",
+      "alert_currency",
+      "last_run_at",
+      "notes",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "market_watches", "id");
 
   // ── Record backup history ─────────────────────────────────────────────────
   const note = Object.entries(summary)

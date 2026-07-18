@@ -1799,7 +1799,7 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS travels_field_conflicts_field_path_idx
      ON travels_field_conflicts (field_path)`,
 
-  // ── Phase 2: Search feedback (#233) ──────────────────────────────────────
+  // ── Phase 2: Search feedback + similarity evaluations (#233) ─────────────
 
   `CREATE TABLE IF NOT EXISTS search_feedback (
     id          SERIAL PRIMARY KEY,
@@ -1821,6 +1821,125 @@ export const STATEMENTS: string[] = [
      ON search_feedback (item_a_type, item_a_id, item_b_type, item_b_id)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS search_feedback_pair_user_idx
      ON search_feedback (user_id, item_a_type, item_a_id, item_b_type, item_b_id)`,
+
+  // ── Phase 2: Similarity evaluations (#233) ───────────────────────────────
+  // Records per-query, per-result component scores from compare endpoints so
+  // calibration drift is observable without manual logging.
+  `CREATE TABLE IF NOT EXISTS similarity_evaluations (
+    id                        SERIAL PRIMARY KEY,
+    module                    TEXT NOT NULL,
+    workflow                  TEXT NOT NULL,
+    query_artifact_type       TEXT NOT NULL,
+    query_artifact_id         INTEGER,
+    candidate_target_type     TEXT NOT NULL,
+    candidate_target_id       INTEGER NOT NULL,
+    search_config_version     TEXT,
+    text_embedding_model      TEXT,
+    text_cosine_score         NUMERIC(5,4),
+    text_rank                 INTEGER,
+    visual_embedding_model    TEXT,
+    visual_cosine_score       NUMERIC(5,4),
+    visual_rank               INTEGER,
+    zone_cosine_score         NUMERIC(5,4),
+    zone_rank                 INTEGER,
+    rrf_score                 NUMERIC(8,6),
+    reranker_model            TEXT,
+    reranker_score            NUMERIC(7,4),
+    reranker_rank             INTEGER,
+    user_verdict              TEXT CHECK (user_verdict IN ('same','similar','different')),
+    user_id                   INTEGER REFERENCES app_users(id) ON DELETE SET NULL,
+    recorded_at               TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS similarity_evaluations_module_workflow_idx
+     ON similarity_evaluations (module, workflow)`,
+  `CREATE INDEX IF NOT EXISTS similarity_evaluations_query_idx
+     ON similarity_evaluations (query_artifact_type, query_artifact_id)`,
+  `CREATE INDEX IF NOT EXISTS similarity_evaluations_candidate_idx
+     ON similarity_evaluations (candidate_target_type, candidate_target_id)`,
+  `CREATE INDEX IF NOT EXISTS similarity_evaluations_recorded_at_idx
+     ON similarity_evaluations (recorded_at DESC)`,
+
+  // ── Phase 3: Market intelligence (#234) ──────────────────────────────────
+
+  `CREATE TABLE IF NOT EXISTS market_observations (
+    id                     SERIAL PRIMARY KEY,
+    module                 TEXT NOT NULL,
+    item_type              TEXT NOT NULL,
+    item_id                INTEGER,
+    ingestion_candidate_id INTEGER REFERENCES ingestion_candidates(id) ON DELETE SET NULL,
+    platform               TEXT NOT NULL,
+    listing_url            TEXT,
+    listing_title          TEXT,
+    observed_price         NUMERIC(12,2),
+    currency               TEXT NOT NULL DEFAULT 'USD',
+    condition              TEXT,
+    listing_status         TEXT NOT NULL DEFAULT 'active'
+                             CHECK (listing_status IN ('active','sold','expired','unknown')),
+    listed_at              TIMESTAMPTZ,
+    sold_at                TIMESTAMPTZ,
+    source_json            JSONB,
+    confidence_score       NUMERIC(4,3),
+    notes                  TEXT,
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS market_observations_module_item_idx
+     ON market_observations (module, item_type, item_id)`,
+  `CREATE INDEX IF NOT EXISTS market_observations_platform_idx
+     ON market_observations (platform)`,
+  `CREATE INDEX IF NOT EXISTS market_observations_status_idx
+     ON market_observations (listing_status)`,
+  `CREATE INDEX IF NOT EXISTS market_observations_created_at_idx
+     ON market_observations (created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS market_observations_candidate_idx
+     ON market_observations (ingestion_candidate_id)`,
+
+  `CREATE TABLE IF NOT EXISTS market_valuations (
+    id                SERIAL PRIMARY KEY,
+    module            TEXT NOT NULL,
+    item_type         TEXT NOT NULL,
+    item_id           INTEGER,
+    valuation_method  TEXT NOT NULL DEFAULT 'median'
+                        CHECK (valuation_method IN ('median','mean','weighted','manual')),
+    estimated_value   NUMERIC(12,2) NOT NULL,
+    value_low         NUMERIC(12,2),
+    value_high        NUMERIC(12,2),
+    currency          TEXT NOT NULL DEFAULT 'USD',
+    sample_size       INTEGER,
+    observation_ids   JSONB,
+    valid_until       TIMESTAMPTZ,
+    notes             TEXT,
+    created_by        INTEGER REFERENCES app_users(id) ON DELETE SET NULL,
+    computed_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS market_valuations_module_item_idx
+     ON market_valuations (module, item_type, item_id)`,
+  `CREATE INDEX IF NOT EXISTS market_valuations_computed_at_idx
+     ON market_valuations (computed_at DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS market_watches (
+    id                    SERIAL PRIMARY KEY,
+    user_id               INTEGER REFERENCES app_users(id) ON DELETE SET NULL,
+    module                TEXT NOT NULL,
+    item_type             TEXT,
+    item_id               INTEGER,
+    search_query          TEXT,
+    platforms             JSONB NOT NULL DEFAULT '[]'::jsonb,
+    enabled               BOOLEAN NOT NULL DEFAULT true,
+    alert_threshold_low   NUMERIC(12,2),
+    alert_threshold_high  NUMERIC(12,2),
+    alert_currency        TEXT NOT NULL DEFAULT 'USD',
+    last_run_at           TIMESTAMPTZ,
+    notes                 TEXT,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS market_watches_user_idx
+     ON market_watches (user_id)`,
+  `CREATE INDEX IF NOT EXISTS market_watches_module_item_idx
+     ON market_watches (module, item_type, item_id)`,
+  `CREATE INDEX IF NOT EXISTS market_watches_enabled_idx
+     ON market_watches (enabled)`,
 
   // ── Security: revoke public execute on auto_enable_rls() (#258) ──────────
   // This Supabase-created SECURITY DEFINER function must not be callable by

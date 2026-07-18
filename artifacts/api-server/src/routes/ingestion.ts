@@ -13,6 +13,8 @@ import { adminLimiter } from "../middleware/rateLimit";
 import { runIngestion } from "../lib/ingestion";
 import { RestAdapter } from "../lib/ingestion/rest-adapter";
 import { ApifyAdapter } from "../lib/ingestion/apify-adapter";
+import { JinaReaderAdapter } from "../lib/ingestion/jina-reader-adapter";
+import { WebSearchAdapter } from "../lib/ingestion/web-search-adapter";
 import { env } from "../lib/env";
 
 const router = Router();
@@ -34,7 +36,14 @@ const SourceBody = z.object({
     .min(1)
     .max(80)
     .regex(/^[a-z0-9-]+$/),
-  adapterType: z.enum(["apify", "rest", "webhook", "manual"]),
+  adapterType: z.enum([
+    "apify",
+    "rest",
+    "jina_reader",
+    "web_search",
+    "webhook",
+    "manual",
+  ]),
   adapterConfig: z.record(z.string(), z.unknown()).default({}),
   module: z.string().min(1),
   feature: z.string().optional(),
@@ -133,6 +142,10 @@ router.post("/sources/:id/run", async (req, res) => {
     }
   } else if (src.adapter_type === "rest") {
     adapter = new RestAdapter();
+  } else if (src.adapter_type === "jina_reader") {
+    adapter = new JinaReaderAdapter();
+  } else if (src.adapter_type === "web_search") {
+    adapter = new WebSearchAdapter();
   } else {
     res.status(400).json({
       error: `Adapter type '${src.adapter_type}' requires manual trigger`,
@@ -218,6 +231,58 @@ router.get("/runs/:runId/candidates", async (req, res) => {
     params,
   );
   res.json({ candidates: result.rows });
+});
+
+router.post("/candidates/:id/accept", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "Invalid candidate id" });
+    return;
+  }
+
+  const row = await pool.query<{ id: number; status: string }>(
+    `SELECT id, status FROM ingestion_candidates WHERE id=$1`,
+    [id],
+  );
+  if (row.rows.length === 0) {
+    res.status(404).json({ error: "Candidate not found" });
+    return;
+  }
+
+  await pool.query(
+    `UPDATE ingestion_candidates SET status='merged', matched_at=now() WHERE id=$1`,
+    [id],
+  );
+  res.json({ ok: true, id, status: "merged" });
+});
+
+router.post("/candidates/:id/reject", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "Invalid candidate id" });
+    return;
+  }
+
+  const body = z
+    .object({ reason: z.string().max(500).optional() })
+    .parse(req.body);
+
+  const row = await pool.query<{ id: number }>(
+    `SELECT id FROM ingestion_candidates WHERE id=$1`,
+    [id],
+  );
+  if (row.rows.length === 0) {
+    res.status(404).json({ error: "Candidate not found" });
+    return;
+  }
+
+  await pool.query(
+    `UPDATE ingestion_candidates
+     SET status='rejected', rejected_reason=$2, merged_at=now()
+     WHERE id=$1`,
+    [id, body.reason ?? null],
+  );
+  res.json({ ok: true, id, status: "rejected" });
 });
 
 export default router;

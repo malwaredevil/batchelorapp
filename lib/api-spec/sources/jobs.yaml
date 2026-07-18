@@ -106,7 +106,8 @@ components:
         progress_message: { type: string, nullable: true }
     JobRegistryEntry:
       type: object
-      required: [type, queue, payloadSchemaVersion, maxAttempts, idempotencyStrategy]
+      required:
+        [type, queue, payloadSchemaVersion, maxAttempts, idempotencyStrategy]
       properties:
         type: { type: string }
         queue: { type: string }

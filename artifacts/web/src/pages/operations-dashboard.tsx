@@ -23,7 +23,10 @@ export default function OperationsDashboard() {
 
   if (!user?.isOwner) return <Redirect to="/" />;
 
-  const providers = (summary.data?.providers ?? []) as Record<string, unknown>[];
+  const providers = (summary.data?.providers ?? []) as Record<
+    string,
+    unknown
+  >[];
   const eventRows = (events.data?.events ?? []) as Record<string, unknown>[];
   const budgetRows = (budgets.data?.budgets ?? []) as Record<string, unknown>[];
 
@@ -88,7 +91,10 @@ export default function OperationsDashboard() {
             <h2 className="mb-3 font-semibold">Budget policies</h2>
             <div className="space-y-2">
               {budgetRows.map((budget) => (
-                <div key={value(budget, "id")} className="rounded-md border p-3">
+                <div
+                  key={value(budget, "id")}
+                  className="rounded-md border p-3"
+                >
                   <div className="flex items-center justify-between">
                     <span className="font-medium">
                       {value(budget, "scope")} {value(budget, "scope_value")}
@@ -138,7 +144,9 @@ export default function OperationsDashboard() {
                     <td className="px-4 py-2">
                       <Badge variant="outline">{value(event, "status")}</Badge>
                     </td>
-                    <td className="px-4 py-2">{value(event, "cache_status")}</td>
+                    <td className="px-4 py-2">
+                      {value(event, "cache_status")}
+                    </td>
                     <td className="px-4 py-2">
                       {value(event, "duration_ms")} ms
                     </td>

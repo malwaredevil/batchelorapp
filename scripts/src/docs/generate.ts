@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { format } from "prettier";
 import {
   GENERATED_DIR,
   ROOT,
@@ -19,14 +20,21 @@ type PackageJson = {
 };
 
 type OpenApi = {
-  paths?: Record<string, Record<string, { operationId?: string; tags?: string[] }>>;
+  paths?: Record<
+    string,
+    Record<string, { operationId?: string; tags?: string[] }>
+  >;
 };
+
+function normalizePathForDocs(filePath: string): string {
+  return filePath.split(path.sep).join("/");
+}
 
 function generateDependencies(): void {
   const packages = listFiles(ROOT, (file) => file.endsWith("package.json"))
     .filter((file) => !file.includes(`${path.sep}node_modules${path.sep}`))
     .map((file) => ({
-      relative: path.relative(ROOT, file),
+      relative: normalizePathForDocs(path.relative(ROOT, file)),
       pkg: JSON.parse(fs.readFileSync(file, "utf8")) as PackageJson,
     }));
   const rows = packages.map(({ relative, pkg }) => {
@@ -58,10 +66,20 @@ function generateRoutes(): void {
 
 function generateJobs(): void {
   const registry = fs.readFileSync(
-    path.join(ROOT, "artifacts", "api-server", "src", "lib", "jobs", "registry.ts"),
+    path.join(
+      ROOT,
+      "artifacts",
+      "api-server",
+      "src",
+      "lib",
+      "jobs",
+      "registry.ts",
+    ),
     "utf8",
   );
-  const types = Array.from(registry.matchAll(/type: "([^"]+)"/g)).map((m) => m[1]);
+  const types = Array.from(registry.matchAll(/type: "([^"]+)"/g)).map(
+    (m) => m[1],
+  );
   writeGenerated(
     "jobs.md",
     `${generatedHeader("Generated job and scheduler reference")}\n| Job type |\n|---|\n${types.map((type) => `| ${type} |`).join("\n")}`,
@@ -76,7 +94,11 @@ function generateProviders(): void {
     ["Apify", "APIFY_API_TOKEN", "Actor runs"],
     ["Resend", "RESEND_API_KEY", "Email"],
     ["AgentPhone", "AGENTPHONE_API_KEY", "SMS/voice"],
-    ["Google", "GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET", "OAuth/Gmail/Calendar"],
+    [
+      "Google",
+      "GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET",
+      "OAuth/Gmail/Calendar",
+    ],
     ["Supabase", "SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY", "Storage"],
   ];
   writeGenerated(
@@ -100,9 +122,14 @@ function generateModelSlots(): void {
 }
 
 function generateSchema(): void {
-  const inventoryPath = path.join(GENERATED_DIR, "database-security-inventory.json");
+  const inventoryPath = path.join(
+    GENERATED_DIR,
+    "database-security-inventory.json",
+  );
   const inventory = fs.existsSync(inventoryPath)
-    ? readJson<Record<string, unknown>>("docs/generated/database-security-inventory.json")
+    ? readJson<Record<string, unknown>>(
+        "docs/generated/database-security-inventory.json",
+      )
     : {};
   writeGenerated(
     "schema.md",
@@ -117,4 +144,16 @@ generateProviders();
 generateStorage();
 generateModelSlots();
 generateSchema();
+
+for (const file of fs.readdirSync(GENERATED_DIR)) {
+  if (!file.endsWith(".md")) continue;
+  const full = path.join(GENERATED_DIR, file);
+  fs.writeFileSync(
+    full,
+    await format(fs.readFileSync(full, "utf8"), {
+      parser: "markdown",
+    }),
+  );
+}
+
 console.log(`Generated docs in ${path.relative(ROOT, GENERATED_DIR)}`);

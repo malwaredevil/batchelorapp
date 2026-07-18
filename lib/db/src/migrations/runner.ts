@@ -30,7 +30,9 @@ export async function ensureMigrationLedger(
       app_commit_sha text
     )
   `);
-  await client.query(`ALTER TABLE app_schema_migrations ENABLE ROW LEVEL SECURITY`);
+  await client.query(
+    `ALTER TABLE app_schema_migrations ENABLE ROW LEVEL SECURITY`,
+  );
 }
 
 async function appliedMigrations(
@@ -119,9 +121,9 @@ export async function applyMigrations(): Promise<MigrationStatus> {
       }
     }
   } finally {
-    await client.query(`SELECT pg_advisory_unlock($1)`, [MIGRATION_LOCK_ID]).catch(
-      () => undefined,
-    );
+    await client
+      .query(`SELECT pg_advisory_unlock($1)`, [MIGRATION_LOCK_ID])
+      .catch(() => undefined);
     client.release();
   }
 

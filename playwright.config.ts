@@ -17,7 +17,7 @@ export default defineConfig({
   webServer: process.env.PLAYWRIGHT_SKIP_WEBSERVER
     ? undefined
     : {
-        command: `corepack pnpm --filter @workspace/web run dev -- --host 127.0.0.1 --port ${port}`,
+        command: `node scripts/playwright-web-server.cjs ${port}`,
         url: baseURL,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,

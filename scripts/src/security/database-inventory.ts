@@ -10,7 +10,12 @@ const ROOT = path.resolve(
   "..",
   "..",
 );
-const OUT = path.join(ROOT, "docs", "generated", "database-security-inventory.json");
+const OUT = path.join(
+  ROOT,
+  "docs",
+  "generated",
+  "database-security-inventory.json",
+);
 const ALLOWLIST = path.join(
   ROOT,
   "docs",
@@ -46,13 +51,17 @@ async function liveInventory(): Promise<Partial<Inventory>> {
   });
   try {
     const [tables, functions, rls] = await Promise.all([
-      pool.query(`
+      pool.query(
+        `
         SELECT table_schema, table_name, table_type
         FROM information_schema.tables
         WHERE table_schema = ANY($1)
         ORDER BY table_schema, table_name
-      `, [["public"]]),
-      pool.query(`
+      `,
+        [["public"]],
+      ),
+      pool.query(
+        `
         SELECT n.nspname AS schema, p.proname AS name, p.prosecdef AS security_definer,
                pg_get_function_arguments(p.oid) AS arguments,
                pg_get_userbyid(p.proowner) AS owner
@@ -60,20 +69,27 @@ async function liveInventory(): Promise<Partial<Inventory>> {
         JOIN pg_namespace n ON n.oid = p.pronamespace
         WHERE n.nspname = ANY($1)
         ORDER BY n.nspname, p.proname
-      `, [["public"]]),
-      pool.query(`
+      `,
+        [["public"]],
+      ),
+      pool.query(
+        `
         SELECT schemaname, tablename, rowsecurity, forcerowsecurity
         FROM pg_tables
         WHERE schemaname = ANY($1)
         ORDER BY schemaname, tablename
-      `, [["public"]]),
+      `,
+        [["public"]],
+      ),
     ]);
     return {
       mode: "live",
       tables: tables.rows,
       functions: functions.rows,
       rls: rls.rows,
-      securityDefinerFunctions: functions.rows.filter((row) => row.security_definer),
+      securityDefinerFunctions: functions.rows.filter(
+        (row) => row.security_definer,
+      ),
     };
   } finally {
     await pool.end();

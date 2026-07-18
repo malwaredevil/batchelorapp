@@ -147,26 +147,28 @@ router.get("/export", async (_req, res) => {
     ORDER BY created_at DESC
     LIMIT 5000
   `);
-  res.type("text/csv").send(
-    [
-      "provider,operation,module,feature,status,cache_status,duration_ms,cost_usd,created_at",
-      ...result.rows.map((row) =>
-        [
-          row.provider,
-          row.operation,
-          row.module,
-          row.feature,
-          row.status,
-          row.cache_status,
-          row.duration_ms,
-          row.cost_usd,
-          row.created_at.toISOString(),
-        ]
-          .map((value) => JSON.stringify(String(value ?? "")))
-          .join(","),
-      ),
-    ].join("\n"),
-  );
+  res
+    .type("text/csv")
+    .send(
+      [
+        "provider,operation,module,feature,status,cache_status,duration_ms,cost_usd,created_at",
+        ...result.rows.map((row) =>
+          [
+            row.provider,
+            row.operation,
+            row.module,
+            row.feature,
+            row.status,
+            row.cache_status,
+            row.duration_ms,
+            row.cost_usd,
+            row.created_at.toISOString(),
+          ]
+            .map((value) => JSON.stringify(String(value ?? "")))
+            .join(","),
+        ),
+      ].join("\n"),
+    );
 });
 
 export default router;

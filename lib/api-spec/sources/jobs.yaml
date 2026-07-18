@@ -1,0 +1,147 @@
+openapi: 3.1.0
+info:
+  title: Jobs
+  version: 0.1.0
+paths:
+  /:
+    get:
+      operationId: listJobs
+      tags: [jobs]
+      summary: List durable jobs (owner only)
+      parameters:
+        - name: type
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: parentJobId
+          in: query
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer, maximum: 250 }
+      responses:
+        "200":
+          description: Job list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobListResponse"
+  /health:
+    get:
+      operationId: getJobsHealth
+      tags: [jobs]
+      summary: Get durable queue health (owner only)
+      responses:
+        "200":
+          description: Queue health
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobHealth"
+  /{id}:
+    get:
+      operationId: getJob
+      tags: [jobs]
+      summary: Get one durable job with attempts (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Job details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobResponse"
+        "404": { description: Job not found }
+  /{id}/cancel:
+    post:
+      operationId: cancelJob
+      tags: [jobs]
+      summary: Cancel a nonterminal job (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Cancellation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobMutationResponse"
+  /{id}/retry:
+    post:
+      operationId: retryJob
+      tags: [jobs]
+      summary: Retry a failed or dead-letter job (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Retry result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobRetryResponse"
+components:
+  schemas:
+    Job:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: integer }
+        type: { type: string }
+        queue: { type: string }
+        status: { type: string }
+        progress_percent: { type: integer }
+        progress_message: { type: string, nullable: true }
+    JobRegistryEntry:
+      type: object
+      required:
+        [type, queue, payloadSchemaVersion, maxAttempts, idempotencyStrategy]
+      properties:
+        type: { type: string }
+        queue: { type: string }
+        payloadSchemaVersion: { type: integer }
+        maxAttempts: { type: integer }
+        idempotencyStrategy: { type: string }
+    JobListResponse:
+      type: object
+      required: [jobs, registry]
+      properties:
+        jobs:
+          type: array
+          items:
+            $ref: "#/components/schemas/Job"
+        registry:
+          type: array
+          items:
+            $ref: "#/components/schemas/JobRegistryEntry"
+    JobResponse:
+      type: object
+      required: [job]
+      properties:
+        job:
+          $ref: "#/components/schemas/Job"
+    JobHealth:
+      type: object
+      additionalProperties: true
+    JobMutationResponse:
+      type: object
+      required: [cancelled]
+      properties:
+        cancelled: { type: boolean }
+    JobRetryResponse:
+      type: object
+      required: [retried]
+      properties:
+        retried: { type: boolean }

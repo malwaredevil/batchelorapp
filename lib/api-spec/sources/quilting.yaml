@@ -1838,7 +1838,7 @@ components:
   schemas:
     FabricsListResponse:
       type: object
-      required: [items, total, page, pageSize, searchMode]
+      required: [items, total, page, pageSize]
       properties:
         items:
           type: array
@@ -1850,9 +1850,6 @@ components:
           type: integer
         pageSize:
           type: integer
-        searchMode:
-          type: string
-          enum: [semantic, keyword]
 
     PatternsListResponse:
       type: object
@@ -1906,6 +1903,24 @@ components:
             "pending" = not yet run; "success" = all steps completed;
             "warn" = DB unavailable at startup (non-fatal, using hardcoded fallbacks);
             "error" = unexpected JS error, stale/missing config rows may persist.
+        migrations:
+          type: object
+          nullable: true
+          required:
+            - expectedLatestVersion
+            - appliedLatestVersion
+            - pendingCount
+            - checksumErrorCount
+          properties:
+            expectedLatestVersion:
+              type: integer
+            appliedLatestVersion:
+              type: integer
+              nullable: true
+            pendingCount:
+              type: integer
+            checksumErrorCount:
+              type: integer
 
     AuthUser:
       type: object
@@ -2571,10 +2586,8 @@ components:
 
     BulkReanalyzeResult:
       type: object
-      required: [total, succeeded, failed, errors]
+      required: [succeeded, failed]
       properties:
-        total:
-          type: integer
         succeeded:
           type: array
           items:
@@ -2583,16 +2596,6 @@ components:
           type: array
           items:
             type: integer
-        errors:
-          type: array
-          items:
-            type: object
-            required: [id, error]
-            properties:
-              id:
-                type: integer
-              error:
-                type: string
 
     ExtractBlocksResult:
       type: object

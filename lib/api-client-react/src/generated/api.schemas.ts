@@ -1234,6 +1234,156 @@ export interface QuiltingUpdateBlockTemplateInput {
   seamAllowanceInches?: number | null;
 }
 
+export interface QuiltingPatternVariant {
+  id: number;
+  patternId: number;
+  name: string;
+  finishedWidth?: number | null;
+  finishedHeight?: number | null;
+  sizeUnit?: string | null;
+  blockCount?: number | null;
+  colorwayDescription?: string | null;
+  notes?: string | null;
+}
+
+export interface QuiltingPatternVariantInput {
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  name: string;
+  finishedWidth?: number | null;
+  finishedHeight?: number | null;
+  sizeUnit?: string | null;
+  blockCount?: number | null;
+  colorwayDescription?: string | null;
+  notes?: string | null;
+}
+
+export interface QuiltingPatternRequirement {
+  id: number;
+  variantId: number;
+  role: string;
+  colorDescription?: string | null;
+  quantityYards?: number | null;
+  quantityFatQuarters?: number | null;
+  widthAssumptionInches?: number | null;
+  suggestedSearchQuery?: string | null;
+}
+
+export interface QuiltingPatternRequirementInput {
+  role: string;
+  colorDescription?: string | null;
+  quantityYards?: number | null;
+  quantityFatQuarters?: number | null;
+  widthAssumptionInches?: number | null;
+  suggestedSearchQuery?: string | null;
+}
+
+export type QuiltingQuiltingAnalysisStatus = typeof QuiltingQuiltingAnalysisStatus[keyof typeof QuiltingQuiltingAnalysisStatus];
+
+
+export const QuiltingQuiltingAnalysisStatus = {
+  running: 'running',
+  done: 'done',
+  failed: 'failed',
+} as const;
+
+export type QuiltingQuiltingAnalysisReadiness = typeof QuiltingQuiltingAnalysisReadiness[keyof typeof QuiltingQuiltingAnalysisReadiness] | null;
+
+
+export const QuiltingQuiltingAnalysisReadiness = {
+  ready: 'ready',
+  partial: 'partial',
+  shopping_needed: 'shopping_needed',
+  unknown: 'unknown',
+} as const;
+
+export type QuiltingQuiltingAnalysisShoppingProposalItem = { [key: string]: unknown };
+
+export type QuiltingQuiltingAnalysisRequirementRowsItem = { [key: string]: unknown };
+
+export type QuiltingQuiltingAnalysisAssumptions = { [key: string]: unknown } | null;
+
+export interface QuiltingQuiltingAnalysis {
+  id: number;
+  patternId: number;
+  variantId?: number | null;
+  status: QuiltingQuiltingAnalysisStatus;
+  readiness?: QuiltingQuiltingAnalysisReadiness;
+  stashMatchSummary?: string | null;
+  shoppingProposal?: QuiltingQuiltingAnalysisShoppingProposalItem[] | null;
+  requirementRows?: QuiltingQuiltingAnalysisRequirementRowsItem[] | null;
+  assumptions?: QuiltingQuiltingAnalysisAssumptions;
+  stashSnapshotAt?: string | null;
+  createdAt?: string;
+}
+
+export type QuiltingFabricIdentifierIdentifierType = typeof QuiltingFabricIdentifierIdentifierType[keyof typeof QuiltingFabricIdentifierIdentifierType];
+
+
+export const QuiltingFabricIdentifierIdentifierType = {
+  sku: 'sku',
+  selvedge: 'selvedge',
+  barcode: 'barcode',
+  other: 'other',
+} as const;
+
+export interface QuiltingFabricIdentifier {
+  id: number;
+  fabricId: number;
+  identifierType: QuiltingFabricIdentifierIdentifierType;
+  value: string;
+  source?: string | null;
+  notes?: string | null;
+}
+
+export type QuiltingFabricIdentifierInputIdentifierType = typeof QuiltingFabricIdentifierInputIdentifierType[keyof typeof QuiltingFabricIdentifierInputIdentifierType];
+
+
+export const QuiltingFabricIdentifierInputIdentifierType = {
+  sku: 'sku',
+  selvedge: 'selvedge',
+  barcode: 'barcode',
+  other: 'other',
+} as const;
+
+export interface QuiltingFabricIdentifierInput {
+  identifierType: QuiltingFabricIdentifierInputIdentifierType;
+  /** @minLength 1 */
+  value: string;
+  source?: string | null;
+  notes?: string | null;
+}
+
+export type QuiltingFabricIdentityResearchStatus = typeof QuiltingFabricIdentityResearchStatus[keyof typeof QuiltingFabricIdentityResearchStatus];
+
+
+export const QuiltingFabricIdentityResearchStatus = {
+  running: 'running',
+  done: 'done',
+  failed: 'failed',
+} as const;
+
+export type QuiltingFabricIdentityResearchCandidatesItem = { [key: string]: unknown };
+
+export interface QuiltingFabricIdentityResearch {
+  id: number;
+  fabricId: number;
+  status: QuiltingFabricIdentityResearchStatus;
+  candidates?: QuiltingFabricIdentityResearchCandidatesItem[] | null;
+  selectedCandidateIndex?: number | null;
+  error?: string | null;
+  createdAt?: string;
+}
+
+export interface QuiltingApplyFabricResearchInput {
+  /** @minimum 0 */
+  candidateIndex: number;
+  /** Specific fields to apply (defaults to all non-locked fields) */
+  fields?: string[];
+}
+
 export type TravelsTripStatus = typeof TravelsTripStatus[keyof typeof TravelsTripStatus];
 
 
@@ -1751,6 +1901,64 @@ export interface OrnamentsStatsResponse {
   totalBookValue: number;
   itemsWithBookValue: number;
   bySeriesOrCollection: OrnamentsSeriesValueBreakdown[];
+}
+
+export type OrnamentsOrnamentIdentityResearchStatus = typeof OrnamentsOrnamentIdentityResearchStatus[keyof typeof OrnamentsOrnamentIdentityResearchStatus];
+
+
+export const OrnamentsOrnamentIdentityResearchStatus = {
+  running: 'running',
+  done: 'done',
+  failed: 'failed',
+} as const;
+
+export type OrnamentsOrnamentIdentityResearchCandidatesItem = { [key: string]: unknown };
+
+export interface OrnamentsOrnamentIdentityResearch {
+  id: number;
+  itemId: number;
+  status: OrnamentsOrnamentIdentityResearchStatus;
+  candidates?: OrnamentsOrnamentIdentityResearchCandidatesItem[] | null;
+  selectedCandidateIndex?: number | null;
+  error?: string | null;
+  createdAt?: string;
+}
+
+export interface OrnamentsApplyOrnamentResearchInput {
+  /** @minimum 0 */
+  candidateIndex: number;
+  /** Specific fields to apply (defaults to all non-locked fields) */
+  fields?: string[];
+}
+
+export interface OrnamentsOrnamentSeries {
+  id: number;
+  name: string;
+  brand?: string | null;
+  description?: string | null;
+  startYear?: number | null;
+  endYear?: number | null;
+  entryCount?: number;
+}
+
+export type OrnamentsOrnamentSeriesDetailEntriesItem = { [key: string]: unknown };
+
+export type OrnamentsOrnamentSeriesDetailLinkedOrnamentsItem = { [key: string]: unknown };
+
+export interface OrnamentsOrnamentSeriesDetail {
+  id: number;
+  name: string;
+  brand?: string | null;
+  description?: string | null;
+  startYear?: number | null;
+  endYear?: number | null;
+  entries: OrnamentsOrnamentSeriesDetailEntriesItem[];
+  linkedOrnaments?: OrnamentsOrnamentSeriesDetailLinkedOrnamentsItem[];
+}
+
+export interface OrnamentsOrnamentSeriesLinkInput {
+  seriesEntryId: number;
+  notes?: string | null;
 }
 
 export interface OfficeNote {
@@ -2293,6 +2501,32 @@ export type GetBlockPreviewPngParams = {
 size?: number;
 };
 
+export type SavePatternRequirementsBody = {
+  requirements: QuiltingPatternRequirementInput[];
+};
+
+export type ExtractPatternRequirements200 = {
+  requirements?: QuiltingPatternRequirementInput[];
+};
+
+export type RunPatternAnalysisBodyAssumptions = { [key: string]: unknown } | null;
+
+export type RunPatternAnalysisBody = {
+  variantId?: number | null;
+  assumptions?: RunPatternAnalysisBodyAssumptions;
+};
+
+export type ApplyPatternAnalysisBody = {
+  requirementIds?: number[] | null;
+};
+
+export type ApplyPatternAnalysis200ItemsItem = { [key: string]: unknown };
+
+export type ApplyPatternAnalysis200 = {
+  added?: number;
+  items?: ApplyPatternAnalysis200ItemsItem[];
+};
+
 export type UploadTripDocumentBody = {
   file: Blob;
   title?: string;
@@ -2342,6 +2576,12 @@ pageSize?: number;
 export type DeleteOrnamentUnusedCategories200 = {
   deleted: number;
 };
+
+export type ApplyOrnamentIdentityResearch200 = { [key: string]: unknown };
+
+export type GetOrnamentSeriesLink200 = { [key: string]: unknown } | null;
+
+export type LinkOrnamentToSeries200 = { [key: string]: unknown };
 
 export type GetConversationMessagesParams = {
 since?: string;

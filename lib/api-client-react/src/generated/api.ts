@@ -20,6 +20,9 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  ApplyOrnamentIdentityResearch200,
+  ApplyPatternAnalysis200,
+  ApplyPatternAnalysisBody,
   AssignUnmatchedDocumentBody,
   AuthProviders,
   AuthUser,
@@ -32,10 +35,12 @@ import type {
   DeletePotteryUnusedCategories200,
   DeleteQuiltingUnusedCategories200,
   Error,
+  ExtractPatternRequirements200,
   ForgotPasswordInput,
   GetBlockPreviewPngParams,
   GetConversationMessagesParams,
   GetLinkPreviewParams,
+  GetOrnamentSeriesLink200,
   GetUnmatchedDocumentsCount200,
   HealthStatus,
   HubPreferencesBody,
@@ -48,6 +53,7 @@ import type {
   JobsJobMutationResponse,
   JobsJobResponse,
   JobsJobRetryResponse,
+  LinkOrnamentToSeries200,
   ListFabricsParams,
   ListJobsParams,
   ListOperationEventsParams,
@@ -88,6 +94,7 @@ import type {
   OperationsOperationProvidersResponse,
   OperationsOperationsSummaryResponse,
   OperationsUpdateBudgetBody,
+  OrnamentsApplyOrnamentResearchInput,
   OrnamentsBarcodeLookupInput,
   OrnamentsBarcodeLookupResult,
   OrnamentsBulkReanalyzeInput,
@@ -96,10 +103,14 @@ import type {
   OrnamentsCategoryColorInput,
   OrnamentsCategoryInput,
   OrnamentsMergeCategoryInput,
+  OrnamentsOrnamentIdentityResearch,
   OrnamentsOrnamentImage,
   OrnamentsOrnamentImageUpdate,
   OrnamentsOrnamentItem,
   OrnamentsOrnamentListResponse,
+  OrnamentsOrnamentSeries,
+  OrnamentsOrnamentSeriesDetail,
+  OrnamentsOrnamentSeriesLinkInput,
   OrnamentsOrnamentUpdate,
   OrnamentsPrimaryImageSelection,
   OrnamentsSeriesCount,
@@ -125,6 +136,7 @@ import type {
   PotteryPrimaryImageSelection,
   PotteryStragglers,
   QuiltingAddImageInput,
+  QuiltingApplyFabricResearchInput,
   QuiltingBlock,
   QuiltingBlockTemplate,
   QuiltingBulkReanalyzeInput,
@@ -145,6 +157,9 @@ import type {
   QuiltingEntityImage,
   QuiltingExtractBlocksResult,
   QuiltingFabric,
+  QuiltingFabricIdentifier,
+  QuiltingFabricIdentifierInput,
+  QuiltingFabricIdentityResearch,
   QuiltingFabricsListResponse,
   QuiltingFinishedQuilt,
   QuiltingImportedPatternInfo,
@@ -152,9 +167,13 @@ import type {
   QuiltingPaletteMatchFabricResponse,
   QuiltingPaletteMatchPatternResponse,
   QuiltingPaletteMatchQuiltResponse,
+  QuiltingPatternRequirement,
+  QuiltingPatternVariant,
+  QuiltingPatternVariantInput,
   QuiltingPatternsListResponse,
   QuiltingQuiltLayout,
   QuiltingQuiltPattern,
+  QuiltingQuiltingAnalysis,
   QuiltingQuiltsListResponse,
   QuiltingRenameCategoryInput,
   QuiltingShoppingItem,
@@ -171,6 +190,8 @@ import type {
   QuiltingUpdateShoppingItemInput,
   ReorderPackingItems200,
   ResetPasswordInput,
+  RunPatternAnalysisBody,
+  SavePatternRequirementsBody,
   SendPhoneCodeInput,
   TravelsBulkCreatePackingItemsBody,
   TravelsCreatePackingItemBody,
@@ -8495,6 +8516,1276 @@ export const useDeleteBlockTemplate = <TError = ErrorType<void>,
       return useMutation(getDeleteBlockTemplateMutationOptions(options));
     }
 
+export const getListPatternVariantsUrl = (id: number,) => {
+
+
+
+
+  return `/api/quilting/patterns/${id}/variants`
+}
+
+/**
+ * @summary List size/colorway variants for a pattern
+ */
+export const listPatternVariants = async (id: number, options?: RequestInit): Promise<QuiltingPatternVariant[]> => {
+
+  return customFetch<QuiltingPatternVariant[]>(getListPatternVariantsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPatternVariantsQueryKey = (id: number,) => {
+    return [
+    `/api/quilting/patterns/${id}/variants`
+    ] as const;
+    }
+
+
+export const getListPatternVariantsQueryOptions = <TData = Awaited<ReturnType<typeof listPatternVariants>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPatternVariants>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPatternVariantsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPatternVariants>>> = ({ signal }) => listPatternVariants(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPatternVariants>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPatternVariantsQueryResult = NonNullable<Awaited<ReturnType<typeof listPatternVariants>>>
+export type ListPatternVariantsQueryError = ErrorType<void>
+
+
+/**
+ * @summary List size/colorway variants for a pattern
+ */
+
+export function useListPatternVariants<TData = Awaited<ReturnType<typeof listPatternVariants>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPatternVariants>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPatternVariantsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreatePatternVariantUrl = (id: number,) => {
+
+
+
+
+  return `/api/quilting/patterns/${id}/variants`
+}
+
+/**
+ * @summary Create a new variant for a pattern
+ */
+export const createPatternVariant = async (id: number,
+    quiltingPatternVariantInput: QuiltingPatternVariantInput, options?: RequestInit): Promise<QuiltingPatternVariant> => {
+
+  return customFetch<QuiltingPatternVariant>(getCreatePatternVariantUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      quiltingPatternVariantInput,)
+  }
+);}
+
+
+
+
+export const getCreatePatternVariantMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPatternVariant>>, TError,{id: number;data: BodyType<QuiltingPatternVariantInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPatternVariant>>, TError,{id: number;data: BodyType<QuiltingPatternVariantInput>}, TContext> => {
+
+const mutationKey = ['createPatternVariant'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPatternVariant>>, {id: number;data: BodyType<QuiltingPatternVariantInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  createPatternVariant(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePatternVariantMutationResult = NonNullable<Awaited<ReturnType<typeof createPatternVariant>>>
+    export type CreatePatternVariantMutationBody = BodyType<QuiltingPatternVariantInput>
+    export type CreatePatternVariantMutationError = ErrorType<void>
+
+    /**
+ * @summary Create a new variant for a pattern
+ */
+export const useCreatePatternVariant = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPatternVariant>>, TError,{id: number;data: BodyType<QuiltingPatternVariantInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPatternVariant>>,
+        TError,
+        {id: number;data: BodyType<QuiltingPatternVariantInput>},
+        TContext
+      > => {
+      return useMutation(getCreatePatternVariantMutationOptions(options));
+    }
+
+export const getUpdatePatternVariantUrl = (id: number,
+    variantId: number,) => {
+
+
+
+
+  return `/api/quilting/patterns/${id}/variants/${variantId}`
+}
+
+/**
+ * @summary Update a variant
+ */
+export const updatePatternVariant = async (id: number,
+    variantId: number,
+    quiltingPatternVariantInput: QuiltingPatternVariantInput, options?: RequestInit): Promise<QuiltingPatternVariant> => {
+
+  return customFetch<QuiltingPatternVariant>(getUpdatePatternVariantUrl(id,variantId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      quiltingPatternVariantInput,)
+  }
+);}
+
+
+
+
+export const getUpdatePatternVariantMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePatternVariant>>, TError,{id: number;variantId: number;data: BodyType<QuiltingPatternVariantInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updatePatternVariant>>, TError,{id: number;variantId: number;data: BodyType<QuiltingPatternVariantInput>}, TContext> => {
+
+const mutationKey = ['updatePatternVariant'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updatePatternVariant>>, {id: number;variantId: number;data: BodyType<QuiltingPatternVariantInput>}> = (props) => {
+          const {id,variantId,data} = props ?? {};
+
+          return  updatePatternVariant(id,variantId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdatePatternVariantMutationResult = NonNullable<Awaited<ReturnType<typeof updatePatternVariant>>>
+    export type UpdatePatternVariantMutationBody = BodyType<QuiltingPatternVariantInput>
+    export type UpdatePatternVariantMutationError = ErrorType<void>
+
+    /**
+ * @summary Update a variant
+ */
+export const useUpdatePatternVariant = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePatternVariant>>, TError,{id: number;variantId: number;data: BodyType<QuiltingPatternVariantInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updatePatternVariant>>,
+        TError,
+        {id: number;variantId: number;data: BodyType<QuiltingPatternVariantInput>},
+        TContext
+      > => {
+      return useMutation(getUpdatePatternVariantMutationOptions(options));
+    }
+
+export const getDeletePatternVariantUrl = (id: number,
+    variantId: number,) => {
+
+
+
+
+  return `/api/quilting/patterns/${id}/variants/${variantId}`
+}
+
+/**
+ * @summary Delete a variant
+ */
+export const deletePatternVariant = async (id: number,
+    variantId: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeletePatternVariantUrl(id,variantId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeletePatternVariantMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePatternVariant>>, TError,{id: number;variantId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deletePatternVariant>>, TError,{id: number;variantId: number}, TContext> => {
+
+const mutationKey = ['deletePatternVariant'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deletePatternVariant>>, {id: number;variantId: number}> = (props) => {
+          const {id,variantId} = props ?? {};
+
+          return  deletePatternVariant(id,variantId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeletePatternVariantMutationResult = NonNullable<Awaited<ReturnType<typeof deletePatternVariant>>>
+
+    export type DeletePatternVariantMutationError = ErrorType<void>
+
+    /**
+ * @summary Delete a variant
+ */
+export const useDeletePatternVariant = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePatternVariant>>, TError,{id: number;variantId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deletePatternVariant>>,
+        TError,
+        {id: number;variantId: number},
+        TContext
+      > => {
+      return useMutation(getDeletePatternVariantMutationOptions(options));
+    }
+
+export const getGetPatternRequirementsUrl = (id: number,
+    variantId: number,) => {
+
+
+
+
+  return `/api/quilting/patterns/${id}/variants/${variantId}/requirements`
+}
+
+/**
+ * @summary Get fabric requirements for a variant
+ */
+export const getPatternRequirements = async (id: number,
+    variantId: number, options?: RequestInit): Promise<QuiltingPatternRequirement[]> => {
+
+  return customFetch<QuiltingPatternRequirement[]>(getGetPatternRequirementsUrl(id,variantId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPatternRequirementsQueryKey = (id: number,
+    variantId: number,) => {
+    return [
+    `/api/quilting/patterns/${id}/variants/${variantId}/requirements`
+    ] as const;
+    }
+
+
+export const getGetPatternRequirementsQueryOptions = <TData = Awaited<ReturnType<typeof getPatternRequirements>>, TError = ErrorType<void>>(id: number,
+    variantId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPatternRequirements>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPatternRequirementsQueryKey(id,variantId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPatternRequirements>>> = ({ signal }) => getPatternRequirements(id,variantId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id && variantId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPatternRequirements>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPatternRequirementsQueryResult = NonNullable<Awaited<ReturnType<typeof getPatternRequirements>>>
+export type GetPatternRequirementsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get fabric requirements for a variant
+ */
+
+export function useGetPatternRequirements<TData = Awaited<ReturnType<typeof getPatternRequirements>>, TError = ErrorType<void>>(
+ id: number,
+    variantId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPatternRequirements>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPatternRequirementsQueryOptions(id,variantId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getSavePatternRequirementsUrl = (id: number,
+    variantId: number,) => {
+
+
+
+
+  return `/api/quilting/patterns/${id}/variants/${variantId}/requirements`
+}
+
+/**
+ * @summary Replace all fabric requirements for a variant
+ */
+export const savePatternRequirements = async (id: number,
+    variantId: number,
+    savePatternRequirementsBody: SavePatternRequirementsBody, options?: RequestInit): Promise<QuiltingPatternRequirement[]> => {
+
+  return customFetch<QuiltingPatternRequirement[]>(getSavePatternRequirementsUrl(id,variantId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      savePatternRequirementsBody,)
+  }
+);}
+
+
+
+
+export const getSavePatternRequirementsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof savePatternRequirements>>, TError,{id: number;variantId: number;data: BodyType<SavePatternRequirementsBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof savePatternRequirements>>, TError,{id: number;variantId: number;data: BodyType<SavePatternRequirementsBody>}, TContext> => {
+
+const mutationKey = ['savePatternRequirements'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof savePatternRequirements>>, {id: number;variantId: number;data: BodyType<SavePatternRequirementsBody>}> = (props) => {
+          const {id,variantId,data} = props ?? {};
+
+          return  savePatternRequirements(id,variantId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SavePatternRequirementsMutationResult = NonNullable<Awaited<ReturnType<typeof savePatternRequirements>>>
+    export type SavePatternRequirementsMutationBody = BodyType<SavePatternRequirementsBody>
+    export type SavePatternRequirementsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Replace all fabric requirements for a variant
+ */
+export const useSavePatternRequirements = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof savePatternRequirements>>, TError,{id: number;variantId: number;data: BodyType<SavePatternRequirementsBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof savePatternRequirements>>,
+        TError,
+        {id: number;variantId: number;data: BodyType<SavePatternRequirementsBody>},
+        TContext
+      > => {
+      return useMutation(getSavePatternRequirementsMutationOptions(options));
+    }
+
+export const getExtractPatternRequirementsUrl = (id: number,
+    variantId: number,) => {
+
+
+
+
+  return `/api/quilting/patterns/${id}/variants/${variantId}/extract-requirements`
+}
+
+/**
+ * @summary Use AI to extract fabric requirements from pattern image/notes
+ */
+export const extractPatternRequirements = async (id: number,
+    variantId: number, options?: RequestInit): Promise<ExtractPatternRequirements200> => {
+
+  return customFetch<ExtractPatternRequirements200>(getExtractPatternRequirementsUrl(id,variantId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getExtractPatternRequirementsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof extractPatternRequirements>>, TError,{id: number;variantId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof extractPatternRequirements>>, TError,{id: number;variantId: number}, TContext> => {
+
+const mutationKey = ['extractPatternRequirements'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof extractPatternRequirements>>, {id: number;variantId: number}> = (props) => {
+          const {id,variantId} = props ?? {};
+
+          return  extractPatternRequirements(id,variantId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExtractPatternRequirementsMutationResult = NonNullable<Awaited<ReturnType<typeof extractPatternRequirements>>>
+
+    export type ExtractPatternRequirementsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Use AI to extract fabric requirements from pattern image/notes
+ */
+export const useExtractPatternRequirements = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof extractPatternRequirements>>, TError,{id: number;variantId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof extractPatternRequirements>>,
+        TError,
+        {id: number;variantId: number},
+        TContext
+      > => {
+      return useMutation(getExtractPatternRequirementsMutationOptions(options));
+    }
+
+export const getListPatternAnalysesUrl = (id: number,) => {
+
+
+
+
+  return `/api/quilting/patterns/${id}/analyses`
+}
+
+/**
+ * @summary List can-i-make-this analyses for a pattern
+ */
+export const listPatternAnalyses = async (id: number, options?: RequestInit): Promise<QuiltingQuiltingAnalysis[]> => {
+
+  return customFetch<QuiltingQuiltingAnalysis[]>(getListPatternAnalysesUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPatternAnalysesQueryKey = (id: number,) => {
+    return [
+    `/api/quilting/patterns/${id}/analyses`
+    ] as const;
+    }
+
+
+export const getListPatternAnalysesQueryOptions = <TData = Awaited<ReturnType<typeof listPatternAnalyses>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPatternAnalyses>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPatternAnalysesQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPatternAnalyses>>> = ({ signal }) => listPatternAnalyses(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPatternAnalyses>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPatternAnalysesQueryResult = NonNullable<Awaited<ReturnType<typeof listPatternAnalyses>>>
+export type ListPatternAnalysesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List can-i-make-this analyses for a pattern
+ */
+
+export function useListPatternAnalyses<TData = Awaited<ReturnType<typeof listPatternAnalyses>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPatternAnalyses>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPatternAnalysesQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getRunPatternAnalysisUrl = (id: number,) => {
+
+
+
+
+  return `/api/quilting/patterns/${id}/analyses`
+}
+
+/**
+ * @summary Run a can-i-make-this analysis against the fabric stash
+ */
+export const runPatternAnalysis = async (id: number,
+    runPatternAnalysisBody?: RunPatternAnalysisBody, options?: RequestInit): Promise<QuiltingQuiltingAnalysis> => {
+
+  return customFetch<QuiltingQuiltingAnalysis>(getRunPatternAnalysisUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      runPatternAnalysisBody,)
+  }
+);}
+
+
+
+
+export const getRunPatternAnalysisMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runPatternAnalysis>>, TError,{id: number;data?: BodyType<RunPatternAnalysisBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runPatternAnalysis>>, TError,{id: number;data?: BodyType<RunPatternAnalysisBody>}, TContext> => {
+
+const mutationKey = ['runPatternAnalysis'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runPatternAnalysis>>, {id: number;data?: BodyType<RunPatternAnalysisBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  runPatternAnalysis(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunPatternAnalysisMutationResult = NonNullable<Awaited<ReturnType<typeof runPatternAnalysis>>>
+    export type RunPatternAnalysisMutationBody = BodyType<RunPatternAnalysisBody> | undefined
+    export type RunPatternAnalysisMutationError = ErrorType<void>
+
+    /**
+ * @summary Run a can-i-make-this analysis against the fabric stash
+ */
+export const useRunPatternAnalysis = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runPatternAnalysis>>, TError,{id: number;data?: BodyType<RunPatternAnalysisBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runPatternAnalysis>>,
+        TError,
+        {id: number;data?: BodyType<RunPatternAnalysisBody>},
+        TContext
+      > => {
+      return useMutation(getRunPatternAnalysisMutationOptions(options));
+    }
+
+export const getGetPatternAnalysisUrl = (id: number,
+    analysisId: number,) => {
+
+
+
+
+  return `/api/quilting/patterns/${id}/analyses/${analysisId}`
+}
+
+/**
+ * @summary Get a single analysis result
+ */
+export const getPatternAnalysis = async (id: number,
+    analysisId: number, options?: RequestInit): Promise<QuiltingQuiltingAnalysis> => {
+
+  return customFetch<QuiltingQuiltingAnalysis>(getGetPatternAnalysisUrl(id,analysisId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPatternAnalysisQueryKey = (id: number,
+    analysisId: number,) => {
+    return [
+    `/api/quilting/patterns/${id}/analyses/${analysisId}`
+    ] as const;
+    }
+
+
+export const getGetPatternAnalysisQueryOptions = <TData = Awaited<ReturnType<typeof getPatternAnalysis>>, TError = ErrorType<void>>(id: number,
+    analysisId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPatternAnalysis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPatternAnalysisQueryKey(id,analysisId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPatternAnalysis>>> = ({ signal }) => getPatternAnalysis(id,analysisId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id && analysisId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPatternAnalysis>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPatternAnalysisQueryResult = NonNullable<Awaited<ReturnType<typeof getPatternAnalysis>>>
+export type GetPatternAnalysisQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get a single analysis result
+ */
+
+export function useGetPatternAnalysis<TData = Awaited<ReturnType<typeof getPatternAnalysis>>, TError = ErrorType<void>>(
+ id: number,
+    analysisId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPatternAnalysis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPatternAnalysisQueryOptions(id,analysisId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getApplyPatternAnalysisUrl = (id: number,
+    analysisId: number,) => {
+
+
+
+
+  return `/api/quilting/patterns/${id}/analyses/${analysisId}/apply`
+}
+
+/**
+ * @summary Push shopping-needed items from an analysis into the shopping list
+ */
+export const applyPatternAnalysis = async (id: number,
+    analysisId: number,
+    applyPatternAnalysisBody?: ApplyPatternAnalysisBody, options?: RequestInit): Promise<ApplyPatternAnalysis200> => {
+
+  return customFetch<ApplyPatternAnalysis200>(getApplyPatternAnalysisUrl(id,analysisId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      applyPatternAnalysisBody,)
+  }
+);}
+
+
+
+
+export const getApplyPatternAnalysisMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyPatternAnalysis>>, TError,{id: number;analysisId: number;data?: BodyType<ApplyPatternAnalysisBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof applyPatternAnalysis>>, TError,{id: number;analysisId: number;data?: BodyType<ApplyPatternAnalysisBody>}, TContext> => {
+
+const mutationKey = ['applyPatternAnalysis'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof applyPatternAnalysis>>, {id: number;analysisId: number;data?: BodyType<ApplyPatternAnalysisBody>}> = (props) => {
+          const {id,analysisId,data} = props ?? {};
+
+          return  applyPatternAnalysis(id,analysisId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApplyPatternAnalysisMutationResult = NonNullable<Awaited<ReturnType<typeof applyPatternAnalysis>>>
+    export type ApplyPatternAnalysisMutationBody = BodyType<ApplyPatternAnalysisBody> | undefined
+    export type ApplyPatternAnalysisMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Push shopping-needed items from an analysis into the shopping list
+ */
+export const useApplyPatternAnalysis = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyPatternAnalysis>>, TError,{id: number;analysisId: number;data?: BodyType<ApplyPatternAnalysisBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof applyPatternAnalysis>>,
+        TError,
+        {id: number;analysisId: number;data?: BodyType<ApplyPatternAnalysisBody>},
+        TContext
+      > => {
+      return useMutation(getApplyPatternAnalysisMutationOptions(options));
+    }
+
+export const getListFabricIdentifiersUrl = (id: number,) => {
+
+
+
+
+  return `/api/quilting/fabrics/${id}/identifiers`
+}
+
+/**
+ * @summary List known identifiers (SKU/selvedge/barcode) for a fabric
+ */
+export const listFabricIdentifiers = async (id: number, options?: RequestInit): Promise<QuiltingFabricIdentifier[]> => {
+
+  return customFetch<QuiltingFabricIdentifier[]>(getListFabricIdentifiersUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListFabricIdentifiersQueryKey = (id: number,) => {
+    return [
+    `/api/quilting/fabrics/${id}/identifiers`
+    ] as const;
+    }
+
+
+export const getListFabricIdentifiersQueryOptions = <TData = Awaited<ReturnType<typeof listFabricIdentifiers>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFabricIdentifiers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListFabricIdentifiersQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listFabricIdentifiers>>> = ({ signal }) => listFabricIdentifiers(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listFabricIdentifiers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListFabricIdentifiersQueryResult = NonNullable<Awaited<ReturnType<typeof listFabricIdentifiers>>>
+export type ListFabricIdentifiersQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List known identifiers (SKU/selvedge/barcode) for a fabric
+ */
+
+export function useListFabricIdentifiers<TData = Awaited<ReturnType<typeof listFabricIdentifiers>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFabricIdentifiers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListFabricIdentifiersQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getAddFabricIdentifierUrl = (id: number,) => {
+
+
+
+
+  return `/api/quilting/fabrics/${id}/identifiers`
+}
+
+/**
+ * @summary Add an identifier to a fabric
+ */
+export const addFabricIdentifier = async (id: number,
+    quiltingFabricIdentifierInput: QuiltingFabricIdentifierInput, options?: RequestInit): Promise<QuiltingFabricIdentifier> => {
+
+  return customFetch<QuiltingFabricIdentifier>(getAddFabricIdentifierUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      quiltingFabricIdentifierInput,)
+  }
+);}
+
+
+
+
+export const getAddFabricIdentifierMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addFabricIdentifier>>, TError,{id: number;data: BodyType<QuiltingFabricIdentifierInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof addFabricIdentifier>>, TError,{id: number;data: BodyType<QuiltingFabricIdentifierInput>}, TContext> => {
+
+const mutationKey = ['addFabricIdentifier'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addFabricIdentifier>>, {id: number;data: BodyType<QuiltingFabricIdentifierInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  addFabricIdentifier(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddFabricIdentifierMutationResult = NonNullable<Awaited<ReturnType<typeof addFabricIdentifier>>>
+    export type AddFabricIdentifierMutationBody = BodyType<QuiltingFabricIdentifierInput>
+    export type AddFabricIdentifierMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Add an identifier to a fabric
+ */
+export const useAddFabricIdentifier = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addFabricIdentifier>>, TError,{id: number;data: BodyType<QuiltingFabricIdentifierInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof addFabricIdentifier>>,
+        TError,
+        {id: number;data: BodyType<QuiltingFabricIdentifierInput>},
+        TContext
+      > => {
+      return useMutation(getAddFabricIdentifierMutationOptions(options));
+    }
+
+export const getDeleteFabricIdentifierUrl = (id: number,
+    identifierId: number,) => {
+
+
+
+
+  return `/api/quilting/fabrics/${id}/identifiers/${identifierId}`
+}
+
+/**
+ * @summary Delete a fabric identifier
+ */
+export const deleteFabricIdentifier = async (id: number,
+    identifierId: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteFabricIdentifierUrl(id,identifierId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteFabricIdentifierMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteFabricIdentifier>>, TError,{id: number;identifierId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteFabricIdentifier>>, TError,{id: number;identifierId: number}, TContext> => {
+
+const mutationKey = ['deleteFabricIdentifier'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteFabricIdentifier>>, {id: number;identifierId: number}> = (props) => {
+          const {id,identifierId} = props ?? {};
+
+          return  deleteFabricIdentifier(id,identifierId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteFabricIdentifierMutationResult = NonNullable<Awaited<ReturnType<typeof deleteFabricIdentifier>>>
+
+    export type DeleteFabricIdentifierMutationError = ErrorType<void>
+
+    /**
+ * @summary Delete a fabric identifier
+ */
+export const useDeleteFabricIdentifier = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteFabricIdentifier>>, TError,{id: number;identifierId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteFabricIdentifier>>,
+        TError,
+        {id: number;identifierId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteFabricIdentifierMutationOptions(options));
+    }
+
+export const getListFabricIdentityResearchUrl = (id: number,) => {
+
+
+
+
+  return `/api/quilting/fabrics/${id}/identity-research`
+}
+
+/**
+ * @summary List identity-research jobs for a fabric
+ */
+export const listFabricIdentityResearch = async (id: number, options?: RequestInit): Promise<QuiltingFabricIdentityResearch[]> => {
+
+  return customFetch<QuiltingFabricIdentityResearch[]>(getListFabricIdentityResearchUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListFabricIdentityResearchQueryKey = (id: number,) => {
+    return [
+    `/api/quilting/fabrics/${id}/identity-research`
+    ] as const;
+    }
+
+
+export const getListFabricIdentityResearchQueryOptions = <TData = Awaited<ReturnType<typeof listFabricIdentityResearch>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFabricIdentityResearch>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListFabricIdentityResearchQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listFabricIdentityResearch>>> = ({ signal }) => listFabricIdentityResearch(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listFabricIdentityResearch>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListFabricIdentityResearchQueryResult = NonNullable<Awaited<ReturnType<typeof listFabricIdentityResearch>>>
+export type ListFabricIdentityResearchQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List identity-research jobs for a fabric
+ */
+
+export function useListFabricIdentityResearch<TData = Awaited<ReturnType<typeof listFabricIdentityResearch>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFabricIdentityResearch>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListFabricIdentityResearchQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getRunFabricIdentityResearchUrl = (id: number,) => {
+
+
+
+
+  return `/api/quilting/fabrics/${id}/identity-research`
+}
+
+/**
+ * @summary Run an AI identity-research job for a fabric
+ */
+export const runFabricIdentityResearch = async (id: number, options?: RequestInit): Promise<QuiltingFabricIdentityResearch> => {
+
+  return customFetch<QuiltingFabricIdentityResearch>(getRunFabricIdentityResearchUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRunFabricIdentityResearchMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runFabricIdentityResearch>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runFabricIdentityResearch>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['runFabricIdentityResearch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runFabricIdentityResearch>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  runFabricIdentityResearch(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunFabricIdentityResearchMutationResult = NonNullable<Awaited<ReturnType<typeof runFabricIdentityResearch>>>
+
+    export type RunFabricIdentityResearchMutationError = ErrorType<void>
+
+    /**
+ * @summary Run an AI identity-research job for a fabric
+ */
+export const useRunFabricIdentityResearch = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runFabricIdentityResearch>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runFabricIdentityResearch>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRunFabricIdentityResearchMutationOptions(options));
+    }
+
+export const getApplyFabricIdentityResearchUrl = (id: number,
+    researchId: number,) => {
+
+
+
+
+  return `/api/quilting/fabrics/${id}/identity-research/${researchId}`
+}
+
+/**
+ * @summary Apply a research candidate to the fabric
+ */
+export const applyFabricIdentityResearch = async (id: number,
+    researchId: number,
+    quiltingApplyFabricResearchInput: QuiltingApplyFabricResearchInput, options?: RequestInit): Promise<QuiltingFabric> => {
+
+  return customFetch<QuiltingFabric>(getApplyFabricIdentityResearchUrl(id,researchId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      quiltingApplyFabricResearchInput,)
+  }
+);}
+
+
+
+
+export const getApplyFabricIdentityResearchMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyFabricIdentityResearch>>, TError,{id: number;researchId: number;data: BodyType<QuiltingApplyFabricResearchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof applyFabricIdentityResearch>>, TError,{id: number;researchId: number;data: BodyType<QuiltingApplyFabricResearchInput>}, TContext> => {
+
+const mutationKey = ['applyFabricIdentityResearch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof applyFabricIdentityResearch>>, {id: number;researchId: number;data: BodyType<QuiltingApplyFabricResearchInput>}> = (props) => {
+          const {id,researchId,data} = props ?? {};
+
+          return  applyFabricIdentityResearch(id,researchId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApplyFabricIdentityResearchMutationResult = NonNullable<Awaited<ReturnType<typeof applyFabricIdentityResearch>>>
+    export type ApplyFabricIdentityResearchMutationBody = BodyType<QuiltingApplyFabricResearchInput>
+    export type ApplyFabricIdentityResearchMutationError = ErrorType<void>
+
+    /**
+ * @summary Apply a research candidate to the fabric
+ */
+export const useApplyFabricIdentityResearch = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyFabricIdentityResearch>>, TError,{id: number;researchId: number;data: BodyType<QuiltingApplyFabricResearchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof applyFabricIdentityResearch>>,
+        TError,
+        {id: number;researchId: number;data: BodyType<QuiltingApplyFabricResearchInput>},
+        TContext
+      > => {
+      return useMutation(getApplyFabricIdentityResearchMutationOptions(options));
+    }
+
 export const getListTripsUrl = () => {
 
 
@@ -12386,6 +13677,600 @@ export const useMergeOrnamentCategory = <TError = ErrorType<Error>,
         TContext
       > => {
       return useMutation(getMergeOrnamentCategoryMutationOptions(options));
+    }
+
+export const getGetOrnamentIdentityResearchUrl = (id: number,) => {
+
+
+
+
+  return `/api/ornaments/items/${id}/identity-research`
+}
+
+/**
+ * @summary List identity-research jobs for an ornament
+ */
+export const getOrnamentIdentityResearch = async (id: number, options?: RequestInit): Promise<OrnamentsOrnamentIdentityResearch[]> => {
+
+  return customFetch<OrnamentsOrnamentIdentityResearch[]>(getGetOrnamentIdentityResearchUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOrnamentIdentityResearchQueryKey = (id: number,) => {
+    return [
+    `/api/ornaments/items/${id}/identity-research`
+    ] as const;
+    }
+
+
+export const getGetOrnamentIdentityResearchQueryOptions = <TData = Awaited<ReturnType<typeof getOrnamentIdentityResearch>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOrnamentIdentityResearch>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOrnamentIdentityResearchQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOrnamentIdentityResearch>>> = ({ signal }) => getOrnamentIdentityResearch(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOrnamentIdentityResearch>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOrnamentIdentityResearchQueryResult = NonNullable<Awaited<ReturnType<typeof getOrnamentIdentityResearch>>>
+export type GetOrnamentIdentityResearchQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List identity-research jobs for an ornament
+ */
+
+export function useGetOrnamentIdentityResearch<TData = Awaited<ReturnType<typeof getOrnamentIdentityResearch>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOrnamentIdentityResearch>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOrnamentIdentityResearchQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getRunOrnamentIdentityResearchUrl = (id: number,) => {
+
+
+
+
+  return `/api/ornaments/items/${id}/identity-research`
+}
+
+/**
+ * @summary Kick off an AI identity-research job for an ornament
+ */
+export const runOrnamentIdentityResearch = async (id: number, options?: RequestInit): Promise<OrnamentsOrnamentIdentityResearch> => {
+
+  return customFetch<OrnamentsOrnamentIdentityResearch>(getRunOrnamentIdentityResearchUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRunOrnamentIdentityResearchMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runOrnamentIdentityResearch>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runOrnamentIdentityResearch>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['runOrnamentIdentityResearch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runOrnamentIdentityResearch>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  runOrnamentIdentityResearch(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunOrnamentIdentityResearchMutationResult = NonNullable<Awaited<ReturnType<typeof runOrnamentIdentityResearch>>>
+
+    export type RunOrnamentIdentityResearchMutationError = ErrorType<void>
+
+    /**
+ * @summary Kick off an AI identity-research job for an ornament
+ */
+export const useRunOrnamentIdentityResearch = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runOrnamentIdentityResearch>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runOrnamentIdentityResearch>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRunOrnamentIdentityResearchMutationOptions(options));
+    }
+
+export const getApplyOrnamentIdentityResearchUrl = (id: number,
+    researchId: number,) => {
+
+
+
+
+  return `/api/ornaments/items/${id}/identity-research/${researchId}`
+}
+
+/**
+ * @summary Apply a research candidate to the ornament
+ */
+export const applyOrnamentIdentityResearch = async (id: number,
+    researchId: number,
+    ornamentsApplyOrnamentResearchInput: OrnamentsApplyOrnamentResearchInput, options?: RequestInit): Promise<ApplyOrnamentIdentityResearch200> => {
+
+  return customFetch<ApplyOrnamentIdentityResearch200>(getApplyOrnamentIdentityResearchUrl(id,researchId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      ornamentsApplyOrnamentResearchInput,)
+  }
+);}
+
+
+
+
+export const getApplyOrnamentIdentityResearchMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyOrnamentIdentityResearch>>, TError,{id: number;researchId: number;data: BodyType<OrnamentsApplyOrnamentResearchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof applyOrnamentIdentityResearch>>, TError,{id: number;researchId: number;data: BodyType<OrnamentsApplyOrnamentResearchInput>}, TContext> => {
+
+const mutationKey = ['applyOrnamentIdentityResearch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof applyOrnamentIdentityResearch>>, {id: number;researchId: number;data: BodyType<OrnamentsApplyOrnamentResearchInput>}> = (props) => {
+          const {id,researchId,data} = props ?? {};
+
+          return  applyOrnamentIdentityResearch(id,researchId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApplyOrnamentIdentityResearchMutationResult = NonNullable<Awaited<ReturnType<typeof applyOrnamentIdentityResearch>>>
+    export type ApplyOrnamentIdentityResearchMutationBody = BodyType<OrnamentsApplyOrnamentResearchInput>
+    export type ApplyOrnamentIdentityResearchMutationError = ErrorType<void>
+
+    /**
+ * @summary Apply a research candidate to the ornament
+ */
+export const useApplyOrnamentIdentityResearch = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyOrnamentIdentityResearch>>, TError,{id: number;researchId: number;data: BodyType<OrnamentsApplyOrnamentResearchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof applyOrnamentIdentityResearch>>,
+        TError,
+        {id: number;researchId: number;data: BodyType<OrnamentsApplyOrnamentResearchInput>},
+        TContext
+      > => {
+      return useMutation(getApplyOrnamentIdentityResearchMutationOptions(options));
+    }
+
+export const getListOrnamentCanonicalSeriesUrl = () => {
+
+
+
+
+  return `/api/ornaments/canonical-series`
+}
+
+/**
+ * @summary List all canonical ornament series
+ */
+export const listOrnamentCanonicalSeries = async ( options?: RequestInit): Promise<OrnamentsOrnamentSeries[]> => {
+
+  return customFetch<OrnamentsOrnamentSeries[]>(getListOrnamentCanonicalSeriesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListOrnamentCanonicalSeriesQueryKey = () => {
+    return [
+    `/api/ornaments/canonical-series`
+    ] as const;
+    }
+
+
+export const getListOrnamentCanonicalSeriesQueryOptions = <TData = Awaited<ReturnType<typeof listOrnamentCanonicalSeries>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOrnamentCanonicalSeries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListOrnamentCanonicalSeriesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listOrnamentCanonicalSeries>>> = ({ signal }) => listOrnamentCanonicalSeries({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listOrnamentCanonicalSeries>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListOrnamentCanonicalSeriesQueryResult = NonNullable<Awaited<ReturnType<typeof listOrnamentCanonicalSeries>>>
+export type ListOrnamentCanonicalSeriesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all canonical ornament series
+ */
+
+export function useListOrnamentCanonicalSeries<TData = Awaited<ReturnType<typeof listOrnamentCanonicalSeries>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOrnamentCanonicalSeries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListOrnamentCanonicalSeriesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetOrnamentCanonicalSeriesUrl = (seriesId: number,) => {
+
+
+
+
+  return `/api/ornaments/canonical-series/${seriesId}`
+}
+
+/**
+ * @summary Get a canonical series with its entries and linked ornaments
+ */
+export const getOrnamentCanonicalSeries = async (seriesId: number, options?: RequestInit): Promise<OrnamentsOrnamentSeriesDetail> => {
+
+  return customFetch<OrnamentsOrnamentSeriesDetail>(getGetOrnamentCanonicalSeriesUrl(seriesId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOrnamentCanonicalSeriesQueryKey = (seriesId: number,) => {
+    return [
+    `/api/ornaments/canonical-series/${seriesId}`
+    ] as const;
+    }
+
+
+export const getGetOrnamentCanonicalSeriesQueryOptions = <TData = Awaited<ReturnType<typeof getOrnamentCanonicalSeries>>, TError = ErrorType<void>>(seriesId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOrnamentCanonicalSeries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOrnamentCanonicalSeriesQueryKey(seriesId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOrnamentCanonicalSeries>>> = ({ signal }) => getOrnamentCanonicalSeries(seriesId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(seriesId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOrnamentCanonicalSeries>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOrnamentCanonicalSeriesQueryResult = NonNullable<Awaited<ReturnType<typeof getOrnamentCanonicalSeries>>>
+export type GetOrnamentCanonicalSeriesQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get a canonical series with its entries and linked ornaments
+ */
+
+export function useGetOrnamentCanonicalSeries<TData = Awaited<ReturnType<typeof getOrnamentCanonicalSeries>>, TError = ErrorType<void>>(
+ seriesId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOrnamentCanonicalSeries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOrnamentCanonicalSeriesQueryOptions(seriesId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetOrnamentSeriesLinkUrl = (id: number,) => {
+
+
+
+
+  return `/api/ornaments/items/${id}/series-link`
+}
+
+/**
+ * @summary Get the series link for an ornament
+ */
+export const getOrnamentSeriesLink = async (id: number, options?: RequestInit): Promise<GetOrnamentSeriesLink200> => {
+
+  return customFetch<GetOrnamentSeriesLink200>(getGetOrnamentSeriesLinkUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOrnamentSeriesLinkQueryKey = (id: number,) => {
+    return [
+    `/api/ornaments/items/${id}/series-link`
+    ] as const;
+    }
+
+
+export const getGetOrnamentSeriesLinkQueryOptions = <TData = Awaited<ReturnType<typeof getOrnamentSeriesLink>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOrnamentSeriesLink>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOrnamentSeriesLinkQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOrnamentSeriesLink>>> = ({ signal }) => getOrnamentSeriesLink(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOrnamentSeriesLink>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOrnamentSeriesLinkQueryResult = NonNullable<Awaited<ReturnType<typeof getOrnamentSeriesLink>>>
+export type GetOrnamentSeriesLinkQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get the series link for an ornament
+ */
+
+export function useGetOrnamentSeriesLink<TData = Awaited<ReturnType<typeof getOrnamentSeriesLink>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOrnamentSeriesLink>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOrnamentSeriesLinkQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getLinkOrnamentToSeriesUrl = (id: number,) => {
+
+
+
+
+  return `/api/ornaments/items/${id}/series-link`
+}
+
+/**
+ * @summary Link an ornament to a canonical series entry
+ */
+export const linkOrnamentToSeries = async (id: number,
+    ornamentsOrnamentSeriesLinkInput: OrnamentsOrnamentSeriesLinkInput, options?: RequestInit): Promise<LinkOrnamentToSeries200> => {
+
+  return customFetch<LinkOrnamentToSeries200>(getLinkOrnamentToSeriesUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      ornamentsOrnamentSeriesLinkInput,)
+  }
+);}
+
+
+
+
+export const getLinkOrnamentToSeriesMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof linkOrnamentToSeries>>, TError,{id: number;data: BodyType<OrnamentsOrnamentSeriesLinkInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof linkOrnamentToSeries>>, TError,{id: number;data: BodyType<OrnamentsOrnamentSeriesLinkInput>}, TContext> => {
+
+const mutationKey = ['linkOrnamentToSeries'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof linkOrnamentToSeries>>, {id: number;data: BodyType<OrnamentsOrnamentSeriesLinkInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  linkOrnamentToSeries(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LinkOrnamentToSeriesMutationResult = NonNullable<Awaited<ReturnType<typeof linkOrnamentToSeries>>>
+    export type LinkOrnamentToSeriesMutationBody = BodyType<OrnamentsOrnamentSeriesLinkInput>
+    export type LinkOrnamentToSeriesMutationError = ErrorType<void>
+
+    /**
+ * @summary Link an ornament to a canonical series entry
+ */
+export const useLinkOrnamentToSeries = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof linkOrnamentToSeries>>, TError,{id: number;data: BodyType<OrnamentsOrnamentSeriesLinkInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof linkOrnamentToSeries>>,
+        TError,
+        {id: number;data: BodyType<OrnamentsOrnamentSeriesLinkInput>},
+        TContext
+      > => {
+      return useMutation(getLinkOrnamentToSeriesMutationOptions(options));
+    }
+
+export const getUnlinkOrnamentFromSeriesUrl = (id: number,) => {
+
+
+
+
+  return `/api/ornaments/items/${id}/series-link`
+}
+
+/**
+ * @summary Remove the series link from an ornament
+ */
+export const unlinkOrnamentFromSeries = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getUnlinkOrnamentFromSeriesUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getUnlinkOrnamentFromSeriesMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unlinkOrnamentFromSeries>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof unlinkOrnamentFromSeries>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['unlinkOrnamentFromSeries'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof unlinkOrnamentFromSeries>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  unlinkOrnamentFromSeries(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UnlinkOrnamentFromSeriesMutationResult = NonNullable<Awaited<ReturnType<typeof unlinkOrnamentFromSeries>>>
+
+    export type UnlinkOrnamentFromSeriesMutationError = ErrorType<void>
+
+    /**
+ * @summary Remove the series link from an ornament
+ */
+export const useUnlinkOrnamentFromSeries = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unlinkOrnamentFromSeries>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof unlinkOrnamentFromSeries>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getUnlinkOrnamentFromSeriesMutationOptions(options));
     }
 
 export const getListNotesUrl = () => {

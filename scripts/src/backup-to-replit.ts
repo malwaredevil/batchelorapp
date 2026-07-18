@@ -1159,6 +1159,131 @@ CREATE TABLE IF NOT EXISTS notification_preferences (
   created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS ornament_series (
+  id                    SERIAL PRIMARY KEY,
+  name                  TEXT NOT NULL,
+  brand                 TEXT NOT NULL DEFAULT 'Hallmark',
+  description           TEXT,
+  start_year            INTEGER,
+  end_year              INTEGER,
+  is_active             BOOLEAN NOT NULL DEFAULT true,
+  total_known_entries   INTEGER,
+  source_url            TEXT,
+  source_authority      TEXT,
+  is_provisional        BOOLEAN NOT NULL DEFAULT false,
+  last_confirmed_at     TIMESTAMPTZ,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS ornament_series_entries (
+  id                    SERIAL PRIMARY KEY,
+  series_id             INTEGER NOT NULL REFERENCES ornament_series(id) ON DELETE CASCADE,
+  sequence_number       INTEGER,
+  year                  INTEGER NOT NULL,
+  official_name         TEXT NOT NULL,
+  catalog_number        TEXT,
+  upc                   TEXT,
+  artist                TEXT,
+  retail_price_usd      NUMERIC(10,2),
+  release_type          TEXT,
+  is_exclusive          BOOLEAN NOT NULL DEFAULT false,
+  notes                 TEXT,
+  source_url            TEXT,
+  is_provisional        BOOLEAN NOT NULL DEFAULT false,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS ornament_item_series_links (
+  item_id               INTEGER NOT NULL,
+  series_entry_id       INTEGER NOT NULL REFERENCES ornament_series_entries(id) ON DELETE RESTRICT,
+  confirmed_by_user_id  INTEGER,
+  confirmed_at          TIMESTAMPTZ,
+  confidence            TEXT NOT NULL DEFAULT 'manual',
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (item_id)
+);
+
+CREATE TABLE IF NOT EXISTS ornament_identity_research (
+  id                        SERIAL PRIMARY KEY,
+  item_id                   INTEGER NOT NULL,
+  status                    TEXT NOT NULL DEFAULT 'pending',
+  candidates                JSONB NOT NULL DEFAULT '[]',
+  selected_candidate_index  INTEGER,
+  decided_by_user_id        INTEGER,
+  decided_at                TIMESTAMPTZ,
+  created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS quilting_fabric_identifiers (
+  id                    SERIAL PRIMARY KEY,
+  fabric_id             INTEGER NOT NULL,
+  identifier_type       TEXT NOT NULL,
+  identifier_value      TEXT NOT NULL,
+  source_url            TEXT,
+  confirmed_by_user_id  INTEGER,
+  confirmed_at          TIMESTAMPTZ,
+  confidence            TEXT NOT NULL DEFAULT 'manual',
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS quilting_pattern_variants (
+  id                    SERIAL PRIMARY KEY,
+  pattern_id            INTEGER NOT NULL,
+  name                  TEXT NOT NULL,
+  finished_width        REAL,
+  finished_height       REAL,
+  size_unit             TEXT NOT NULL DEFAULT 'inches',
+  block_count           INTEGER,
+  skill_level           TEXT,
+  notes                 TEXT,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS quilting_pattern_requirements (
+  id                        SERIAL PRIMARY KEY,
+  variant_id                INTEGER NOT NULL REFERENCES quilting_pattern_variants(id) ON DELETE CASCADE,
+  role                      TEXT NOT NULL,
+  color_description         TEXT,
+  quantity_yards            REAL,
+  quantity_fat_quarters     REAL,
+  width_assumption_inches   REAL DEFAULT 44,
+  seam_allowance_inches     REAL DEFAULT 0.25,
+  notes                     TEXT,
+  is_extracted              BOOLEAN NOT NULL DEFAULT false,
+  extraction_confidence     TEXT,
+  created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS quilting_analyses (
+  id                    SERIAL PRIMARY KEY,
+  pattern_id            INTEGER NOT NULL,
+  variant_id            INTEGER,
+  created_by_user_id    INTEGER,
+  status                TEXT NOT NULL DEFAULT 'pending',
+  readiness             TEXT,
+  stash_snapshot_at     TIMESTAMPTZ,
+  assumptions           JSONB NOT NULL DEFAULT '{}',
+  requirement_rows      JSONB NOT NULL DEFAULT '[]',
+  shopping_proposal     JSONB NOT NULL DEFAULT '[]',
+  applied_at            TIMESTAMPTZ,
+  applied_by_user_id    INTEGER,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS quilting_fabric_identity_research (
+  id                        SERIAL PRIMARY KEY,
+  fabric_id                 INTEGER NOT NULL,
+  status                    TEXT NOT NULL DEFAULT 'pending',
+  candidates                JSONB NOT NULL DEFAULT '[]',
+  selected_candidate_index  INTEGER,
+  decided_by_user_id        INTEGER,
+  decided_at                TIMESTAMPTZ,
+  created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 `;
 
 async function copyTable(
@@ -1441,6 +1566,81 @@ async function main() {
   });
   await resetSequence(dest, "ornaments_hallmark_events", "id");
 
+  summary["ornament_series"] = await copyTable(source, dest, {
+    table: "ornament_series",
+    columns: [
+      "id",
+      "name",
+      "brand",
+      "description",
+      "start_year",
+      "end_year",
+      "is_active",
+      "total_known_entries",
+      "source_url",
+      "source_authority",
+      "is_provisional",
+      "last_confirmed_at",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ornament_series", "id");
+
+  summary["ornament_series_entries"] = await copyTable(source, dest, {
+    table: "ornament_series_entries",
+    columns: [
+      "id",
+      "series_id",
+      "sequence_number",
+      "year",
+      "official_name",
+      "catalog_number",
+      "upc",
+      "artist",
+      "retail_price_usd",
+      "release_type",
+      "is_exclusive",
+      "notes",
+      "source_url",
+      "is_provisional",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ornament_series_entries", "id");
+
+  summary["ornament_item_series_links"] = await copyTable(source, dest, {
+    table: "ornament_item_series_links",
+    columns: [
+      "item_id",
+      "series_entry_id",
+      "confirmed_by_user_id",
+      "confirmed_at",
+      "confidence",
+      "created_at",
+    ],
+    orderBy: "item_id",
+  });
+
+  summary["ornament_identity_research"] = await copyTable(source, dest, {
+    table: "ornament_identity_research",
+    columns: [
+      "id",
+      "item_id",
+      "status",
+      "candidates",
+      "selected_candidate_index",
+      "decided_by_user_id",
+      "decided_at",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ornament_identity_research", "id");
+
   // ── Office ────────────────────────────────────────────────────────────────
   summary["office_notes"] = await copyTable(source, dest, {
     table: "office_notes",
@@ -1643,6 +1843,101 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "quilting_shopping_items", "id");
+
+  summary["quilting_fabric_identifiers"] = await copyTable(source, dest, {
+    table: "quilting_fabric_identifiers",
+    columns: [
+      "id",
+      "fabric_id",
+      "identifier_type",
+      "identifier_value",
+      "source_url",
+      "confirmed_by_user_id",
+      "confirmed_at",
+      "confidence",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "quilting_fabric_identifiers", "id");
+
+  summary["quilting_pattern_variants"] = await copyTable(source, dest, {
+    table: "quilting_pattern_variants",
+    columns: [
+      "id",
+      "pattern_id",
+      "name",
+      "finished_width",
+      "finished_height",
+      "size_unit",
+      "block_count",
+      "skill_level",
+      "notes",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "quilting_pattern_variants", "id");
+
+  summary["quilting_pattern_requirements"] = await copyTable(source, dest, {
+    table: "quilting_pattern_requirements",
+    columns: [
+      "id",
+      "variant_id",
+      "role",
+      "color_description",
+      "quantity_yards",
+      "quantity_fat_quarters",
+      "width_assumption_inches",
+      "seam_allowance_inches",
+      "notes",
+      "is_extracted",
+      "extraction_confidence",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "quilting_pattern_requirements", "id");
+
+  summary["quilting_analyses"] = await copyTable(source, dest, {
+    table: "quilting_analyses",
+    columns: [
+      "id",
+      "pattern_id",
+      "variant_id",
+      "created_by_user_id",
+      "status",
+      "readiness",
+      "stash_snapshot_at",
+      "assumptions",
+      "requirement_rows",
+      "shopping_proposal",
+      "applied_at",
+      "applied_by_user_id",
+      "created_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["assumptions", "requirement_rows", "shopping_proposal"],
+  });
+  await resetSequence(dest, "quilting_analyses", "id");
+
+  summary["quilting_fabric_identity_research"] = await copyTable(source, dest, {
+    table: "quilting_fabric_identity_research",
+    columns: [
+      "id",
+      "fabric_id",
+      "status",
+      "candidates",
+      "selected_candidate_index",
+      "decided_by_user_id",
+      "decided_at",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["candidates"],
+  });
+  await resetSequence(dest, "quilting_fabric_identity_research", "id");
 
   // ── Travels ───────────────────────────────────────────────────────────────
   summary["travels_trips"] = await copyTable(source, dest, {

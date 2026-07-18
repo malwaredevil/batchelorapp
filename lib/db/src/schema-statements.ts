@@ -2062,4 +2062,159 @@ export const STATEMENTS: string[] = [
      WHERE scope = 'event_type'`,
   `CREATE INDEX IF NOT EXISTS notification_preferences_user_idx
      ON notification_preferences (user_id)`,
+
+  // -------------------------------------------------------------------------
+  // #236 Ornaments: canonical series catalog + identity research
+  // -------------------------------------------------------------------------
+
+  `CREATE TABLE IF NOT EXISTS ornament_series (
+    id                   SERIAL PRIMARY KEY,
+    name                 TEXT NOT NULL,
+    brand                TEXT NOT NULL DEFAULT 'Hallmark',
+    description          TEXT,
+    start_year           INTEGER,
+    end_year             INTEGER,
+    is_active            BOOLEAN NOT NULL DEFAULT true,
+    total_known_entries  INTEGER,
+    source_url           TEXT,
+    source_authority     TEXT,
+    is_provisional       BOOLEAN NOT NULL DEFAULT false,
+    last_confirmed_at    TIMESTAMPTZ,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE ornament_series ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS ornament_series_brand_idx ON ornament_series (brand)`,
+  `CREATE INDEX IF NOT EXISTS ornament_series_name_idx  ON ornament_series (name)`,
+
+  `CREATE TABLE IF NOT EXISTS ornament_series_entries (
+    id               SERIAL PRIMARY KEY,
+    series_id        INTEGER NOT NULL REFERENCES ornament_series(id) ON DELETE CASCADE,
+    sequence_number  INTEGER,
+    year             INTEGER NOT NULL,
+    official_name    TEXT NOT NULL,
+    catalog_number   TEXT,
+    upc              TEXT,
+    artist           TEXT,
+    retail_price_usd NUMERIC(10,2),
+    release_type     TEXT,
+    is_exclusive     BOOLEAN NOT NULL DEFAULT false,
+    notes            TEXT,
+    source_url       TEXT,
+    is_provisional   BOOLEAN NOT NULL DEFAULT false,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE ornament_series_entries ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS ornament_series_entries_series_idx  ON ornament_series_entries (series_id)`,
+  `CREATE INDEX IF NOT EXISTS ornament_series_entries_year_idx    ON ornament_series_entries (year)`,
+  `CREATE INDEX IF NOT EXISTS ornament_series_entries_catalog_idx ON ornament_series_entries (catalog_number)`,
+
+  `CREATE TABLE IF NOT EXISTS ornament_item_series_links (
+    item_id             INTEGER PRIMARY KEY REFERENCES ornaments_items(id) ON DELETE CASCADE,
+    series_entry_id     INTEGER NOT NULL REFERENCES ornament_series_entries(id) ON DELETE RESTRICT,
+    confirmed_by_user_id INTEGER,
+    confirmed_at        TIMESTAMPTZ,
+    confidence          TEXT NOT NULL DEFAULT 'manual',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE ornament_item_series_links ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS ornament_item_series_links_entry_idx ON ornament_item_series_links (series_entry_id)`,
+
+  `CREATE TABLE IF NOT EXISTS ornament_identity_research (
+    id                       SERIAL PRIMARY KEY,
+    item_id                  INTEGER NOT NULL REFERENCES ornaments_items(id) ON DELETE CASCADE,
+    status                   TEXT NOT NULL DEFAULT 'pending',
+    candidates               JSONB NOT NULL DEFAULT '[]',
+    selected_candidate_index INTEGER,
+    decided_by_user_id       INTEGER,
+    decided_at               TIMESTAMPTZ,
+    created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE ornament_identity_research ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS ornament_identity_research_item_idx ON ornament_identity_research (item_id)`,
+
+  // -------------------------------------------------------------------------
+  // #237 Quilting: fabric identifiers, pattern requirements, analysis runs
+  // -------------------------------------------------------------------------
+
+  `CREATE TABLE IF NOT EXISTS quilting_fabric_identifiers (
+    id                    SERIAL PRIMARY KEY,
+    fabric_id             INTEGER NOT NULL REFERENCES quilting_fabrics(id) ON DELETE CASCADE,
+    identifier_type       TEXT NOT NULL,
+    identifier_value      TEXT NOT NULL,
+    source_url            TEXT,
+    confirmed_by_user_id  INTEGER,
+    confirmed_at          TIMESTAMPTZ,
+    confidence            TEXT NOT NULL DEFAULT 'manual',
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE quilting_fabric_identifiers ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS quilting_fabric_identifiers_fabric_idx    ON quilting_fabric_identifiers (fabric_id)`,
+  `CREATE INDEX IF NOT EXISTS quilting_fabric_identifiers_type_val_idx  ON quilting_fabric_identifiers (identifier_type, identifier_value)`,
+
+  `CREATE TABLE IF NOT EXISTS quilting_pattern_variants (
+    id               SERIAL PRIMARY KEY,
+    pattern_id       INTEGER NOT NULL REFERENCES quilting_patterns(id) ON DELETE CASCADE,
+    name             TEXT NOT NULL,
+    finished_width   REAL,
+    finished_height  REAL,
+    size_unit        TEXT NOT NULL DEFAULT 'inches',
+    block_count      INTEGER,
+    skill_level      TEXT,
+    notes            TEXT,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE quilting_pattern_variants ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS quilting_pattern_variants_pattern_idx ON quilting_pattern_variants (pattern_id)`,
+
+  `CREATE TABLE IF NOT EXISTS quilting_pattern_requirements (
+    id                         SERIAL PRIMARY KEY,
+    variant_id                 INTEGER NOT NULL REFERENCES quilting_pattern_variants(id) ON DELETE CASCADE,
+    role                       TEXT NOT NULL,
+    color_description          TEXT,
+    quantity_yards             REAL,
+    quantity_fat_quarters      REAL,
+    width_assumption_inches    REAL DEFAULT 44,
+    seam_allowance_inches      REAL DEFAULT 0.25,
+    notes                      TEXT,
+    is_extracted               BOOLEAN NOT NULL DEFAULT false,
+    extraction_confidence      TEXT,
+    created_at                 TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE quilting_pattern_requirements ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS quilting_pattern_requirements_variant_idx ON quilting_pattern_requirements (variant_id)`,
+
+  `CREATE TABLE IF NOT EXISTS quilting_analyses (
+    id                   SERIAL PRIMARY KEY,
+    pattern_id           INTEGER NOT NULL REFERENCES quilting_patterns(id) ON DELETE CASCADE,
+    variant_id           INTEGER REFERENCES quilting_pattern_variants(id) ON DELETE SET NULL,
+    created_by_user_id   INTEGER,
+    status               TEXT NOT NULL DEFAULT 'pending',
+    readiness            TEXT,
+    stash_snapshot_at    TIMESTAMPTZ,
+    assumptions          JSONB NOT NULL DEFAULT '{}',
+    requirement_rows     JSONB NOT NULL DEFAULT '[]',
+    shopping_proposal    JSONB NOT NULL DEFAULT '[]',
+    applied_at           TIMESTAMPTZ,
+    applied_by_user_id   INTEGER,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE quilting_analyses ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS quilting_analyses_pattern_idx    ON quilting_analyses (pattern_id)`,
+  `CREATE INDEX IF NOT EXISTS quilting_analyses_created_at_idx ON quilting_analyses (created_at DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS quilting_fabric_identity_research (
+    id                       SERIAL PRIMARY KEY,
+    fabric_id                INTEGER NOT NULL REFERENCES quilting_fabrics(id) ON DELETE CASCADE,
+    status                   TEXT NOT NULL DEFAULT 'pending',
+    candidates               JSONB NOT NULL DEFAULT '[]',
+    selected_candidate_index INTEGER,
+    decided_by_user_id       INTEGER,
+    decided_at               TIMESTAMPTZ,
+    created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE quilting_fabric_identity_research ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS quilting_fabric_identity_research_fabric_idx ON quilting_fabric_identity_research (fabric_id)`,
 ];

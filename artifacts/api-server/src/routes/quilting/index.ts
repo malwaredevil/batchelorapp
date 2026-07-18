@@ -11,6 +11,8 @@ import shoppingRouter from "./shopping";
 import patternImportRouter from "./pattern-import";
 import toolsRouter from "./tools";
 import blockTemplatesRouter from "./block-templates";
+import analysesRouter from "./analyses";
+import fabricIdentityRouter from "./fabric-identity";
 
 const router: IRouter = Router();
 
@@ -26,5 +28,7 @@ router.use(shoppingRouter);
 router.use(patternImportRouter);
 router.use(toolsRouter);
 router.use(blockTemplatesRouter);
+router.use(analysesRouter);
+router.use(fabricIdentityRouter);
 
 export default router;

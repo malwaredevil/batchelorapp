@@ -12,6 +12,8 @@ import {
   vector,
   primaryKey,
   jsonb,
+  boolean,
+  numeric,
 } from "drizzle-orm/pg-core";
 
 // ---------------------------------------------------------------------------
@@ -396,3 +398,187 @@ export const shoppingItems = pgTable("quilting_shopping_items", {
 
 export type ShoppingItemRow = typeof shoppingItems.$inferSelect;
 export type InsertShoppingItem = typeof shoppingItems.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Fabric external identifiers / aliases
+// ---------------------------------------------------------------------------
+
+/**
+ * External product identifiers for fabrics (SKU, manufacturer reference, etc.).
+ * Supports confirmed identity links to manufacturer/retailer databases.
+ */
+export const fabricIdentifiers = pgTable(
+  "quilting_fabric_identifiers",
+  {
+    id: serial("id").primaryKey(),
+    fabricId: integer("fabric_id")
+      .notNull()
+      .references(() => fabrics.id, { onDelete: "cascade" }),
+    identifierType: text("identifier_type").notNull(),
+    identifierValue: text("identifier_value").notNull(),
+    sourceUrl: text("source_url"),
+    confirmedByUserId: integer("confirmed_by_user_id"),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    confidence: text("confidence").notNull().default("manual"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("quilting_fabric_identifiers_fabric_idx").on(table.fabricId),
+    index("quilting_fabric_identifiers_type_val_idx").on(
+      table.identifierType,
+      table.identifierValue,
+    ),
+  ],
+).enableRLS();
+
+export type FabricIdentifierRow = typeof fabricIdentifiers.$inferSelect;
+export type InsertFabricIdentifier = typeof fabricIdentifiers.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Pattern requirements — size variants and fabric requirements
+// ---------------------------------------------------------------------------
+
+/**
+ * A size/variant of a pattern (e.g. "Lap 60×72", "King 108×108").
+ */
+export const patternVariants = pgTable(
+  "quilting_pattern_variants",
+  {
+    id: serial("id").primaryKey(),
+    patternId: integer("pattern_id")
+      .notNull()
+      .references(() => quiltPatterns.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    finishedWidth: real("finished_width"),
+    finishedHeight: real("finished_height"),
+    sizeUnit: text("size_unit").notNull().default("inches"),
+    blockCount: integer("block_count"),
+    skillLevel: text("skill_level"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("quilting_pattern_variants_pattern_idx").on(table.patternId),
+  ],
+).enableRLS();
+
+export type PatternVariantRow = typeof patternVariants.$inferSelect;
+export type InsertPatternVariant = typeof patternVariants.$inferInsert;
+
+/**
+ * Individual fabric requirements for a pattern variant.
+ * Each row is one fabric role (e.g. "Background", "Accent A", "Binding").
+ */
+export const patternRequirements = pgTable(
+  "quilting_pattern_requirements",
+  {
+    id: serial("id").primaryKey(),
+    variantId: integer("variant_id")
+      .notNull()
+      .references(() => patternVariants.id, { onDelete: "cascade" }),
+    role: text("role").notNull(),
+    colorDescription: text("color_description"),
+    quantityYards: real("quantity_yards"),
+    quantityFatQuarters: real("quantity_fat_quarters"),
+    widthAssumptionInches: real("width_assumption_inches").default(44),
+    seamAllowanceInches: real("seam_allowance_inches").default(0.25),
+    notes: text("notes"),
+    isExtracted: boolean("is_extracted").notNull().default(false),
+    extractionConfidence: text("extraction_confidence"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("quilting_pattern_requirements_variant_idx").on(table.variantId),
+  ],
+).enableRLS();
+
+export type PatternRequirementRow = typeof patternRequirements.$inferSelect;
+export type InsertPatternRequirement = typeof patternRequirements.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// "Can I make this?" analysis runs
+// ---------------------------------------------------------------------------
+
+/**
+ * A single "Can I make this?" analysis comparing a pattern variant against
+ * the current stash. Results are immutable once created — re-run creates a
+ * new row.
+ */
+export const quiltingAnalyses = pgTable(
+  "quilting_analyses",
+  {
+    id: serial("id").primaryKey(),
+    patternId: integer("pattern_id")
+      .notNull()
+      .references(() => quiltPatterns.id, { onDelete: "cascade" }),
+    variantId: integer("variant_id").references(() => patternVariants.id, {
+      onDelete: "set null",
+    }),
+    createdByUserId: integer("created_by_user_id"),
+    status: text("status").notNull().default("pending"),
+    readiness: text("readiness"),
+    stashSnapshotAt: timestamp("stash_snapshot_at", { withTimezone: true }),
+    assumptions: jsonb("assumptions")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    requirementRows: jsonb("requirement_rows")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    shoppingProposal: jsonb("shopping_proposal")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    appliedAt: timestamp("applied_at", { withTimezone: true }),
+    appliedByUserId: integer("applied_by_user_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("quilting_analyses_pattern_idx").on(table.patternId),
+    index("quilting_analyses_created_at_idx").on(table.createdAt),
+  ],
+).enableRLS();
+
+export type QuiltingAnalysisRow = typeof quiltingAnalyses.$inferSelect;
+export type InsertQuiltingAnalysis = typeof quiltingAnalyses.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Fabric identity research — candidates and decisions
+// ---------------------------------------------------------------------------
+
+export const fabricIdentityResearch = pgTable(
+  "quilting_fabric_identity_research",
+  {
+    id: serial("id").primaryKey(),
+    fabricId: integer("fabric_id")
+      .notNull()
+      .references(() => fabrics.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("pending"),
+    candidates: jsonb("candidates")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    selectedCandidateIndex: integer("selected_candidate_index"),
+    decidedByUserId: integer("decided_by_user_id"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("quilting_fabric_identity_research_fabric_idx").on(table.fabricId),
+  ],
+).enableRLS();
+
+export type FabricIdentityResearchRow =
+  typeof fabricIdentityResearch.$inferSelect;
+export type InsertFabricIdentityResearch =
+  typeof fabricIdentityResearch.$inferInsert;

@@ -38,6 +38,8 @@ import { Badge } from "@/components/ui/badge";
 import { CategorySelector } from "@/ornaments/components/category-selector";
 import { generateInsurancePdf } from "@/ornaments/lib/pdf-export";
 import { cn } from "@/lib/utils";
+import { IdentityResearchPanel } from "@/ornaments/components/IdentityResearchPanel";
+import { SeriesLinkPanel } from "@/ornaments/components/SeriesLinkPanel";
 
 function formatCurrency(amount: number | null | undefined): string {
   if (amount == null) return "—";
@@ -541,6 +543,9 @@ export default function OrnamentDetail() {
               </p>
             </div>
           )}
+
+          <IdentityResearchPanel itemId={ornament.id} />
+          <SeriesLinkPanel itemId={ornament.id} />
 
           <div className="flex flex-wrap gap-2">
             {ornament.motifs?.map((m) => (

@@ -1815,6 +1815,389 @@ paths:
         "404":
           description: Not found
 
+  /patterns/{id}/variants:
+    get:
+      operationId: listPatternVariants
+      tags: [quilting]
+      summary: List size/colorway variants for a pattern
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: List of variants
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PatternVariant"
+        "404":
+          description: Pattern not found
+    post:
+      operationId: createPatternVariant
+      tags: [quilting]
+      summary: Create a new variant for a pattern
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatternVariantInput"
+      responses:
+        "201":
+          description: Created variant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PatternVariant"
+        "404":
+          description: Pattern not found
+
+  /patterns/{id}/variants/{variantId}:
+    patch:
+      operationId: updatePatternVariant
+      tags: [quilting]
+      summary: Update a variant
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - name: variantId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatternVariantInput"
+      responses:
+        "200":
+          description: Updated variant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PatternVariant"
+        "404":
+          description: Not found
+    delete:
+      operationId: deletePatternVariant
+      tags: [quilting]
+      summary: Delete a variant
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - name: variantId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /patterns/{id}/variants/{variantId}/requirements:
+    get:
+      operationId: getPatternRequirements
+      tags: [quilting]
+      summary: Get fabric requirements for a variant
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - name: variantId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Requirements list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PatternRequirement"
+        "404":
+          description: Not found
+    put:
+      operationId: savePatternRequirements
+      tags: [quilting]
+      summary: Replace all fabric requirements for a variant
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - name: variantId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [requirements]
+              properties:
+                requirements:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/PatternRequirementInput"
+      responses:
+        "200":
+          description: Saved requirements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PatternRequirement"
+
+  /patterns/{id}/variants/{variantId}/extract-requirements:
+    post:
+      operationId: extractPatternRequirements
+      tags: [quilting]
+      summary: Use AI to extract fabric requirements from pattern image/notes
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - name: variantId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Extracted requirements
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requirements:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PatternRequirementInput"
+
+  /patterns/{id}/analyses:
+    get:
+      operationId: listPatternAnalyses
+      tags: [quilting]
+      summary: List can-i-make-this analyses for a pattern
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: List of analyses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QuiltingAnalysis"
+    post:
+      operationId: runPatternAnalysis
+      tags: [quilting]
+      summary: Run a can-i-make-this analysis against the fabric stash
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                variantId:
+                  type: integer
+                  nullable: true
+                assumptions:
+                  type: object
+                  nullable: true
+      responses:
+        "202":
+          description: Analysis started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuiltingAnalysis"
+        "404":
+          description: Pattern not found
+
+  /patterns/{id}/analyses/{analysisId}:
+    get:
+      operationId: getPatternAnalysis
+      tags: [quilting]
+      summary: Get a single analysis result
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - name: analysisId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Analysis result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuiltingAnalysis"
+        "404":
+          description: Not found
+
+  /patterns/{id}/analyses/{analysisId}/apply:
+    post:
+      operationId: applyPatternAnalysis
+      tags: [quilting]
+      summary: Push shopping-needed items from an analysis into the shopping list
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - name: analysisId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                requirementIds:
+                  type: array
+                  items:
+                    type: integer
+                  nullable: true
+      responses:
+        "200":
+          description: Items added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  added:
+                    type: integer
+                  items:
+                    type: array
+                    items:
+                      type: object
+
+  /fabrics/{id}/identifiers:
+    get:
+      operationId: listFabricIdentifiers
+      tags: [quilting]
+      summary: List known identifiers (SKU/selvedge/barcode) for a fabric
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: List of identifiers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FabricIdentifier"
+    post:
+      operationId: addFabricIdentifier
+      tags: [quilting]
+      summary: Add an identifier to a fabric
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FabricIdentifierInput"
+      responses:
+        "201":
+          description: Created identifier
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FabricIdentifier"
+
+  /fabrics/{id}/identifiers/{identifierId}:
+    delete:
+      operationId: deleteFabricIdentifier
+      tags: [quilting]
+      summary: Delete a fabric identifier
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - name: identifierId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /fabrics/{id}/identity-research:
+    get:
+      operationId: listFabricIdentityResearch
+      tags: [quilting]
+      summary: List identity-research jobs for a fabric
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: List of research jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FabricIdentityResearch"
+    post:
+      operationId: runFabricIdentityResearch
+      tags: [quilting]
+      summary: Run an AI identity-research job for a fabric
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "202":
+          description: Job started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FabricIdentityResearch"
+        "404":
+          description: Fabric not found
+
+  /fabrics/{id}/identity-research/{researchId}:
+    patch:
+      operationId: applyFabricIdentityResearch
+      tags: [quilting]
+      summary: Apply a research candidate to the fabric
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - name: researchId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplyFabricResearchInput"
+      responses:
+        "200":
+          description: Updated fabric
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fabric"
+        "404":
+          description: Not found
+
 # ---------------------------------------------------------------------------
 # Components
 # ---------------------------------------------------------------------------
@@ -3493,3 +3876,225 @@ components:
           nullable: true
           minimum: 0.0625
           maximum: 1
+
+    PatternVariant:
+      type: object
+      required: [id, patternId, name]
+      properties:
+        id:
+          type: integer
+        patternId:
+          type: integer
+        name:
+          type: string
+        finishedWidth:
+          type: number
+          nullable: true
+        finishedHeight:
+          type: number
+          nullable: true
+        sizeUnit:
+          type: string
+          nullable: true
+        blockCount:
+          type: integer
+          nullable: true
+        colorwayDescription:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+
+    PatternVariantInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        finishedWidth:
+          type: number
+          nullable: true
+        finishedHeight:
+          type: number
+          nullable: true
+        sizeUnit:
+          type: string
+          nullable: true
+        blockCount:
+          type: integer
+          nullable: true
+        colorwayDescription:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+
+    PatternRequirement:
+      type: object
+      required: [id, variantId, role]
+      properties:
+        id:
+          type: integer
+        variantId:
+          type: integer
+        role:
+          type: string
+        colorDescription:
+          type: string
+          nullable: true
+        quantityYards:
+          type: number
+          nullable: true
+        quantityFatQuarters:
+          type: number
+          nullable: true
+        widthAssumptionInches:
+          type: number
+          nullable: true
+        suggestedSearchQuery:
+          type: string
+          nullable: true
+
+    PatternRequirementInput:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+        colorDescription:
+          type: string
+          nullable: true
+        quantityYards:
+          type: number
+          nullable: true
+        quantityFatQuarters:
+          type: number
+          nullable: true
+        widthAssumptionInches:
+          type: number
+          nullable: true
+        suggestedSearchQuery:
+          type: string
+          nullable: true
+
+    QuiltingAnalysis:
+      type: object
+      required: [id, patternId, status]
+      properties:
+        id:
+          type: integer
+        patternId:
+          type: integer
+        variantId:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [running, done, failed]
+        readiness:
+          type: string
+          enum: [ready, partial, shopping_needed, unknown]
+          nullable: true
+        stashMatchSummary:
+          type: string
+          nullable: true
+        shoppingProposal:
+          type: array
+          nullable: true
+          items:
+            type: object
+        requirementRows:
+          type: array
+          nullable: true
+          items:
+            type: object
+        assumptions:
+          type: object
+          nullable: true
+        stashSnapshotAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    FabricIdentifier:
+      type: object
+      required: [id, fabricId, identifierType, value]
+      properties:
+        id:
+          type: integer
+        fabricId:
+          type: integer
+        identifierType:
+          type: string
+          enum: [sku, selvedge, barcode, other]
+        value:
+          type: string
+        source:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+
+    FabricIdentifierInput:
+      type: object
+      required: [identifierType, value]
+      properties:
+        identifierType:
+          type: string
+          enum: [sku, selvedge, barcode, other]
+        value:
+          type: string
+          minLength: 1
+        source:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+
+    FabricIdentityResearch:
+      type: object
+      required: [id, fabricId, status]
+      properties:
+        id:
+          type: integer
+        fabricId:
+          type: integer
+        status:
+          type: string
+          enum: [running, done, failed]
+        candidates:
+          type: array
+          nullable: true
+          items:
+            type: object
+        selectedCandidateIndex:
+          type: integer
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    ApplyFabricResearchInput:
+      type: object
+      required: [candidateIndex]
+      properties:
+        candidateIndex:
+          type: integer
+          minimum: 0
+        fields:
+          type: array
+          items:
+            type: string
+          description: Specific fields to apply (defaults to all non-locked fields)

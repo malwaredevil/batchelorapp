@@ -6,7 +6,6 @@ import { requireAuth } from "../middleware/auth";
 import dns from "node:dns";
 import { isIP } from "node:net";
 import { Agent, fetch as undiciFetch } from "undici";
-import { XMLParser } from "fast-xml-parser";
 
 const router: IRouter = Router();
 
@@ -307,40 +306,22 @@ async function safeFetchFollowingRedirects(
   throw new Error("Too many redirects");
 }
 
-const feedParser = new XMLParser({
-  ignoreAttributes: false,
-  attributeNamePrefix: "@_",
-  cdataPropName: "__cdata",
-  isArray: (name) => ["item", "entry"].includes(name),
-});
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null
-    ? (value as Record<string, unknown>)
-    : {};
+function unescapeHtml(s: string): string {
+  // Decode &amp; LAST so a double-encoded entity like "&amp;lt;" (which
+  // represents the literal text "&lt;") doesn't get collapsed into "<".
+  return s
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&");
 }
 
-function asArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : value === undefined ? [] : [value];
-}
-
-function textValue(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "object") {
-    const record = asRecord(value);
-    return textValue(record["__cdata"] ?? record["#text"] ?? "");
-  }
-  return String(value).trim();
-}
-
-function attrValue(value: unknown, attr: string): string {
-  const record = asRecord(value);
-  return textValue(record[`@_${attr}`]);
-}
-
-function plainDescription(value: unknown): string {
-  return textValue(value)
-    .replace(/<[^>]+>/g, " ")
+function extractText(raw: string): string {
+  const cdataMatch = raw.match(/^\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*$/);
+  if (cdataMatch) return cdataMatch[1].trim();
+  return unescapeHtml(raw.replace(/<[^>]+>/g, " "))
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -352,55 +333,43 @@ function parseRss(xml: string): {
     link: string;
     pubDate: string;
     description: string;
-    imageUrl: string | null;
   }>;
 } {
-  const parsed = asRecord(feedParser.parse(xml));
-  const rss = asRecord(parsed["rss"]);
-  const channel =
-    Object.keys(rss).length > 0
-      ? asRecord(rss["channel"])
-      : asRecord(parsed["feed"]);
-  const feedTitle = textValue(channel["title"]) || "RSS Feed";
-  const rawItems = asArray(channel["item"] ?? channel["entry"]);
-  const MAX_ITEMS = 20;
-  const MAX_DESCRIPTION = 600;
+  const feedTitleMatch = xml.match(
+    /<channel[^>]*>[\s\S]*?<title[^>]*>([\s\S]*?)<\/title>/,
+  );
+  const feedTitle = feedTitleMatch
+    ? extractText(feedTitleMatch[1])
+    : "RSS Feed";
 
-  const items = rawItems
-    .slice(0, MAX_ITEMS)
-    .map((raw) => {
-      const item = asRecord(raw);
-      const enclosure = asRecord(item["enclosure"]);
-      const enclosureType = attrValue(enclosure, "type");
-      const linkNode = item["link"];
-      const link =
-        attrValue(linkNode, "href") ||
-        textValue(linkNode) ||
-        textValue(item["id"]);
-      const imageUrl =
-        attrValue(item["media:thumbnail"], "url") ||
-        (enclosureType.startsWith("image/")
-          ? attrValue(enclosure, "url")
-          : "") ||
-        attrValue(item["itunes:image"], "href") ||
-        null;
+  // Handle both RSS <item> and Atom <entry>
+  const tagRe = /<(?:item|entry)[^>]*>([\s\S]*?)<\/(?:item|entry)>/g;
+  const itemMatches = [...xml.matchAll(tagRe)];
 
-      return {
-        title: (textValue(item["title"]) || "Untitled").slice(0, 200),
-        link: link.slice(0, 500),
-        pubDate: textValue(
-          item["pubDate"] ?? item["published"] ?? item["updated"],
-        ).slice(0, 100),
-        description: plainDescription(
-          item["description"] ??
-            item["summary"] ??
-            item["content"] ??
-            item["content:encoded"],
-        ).slice(0, MAX_DESCRIPTION),
-        imageUrl,
-      };
-    })
-    .filter((item) => item.link);
+  const items = itemMatches.slice(0, 8).map((m) => {
+    const item = m[1];
+    const titleRaw = item.match(/<title[^>]*>([\s\S]*?)<\/title>/)?.[1] ?? "";
+    // RSS uses <link>, Atom uses <link href="..."/>
+    const linkRaw =
+      item.match(/<link[^>]*>([\s\S]*?)<\/link>/)?.[1] ??
+      item.match(/<link[^>]+href=["']([^"']+)["']/i)?.[1] ??
+      "";
+    const pubDateRaw =
+      item.match(/<pubDate[^>]*>([\s\S]*?)<\/pubDate>/)?.[1] ??
+      item.match(/<published[^>]*>([\s\S]*?)<\/published>/)?.[1] ??
+      item.match(/<updated[^>]*>([\s\S]*?)<\/updated>/)?.[1] ??
+      "";
+    const descRaw =
+      item.match(/<description[^>]*>([\s\S]*?)<\/description>/)?.[1] ??
+      item.match(/<summary[^>]*>([\s\S]*?)<\/summary>/)?.[1] ??
+      "";
+    return {
+      title: extractText(titleRaw).slice(0, 200),
+      link: extractText(linkRaw).trim().slice(0, 500),
+      pubDate: pubDateRaw.trim().slice(0, 100),
+      description: extractText(descRaw).slice(0, 300),
+    };
+  });
 
   return { feedTitle, items };
 }
@@ -463,14 +432,14 @@ router.get("/hub/rss", requireAuth, async (req, res) => {
       res.status(413).json({ error: "Feed response too large (max 2 MB)" });
       return;
     }
-    const result = parseRss(xml);
-    if (result.items.length === 0) {
+    if (!xml.includes("<item") && !xml.includes("<entry")) {
       res
         .status(422)
         .json({ error: "URL does not appear to be a valid RSS/Atom feed" });
       return;
     }
 
+    const result = parseRss(xml);
     // Add formatted relative dates
     const enriched = {
       feedTitle: result.feedTitle,

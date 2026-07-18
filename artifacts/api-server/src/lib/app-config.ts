@@ -26,11 +26,6 @@ export interface AppConfigDefault {
   description?: string;
 }
 
-export const DEFAULT_UPCITEMDB_TRIAL_URL =
-  "https://api.upcitemdb.com/prod/trial/lookup";
-export const DEFAULT_UPCITEMDB_PAID_URL =
-  "https://api.upcitemdb.com/prod/v1/lookup";
-
 export const APP_CONFIG_DEFAULTS: AppConfigDefault[] = [
   // ── web_search ────────────────────────────────────────────────────────────
   {
@@ -82,24 +77,6 @@ export const APP_CONFIG_DEFAULTS: AppConfigDefault[] = [
     type: "integer",
     label: "Barcode lookup fetch timeout (ms)",
     description: "AbortController timeout for UPCitemdb barcode lookup calls.",
-  },
-  {
-    module: "ornaments",
-    key: "barcode_trial_url",
-    value: DEFAULT_UPCITEMDB_TRIAL_URL,
-    type: "string",
-    label: "UPCitemdb trial lookup URL",
-    description:
-      "Base URL used for barcode lookups when UPCITEMDB_USER_KEY is not set.",
-  },
-  {
-    module: "ornaments",
-    key: "barcode_paid_url",
-    value: DEFAULT_UPCITEMDB_PAID_URL,
-    type: "string",
-    label: "UPCitemdb paid lookup URL",
-    description:
-      "Base URL used for barcode lookups when UPCITEMDB_USER_KEY is set.",
   },
 
   // ── quilting ─────────────────────────────────────────────────────────────

@@ -19,8 +19,6 @@ import ResetPassword from "@/pages/reset-password";
 import Account from "@/pages/account";
 import OwnerPanel from "@/pages/owner-panel";
 import ControlPanel from "@/pages/control-panel";
-import JobsDashboard from "@/pages/jobs-dashboard";
-import OperationsDashboard from "@/pages/operations-dashboard";
 import GoogleApisDemo from "@/pages/google-apis-demo";
 import NotFound from "@/pages/not-found";
 import { BirthdayBanner } from "@/components/BirthdayBanner";
@@ -81,11 +79,6 @@ function Routes() {
         <Route path="/account" component={Account} />
         <Route path="/owner-panel" component={OwnerPanel} />
         <Route path="/control-panel" component={ControlPanel} />
-        <Route path="/control-panel/jobs" component={JobsDashboard} />
-        <Route
-          path="/control-panel/operations"
-          component={OperationsDashboard}
-        />
         <Route path="/google-apis-demo" component={GoogleApisDemo} />
         <Route path="/login">
           <Redirect to="/" />

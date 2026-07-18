@@ -307,7 +307,6 @@ export default function Patterns() {
     data: patternsData,
     isLoading,
     isError,
-    refetch,
   } = useListPatterns({ pageSize: 200 });
   const patterns = (patternsData?.items ?? []) as PatternSummary[];
 
@@ -473,7 +472,6 @@ export default function Patterns() {
       items={patterns}
       isLoading={isLoading}
       isError={isError}
-      onRetry={refetch}
       {...pageState}
       title="Patterns"
       singularNoun="pattern"

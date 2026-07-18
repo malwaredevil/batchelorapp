@@ -11,7 +11,6 @@ import {
   travelsPackingLists,
 } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
-import { ssrfSafeFetch } from "../../lib/ssrf-safe-fetch";
 import { deleteTripPhoto } from "../../lib/travels/storage";
 import { deleteDocument } from "../../lib/travels-storage";
 import {
@@ -34,8 +33,7 @@ async function geocodeDestination(
 ): Promise<{ lat: number; lng: number } | null> {
   try {
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(destination)}&format=json&limit=1`;
-    // Always use ssrfSafeFetch for external URLs — keeps SSRF policy uniformly enforced across the codebase.
-    const res = await ssrfSafeFetch(url, {
+    const res = await fetch(url, {
       headers: { "User-Agent": "Batchelor-App/1.0" },
       signal: AbortSignal.timeout(5000),
     });
@@ -249,8 +247,7 @@ router.delete("/trips/:id", async (req, res) => {
     return;
   }
 
-  // Collect storage paths before the transaction, but do not delete from
-  // storage until the DB commit succeeds.
+  // Clean up photos and documents from Supabase Storage before deleting DB rows
   const photos = await db
     .select({ storagePath: travelsTripPhotos.storagePath })
     .from(travelsTripPhotos)
@@ -261,9 +258,15 @@ router.delete("/trips/:id", async (req, res) => {
     .from(travelsTripDocuments)
     .where(eq(travelsTripDocuments.tripId, id));
 
+  await Promise.allSettled([
+    ...photos.map((p) => deleteTripPhoto(p.storagePath)),
+    ...docs.map((d) => deleteDocument(d.storagePath)),
+  ]);
+
   // Delete all child rows in a transaction so a mid-delete failure can't
   // leave orphaned photos, documents, chunks, reminders, or packing rows.
-  // Storage deletes happen after commit because they are not transactional.
+  // Storage deletes (above) stay outside the transaction — they're not
+  // atomic and the allSettled handling already accepts individual failures.
   await db.transaction(async (tx) => {
     await tx.delete(travelsTripPhotos).where(eq(travelsTripPhotos.tripId, id));
     // Doc chunks have no FK cascade — delete before documents.
@@ -288,20 +291,6 @@ router.delete("/trips/:id", async (req, res) => {
       .where(eq(travelsPackingLists.tripId, id));
     await tx.delete(travelsTrips).where(eq(travelsTrips.id, id));
   });
-
-  const storageDeleteResults = await Promise.allSettled([
-    ...photos.map((p) => deleteTripPhoto(p.storagePath)),
-    ...docs.map((d) => deleteDocument(d.storagePath)),
-  ]);
-  const failedStorageDeletes = storageDeleteResults.filter(
-    (result) => result.status === "rejected",
-  );
-  if (failedStorageDeletes.length > 0) {
-    req.log.warn(
-      { tripId: id, failedCount: failedStorageDeletes.length },
-      "Some storage objects could not be deleted after trip removal",
-    );
-  }
 
   res.status(204).send();
   void deleteTripCalendarEvents(id);

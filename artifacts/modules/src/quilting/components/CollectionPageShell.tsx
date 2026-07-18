@@ -23,7 +23,6 @@ import type { ReactNode } from "react";
 import { getCategoryPalette, colorToHex } from "@workspace/web-core";
 import { CategoryEditDialog } from "@/quilting/components/CategoryEditDialog";
 import { PaletteMatchModal } from "@/quilting/components/PaletteMatchModal";
-import { CollectionErrorState } from "@/components/CollectionErrorState";
 import type { QuiltingCategory } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
 import { SORT_LABELS } from "@/quilting/hooks/useCollectionPage";
@@ -45,7 +44,6 @@ interface CollectionPageShellProps<T extends CollectionPageItem> {
   items: T[] | null | undefined;
   isLoading: boolean;
   isError: boolean;
-  onRetry: () => Promise<unknown>;
 
   // Shared page state (from useCollectionPage)
   search: string;
@@ -118,7 +116,6 @@ export function CollectionPageShell<T extends CollectionPageItem>({
   items,
   isLoading,
   isError,
-  onRetry,
   search,
   setSearch,
   categoryFilter,
@@ -451,10 +448,11 @@ export function CollectionPageShell<T extends CollectionPageItem>({
 
       {/* Error state */}
       {isError && (
-        <CollectionErrorState
-          onRetry={onRetry}
-          message={`Couldn't load your ${noun}. Check your connection and try again.`}
-        />
+        <div className="flex h-40 items-center justify-center rounded-xl border border-destructive/30 bg-destructive/5">
+          <p className="text-sm text-destructive">
+            Failed to load {noun}. Please refresh.
+          </p>
+        </div>
       )}
 
       {/* Empty collection state */}

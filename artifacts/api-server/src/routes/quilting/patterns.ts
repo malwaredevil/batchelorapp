@@ -426,16 +426,12 @@ router.post("/patterns/:id/reanalyze", aiLimiter, async (req, res) => {
 
 /** Re-run AI analysis on a batch of patterns. Shared by the REST route and
  * Elaine's bulk_reanalyze_quilting action. */
-export async function bulkReanalyzePatterns(ids: number[]): Promise<{
-  total: number;
-  succeeded: number[];
-  failed: number[];
-  errors: Array<{ id: number; error: string }>;
-}> {
+export async function bulkReanalyzePatterns(
+  ids: number[],
+): Promise<{ succeeded: number[]; failed: number[] }> {
   const capped = [...new Set(ids)].slice(0, MAX_BULK_REANALYZE);
   const succeeded: number[] = [];
   const failed: number[] = [];
-  const errors: Array<{ id: number; error: string }> = [];
 
   for (const id of capped) {
     try {
@@ -446,7 +442,6 @@ export async function bulkReanalyzePatterns(ids: number[]): Promise<{
         .limit(1);
       if (!row || !row.imagePath) {
         failed.push(id);
-        errors.push({ id, error: "Pattern not found or has no image." });
         continue;
       }
 
@@ -470,10 +465,6 @@ export async function bulkReanalyzePatterns(ids: number[]): Promise<{
         .map((s) => s.value);
       if (dataUrls.length === 0) {
         failed.push(id);
-        errors.push({
-          id,
-          error: "Could not load any image for this pattern.",
-        });
         continue;
       }
 
@@ -502,26 +493,21 @@ export async function bulkReanalyzePatterns(ids: number[]): Promise<{
         })
         .where(eq(quiltPatterns.id, id));
       succeeded.push(id);
-    } catch (err) {
+    } catch {
       failed.push(id);
-      errors.push({
-        id,
-        error: err instanceof Error ? err.message : String(err),
-      });
     }
     if (capped.indexOf(id) < capped.length - 1) {
       await new Promise((resolve) => setTimeout(resolve, 300));
     }
   }
 
-  return { total: capped.length, succeeded, failed, errors };
+  return { succeeded, failed };
 }
 
 router.post("/patterns/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
   const { ids } = BulkReanalyzePatternsBody.parse(req.body);
-  res.json(
-    BulkReanalyzePatternsResponse.parse(await bulkReanalyzePatterns(ids)),
-  );
+  const { succeeded, failed } = await bulkReanalyzePatterns(ids);
+  res.json(BulkReanalyzePatternsResponse.parse({ succeeded, failed }));
 });
 
 // ---------------------------------------------------------------------------

@@ -11,10 +11,30 @@ env = { "CI" = "true" }
 [workflows]
 runButton = "Project"
 
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "app-config-drift"
+
+[[workflows.workflow]]
+name = "app-config-drift"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/api-server run lint:config"
+
+[workflows.workflow.metadata]
+isValidation = true
+
 [agent]
 stack = "PNPM_WORKSPACE"
 expertMode = true
-integrations = ["github:1.0.0", "google-calendar:1.0.0", "agentphone:1.0.0"]
+integrations = ["github:1.0.0", "google-calendar:1.0.0", "agentphone:1.0.0", "apify:1.0.0"]
 
 [postMerge]
 path = "scripts/post-merge.sh"
@@ -44,6 +64,10 @@ localPort = 22333
 externalPort = 3000
 
 [[ports]]
+localPort = 25313
+externalPort = 4200
+
+[[ports]]
 localPort = 25604
 externalPort = 3003
 
@@ -59,3 +83,6 @@ RESEND_FROM_EMAIL = "Batchelor <noreply@app.batchelor.app>"
 RESEND_REMINDER_FROM_EMAIL = "Batchelor Travels <travel.alert@app.batchelor.app>"
 GOOGLE_WALLET_ISSUER_ID = "3388000000023170019"
 DEV_SCREENSHOT_TOKEN = "ebd6f84d4a32248b2e8442f6849fdee51d2dd9b4d5b52606026b57198a51625d"
+VITE_VAPID_PUBLIC_KEY = "BHPFQM6PK5_JdJkyhIz_fCL8VBwhsjOg248Op6XOWEc-k_KqeN5rweWW5VTN9uLP67-MJ4f2IKcFTpN1HkTZ0vM"
+VAPID_PUBLIC_KEY = "BHPFQM6PK5_JdJkyhIz_fCL8VBwhsjOg248Op6XOWEc-k_KqeN5rweWW5VTN9uLP67-MJ4f2IKcFTpN1HkTZ0vM"
+VAPID_SUBJECT = "mailto:batchelorjc@gmail.com"

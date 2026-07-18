@@ -134,6 +134,21 @@ export const JOB_REGISTRY = [
       );
     },
   },
+  {
+    type: "travels.monitoring-check",
+    queue: "provider.default",
+    payloadSchemaVersion: 1,
+    payloadSchema: z.object({ reservationId: z.number().int() }),
+    maxAttempts: 3,
+    idempotencyStrategy:
+      "Key monitoring-check:<reservationId>:<timestamp-bucket> so rapid re-triggers within the same minute deduplicate.",
+    handler: async (_payload, context) => {
+      await context.updateProgress(
+        100,
+        "Monitoring check placeholder completed — live adapters added per provider.",
+      );
+    },
+  },
 ] satisfies JobDefinition<z.ZodTypeAny>[];
 
 export const JOB_REGISTRY_BY_TYPE = new Map(

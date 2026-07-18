@@ -1799,6 +1799,108 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS travels_field_conflicts_field_path_idx
      ON travels_field_conflicts (field_path)`,
 
+  // ── Disruption monitoring (#238) ─────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS travels_reservations (
+    id                    SERIAL PRIMARY KEY,
+    trip_id               INTEGER NOT NULL REFERENCES travels_trips(id) ON DELETE CASCADE,
+    document_id           INTEGER,
+    reservation_type      TEXT NOT NULL DEFAULT 'general',
+    status                TEXT NOT NULL DEFAULT 'confirmed',
+    provider_name         TEXT,
+    confirmation_ref      TEXT,
+    passenger_names       JSONB NOT NULL DEFAULT '[]',
+    segments              JSONB NOT NULL DEFAULT '[]',
+    check_in_date         DATE,
+    check_out_date        DATE,
+    destination_iata      TEXT,
+    origin_iata           TEXT,
+    raw_extracted         JSONB NOT NULL DEFAULT '{}',
+    monitoring_enabled    BOOLEAN NOT NULL DEFAULT true,
+    monitoring_policy     TEXT NOT NULL DEFAULT 'standard',
+    last_baseline_at      TIMESTAMPTZ,
+    last_checked_at       TIMESTAMPTZ,
+    created_by_user_id    INTEGER NOT NULL,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE travels_reservations ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travels_reservations_trip_idx    ON travels_reservations (trip_id)`,
+  `CREATE INDEX IF NOT EXISTS travels_reservations_type_idx    ON travels_reservations (reservation_type)`,
+  `CREATE INDEX IF NOT EXISTS travels_reservations_status_idx  ON travels_reservations (status)`,
+
+  `CREATE TABLE IF NOT EXISTS travel_monitoring_baselines (
+    id                    SERIAL PRIMARY KEY,
+    reservation_id        INTEGER NOT NULL REFERENCES travels_reservations(id) ON DELETE CASCADE,
+    normalized_data       JSONB NOT NULL DEFAULT '{}',
+    schema_version        TEXT NOT NULL DEFAULT '1',
+    content_hash          TEXT,
+    confirmed_by          TEXT NOT NULL DEFAULT 'auto',
+    confirmed_by_user_id  INTEGER,
+    source_refs           JSONB NOT NULL DEFAULT '[]',
+    effective_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE travel_monitoring_baselines ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travel_monitoring_baselines_reservation_idx    ON travel_monitoring_baselines (reservation_id)`,
+  `CREATE INDEX IF NOT EXISTS travel_monitoring_baselines_effective_at_idx   ON travel_monitoring_baselines (effective_at DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS travel_monitoring_observations (
+    id                  SERIAL PRIMARY KEY,
+    reservation_id      INTEGER NOT NULL REFERENCES travels_reservations(id) ON DELETE CASCADE,
+    provider            TEXT NOT NULL,
+    external_record_id  TEXT,
+    observed_data       JSONB NOT NULL DEFAULT '{}',
+    observed_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    content_hash        TEXT,
+    authority           TEXT NOT NULL DEFAULT 'document',
+    raw_snapshot        JSONB NOT NULL DEFAULT '{}',
+    job_id              INTEGER,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE travel_monitoring_observations ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travel_monitoring_observations_reservation_idx  ON travel_monitoring_observations (reservation_id)`,
+  `CREATE INDEX IF NOT EXISTS travel_monitoring_observations_observed_at_idx  ON travel_monitoring_observations (observed_at DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS travel_change_events (
+    id                       SERIAL PRIMARY KEY,
+    reservation_id           INTEGER NOT NULL REFERENCES travels_reservations(id) ON DELETE CASCADE,
+    baseline_id              INTEGER,
+    previous_observation_id  INTEGER,
+    new_observation_id       INTEGER,
+    change_type              TEXT NOT NULL,
+    severity                 TEXT NOT NULL DEFAULT 'informational',
+    field_diffs              JSONB NOT NULL DEFAULT '[]',
+    materiality_reason       TEXT,
+    downstream_impacts       JSONB NOT NULL DEFAULT '[]',
+    state                    TEXT NOT NULL DEFAULT 'detected',
+    decided_by_user_id       INTEGER,
+    decided_at               TIMESTAMPTZ,
+    decision_notes           TEXT,
+    notification_event_id    INTEGER,
+    dedup_key                TEXT UNIQUE,
+    created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE travel_change_events ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travel_change_events_reservation_idx  ON travel_change_events (reservation_id)`,
+  `CREATE INDEX IF NOT EXISTS travel_change_events_state_idx         ON travel_change_events (state)`,
+  `CREATE INDEX IF NOT EXISTS travel_change_events_severity_idx      ON travel_change_events (severity)`,
+
+  `CREATE TABLE IF NOT EXISTS travels_monitoring_preferences (
+    id                                  SERIAL PRIMARY KEY,
+    user_id                             INTEGER NOT NULL UNIQUE,
+    monitoring_enabled                  BOOLEAN NOT NULL DEFAULT true,
+    weather_alerts                      BOOLEAN NOT NULL DEFAULT true,
+    check_in_reminders                  BOOLEAN NOT NULL DEFAULT true,
+    document_reminders                  BOOLEAN NOT NULL DEFAULT true,
+    min_severity                        TEXT NOT NULL DEFAULT 'attention',
+    notify_channels                     JSONB NOT NULL DEFAULT '{"inApp":true,"email":false}',
+    schedule_change_threshold_minutes   INTEGER NOT NULL DEFAULT 30,
+    updated_at                          TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE travels_monitoring_preferences ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travels_monitoring_prefs_user_idx ON travels_monitoring_preferences (user_id)`,
+
   // ── Phase 2: Search feedback + similarity evaluations (#233) ─────────────
 
   `CREATE TABLE IF NOT EXISTS search_feedback (

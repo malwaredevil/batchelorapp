@@ -20,6 +20,9 @@ import cardLayoutRouter from "./card-layout";
 import documentTypesRouter from "./document-types";
 import packingRouter from "./packing";
 import documentEvidenceRouter from "./document-evidence";
+import reservationsRouter from "./reservations";
+import changesRouter from "./changes";
+import monitoringPreferencesRouter from "./monitoring-preferences";
 
 const router: IRouter = Router();
 
@@ -46,5 +49,8 @@ router.use(walletRouter);
 router.use(documentTypesRouter);
 router.use(packingRouter);
 router.use(documentEvidenceRouter);
+router.use(reservationsRouter);
+router.use(changesRouter);
+router.use(monitoringPreferencesRouter);
 
 export default router;

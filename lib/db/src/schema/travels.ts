@@ -825,3 +825,204 @@ export const travelsFieldConflicts = pgTable(
 export type TravelsFieldConflictRow = typeof travelsFieldConflicts.$inferSelect;
 export type InsertTravelsFieldConflict =
   typeof travelsFieldConflicts.$inferInsert;
+
+// ─── Disruption Monitoring (#238) ─────────────────────────────────────────
+
+export const travelsReservations = pgTable(
+  "travels_reservations",
+  {
+    id: serial("id").primaryKey(),
+    tripId: integer("trip_id")
+      .notNull()
+      .references(() => travelsTrips.id, { onDelete: "cascade" }),
+    documentId: integer("document_id"),
+    reservationType: text("reservation_type").notNull().default("general"),
+    status: text("status").notNull().default("confirmed"),
+    providerName: text("provider_name"),
+    confirmationRef: text("confirmation_ref"),
+    passengerNames: jsonb("passenger_names").$type<string[]>().default([]),
+    segments: jsonb("segments").$type<Record<string, unknown>[]>().default([]),
+    checkInDate: date("check_in_date"),
+    checkOutDate: date("check_out_date"),
+    destinationIata: text("destination_iata"),
+    originIata: text("origin_iata"),
+    rawExtracted: jsonb("raw_extracted")
+      .$type<Record<string, unknown>>()
+      .default({}),
+    monitoringEnabled: boolean("monitoring_enabled").notNull().default(true),
+    monitoringPolicy: text("monitoring_policy").notNull().default("standard"),
+    lastBaselineAt: timestamp("last_baseline_at", { withTimezone: true }),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+    createdByUserId: integer("created_by_user_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("travels_reservations_trip_idx").on(table.tripId),
+    index("travels_reservations_type_idx").on(table.reservationType),
+    index("travels_reservations_status_idx").on(table.status),
+  ],
+).enableRLS();
+
+export type TravelsReservationRow = typeof travelsReservations.$inferSelect;
+export type InsertTravelsReservation = typeof travelsReservations.$inferInsert;
+
+export const travelMonitoringBaselines = pgTable(
+  "travel_monitoring_baselines",
+  {
+    id: serial("id").primaryKey(),
+    reservationId: integer("reservation_id")
+      .notNull()
+      .references(() => travelsReservations.id, { onDelete: "cascade" }),
+    normalizedData: jsonb("normalized_data")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    schemaVersion: text("schema_version").notNull().default("1"),
+    contentHash: text("content_hash"),
+    confirmedBy: text("confirmed_by").notNull().default("auto"),
+    confirmedByUserId: integer("confirmed_by_user_id"),
+    sourceRefs: jsonb("source_refs").$type<string[]>().default([]),
+    effectiveAt: timestamp("effective_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("travel_monitoring_baselines_reservation_idx").on(
+      table.reservationId,
+    ),
+    index("travel_monitoring_baselines_effective_at_idx").on(table.effectiveAt),
+  ],
+).enableRLS();
+
+export type TravelMonitoringBaselineRow =
+  typeof travelMonitoringBaselines.$inferSelect;
+export type InsertTravelMonitoringBaseline =
+  typeof travelMonitoringBaselines.$inferInsert;
+
+export const travelMonitoringObservations = pgTable(
+  "travel_monitoring_observations",
+  {
+    id: serial("id").primaryKey(),
+    reservationId: integer("reservation_id")
+      .notNull()
+      .references(() => travelsReservations.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    externalRecordId: text("external_record_id"),
+    observedData: jsonb("observed_data")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    observedAt: timestamp("observed_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    contentHash: text("content_hash"),
+    authority: text("authority").notNull().default("document"),
+    rawSnapshot: jsonb("raw_snapshot")
+      .$type<Record<string, unknown>>()
+      .default({}),
+    jobId: integer("job_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("travel_monitoring_observations_reservation_idx").on(
+      table.reservationId,
+    ),
+    index("travel_monitoring_observations_observed_at_idx").on(
+      table.observedAt,
+    ),
+  ],
+).enableRLS();
+
+export type TravelMonitoringObservationRow =
+  typeof travelMonitoringObservations.$inferSelect;
+export type InsertTravelMonitoringObservation =
+  typeof travelMonitoringObservations.$inferInsert;
+
+export const travelChangeEvents = pgTable(
+  "travel_change_events",
+  {
+    id: serial("id").primaryKey(),
+    reservationId: integer("reservation_id")
+      .notNull()
+      .references(() => travelsReservations.id, { onDelete: "cascade" }),
+    baselineId: integer("baseline_id"),
+    previousObservationId: integer("previous_observation_id"),
+    newObservationId: integer("new_observation_id"),
+    changeType: text("change_type").notNull(),
+    severity: text("severity").notNull().default("informational"),
+    fieldDiffs: jsonb("field_diffs")
+      .$type<
+        Array<{
+          field: string;
+          before: unknown;
+          after: unknown;
+          reason?: string;
+        }>
+      >()
+      .notNull()
+      .default([]),
+    materialityReason: text("materiality_reason"),
+    downstreamImpacts: jsonb("downstream_impacts")
+      .$type<string[]>()
+      .default([]),
+    state: text("state").notNull().default("detected"),
+    decidedByUserId: integer("decided_by_user_id"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    decisionNotes: text("decision_notes"),
+    notificationEventId: integer("notification_event_id"),
+    dedupKey: text("dedup_key").unique(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("travel_change_events_reservation_idx").on(table.reservationId),
+    index("travel_change_events_state_idx").on(table.state),
+    index("travel_change_events_severity_idx").on(table.severity),
+  ],
+).enableRLS();
+
+export type TravelChangeEventRow = typeof travelChangeEvents.$inferSelect;
+export type InsertTravelChangeEvent = typeof travelChangeEvents.$inferInsert;
+
+export const travelsMonitoringPreferences = pgTable(
+  "travels_monitoring_preferences",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull().unique(),
+    monitoringEnabled: boolean("monitoring_enabled").notNull().default(true),
+    weatherAlerts: boolean("weather_alerts").notNull().default(true),
+    checkInReminders: boolean("check_in_reminders").notNull().default(true),
+    documentReminders: boolean("document_reminders").notNull().default(true),
+    minSeverity: text("min_severity").notNull().default("attention"),
+    notifyChannels: jsonb("notify_channels")
+      .$type<{ inApp: boolean; email: boolean }>()
+      .notNull()
+      .default({ inApp: true, email: false }),
+    scheduleChangeThresholdMinutes: integer("schedule_change_threshold_minutes")
+      .notNull()
+      .default(30),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("travels_monitoring_prefs_user_idx").on(table.userId)],
+).enableRLS();
+
+export type TravelsMonitoringPreferencesRow =
+  typeof travelsMonitoringPreferences.$inferSelect;
+export type InsertTravelsMonitoringPreferences =
+  typeof travelsMonitoringPreferences.$inferInsert;

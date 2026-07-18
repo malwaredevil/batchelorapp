@@ -743,7 +743,8 @@ export const ListFabricsResponse = zod.object({
 })),
   "total": zod.number(),
   "page": zod.number(),
-  "pageSize": zod.number()
+  "pageSize": zod.number(),
+  "searchMode": zod.enum(['semantic', 'keyword'])
 })
 
 
@@ -1009,8 +1010,13 @@ export const BulkReanalyzeFabricsBody = zod.object({
 })
 
 export const BulkReanalyzeFabricsResponse = zod.object({
+  "total": zod.number(),
   "succeeded": zod.array(zod.number()),
-  "failed": zod.array(zod.number())
+  "failed": zod.array(zod.number()),
+  "errors": zod.array(zod.object({
+  "id": zod.number(),
+  "error": zod.string()
+}))
 })
 
 
@@ -1343,8 +1349,13 @@ export const BulkReanalyzePatternsBody = zod.object({
 })
 
 export const BulkReanalyzePatternsResponse = zod.object({
+  "total": zod.number(),
   "succeeded": zod.array(zod.number()),
-  "failed": zod.array(zod.number())
+  "failed": zod.array(zod.number()),
+  "errors": zod.array(zod.object({
+  "id": zod.number(),
+  "error": zod.string()
+}))
 })
 
 
@@ -1678,8 +1689,13 @@ export const BulkReanalyzeQuiltsBody = zod.object({
 })
 
 export const BulkReanalyzeQuiltsResponse = zod.object({
+  "total": zod.number(),
   "succeeded": zod.array(zod.number()),
-  "failed": zod.array(zod.number())
+  "failed": zod.array(zod.number()),
+  "errors": zod.array(zod.object({
+  "id": zod.number(),
+  "error": zod.string()
+}))
 })
 
 

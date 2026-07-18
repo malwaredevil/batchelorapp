@@ -367,6 +367,14 @@ export interface PotteryCollectionStats {
   topColors: PotteryColorCount[];
 }
 
+export type QuiltingFabricsListResponseSearchMode = typeof QuiltingFabricsListResponseSearchMode[keyof typeof QuiltingFabricsListResponseSearchMode];
+
+
+export const QuiltingFabricsListResponseSearchMode = {
+  semantic: 'semantic',
+  keyword: 'keyword',
+} as const;
+
 export interface QuiltingCategory {
   id: number;
   name: string;
@@ -415,6 +423,7 @@ export interface QuiltingFabricsListResponse {
   total: number;
   page: number;
   pageSize: number;
+  searchMode: QuiltingFabricsListResponseSearchMode;
 }
 
 export interface QuiltingQuiltPattern {
@@ -599,9 +608,16 @@ export interface QuiltingBulkReanalyzeInput {
   ids: number[];
 }
 
+export type QuiltingBulkReanalyzeResultErrorsItem = {
+  id: number;
+  error: string;
+};
+
 export interface QuiltingBulkReanalyzeResult {
+  total: number;
   succeeded: number[];
   failed: number[];
+  errors: QuiltingBulkReanalyzeResultErrorsItem[];
 }
 
 export type QuiltingExtractBlocksResultGridSize = typeof QuiltingExtractBlocksResultGridSize[keyof typeof QuiltingExtractBlocksResultGridSize];

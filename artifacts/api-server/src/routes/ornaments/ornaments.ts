@@ -12,6 +12,7 @@ import {
   isNull,
   or,
   sql,
+  type SQL,
 } from "drizzle-orm";
 import {
   db,
@@ -71,6 +72,10 @@ import { lookupBookValue } from "../../lib/ornaments/book-value";
 import { serializeItem, serializeItems } from "../../lib/ornaments/serialize";
 import { logger } from "../../lib/logger";
 import pLimit from "p-limit";
+import {
+  semanticCollectionSearch,
+  buildOrnamentSearchDocument,
+} from "../../lib/collection-search";
 
 // Excludes the embedding + visualEmbedding vectors from list/detail queries —
 // they're large and only needed internally, never surfaced via the API.
@@ -116,8 +121,115 @@ router.get("/items", async (req, res) => {
   const { q, categoryId, seriesOrCollection, year, page, pageSize } =
     parsed.data;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const conditions: any[] = [];
+  // When a text query is provided, try hybrid semantic search first.
+  // Uses vector embeddings + Voyage reranking for ranked relevance ordering.
+  // Falls back to ILIKE when embeddings are unavailable or the result set is empty.
+  if (q && q.trim()) {
+    try {
+      let catItemIds: Set<number> | null = null;
+      if (categoryId !== undefined) {
+        const catRows = await db
+          .select({ itemId: itemCategories.itemId })
+          .from(itemCategories)
+          .where(eq(itemCategories.categoryId, categoryId));
+        catItemIds = new Set(catRows.map((r) => r.itemId));
+        if (catItemIds.size === 0) {
+          res.json(
+            ListOrnamentsResponse.parse({
+              items: [],
+              total: 0,
+              page,
+              pageSize,
+              searchMode: "semantic",
+            }),
+          );
+          return;
+        }
+      }
+
+      // Build extra WHERE for non-category filters (series, year).
+      const extraConditions: SQL<unknown>[] = [];
+      if (seriesOrCollection) {
+        extraConditions.push(
+          eq(ornamentsItems.seriesOrCollection, seriesOrCollection),
+        );
+      }
+      if (year !== undefined) {
+        extraConditions.push(eq(ornamentsItems.year, year));
+      }
+      const extraWhere =
+        extraConditions.length > 0
+          ? and(...(extraConditions as [SQL, ...SQL[]]))
+          : undefined;
+
+      const rankedIds = await semanticCollectionSearch({
+        query: q.trim(),
+        table: ornamentsItems,
+        textEmbeddingCol: "embedding",
+        visualEmbeddingCol: "visual_embedding",
+        db,
+        extraWhere,
+        fetchDocuments: async (ids) => {
+          const rows = await db
+            .select(itemColumns)
+            .from(ornamentsItems)
+            .where(inArray(ornamentsItems.id, ids));
+          return rows.map((r) => ({
+            id: r.id,
+            text: buildOrnamentSearchDocument(r),
+          }));
+        },
+      });
+
+      if (rankedIds.length > 0) {
+        const filteredIds = catItemIds
+          ? rankedIds.filter((id) => catItemIds!.has(id))
+          : rankedIds;
+
+        const total = filteredIds.length;
+        const offset = (page - 1) * pageSize;
+        const pageIds = filteredIds.slice(offset, offset + pageSize);
+
+        if (pageIds.length === 0) {
+          res.json(
+            ListOrnamentsResponse.parse({
+              items: [],
+              total,
+              page,
+              pageSize,
+              searchMode: "semantic",
+            }),
+          );
+          return;
+        }
+
+        const pageRows = await db
+          .select(itemColumns)
+          .from(ornamentsItems)
+          .where(inArray(ornamentsItems.id, pageIds));
+        const byId = new Map(pageRows.map((r) => [r.id, r]));
+        const orderedRows = pageIds
+          .filter((id) => byId.has(id))
+          .map((id) => byId.get(id)!);
+        const items = await serializeItems(orderedRows);
+        res.json(
+          ListOrnamentsResponse.parse({
+            items,
+            total,
+            page,
+            pageSize,
+            searchMode: "semantic",
+          }),
+        );
+        return;
+      }
+    } catch {
+      // Semantic search unavailable (embeddings missing/AI down) — fall through to ILIKE.
+    }
+  }
+
+  // ILIKE fallback: plain text match on name/series/brand/notes.
+  const conditions: SQL<unknown>[] = [];
   if (q && q.trim()) {
     const term = `%${q.trim().toLowerCase()}%`;
     conditions.push(
@@ -126,7 +238,7 @@ router.get("/items", async (req, res) => {
         ilike(ornamentsItems.seriesOrCollection, term),
         ilike(ornamentsItems.brand, term),
         ilike(ornamentsItems.notes, term),
-      ),
+      )!,
     );
   }
   if (seriesOrCollection) {
@@ -144,16 +256,21 @@ router.get("/items", async (req, res) => {
     const itemIdsForCategory = catRows.map((r) => r.itemId);
     if (itemIdsForCategory.length === 0) {
       res.json(
-        ListOrnamentsResponse.parse({ items: [], total: 0, page, pageSize }),
+        ListOrnamentsResponse.parse({
+          items: [],
+          total: 0,
+          page,
+          pageSize,
+          searchMode: "keyword",
+        }),
       );
       return;
     }
     conditions.push(inArray(ornamentsItems.id, itemIdsForCategory));
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where =
-    conditions.length > 0 ? and(...(conditions as [any, ...any[]])) : undefined;
+    conditions.length > 0 ? and(...(conditions as [SQL, ...SQL[]])) : undefined;
 
   const [{ value: total }] = await db
     .select({ value: count() })
@@ -170,7 +287,15 @@ router.get("/items", async (req, res) => {
     .offset(offset);
 
   const items = await serializeItems(rows);
-  res.json(ListOrnamentsResponse.parse({ items, total, page, pageSize }));
+  res.json(
+    ListOrnamentsResponse.parse({
+      items,
+      total,
+      page,
+      pageSize,
+      searchMode: "keyword",
+    }),
+  );
 });
 
 // Registered BEFORE /items/:id so the literal "stragglers" segment isn't

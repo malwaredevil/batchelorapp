@@ -280,13 +280,27 @@ exact sequence of issues to implement.
 
 **Quick reference:**
 
-- Campaign 1 branch: `feat/batch-quick-wins` — issues #244, #247, #253, #245, #248, #251, #243, #250, #252
+- Campaign 1 branch: `feat/batch-quick-wins` — issues #244, #247, #245, #248, #251, #243, #250, #252, #261
 - Campaign 2A branch: `feat/epic-241-search-quality` — issues #246, then #254
 - Campaign 2B branch: `feat/epic-242-elaine-completeness` — issues #255, then #256
 - Campaign 3 branch: `feat/strategic-phase1` — issues #257→#258→#223→#224→#225→#226→#227→#228
 
 **Before starting any campaign:** run `pnpm --filter @workspace/scripts run verify-github-secrets`
 **Before starting Campaign 3:** also run `pnpm --filter @workspace/scripts run verify-supabase-prerequisites`
+
+### 8.1 Batching — implement multiple issues per session
+
+**Preferred approach:** implement all issues for a campaign branch in a single session.
+List every issue URL in the prompt, separated by newlines. Tell Copilot not to create
+the PR until all issues are done. Copilot will implement each one in sequence and then
+open a single PR covering all of them.
+
+**PR base branch:** every PR must target the campaign branch (`feat/batch-quick-wins`,
+etc.), **never `main`**. If Copilot targets `main`, close the PR and redo it.
+
+**One PR per campaign branch:** do not open multiple PRs against the same campaign branch
+in parallel — they will conflict. Finish and merge one PR before starting the next batch
+on the same branch.
 
 ---
 

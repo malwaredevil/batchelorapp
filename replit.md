@@ -115,7 +115,7 @@ Names only — values must be re-entered manually in the new environment's Secre
 - `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `JINA_API_KEY`, `VOYAGE_API_KEY` (all required, not optional — see below)
 - `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_REMINDER_FROM_EMAIL`
 - `SENTRY_DSN`
-- `GITHUB_PAT`
+- `GH_PAT`
 - `AGENTPHONE_API_KEY`, `AGENTPHONE_WEBHOOK_SECRET`
 - `DEV_SCREENSHOT_TOKEN` (dev-only cookie-free login bypass — must be a plain env var, never a Replit secret, so the agent can read its literal value)
 - `AGENT_LOGIN_EMAIL`, `AGENT_LOGIN_PASSWORD` (dev-only test login fallback)

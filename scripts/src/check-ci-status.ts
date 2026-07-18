@@ -28,7 +28,7 @@
  *   pnpm --filter @workspace/scripts run check-ci-status
  *
  * Requires:
- *   GITHUB_PAT   — a GitHub personal access token with `repo` read access.
+ *   GH_PAT       — a GitHub personal access token with `repo` read access.
  *                  This is a dev-only secret used for repo automation; it is
  *                  never exposed to the deployed application.
  *   GITHUB_REPO  — optional, defaults to "malwaredevil/batchelorapp".
@@ -38,7 +38,7 @@ export {};
 
 const REPO = process.env["GITHUB_REPO"] || "malwaredevil/batchelorapp";
 const BRANCH = process.env["GITHUB_BRANCH"] || "main";
-const PAT = process.env["GITHUB_PAT"];
+const PAT = process.env["GH_PAT"];
 
 interface GitHubCommit {
   sha: string;
@@ -100,9 +100,9 @@ async function main(): Promise<void> {
 
   if (!PAT) {
     warn(
-      "GITHUB_PAT is not set — cannot verify GitHub CI status for the latest " +
+      "GH_PAT is not set — cannot verify GitHub CI status for the latest " +
         "commit on main. Publishing now means CI has NOT been confirmed clean " +
-        "for this commit. Set GITHUB_PAT or verify CI manually on GitHub before publishing.",
+        "for this commit. Set GH_PAT or verify CI manually on GitHub before publishing.",
     );
     process.exitCode = 1;
     return;

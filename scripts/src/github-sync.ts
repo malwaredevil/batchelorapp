@@ -20,12 +20,12 @@ import https from "https";
 import path from "path";
 import crypto from "crypto";
 
-const TOKEN = process.env.GITHUB_PAT;
+const TOKEN = process.env.GH_PAT;
 const REPO = "malwaredevil/batchelorapp";
 const BRANCH = "main";
 
 if (!TOKEN) {
-  console.error("GITHUB_PAT env var not set.");
+  console.error("GH_PAT env var not set.");
   process.exit(1);
 }
 

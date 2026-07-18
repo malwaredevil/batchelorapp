@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth";
 import { requireOwner } from "../middleware/owner";
+import { adminLimiter } from "../middleware/rateLimit";
 import {
   cancelJob,
   getJob,
@@ -12,7 +13,7 @@ import {
 import { JOB_REGISTRY } from "../lib/jobs/registry";
 
 const router = Router();
-router.use(requireAuth, requireOwner);
+router.use(adminLimiter, requireAuth, requireOwner);
 
 const jobQuerySchema = z.object({
   type: z.string().optional(),

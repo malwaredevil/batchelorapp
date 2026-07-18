@@ -1,6 +1,5 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
-import pLimit from "p-limit";
 import {
   and,
   asc,
@@ -71,10 +70,6 @@ import {
 } from "../../lib/visual-embed";
 import { serializeItem, serializeItems } from "../../lib/pottery/serialize";
 import { logger } from "../../lib/logger";
-import {
-  buildPotterySearchDocument,
-  semanticCollectionSearch,
-} from "../../lib/collection-search";
 
 // All columns except the three embedding vectors — the 1536-dim text embedding,
 // the 1024-dim whole-piece visual embedding, and the 1024-dim zone embedding are
@@ -136,144 +131,60 @@ router.get("/items", async (req, res) => {
   }
   const { q, categoryId, page, pageSize } = parsed.data;
 
-  async function getCategoryItemIds(): Promise<number[] | undefined> {
-    if (categoryId === undefined) return undefined;
+  // Build WHERE conditions for server-side filtering.
+  const conditions: SQL<unknown>[] = [];
+  if (q && q.trim()) {
+    const term = `%${q.trim().toLowerCase()}%`;
+    conditions.push(
+      or(
+        ilike(potteryItems.name, term),
+        ilike(potteryItems.patternDescription, term),
+        ilike(potteryItems.style, term),
+        ilike(potteryItems.shape, term),
+        ilike(potteryItems.maker, term),
+      )!,
+    );
+  }
+
+  // Category filter: join to itemCategories to filter by categoryId.
+  if (categoryId !== undefined) {
     const catRows = await db
       .select({ itemId: itemCategories.itemId })
       .from(itemCategories)
       .where(eq(itemCategories.categoryId, categoryId));
-    return catRows.map((r) => r.itemId);
-  }
-
-  async function runKeywordSearch(searchMode: "keyword" = "keyword") {
-    // Build WHERE conditions for server-side filtering.
-    const conditions: SQL<unknown>[] = [];
-    if (q && q.trim()) {
-      const term = `%${q.trim().toLowerCase()}%`;
-      conditions.push(
-        or(
-          ilike(potteryItems.name, term),
-          ilike(potteryItems.patternDescription, term),
-          ilike(potteryItems.style, term),
-          ilike(potteryItems.shape, term),
-          ilike(potteryItems.maker, term),
-        )!,
-      );
-    }
-
-    const itemIdsForCategory = await getCategoryItemIds();
-    if (itemIdsForCategory?.length === 0) {
+    const itemIdsForCategory = catRows.map((r) => r.itemId);
+    if (itemIdsForCategory.length === 0) {
       // No items in this category — short-circuit.
       res.json(
-        ListPotteryResponse.parse({
-          items: [],
-          total: 0,
-          page,
-          pageSize,
-          searchMode,
-        }),
+        ListPotteryResponse.parse({ items: [], total: 0, page, pageSize }),
       );
       return;
     }
-    if (itemIdsForCategory) {
-      conditions.push(inArray(potteryItems.id, itemIdsForCategory));
-    }
-
-    const where =
-      conditions.length > 0
-        ? and(...(conditions as [SQL<unknown>, ...SQL<unknown>[]]))
-        : undefined;
-
-    // Total count for pagination metadata.
-    const [{ value: total }] = await db
-      .select({ value: count() })
-      .from(potteryItems)
-      .where(where);
-
-    const offset = (page - 1) * pageSize;
-    const rows = await db
-      .select(itemColumns)
-      .from(potteryItems)
-      .where(where)
-      .orderBy(desc(potteryItems.createdAt))
-      .limit(pageSize)
-      .offset(offset);
-
-    const items = await serializeItems(rows);
-    res.json(
-      ListPotteryResponse.parse({ items, total, page, pageSize, searchMode }),
-    );
+    conditions.push(inArray(potteryItems.id, itemIdsForCategory));
   }
 
-  if (q && q.trim()) {
-    const itemIdsForCategory = await getCategoryItemIds();
-    if (itemIdsForCategory?.length === 0) {
-      res.json(
-        ListPotteryResponse.parse({
-          items: [],
-          total: 0,
-          page,
-          pageSize,
-          searchMode: "semantic",
-        }),
-      );
-      return;
-    }
+  const where =
+    conditions.length > 0
+      ? and(...(conditions as [SQL<unknown>, ...SQL<unknown>[]]))
+      : undefined;
 
-    const rankedIds = await semanticCollectionSearch({
-      query: q.trim(),
-      table: potteryItems,
-      textEmbeddingCol: "embedding",
-      visualEmbeddingCol: "visual_embedding",
-      limit: pageSize,
-      extraWhere: itemIdsForCategory
-        ? inArray(potteryItems.id, itemIdsForCategory)
-        : undefined,
-      db,
-      fetchDocuments: async (ids) => {
-        const rows = await db
-          .select({
-            id: potteryItems.id,
-            name: potteryItems.name,
-            style: potteryItems.style,
-            shape: potteryItems.shape,
-            maker: potteryItems.maker,
-            patternDescription: potteryItems.patternDescription,
-            motifs: potteryItems.motifs,
-            dominantColors: potteryItems.dominantColors,
-            aiDescription: potteryItems.aiDescription,
-          })
-          .from(potteryItems)
-          .where(inArray(potteryItems.id, ids));
-        return rows.map((row) => ({
-          id: row.id,
-          text: buildPotterySearchDocument(row),
-        }));
-      },
-    });
+  // Total count for pagination metadata.
+  const [{ value: total }] = await db
+    .select({ value: count() })
+    .from(potteryItems)
+    .where(where);
 
-    if (rankedIds.length > 0) {
-      const rows = await db
-        .select(itemColumns)
-        .from(potteryItems)
-        .where(inArray(potteryItems.id, rankedIds));
-      const idOrder = new Map(rankedIds.map((id, index) => [id, index]));
-      rows.sort((a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0));
-      const items = await serializeItems(rows);
-      res.json(
-        ListPotteryResponse.parse({
-          items,
-          total: items.length,
-          page: 1,
-          pageSize: items.length,
-          searchMode: "semantic",
-        }),
-      );
-      return;
-    }
-  }
+  const offset = (page - 1) * pageSize;
+  const rows = await db
+    .select(itemColumns)
+    .from(potteryItems)
+    .where(where)
+    .orderBy(desc(potteryItems.createdAt))
+    .limit(pageSize)
+    .offset(offset);
 
-  await runKeywordSearch();
+  const items = await serializeItems(rows);
+  res.json(ListPotteryResponse.parse({ items, total, page, pageSize }));
 });
 
 // Stragglers: pieces that need re-analysis — either missing a similarity
@@ -1070,57 +981,31 @@ router.post("/items/:id/reanalyze", aiLimiter, async (req, res) => {
 // ---------------------------------------------------------------------------
 
 export const MAX_BULK_REANALYZE = 20;
-const BULK_REANALYZE_CONCURRENCY = 3;
-
-interface BulkReanalyzeResult {
-  total: number;
-  succeeded: number[];
-  failed: number[];
-  errors: Array<{ id: number; error: string }>;
-}
 
 export async function bulkReanalyzePotteryItems(
   ids: number[],
-): Promise<BulkReanalyzeResult> {
+): Promise<{ succeeded: number[]; failed: number[] }> {
   const capped = [...new Set(ids)].slice(0, MAX_BULK_REANALYZE);
-  const limit = pLimit(BULK_REANALYZE_CONCURRENCY);
+  const succeeded: number[] = [];
+  const failed: number[] = [];
 
-  const results = await Promise.all(
-    capped.map((id) =>
-      limit(async () => {
-        try {
-          await runItemAnalysis(id);
-          return { id, status: "ok" as const };
-        } catch (err) {
-          logger.error({ itemId: id, err }, "bulk-reanalyze: item failed");
-          return {
-            id,
-            status: "error" as const,
-            error: err instanceof Error ? err.message : String(err),
-          };
-        }
-      }),
-    ),
-  );
+  for (let i = 0; i < capped.length; i++) {
+    const id = capped[i]!;
+    try {
+      await runItemAnalysis(id);
+      succeeded.push(id);
+    } catch (err) {
+      logger.error({ itemId: id, err }, "bulk-reanalyze: item failed");
+      failed.push(id);
+    }
+    // Brief pause between items so we don't burst-fire Jina/OpenRouter
+    // requests fast enough to trigger their rate limiters.
+    if (i < capped.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+  }
 
-  const succeeded = results
-    .filter((result) => result.status === "ok")
-    .map((result) => result.id);
-  const errors = results
-    .filter(
-      (
-        result,
-      ): result is Extract<(typeof results)[number], { status: "error" }> =>
-        result.status === "error",
-    )
-    .map((result) => ({ id: result.id, error: result.error }));
-
-  return {
-    total: capped.length,
-    succeeded,
-    failed: errors.map((error) => error.id),
-    errors,
-  };
+  return { succeeded, failed };
 }
 
 router.post("/items/bulk-reanalyze", bulkAiLimiter, async (req, res) => {

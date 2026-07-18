@@ -4,9 +4,9 @@ set -e
 pnpm install --frozen-lockfile
 
 # Safe, idempotent schema bootstrap — CREATE TABLE IF NOT EXISTS only.
-# Never run drizzle-kit push --force: the Supabase database is shared by
-# both pottery and quilting apps, and a force push would silently drop
-# tables belonging to the other app.
+# The banned force-push command is never used here: the Supabase database is
+# shared by both pottery and quilting apps, and a force push would silently
+# drop tables belonging to the other app.
 pnpm --filter @workspace/db run bootstrap
 
 # Snapshot Supabase (all pottery + quilting tables) → Replit built-in PostgreSQL.

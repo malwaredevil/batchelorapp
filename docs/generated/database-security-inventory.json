@@ -1,0 +1,52 @@
+{
+  "generatedBy": "scripts/src/security/database-inventory.ts",
+  "mode": "offline",
+  "exposedSchemas": ["public"],
+  "directClientAllowlist": {
+    "tables": [],
+    "functions": []
+  },
+  "securityDefinerFunctions": [
+    {
+      "schema": "public",
+      "name": "auto_enable_rls",
+      "requiredPosture": "not executable by PUBLIC, anon, or authenticated",
+      "migration": "lib/db/migrations/0002_security_hardening.sql"
+    }
+  ],
+  "sensitiveTablesNeverExposed": [
+    "app_users",
+    "password_reset_tokens",
+    "phone_verification_codes",
+    "pottery_sessions",
+    "quilting_sessions",
+    "app_gmail_tokens",
+    "gmail_oauth_tokens",
+    "google_calendar_tokens",
+    "elaine_conversations",
+    "elaine_messages",
+    "elaine_memories",
+    "travels_trip_documents",
+    "travels_doc_chunks",
+    "messenger_attachments",
+    "messenger_push_subscriptions",
+    "app_jobs",
+    "app_job_attempts",
+    "external_operation_events"
+  ],
+  "frontendSupabaseAnonKeyUses": [],
+  "serverSupabaseServiceRoleUses": [
+    "artifacts/api-server/src/lib/storage-core.ts",
+    "artifacts/api-server/src/lib/travels/storage.ts",
+    "artifacts/api-server/src/lib/pottery/storage.ts",
+    "artifacts/api-server/src/lib/ornaments/storage.ts",
+    "artifacts/api-server/src/lib/messenger/storage.ts"
+  ],
+  "pgNetUsage": [
+    "artifacts/api-server/src/lib/startup-migrate.ts keepalive cron setup"
+  ],
+  "vectorExtensionDecision": {
+    "status": "retained in public pending branch-database compatibility test",
+    "compensation": "direct table/function grants remain deny-by-default outside the allowlist"
+  }
+}

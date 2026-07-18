@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { useEffect } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
@@ -10,7 +10,6 @@ import {
   redirectToMainLogin,
 } from "@workspace/web-core/auth";
 import { ModuleShell } from "@/components/module-shell";
-import { ModuleLoadingSpinner } from "@/components/ModuleLoadingSpinner";
 import { BackgroundTaskProvider } from "@/lib/background-tasks";
 import {
   ThemeProvider,
@@ -23,98 +22,74 @@ import "@/quilting/features";
 import "@/ornaments/features";
 import "@/travels/features";
 import "@/office/features";
+import MessengerPage from "@/office/pages/messenger";
 import { MessengerNotification } from "@workspace/messenger-ui";
+import NotFound from "@/pages/not-found";
+import PotteryCollection from "@/pottery/pages/collection";
+import PotteryAdd from "@/pottery/pages/add";
+import PotteryCompare from "@/pottery/pages/compare";
+import PotteryScan from "@/pottery/pages/scan";
+import PotteryStats from "@/pottery/pages/stats";
+import PotteryDetail from "@/pottery/pages/detail";
+import PotteryCategories from "@/pottery/pages/categories";
+import PotteryMaintenance from "@/pottery/pages/maintenance";
 import { BulkAddProvider } from "@/quilting/contexts/bulk-add-context";
+import Fabrics from "@/quilting/pages/fabrics/index";
+import AddFabric from "@/quilting/pages/fabrics/add";
+import BulkAddFabric from "@/quilting/pages/fabrics/bulk-add";
+import FabricDetail from "@/quilting/pages/fabrics/detail";
+import Patterns from "@/quilting/pages/patterns/index";
+import AddPattern from "@/quilting/pages/patterns/add";
+import PatternDetail from "@/quilting/pages/patterns/detail";
+import Quilts from "@/quilting/pages/quilts/index";
+import AddQuilt from "@/quilting/pages/quilts/add";
+import QuiltDetail from "@/quilting/pages/quilts/detail";
+import QuiltingCompare from "@/quilting/pages/compare";
+import Blocks from "@/quilting/pages/blocks/index";
+import BlockDesigner from "@/quilting/pages/blocks/designer";
+import CutPatternPage from "@/quilting/pages/blocks/cut-pattern";
+import BlockDetail from "@/quilting/pages/blocks/detail";
+import BlockLibrary from "@/quilting/pages/library/blocks";
+import Layouts from "@/quilting/pages/layouts/index";
+import LayoutComposer from "@/quilting/pages/layouts/composer";
+import LayoutDetail from "@/quilting/pages/layouts/detail";
+import WholeQuiltList from "@/quilting/pages/blocks/whole-quilt-list";
+import WholeQuiltDesigner from "@/quilting/pages/blocks/whole-quilt";
+import Shopping from "@/quilting/pages/shopping/index";
+import YardageCalculator from "@/quilting/pages/tools/yardage";
+import QuiltingCategories from "@/quilting/pages/categories";
+import QuiltingMaintenance from "@/quilting/pages/maintenance";
+import FabricCompareDevPage from "@/quilting/pages/dev/fabric-compare";
+import FabricDensityDevPage from "@/quilting/pages/dev/fabric-density";
+import FabricSizeDevPage from "@/quilting/pages/dev/fabric-size";
+import FabricPipelineDevPage from "@/quilting/pages/dev/fabric-pipeline";
+import FabricPhotoPreviewDevPage from "@/quilting/pages/dev/fabric-photo-preview";
+import OrnamentsCollection from "@/ornaments/pages/collection";
+import OrnamentsAdd from "@/ornaments/pages/add";
+import OrnamentsScan from "@/ornaments/pages/scan";
+import OrnamentsStats from "@/ornaments/pages/stats";
+import OrnamentsDetail from "@/ornaments/pages/detail";
+import OrnamentsCategories from "@/ornaments/pages/categories";
+import OrnamentsMaintenance from "@/ornaments/pages/maintenance";
+import OrnamentsHallmarkEvents from "@/ornaments/pages/hallmark-events";
 import { Layout as TravelsLayout } from "@/travels/components/Layout";
+import TravelsDashboard from "@/travels/pages/Dashboard";
+import TravelsTrips from "@/travels/pages/Trips";
+import TravelsTripDetail from "@/travels/pages/TripDetail";
+import TravelsWorldMap from "@/travels/pages/WorldMap";
+import TravelsExplore from "@/travels/pages/Explore";
+import TravelsWishlist from "@/travels/pages/Wishlist";
+import TravelsDestinations from "@/travels/pages/Destinations";
+import TravelsTravelCalendar from "@/travels/pages/TravelCalendar";
+import TravelsGmailReview from "@/travels/pages/GmailReview";
+import TravelsDocuments from "@/travels/pages/Documents";
+import TravelsPrivacyPolicy from "@/travels/pages/PrivacyPolicy";
+import TravelsTripShare from "@/travels/pages/TripShare";
 import { OfficeLayout } from "@/office/components/OfficeLayout";
-
-const MessengerPage = lazy(() => import("@/office/pages/messenger"));
-const NotFound = lazy(() => import("@/pages/not-found"));
-const PotteryCollection = lazy(() => import("@/pottery/pages/collection"));
-const PotteryAdd = lazy(() => import("@/pottery/pages/add"));
-const PotteryCompare = lazy(() => import("@/pottery/pages/compare"));
-const PotteryScan = lazy(() => import("@/pottery/pages/scan"));
-const PotteryStats = lazy(() => import("@/pottery/pages/stats"));
-const PotteryDetail = lazy(() => import("@/pottery/pages/detail"));
-const PotteryCategories = lazy(() => import("@/pottery/pages/categories"));
-const PotteryMaintenance = lazy(() => import("@/pottery/pages/maintenance"));
-const Fabrics = lazy(() => import("@/quilting/pages/fabrics/index"));
-const AddFabric = lazy(() => import("@/quilting/pages/fabrics/add"));
-const BulkAddFabric = lazy(() => import("@/quilting/pages/fabrics/bulk-add"));
-const FabricDetail = lazy(() => import("@/quilting/pages/fabrics/detail"));
-const Patterns = lazy(() => import("@/quilting/pages/patterns/index"));
-const AddPattern = lazy(() => import("@/quilting/pages/patterns/add"));
-const PatternDetail = lazy(() => import("@/quilting/pages/patterns/detail"));
-const Quilts = lazy(() => import("@/quilting/pages/quilts/index"));
-const AddQuilt = lazy(() => import("@/quilting/pages/quilts/add"));
-const QuiltDetail = lazy(() => import("@/quilting/pages/quilts/detail"));
-const QuiltingCompare = lazy(() => import("@/quilting/pages/compare"));
-const Blocks = lazy(() => import("@/quilting/pages/blocks/index"));
-const BlockDesigner = lazy(() => import("@/quilting/pages/blocks/designer"));
-const CutPatternPage = lazy(
-  () => import("@/quilting/pages/blocks/cut-pattern"),
-);
-const BlockDetail = lazy(() => import("@/quilting/pages/blocks/detail"));
-const BlockLibrary = lazy(() => import("@/quilting/pages/library/blocks"));
-const Layouts = lazy(() => import("@/quilting/pages/layouts/index"));
-const LayoutComposer = lazy(() => import("@/quilting/pages/layouts/composer"));
-const LayoutDetail = lazy(() => import("@/quilting/pages/layouts/detail"));
-const WholeQuiltList = lazy(
-  () => import("@/quilting/pages/blocks/whole-quilt-list"),
-);
-const WholeQuiltDesigner = lazy(
-  () => import("@/quilting/pages/blocks/whole-quilt"),
-);
-const Shopping = lazy(() => import("@/quilting/pages/shopping/index"));
-const YardageCalculator = lazy(() => import("@/quilting/pages/tools/yardage"));
-const QuiltingCategories = lazy(() => import("@/quilting/pages/categories"));
-const QuiltingMaintenance = lazy(() => import("@/quilting/pages/maintenance"));
-const FabricCompareDevPage = lazy(
-  () => import("@/quilting/pages/dev/fabric-compare"),
-);
-const FabricDensityDevPage = lazy(
-  () => import("@/quilting/pages/dev/fabric-density"),
-);
-const FabricSizeDevPage = lazy(
-  () => import("@/quilting/pages/dev/fabric-size"),
-);
-const FabricPipelineDevPage = lazy(
-  () => import("@/quilting/pages/dev/fabric-pipeline"),
-);
-const FabricPhotoPreviewDevPage = lazy(
-  () => import("@/quilting/pages/dev/fabric-photo-preview"),
-);
-const OrnamentsCollection = lazy(() => import("@/ornaments/pages/collection"));
-const OrnamentsAdd = lazy(() => import("@/ornaments/pages/add"));
-const OrnamentsScan = lazy(() => import("@/ornaments/pages/scan"));
-const OrnamentsStats = lazy(() => import("@/ornaments/pages/stats"));
-const OrnamentsDetail = lazy(() => import("@/ornaments/pages/detail"));
-const OrnamentsCategories = lazy(() => import("@/ornaments/pages/categories"));
-const OrnamentsMaintenance = lazy(
-  () => import("@/ornaments/pages/maintenance"),
-);
-const OrnamentsHallmarkEvents = lazy(
-  () => import("@/ornaments/pages/hallmark-events"),
-);
-const TravelsDashboard = lazy(() => import("@/travels/pages/Dashboard"));
-const TravelsTrips = lazy(() => import("@/travels/pages/Trips"));
-const TravelsTripDetail = lazy(() => import("@/travels/pages/TripDetail"));
-const TravelsWorldMap = lazy(() => import("@/travels/pages/WorldMap"));
-const TravelsExplore = lazy(() => import("@/travels/pages/Explore"));
-const TravelsWishlist = lazy(() => import("@/travels/pages/Wishlist"));
-const TravelsDestinations = lazy(() => import("@/travels/pages/Destinations"));
-const TravelsTravelCalendar = lazy(
-  () => import("@/travels/pages/TravelCalendar"),
-);
-const TravelsGmailReview = lazy(() => import("@/travels/pages/GmailReview"));
-const TravelsDocuments = lazy(() => import("@/travels/pages/Documents"));
-const TravelsPrivacyPolicy = lazy(
-  () => import("@/travels/pages/PrivacyPolicy"),
-);
-const TravelsTripShare = lazy(() => import("@/travels/pages/TripShare"));
-const OfficeGmail = lazy(() => import("@/office/pages/gmail"));
-const OfficeCalendar = lazy(() => import("@/office/pages/calendar"));
-const OfficeNotes = lazy(() => import("@/office/pages/notes"));
+import OfficeHome from "@/office/pages/home";
+import OfficeGmail from "@/office/pages/gmail";
+import OfficeCalendar from "@/office/pages/calendar";
+import OfficeNotes from "@/office/pages/notes";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -154,213 +129,196 @@ function Routes() {
       <BackgroundTaskProvider>
         <ModuleShell>
           <BulkAddProvider>
-            <Suspense fallback={<ModuleLoadingSpinner />}>
-              <Switch>
-                <Route path="/" component={Home} />
-                <Route path="/pottery" component={PotteryCollection} />
-                <Route path="/pottery/add" component={PotteryAdd} />
-                <Route path="/pottery/compare" component={PotteryCompare} />
-                <Route path="/pottery/scan" component={PotteryScan} />
-                <Route path="/pottery/stats" component={PotteryStats} />
-                <Route path="/pottery/piece/:id" component={PotteryDetail} />
-                <Route
-                  path="/pottery/categories"
-                  component={PotteryCategories}
-                />
-                <Route
-                  path="/pottery/maintenance"
-                  component={PotteryMaintenance}
-                />
-                <Route path="/quilting" component={Fabrics} />
-                <Route path="/quilting/fabrics" component={Fabrics} />
-                <Route path="/quilting/fabrics/add" component={AddFabric} />
-                <Route
-                  path="/quilting/fabrics/bulk-add"
-                  component={BulkAddFabric}
-                />
-                <Route path="/quilting/fabrics/:id" component={FabricDetail} />
-                <Route path="/quilting/patterns" component={Patterns} />
-                <Route path="/quilting/patterns/add" component={AddPattern} />
-                <Route
-                  path="/quilting/patterns/:id"
-                  component={PatternDetail}
-                />
-                <Route path="/quilting/quilts" component={Quilts} />
-                <Route path="/quilting/quilts/add" component={AddQuilt} />
-                <Route path="/quilting/quilts/:id" component={QuiltDetail} />
-                <Route path="/quilting/compare" component={QuiltingCompare} />
-                <Route path="/quilting/blocks" component={Blocks} />
-                <Route path="/quilting/blocks/new" component={BlockDesigner} />
-                <Route
-                  path="/quilting/blocks/:id/cut-pattern"
-                  component={CutPatternPage}
-                />
-                <Route
-                  path="/quilting/blocks/:id/edit"
-                  component={BlockDesigner}
-                />
-                <Route path="/quilting/blocks/:id" component={BlockDetail} />
-                <Route
-                  path="/quilting/library/blocks"
-                  component={BlockLibrary}
-                />
-                <Route
-                  path="/quilting/library/blocks/new"
-                  component={BlockDesigner}
-                />
-                <Route
-                  path="/quilting/library/blocks/:id/edit"
-                  component={BlockDesigner}
-                />
-                <Route path="/quilting/layouts" component={Layouts} />
-                <Route
-                  path="/quilting/layouts/new"
-                  component={LayoutComposer}
-                />
-                <Route
-                  path="/quilting/layouts/:id/edit"
-                  component={LayoutComposer}
-                />
-                <Route path="/quilting/layouts/:id" component={LayoutDetail} />
-                <Route
-                  path="/quilting/whole-quilt"
-                  component={WholeQuiltList}
-                />
-                <Route
-                  path="/quilting/whole-quilt/designer"
-                  component={WholeQuiltDesigner}
-                />
-                <Route path="/quilting/shopping" component={Shopping} />
-                <Route
-                  path="/quilting/tools/yardage"
-                  component={YardageCalculator}
-                />
-                <Route
-                  path="/quilting/categories"
-                  component={QuiltingCategories}
-                />
-                <Route
-                  path="/quilting/maintenance"
-                  component={QuiltingMaintenance}
-                />
-                {import.meta.env.DEV && (
-                  <>
-                    <Route
-                      path="/quilting/dev/fabric-compare"
-                      component={FabricCompareDevPage}
-                    />
-                    <Route
-                      path="/quilting/dev/fabric-density"
-                      component={FabricDensityDevPage}
-                    />
-                    <Route
-                      path="/quilting/dev/fabric-size"
-                      component={FabricSizeDevPage}
-                    />
-                    <Route
-                      path="/quilting/dev/fabric-pipeline"
-                      component={FabricPipelineDevPage}
-                    />
-                    <Route
-                      path="/quilting/dev/fabric-photo-preview"
-                      component={FabricPhotoPreviewDevPage}
-                    />
-                  </>
+            <Switch>
+              <Route path="/" component={Home} />
+              <Route path="/pottery" component={PotteryCollection} />
+              <Route path="/pottery/add" component={PotteryAdd} />
+              <Route path="/pottery/compare" component={PotteryCompare} />
+              <Route path="/pottery/scan" component={PotteryScan} />
+              <Route path="/pottery/stats" component={PotteryStats} />
+              <Route path="/pottery/piece/:id" component={PotteryDetail} />
+              <Route path="/pottery/categories" component={PotteryCategories} />
+              <Route
+                path="/pottery/maintenance"
+                component={PotteryMaintenance}
+              />
+              <Route path="/quilting" component={Fabrics} />
+              <Route path="/quilting/fabrics" component={Fabrics} />
+              <Route path="/quilting/fabrics/add" component={AddFabric} />
+              <Route
+                path="/quilting/fabrics/bulk-add"
+                component={BulkAddFabric}
+              />
+              <Route path="/quilting/fabrics/:id" component={FabricDetail} />
+              <Route path="/quilting/patterns" component={Patterns} />
+              <Route path="/quilting/patterns/add" component={AddPattern} />
+              <Route path="/quilting/patterns/:id" component={PatternDetail} />
+              <Route path="/quilting/quilts" component={Quilts} />
+              <Route path="/quilting/quilts/add" component={AddQuilt} />
+              <Route path="/quilting/quilts/:id" component={QuiltDetail} />
+              <Route path="/quilting/compare" component={QuiltingCompare} />
+              <Route path="/quilting/blocks" component={Blocks} />
+              <Route path="/quilting/blocks/new" component={BlockDesigner} />
+              <Route
+                path="/quilting/blocks/:id/cut-pattern"
+                component={CutPatternPage}
+              />
+              <Route
+                path="/quilting/blocks/:id/edit"
+                component={BlockDesigner}
+              />
+              <Route path="/quilting/blocks/:id" component={BlockDetail} />
+              <Route path="/quilting/library/blocks" component={BlockLibrary} />
+              <Route
+                path="/quilting/library/blocks/new"
+                component={BlockDesigner}
+              />
+              <Route
+                path="/quilting/library/blocks/:id/edit"
+                component={BlockDesigner}
+              />
+              <Route path="/quilting/layouts" component={Layouts} />
+              <Route path="/quilting/layouts/new" component={LayoutComposer} />
+              <Route
+                path="/quilting/layouts/:id/edit"
+                component={LayoutComposer}
+              />
+              <Route path="/quilting/layouts/:id" component={LayoutDetail} />
+              <Route path="/quilting/whole-quilt" component={WholeQuiltList} />
+              <Route
+                path="/quilting/whole-quilt/designer"
+                component={WholeQuiltDesigner}
+              />
+              <Route path="/quilting/shopping" component={Shopping} />
+              <Route
+                path="/quilting/tools/yardage"
+                component={YardageCalculator}
+              />
+              <Route
+                path="/quilting/categories"
+                component={QuiltingCategories}
+              />
+              <Route
+                path="/quilting/maintenance"
+                component={QuiltingMaintenance}
+              />
+              {import.meta.env.DEV && (
+                <>
+                  <Route
+                    path="/quilting/dev/fabric-compare"
+                    component={FabricCompareDevPage}
+                  />
+                  <Route
+                    path="/quilting/dev/fabric-density"
+                    component={FabricDensityDevPage}
+                  />
+                  <Route
+                    path="/quilting/dev/fabric-size"
+                    component={FabricSizeDevPage}
+                  />
+                  <Route
+                    path="/quilting/dev/fabric-pipeline"
+                    component={FabricPipelineDevPage}
+                  />
+                  <Route
+                    path="/quilting/dev/fabric-photo-preview"
+                    component={FabricPhotoPreviewDevPage}
+                  />
+                </>
+              )}
+              <Route path="/travels">
+                <TravelsLayout>
+                  <TravelsDashboard />
+                </TravelsLayout>
+              </Route>
+              <Route path="/travels/trips">
+                <TravelsLayout>
+                  <TravelsTrips />
+                </TravelsLayout>
+              </Route>
+              <Route path="/travels/trips/:id">
+                {(params) => (
+                  <TravelsLayout>
+                    <TravelsTripDetail id={Number(params.id)} />
+                  </TravelsLayout>
                 )}
-                <Route path="/travels">
-                  <TravelsLayout>
-                    <TravelsDashboard />
-                  </TravelsLayout>
-                </Route>
-                <Route path="/travels/trips">
-                  <TravelsLayout>
-                    <TravelsTrips />
-                  </TravelsLayout>
-                </Route>
-                <Route path="/travels/trips/:id">
-                  {(params) => (
-                    <TravelsLayout>
-                      <TravelsTripDetail id={Number(params.id)} />
-                    </TravelsLayout>
-                  )}
-                </Route>
-                <Route path="/travels/map">
-                  <TravelsLayout>
-                    <TravelsWorldMap />
-                  </TravelsLayout>
-                </Route>
-                <Route path="/travels/explore">
-                  <TravelsLayout>
-                    <TravelsExplore />
-                  </TravelsLayout>
-                </Route>
-                <Route path="/travels/wishlist">
-                  <TravelsLayout>
-                    <TravelsWishlist />
-                  </TravelsLayout>
-                </Route>
-                <Route path="/travels/destinations">
-                  <TravelsLayout>
-                    <TravelsDestinations />
-                  </TravelsLayout>
-                </Route>
-                <Route path="/travels/travel-calendar">
-                  <TravelsLayout>
-                    <TravelsTravelCalendar />
-                  </TravelsLayout>
-                </Route>
-                <Route path="/travels/gmail">
-                  <TravelsLayout>
-                    <TravelsGmailReview />
-                  </TravelsLayout>
-                </Route>
-                <Route path="/travels/documents">
-                  <TravelsLayout>
-                    <TravelsDocuments />
-                  </TravelsLayout>
-                </Route>
-                <Route path="/ornaments" component={OrnamentsCollection} />
-                <Route path="/ornaments/add" component={OrnamentsAdd} />
-                <Route path="/ornaments/scan" component={OrnamentsScan} />
-                <Route path="/ornaments/stats" component={OrnamentsStats} />
-                <Route
-                  path="/ornaments/categories"
-                  component={OrnamentsCategories}
-                />
-                <Route
-                  path="/ornaments/maintenance"
-                  component={OrnamentsMaintenance}
-                />
-                <Route
-                  path="/ornaments/hallmark-events"
-                  component={OrnamentsHallmarkEvents}
-                />
-                <Route
-                  path="/ornaments/ornament/:id"
-                  component={OrnamentsDetail}
-                />
-                <Route path="/office">
-                  <Redirect to="/office/gmail" />
-                </Route>
-                <Route path="/office/gmail">
-                  <OfficeLayout>
-                    <OfficeGmail />
-                  </OfficeLayout>
-                </Route>
-                <Route path="/office/calendar">
-                  <OfficeLayout>
-                    <OfficeCalendar />
-                  </OfficeLayout>
-                </Route>
-                <Route path="/office/notes">
-                  <OfficeLayout>
-                    <OfficeNotes />
-                  </OfficeLayout>
-                </Route>
-                <Route path="/office/messenger" component={MessengerPage} />
-                <Route component={NotFound} />
-              </Switch>
-            </Suspense>
+              </Route>
+              <Route path="/travels/map">
+                <TravelsLayout>
+                  <TravelsWorldMap />
+                </TravelsLayout>
+              </Route>
+              <Route path="/travels/explore">
+                <TravelsLayout>
+                  <TravelsExplore />
+                </TravelsLayout>
+              </Route>
+              <Route path="/travels/wishlist">
+                <TravelsLayout>
+                  <TravelsWishlist />
+                </TravelsLayout>
+              </Route>
+              <Route path="/travels/destinations">
+                <TravelsLayout>
+                  <TravelsDestinations />
+                </TravelsLayout>
+              </Route>
+              <Route path="/travels/travel-calendar">
+                <TravelsLayout>
+                  <TravelsTravelCalendar />
+                </TravelsLayout>
+              </Route>
+              <Route path="/travels/gmail">
+                <TravelsLayout>
+                  <TravelsGmailReview />
+                </TravelsLayout>
+              </Route>
+              <Route path="/travels/documents">
+                <TravelsLayout>
+                  <TravelsDocuments />
+                </TravelsLayout>
+              </Route>
+              <Route path="/ornaments" component={OrnamentsCollection} />
+              <Route path="/ornaments/add" component={OrnamentsAdd} />
+              <Route path="/ornaments/scan" component={OrnamentsScan} />
+              <Route path="/ornaments/stats" component={OrnamentsStats} />
+              <Route
+                path="/ornaments/categories"
+                component={OrnamentsCategories}
+              />
+              <Route
+                path="/ornaments/maintenance"
+                component={OrnamentsMaintenance}
+              />
+              <Route
+                path="/ornaments/hallmark-events"
+                component={OrnamentsHallmarkEvents}
+              />
+              <Route
+                path="/ornaments/ornament/:id"
+                component={OrnamentsDetail}
+              />
+              <Route path="/office">
+                <Redirect to="/office/gmail" />
+              </Route>
+              <Route path="/office/gmail">
+                <OfficeLayout>
+                  <OfficeGmail />
+                </OfficeLayout>
+              </Route>
+              <Route path="/office/calendar">
+                <OfficeLayout>
+                  <OfficeCalendar />
+                </OfficeLayout>
+              </Route>
+              <Route path="/office/notes">
+                <OfficeLayout>
+                  <OfficeNotes />
+                </OfficeLayout>
+              </Route>
+              <Route path="/office/messenger" component={MessengerPage} />
+              <Route component={NotFound} />
+            </Switch>
           </BulkAddProvider>
         </ModuleShell>
       </BackgroundTaskProvider>
@@ -371,19 +329,17 @@ function Routes() {
 
 function AppRoutes() {
   return (
-    <Suspense fallback={<ModuleLoadingSpinner />}>
-      <Switch>
-        <Route path="/travels/trips/:id/share" component={TravelsTripShare} />
-        <Route path="/travels/privacy" component={TravelsPrivacyPolicy} />
-        <Route>
-          <AuthProvider>
-            <ElainePageContextProvider>
-              <Routes />
-            </ElainePageContextProvider>
-          </AuthProvider>
-        </Route>
-      </Switch>
-    </Suspense>
+    <Switch>
+      <Route path="/travels/trips/:id/share" component={TravelsTripShare} />
+      <Route path="/travels/privacy" component={TravelsPrivacyPolicy} />
+      <Route>
+        <AuthProvider>
+          <ElainePageContextProvider>
+            <Routes />
+          </ElainePageContextProvider>
+        </AuthProvider>
+      </Route>
+    </Switch>
   );
 }
 

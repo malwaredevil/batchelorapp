@@ -4271,6 +4271,240 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MessengerLinkPreview"
+  /jobs:
+    get:
+      operationId: listJobs
+      tags:
+        - jobs
+      summary: List durable jobs (owner only)
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: parentJobId
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            maximum: 250
+      responses:
+        "200":
+          description: Job list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobsJobListResponse"
+  /jobs/health:
+    get:
+      operationId: getJobsHealth
+      tags:
+        - jobs
+      summary: Get durable queue health (owner only)
+      responses:
+        "200":
+          description: Queue health
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobsJobHealth"
+  /jobs/{id}:
+    get:
+      operationId: getJob
+      tags:
+        - jobs
+      summary: Get one durable job with attempts (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Job details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobsJobResponse"
+        "404":
+          description: Job not found
+  /jobs/{id}/cancel:
+    post:
+      operationId: cancelJob
+      tags:
+        - jobs
+      summary: Cancel a nonterminal job (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Cancellation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobsJobMutationResponse"
+  /jobs/{id}/retry:
+    post:
+      operationId: retryJob
+      tags:
+        - jobs
+      summary: Retry a failed or dead-letter job (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Retry result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobsJobRetryResponse"
+  /operations/summary:
+    get:
+      operationId: getOperationsSummary
+      tags:
+        - operations
+      summary: Summarize provider spend, latency, and reliability (owner only)
+      responses:
+        "200":
+          description: Provider summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsOperationsSummaryResponse"
+  /operations/events:
+    get:
+      operationId: listOperationEvents
+      tags:
+        - operations
+      summary: List sanitized external operation events (owner only)
+      parameters:
+        - name: provider
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            maximum: 250
+      responses:
+        "200":
+          description: Operation events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsOperationEventsResponse"
+  /operations/providers:
+    get:
+      operationId: listOperationProviders
+      tags:
+        - operations
+      summary: List observed providers (owner only)
+      responses:
+        "200":
+          description: Provider list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsOperationProvidersResponse"
+  /operations/budgets:
+    get:
+      operationId: listOperationBudgets
+      tags:
+        - operations
+      summary: List provider budget policies (owner only)
+      responses:
+        "200":
+          description: Budgets
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsOperationBudgetsResponse"
+  /operations/budgets/{id}:
+    put:
+      operationId: updateOperationBudget
+      tags:
+        - operations
+      summary: Update a budget policy (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OperationsUpdateBudgetBody"
+      responses:
+        "200":
+          description: Updated budget
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsOperationBudgetResponse"
+  /operations/budgets/{id}/override:
+    post:
+      operationId: overrideOperationBudget
+      tags:
+        - operations
+      summary: Temporarily override a budget policy (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - expiresAt
+              properties:
+                expiresAt:
+                  type: string
+                  format: date-time
+      responses:
+        "200":
+          description: Override result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsOperationBudgetResponse"
+  /operations/export:
+    get:
+      operationId: exportOperationEvents
+      tags:
+        - operations
+      summary: Export sanitized external operation events as CSV (owner only)
+      responses:
+        "200":
+          description: CSV export
+          content:
+            text/csv:
+              schema:
+                type: string
 components:
   schemas:
     HealthStatus:
@@ -4289,6 +4523,24 @@ components:
             - error
           description: |
             Outcome of the last app-config bootstrap run. "pending" = not yet run; "success" = all steps completed; "warn" = DB unavailable at startup (non-fatal, using hardcoded fallbacks); "error" = unexpected JS error, stale/missing config rows may persist.
+        migrations:
+          type: object
+          nullable: true
+          required:
+            - expectedLatestVersion
+            - appliedLatestVersion
+            - pendingCount
+            - checksumErrorCount
+          properties:
+            expectedLatestVersion:
+              type: integer
+            appliedLatestVersion:
+              type: integer
+              nullable: true
+            pendingCount:
+              type: integer
+            checksumErrorCount:
+              type: integer
     LoginInput:
       type: object
       required:
@@ -7903,6 +8155,149 @@ components:
         - endpoint
       properties:
         endpoint:
+          type: string
+    JobsJob:
+      type: object
+      additionalProperties: true
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+        queue:
+          type: string
+        status:
+          type: string
+        progress_percent:
+          type: integer
+        progress_message:
+          type: string
+          nullable: true
+    JobsJobRegistryEntry:
+      type: object
+      required:
+        - type
+        - queue
+        - payloadSchemaVersion
+        - maxAttempts
+        - idempotencyStrategy
+      properties:
+        type:
+          type: string
+        queue:
+          type: string
+        payloadSchemaVersion:
+          type: integer
+        maxAttempts:
+          type: integer
+        idempotencyStrategy:
+          type: string
+    JobsJobListResponse:
+      type: object
+      required:
+        - jobs
+        - registry
+      properties:
+        jobs:
+          type: array
+          items:
+            $ref: "#/components/schemas/JobsJob"
+        registry:
+          type: array
+          items:
+            $ref: "#/components/schemas/JobsJobRegistryEntry"
+    JobsJobResponse:
+      type: object
+      required:
+        - job
+      properties:
+        job:
+          $ref: "#/components/schemas/JobsJob"
+    JobsJobHealth:
+      type: object
+      additionalProperties: true
+    JobsJobMutationResponse:
+      type: object
+      required:
+        - cancelled
+      properties:
+        cancelled:
+          type: boolean
+    JobsJobRetryResponse:
+      type: object
+      required:
+        - retried
+      properties:
+        retried:
+          type: boolean
+    OperationsOperationProviderSummary:
+      type: object
+      additionalProperties: true
+    OperationsOperationsSummaryResponse:
+      type: object
+      required:
+        - providers
+      properties:
+        providers:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsOperationProviderSummary"
+    OperationsOperationEvent:
+      type: object
+      additionalProperties: true
+    OperationsOperationEventsResponse:
+      type: object
+      required:
+        - events
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsOperationEvent"
+    OperationsOperationProvidersResponse:
+      type: object
+      required:
+        - providers
+      properties:
+        providers:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    OperationsOperationBudget:
+      type: object
+      additionalProperties: true
+    OperationsOperationBudgetsResponse:
+      type: object
+      required:
+        - budgets
+      properties:
+        budgets:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsOperationBudget"
+    OperationsOperationBudgetResponse:
+      type: object
+      required:
+        - budget
+      properties:
+        budget:
+          $ref: "#/components/schemas/OperationsOperationBudget"
+    OperationsUpdateBudgetBody:
+      type: object
+      required:
+        - softThresholdUsd
+        - hardThresholdUsd
+        - enabled
+        - degradationAction
+      properties:
+        softThresholdUsd:
+          type: number
+        hardThresholdUsd:
+          type: number
+        enabled:
+          type: boolean
+        degradationAction:
           type: string
   parameters:
     IdParam:

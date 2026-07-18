@@ -1,8 +1,5 @@
 import { useState, useRef } from "react";
-import { useLocation } from "wouter";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 import {
   Camera,
@@ -31,15 +28,6 @@ import { cn } from "@/lib/utils";
 import { usePageAssistantContext } from "@/pottery/lib/assistant-context";
 import { useAppConfigSummary } from "@workspace/elaine-ui";
 
-const potteryFormSchema = z.object({
-  name: z.string().optional(),
-  quantity: z.coerce.number().int().min(1, "Quantity must be at least 1"),
-  dimensions: z.string().optional(),
-  notes: z.string().optional(),
-});
-
-type PotteryFormValues = z.infer<typeof potteryFormSchema>;
-
 const LABEL_SUGGESTIONS = [
   "Front",
   "Back",
@@ -64,15 +52,11 @@ export default function AddPiece() {
   const [file, setFile] = useState<File | null>(null);
   const [editingFile, setEditingFile] = useState<File | null>(null);
 
-  const form = useForm<PotteryFormValues>({
-    resolver: zodResolver(potteryFormSchema),
-    defaultValues: {
-      name: "",
-      quantity: 1,
-      dimensions: "",
-      notes: "",
-    },
-  });
+  // Form fields
+  const [name, setName] = useState("");
+  const [quantity, setQuantity] = useState(1);
+  const [notes, setNotes] = useState("");
+  const [dimensions, setDimensions] = useState("");
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
 
   // Supplemental photos
@@ -158,7 +142,8 @@ export default function AddPiece() {
   // ---------------------------------------------------------------------------
   // Submit
   // ---------------------------------------------------------------------------
-  async function handleSubmit(values: PotteryFormValues) {
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
     if (!file) {
       toast.error("Please choose a photo first.");
       return;
@@ -166,10 +151,10 @@ export default function AddPiece() {
     upload.mutate(
       {
         image: file,
-        name: values.name?.trim() || undefined,
-        quantity: values.quantity > 1 ? values.quantity : undefined,
-        notes: values.notes?.trim() || undefined,
-        dimensions: values.dimensions?.trim() || undefined,
+        name: name.trim() || undefined,
+        quantity: quantity > 1 ? quantity : undefined,
+        notes: notes.trim() || undefined,
+        dimensions: dimensions.trim() || undefined,
         categoryIds: selectedCategoryIds,
       },
       {
@@ -190,25 +175,13 @@ export default function AddPiece() {
     );
   }
 
-  function handleCancel() {
-    const dirty =
-      form.formState.isDirty ||
-      file !== null ||
-      suppPhotos.length > 0 ||
-      selectedCategoryIds.length > 0;
-    if (!dirty || window.confirm("Discard changes?")) {
-      navigate("/pottery");
-    }
-  }
-
   const busy = upload.isPending;
 
   const configSummary = useAppConfigSummary();
-  const watchedValues = form.watch();
 
   usePageAssistantContext(
     "pottery-add",
-    `Add a Piece page: form for cataloguing a new pottery piece. Primary photo ${file ? "selected" : "not yet selected (required before submit)"}, ${suppPhotos.length} additional photo(s) attached. Current field values — name: ${watchedValues.name?.trim() || "(blank, will be AI-generated)"}, quantity: ${watchedValues.quantity}, dimensions: ${watchedValues.dimensions?.trim() || "(blank, AI estimates from photo)"}, notes: ${watchedValues.notes?.trim() || "(blank)"}, categories: ${
+    `Add a Piece page: form for cataloguing a new pottery piece. Primary photo ${file ? "selected" : "not yet selected (required before submit)"}, ${suppPhotos.length} additional photo(s) attached. Current field values — name: ${name.trim() || "(blank, will be AI-generated)"}, quantity: ${quantity}, dimensions: ${dimensions.trim() || "(blank, AI estimates from photo)"}, notes: ${notes.trim() || "(blank)"}, categories: ${
       selectedCategoryIds.length
         ? categories
             .filter((c) => selectedCategoryIds.includes(c.id))
@@ -257,7 +230,7 @@ export default function AddPiece() {
           </p>
         </div>
 
-        <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-5">
           {/* Primary image */}
           <div className="space-y-2">
             <Label>
@@ -411,15 +384,11 @@ export default function AddPiece() {
             <Input
               id="name"
               placeholder="e.g. Blue floral teacup"
-              {...form.register("name")}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
               disabled={busy}
               data-testid="input-name"
             />
-            {form.formState.errors.name && (
-              <p className="text-xs text-destructive">
-                {form.formState.errors.name.message}
-              </p>
-            )}
           </div>
 
           <div className="space-y-2">
@@ -434,16 +403,14 @@ export default function AddPiece() {
               type="number"
               min={1}
               step={1}
-              {...form.register("quantity")}
+              value={quantity}
+              onChange={(e) =>
+                setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))
+              }
               onFocus={(e) => e.target.select()}
               disabled={busy}
               className="w-24"
             />
-            {form.formState.errors.quantity && (
-              <p className="text-xs text-destructive">
-                {form.formState.errors.quantity.message}
-              </p>
-            )}
           </div>
 
           <div className="space-y-2">
@@ -458,7 +425,8 @@ export default function AddPiece() {
               <Input
                 id="dimensions"
                 placeholder="e.g. H 14 cm × D 22 cm"
-                {...form.register("dimensions")}
+                value={dimensions}
+                onChange={(e) => setDimensions(e.target.value)}
                 disabled={busy}
                 className="pl-9"
                 data-testid="input-dimensions"
@@ -476,7 +444,8 @@ export default function AddPiece() {
             <Textarea
               id="notes"
               placeholder="Where you bought it, who made it, anything worth remembering…"
-              {...form.register("notes")}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
               rows={3}
               disabled={busy}
               data-testid="input-notes"
@@ -506,11 +475,11 @@ export default function AddPiece() {
             <Button
               type="button"
               variant="outline"
-              onClick={handleCancel}
+              asChild
               disabled={busy}
               data-testid="button-cancel-add"
             >
-              Cancel
+              <Link href="/pottery">Cancel</Link>
             </Button>
           </div>
         </form>

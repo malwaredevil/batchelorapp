@@ -24,16 +24,8 @@ export type ElaineAppId =
   | "pottery"
   | "quilting"
   | "ornaments"
-  | "office"
   | "hub"
   | "elaine";
-
-export interface PageContext {
-  module: ElaineAppId;
-  description: string;
-  structuredData?: string;
-  userNotes?: string;
-}
 
 /** A single image/PDF attachment on a user message. `name` is the original
  *  upload filename (PDFs only — images are shown as thumbnails and don't
@@ -82,62 +74,23 @@ export type PotteryActionType =
   | "update_pottery_item"
   | "delete_pottery_item"
   | "create_pottery_category"
-  | "delete_pottery_category"
-  | "lock_pottery_field"
-  | "update_pottery_item_categories"
-  | "delete_pottery_photo"
-  | "promote_pottery_photo"
-  | "merge_pottery_categories"
-  | "bulk_reanalyze_pottery";
+  | "delete_pottery_category";
 
 export type QuiltingActionType =
-  | "add_fabric"
   | "update_fabric"
-  | "update_fabric_fields"
   | "delete_fabric"
   | "update_pattern"
   | "delete_pattern"
   | "create_shopping_item"
-  | "add_fabric_to_shopping_list"
   | "update_shopping_item"
   | "delete_shopping_item"
   | "create_quilting_category"
-  | "delete_quilting_category"
-  | "create_pattern"
-  | "delete_quilt"
-  | "rename_quilting_category"
-  | "merge_quilting_categories"
-  | "create_block"
-  | "delete_block"
-  | "create_layout"
-  | "create_quilt_layout"
-  | "delete_layout"
-  | "bulk_reanalyze_quilting"
-  | "find_fabrics_by_color";
-
-export type OrnamentActionType =
-  | "update_ornament_item"
-  | "delete_ornament_item"
-  | "create_ornament_category"
-  | "delete_ornament_category"
-  | "lock_ornament_field"
-  | "update_ornament_item_categories"
-  | "delete_ornament_photo"
-  | "promote_ornament_photo"
-  | "merge_ornament_categories"
-  | "bulk_reanalyze_ornaments";
-
-export type OfficeActionType =
-  | "summarize_inbox"
-  | "find_emails_about_topic"
-  | "get_email_detail";
+  | "delete_quilting_category";
 
 export type AssistantActionType =
   | TravelActionType
   | PotteryActionType
-  | QuiltingActionType
-  | OrnamentActionType
-  | OfficeActionType;
+  | QuiltingActionType;
 
 export interface AssistantAction {
   type: AssistantActionType;
@@ -330,7 +283,7 @@ function parseSseDataLines(rawEvent: string): string | null {
 export async function streamElaineMessage(
   body: {
     message: string;
-    pageContext?: PageContext;
+    pageContext?: string;
     appId: ElaineAppId;
     /** ID of the named conversation to continue. Omit to start a new one. */
     conversationId?: number;

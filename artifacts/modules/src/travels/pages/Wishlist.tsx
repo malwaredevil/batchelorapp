@@ -20,6 +20,8 @@ import {
   Trash2,
   Star,
   Calendar,
+  Plane,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,8 +32,10 @@ import {
   useCreateWishlistItem,
   useUpdateWishlistItem,
   useDeleteWishlistItem,
-  type WishlistItem,
+  useCheckWishlistFlights,
+  type TravelsWishlistItem,
 } from "@workspace/api-client-react";
+type WishlistItem = TravelsWishlistItem;
 import { useQueryClient } from "@tanstack/react-query";
 import { getListWishlistQueryKey } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/travels/lib/assistant-context";
@@ -312,10 +316,52 @@ function WishlistRow({ item }: { item: WishlistItem }) {
   const qc = useQueryClient();
   const updateItem = useUpdateWishlistItem();
   const removeItem = useDeleteWishlistItem();
+  const checkFlights = useCheckWishlistFlights();
   const [editing, setEditing] = useState(false);
+  const [showFlightInput, setShowFlightInput] = useState(false);
+  const [flightIata, setFlightIata] = useState("");
+  const [flightResult, setFlightResult] = useState<{
+    priceMinUsd?: number | null;
+    destination: string;
+    options: Array<{
+      price: number;
+      currency: string;
+      airline?: string | null;
+      departureDate?: string | null;
+    }>;
+  } | null>(null);
 
   const invalidate = () =>
     qc.invalidateQueries({ queryKey: getListWishlistQueryKey() });
+
+  async function handleCheckFlights() {
+    const iata = flightIata.trim().toUpperCase();
+    if (iata.length < 3) return;
+    try {
+      toast.loading("Checking flights…", { id: "flights" });
+      const result = await checkFlights.mutateAsync({
+        id: item.id,
+        data: { originIata: iata },
+      });
+      toast.dismiss("flights");
+      if (result.options.length > 0) {
+        setFlightResult(result);
+        const cheapest = result.priceMinUsd;
+        toast.success(
+          cheapest != null
+            ? `Cheapest flight: $${cheapest.toFixed(0)}`
+            : `Found ${result.options.length} flight option(s)`,
+        );
+        invalidate();
+      } else {
+        toast.error("No flights found for this route.");
+      }
+      setShowFlightInput(false);
+    } catch {
+      toast.dismiss("flights");
+      toast.error("Failed to check flights.");
+    }
+  }
 
   const notes = parseNotes(item.notes);
   const displayHtml = buildDisplayHtml(notes);
@@ -325,7 +371,7 @@ function WishlistRow({ item }: { item: WishlistItem }) {
     (updated: WishlistNotes) => {
       const value = updated.html.trim() ? JSON.stringify(updated) : null;
       updateItem.mutate(
-        { id: item.id, body: { notes: value } },
+        { id: item.id, data: { notes: value } },
         {
           onSuccess: () => {
             invalidate();
@@ -339,13 +385,16 @@ function WishlistRow({ item }: { item: WishlistItem }) {
   );
 
   function handleDelete() {
-    removeItem.mutate(item.id, {
-      onSuccess: () => {
-        invalidate();
-        toast.success("Removed");
+    removeItem.mutate(
+      { id: item.id },
+      {
+        onSuccess: () => {
+          invalidate();
+          toast.success("Removed");
+        },
+        onError: () => toast.error("Failed to remove"),
       },
-      onError: () => toast.error("Failed to remove"),
-    });
+    );
   }
 
   return (
@@ -398,6 +447,95 @@ function WishlistRow({ item }: { item: WishlistItem }) {
             Add a note…
           </button>
         )}
+
+        {/* Flight price check */}
+        <div className="mt-2">
+          {!showFlightInput && !flightResult && (
+            <button
+              onClick={() => setShowFlightInput(true)}
+              className="text-xs text-muted-foreground/60 hover:text-primary transition-colors flex items-center gap-1"
+            >
+              <Plane className="h-3 w-3" />
+              Check flight prices…
+            </button>
+          )}
+          {showFlightInput && (
+            <div className="flex items-center gap-1.5">
+              <Plane className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <input
+                className="text-xs border border-input rounded px-2 py-1 w-20 uppercase bg-background"
+                placeholder="JFK"
+                maxLength={3}
+                value={flightIata}
+                onChange={(e) => setFlightIata(e.target.value.toUpperCase())}
+                onKeyDown={(e) => e.key === "Enter" && handleCheckFlights()}
+                autoFocus
+              />
+              <button
+                onClick={handleCheckFlights}
+                disabled={
+                  checkFlights.isPending || flightIata.trim().length < 3
+                }
+                className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded disabled:opacity-40"
+              >
+                {checkFlights.isPending ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  "Go"
+                )}
+              </button>
+              <button
+                onClick={() => {
+                  setShowFlightInput(false);
+                  setFlightIata("");
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+          {flightResult && (
+            <div className="bg-sky-50 border border-sky-200 rounded-lg p-2.5 text-xs">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="font-medium text-sky-800 flex items-center gap-1">
+                  <Plane className="h-3 w-3" />
+                  Flights to {flightResult.destination}
+                </span>
+                <button
+                  onClick={() => {
+                    setFlightResult(null);
+                    setFlightIata("");
+                  }}
+                  className="text-sky-400 hover:text-sky-700"
+                >
+                  ✕
+                </button>
+              </div>
+              {flightResult.priceMinUsd != null && (
+                <p className="text-sky-700 font-semibold mb-1">
+                  From ${flightResult.priceMinUsd.toFixed(0)}
+                </p>
+              )}
+              <div className="space-y-0.5">
+                {flightResult.options.slice(0, 3).map((opt, i) => (
+                  <div key={i} className="flex justify-between text-sky-600">
+                    <span>{opt.airline ?? "Unknown airline"}</span>
+                    <span>
+                      {opt.price} {opt.currency}
+                      {opt.departureDate ? ` · ${opt.departureDate}` : ""}
+                    </span>
+                  </div>
+                ))}
+                {flightResult.options.length > 3 && (
+                  <p className="text-sky-500">
+                    +{flightResult.options.length - 3} more options
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -444,7 +582,7 @@ export default function Wishlist() {
     const dest = newDest.trim();
     if (!dest) return;
     create.mutate(
-      { destination: dest, targetDate: newDate || undefined },
+      { data: { destination: dest, targetDate: newDate || undefined } },
       {
         onSuccess: () => {
           setNewDest("");

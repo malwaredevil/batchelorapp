@@ -3,6 +3,11 @@ import { z } from "zod";
 import { eq, desc } from "drizzle-orm";
 import { db, shoppingItems } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
+import {
+  suggestEtsyPrice,
+  buildEtsyQuery,
+} from "../../lib/quilting/etsy-price";
+import { env } from "../../lib/env";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -159,6 +164,67 @@ router.delete("/shopping/:id", async (req, res) => {
     return;
   }
   res.status(204).send();
+});
+
+// ---------------------------------------------------------------------------
+// #215 — Etsy price suggestion
+// ---------------------------------------------------------------------------
+
+const SuggestPriceParams = z.object({ id: z.coerce.number().int().positive() });
+const SuggestPriceBody = z.object({
+  itemType: z.enum(["pattern", "fabric", "other"]).default("other"),
+  designer: z.string().nullable().optional(),
+  manufacturer: z.string().nullable().optional(),
+  colorway: z.string().nullable().optional(),
+});
+
+router.post("/shopping/:id/suggest-price", async (req, res) => {
+  const { id } = SuggestPriceParams.parse(req.params);
+
+  if (!env.apifyApiToken) {
+    res.status(503).json({ error: "Apify integration not configured." });
+    return;
+  }
+
+  const [row] = await db
+    .select()
+    .from(shoppingItems)
+    .where(eq(shoppingItems.id, id));
+  if (!row) {
+    res.status(404).json({ error: "Shopping item not found." });
+    return;
+  }
+
+  const body = SuggestPriceBody.parse(req.body);
+  const query = buildEtsyQuery(row.name, body.itemType, {
+    designer: body.designer,
+    manufacturer: body.manufacturer,
+    colorway: body.colorway,
+  });
+
+  const result = await suggestEtsyPrice(query, env.apifyApiToken);
+  if (!result) {
+    res.status(422).json({ error: "No Etsy listings found for this item." });
+    return;
+  }
+
+  const [updated] = await db
+    .update(shoppingItems)
+    .set({
+      etsyPriceSuggestionUsd: result.suggestionUsd,
+      etsyPriceCachedAt: new Date(),
+      etsyPriceListings: result.listings as unknown as Record<string, unknown>,
+    })
+    .where(eq(shoppingItems.id, id))
+    .returning();
+
+  res.json({
+    suggestionUsd: updated.etsyPriceSuggestionUsd,
+    cachedAt: updated.etsyPriceCachedAt?.toISOString() ?? null,
+    listingCount: result.listingCount,
+    listings: result.listings,
+    searchQuery: query,
+  });
 });
 
 export default router;

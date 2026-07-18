@@ -7,9 +7,10 @@ import {
   useUpdateWishlistItem,
   type TravelsTrip as Trip,
   type TripStatus,
-  type WishlistItem,
+  type TravelsWishlistItem,
   getListWishlistQueryKey,
 } from "@workspace/api-client-react";
+type WishlistItem = TravelsWishlistItem;
 import {
   Globe,
   MapPin,
@@ -484,7 +485,7 @@ export default function WorldMap() {
       const coords = await geocodeDestination(item.destination);
       if (coords) {
         updateWishlistItem.mutate(
-          { id: item.id, body: { lat: coords.lat, lng: coords.lng } },
+          { id: item.id, data: { lat: coords.lat, lng: coords.lng } },
           {
             onSuccess: () =>
               qc.invalidateQueries({ queryKey: getListWishlistQueryKey() }),

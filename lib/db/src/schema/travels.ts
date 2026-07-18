@@ -216,6 +216,15 @@ export const travelsWishlist = pgTable(
     lng: real("lng"),
     done: boolean("done").notNull().default(false),
     sortOrder: integer("sort_order").notNull().default(0),
+    flightOriginIata: text("flight_origin_iata"),
+    flightPriceMinUsd: numeric("flight_price_min_usd", {
+      precision: 10,
+      scale: 2,
+    }),
+    flightPriceCachedAt: timestamp("flight_price_cached_at", {
+      withTimezone: true,
+    }),
+    flightPriceOptions: jsonb("flight_price_options"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

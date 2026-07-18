@@ -5,8 +5,11 @@ import {
   integer,
   text,
   date,
+  numeric,
+  boolean,
   timestamp,
   index,
+  uniqueIndex,
   vector,
   primaryKey,
   jsonb,
@@ -50,6 +53,16 @@ export const potteryItems = pgTable(
     embedding: vector("embedding", { dimensions: 1536 }),
     visualEmbedding: vector("visual_embedding", { dimensions: 1024 }),
     zoneEmbedding: vector("zone_embedding", { dimensions: 1024 }),
+    ebayPriceMinUsd: numeric("ebay_price_min_usd", { precision: 10, scale: 2 }),
+    ebayPriceMaxUsd: numeric("ebay_price_max_usd", { precision: 10, scale: 2 }),
+    ebayPriceMedianUsd: numeric("ebay_price_median_usd", {
+      precision: 10,
+      scale: 2,
+    }),
+    ebayPriceCachedAt: timestamp("ebay_price_cached_at", {
+      withTimezone: true,
+    }),
+    ebayPriceListings: jsonb("ebay_price_listings"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -126,3 +139,73 @@ export type PotteryCategoryRow = typeof potteryCategories.$inferSelect;
 export type PotteryItemCategoryRow = typeof potteryItemCategories.$inferSelect;
 export type PotteryImageRow = typeof potteryImages.$inferSelect;
 export type InsertPotteryImage = typeof potteryImages.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Marketplace watchlist (#249)
+// ---------------------------------------------------------------------------
+
+/**
+ * Persistent saved search for a piece the household wants to acquire.
+ * A background job periodically runs the search on eBay/Etsy and creates
+ * alerts when new matching listings appear.
+ */
+export const potteryWatchlistItems = pgTable(
+  "pottery_watchlist_items",
+  {
+    id: serial("id").primaryKey(),
+    createdByUserId: integer("created_by_user_id"),
+    title: text("title").notNull(),
+    keywords: text("keywords").notNull(),
+    priceMinUsd: numeric("price_min_usd", { precision: 10, scale: 2 }),
+    priceMaxUsd: numeric("price_max_usd", { precision: 10, scale: 2 }),
+    active: boolean("active").notNull().default(true),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+    lastAlertAt: timestamp("last_alert_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("pottery_watchlist_active_idx").on(table.active),
+    index("pottery_watchlist_user_idx").on(table.createdByUserId),
+  ],
+).enableRLS();
+
+/**
+ * Individual alert rows — one per matching listing found by the background job.
+ */
+export const potteryWatchlistAlerts = pgTable(
+  "pottery_watchlist_alerts",
+  {
+    id: serial("id").primaryKey(),
+    watchlistItemId: integer("watchlist_item_id")
+      .notNull()
+      .references(() => potteryWatchlistItems.id, { onDelete: "cascade" }),
+    platform: text("platform").notNull(),
+    listingId: text("listing_id").notNull(),
+    title: text("title").notNull(),
+    priceUsd: numeric("price_usd", { precision: 10, scale: 2 }),
+    condition: text("condition"),
+    imageUrl: text("image_url"),
+    listingUrl: text("listing_url").notNull(),
+    soldAt: timestamp("sold_at", { withTimezone: true }),
+    seenAt: timestamp("seen_at", { withTimezone: true }).defaultNow().notNull(),
+    dismissed: boolean("dismissed").notNull().default(false),
+  },
+  (table) => [
+    uniqueIndex("pottery_watchlist_alerts_dedup_idx").on(
+      table.watchlistItemId,
+      table.platform,
+      table.listingId,
+    ),
+    index("pottery_watchlist_alerts_item_idx").on(table.watchlistItemId),
+  ],
+).enableRLS();
+
+export type PotteryWatchlistItemRow = typeof potteryWatchlistItems.$inferSelect;
+export type InsertPotteryWatchlistItem =
+  typeof potteryWatchlistItems.$inferInsert;
+export type PotteryWatchlistAlertRow =
+  typeof potteryWatchlistAlerts.$inferSelect;
+export type InsertPotteryWatchlistAlert =
+  typeof potteryWatchlistAlerts.$inferInsert;

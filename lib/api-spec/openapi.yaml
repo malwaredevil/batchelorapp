@@ -589,6 +589,221 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /pottery/items/{id}/estimate-market-value:
+    post:
+      operationId: estimatePotteryMarketValue
+      tags:
+        - pottery
+      summary: Look up eBay sold-listing prices and cache them on the item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: eBay price data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PotteryEbayPriceResult"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: No eBay listings found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Apify integration not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /pottery/watchlist:
+    get:
+      operationId: listWatchlistItems
+      tags:
+        - pottery
+      summary: List all pottery watchlist items (household-shared)
+      responses:
+        "200":
+          description: Watchlist items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PotteryWatchlistItem"
+    post:
+      operationId: createWatchlistItem
+      tags:
+        - pottery
+      summary: Create a new watchlist item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PotteryCreateWatchlistItemBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PotteryWatchlistItem"
+  /pottery/watchlist/{id}:
+    patch:
+      operationId: updateWatchlistItem
+      tags:
+        - pottery
+      summary: Update a watchlist item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PotteryUpdateWatchlistItemBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PotteryWatchlistItem"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deleteWatchlistItem
+      tags:
+        - pottery
+      summary: Delete a watchlist item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+  /pottery/watchlist/{id}/scan:
+    post:
+      operationId: scanWatchlistItem
+      tags:
+        - pottery
+      summary: Run an on-demand eBay scan and upsert new alerts
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Scan results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PotteryWatchlistScanResult"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Apify integration not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /pottery/watchlist/{id}/alerts:
+    get:
+      operationId: listWatchlistAlerts
+      tags:
+        - pottery
+      summary: List alerts for a watchlist item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PotteryWatchlistAlert"
+  /pottery/watchlist/{id}/alerts/{alertId}/dismiss:
+    patch:
+      operationId: dismissWatchlistAlert
+      tags:
+        - pottery
+      summary: Dismiss a watchlist alert
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: alertId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Dismissed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dismissed:
+                    type: boolean
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /pottery/watchlist/alerts/unseen:
+    get:
+      operationId: listUnseenWatchlistAlerts
+      tags:
+        - pottery
+      summary: List all undismissed alerts across all watchlist items
+      responses:
+        "200":
+          description: Undismissed alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PotteryWatchlistAlert"
   /pottery/categories:
     get:
       operationId: listPotteryCategories
@@ -1922,6 +2137,45 @@ paths:
       responses:
         "204":
           description: Deleted
+  /quilting/shopping/{id}/suggest-price:
+    post:
+      operationId: suggestShoppingItemPrice
+      tags:
+        - shopping
+      summary: Look up Etsy listings and suggest a price for this shopping item
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuiltingSuggestPriceBody"
+      responses:
+        "200":
+          description: Etsy price suggestion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuiltingEtsyPriceSuggestion"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: No Etsy listings found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Apify not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /quilting/layouts:
     get:
       operationId: listLayouts
@@ -3734,6 +3988,127 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TravelsTravelsMonitoringPreferences"
+  /travels/wishlist:
+    get:
+      operationId: listWishlist
+      tags:
+        - wishlist
+      summary: List all wishlist destinations (household-shared)
+      responses:
+        "200":
+          description: Wishlist items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TravelsWishlistItem"
+    post:
+      operationId: createWishlistItem
+      tags:
+        - wishlist
+      summary: Add a new wishlist destination
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TravelsCreateWishlistBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TravelsWishlistItem"
+  /travels/wishlist/{id}:
+    patch:
+      operationId: updateWishlistItem
+      tags:
+        - wishlist
+      summary: Update a wishlist item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TravelsUpdateWishlistBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TravelsWishlistItem"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deleteWishlistItem
+      tags:
+        - wishlist
+      summary: Delete a wishlist item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+  /travels/wishlist/{id}/check-flights:
+    post:
+      operationId: checkWishlistFlights
+      tags:
+        - wishlist
+      summary: Look up cheapest round-trip flights for a wishlist destination and cache them
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TravelsCheckFlightsBody"
+      responses:
+        "200":
+          description: Flight price data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TravelsFlightPriceResult"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: No flights found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Apify not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /ornaments/items:
     get:
       operationId: listOrnaments
@@ -4107,6 +4482,43 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OrnamentsBarcodeLookupResult"
+  /ornaments/items/{id}/ebay-price-lookup:
+    post:
+      operationId: lookupOrnamentEbayPrice
+      tags:
+        - ornaments
+      summary: Look up eBay sold-listing prices and cache them on the ornament
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: eBay price data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrnamentsEbayPriceResult"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: No eBay listings found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Apify not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /ornaments/items/{id}/book-value-lookup:
     post:
       operationId: lookupOrnamentBookValue
@@ -5665,6 +6077,196 @@ components:
           type: string
         newPassword:
           type: string
+    PotteryEbayListing:
+      type: object
+      required:
+        - title
+        - soldPrice
+        - currency
+      properties:
+        title:
+          type: string
+        soldPrice:
+          type: number
+        currency:
+          type: string
+        soldDate:
+          type:
+            - string
+            - "null"
+        condition:
+          type:
+            - string
+            - "null"
+        imageUrl:
+          type:
+            - string
+            - "null"
+        itemUrl:
+          type:
+            - string
+            - "null"
+    PotteryEbayPriceResult:
+      type: object
+      required:
+        - priceMinUsd
+        - priceMaxUsd
+        - priceMedianUsd
+        - listingCount
+        - listings
+      properties:
+        priceMinUsd:
+          type: number
+        priceMaxUsd:
+          type: number
+        priceMedianUsd:
+          type: number
+        listingCount:
+          type: integer
+        listings:
+          type: array
+          items:
+            $ref: "#/components/schemas/PotteryEbayListing"
+        cachedAt:
+          type:
+            - string
+            - "null"
+        searchQuery:
+          type: string
+    PotteryWatchlistItem:
+      type: object
+      required:
+        - id
+        - title
+        - keywords
+        - active
+        - createdAt
+      properties:
+        id:
+          type: integer
+        createdByUserId:
+          type:
+            - integer
+            - "null"
+        title:
+          type: string
+        keywords:
+          type: string
+        priceMinUsd:
+          type:
+            - string
+            - "null"
+        priceMaxUsd:
+          type:
+            - string
+            - "null"
+        active:
+          type: boolean
+        lastCheckedAt:
+          type:
+            - string
+            - "null"
+        lastAlertAt:
+          type:
+            - string
+            - "null"
+        createdAt:
+          type: string
+    PotteryWatchlistAlert:
+      type: object
+      required:
+        - id
+        - watchlistItemId
+        - platform
+        - listingId
+        - title
+        - listingUrl
+        - dismissed
+        - seenAt
+      properties:
+        id:
+          type: integer
+        watchlistItemId:
+          type: integer
+        platform:
+          type: string
+        listingId:
+          type: string
+        title:
+          type: string
+        priceUsd:
+          type:
+            - string
+            - "null"
+        condition:
+          type:
+            - string
+            - "null"
+        imageUrl:
+          type:
+            - string
+            - "null"
+        listingUrl:
+          type: string
+        soldAt:
+          type:
+            - string
+            - "null"
+        seenAt:
+          type: string
+        dismissed:
+          type: boolean
+    PotteryWatchlistScanResult:
+      type: object
+      required:
+        - newAlerts
+        - totalListings
+      properties:
+        newAlerts:
+          type: integer
+        totalListings:
+          type: integer
+        searchQuery:
+          type: string
+    PotteryCreateWatchlistItemBody:
+      type: object
+      required:
+        - title
+        - keywords
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        keywords:
+          type: string
+          minLength: 1
+          maxLength: 500
+        priceMinUsd:
+          type:
+            - number
+            - "null"
+        priceMaxUsd:
+          type:
+            - number
+            - "null"
+    PotteryUpdateWatchlistItemBody:
+      type: object
+      properties:
+        title:
+          type: string
+        keywords:
+          type: string
+        priceMinUsd:
+          type:
+            - number
+            - "null"
+        priceMaxUsd:
+          type:
+            - number
+            - "null"
+        active:
+          type: boolean
     PotteryStragglerItem:
       type: object
       required:
@@ -6102,6 +6704,82 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PotteryColorCount"
+    QuiltingSuggestPriceBody:
+      type: object
+      properties:
+        itemType:
+          type: string
+          enum:
+            - pattern
+            - fabric
+            - other
+          default: other
+        designer:
+          type:
+            - string
+            - "null"
+        manufacturer:
+          type:
+            - string
+            - "null"
+        colorway:
+          type:
+            - string
+            - "null"
+    QuiltingEtsyListing:
+      type: object
+      required:
+        - title
+        - priceUsd
+        - currency
+      properties:
+        title:
+          type: string
+        priceUsd:
+          type: number
+        currency:
+          type: string
+        rating:
+          type:
+            - number
+            - "null"
+        reviewCount:
+          type:
+            - integer
+            - "null"
+        seller:
+          type:
+            - string
+            - "null"
+        listingUrl:
+          type:
+            - string
+            - "null"
+        imageUrl:
+          type:
+            - string
+            - "null"
+    QuiltingEtsyPriceSuggestion:
+      type: object
+      required:
+        - suggestionUsd
+        - listingCount
+        - listings
+      properties:
+        suggestionUsd:
+          type: number
+        listingCount:
+          type: integer
+        listings:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuiltingEtsyListing"
+        cachedAt:
+          type:
+            - string
+            - "null"
+        searchQuery:
+          type: string
     QuiltingFabricsListResponse:
       type: object
       required:
@@ -7964,6 +8642,169 @@ components:
           items:
             type: string
           description: Specific fields to apply (defaults to all non-locked fields)
+    TravelsWishlistItem:
+      type: object
+      required:
+        - id
+        - destination
+        - done
+        - sortOrder
+        - createdAt
+      properties:
+        id:
+          type: integer
+        userId:
+          type:
+            - integer
+            - "null"
+        destination:
+          type: string
+        targetDate:
+          type:
+            - string
+            - "null"
+        notes:
+          type:
+            - string
+            - "null"
+        lat:
+          type:
+            - number
+            - "null"
+        lng:
+          type:
+            - number
+            - "null"
+        done:
+          type: boolean
+        sortOrder:
+          type: integer
+        flightOriginIata:
+          type:
+            - string
+            - "null"
+        flightPriceMinUsd:
+          type:
+            - string
+            - "null"
+        flightPriceCachedAt:
+          type:
+            - string
+            - "null"
+        flightPriceOptions:
+          nullable: true
+        createdAt:
+          type: string
+    TravelsCreateWishlistBody:
+      type: object
+      required:
+        - destination
+      properties:
+        destination:
+          type: string
+          minLength: 1
+        targetDate:
+          type: string
+        notes:
+          type: string
+        sortOrder:
+          type: integer
+          default: 0
+    TravelsUpdateWishlistBody:
+      type: object
+      properties:
+        destination:
+          type: string
+          minLength: 1
+        targetDate:
+          type:
+            - string
+            - "null"
+        notes:
+          type:
+            - string
+            - "null"
+        lat:
+          type:
+            - number
+            - "null"
+        lng:
+          type:
+            - number
+            - "null"
+        done:
+          type: boolean
+        sortOrder:
+          type: integer
+    TravelsCheckFlightsBody:
+      type: object
+      required:
+        - originIata
+      properties:
+        originIata:
+          type: string
+          minLength: 3
+          maxLength: 4
+          description: IATA airport code for the departure airport (e.g. "LAX", "JFK")
+    TravelsFlightOption:
+      type: object
+      required:
+        - price
+        - currency
+      properties:
+        price:
+          type: number
+        currency:
+          type: string
+        airline:
+          type:
+            - string
+            - "null"
+        departureDate:
+          type:
+            - string
+            - "null"
+        returnDate:
+          type:
+            - string
+            - "null"
+        durationMinutes:
+          type:
+            - integer
+            - "null"
+        stops:
+          type:
+            - integer
+            - "null"
+        deepLink:
+          type:
+            - string
+            - "null"
+    TravelsFlightPriceResult:
+      type: object
+      required:
+        - originIata
+        - destination
+        - options
+      properties:
+        originIata:
+          type: string
+        destination:
+          type: string
+        priceMinUsd:
+          type:
+            - number
+            - "null"
+        cachedAt:
+          type:
+            - string
+            - "null"
+        currency:
+          type: string
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/TravelsFlightOption"
     TravelsTrip:
       type: object
       required:
@@ -8801,6 +9642,62 @@ components:
               type: boolean
         scheduleChangeThresholdMinutes:
           type: integer
+    OrnamentsEbayListing:
+      type: object
+      required:
+        - title
+        - soldPrice
+        - currency
+      properties:
+        title:
+          type: string
+        soldPrice:
+          type: number
+        currency:
+          type: string
+        soldDate:
+          type:
+            - string
+            - "null"
+        condition:
+          type:
+            - string
+            - "null"
+        imageUrl:
+          type:
+            - string
+            - "null"
+        itemUrl:
+          type:
+            - string
+            - "null"
+    OrnamentsEbayPriceResult:
+      type: object
+      required:
+        - priceMinUsd
+        - priceMaxUsd
+        - priceMedianUsd
+        - listingCount
+        - listings
+      properties:
+        priceMinUsd:
+          type: number
+        priceMaxUsd:
+          type: number
+        priceMedianUsd:
+          type: number
+        listingCount:
+          type: integer
+        listings:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrnamentsEbayListing"
+        cachedAt:
+          type:
+            - string
+            - "null"
+        searchQuery:
+          type: string
     OrnamentsCategory:
       type: object
       required:

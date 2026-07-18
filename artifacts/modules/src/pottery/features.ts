@@ -7,6 +7,7 @@ import {
   Wrench,
   Camera,
   BarChart3,
+  Bell,
 } from "lucide-react";
 
 // Mirrors artifacts/pottery/src/features/index.ts, namespaced under
@@ -86,5 +87,16 @@ registerFeature({
     label: "Maintenance",
     icon: Wrench,
     order: 16,
+  },
+});
+
+registerFeature({
+  id: "pottery-watchlist",
+  nav: {
+    group: "tools",
+    href: "/pottery/watchlist",
+    label: "Watchlist",
+    icon: Bell,
+    order: 17,
   },
 });

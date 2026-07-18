@@ -33,6 +33,7 @@ import PotteryStats from "@/pottery/pages/stats";
 import PotteryDetail from "@/pottery/pages/detail";
 import PotteryCategories from "@/pottery/pages/categories";
 import PotteryMaintenance from "@/pottery/pages/maintenance";
+import PotteryWatchlist from "@/pottery/pages/watchlist";
 import { BulkAddProvider } from "@/quilting/contexts/bulk-add-context";
 import Fabrics from "@/quilting/pages/fabrics/index";
 import AddFabric from "@/quilting/pages/fabrics/add";
@@ -142,6 +143,7 @@ function Routes() {
                 path="/pottery/maintenance"
                 component={PotteryMaintenance}
               />
+              <Route path="/pottery/watchlist" component={PotteryWatchlist} />
               <Route path="/quilting" component={Fabrics} />
               <Route path="/quilting/fabrics" component={Fabrics} />
               <Route path="/quilting/fabrics/add" component={AddFabric} />

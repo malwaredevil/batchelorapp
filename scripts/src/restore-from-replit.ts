@@ -237,6 +237,44 @@ async function main() {
     columns: ["item_id", "category_id"],
   });
 
+  await copyTable(source, dest, {
+    table: "pottery_watchlist_items",
+    columns: [
+      "id",
+      "created_by_user_id",
+      "title",
+      "keywords",
+      "price_min_usd",
+      "price_max_usd",
+      "active",
+      "last_checked_at",
+      "last_alert_at",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "pottery_watchlist_items", "id");
+
+  await copyTable(source, dest, {
+    table: "pottery_watchlist_alerts",
+    columns: [
+      "id",
+      "watchlist_item_id",
+      "platform",
+      "listing_id",
+      "title",
+      "price_usd",
+      "condition",
+      "image_url",
+      "listing_url",
+      "sold_at",
+      "seen_at",
+      "dismissed",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "pottery_watchlist_alerts", "id");
+
   // ── Ornaments ─────────────────────────────────────────────────────────────
   await dest.query("TRUNCATE ornaments_item_categories CASCADE");
   await dest.query("TRUNCATE ornaments_images CASCADE");

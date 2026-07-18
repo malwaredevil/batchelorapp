@@ -49,6 +49,16 @@ export const ornamentsItems = pgTable(
     bookValueUpdatedAt: timestamp("book_value_updated_at", {
       withTimezone: true,
     }),
+    ebayPriceMinUsd: numeric("ebay_price_min_usd", { precision: 10, scale: 2 }),
+    ebayPriceMaxUsd: numeric("ebay_price_max_usd", { precision: 10, scale: 2 }),
+    ebayPriceMedianUsd: numeric("ebay_price_median_usd", {
+      precision: 10,
+      scale: 2,
+    }),
+    ebayPriceCachedAt: timestamp("ebay_price_cached_at", {
+      withTimezone: true,
+    }),
+    ebayPriceListings: jsonb("ebay_price_listings"),
     embedding: vector("embedding", { dimensions: 1536 }),
     visualEmbedding: vector("visual_embedding", { dimensions: 1024 }),
     createdAt: timestamp("created_at", { withTimezone: true })

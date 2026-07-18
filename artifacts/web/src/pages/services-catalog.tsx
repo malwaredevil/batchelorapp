@@ -153,6 +153,22 @@ const SERVICES: ServiceEntry[] = [
     env: ["SENTRY_DSN"],
   },
   {
+    name: "Apify",
+    purpose: "Web scraping and market-price lookup platform",
+    usedFor:
+      "eBay sold-listing price lookups for pottery and ornaments (market value estimates), Etsy price suggestions for quilting shopping items, live flight price checks for the travels wishlist, Hallmark book-value lookups for ornaments (supplemental to UPCitemdb). All calls are gated by the APIFY_API_TOKEN secret.",
+    implementedIn: [
+      "artifacts/api-server/src/lib/apify-client.ts",
+      "artifacts/api-server/src/lib/pottery/market-value.ts",
+      "artifacts/api-server/src/lib/ornaments/ebay-price.ts",
+      "artifacts/api-server/src/lib/quilting/etsy-price.ts",
+      "artifacts/api-server/src/lib/travels/flight-prices.ts",
+      "artifacts/api-server/src/lib/ornaments/hallmark-book-value.ts",
+    ],
+    modules: ["Pottery", "Quilting", "Ornaments", "Travels"],
+    env: ["APIFY_API_TOKEN"],
+  },
+  {
     name: "UPCitemdb",
     purpose: "Barcode / UPC product lookup (primary)",
     usedFor:

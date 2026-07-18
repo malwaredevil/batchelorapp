@@ -504,6 +504,175 @@ export const SetPrimaryImageResponse = zod.object({
 
 
 /**
+ * @summary Look up eBay sold-listing prices and cache them on the item
+ */
+export const EstimatePotteryMarketValueParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const EstimatePotteryMarketValueResponse = zod.object({
+  "priceMinUsd": zod.number(),
+  "priceMaxUsd": zod.number(),
+  "priceMedianUsd": zod.number(),
+  "listingCount": zod.number(),
+  "listings": zod.array(zod.object({
+  "title": zod.string(),
+  "soldPrice": zod.number(),
+  "currency": zod.string(),
+  "soldDate": zod.string().nullish(),
+  "condition": zod.string().nullish(),
+  "imageUrl": zod.string().nullish(),
+  "itemUrl": zod.string().nullish()
+})),
+  "cachedAt": zod.string().nullish(),
+  "searchQuery": zod.string().optional()
+})
+
+
+/**
+ * @summary List all pottery watchlist items (household-shared)
+ */
+export const ListWatchlistItemsResponseItem = zod.object({
+  "id": zod.number(),
+  "createdByUserId": zod.number().nullish(),
+  "title": zod.string(),
+  "keywords": zod.string(),
+  "priceMinUsd": zod.string().nullish(),
+  "priceMaxUsd": zod.string().nullish(),
+  "active": zod.boolean(),
+  "lastCheckedAt": zod.string().nullish(),
+  "lastAlertAt": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+export const ListWatchlistItemsResponse = zod.array(ListWatchlistItemsResponseItem)
+
+
+/**
+ * @summary Create a new watchlist item
+ */
+export const createWatchlistItemBodyTitleMax = 200;
+
+export const createWatchlistItemBodyKeywordsMax = 500;
+
+
+
+export const CreateWatchlistItemBody = zod.object({
+  "title": zod.string().min(1).max(createWatchlistItemBodyTitleMax),
+  "keywords": zod.string().min(1).max(createWatchlistItemBodyKeywordsMax),
+  "priceMinUsd": zod.number().nullish(),
+  "priceMaxUsd": zod.number().nullish()
+})
+
+
+/**
+ * @summary Update a watchlist item
+ */
+export const UpdateWatchlistItemParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateWatchlistItemBody = zod.object({
+  "title": zod.string().optional(),
+  "keywords": zod.string().optional(),
+  "priceMinUsd": zod.number().nullish(),
+  "priceMaxUsd": zod.number().nullish(),
+  "active": zod.boolean().optional()
+})
+
+export const UpdateWatchlistItemResponse = zod.object({
+  "id": zod.number(),
+  "createdByUserId": zod.number().nullish(),
+  "title": zod.string(),
+  "keywords": zod.string(),
+  "priceMinUsd": zod.string().nullish(),
+  "priceMaxUsd": zod.string().nullish(),
+  "active": zod.boolean(),
+  "lastCheckedAt": zod.string().nullish(),
+  "lastAlertAt": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Delete a watchlist item
+ */
+export const DeleteWatchlistItemParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Run an on-demand eBay scan and upsert new alerts
+ */
+export const ScanWatchlistItemParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ScanWatchlistItemResponse = zod.object({
+  "newAlerts": zod.number(),
+  "totalListings": zod.number(),
+  "searchQuery": zod.string().optional()
+})
+
+
+/**
+ * @summary List alerts for a watchlist item
+ */
+export const ListWatchlistAlertsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListWatchlistAlertsResponseItem = zod.object({
+  "id": zod.number(),
+  "watchlistItemId": zod.number(),
+  "platform": zod.string(),
+  "listingId": zod.string(),
+  "title": zod.string(),
+  "priceUsd": zod.string().nullish(),
+  "condition": zod.string().nullish(),
+  "imageUrl": zod.string().nullish(),
+  "listingUrl": zod.string(),
+  "soldAt": zod.string().nullish(),
+  "seenAt": zod.string(),
+  "dismissed": zod.boolean()
+})
+export const ListWatchlistAlertsResponse = zod.array(ListWatchlistAlertsResponseItem)
+
+
+/**
+ * @summary Dismiss a watchlist alert
+ */
+export const DismissWatchlistAlertParams = zod.object({
+  "id": zod.coerce.number(),
+  "alertId": zod.coerce.number()
+})
+
+export const DismissWatchlistAlertResponse = zod.object({
+  "dismissed": zod.boolean().optional()
+})
+
+
+/**
+ * @summary List all undismissed alerts across all watchlist items
+ */
+export const ListUnseenWatchlistAlertsResponseItem = zod.object({
+  "id": zod.number(),
+  "watchlistItemId": zod.number(),
+  "platform": zod.string(),
+  "listingId": zod.string(),
+  "title": zod.string(),
+  "priceUsd": zod.string().nullish(),
+  "condition": zod.string().nullish(),
+  "imageUrl": zod.string().nullish(),
+  "listingUrl": zod.string(),
+  "soldAt": zod.string().nullish(),
+  "seenAt": zod.string(),
+  "dismissed": zod.boolean()
+})
+export const ListUnseenWatchlistAlertsResponse = zod.array(ListUnseenWatchlistAlertsResponseItem)
+
+
+/**
  * @summary List categories
  */
 export const ListPotteryCategoriesResponseItem = zod.object({
@@ -2180,6 +2349,40 @@ export const UpdateShoppingItemResponse = zod.object({
  */
 export const DeleteShoppingItemParams = zod.object({
   "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Look up Etsy listings and suggest a price for this shopping item
+ */
+export const SuggestShoppingItemPriceParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const suggestShoppingItemPriceBodyItemTypeDefault = `other`;
+
+export const SuggestShoppingItemPriceBody = zod.object({
+  "itemType": zod.enum(['pattern', 'fabric', 'other']).default(suggestShoppingItemPriceBodyItemTypeDefault),
+  "designer": zod.string().nullish(),
+  "manufacturer": zod.string().nullish(),
+  "colorway": zod.string().nullish()
+})
+
+export const SuggestShoppingItemPriceResponse = zod.object({
+  "suggestionUsd": zod.number(),
+  "listingCount": zod.number(),
+  "listings": zod.array(zod.object({
+  "title": zod.string(),
+  "priceUsd": zod.number(),
+  "currency": zod.string(),
+  "rating": zod.number().nullish(),
+  "reviewCount": zod.number().nullish(),
+  "seller": zod.string().nullish(),
+  "listingUrl": zod.string().nullish(),
+  "imageUrl": zod.string().nullish()
+})),
+  "cachedAt": zod.string().nullish(),
+  "searchQuery": zod.string().optional()
 })
 
 
@@ -4190,6 +4393,123 @@ export const TravelsUpdateMonitoringPreferencesResponse = zod.object({
 
 
 /**
+ * @summary List all wishlist destinations (household-shared)
+ */
+export const ListWishlistResponseItem = zod.object({
+  "id": zod.number(),
+  "userId": zod.number().nullish(),
+  "destination": zod.string(),
+  "targetDate": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "lat": zod.number().nullish(),
+  "lng": zod.number().nullish(),
+  "done": zod.boolean(),
+  "sortOrder": zod.number(),
+  "flightOriginIata": zod.string().nullish(),
+  "flightPriceMinUsd": zod.string().nullish(),
+  "flightPriceCachedAt": zod.string().nullish(),
+  "flightPriceOptions": zod.unknown().nullish(),
+  "createdAt": zod.string()
+})
+export const ListWishlistResponse = zod.array(ListWishlistResponseItem)
+
+
+/**
+ * @summary Add a new wishlist destination
+ */
+
+export const createWishlistItemBodySortOrderDefault = 0;
+
+export const CreateWishlistItemBody = zod.object({
+  "destination": zod.string().min(1),
+  "targetDate": zod.string().optional(),
+  "notes": zod.string().optional(),
+  "sortOrder": zod.number().default(createWishlistItemBodySortOrderDefault)
+})
+
+
+/**
+ * @summary Update a wishlist item
+ */
+export const UpdateWishlistItemParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const UpdateWishlistItemBody = zod.object({
+  "destination": zod.string().min(1).optional(),
+  "targetDate": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "lat": zod.number().nullish(),
+  "lng": zod.number().nullish(),
+  "done": zod.boolean().optional(),
+  "sortOrder": zod.number().optional()
+})
+
+export const UpdateWishlistItemResponse = zod.object({
+  "id": zod.number(),
+  "userId": zod.number().nullish(),
+  "destination": zod.string(),
+  "targetDate": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "lat": zod.number().nullish(),
+  "lng": zod.number().nullish(),
+  "done": zod.boolean(),
+  "sortOrder": zod.number(),
+  "flightOriginIata": zod.string().nullish(),
+  "flightPriceMinUsd": zod.string().nullish(),
+  "flightPriceCachedAt": zod.string().nullish(),
+  "flightPriceOptions": zod.unknown().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Delete a wishlist item
+ */
+export const DeleteWishlistItemParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Look up cheapest round-trip flights for a wishlist destination and cache them
+ */
+export const CheckWishlistFlightsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const checkWishlistFlightsBodyOriginIataMin = 3;
+export const checkWishlistFlightsBodyOriginIataMax = 4;
+
+
+
+export const CheckWishlistFlightsBody = zod.object({
+  "originIata": zod.string().min(checkWishlistFlightsBodyOriginIataMin).max(checkWishlistFlightsBodyOriginIataMax).describe('IATA airport code for the departure airport (e.g. \"LAX\", \"JFK\")')
+})
+
+export const CheckWishlistFlightsResponse = zod.object({
+  "originIata": zod.string(),
+  "destination": zod.string(),
+  "priceMinUsd": zod.number().nullish(),
+  "cachedAt": zod.string().nullish(),
+  "currency": zod.string().optional(),
+  "options": zod.array(zod.object({
+  "price": zod.number(),
+  "currency": zod.string(),
+  "airline": zod.string().nullish(),
+  "departureDate": zod.string().nullish(),
+  "returnDate": zod.string().nullish(),
+  "durationMinutes": zod.number().nullish(),
+  "stops": zod.number().nullish(),
+  "deepLink": zod.string().nullish()
+}))
+})
+
+
+/**
  * @summary List ornaments
  */
 export const listOrnamentsQueryPageDefault = 1;
@@ -4601,6 +4921,32 @@ export const LookupBarcodeResponse = zod.object({
   "year": zod.number().nullish(),
   "description": zod.string().nullish(),
   "imageUrl": zod.string().nullish()
+})
+
+
+/**
+ * @summary Look up eBay sold-listing prices and cache them on the ornament
+ */
+export const LookupOrnamentEbayPriceParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const LookupOrnamentEbayPriceResponse = zod.object({
+  "priceMinUsd": zod.number(),
+  "priceMaxUsd": zod.number(),
+  "priceMedianUsd": zod.number(),
+  "listingCount": zod.number(),
+  "listings": zod.array(zod.object({
+  "title": zod.string(),
+  "soldPrice": zod.number(),
+  "currency": zod.string(),
+  "soldDate": zod.string().nullish(),
+  "condition": zod.string().nullish(),
+  "imageUrl": zod.string().nullish(),
+  "itemUrl": zod.string().nullish()
+})),
+  "cachedAt": zod.string().nullish(),
+  "searchQuery": zod.string().optional()
 })
 
 

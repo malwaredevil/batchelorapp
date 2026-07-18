@@ -391,6 +391,11 @@ export const shoppingItems = pgTable("quilting_shopping_items", {
   store: text("store"),
   status: text("status").notNull().default("want"),
   priority: integer("priority").notNull().default(0),
+  etsyPriceSuggestionUsd: real("etsy_price_suggestion_usd"),
+  etsyPriceCachedAt: timestamp("etsy_price_cached_at", {
+    withTimezone: true,
+  }),
+  etsyPriceListings: jsonb("etsy_price_listings"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

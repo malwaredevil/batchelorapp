@@ -7,6 +7,8 @@ import {
   Trash2,
   ExternalLink,
   DollarSign,
+  Loader2,
+  TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +37,7 @@ import {
   useCreateShoppingItem,
   useUpdateShoppingItem,
   useDeleteShoppingItem,
+  useSuggestShoppingItemPrice,
   getListShoppingItemsQueryKey,
   getGetShoppingStatsQueryKey,
 } from "@workspace/api-client-react";
@@ -242,6 +245,24 @@ function AddItemDialog({ onClose }: { onClose: () => void }) {
 
 function ItemCard({ item }: { item: Item }) {
   const queryClient = useQueryClient();
+  const suggestPrice = useSuggestShoppingItemPrice();
+
+  async function handleSuggestPrice() {
+    try {
+      const result = await suggestPrice.mutateAsync({ id: item.id });
+      if (result.listingCount > 0) {
+        const suggestion = `$${result.suggestionUsd.toFixed(2)} (${result.listingCount} Etsy listing${result.listingCount !== 1 ? "s" : ""})`;
+        toast.success(`Etsy price suggestion: ${suggestion}`, {
+          duration: 6000,
+        });
+      } else {
+        toast.error("No Etsy listings found for this item.");
+      }
+    } catch {
+      toast.error("Failed to look up Etsy price.");
+    }
+  }
+
   const update = useUpdateShoppingItem({
     mutation: {
       onSuccess: () => {
@@ -344,6 +365,18 @@ function ItemCard({ item }: { item: Item }) {
 
       {/* Actions */}
       <div className="flex shrink-0 items-center gap-1">
+        <button
+          onClick={handleSuggestPrice}
+          disabled={suggestPrice.isPending}
+          title="Look up Etsy price suggestion"
+          className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:text-primary disabled:opacity-40"
+        >
+          {suggestPrice.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <TrendingUp className="h-3.5 w-3.5" />
+          )}
+        </button>
         {item.url && (
           <a
             href={item.url}

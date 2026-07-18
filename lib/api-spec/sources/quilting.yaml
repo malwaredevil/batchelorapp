@@ -1438,6 +1438,46 @@ paths:
         "204":
           description: Deleted
 
+  # #215 — Etsy price suggestion
+  /shopping/{id}/suggest-price:
+    post:
+      operationId: suggestShoppingItemPrice
+      tags: [shopping]
+      summary: Look up Etsy listings and suggest a price for this shopping item
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SuggestPriceBody"
+      responses:
+        "200":
+          description: Etsy price suggestion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EtsyPriceSuggestion"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: No Etsy listings found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Apify not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   # ---------------------------------------------------------------------------
   # Quilt Layouts
   # ---------------------------------------------------------------------------
@@ -2219,6 +2259,58 @@ components:
         type: integer
 
   schemas:
+    SuggestPriceBody:
+      type: object
+      properties:
+        itemType:
+          type: string
+          enum: [pattern, fabric, other]
+          default: other
+        designer:
+          type: ["string", "null"]
+        manufacturer:
+          type: ["string", "null"]
+        colorway:
+          type: ["string", "null"]
+
+    EtsyListing:
+      type: object
+      required: [title, priceUsd, currency]
+      properties:
+        title:
+          type: string
+        priceUsd:
+          type: number
+        currency:
+          type: string
+        rating:
+          type: ["number", "null"]
+        reviewCount:
+          type: ["integer", "null"]
+        seller:
+          type: ["string", "null"]
+        listingUrl:
+          type: ["string", "null"]
+        imageUrl:
+          type: ["string", "null"]
+
+    EtsyPriceSuggestion:
+      type: object
+      required: [suggestionUsd, listingCount, listings]
+      properties:
+        suggestionUsd:
+          type: number
+        listingCount:
+          type: integer
+        listings:
+          type: array
+          items:
+            $ref: "#/components/schemas/EtsyListing"
+        cachedAt:
+          type: ["string", "null"]
+        searchQuery:
+          type: string
+
     FabricsListResponse:
       type: object
       required: [items, total, page, pageSize]

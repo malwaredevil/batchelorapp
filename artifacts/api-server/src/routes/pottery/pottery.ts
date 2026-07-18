@@ -69,6 +69,11 @@ import {
   generateZoneEmbedding,
 } from "../../lib/visual-embed";
 import { serializeItem, serializeItems } from "../../lib/pottery/serialize";
+import {
+  lookupEbayMarketValue,
+  buildEbayQuery,
+} from "../../lib/pottery/ebay-market-value";
+import { env } from "../../lib/env";
 import { logger } from "../../lib/logger";
 import pLimit from "p-limit";
 import {
@@ -1157,6 +1162,82 @@ router.post("/items/:id/set-primary-image", aiLimiter, async (req, res) => {
     const message = err instanceof Error ? err.message : "Unknown error.";
     res.status(status).json({ error: message });
   }
+});
+
+// ---------------------------------------------------------------------------
+// #213 — eBay market-value estimate (on-demand)
+// ---------------------------------------------------------------------------
+
+router.post("/items/:id/estimate-market-value", aiLimiter, async (req, res) => {
+  const { id } = GetPotteryParams.parse(req.params);
+
+  if (!env.apifyApiToken) {
+    res.status(503).json({ error: "Apify integration not configured." });
+    return;
+  }
+
+  const [item] = await db
+    .select({
+      id: potteryItems.id,
+      name: potteryItems.name,
+      maker: potteryItems.maker,
+      style: potteryItems.style,
+    })
+    .from(potteryItems)
+    .where(eq(potteryItems.id, id));
+
+  if (!item) {
+    res.status(404).json({ error: "Item not found." });
+    return;
+  }
+
+  const query = buildEbayQuery(item.name, {
+    maker: item.maker,
+    style: item.style,
+  });
+
+  const result = await lookupEbayMarketValue(query, env.apifyApiToken);
+  if (!result) {
+    res.status(422).json({
+      error:
+        "No eBay sold listings found for this item. Try refining the search.",
+    });
+    return;
+  }
+
+  // Cache result on the item
+  const [updated] = await db
+    .update(potteryItems)
+    .set({
+      ebayPriceMinUsd: String(result.priceMinUsd),
+      ebayPriceMaxUsd: String(result.priceMaxUsd),
+      ebayPriceMedianUsd: String(result.priceMedianUsd),
+      ebayPriceCachedAt: new Date(),
+      ebayPriceListings: result.listings as unknown as Record<string, unknown>,
+    })
+    .where(eq(potteryItems.id, id))
+    .returning({
+      ebayPriceMinUsd: potteryItems.ebayPriceMinUsd,
+      ebayPriceMaxUsd: potteryItems.ebayPriceMaxUsd,
+      ebayPriceMedianUsd: potteryItems.ebayPriceMedianUsd,
+      ebayPriceCachedAt: potteryItems.ebayPriceCachedAt,
+    });
+
+  res.json({
+    priceMinUsd: updated.ebayPriceMinUsd
+      ? Number(updated.ebayPriceMinUsd)
+      : null,
+    priceMaxUsd: updated.ebayPriceMaxUsd
+      ? Number(updated.ebayPriceMaxUsd)
+      : null,
+    priceMedianUsd: updated.ebayPriceMedianUsd
+      ? Number(updated.ebayPriceMedianUsd)
+      : null,
+    cachedAt: updated.ebayPriceCachedAt?.toISOString() ?? null,
+    listingCount: result.listingCount,
+    listings: result.listings,
+    searchQuery: query,
+  });
 });
 
 export default router;

@@ -69,6 +69,11 @@ import {
 } from "../../lib/ornaments/openai";
 import { lookupBarcode } from "../../lib/ornaments/barcode";
 import { lookupBookValue } from "../../lib/ornaments/book-value";
+import {
+  lookupEbayMarketValue,
+  buildEbayQuery,
+} from "../../lib/pottery/ebay-market-value";
+import { env } from "../../lib/env";
 import { serializeItem, serializeItems } from "../../lib/ornaments/serialize";
 import { logger } from "../../lib/logger";
 import pLimit from "p-limit";
@@ -1035,6 +1040,82 @@ export async function runItemAnalysis(id: number): Promise<unknown> {
 
   return GetOrnamentResponse.parse(await serializeItem(updated));
 }
+
+// ---------------------------------------------------------------------------
+// #214 — eBay sold-listings fallback (any brand, not just Hallmark)
+// ---------------------------------------------------------------------------
+
+router.post("/items/:id/ebay-price-lookup", aiLimiter, async (req, res) => {
+  const { id } = GetOrnamentParams.parse(req.params);
+
+  if (!env.apifyApiToken) {
+    res.status(503).json({ error: "Apify integration not configured." });
+    return;
+  }
+
+  const [item] = await db
+    .select({
+      id: ornamentsItems.id,
+      name: ornamentsItems.name,
+      brand: ornamentsItems.brand,
+      seriesOrCollection: ornamentsItems.seriesOrCollection,
+      year: ornamentsItems.year,
+    })
+    .from(ornamentsItems)
+    .where(eq(ornamentsItems.id, id));
+
+  if (!item) {
+    res.status(404).json({ error: "Ornament not found." });
+    return;
+  }
+
+  const query = buildEbayQuery(item.name, {
+    brand: item.brand,
+    seriesOrCollection: item.seriesOrCollection,
+    year: item.year,
+  });
+
+  const result = await lookupEbayMarketValue(query, env.apifyApiToken);
+  if (!result) {
+    res
+      .status(422)
+      .json({ error: "No eBay sold listings found for this ornament." });
+    return;
+  }
+
+  const [updated] = await db
+    .update(ornamentsItems)
+    .set({
+      ebayPriceMinUsd: String(result.priceMinUsd),
+      ebayPriceMaxUsd: String(result.priceMaxUsd),
+      ebayPriceMedianUsd: String(result.priceMedianUsd),
+      ebayPriceCachedAt: new Date(),
+      ebayPriceListings: result.listings as unknown as Record<string, unknown>,
+    })
+    .where(eq(ornamentsItems.id, id))
+    .returning({
+      ebayPriceMinUsd: ornamentsItems.ebayPriceMinUsd,
+      ebayPriceMaxUsd: ornamentsItems.ebayPriceMaxUsd,
+      ebayPriceMedianUsd: ornamentsItems.ebayPriceMedianUsd,
+      ebayPriceCachedAt: ornamentsItems.ebayPriceCachedAt,
+    });
+
+  res.json({
+    priceMinUsd: updated.ebayPriceMinUsd
+      ? Number(updated.ebayPriceMinUsd)
+      : null,
+    priceMaxUsd: updated.ebayPriceMaxUsd
+      ? Number(updated.ebayPriceMaxUsd)
+      : null,
+    priceMedianUsd: updated.ebayPriceMedianUsd
+      ? Number(updated.ebayPriceMedianUsd)
+      : null,
+    cachedAt: updated.ebayPriceCachedAt?.toISOString() ?? null,
+    listingCount: result.listingCount,
+    listings: result.listings,
+    searchQuery: query,
+  });
+});
 
 router.post("/items/:id/reanalyze", aiLimiter, async (req, res) => {
   const { id } = GetOrnamentParams.parse(req.params);

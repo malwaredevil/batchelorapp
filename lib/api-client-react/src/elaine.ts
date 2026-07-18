@@ -28,6 +28,13 @@ export type ElaineAppId =
   | "hub"
   | "elaine";
 
+export interface PageContext {
+  module: ElaineAppId;
+  description: string;
+  structuredData?: string;
+  userNotes?: string;
+}
+
 /** A single image/PDF attachment on a user message. `name` is the original
  *  upload filename (PDFs only — images are shown as thumbnails and don't
  *  need a name). Older stored messages may still be plain strings; callers
@@ -323,7 +330,7 @@ function parseSseDataLines(rawEvent: string): string | null {
 export async function streamElaineMessage(
   body: {
     message: string;
-    pageContext?: string;
+    pageContext?: PageContext;
     appId: ElaineAppId;
     /** ID of the named conversation to continue. Omit to start a new one. */
     conversationId?: number;

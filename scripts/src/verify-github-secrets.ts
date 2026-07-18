@@ -9,7 +9,7 @@
  * Usage:
  *   pnpm --filter @workspace/scripts run verify-github-secrets
  *
- * Requires: GITHUB_PAT in environment (loaded from .env via tsx --env-file=.env)
+ * Requires: GH_PAT in environment (loaded from .env via tsx --env-file=.env)
  *
  * Exit codes:
  *   0 — all checks passed, safe to proceed
@@ -56,7 +56,7 @@ const REQUIRED_GITHUB_SECRETS: Array<{ name: string; purpose: string }> = [
     purpose: "Resend reminder from address",
   },
   { name: "SENTRY_DSN", purpose: "Sentry error tracking DSN" },
-  { name: "GITHUB_PAT", purpose: "GitHub Personal Access Token" },
+  { name: "GH_PAT", purpose: "GitHub Personal Access Token" },
   { name: "AGENTPHONE_API_KEY", purpose: "AgentPhone SMS/voice API key" },
   {
     name: "AGENTPHONE_WEBHOOK_SECRET",
@@ -141,11 +141,11 @@ async function checkGitHubSecrets(): Promise<{
 }> {
   header("Check 2: GitHub Actions secrets");
 
-  const token = process.env["GITHUB_PAT"];
+  const token = process.env["GH_PAT"];
   if (!token) {
-    fail("GITHUB_PAT not set in environment — cannot verify GitHub secrets");
+    fail("GH_PAT not set in environment — cannot verify GitHub secrets");
     console.error(
-      "  Ensure GITHUB_PAT is in your .env file and the script is run",
+      "  Ensure GH_PAT is in your .env file and the script is run",
     );
     console.error(
       "  via: pnpm --filter @workspace/scripts run verify-github-secrets",

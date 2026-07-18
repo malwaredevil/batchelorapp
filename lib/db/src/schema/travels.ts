@@ -9,6 +9,7 @@ import {
   boolean,
   timestamp,
   jsonb,
+  numeric,
   index,
   uniqueIndex,
   vector,
@@ -718,3 +719,109 @@ export type TravelsPackingTemplateRow =
   typeof travelsPackingTemplates.$inferSelect;
 export type InsertTravelsPackingTemplate =
   typeof travelsPackingTemplates.$inferInsert;
+
+export const travelsDocumentPages = pgTable(
+  "travels_document_pages",
+  {
+    id: serial("id").primaryKey(),
+    tripDocumentId: integer("trip_document_id")
+      .notNull()
+      .references(() => travelsTripDocuments.id, { onDelete: "cascade" }),
+    pageIndex: integer("page_index").notNull(),
+    mediaType: text("media_type").notNull().default("application/pdf"),
+    widthPx: integer("width_px"),
+    heightPx: integer("height_px"),
+    extractedText: text("extracted_text"),
+    ocrEngine: text("ocr_engine"),
+    ocrEngineVersion: text("ocr_engine_version"),
+    extractionStatus: text("extraction_status").notNull().default("pending"),
+    extractionWarnings: text("extraction_warnings"),
+    contentHash: text("content_hash"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("travels_document_pages_doc_idx").on(table.tripDocumentId),
+    uniqueIndex("travels_document_pages_doc_page_idx").on(
+      table.tripDocumentId,
+      table.pageIndex,
+    ),
+  ],
+).enableRLS();
+
+export type TravelsDocumentPageRow = typeof travelsDocumentPages.$inferSelect;
+export type InsertTravelsDocumentPage =
+  typeof travelsDocumentPages.$inferInsert;
+
+export const travelsDocumentFieldEvidence = pgTable(
+  "travels_document_field_evidence",
+  {
+    id: serial("id").primaryKey(),
+    candidateId: integer("candidate_id").notNull(),
+    documentPageId: integer("document_page_id"),
+    evidenceKind: text("evidence_kind").notNull(),
+    textStart: integer("text_start"),
+    textEnd: integer("text_end"),
+    bbox: jsonb("bbox"),
+    snippet: text("snippet"),
+    ocrConfidence: numeric("ocr_confidence", { precision: 5, scale: 4 }),
+    evidenceHash: text("evidence_hash"),
+    sourceTimestamp: timestamp("source_timestamp", { withTimezone: true }),
+    effectiveTimestamp: timestamp("effective_timestamp", {
+      withTimezone: true,
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("travels_document_field_evidence_candidate_idx").on(
+      table.candidateId,
+    ),
+    index("travels_document_field_evidence_page_idx").on(table.documentPageId),
+  ],
+).enableRLS();
+
+export type TravelsDocumentFieldEvidenceRow =
+  typeof travelsDocumentFieldEvidence.$inferSelect;
+export type InsertTravelsDocumentFieldEvidence =
+  typeof travelsDocumentFieldEvidence.$inferInsert;
+
+export const travelsFieldConflicts = pgTable(
+  "travels_field_conflicts",
+  {
+    id: serial("id").primaryKey(),
+    tripId: integer("trip_id")
+      .notNull()
+      .references(() => travelsTrips.id, { onDelete: "cascade" }),
+    fieldPath: text("field_path").notNull(),
+    acceptedCandidateId: integer("accepted_candidate_id"),
+    acceptedValue: jsonb("accepted_value"),
+    competingCandidateIds: jsonb("competing_candidate_ids")
+      .notNull()
+      .$type<number[]>()
+      .default([]),
+    conflictType: text("conflict_type").notNull(),
+    recommendedCandidateId: integer("recommended_candidate_id"),
+    recommendedRationale: text("recommended_rationale"),
+    status: text("status").notNull().default("open"),
+    decidingUserId: integer("deciding_user_id"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("travels_field_conflicts_trip_idx").on(table.tripId),
+    index("travels_field_conflicts_status_idx").on(table.status),
+    index("travels_field_conflicts_field_path_idx").on(table.fieldPath),
+  ],
+).enableRLS();
+
+export type TravelsFieldConflictRow = typeof travelsFieldConflicts.$inferSelect;
+export type InsertTravelsFieldConflict =
+  typeof travelsFieldConflicts.$inferInsert;

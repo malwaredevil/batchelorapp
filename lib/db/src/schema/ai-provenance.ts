@@ -130,3 +130,26 @@ export const aiFieldDecisions = pgTable(
 
 export type AiFieldDecision = typeof aiFieldDecisions.$inferSelect;
 export type InsertAiFieldDecision = typeof aiFieldDecisions.$inferInsert;
+
+export const aiPromptVersions = pgTable(
+  "ai_prompt_versions",
+  {
+    id: serial("id").primaryKey(),
+    templateId: text("template_id").notNull(),
+    version: integer("version").notNull().default(1),
+    hash: text("hash").notNull(),
+    schemaVersion: integer("schema_version").notNull().default(1),
+    effectiveFrom: timestamp("effective_from", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    effectiveUntil: timestamp("effective_until", { withTimezone: true }),
+    releaseNotes: text("release_notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("ai_prompt_versions_hash_idx").on(table.hash)],
+).enableRLS();
+
+export type AiPromptVersion = typeof aiPromptVersions.$inferSelect;
+export type InsertAiPromptVersion = typeof aiPromptVersions.$inferInsert;

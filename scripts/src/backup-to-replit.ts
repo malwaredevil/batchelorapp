@@ -873,6 +873,19 @@ CREATE TABLE IF NOT EXISTS ai_field_decisions (
   decided_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Phase 2: AI prompt versions (#229)
+CREATE TABLE IF NOT EXISTS ai_prompt_versions (
+  id               SERIAL PRIMARY KEY,
+  template_id      TEXT NOT NULL,
+  version          INTEGER NOT NULL DEFAULT 1,
+  hash             TEXT NOT NULL,
+  schema_version   INTEGER NOT NULL DEFAULT 1,
+  effective_from   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  effective_until  TIMESTAMPTZ,
+  release_notes    TEXT,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Phase 2: Ingestion framework (#230)
 CREATE TABLE IF NOT EXISTS ingestion_sources (
   id                      SERIAL PRIMARY KEY,
@@ -922,6 +935,56 @@ CREATE TABLE IF NOT EXISTS ingestion_candidates (
   merged_at         TIMESTAMPTZ,
   rejected_reason   TEXT,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Phase 2: Document evidence (#232)
+CREATE TABLE IF NOT EXISTS travels_document_pages (
+  id                   SERIAL PRIMARY KEY,
+  trip_document_id     INTEGER NOT NULL,
+  page_index           INTEGER NOT NULL,
+  media_type           TEXT NOT NULL DEFAULT 'application/pdf',
+  width_px             INTEGER,
+  height_px            INTEGER,
+  extracted_text       TEXT,
+  ocr_engine           TEXT,
+  ocr_engine_version   TEXT,
+  extraction_status    TEXT NOT NULL DEFAULT 'pending',
+  extraction_warnings  TEXT,
+  content_hash         TEXT,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS travels_document_field_evidence (
+  id                   SERIAL PRIMARY KEY,
+  candidate_id         INTEGER NOT NULL,
+  document_page_id     INTEGER,
+  evidence_kind        TEXT NOT NULL,
+  text_start           INTEGER,
+  text_end             INTEGER,
+  bbox                 JSONB,
+  snippet              TEXT,
+  ocr_confidence       NUMERIC(5,4),
+  evidence_hash        TEXT,
+  source_timestamp     TIMESTAMPTZ,
+  effective_timestamp  TIMESTAMPTZ,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS travels_field_conflicts (
+  id                        SERIAL PRIMARY KEY,
+  trip_id                   INTEGER NOT NULL,
+  field_path                TEXT NOT NULL,
+  accepted_candidate_id     INTEGER,
+  accepted_value            JSONB,
+  competing_candidate_ids   JSONB NOT NULL DEFAULT '[]'::jsonb,
+  conflict_type             TEXT NOT NULL,
+  recommended_candidate_id  INTEGER,
+  recommended_rationale     TEXT,
+  status                    TEXT NOT NULL DEFAULT 'open',
+  deciding_user_id          INTEGER,
+  decided_at                TIMESTAMPTZ,
+  created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Phase 2: Search feedback (#233)
@@ -2046,6 +2109,23 @@ async function main() {
   });
   await resetSequence(dest, "ai_field_decisions", "id");
 
+  summary["ai_prompt_versions"] = await copyTable(source, dest, {
+    table: "ai_prompt_versions",
+    columns: [
+      "id",
+      "template_id",
+      "version",
+      "hash",
+      "schema_version",
+      "effective_from",
+      "effective_until",
+      "release_notes",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ai_prompt_versions", "id");
+
   // ── Phase 2: Ingestion ────────────────────────────────────────────────────
   summary["ingestion_sources"] = await copyTable(source, dest, {
     table: "ingestion_sources",
@@ -2131,6 +2211,71 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "search_feedback", "id");
+
+  // ── Phase 2: Document evidence ────────────────────────────────────────────
+  summary["travels_document_pages"] = await copyTable(source, dest, {
+    table: "travels_document_pages",
+    columns: [
+      "id",
+      "trip_document_id",
+      "page_index",
+      "media_type",
+      "width_px",
+      "height_px",
+      "extracted_text",
+      "ocr_engine",
+      "ocr_engine_version",
+      "extraction_status",
+      "extraction_warnings",
+      "content_hash",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_document_pages", "id");
+
+  summary["travels_document_field_evidence"] = await copyTable(source, dest, {
+    table: "travels_document_field_evidence",
+    columns: [
+      "id",
+      "candidate_id",
+      "document_page_id",
+      "evidence_kind",
+      "text_start",
+      "text_end",
+      "bbox",
+      "snippet",
+      "ocr_confidence",
+      "evidence_hash",
+      "source_timestamp",
+      "effective_timestamp",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_document_field_evidence", "id");
+
+  summary["travels_field_conflicts"] = await copyTable(source, dest, {
+    table: "travels_field_conflicts",
+    columns: [
+      "id",
+      "trip_id",
+      "field_path",
+      "accepted_candidate_id",
+      "accepted_value",
+      "competing_candidate_ids",
+      "conflict_type",
+      "recommended_candidate_id",
+      "recommended_rationale",
+      "status",
+      "deciding_user_id",
+      "decided_at",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_field_conflicts", "id");
 
   // ── Record backup history ─────────────────────────────────────────────────
   const note = Object.entries(summary)

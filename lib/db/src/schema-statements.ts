@@ -1629,6 +1629,25 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS ai_field_decisions_user_idx
      ON ai_field_decisions (deciding_user_id)`,
 
+  // ── Phase 2: AI prompt versions (#229) ───────────────────────────────────
+
+  `CREATE TABLE IF NOT EXISTS ai_prompt_versions (
+    id               SERIAL PRIMARY KEY,
+    template_id      TEXT NOT NULL,
+    version          INTEGER NOT NULL DEFAULT 1,
+    hash             TEXT NOT NULL,
+    schema_version   INTEGER NOT NULL DEFAULT 1,
+    effective_from   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    effective_until  TIMESTAMPTZ,
+    release_notes    TEXT,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE ai_prompt_versions ENABLE ROW LEVEL SECURITY`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS ai_prompt_versions_template_version_idx
+     ON ai_prompt_versions (template_id, version)`,
+  `CREATE INDEX IF NOT EXISTS ai_prompt_versions_hash_idx
+     ON ai_prompt_versions (hash)`,
+
   // ── Phase 2: Ingestion framework (#230) ──────────────────────────────────
 
   `CREATE TABLE IF NOT EXISTS ingestion_sources (
@@ -1706,6 +1725,79 @@ export const STATEMENTS: string[] = [
 
   `ALTER TABLE travels_trip_documents
      ADD COLUMN IF NOT EXISTS source_spans JSONB`,
+
+  `CREATE TABLE IF NOT EXISTS travels_document_pages (
+    id                   SERIAL PRIMARY KEY,
+    trip_document_id     INTEGER NOT NULL
+                           REFERENCES travels_trip_documents(id) ON DELETE CASCADE,
+    page_index           INTEGER NOT NULL,
+    media_type           TEXT NOT NULL DEFAULT 'application/pdf',
+    width_px             INTEGER,
+    height_px            INTEGER,
+    extracted_text       TEXT,
+    ocr_engine           TEXT,
+    ocr_engine_version   TEXT,
+    extraction_status    TEXT NOT NULL DEFAULT 'pending',
+    extraction_warnings  TEXT,
+    content_hash         TEXT,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_document_pages ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travels_document_pages_doc_idx
+     ON travels_document_pages (trip_document_id)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS travels_document_pages_doc_page_idx
+     ON travels_document_pages (trip_document_id, page_index)`,
+
+  `CREATE TABLE IF NOT EXISTS travels_document_field_evidence (
+    id                   SERIAL PRIMARY KEY,
+    candidate_id         INTEGER NOT NULL
+                           REFERENCES ai_field_candidates(id) ON DELETE CASCADE,
+    document_page_id     INTEGER
+                           REFERENCES travels_document_pages(id) ON DELETE SET NULL,
+    evidence_kind        TEXT NOT NULL,
+    text_start           INTEGER,
+    text_end             INTEGER,
+    bbox                 JSONB,
+    snippet              TEXT,
+    ocr_confidence       NUMERIC(5,4),
+    evidence_hash        TEXT,
+    source_timestamp     TIMESTAMPTZ,
+    effective_timestamp  TIMESTAMPTZ,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_document_field_evidence ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travels_document_field_evidence_candidate_idx
+     ON travels_document_field_evidence (candidate_id)`,
+  `CREATE INDEX IF NOT EXISTS travels_document_field_evidence_page_idx
+     ON travels_document_field_evidence (document_page_id)`,
+
+  `CREATE TABLE IF NOT EXISTS travels_field_conflicts (
+    id                        SERIAL PRIMARY KEY,
+    trip_id                   INTEGER NOT NULL
+                                REFERENCES travels_trips(id) ON DELETE CASCADE,
+    field_path                TEXT NOT NULL,
+    accepted_candidate_id     INTEGER
+                                REFERENCES ai_field_candidates(id) ON DELETE SET NULL,
+    accepted_value            JSONB,
+    competing_candidate_ids   JSONB NOT NULL DEFAULT '[]'::jsonb,
+    conflict_type             TEXT NOT NULL,
+    recommended_candidate_id  INTEGER
+                                REFERENCES ai_field_candidates(id) ON DELETE SET NULL,
+    recommended_rationale     TEXT,
+    status                    TEXT NOT NULL DEFAULT 'open',
+    deciding_user_id          INTEGER
+                                REFERENCES app_users(id) ON DELETE SET NULL,
+    decided_at                TIMESTAMPTZ,
+    created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_field_conflicts ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travels_field_conflicts_trip_idx
+     ON travels_field_conflicts (trip_id)`,
+  `CREATE INDEX IF NOT EXISTS travels_field_conflicts_status_idx
+     ON travels_field_conflicts (status)`,
+  `CREATE INDEX IF NOT EXISTS travels_field_conflicts_field_path_idx
+     ON travels_field_conflicts (field_path)`,
 
   // ── Phase 2: Search feedback (#233) ──────────────────────────────────────
 

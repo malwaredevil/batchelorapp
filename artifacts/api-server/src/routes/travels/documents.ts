@@ -521,6 +521,7 @@ router.post("/trips/:id/documents", upload.single("file"), async (req, res) => {
   const storagePath = await uploadDocument(buffer, mimetype, originalname);
 
   let extractedData: Record<string, unknown> = {};
+  let docSourceSpans: unknown = null;
   let rawText: string | null = null;
   try {
     if (isPdf) {
@@ -531,9 +532,13 @@ router.post("/trips/:id/documents", upload.single("file"), async (req, res) => {
       } catch {
         // non-fatal
       }
-      extractedData = await extractFromPdf(buffer);
+      const result = await extractFromPdf(buffer);
+      extractedData = result.data;
+      docSourceSpans = result.sourceSpans;
     } else {
-      extractedData = await extractFromImage(buffer, mimetype);
+      const result = await extractFromImage(buffer, mimetype);
+      extractedData = result.data;
+      docSourceSpans = result.sourceSpans;
       // For images, synthesize a text blob from the extracted structured data
       // so semantic search still covers image-based documents.
       const parts = Object.entries(extractedData)
@@ -561,6 +566,7 @@ router.post("/trips/:id/documents", upload.single("file"), async (req, res) => {
       documentType: (extractedData.documentType as string | undefined) ?? null,
       originalFilename: originalname,
       extractedData,
+      sourceSpans: docSourceSpans,
       rawText,
     })
     .returning();
@@ -704,11 +710,16 @@ export async function rescanTripDocument(
   const isImage = contentType.startsWith("image/");
 
   let freshData: Record<string, unknown> = {};
+  let freshSourceSpans: unknown = null;
   try {
     if (isPdf) {
-      freshData = await extractFromPdf(buffer);
+      const result = await extractFromPdf(buffer);
+      freshData = result.data;
+      freshSourceSpans = result.sourceSpans;
     } else if (isImage) {
-      freshData = await extractFromImage(buffer, contentType);
+      const result = await extractFromImage(buffer, contentType);
+      freshData = result.data;
+      freshSourceSpans = result.sourceSpans;
     } else {
       return {
         ok: false,
@@ -741,6 +752,7 @@ export async function rescanTripDocument(
     .update(travelsTripDocuments)
     .set({
       extractedData: merged,
+      sourceSpans: freshSourceSpans,
       documentType: locked.has("documentType")
         ? existing.documentType
         : ((merged.documentType as string | undefined) ??

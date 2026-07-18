@@ -1417,4 +1417,194 @@ export const STATEMENTS: string[] = [
 
   `CREATE INDEX IF NOT EXISTS messenger_push_subs_user_idx
      ON messenger_push_subscriptions (user_id)`,
+
+  // ── Phase 2: AI provenance (#229) ────────────────────────────────────────
+
+  `CREATE TABLE IF NOT EXISTS ai_generation_runs (
+    id                    SERIAL PRIMARY KEY,
+    module                TEXT NOT NULL,
+    feature               TEXT NOT NULL,
+    target_type           TEXT NOT NULL,
+    target_id             INTEGER,
+    job_id                INTEGER REFERENCES app_jobs(id) ON DELETE SET NULL,
+    operation_event_id    INTEGER REFERENCES external_operation_events(id) ON DELETE SET NULL,
+    user_id               INTEGER REFERENCES app_users(id) ON DELETE SET NULL,
+    provider              TEXT NOT NULL,
+    model                 TEXT NOT NULL,
+    model_provider_run_id TEXT,
+    prompt_template_id    TEXT,
+    prompt_version_hash   TEXT,
+    tool_schema_version   INTEGER NOT NULL DEFAULT 1,
+    input_artifact_hashes JSONB NOT NULL DEFAULT '[]'::jsonb,
+    status                TEXT NOT NULL DEFAULT 'pending',
+    error_code            TEXT,
+    error_message         TEXT,
+    started_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at          TIMESTAMPTZ,
+    duration_ms           INTEGER,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE ai_generation_runs ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS ai_generation_runs_target_idx
+     ON ai_generation_runs (target_type, target_id)`,
+  `CREATE INDEX IF NOT EXISTS ai_generation_runs_module_feature_idx
+     ON ai_generation_runs (module, feature)`,
+  `CREATE INDEX IF NOT EXISTS ai_generation_runs_created_at_idx
+     ON ai_generation_runs (created_at DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS ai_field_candidates (
+    id                    SERIAL PRIMARY KEY,
+    generation_run_id     INTEGER NOT NULL REFERENCES ai_generation_runs(id) ON DELETE CASCADE,
+    target_type           TEXT NOT NULL,
+    target_id             INTEGER,
+    field_path            TEXT NOT NULL,
+    candidate_value       JSONB,
+    normalized_value_hash TEXT,
+    confidence_score      NUMERIC(5,4),
+    confidence_method     TEXT,
+    authority_class       TEXT NOT NULL DEFAULT 'vision',
+    source_references     JSONB NOT NULL DEFAULT '[]'::jsonb,
+    disposition           TEXT NOT NULL DEFAULT 'proposed',
+    applied_at            TIMESTAMPTZ,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE ai_field_candidates ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS ai_field_candidates_run_idx
+     ON ai_field_candidates (generation_run_id)`,
+  `CREATE INDEX IF NOT EXISTS ai_field_candidates_target_field_idx
+     ON ai_field_candidates (target_type, target_id, field_path)`,
+  `CREATE INDEX IF NOT EXISTS ai_field_candidates_disposition_idx
+     ON ai_field_candidates (disposition)`,
+
+  `CREATE TABLE IF NOT EXISTS ai_field_decisions (
+    id                SERIAL PRIMARY KEY,
+    candidate_id      INTEGER NOT NULL REFERENCES ai_field_candidates(id) ON DELETE CASCADE,
+    deciding_user_id  INTEGER REFERENCES app_users(id) ON DELETE SET NULL,
+    decision_type     TEXT NOT NULL,
+    prior_value       JSONB,
+    final_value       JSONB,
+    correction_category TEXT,
+    context_source    TEXT NOT NULL DEFAULT 'manual_edit',
+    decided_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE ai_field_decisions ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS ai_field_decisions_candidate_idx
+     ON ai_field_decisions (candidate_id)`,
+  `CREATE INDEX IF NOT EXISTS ai_field_decisions_user_idx
+     ON ai_field_decisions (deciding_user_id)`,
+
+  // ── Phase 2: Ingestion framework (#230) ──────────────────────────────────
+
+  `CREATE TABLE IF NOT EXISTS ingestion_sources (
+    id                    SERIAL PRIMARY KEY,
+    name                  TEXT NOT NULL,
+    slug                  TEXT NOT NULL,
+    adapter_type          TEXT NOT NULL,
+    adapter_config        JSONB NOT NULL DEFAULT '{}'::jsonb,
+    config_schema_version INTEGER NOT NULL DEFAULT 1,
+    module                TEXT NOT NULL,
+    feature               TEXT,
+    enabled               BOOLEAN NOT NULL DEFAULT TRUE,
+    owner_notes           TEXT,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE ingestion_sources ENABLE ROW LEVEL SECURITY`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS ingestion_sources_slug_idx
+     ON ingestion_sources (slug)`,
+  `CREATE INDEX IF NOT EXISTS ingestion_sources_module_idx
+     ON ingestion_sources (module)`,
+
+  `CREATE TABLE IF NOT EXISTS ingestion_runs (
+    id              SERIAL PRIMARY KEY,
+    source_id       INTEGER NOT NULL REFERENCES ingestion_sources(id) ON DELETE CASCADE,
+    job_id          INTEGER REFERENCES app_jobs(id) ON DELETE SET NULL,
+    triggered_by    INTEGER REFERENCES app_users(id) ON DELETE SET NULL,
+    trigger_type    TEXT NOT NULL DEFAULT 'manual',
+    status          TEXT NOT NULL DEFAULT 'pending',
+    items_fetched   INTEGER NOT NULL DEFAULT 0,
+    items_matched   INTEGER NOT NULL DEFAULT 0,
+    items_merged    INTEGER NOT NULL DEFAULT 0,
+    items_rejected  INTEGER NOT NULL DEFAULT 0,
+    error_code      TEXT,
+    error_message   TEXT,
+    started_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at    TIMESTAMPTZ,
+    metadata        JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE ingestion_runs ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS ingestion_runs_source_idx
+     ON ingestion_runs (source_id)`,
+  `CREATE INDEX IF NOT EXISTS ingestion_runs_status_idx
+     ON ingestion_runs (status)`,
+  `CREATE INDEX IF NOT EXISTS ingestion_runs_created_at_idx
+     ON ingestion_runs (created_at DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS ingestion_candidates (
+    id               SERIAL PRIMARY KEY,
+    run_id           INTEGER NOT NULL REFERENCES ingestion_runs(id) ON DELETE CASCADE,
+    source_id        INTEGER NOT NULL REFERENCES ingestion_sources(id) ON DELETE CASCADE,
+    source_key       TEXT NOT NULL,
+    target_type      TEXT,
+    target_id        INTEGER,
+    normalized_data  JSONB NOT NULL DEFAULT '{}'::jsonb,
+    confidence_score NUMERIC(5,4),
+    status           TEXT NOT NULL DEFAULT 'pending',
+    matched_at       TIMESTAMPTZ,
+    merged_at        TIMESTAMPTZ,
+    rejected_reason  TEXT,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE ingestion_candidates ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS ingestion_candidates_run_idx
+     ON ingestion_candidates (run_id)`,
+  `CREATE INDEX IF NOT EXISTS ingestion_candidates_target_idx
+     ON ingestion_candidates (target_type, target_id)`,
+  `CREATE INDEX IF NOT EXISTS ingestion_candidates_status_idx
+     ON ingestion_candidates (status)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS ingestion_candidates_source_key_idx
+     ON ingestion_candidates (source_id, source_key)`,
+
+  // ── Phase 2: Document evidence (#232) ────────────────────────────────────
+
+  `ALTER TABLE travels_trip_documents
+     ADD COLUMN IF NOT EXISTS source_spans JSONB`,
+
+  // ── Phase 2: Search feedback (#233) ──────────────────────────────────────
+
+  `CREATE TABLE IF NOT EXISTS search_feedback (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER REFERENCES app_users(id) ON DELETE SET NULL,
+    module      TEXT NOT NULL,
+    item_a_type TEXT NOT NULL,
+    item_a_id   INTEGER NOT NULL,
+    item_b_type TEXT NOT NULL,
+    item_b_id   INTEGER NOT NULL,
+    verdict     TEXT NOT NULL,
+    weight      NUMERIC(4,3) NOT NULL DEFAULT 1.000,
+    notes       TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE search_feedback ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS search_feedback_module_idx
+     ON search_feedback (module)`,
+  `CREATE INDEX IF NOT EXISTS search_feedback_items_idx
+     ON search_feedback (item_a_type, item_a_id, item_b_type, item_b_id)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS search_feedback_pair_user_idx
+     ON search_feedback (user_id, item_a_type, item_a_id, item_b_type, item_b_id)`,
+
+  // ── Security: revoke public execute on auto_enable_rls() (#258) ──────────
+  // This Supabase-created SECURITY DEFINER function must not be callable by
+  // the anon or authenticated roles. Run idempotently — no-op if function
+  // does not exist or already has the privilege revoked.
+  `DO $$ BEGIN
+     IF EXISTS (
+       SELECT 1 FROM pg_proc p
+       JOIN pg_namespace n ON n.oid = p.pronamespace
+       WHERE n.nspname = 'public' AND p.proname = 'auto_enable_rls'
+     ) THEN
+       REVOKE EXECUTE ON FUNCTION public.auto_enable_rls() FROM anon, authenticated, PUBLIC;
+     END IF;
+   END $$`,
 ];

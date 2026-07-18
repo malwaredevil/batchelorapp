@@ -78,6 +78,7 @@ export const travelsTripDocuments = pgTable(
     sourceEmailFrom: text("source_email_from"),
     sourceEmailSubject: text("source_email_subject"),
     sourceReceivedAt: timestamp("source_received_at", { withTimezone: true }),
+    sourceSpans: jsonb("source_spans"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

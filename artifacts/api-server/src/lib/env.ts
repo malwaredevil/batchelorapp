@@ -55,6 +55,9 @@ export const env = {
   // Received Emails API — Resend's webhook payloads never include the
   // body/headers/attachments inline, only metadata.
   resendApiKey: optional("RESEND_API_KEY"),
+  // Apify API token for the ingestion framework (#230). Optional — only
+  // required when Apify-backed ingestion sources are configured.
+  apifyApiToken: optional("APIFY_API_TOKEN"),
   sentryDsn: optional("SENTRY_DSN"),
   // Comma-separated list of allowed host names for OAuth redirect URIs and
   // password-reset URLs. Validated server-side so a forged Host header

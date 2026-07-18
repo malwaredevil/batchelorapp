@@ -3,6 +3,7 @@ import { env } from "./env";
 import { getElaineGlobalConfig } from "./elaine-config";
 import { getConfig } from "./app-config";
 import { logger } from "./logger";
+import { circuitBreaker } from "./circuit-breaker";
 
 /**
  * Every AI call in this app goes through OpenRouter, using OpenRouter's model
@@ -118,7 +119,8 @@ export async function callModel<T>(
   model: string,
   fn: (client: OpenAI, model: string) => Promise<T>,
 ): Promise<T> {
-  return fn(await getOpenRouterClient(), model);
+  const client = await getOpenRouterClient();
+  return circuitBreaker.execute("openrouter", () => fn(client, model));
 }
 
 /**

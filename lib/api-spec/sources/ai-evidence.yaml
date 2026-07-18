@@ -1,0 +1,186 @@
+openapi: 3.1.0
+info:
+  title: AI Evidence
+  version: 0.1.0
+paths:
+  /summary:
+    get:
+      operationId: getAiEvidenceSummary
+      tags: [ai-evidence]
+      summary: Aggregate AI generation run stats by module/feature/model (owner only)
+      responses:
+        "200":
+          description: Summary stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiEvidenceSummaryResponse"
+
+  /runs:
+    get:
+      operationId: listAiGenerationRuns
+      tags: [ai-evidence]
+      summary: List AI generation runs (owner only)
+      parameters:
+        - name: module
+          in: query
+          schema: { type: string }
+        - name: feature
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, maximum: 200 }
+      responses:
+        "200":
+          description: Run list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiGenerationRunsResponse"
+
+  /{targetType}/{targetId}:
+    get:
+      operationId: getAiEvidenceForTarget
+      tags: [ai-evidence]
+      summary: Fetch generation runs + field candidates for a specific item (owner only)
+      parameters:
+        - name: targetType
+          in: path
+          required: true
+          schema: { type: string }
+        - name: targetId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Runs with candidates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiEvidenceTargetResponse"
+
+  /candidates/{candidateId}/decision:
+    post:
+      operationId: recordAiFieldDecision
+      tags: [ai-evidence]
+      summary: Record an accept/reject/edit decision on a field candidate (owner only)
+      parameters:
+        - name: candidateId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiFieldDecisionBody"
+      responses:
+        "200":
+          description: Decision recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  disposition: { type: string }
+
+components:
+  schemas:
+    AiEvidenceSummaryRow:
+      type: object
+      properties:
+        module: { type: string }
+        feature: { type: string }
+        model: { type: string }
+        run_count: { type: integer }
+        success_count: { type: integer }
+        avg_duration_ms: { type: integer }
+        total_candidates: { type: integer }
+        accepted_candidates: { type: integer }
+        rejected_candidates: { type: integer }
+
+    AiEvidenceSummaryResponse:
+      type: object
+      properties:
+        summary:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiEvidenceSummaryRow"
+
+    AiGenerationRunRow:
+      type: object
+      properties:
+        id: { type: integer }
+        module: { type: string }
+        feature: { type: string }
+        provider: { type: string }
+        model: { type: string }
+        status: { type: string }
+        started_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time, nullable: true }
+        duration_ms: { type: integer, nullable: true }
+        error_code: { type: string, nullable: true }
+        candidate_count: { type: integer }
+
+    AiGenerationRunsResponse:
+      type: object
+      properties:
+        runs:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiGenerationRunRow"
+
+    AiFieldCandidateRow:
+      type: object
+      properties:
+        id: { type: integer }
+        field_path: { type: string }
+        candidate_value: {}
+        confidence_score: { type: number, nullable: true }
+        confidence_method: { type: string, nullable: true }
+        authority_class: { type: string }
+        disposition: { type: string }
+        applied_at: { type: string, format: date-time, nullable: true }
+
+    AiEvidenceTargetResponse:
+      type: object
+      properties:
+        targetType: { type: string }
+        targetId: { type: integer }
+        runs:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              module: { type: string }
+              feature: { type: string }
+              provider: { type: string }
+              model: { type: string }
+              status: { type: string }
+              started_at: { type: string, format: date-time }
+              completed_at: { type: string, format: date-time, nullable: true }
+              duration_ms: { type: integer, nullable: true }
+              error_code: { type: string, nullable: true }
+              candidates:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AiFieldCandidateRow"
+
+    AiFieldDecisionBody:
+      type: object
+      required: [decisionType]
+      properties:
+        decisionType:
+          type: string
+          enum: [accept, reject, edit, lock, unlock]
+        finalValue: {}
+        correctionCategory: { type: string }
+        contextSource: { type: string }

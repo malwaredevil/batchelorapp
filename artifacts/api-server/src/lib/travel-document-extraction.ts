@@ -182,10 +182,63 @@ function isThinExtraction(fields: Record<string, unknown>): boolean {
   return substantive.length < 2;
 }
 
+// ---------------------------------------------------------------------------
+// Source-span tracking
+// ---------------------------------------------------------------------------
+
+/**
+ * Describes where a field value was located in the source material, so the
+ * owner can trace why the AI chose a particular extracted value.
+ *
+ * PDF: character offsets into the raw text slice.
+ * Vision: extraction path metadata (model, QR decode, fusion flag).
+ */
+export interface ExtractionSourceSpans {
+  source: "pdf_text" | "vision" | "vision_fusion";
+  /** PDF only — raw text length that was fed to the model */
+  textLength?: number;
+  /** PDF only — per-field character offsets */
+  fieldOffsets?: Array<{
+    field: string;
+    start: number;
+    end: number;
+    excerpt: string;
+  }>;
+  /** Vision only — whether a QR code was decoded and used */
+  hasQr?: boolean;
+  /** Vision only — raw decoded QR value if present */
+  qrValue?: string;
+}
+
+export interface ExtractionResult {
+  data: Record<string, unknown>;
+  sourceSpans: ExtractionSourceSpans;
+}
+
+function computePdfSourceSpans(
+  text: string,
+  fields: Record<string, unknown>,
+): ExtractionSourceSpans {
+  const fieldOffsets: ExtractionSourceSpans["fieldOffsets"] = [];
+  for (const [key, value] of Object.entries(fields)) {
+    if (typeof value !== "string" || value.length < 3) continue;
+    const idx = text.indexOf(value);
+    if (idx !== -1) {
+      fieldOffsets.push({
+        field: key,
+        start: idx,
+        end: idx + value.length,
+        excerpt: value.length > 80 ? value.slice(0, 80) + "…" : value,
+      });
+    }
+  }
+  return { source: "pdf_text", textLength: text.length, fieldOffsets };
+}
+
 export async function extractFromImage(
   buffer: Buffer,
   mimeType: string,
-): Promise<Record<string, unknown>> {
+): Promise<ExtractionResult> {
   const b64 = buffer.toString("base64");
   const dataUrl = `data:${mimeType};base64,${b64}`;
   const [models, thresholds, qrText] = await Promise.all([
@@ -241,7 +294,14 @@ Return ONLY valid JSON, no extra text.`;
   const parsed = parseAiExtractionJson(result);
   const features = await getFeatures();
   if (!features.enableFusionTravelDocFallback || !isThinExtraction(parsed)) {
-    return parsed;
+    return {
+      data: parsed,
+      sourceSpans: {
+        source: "vision",
+        hasQr: !!qrText,
+        qrValue: qrText ?? undefined,
+      },
+    };
   }
 
   try {
@@ -258,22 +318,40 @@ Return ONLY valid JSON, no extra text.`;
       { maxTokens: thresholds.travelDocExtractionMaxTokens },
     );
     const fusedParsed = parseAiExtractionJson(fused);
-    return isThinExtraction(fusedParsed) ? parsed : fusedParsed;
+    const finalData = isThinExtraction(fusedParsed) ? parsed : fusedParsed;
+    return {
+      data: finalData,
+      sourceSpans: {
+        source: isThinExtraction(fusedParsed) ? "vision" : "vision_fusion",
+        hasQr: !!qrText,
+        qrValue: qrText ?? undefined,
+      },
+    };
   } catch {
-    return parsed;
+    return {
+      data: parsed,
+      sourceSpans: {
+        source: "vision",
+        hasQr: !!qrText,
+        qrValue: qrText ?? undefined,
+      },
+    };
   }
 }
 
 export async function extractFromPdf(
   buffer: Buffer,
-): Promise<Record<string, unknown>> {
+): Promise<ExtractionResult> {
   let text = "";
   try {
     const pdfParse = await import("pdf-parse");
     const parsed = await pdfParse.default(buffer);
     text = parsed.text.slice(0, 6000);
   } catch {
-    return { notes: "Could not parse PDF text" };
+    return {
+      data: { notes: "Could not parse PDF text" },
+      sourceSpans: { source: "pdf_text", textLength: 0, fieldOffsets: [] },
+    };
   }
 
   const [models, thresholds] = await Promise.all([
@@ -318,20 +396,22 @@ Return ONLY valid JSON, no extra text.`;
   const parsed = parseAiExtractionJson(result);
   const features = await getFeatures();
   if (!features.enableFusionTravelDocFallback || !isThinExtraction(parsed)) {
-    return parsed;
+    return { data: parsed, sourceSpans: computePdfSourceSpans(text, parsed) };
   }
 
   try {
     const fused = await callFusion(
       () => [{ role: "user", content: promptText }],
-      {
-        maxTokens: thresholds.travelDocExtractionMaxTokens,
-      },
+      { maxTokens: thresholds.travelDocExtractionMaxTokens },
     );
     const fusedParsed = parseAiExtractionJson(fused);
-    return isThinExtraction(fusedParsed) ? parsed : fusedParsed;
+    const finalData = isThinExtraction(fusedParsed) ? parsed : fusedParsed;
+    return {
+      data: finalData,
+      sourceSpans: computePdfSourceSpans(text, finalData),
+    };
   } catch {
-    return parsed;
+    return { data: parsed, sourceSpans: computePdfSourceSpans(text, parsed) };
   }
 }
 

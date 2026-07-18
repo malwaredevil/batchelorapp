@@ -1,6 +1,14 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, Code2, Globe, Map, Settings2, Puzzle } from "lucide-react";
+import {
+  ArrowLeft,
+  Code2,
+  Globe,
+  Map,
+  Settings2,
+  Puzzle,
+  FlaskConical,
+} from "lucide-react";
 import { GlobalConfigCard } from "@workspace/elaine-ui";
 import {
   ReminderEmailCard,
@@ -20,7 +28,8 @@ type Tab =
   | "global-config"
   | "control-panel"
   | "google-apis"
-  | "services";
+  | "services"
+  | "ai-evidence";
 
 const ALL_TABS: { id: Tab; label: string; icon: typeof Globe }[] = [
   { id: "travels", label: "Travels", icon: Globe },
@@ -28,6 +37,7 @@ const ALL_TABS: { id: Tab; label: string; icon: typeof Globe }[] = [
   { id: "control-panel", label: "Control Panel", icon: Code2 },
   { id: "google-apis", label: "Google APIs", icon: Map },
   { id: "services", label: "Services", icon: Puzzle },
+  { id: "ai-evidence", label: "AI Evidence", icon: FlaskConical },
 ];
 
 export default function OwnerPanel() {
@@ -135,7 +145,173 @@ export default function OwnerPanel() {
         {safeTab === "google-apis" && isOwner && <GoogleApisDemoContent />}
 
         {safeTab === "services" && isOwner && <ServicesCatalogContent />}
+
+        {safeTab === "ai-evidence" && isOwner && <AiEvidenceContent />}
       </main>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// AI Evidence — owner-only tab showing AI generation run statistics.
+// Helps the owner diagnose why AI picked certain field values and track
+// model quality over time. Never shown in regular user UI.
+// ---------------------------------------------------------------------------
+
+interface AiEvidenceSummaryRow {
+  module: string;
+  feature: string;
+  model: string;
+  run_count: number;
+  success_count: number;
+  avg_duration_ms: number | null;
+  total_candidates: number;
+  accepted_candidates: number;
+  rejected_candidates: number;
+}
+
+function AiEvidenceContent() {
+  const [summary, setSummary] = useState<AiEvidenceSummaryRow[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = () => {
+    setLoading(true);
+    setError(null);
+    // raw-fetch-ok — owner-only admin panel; no generated hook for this endpoint
+    fetch("/api/ai-evidence/summary")
+      .then((r) => {
+        if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+        return r.json() as Promise<{ summary: AiEvidenceSummaryRow[] }>;
+      })
+      .then((d) => setSummary(d.summary))
+      .catch((e: unknown) =>
+        setError(e instanceof Error ? e.message : "Failed to load"),
+      )
+      .finally(() => setLoading(false));
+  };
+
+  useState(() => {
+    load();
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">AI Evidence</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Generation run statistics by module and feature. Use this to
+            diagnose wrong AI values and track model quality over time.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={load}
+          className="rounded-md border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          Refresh
+        </button>
+      </div>
+
+      {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
+
+      {error && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && summary !== null && summary.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          No generation runs recorded yet. AI runs will appear here after items
+          are analysed.
+        </p>
+      )}
+
+      {!loading && !error && summary && summary.length > 0 && (
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/50 text-left">
+                <th className="px-3 py-2 font-medium text-muted-foreground">
+                  Module
+                </th>
+                <th className="px-3 py-2 font-medium text-muted-foreground">
+                  Feature
+                </th>
+                <th className="px-3 py-2 font-medium text-muted-foreground">
+                  Model
+                </th>
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                  Runs
+                </th>
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                  Success %
+                </th>
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                  Avg ms
+                </th>
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                  Candidates
+                </th>
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                  Accepted
+                </th>
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                  Rejected
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {summary.map((row, i) => {
+                const successPct =
+                  row.run_count > 0
+                    ? Math.round((row.success_count / row.run_count) * 100)
+                    : 0;
+                return (
+                  <tr
+                    key={i}
+                    className="border-b border-border last:border-0 hover:bg-muted/30"
+                  >
+                    <td className="px-3 py-2 font-medium capitalize">
+                      {row.module}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {row.feature}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                      {row.model.split("/").pop()}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {row.run_count}
+                    </td>
+                    <td
+                      className={`px-3 py-2 text-right tabular-nums ${successPct < 80 ? "text-destructive" : "text-green-600 dark:text-green-400"}`}
+                    >
+                      {successPct}%
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                      {row.avg_duration_ms != null
+                        ? row.avg_duration_ms.toLocaleString()
+                        : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {row.total_candidates}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-green-600 dark:text-green-400">
+                      {row.accepted_candidates}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-destructive">
+                      {row.rejected_candidates}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

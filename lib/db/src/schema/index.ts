@@ -10,3 +10,6 @@ export * from "./office";
 export * from "./elaine-email";
 export * from "./app-config";
 export * from "./messenger";
+export * from "./ai-provenance";
+export * from "./ingestion";
+export * from "./search-feedback";

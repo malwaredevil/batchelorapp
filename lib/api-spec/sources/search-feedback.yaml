@@ -1,0 +1,95 @@
+openapi: 3.1.0
+info:
+  title: Search Feedback
+  version: 0.1.0
+paths:
+  /feedback:
+    post:
+      operationId: submitSearchFeedback
+      tags: [search-feedback]
+      summary: Submit a thumbs-up or thumbs-down on a search result
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitSearchFeedbackBody"
+      responses:
+        "201":
+          description: Feedback recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  id: { type: integer }
+
+  /feedback/summary:
+    get:
+      operationId: getSearchFeedbackSummary
+      tags: [search-feedback]
+      summary: Aggregate search feedback summary by module/query (owner only)
+      parameters:
+        - name: module
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, maximum: 200 }
+      responses:
+        "200":
+          description: Summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchFeedbackSummaryResponse"
+
+components:
+  schemas:
+    SubmitSearchFeedbackBody:
+      type: object
+      required: [module, query, resultId, resultType, vote]
+      properties:
+        module:
+          type: string
+          description: App module (pottery, quilting, ornaments, travels)
+        query:
+          type: string
+          description: The search query string
+        resultId:
+          type: integer
+          description: ID of the result item the user is voting on
+        resultType:
+          type: string
+          description: Type of result (e.g. item, fabric, pattern, trip)
+        vote:
+          type: string
+          enum: [up, down]
+          description: Thumbs up or thumbs down
+        rank:
+          type: integer
+          description: The rank position of this result in the list (0-indexed)
+        searchSessionId:
+          type: string
+          description: Optional client-generated session ID to group a search interaction
+
+    SearchFeedbackSummaryRow:
+      type: object
+      properties:
+        module: { type: string }
+        query: { type: string }
+        result_type: { type: string }
+        up_votes: { type: integer }
+        down_votes: { type: integer }
+        net_score: { type: integer }
+        last_voted_at: { type: string, format: date-time }
+
+    SearchFeedbackSummaryResponse:
+      type: object
+      properties:
+        summary:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchFeedbackSummaryRow"
+        totalFeedback: { type: integer }

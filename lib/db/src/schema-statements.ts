@@ -321,6 +321,10 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE quilting_layouts ADD COLUMN IF NOT EXISTS border_width_inches REAL`,
   `ALTER TABLE quilting_layouts ADD COLUMN IF NOT EXISTS border_color TEXT`,
   `ALTER TABLE quilting_layouts ADD COLUMN IF NOT EXISTS cornerstone_color TEXT`,
+  `ALTER TABLE quilting_layouts ADD COLUMN IF NOT EXISTS pattern_id INTEGER REFERENCES quilting_patterns(id) ON DELETE SET NULL`,
+  `ALTER TABLE quilting_layouts ADD COLUMN IF NOT EXISTS planned_finish_date DATE`,
+  `ALTER TABLE quilting_layouts ADD COLUMN IF NOT EXISTS notes TEXT`,
+  `ALTER TABLE quilting_layouts ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'planned'`,
 
   `CREATE TABLE IF NOT EXISTS quilting_shopping_items (
     id                  SERIAL PRIMARY KEY,

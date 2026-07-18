@@ -4783,7 +4783,6 @@ components:
         - total
         - page
         - pageSize
-        - searchMode
       properties:
         items:
           type: array
@@ -4796,11 +4795,6 @@ components:
           type: integer
         pageSize:
           type: integer
-        searchMode:
-          type: string
-          enum:
-            - semantic
-            - keyword
     PotteryPotteryItem:
       type: object
       required:
@@ -5111,7 +5105,6 @@ components:
         - total
         - page
         - pageSize
-        - searchMode
       properties:
         items:
           type: array
@@ -5123,11 +5116,6 @@ components:
           type: integer
         pageSize:
           type: integer
-        searchMode:
-          type: string
-          enum:
-            - semantic
-            - keyword
     QuiltingPatternsListResponse:
       type: object
       required:

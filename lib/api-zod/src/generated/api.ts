@@ -206,8 +206,7 @@ export const ListPotteryResponse = zod.object({
 })),
   "total": zod.number().describe('Total number of items matching the query (before pagination)'),
   "page": zod.number(),
-  "pageSize": zod.number(),
-  "searchMode": zod.enum(['semantic', 'keyword'])
+  "pageSize": zod.number()
 })
 
 
@@ -743,8 +742,7 @@ export const ListFabricsResponse = zod.object({
 })),
   "total": zod.number(),
   "page": zod.number(),
-  "pageSize": zod.number(),
-  "searchMode": zod.enum(['semantic', 'keyword'])
+  "pageSize": zod.number()
 })
 
 

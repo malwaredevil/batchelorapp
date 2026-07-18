@@ -1838,7 +1838,7 @@ components:
   schemas:
     FabricsListResponse:
       type: object
-      required: [items, total, page, pageSize, searchMode]
+      required: [items, total, page, pageSize]
       properties:
         items:
           type: array
@@ -1850,9 +1850,6 @@ components:
           type: integer
         pageSize:
           type: integer
-        searchMode:
-          type: string
-          enum: [semantic, keyword]
 
     PatternsListResponse:
       type: object

@@ -144,9 +144,7 @@ async function checkGitHubSecrets(): Promise<{
   const token = process.env["GH_PAT"];
   if (!token) {
     fail("GH_PAT not set in environment — cannot verify GitHub secrets");
-    console.error(
-      "  Ensure GH_PAT is in your .env file and the script is run",
-    );
+    console.error("  Ensure GH_PAT is in your .env file and the script is run");
     console.error(
       "  via: pnpm --filter @workspace/scripts run verify-github-secrets",
     );

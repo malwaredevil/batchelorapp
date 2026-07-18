@@ -5,8 +5,11 @@
  * Unified API specification (pottery + quilting + travels + ornaments + office + hub + messenger)
  * OpenAPI spec version: 0.1.0
  */
+import type { QuiltingBulkReanalyzeResultErrorsItem } from './quiltingBulkReanalyzeResultErrorsItem';
 
 export interface QuiltingBulkReanalyzeResult {
+  total: number;
   succeeded: number[];
   failed: number[];
+  errors: QuiltingBulkReanalyzeResultErrorsItem[];
 }

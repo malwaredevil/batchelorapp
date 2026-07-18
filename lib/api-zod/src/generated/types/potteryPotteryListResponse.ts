@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { PotteryPotteryItem } from './potteryPotteryItem';
+import type { PotteryPotteryListResponseSearchMode } from './potteryPotteryListResponseSearchMode';
 
 export interface PotteryPotteryListResponse {
   items: PotteryPotteryItem[];
@@ -13,4 +14,5 @@ export interface PotteryPotteryListResponse {
   total: number;
   page: number;
   pageSize: number;
+  searchMode: PotteryPotteryListResponseSearchMode;
 }

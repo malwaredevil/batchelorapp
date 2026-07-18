@@ -1,5 +1,5 @@
 import { z } from "zod/v4";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ilike, or, sql } from "drizzle-orm";
 import type OpenAI from "openai";
 import {
   db,
@@ -22,17 +22,16 @@ import {
   renameQuiltingCategory,
   mergeQuiltingCategories,
 } from "../routes/quilting/categories";
+import { uploadImage } from "../lib/storage";
 
-// Elaine's write-actions for the Quilting app. Creating brand-new fabrics or
-// finished quilts isn't offered here since both require an uploaded photo
-// (imagePath is NOT NULL) and chat has no way to attach one — but a new quilt
-// PATTERN can be created since its image is optional. Elaine can also
-// update/delete existing fabrics/patterns/quilts, fully manage the shopping
-// list and categories, create/delete block and layout metadata (no
-// chat-driven cell drawing or grid placement — that stays a navigate-only,
-// UI-only workflow), trigger bulk AI re-analysis, and estimate yardage as a
-// read-only calculation (see calculate_yardage, a soft tool in index.ts, not
-// a QuiltingAction).
+// Elaine's write-actions for the Quilting app. Chat-created fabrics use a tiny
+// placeholder image because the fabric schema requires imagePath; finished
+// quilts still require a real uploaded photo in the UI. Elaine can also
+// update/delete existing fabrics/patterns/quilts, manage the shopping list and
+// categories, create/delete block and layout metadata (no chat-driven cell
+// drawing or grid placement — that stays a navigate-only, UI-only workflow),
+// trigger bulk AI re-analysis, search the stash, and estimate yardage as a
+// read-only calculation (see calculate_yardage, a soft tool in index.ts).
 //
 // Quilting is a fully household-shared collection (see threat_model.md).
 // New executors below intentionally do NOT filter by userId beyond what the
@@ -40,6 +39,22 @@ import {
 // executors above and with the pottery precedent.
 
 const VALID_GRID_SIZES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
+const PLACEHOLDER_FABRIC_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+  "base64",
+);
+
+export const AddFabricActionPayload = z.object({
+  name: z.string().min(1).max(200),
+  designer: z.string().max(200).optional(),
+  collection: z.string().max(200).optional(),
+  colorFamily: z.string().max(200).optional(),
+  fabricType: z
+    .enum(["cotton", "linen", "flannel", "voile", "other"])
+    .optional(),
+  yardageOwned: z.number().positive().max(9999),
+  notes: z.string().max(4000).optional(),
+});
 
 export const UpdateFabricActionPayload = z
   .object({
@@ -63,6 +78,35 @@ export const UpdateFabricActionPayload = z
 export const DeleteFabricActionPayload = z.object({
   fabricId: z.number().int().positive(),
 });
+
+export const UpdateFabricFieldsActionPayload = z
+  .object({
+    fabricId: z
+      .number()
+      .int()
+      .positive()
+      .describe(
+        "The numeric fabric ID. NEVER guess this; resolve it with find_fabrics_by_color, search_household_data, or visible page context first.",
+      ),
+    fields: z.object({
+      name: z.string().min(1).max(200).optional(),
+      designer: z.string().max(200).optional(),
+      collection: z.string().max(200).optional(),
+      colorFamily: z.string().max(200).optional(),
+      fabricType: z
+        .enum(["cotton", "linen", "flannel", "voile", "other"])
+        .optional(),
+      yardageOwned: z.number().positive().max(9999).optional(),
+      notes: z.string().max(4000).optional(),
+      manufacturer: z.string().max(200).optional(),
+      printType: z.string().max(200).optional(),
+      widthInches: z.number().positive().max(200).optional(),
+      sku: z.string().max(200).optional(),
+    }),
+  })
+  .refine((v) => Object.keys(v.fields).length > 0, {
+    message: "At least one field to update must be provided",
+  });
 
 export const UpdatePatternActionPayload = z
   .object({
@@ -89,6 +133,16 @@ export const CreateShoppingItemActionPayload = z.object({
   unit: z.string().max(50).optional(),
   estimatedPriceUsd: z.number().min(0).optional(),
   store: z.string().max(200).optional(),
+});
+
+export const AddFabricToShoppingListActionPayload = z.object({
+  name: z.string().min(1).max(200),
+  designer: z.string().max(200).optional(),
+  collection: z.string().max(200).optional(),
+  yardageNeeded: z.number().positive().max(9999).optional(),
+  estimatedPricePerYard: z.number().positive().optional(),
+  notes: z.string().max(2000).optional(),
+  priority: z.enum(["low", "medium", "high"]).default("medium"),
 });
 
 export const UpdateShoppingItemActionPayload = z
@@ -169,6 +223,21 @@ export const CreateLayoutActionPayload = z.object({
   categoryNames: z.array(z.string().max(100)).max(20).optional(),
 });
 
+export const CreateQuiltLayoutActionPayload = z.object({
+  name: z.string().min(1).max(100),
+  patternId: z.number().int().positive().optional(),
+  plannedFinishDate: z.string().max(20).optional(),
+  notes: z.string().max(4000).optional(),
+  status: z
+    .enum(["planned", "in_progress", "completed", "gifted"])
+    .default("planned"),
+});
+
+export const FindFabricsByColorPayload = z.object({
+  colorQuery: z.string().min(1).max(100),
+  limit: z.number().int().min(1).max(20).default(10),
+});
+
 export const DeleteLayoutActionPayload = z.object({
   layoutId: z.number().int().positive(),
 });
@@ -180,8 +249,16 @@ export const BulkReanalyzeQuiltingActionPayload = z.object({
 
 export const quiltingActionSchemas = [
   z.object({
+    type: z.literal("add_fabric"),
+    payload: AddFabricActionPayload,
+  }),
+  z.object({
     type: z.literal("update_fabric"),
     payload: UpdateFabricActionPayload,
+  }),
+  z.object({
+    type: z.literal("update_fabric_fields"),
+    payload: UpdateFabricFieldsActionPayload,
   }),
   z.object({
     type: z.literal("delete_fabric"),
@@ -198,6 +275,10 @@ export const quiltingActionSchemas = [
   z.object({
     type: z.literal("create_shopping_item"),
     payload: CreateShoppingItemActionPayload,
+  }),
+  z.object({
+    type: z.literal("add_fabric_to_shopping_list"),
+    payload: AddFabricToShoppingListActionPayload,
   }),
   z.object({
     type: z.literal("update_shopping_item"),
@@ -244,6 +325,10 @@ export const quiltingActionSchemas = [
     payload: CreateLayoutActionPayload,
   }),
   z.object({
+    type: z.literal("create_quilt_layout"),
+    payload: CreateQuiltLayoutActionPayload,
+  }),
+  z.object({
     type: z.literal("delete_layout"),
     payload: DeleteLayoutActionPayload,
   }),
@@ -251,14 +336,21 @@ export const quiltingActionSchemas = [
     type: z.literal("bulk_reanalyze_quilting"),
     payload: BulkReanalyzeQuiltingActionPayload,
   }),
+  z.object({
+    type: z.literal("find_fabrics_by_color"),
+    payload: FindFabricsByColorPayload,
+  }),
 ] as const;
 
 export type QuiltingActionType =
+  | "add_fabric"
   | "update_fabric"
+  | "update_fabric_fields"
   | "delete_fabric"
   | "update_pattern"
   | "delete_pattern"
   | "create_shopping_item"
+  | "add_fabric_to_shopping_list"
   | "update_shopping_item"
   | "delete_shopping_item"
   | "create_quilting_category"
@@ -270,8 +362,10 @@ export type QuiltingActionType =
   | "create_block"
   | "delete_block"
   | "create_layout"
+  | "create_quilt_layout"
   | "delete_layout"
-  | "bulk_reanalyze_quilting";
+  | "bulk_reanalyze_quilting"
+  | "find_fabrics_by_color";
 
 async function getFabricLabelInfo(
   fabricId: number,
@@ -391,6 +485,33 @@ export const quiltingActionExecutors: Record<
   QuiltingActionType,
   ActionExecutor
 > = {
+  add_fabric: (async (
+    payload: z.infer<typeof AddFabricActionPayload>,
+    userId: number,
+  ) => {
+    const imagePath = await uploadImage(PLACEHOLDER_FABRIC_PNG, "image/png");
+    const [row] = await db
+      .insert(fabrics)
+      .values({
+        userId,
+        name: payload.name,
+        lineName: payload.collection ?? null,
+        designer: payload.designer ?? null,
+        colorway: payload.colorFamily ?? null,
+        fiberContent: payload.fabricType ?? null,
+        quantity: payload.yardageOwned,
+        quantityUnit: "yards",
+        notes: payload.notes ?? null,
+        dominantColors: payload.colorFamily ? [payload.colorFamily] : [],
+        motifs: [],
+        styleDescriptors: [],
+        lockedFields: [],
+        imagePath,
+      })
+      .returning();
+    return { status: 201, body: { type: "add_fabric", result: row } };
+  }) as ActionExecutor,
+
   update_fabric: (async (
     payload: z.infer<typeof UpdateFabricActionPayload>,
     userId: number,
@@ -414,6 +535,44 @@ export const quiltingActionExecutors: Record<
       .where(eq(fabrics.id, payload.fabricId))
       .returning();
     return { status: 200, body: { type: "update_fabric", result: row } };
+  }) as ActionExecutor,
+
+  update_fabric_fields: (async (
+    payload: z.infer<typeof UpdateFabricFieldsActionPayload>,
+  ) => {
+    const [existing] = await db
+      .select({ id: fabrics.id })
+      .from(fabrics)
+      .where(eq(fabrics.id, payload.fabricId));
+    if (!existing) return { status: 404, body: { error: "Fabric not found" } };
+
+    const updates: Partial<typeof fabrics.$inferInsert> = {};
+    const fields = payload.fields;
+    if (fields.name !== undefined) updates.name = fields.name;
+    if (fields.designer !== undefined) updates.designer = fields.designer;
+    if (fields.collection !== undefined) updates.lineName = fields.collection;
+    if (fields.colorFamily !== undefined) {
+      updates.colorway = fields.colorFamily;
+      updates.dominantColors = [fields.colorFamily];
+    }
+    if (fields.fabricType !== undefined)
+      updates.fiberContent = fields.fabricType;
+    if (fields.yardageOwned !== undefined)
+      updates.quantity = fields.yardageOwned;
+    if (fields.notes !== undefined) updates.notes = fields.notes;
+    if (fields.manufacturer !== undefined)
+      updates.manufacturer = fields.manufacturer;
+    if (fields.printType !== undefined) updates.printType = fields.printType;
+    if (fields.widthInches !== undefined)
+      updates.widthInches = fields.widthInches;
+    if (fields.sku !== undefined) updates.sku = fields.sku;
+
+    const [row] = await db
+      .update(fabrics)
+      .set(updates)
+      .where(eq(fabrics.id, payload.fabricId))
+      .returning();
+    return { status: 200, body: { type: "update_fabric_fields", result: row } };
   }) as ActionExecutor,
 
   delete_fabric: (async (
@@ -501,6 +660,40 @@ export const quiltingActionExecutors: Record<
       })
       .returning();
     return { status: 201, body: { type: "create_shopping_item", result: row } };
+  }) as ActionExecutor,
+
+  add_fabric_to_shopping_list: (async (
+    payload: z.infer<typeof AddFabricToShoppingListActionPayload>,
+    userId: number,
+  ) => {
+    const priorityMap = { low: 0, medium: 5, high: 10 } as const;
+    const notes = [
+      payload.designer ? `Designer: ${payload.designer}` : null,
+      payload.collection ? `Collection: ${payload.collection}` : null,
+      payload.notes ?? null,
+    ]
+      .filter((v): v is string => Boolean(v))
+      .join("\n");
+    const [row] = await db
+      .insert(shoppingItems)
+      .values({
+        userId,
+        name: payload.name,
+        notes: notes || null,
+        quantity: payload.yardageNeeded ?? null,
+        unit: "yards",
+        estimatedPriceUsd:
+          payload.estimatedPricePerYard != null && payload.yardageNeeded != null
+            ? payload.estimatedPricePerYard * payload.yardageNeeded
+            : payload.estimatedPricePerYard,
+        status: "want",
+        priority: priorityMap[payload.priority],
+      })
+      .returning();
+    return {
+      status: 201,
+      body: { type: "add_fabric_to_shopping_list", result: row },
+    };
   }) as ActionExecutor,
 
   update_shopping_item: (async (
@@ -771,6 +964,41 @@ export const quiltingActionExecutors: Record<
     return { status: 201, body: { type: "create_layout", result: row } };
   }) as ActionExecutor,
 
+  create_quilt_layout: (async (
+    payload: z.infer<typeof CreateQuiltLayoutActionPayload>,
+    userId: number,
+  ) => {
+    if (payload.patternId !== undefined) {
+      const [pattern] = await db
+        .select({ id: quiltPatterns.id })
+        .from(quiltPatterns)
+        .where(eq(quiltPatterns.id, payload.patternId));
+      if (!pattern)
+        return { status: 404, body: { error: "Pattern not found" } };
+    }
+
+    const cells = new Array(5 * 5).fill({
+      blockId: null,
+      rotation: 0,
+    });
+    const [row] = await db
+      .insert(layouts)
+      .values({
+        userId,
+        name: payload.name,
+        patternId: payload.patternId ?? null,
+        plannedFinishDate: payload.plannedFinishDate ?? null,
+        notes: payload.notes ?? null,
+        status: payload.status,
+        rows: 5,
+        cols: 5,
+        cells,
+      })
+      .returning();
+
+    return { status: 201, body: { type: "create_quilt_layout", result: row } };
+  }) as ActionExecutor,
+
   delete_layout: (async (
     payload: z.infer<typeof DeleteLayoutActionPayload>,
   ) => {
@@ -818,16 +1046,75 @@ export const quiltingActionExecutors: Record<
       body: { type: "bulk_reanalyze_quilting", result },
     };
   }) as ActionExecutor,
+
+  find_fabrics_by_color: (async (
+    payload: z.infer<typeof FindFabricsByColorPayload>,
+  ) => {
+    const result = await executeFindFabricsByColor(payload);
+    return {
+      status: 200,
+      body: { type: "find_fabrics_by_color", result },
+    };
+  }) as ActionExecutor,
 };
+
+export async function executeFindFabricsByColor(
+  payload: z.infer<typeof FindFabricsByColorPayload>,
+): Promise<string> {
+  const pattern = `%${payload.colorQuery}%`;
+  const rows = await db
+    .select({
+      id: fabrics.id,
+      name: fabrics.name,
+      designer: fabrics.designer,
+      collection: fabrics.lineName,
+      colorFamily: fabrics.colorway,
+      yardageOwned: fabrics.quantity,
+    })
+    .from(fabrics)
+    .where(
+      or(
+        ilike(fabrics.name, pattern),
+        ilike(fabrics.colorway, pattern),
+        ilike(fabrics.designer, pattern),
+        ilike(fabrics.lineName, pattern),
+        sql`${fabrics.dominantColors}::text ILIKE ${pattern}`,
+      ),
+    )
+    .limit(payload.limit);
+
+  if (rows.length === 0) {
+    return `No fabrics matched color "${payload.colorQuery}".`;
+  }
+
+  return rows
+    .map(
+      (row) =>
+        `fabricId: ${row.id}\nName: ${row.name}\nDesigner: ${row.designer ?? "unknown"}\nCollection: ${row.collection ?? "unknown"}\nColor family: ${row.colorFamily ?? "unknown"}\nYardage owned: ${row.yardageOwned ?? 0} yards`,
+    )
+    .join("\n\n");
+}
 
 export async function buildQuiltingActionLabel(action: {
   type: QuiltingActionType;
   payload: unknown;
 }): Promise<string> {
   switch (action.type) {
+    case "add_fabric": {
+      const payload = action.payload as z.infer<typeof AddFabricActionPayload>;
+      return `Add "${payload.name}" to your fabric stash`;
+    }
     case "update_fabric": {
       const payload = action.payload as z.infer<
         typeof UpdateFabricActionPayload
+      >;
+      const fabric = await getFabricLabelInfo(payload.fabricId);
+      const name = fabric ? `"${fabric.name}"` : "this fabric";
+      return `Update ${name} in your fabric stash`;
+    }
+    case "update_fabric_fields": {
+      const payload = action.payload as z.infer<
+        typeof UpdateFabricFieldsActionPayload
       >;
       const fabric = await getFabricLabelInfo(payload.fabricId);
       const name = fabric ? `"${fabric.name}"` : "this fabric";
@@ -860,6 +1147,12 @@ export async function buildQuiltingActionLabel(action: {
     case "create_shopping_item": {
       const payload = action.payload as z.infer<
         typeof CreateShoppingItemActionPayload
+      >;
+      return `Add "${payload.name}" to your quilting shopping list`;
+    }
+    case "add_fabric_to_shopping_list": {
+      const payload = action.payload as z.infer<
+        typeof AddFabricToShoppingListActionPayload
       >;
       return `Add "${payload.name}" to your quilting shopping list`;
     }
@@ -949,6 +1242,12 @@ export async function buildQuiltingActionLabel(action: {
       >;
       return `Create a blank ${payload.rows}x${payload.cols} layout named "${payload.name}"`;
     }
+    case "create_quilt_layout": {
+      const payload = action.payload as z.infer<
+        typeof CreateQuiltLayoutActionPayload
+      >;
+      return `Create the quilt layout "${payload.name}"`;
+    }
     case "delete_layout": {
       const payload = action.payload as z.infer<
         typeof DeleteLayoutActionPayload
@@ -971,11 +1270,41 @@ export async function buildQuiltingActionLabel(action: {
         ? `Run AI re-analysis on ${payload.ids.length} ${label}`
         : `Run AI re-analysis on every ${payload.entityType} that needs it`;
     }
+    case "find_fabrics_by_color": {
+      const payload = action.payload as z.infer<
+        typeof FindFabricsByColorPayload
+      >;
+      return `Find fabrics matching "${payload.colorQuery}"`;
+    }
   }
 }
 
 export const quiltingActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
   [
+    {
+      type: "function",
+      function: {
+        name: "add_fabric",
+        description:
+          'Propose adding a new metadata-only fabric entry to the stash, e.g. "add 1.5 yards of Moda Bella Solids Navy". This creates a fabric record with a placeholder image; suggest the user add a real photo later from the fabric detail page if needed.',
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            designer: { type: "string" },
+            collection: { type: "string" },
+            colorFamily: { type: "string" },
+            fabricType: {
+              type: "string",
+              enum: ["cotton", "linen", "flannel", "voile", "other"],
+            },
+            yardageOwned: { type: "number" },
+            notes: { type: "string" },
+          },
+          required: ["name", "yardageOwned"],
+        },
+      },
+    },
     {
       type: "function",
       function: {
@@ -999,6 +1328,40 @@ export const quiltingActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
     {
       type: "function",
       function: {
+        name: "update_fabric_fields",
+        description:
+          "Propose editing one or more fields on an EXISTING fabric. The fabricId must come from find_fabrics_by_color, search_household_data, or visible page context; NEVER guess it. Include only fields that actually change.",
+        parameters: {
+          type: "object",
+          properties: {
+            fabricId: { type: "integer" },
+            fields: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                designer: { type: "string" },
+                collection: { type: "string" },
+                colorFamily: { type: "string" },
+                fabricType: {
+                  type: "string",
+                  enum: ["cotton", "linen", "flannel", "voile", "other"],
+                },
+                yardageOwned: { type: "number" },
+                notes: { type: "string" },
+                manufacturer: { type: "string" },
+                printType: { type: "string" },
+                widthInches: { type: "number" },
+                sku: { type: "string" },
+              },
+            },
+          },
+          required: ["fabricId", "fields"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
         name: "delete_fabric",
         description:
           "Propose permanently deleting a fabric and its photo(s). Only call this if the fabric's numeric id is visible on screen; never guess an id. Since this is destructive, say clearly in your visible reply that this will DELETE the fabric.",
@@ -1006,6 +1369,30 @@ export const quiltingActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
           type: "object",
           properties: { fabricId: { type: "integer" } },
           required: ["fabricId"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "add_fabric_to_shopping_list",
+        description:
+          'Propose adding a fabric to the quilting shopping list, e.g. "put Tula Pink True Colors on my shopping list, I need 3 yards".',
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            designer: { type: "string" },
+            collection: { type: "string" },
+            yardageNeeded: { type: "number" },
+            estimatedPricePerYard: { type: "number" },
+            notes: { type: "string" },
+            priority: {
+              type: "string",
+              enum: ["low", "medium", "high"],
+            },
+          },
+          required: ["name"],
         },
       },
     },
@@ -1024,6 +1411,31 @@ export const quiltingActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
             notes: { type: "string" },
           },
           required: ["patternId"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "create_quilt_layout",
+        description:
+          'Propose creating a new quilt layout/project entry, e.g. "create a Baby shower quilt 2026 project". If the user names a pattern, resolve the numeric patternId with search_household_data first; never guess it.',
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            patternId: { type: "integer" },
+            plannedFinishDate: {
+              type: "string",
+              description: "YYYY-MM-DD",
+            },
+            notes: { type: "string" },
+            status: {
+              type: "string",
+              enum: ["planned", "in_progress", "completed", "gifted"],
+            },
+          },
+          required: ["name"],
         },
       },
     },
@@ -1275,6 +1687,29 @@ export const quiltingActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
             ids: { type: "array", items: { type: "integer" } },
           },
           required: ["entityType"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "find_fabrics_by_color",
+        description:
+          'Read-only lookup. Search the fabric stash by color/name/designer to answer questions like "do we have any navy fabric?" and to resolve fabricId before update_fabric_fields. Return these results to yourself before answering or updating; never guess a fabricId.',
+        parameters: {
+          type: "object",
+          properties: {
+            colorQuery: {
+              type: "string",
+              description: 'Color to search for, e.g. "navy" or "teal"',
+            },
+            limit: {
+              type: "integer",
+              minimum: 1,
+              maximum: 20,
+            },
+          },
+          required: ["colorQuery"],
         },
       },
     },

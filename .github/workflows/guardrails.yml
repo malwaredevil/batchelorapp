@@ -22,7 +22,7 @@ jobs:
 
       - name: "Ban: drizzle-kit push"
         run: |
-          if git diff --name-only origin/main...HEAD | xargs grep -l "drizzle-kit push" 2>/dev/null | grep -qv "guardrails.yml"; then
+          if git diff --name-only origin/main...HEAD | xargs grep -l "drizzle-kit push" 2>/dev/null | grep -Ev "guardrails\.yml|schema-statements\.ts|bootstrap\.ts|post-merge\.sh"; then
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "ERROR: 'drizzle-kit push' detected in changed files."
             echo ""

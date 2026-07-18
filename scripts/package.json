@@ -17,17 +17,25 @@
     "pre-publish": "bash ./src/pre-publish.sh",
     "verify-github-secrets": "tsx --env-file=.env ./src/verify-github-secrets.ts",
     "verify-supabase-prerequisites": "tsx --env-file=.env ./src/verify-supabase-prerequisites.ts",
+    "security:inventory": "tsx ./src/security/database-inventory.ts",
+    "security:check": "tsx ./src/security/check-database-security.ts",
+    "docs:generate": "tsx ./src/docs/generate.ts",
+    "docs:check": "tsx ./src/docs/check.ts",
+    "docs:schema-snapshot": "tsx ./src/security/database-inventory.ts",
+    "docs:route-audit": "tsx ./src/docs/route-audit.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@workspace/db": "workspace:*",
     "bcryptjs": "^3.0.3",
-    "pg": "^8.20.0"
+    "pg": "^8.20.0",
+    "yaml": "2.8.4"
   },
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",
     "@types/node": "catalog:",
     "@types/pg": "^8.11.0",
+    "prettier": "^3.8.3",
     "tsx": "catalog:"
   }
 }

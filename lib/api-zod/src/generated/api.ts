@@ -13,7 +13,13 @@ import * as zod from 'zod';
  */
 export const HealthCheckResponse = zod.object({
   "status": zod.string(),
-  "configBootstrap": zod.enum(['pending', 'success', 'warn', 'error']).optional().describe('Outcome of the last app-config bootstrap run. \"pending\" = not yet run; \"success\" = all steps completed; \"warn\" = DB unavailable at startup (non-fatal, using hardcoded fallbacks); \"error\" = unexpected JS error, stale\/missing config rows may persist.\n')
+  "configBootstrap": zod.enum(['pending', 'success', 'warn', 'error']).optional().describe('Outcome of the last app-config bootstrap run. \"pending\" = not yet run; \"success\" = all steps completed; \"warn\" = DB unavailable at startup (non-fatal, using hardcoded fallbacks); \"error\" = unexpected JS error, stale\/missing config rows may persist.\n'),
+  "migrations": zod.object({
+  "expectedLatestVersion": zod.number(),
+  "appliedLatestVersion": zod.number().nullable(),
+  "pendingCount": zod.number(),
+  "checksumErrorCount": zod.number()
+}).nullish()
 })
 
 
@@ -4523,6 +4529,164 @@ export const GetLinkPreviewResponse = zod.object({
   "title": zod.string().nullish(),
   "description": zod.string().nullish(),
   "imageUrl": zod.string().nullish()
+})
+
+
+/**
+ * @summary List durable jobs (owner only)
+ */
+export const listJobsQueryLimitMax = 250;
+
+
+
+export const ListJobsQueryParams = zod.object({
+  "type": zod.coerce.string().optional(),
+  "status": zod.coerce.string().optional(),
+  "parentJobId": zod.coerce.number().optional(),
+  "limit": zod.coerce.number().max(listJobsQueryLimitMax).optional()
+})
+
+export const ListJobsResponse = zod.object({
+  "jobs": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "type": zod.string().optional(),
+  "queue": zod.string().optional(),
+  "status": zod.string().optional(),
+  "progress_percent": zod.number().optional(),
+  "progress_message": zod.string().nullish()
+})),
+  "registry": zod.array(zod.object({
+  "type": zod.string(),
+  "queue": zod.string(),
+  "payloadSchemaVersion": zod.number(),
+  "maxAttempts": zod.number(),
+  "idempotencyStrategy": zod.string()
+}))
+})
+
+
+/**
+ * @summary Get durable queue health (owner only)
+ */
+export const GetJobsHealthResponse = zod.record(zod.string(), zod.unknown())
+
+
+/**
+ * @summary Get one durable job with attempts (owner only)
+ */
+export const GetJobParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetJobResponse = zod.object({
+  "job": zod.object({
+  "id": zod.number().optional(),
+  "type": zod.string().optional(),
+  "queue": zod.string().optional(),
+  "status": zod.string().optional(),
+  "progress_percent": zod.number().optional(),
+  "progress_message": zod.string().nullish()
+})
+})
+
+
+/**
+ * @summary Cancel a nonterminal job (owner only)
+ */
+export const CancelJobParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CancelJobResponse = zod.object({
+  "cancelled": zod.boolean()
+})
+
+
+/**
+ * @summary Retry a failed or dead-letter job (owner only)
+ */
+export const RetryJobParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RetryJobResponse = zod.object({
+  "retried": zod.boolean()
+})
+
+
+/**
+ * @summary Summarize provider spend, latency, and reliability (owner only)
+ */
+export const GetOperationsSummaryResponse = zod.object({
+  "providers": zod.array(zod.record(zod.string(), zod.unknown()))
+})
+
+
+/**
+ * @summary List sanitized external operation events (owner only)
+ */
+export const listOperationEventsQueryLimitMax = 250;
+
+
+
+export const ListOperationEventsQueryParams = zod.object({
+  "provider": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().max(listOperationEventsQueryLimitMax).optional()
+})
+
+export const ListOperationEventsResponse = zod.object({
+  "events": zod.array(zod.record(zod.string(), zod.unknown()))
+})
+
+
+/**
+ * @summary List observed providers (owner only)
+ */
+export const ListOperationProvidersResponse = zod.object({
+  "providers": zod.array(zod.record(zod.string(), zod.unknown()))
+})
+
+
+/**
+ * @summary List provider budget policies (owner only)
+ */
+export const ListOperationBudgetsResponse = zod.object({
+  "budgets": zod.array(zod.record(zod.string(), zod.unknown()))
+})
+
+
+/**
+ * @summary Update a budget policy (owner only)
+ */
+export const UpdateOperationBudgetParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateOperationBudgetBody = zod.object({
+  "softThresholdUsd": zod.number(),
+  "hardThresholdUsd": zod.number(),
+  "enabled": zod.boolean(),
+  "degradationAction": zod.string()
+})
+
+export const UpdateOperationBudgetResponse = zod.object({
+  "budget": zod.record(zod.string(), zod.unknown())
+})
+
+
+/**
+ * @summary Temporarily override a budget policy (owner only)
+ */
+export const OverrideOperationBudgetParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const OverrideOperationBudgetBody = zod.object({
+  "expiresAt": zod.coerce.date()
+})
+
+export const OverrideOperationBudgetResponse = zod.object({
+  "budget": zod.record(zod.string(), zod.unknown())
 })
 
 

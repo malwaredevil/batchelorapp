@@ -1,0 +1,179 @@
+openapi: 3.1.0
+info:
+  title: Operations
+  version: 0.1.0
+paths:
+  /summary:
+    get:
+      operationId: getOperationsSummary
+      tags: [operations]
+      summary: Summarize provider spend, latency, and reliability (owner only)
+      responses:
+        "200":
+          description: Provider summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsSummaryResponse"
+  /events:
+    get:
+      operationId: listOperationEvents
+      tags: [operations]
+      summary: List sanitized external operation events (owner only)
+      parameters:
+        - name: provider
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, maximum: 250 }
+      responses:
+        "200":
+          description: Operation events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationEventsResponse"
+  /providers:
+    get:
+      operationId: listOperationProviders
+      tags: [operations]
+      summary: List observed providers (owner only)
+      responses:
+        "200":
+          description: Provider list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationProvidersResponse"
+  /budgets:
+    get:
+      operationId: listOperationBudgets
+      tags: [operations]
+      summary: List provider budget policies (owner only)
+      responses:
+        "200":
+          description: Budgets
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationBudgetsResponse"
+  /budgets/{id}:
+    put:
+      operationId: updateOperationBudget
+      tags: [operations]
+      summary: Update a budget policy (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBudgetBody"
+      responses:
+        "200":
+          description: Updated budget
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationBudgetResponse"
+  /budgets/{id}/override:
+    post:
+      operationId: overrideOperationBudget
+      tags: [operations]
+      summary: Temporarily override a budget policy (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expiresAt]
+              properties:
+                expiresAt: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Override result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationBudgetResponse"
+  /export:
+    get:
+      operationId: exportOperationEvents
+      tags: [operations]
+      summary: Export sanitized external operation events as CSV (owner only)
+      responses:
+        "200":
+          description: CSV export
+          content:
+            text/csv:
+              schema:
+                type: string
+components:
+  schemas:
+    OperationProviderSummary:
+      type: object
+      additionalProperties: true
+    OperationsSummaryResponse:
+      type: object
+      required: [providers]
+      properties:
+        providers:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationProviderSummary"
+    OperationEvent:
+      type: object
+      additionalProperties: true
+    OperationEventsResponse:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationEvent"
+    OperationProvidersResponse:
+      type: object
+      required: [providers]
+      properties:
+        providers:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    OperationBudget:
+      type: object
+      additionalProperties: true
+    OperationBudgetsResponse:
+      type: object
+      required: [budgets]
+      properties:
+        budgets:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationBudget"
+    OperationBudgetResponse:
+      type: object
+      required: [budget]
+      properties:
+        budget:
+          $ref: "#/components/schemas/OperationBudget"
+    UpdateBudgetBody:
+      type: object
+      required: [softThresholdUsd, hardThresholdUsd, enabled, degradationAction]
+      properties:
+        softThresholdUsd: { type: number }
+        hardThresholdUsd: { type: number }
+        enabled: { type: boolean }
+        degradationAction: { type: string }

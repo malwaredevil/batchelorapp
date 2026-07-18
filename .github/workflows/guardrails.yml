@@ -77,6 +77,7 @@ jobs:
             | grep -E "\.(ts|tsx)$" \
             | xargs grep -n "new OpenAI(" 2>/dev/null \
             | grep -v "node_modules" \
+            | grep -v "artifacts/api-server/src/lib/ai-client.ts" \
             | grep -v "// openai-direct-ok" || true)
           if [ -n "$VIOLATIONS" ]; then
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

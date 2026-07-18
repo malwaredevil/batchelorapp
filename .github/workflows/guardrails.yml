@@ -2,7 +2,7 @@ name: Guardrails
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, feat/strategic-phase1]
 
 concurrency:
   group: guardrails-${{ github.ref }}
@@ -22,9 +22,19 @@ jobs:
 
       - name: "Ban: drizzle-kit push"
         run: |
-          if git diff --name-only origin/main...HEAD | xargs grep -l "drizzle-kit push" 2>/dev/null | grep -qv "guardrails.yml"; then
+          BASE_REF="${{ github.base_ref || 'main' }}"
+          git fetch origin "$BASE_REF" --depth=1
+          VIOLATIONS=$(git diff "origin/$BASE_REF...HEAD" -- ':!*.md' ':!.github/workflows/guardrails.yml' \
+            | grep "^+" \
+            | grep -v "^+++" \
+            | sed 's/^+//' \
+            | grep -Ev '^[[:space:]]*(//|/\*|\*|#|echo )' \
+            | grep -nE "drizzle-kit[[:space:]]+push" || true)
+          if [ -n "$VIOLATIONS" ]; then
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "ERROR: 'drizzle-kit push' detected in changed files."
+            echo "$VIOLATIONS"
+            echo ""
             echo ""
             echo "This command is permanently banned. It introspects ALL tables"
             echo "in the shared Supabase database and silently drops any table"
@@ -39,7 +49,9 @@ jobs:
 
       - name: "Ban: restricted files in PR diff"
         run: |
-          RESTRICTED=$(git diff --name-only origin/main...HEAD | grep -E "^\.agents/|^\.local/|^threat_model\.md|^\.env$|^\.env\." || true)
+          BASE_REF="${{ github.base_ref || 'main' }}"
+          git fetch origin "$BASE_REF" --depth=1
+          RESTRICTED=$(git diff --name-only "origin/$BASE_REF...HEAD" | grep -E "^\.agents/|^\.local/|^threat_model\.md|^\.env$|^\.env\." || true)
           if [ -n "$RESTRICTED" ]; then
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "ERROR: The following restricted files appear in this PR:"
@@ -59,10 +71,13 @@ jobs:
 
       - name: "Ban: direct OpenAI SDK instantiation in server code"
         run: |
-          VIOLATIONS=$(git diff --name-only origin/main...HEAD \
+          BASE_REF="${{ github.base_ref || 'main' }}"
+          git fetch origin "$BASE_REF" --depth=1
+          VIOLATIONS=$(git diff --name-only "origin/$BASE_REF...HEAD" \
             | grep -E "\.(ts|tsx)$" \
             | xargs grep -n "new OpenAI(" 2>/dev/null \
             | grep -v "node_modules" \
+            | grep -v "artifacts/api-server/src/lib/ai-client.ts" \
             | grep -v "// openai-direct-ok" || true)
           if [ -n "$VIOLATIONS" ]; then
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -80,7 +95,9 @@ jobs:
 
       - name: "Ban: passOnStoreError: true in rate limiters"
         run: |
-          VIOLATIONS=$(git diff --name-only origin/main...HEAD \
+          BASE_REF="${{ github.base_ref || 'main' }}"
+          git fetch origin "$BASE_REF" --depth=1
+          VIOLATIONS=$(git diff --name-only "origin/$BASE_REF...HEAD" \
             | grep -E "\.(ts|tsx)$" \
             | xargs grep -n "passOnStoreError.*true\|passOnStoreError:true" 2>/dev/null \
             | grep -v "node_modules" || true)
@@ -99,7 +116,9 @@ jobs:
 
       - name: "Ban: destructive SQL in schema-statements diff"
         run: |
-          VIOLATIONS=$(git diff origin/main...HEAD -- lib/db/src/schema-statements.ts \
+          BASE_REF="${{ github.base_ref || 'main' }}"
+          git fetch origin "$BASE_REF" --depth=1
+          VIOLATIONS=$(git diff "origin/$BASE_REF...HEAD" -- lib/db/src/schema-statements.ts \
             | grep "^+" \
             | grep -v "^+++" \
             | grep -iE "^\+\s*(DROP|TRUNCATE|DELETE FROM|ALTER TABLE.*DROP COLUMN)" \

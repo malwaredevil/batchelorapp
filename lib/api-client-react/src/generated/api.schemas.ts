@@ -19,11 +19,19 @@ export const HealthStatusConfigBootstrap = {
   error: 'error',
 } as const;
 
+export type HealthStatusMigrations = {
+  expectedLatestVersion: number;
+  appliedLatestVersion: number | null;
+  pendingCount: number;
+  checksumErrorCount: number;
+} | null;
+
 export interface HealthStatus {
   status: string;
   /** Outcome of the last app-config bootstrap run. "pending" = not yet run; "success" = all steps completed; "warn" = DB unavailable at startup (non-fatal, using hardcoded fallbacks); "error" = unexpected JS error, stale/missing config rows may persist.
    */
   configBootstrap?: HealthStatusConfigBootstrap;
+  migrations?: HealthStatusMigrations;
 }
 
 export interface LoginInput {
@@ -1962,6 +1970,78 @@ export interface MessengerPushUnsubscribeBody {
   endpoint: string;
 }
 
+export interface JobsJob {
+  id?: number;
+  type?: string;
+  queue?: string;
+  status?: string;
+  progress_percent?: number;
+  progress_message?: string | null;
+  [key: string]: unknown;
+ }
+
+export interface JobsJobRegistryEntry {
+  type: string;
+  queue: string;
+  payloadSchemaVersion: number;
+  maxAttempts: number;
+  idempotencyStrategy: string;
+}
+
+export interface JobsJobListResponse {
+  jobs: JobsJob[];
+  registry: JobsJobRegistryEntry[];
+}
+
+export interface JobsJobResponse {
+  job: JobsJob;
+}
+
+export interface JobsJobHealth { [key: string]: unknown }
+
+export interface JobsJobMutationResponse {
+  cancelled: boolean;
+}
+
+export interface JobsJobRetryResponse {
+  retried: boolean;
+}
+
+export interface OperationsOperationProviderSummary { [key: string]: unknown }
+
+export interface OperationsOperationsSummaryResponse {
+  providers: OperationsOperationProviderSummary[];
+}
+
+export interface OperationsOperationEvent { [key: string]: unknown }
+
+export interface OperationsOperationEventsResponse {
+  events: OperationsOperationEvent[];
+}
+
+export type OperationsOperationProvidersResponseProvidersItem = { [key: string]: unknown };
+
+export interface OperationsOperationProvidersResponse {
+  providers: OperationsOperationProvidersResponseProvidersItem[];
+}
+
+export interface OperationsOperationBudget { [key: string]: unknown }
+
+export interface OperationsOperationBudgetsResponse {
+  budgets: OperationsOperationBudget[];
+}
+
+export interface OperationsOperationBudgetResponse {
+  budget: OperationsOperationBudget;
+}
+
+export interface OperationsUpdateBudgetBody {
+  softThresholdUsd: number;
+  hardThresholdUsd: number;
+  enabled: boolean;
+  degradationAction: string;
+}
+
 export type ListPotteryParams = {
 /**
  * Text search across name, pattern description, style, shape, maker, and motifs
@@ -2128,5 +2208,27 @@ export type UploadAttachmentBody = {
 
 export type GetLinkPreviewParams = {
 url: string;
+};
+
+export type ListJobsParams = {
+type?: string;
+status?: string;
+parentJobId?: number;
+/**
+ * @maximum 250
+ */
+limit?: number;
+};
+
+export type ListOperationEventsParams = {
+provider?: string;
+/**
+ * @maximum 250
+ */
+limit?: number;
+};
+
+export type OverrideOperationBudgetBody = {
+  expiresAt: string;
 };
 

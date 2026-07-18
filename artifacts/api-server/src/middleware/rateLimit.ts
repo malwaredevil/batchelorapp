@@ -102,3 +102,16 @@ export const passwordResetLimiter = rateLimit({
   store: new PostgresRateLimitStore("password-reset"),
   passOnStoreError: false,
 });
+
+// Admin/owner-only operational routes (jobs dashboard, operations telemetry).
+// Generous cap since they are already gated behind requireOwner, but still
+// bounded to prevent accidental tight-loop polling from saturating the DB.
+export const adminLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: jsonLimitMessage,
+  store: new PostgresRateLimitStore("admin"),
+  passOnStoreError: false,
+});

@@ -3,10 +3,11 @@ import { z } from "zod";
 import { pool } from "@workspace/db";
 import { requireAuth } from "../middleware/auth";
 import { requireOwner } from "../middleware/owner";
+import { adminLimiter } from "../middleware/rateLimit";
 import { redactMetadata } from "../lib/operations";
 
 const router = Router();
-router.use(requireAuth, requireOwner);
+router.use(adminLimiter, requireAuth, requireOwner);
 
 router.get("/summary", async (_req, res) => {
   const result = await pool.query(`

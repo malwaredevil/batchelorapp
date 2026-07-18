@@ -172,6 +172,14 @@ export interface PotteryPotteryImageUpdate {
   position?: number;
 }
 
+export type PotteryPotteryListResponseSearchMode = typeof PotteryPotteryListResponseSearchMode[keyof typeof PotteryPotteryListResponseSearchMode];
+
+
+export const PotteryPotteryListResponseSearchMode = {
+  semantic: 'semantic',
+  keyword: 'keyword',
+} as const;
+
 /**
  * AI-detected decorative surface zone breakdown (zones, complexity, repeatPattern)
  * @nullable
@@ -226,6 +234,7 @@ export interface PotteryPotteryListResponse {
   total: number;
   page: number;
   pageSize: number;
+  searchMode: PotteryPotteryListResponseSearchMode;
 }
 
 export interface PotteryPotteryUpdate {
@@ -321,9 +330,16 @@ export interface PotteryPotteryBulkReanalyzeInput {
   ids: number[];
 }
 
+export type PotteryPotteryBulkReanalyzeResultErrorsItem = {
+  id: number;
+  error: string;
+};
+
 export interface PotteryPotteryBulkReanalyzeResult {
+  total: number;
   succeeded: number[];
   failed: number[];
+  errors: PotteryPotteryBulkReanalyzeResultErrorsItem[];
 }
 
 export interface PotteryMotifCount {
@@ -342,6 +358,14 @@ export interface PotteryCollectionStats {
   topMotifs: PotteryMotifCount[];
   topColors: PotteryColorCount[];
 }
+
+export type QuiltingFabricsListResponseSearchMode = typeof QuiltingFabricsListResponseSearchMode[keyof typeof QuiltingFabricsListResponseSearchMode];
+
+
+export const QuiltingFabricsListResponseSearchMode = {
+  semantic: 'semantic',
+  keyword: 'keyword',
+} as const;
 
 export interface QuiltingCategory {
   id: number;
@@ -391,6 +415,7 @@ export interface QuiltingFabricsListResponse {
   total: number;
   page: number;
   pageSize: number;
+  searchMode: QuiltingFabricsListResponseSearchMode;
 }
 
 export interface QuiltingQuiltPattern {
@@ -575,9 +600,16 @@ export interface QuiltingBulkReanalyzeInput {
   ids: number[];
 }
 
+export type QuiltingBulkReanalyzeResultErrorsItem = {
+  id: number;
+  error: string;
+};
+
 export interface QuiltingBulkReanalyzeResult {
+  total: number;
   succeeded: number[];
   failed: number[];
+  errors: QuiltingBulkReanalyzeResultErrorsItem[];
 }
 
 export type QuiltingExtractBlocksResultGridSize = typeof QuiltingExtractBlocksResultGridSize[keyof typeof QuiltingExtractBlocksResultGridSize];
@@ -1559,6 +1591,14 @@ export interface OrnamentsOrnamentImageUpdate {
   position?: number;
 }
 
+export type OrnamentsOrnamentListResponseSearchMode = typeof OrnamentsOrnamentListResponseSearchMode[keyof typeof OrnamentsOrnamentListResponseSearchMode];
+
+
+export const OrnamentsOrnamentListResponseSearchMode = {
+  semantic: 'semantic',
+  keyword: 'keyword',
+} as const;
+
 export interface OrnamentsOrnamentItem {
   id: number;
   name: string;
@@ -1610,6 +1650,7 @@ export interface OrnamentsOrnamentListResponse {
   total: number;
   page: number;
   pageSize: number;
+  searchMode: OrnamentsOrnamentListResponseSearchMode;
 }
 
 export interface OrnamentsOrnamentUpdate {
@@ -1667,9 +1708,16 @@ export interface OrnamentsBulkReanalyzeInput {
   ids: number[];
 }
 
+export type OrnamentsBulkReanalyzeResultErrorsItem = {
+  id: number;
+  error: string;
+};
+
 export interface OrnamentsBulkReanalyzeResult {
+  total: number;
   succeeded: number[];
   failed: number[];
+  errors: OrnamentsBulkReanalyzeResultErrorsItem[];
 }
 
 export interface OrnamentsBarcodeLookupInput {

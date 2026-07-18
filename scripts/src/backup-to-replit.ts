@@ -706,6 +706,238 @@ ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS extra_models JSONB NOT
 ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS timeouts JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS features JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS thresholds JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+-- Phase 2: Operations (job queue + external cost tracking)
+CREATE TABLE IF NOT EXISTS app_schema_migrations (
+  version         BIGINT PRIMARY KEY,
+  name            TEXT NOT NULL,
+  checksum_sha256 TEXT NOT NULL,
+  applied_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  applied_by      TEXT,
+  execution_ms    INTEGER,
+  app_commit_sha  TEXT
+);
+
+CREATE TABLE IF NOT EXISTS app_jobs (
+  id                      SERIAL PRIMARY KEY,
+  type                    TEXT NOT NULL,
+  queue                   TEXT NOT NULL DEFAULT 'default',
+  status                  TEXT NOT NULL DEFAULT 'queued',
+  priority                INTEGER NOT NULL DEFAULT 0,
+  payload                 JSONB NOT NULL DEFAULT '{}'::jsonb,
+  payload_schema_version  INTEGER NOT NULL DEFAULT 1,
+  idempotency_key         TEXT,
+  created_by_user_id      INTEGER,
+  domain                  TEXT,
+  scheduled_for           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  attempt_count           INTEGER NOT NULL DEFAULT 0,
+  max_attempts            INTEGER NOT NULL DEFAULT 3,
+  lease_owner             TEXT,
+  lease_expires_at        TIMESTAMPTZ,
+  started_at              TIMESTAMPTZ,
+  completed_at            TIMESTAMPTZ,
+  progress_percent        INTEGER NOT NULL DEFAULT 0,
+  progress_message        TEXT,
+  last_error_code         TEXT,
+  last_error_message      TEXT,
+  provider_request_id     TEXT,
+  parent_job_id           INTEGER,
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS app_job_attempts (
+  id              SERIAL PRIMARY KEY,
+  job_id          INTEGER NOT NULL,
+  attempt_number  INTEGER NOT NULL,
+  status          TEXT NOT NULL,
+  started_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  completed_at    TIMESTAMPTZ,
+  error_code      TEXT,
+  error_message   TEXT,
+  metadata        JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE TABLE IF NOT EXISTS external_operation_events (
+  id                   SERIAL PRIMARY KEY,
+  provider             TEXT NOT NULL,
+  operation            TEXT NOT NULL,
+  model_or_actor       TEXT,
+  feature              TEXT NOT NULL,
+  module               TEXT NOT NULL,
+  user_id              INTEGER,
+  request_id           TEXT,
+  job_id               INTEGER,
+  parent_job_id        INTEGER,
+  status               TEXT NOT NULL,
+  error_code           TEXT,
+  started_at           TIMESTAMPTZ NOT NULL,
+  completed_at         TIMESTAMPTZ NOT NULL,
+  duration_ms          INTEGER NOT NULL,
+  attempt_number       INTEGER NOT NULL DEFAULT 1,
+  retry_count          INTEGER NOT NULL DEFAULT 0,
+  cache_status         TEXT NOT NULL DEFAULT 'not_applicable',
+  input_units          INTEGER,
+  output_units         INTEGER,
+  billed_units         NUMERIC(18,6),
+  estimated_cost_usd   NUMERIC(18,8),
+  actual_cost_usd      NUMERIC(18,8),
+  currency             TEXT NOT NULL DEFAULT 'USD',
+  pricing_version_at   TIMESTAMPTZ,
+  provider_request_id  TEXT,
+  metadata             JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS external_provider_pricing (
+  id              SERIAL PRIMARY KEY,
+  provider        TEXT NOT NULL,
+  operation       TEXT NOT NULL,
+  model_or_actor  TEXT,
+  unit_type       TEXT NOT NULL,
+  price_usd       NUMERIC(18,8) NOT NULL,
+  effective_from  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  effective_to    TIMESTAMPTZ,
+  source          TEXT NOT NULL DEFAULT 'manual',
+  notes           TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS external_budget_policies (
+  id                   SERIAL PRIMARY KEY,
+  scope                TEXT NOT NULL,
+  scope_value          TEXT,
+  period               TEXT NOT NULL,
+  soft_threshold_usd   NUMERIC(18,2) NOT NULL,
+  hard_threshold_usd   NUMERIC(18,2) NOT NULL,
+  warning_policy       TEXT NOT NULL DEFAULT 'owner_dashboard',
+  degradation_action   TEXT NOT NULL DEFAULT 'warn_only',
+  enabled              BOOLEAN NOT NULL DEFAULT true,
+  override_until       TIMESTAMPTZ,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Phase 2: AI provenance (#229)
+CREATE TABLE IF NOT EXISTS ai_generation_runs (
+  id                      SERIAL PRIMARY KEY,
+  module                  TEXT NOT NULL,
+  feature                 TEXT NOT NULL,
+  target_type             TEXT NOT NULL,
+  target_id               INTEGER,
+  job_id                  INTEGER,
+  operation_event_id      INTEGER,
+  user_id                 INTEGER,
+  provider                TEXT NOT NULL,
+  model                   TEXT NOT NULL,
+  model_provider_run_id   TEXT,
+  prompt_template_id      TEXT,
+  prompt_version_hash     TEXT,
+  tool_schema_version     INTEGER NOT NULL DEFAULT 1,
+  input_artifact_hashes   JSONB NOT NULL DEFAULT '[]'::jsonb,
+  status                  TEXT NOT NULL DEFAULT 'pending',
+  error_code              TEXT,
+  error_message           TEXT,
+  started_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  completed_at            TIMESTAMPTZ,
+  duration_ms             INTEGER,
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS ai_field_candidates (
+  id                      SERIAL PRIMARY KEY,
+  generation_run_id       INTEGER NOT NULL,
+  target_type             TEXT NOT NULL,
+  target_id               INTEGER,
+  field_path              TEXT NOT NULL,
+  candidate_value         JSONB,
+  normalized_value_hash   TEXT,
+  confidence_score        NUMERIC(5,4),
+  confidence_method       TEXT,
+  authority_class         TEXT NOT NULL DEFAULT 'vision',
+  source_references       JSONB NOT NULL DEFAULT '[]'::jsonb,
+  disposition             TEXT NOT NULL DEFAULT 'proposed',
+  applied_at              TIMESTAMPTZ,
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS ai_field_decisions (
+  id                    SERIAL PRIMARY KEY,
+  candidate_id          INTEGER NOT NULL,
+  deciding_user_id      INTEGER,
+  decision_type         TEXT NOT NULL,
+  prior_value           JSONB,
+  final_value           JSONB,
+  correction_category   TEXT,
+  context_source        TEXT NOT NULL DEFAULT 'manual_edit',
+  decided_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Phase 2: Ingestion framework (#230)
+CREATE TABLE IF NOT EXISTS ingestion_sources (
+  id                      SERIAL PRIMARY KEY,
+  name                    TEXT NOT NULL,
+  slug                    TEXT NOT NULL,
+  adapter_type            TEXT NOT NULL,
+  adapter_config          JSONB NOT NULL DEFAULT '{}'::jsonb,
+  config_schema_version   INTEGER NOT NULL DEFAULT 1,
+  module                  TEXT NOT NULL,
+  feature                 TEXT,
+  enabled                 BOOLEAN NOT NULL DEFAULT true,
+  owner_notes             TEXT,
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS ingestion_runs (
+  id               SERIAL PRIMARY KEY,
+  source_id        INTEGER NOT NULL,
+  job_id           INTEGER,
+  triggered_by     INTEGER,
+  trigger_type     TEXT NOT NULL DEFAULT 'manual',
+  status           TEXT NOT NULL DEFAULT 'pending',
+  items_fetched    INTEGER NOT NULL DEFAULT 0,
+  items_matched    INTEGER NOT NULL DEFAULT 0,
+  items_merged     INTEGER NOT NULL DEFAULT 0,
+  items_rejected   INTEGER NOT NULL DEFAULT 0,
+  error_code       TEXT,
+  error_message    TEXT,
+  started_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  completed_at     TIMESTAMPTZ,
+  metadata         JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS ingestion_candidates (
+  id                SERIAL PRIMARY KEY,
+  run_id            INTEGER NOT NULL,
+  source_id         INTEGER NOT NULL,
+  source_key        TEXT NOT NULL,
+  target_type       TEXT,
+  target_id         INTEGER,
+  normalized_data   JSONB NOT NULL DEFAULT '{}'::jsonb,
+  confidence_score  NUMERIC(5,4),
+  status            TEXT NOT NULL DEFAULT 'pending',
+  matched_at        TIMESTAMPTZ,
+  merged_at         TIMESTAMPTZ,
+  rejected_reason   TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Phase 2: Search feedback (#233)
+CREATE TABLE IF NOT EXISTS search_feedback (
+  id           SERIAL PRIMARY KEY,
+  user_id      INTEGER,
+  module       TEXT NOT NULL,
+  item_a_type  TEXT NOT NULL,
+  item_a_id    INTEGER NOT NULL,
+  item_b_type  TEXT NOT NULL,
+  item_b_id    INTEGER NOT NULL,
+  verdict      TEXT NOT NULL,
+  weight       NUMERIC(4,3) NOT NULL DEFAULT 1.000,
+  notes        TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 `;
 
 async function copyTable(
@@ -1603,6 +1835,302 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "messenger_link_previews", "id");
+
+  // ── Phase 2: Operations ───────────────────────────────────────────────────
+  summary["app_schema_migrations"] = await copyTable(source, dest, {
+    table: "app_schema_migrations",
+    columns: [
+      "version",
+      "name",
+      "checksum_sha256",
+      "applied_at",
+      "applied_by",
+      "execution_ms",
+      "app_commit_sha",
+    ],
+    orderBy: "version",
+  });
+
+  summary["app_jobs"] = await copyTable(source, dest, {
+    table: "app_jobs",
+    columns: [
+      "id",
+      "type",
+      "queue",
+      "status",
+      "priority",
+      "payload",
+      "payload_schema_version",
+      "idempotency_key",
+      "created_by_user_id",
+      "domain",
+      "scheduled_for",
+      "attempt_count",
+      "max_attempts",
+      "lease_owner",
+      "lease_expires_at",
+      "started_at",
+      "completed_at",
+      "progress_percent",
+      "progress_message",
+      "last_error_code",
+      "last_error_message",
+      "provider_request_id",
+      "parent_job_id",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "app_jobs", "id");
+
+  summary["app_job_attempts"] = await copyTable(source, dest, {
+    table: "app_job_attempts",
+    columns: [
+      "id",
+      "job_id",
+      "attempt_number",
+      "status",
+      "started_at",
+      "completed_at",
+      "error_code",
+      "error_message",
+      "metadata",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "app_job_attempts", "id");
+
+  summary["external_operation_events"] = await copyTable(source, dest, {
+    table: "external_operation_events",
+    columns: [
+      "id",
+      "provider",
+      "operation",
+      "model_or_actor",
+      "feature",
+      "module",
+      "user_id",
+      "request_id",
+      "job_id",
+      "parent_job_id",
+      "status",
+      "error_code",
+      "started_at",
+      "completed_at",
+      "duration_ms",
+      "attempt_number",
+      "retry_count",
+      "cache_status",
+      "input_units",
+      "output_units",
+      "billed_units",
+      "estimated_cost_usd",
+      "actual_cost_usd",
+      "currency",
+      "pricing_version_at",
+      "provider_request_id",
+      "metadata",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "external_operation_events", "id");
+
+  summary["external_provider_pricing"] = await copyTable(source, dest, {
+    table: "external_provider_pricing",
+    columns: [
+      "id",
+      "provider",
+      "operation",
+      "model_or_actor",
+      "unit_type",
+      "price_usd",
+      "effective_from",
+      "effective_to",
+      "source",
+      "notes",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "external_provider_pricing", "id");
+
+  summary["external_budget_policies"] = await copyTable(source, dest, {
+    table: "external_budget_policies",
+    columns: [
+      "id",
+      "scope",
+      "scope_value",
+      "period",
+      "soft_threshold_usd",
+      "hard_threshold_usd",
+      "warning_policy",
+      "degradation_action",
+      "enabled",
+      "override_until",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "external_budget_policies", "id");
+
+  // ── Phase 2: AI provenance ────────────────────────────────────────────────
+  summary["ai_generation_runs"] = await copyTable(source, dest, {
+    table: "ai_generation_runs",
+    columns: [
+      "id",
+      "module",
+      "feature",
+      "target_type",
+      "target_id",
+      "job_id",
+      "operation_event_id",
+      "user_id",
+      "provider",
+      "model",
+      "model_provider_run_id",
+      "prompt_template_id",
+      "prompt_version_hash",
+      "tool_schema_version",
+      "input_artifact_hashes",
+      "status",
+      "error_code",
+      "error_message",
+      "started_at",
+      "completed_at",
+      "duration_ms",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ai_generation_runs", "id");
+
+  summary["ai_field_candidates"] = await copyTable(source, dest, {
+    table: "ai_field_candidates",
+    columns: [
+      "id",
+      "generation_run_id",
+      "target_type",
+      "target_id",
+      "field_path",
+      "candidate_value",
+      "normalized_value_hash",
+      "confidence_score",
+      "confidence_method",
+      "authority_class",
+      "source_references",
+      "disposition",
+      "applied_at",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ai_field_candidates", "id");
+
+  summary["ai_field_decisions"] = await copyTable(source, dest, {
+    table: "ai_field_decisions",
+    columns: [
+      "id",
+      "candidate_id",
+      "deciding_user_id",
+      "decision_type",
+      "prior_value",
+      "final_value",
+      "correction_category",
+      "context_source",
+      "decided_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ai_field_decisions", "id");
+
+  // ── Phase 2: Ingestion ────────────────────────────────────────────────────
+  summary["ingestion_sources"] = await copyTable(source, dest, {
+    table: "ingestion_sources",
+    columns: [
+      "id",
+      "name",
+      "slug",
+      "adapter_type",
+      "adapter_config",
+      "config_schema_version",
+      "module",
+      "feature",
+      "enabled",
+      "owner_notes",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ingestion_sources", "id");
+
+  summary["ingestion_runs"] = await copyTable(source, dest, {
+    table: "ingestion_runs",
+    columns: [
+      "id",
+      "source_id",
+      "job_id",
+      "triggered_by",
+      "trigger_type",
+      "status",
+      "items_fetched",
+      "items_matched",
+      "items_merged",
+      "items_rejected",
+      "error_code",
+      "error_message",
+      "started_at",
+      "completed_at",
+      "metadata",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ingestion_runs", "id");
+
+  summary["ingestion_candidates"] = await copyTable(source, dest, {
+    table: "ingestion_candidates",
+    columns: [
+      "id",
+      "run_id",
+      "source_id",
+      "source_key",
+      "target_type",
+      "target_id",
+      "normalized_data",
+      "confidence_score",
+      "status",
+      "matched_at",
+      "merged_at",
+      "rejected_reason",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ingestion_candidates", "id");
+
+  // ── Phase 2: Search feedback ──────────────────────────────────────────────
+  summary["search_feedback"] = await copyTable(source, dest, {
+    table: "search_feedback",
+    columns: [
+      "id",
+      "user_id",
+      "module",
+      "item_a_type",
+      "item_a_id",
+      "item_b_type",
+      "item_b_id",
+      "verdict",
+      "weight",
+      "notes",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "search_feedback", "id");
 
   // ── Record backup history ─────────────────────────────────────────────────
   const note = Object.entries(summary)

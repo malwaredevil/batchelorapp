@@ -922,6 +922,302 @@ async function main() {
   });
   await resetSequence(dest, "messenger_link_previews", "id");
 
+  // ── Phase 2: Operations ───────────────────────────────────────────────────
+  await copyTable(source, dest, {
+    table: "app_schema_migrations",
+    columns: [
+      "version",
+      "name",
+      "checksum_sha256",
+      "applied_at",
+      "applied_by",
+      "execution_ms",
+      "app_commit_sha",
+    ],
+    orderBy: "version",
+  });
+
+  await copyTable(source, dest, {
+    table: "app_jobs",
+    columns: [
+      "id",
+      "type",
+      "queue",
+      "status",
+      "priority",
+      "payload",
+      "payload_schema_version",
+      "idempotency_key",
+      "created_by_user_id",
+      "domain",
+      "scheduled_for",
+      "attempt_count",
+      "max_attempts",
+      "lease_owner",
+      "lease_expires_at",
+      "started_at",
+      "completed_at",
+      "progress_percent",
+      "progress_message",
+      "last_error_code",
+      "last_error_message",
+      "provider_request_id",
+      "parent_job_id",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "app_jobs", "id");
+
+  await copyTable(source, dest, {
+    table: "app_job_attempts",
+    columns: [
+      "id",
+      "job_id",
+      "attempt_number",
+      "status",
+      "started_at",
+      "completed_at",
+      "error_code",
+      "error_message",
+      "metadata",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "app_job_attempts", "id");
+
+  await copyTable(source, dest, {
+    table: "external_operation_events",
+    columns: [
+      "id",
+      "provider",
+      "operation",
+      "model_or_actor",
+      "feature",
+      "module",
+      "user_id",
+      "request_id",
+      "job_id",
+      "parent_job_id",
+      "status",
+      "error_code",
+      "started_at",
+      "completed_at",
+      "duration_ms",
+      "attempt_number",
+      "retry_count",
+      "cache_status",
+      "input_units",
+      "output_units",
+      "billed_units",
+      "estimated_cost_usd",
+      "actual_cost_usd",
+      "currency",
+      "pricing_version_at",
+      "provider_request_id",
+      "metadata",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "external_operation_events", "id");
+
+  await copyTable(source, dest, {
+    table: "external_provider_pricing",
+    columns: [
+      "id",
+      "provider",
+      "operation",
+      "model_or_actor",
+      "unit_type",
+      "price_usd",
+      "effective_from",
+      "effective_to",
+      "source",
+      "notes",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "external_provider_pricing", "id");
+
+  await copyTable(source, dest, {
+    table: "external_budget_policies",
+    columns: [
+      "id",
+      "scope",
+      "scope_value",
+      "period",
+      "soft_threshold_usd",
+      "hard_threshold_usd",
+      "warning_policy",
+      "degradation_action",
+      "enabled",
+      "override_until",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "external_budget_policies", "id");
+
+  // ── Phase 2: AI provenance ────────────────────────────────────────────────
+  await copyTable(source, dest, {
+    table: "ai_generation_runs",
+    columns: [
+      "id",
+      "module",
+      "feature",
+      "target_type",
+      "target_id",
+      "job_id",
+      "operation_event_id",
+      "user_id",
+      "provider",
+      "model",
+      "model_provider_run_id",
+      "prompt_template_id",
+      "prompt_version_hash",
+      "tool_schema_version",
+      "input_artifact_hashes",
+      "status",
+      "error_code",
+      "error_message",
+      "started_at",
+      "completed_at",
+      "duration_ms",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ai_generation_runs", "id");
+
+  await copyTable(source, dest, {
+    table: "ai_field_candidates",
+    columns: [
+      "id",
+      "generation_run_id",
+      "target_type",
+      "target_id",
+      "field_path",
+      "candidate_value",
+      "normalized_value_hash",
+      "confidence_score",
+      "confidence_method",
+      "authority_class",
+      "source_references",
+      "disposition",
+      "applied_at",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ai_field_candidates", "id");
+
+  await copyTable(source, dest, {
+    table: "ai_field_decisions",
+    columns: [
+      "id",
+      "candidate_id",
+      "deciding_user_id",
+      "decision_type",
+      "prior_value",
+      "final_value",
+      "correction_category",
+      "context_source",
+      "decided_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ai_field_decisions", "id");
+
+  // ── Phase 2: Ingestion ────────────────────────────────────────────────────
+  await copyTable(source, dest, {
+    table: "ingestion_sources",
+    columns: [
+      "id",
+      "name",
+      "slug",
+      "adapter_type",
+      "adapter_config",
+      "config_schema_version",
+      "module",
+      "feature",
+      "enabled",
+      "owner_notes",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ingestion_sources", "id");
+
+  await copyTable(source, dest, {
+    table: "ingestion_runs",
+    columns: [
+      "id",
+      "source_id",
+      "job_id",
+      "triggered_by",
+      "trigger_type",
+      "status",
+      "items_fetched",
+      "items_matched",
+      "items_merged",
+      "items_rejected",
+      "error_code",
+      "error_message",
+      "started_at",
+      "completed_at",
+      "metadata",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ingestion_runs", "id");
+
+  await copyTable(source, dest, {
+    table: "ingestion_candidates",
+    columns: [
+      "id",
+      "run_id",
+      "source_id",
+      "source_key",
+      "target_type",
+      "target_id",
+      "normalized_data",
+      "confidence_score",
+      "status",
+      "matched_at",
+      "merged_at",
+      "rejected_reason",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ingestion_candidates", "id");
+
+  // ── Phase 2: Search feedback ──────────────────────────────────────────────
+  await copyTable(source, dest, {
+    table: "search_feedback",
+    columns: [
+      "id",
+      "user_id",
+      "module",
+      "item_a_type",
+      "item_a_id",
+      "item_b_type",
+      "item_b_id",
+      "verdict",
+      "weight",
+      "notes",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "search_feedback", "id");
+
   await dest.query("SET session_replication_role = DEFAULT");
 
   console.log("\n✓ Restore complete.");

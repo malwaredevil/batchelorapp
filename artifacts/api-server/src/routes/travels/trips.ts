@@ -11,6 +11,7 @@ import {
   travelsPackingLists,
 } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
+import { ssrfSafeFetch } from "../../lib/ssrf-safe-fetch";
 import { deleteTripPhoto } from "../../lib/travels/storage";
 import { deleteDocument } from "../../lib/travels-storage";
 import {
@@ -33,7 +34,8 @@ async function geocodeDestination(
 ): Promise<{ lat: number; lng: number } | null> {
   try {
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(destination)}&format=json&limit=1`;
-    const res = await fetch(url, {
+    // Always use ssrfSafeFetch for external URLs — keeps SSRF policy uniformly enforced across the codebase.
+    const res = await ssrfSafeFetch(url, {
       headers: { "User-Agent": "Batchelor-App/1.0" },
       signal: AbortSignal.timeout(5000),
     });

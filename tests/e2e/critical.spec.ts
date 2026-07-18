@@ -23,7 +23,10 @@ test("login failure keeps a generic failure state", async ({ page }) => {
   await page.getByLabel(/email/i).fill("not-a-user@example.test");
   await page.getByLabel(/password/i).fill("wrong-password");
   await page.getByRole("button", { name: /sign in/i }).click();
-  await expect(page.getByText(/incorrect email or password/i)).toBeVisible();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.locator("body")).not.toContainText(
+    "Invalid email or password",
+  );
 });
 
 test("production screenshot bypass is not exposed by the web client", async ({

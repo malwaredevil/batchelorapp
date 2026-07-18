@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "defaultPosture": "deny direct Supabase REST table/function access; Express is the application data gateway",
+  "directClientTables": [],
+  "directClientFunctions": [],
+  "sensitiveTablesNeverExposed": [
+    "app_users",
+    "password_reset_tokens",
+    "phone_verification_codes",
+    "pottery_sessions",
+    "quilting_sessions",
+    "app_gmail_tokens",
+    "gmail_oauth_tokens",
+    "google_calendar_tokens",
+    "elaine_conversations",
+    "elaine_messages",
+    "elaine_memories",
+    "travels_trip_documents",
+    "travels_doc_chunks",
+    "messenger_attachments",
+    "messenger_push_subscriptions",
+    "app_jobs",
+    "app_job_attempts",
+    "external_operation_events"
+  ],
+  "acceptedExtensionWarnings": [
+    {
+      "extension": "pg_net",
+      "reason": "Supabase-managed extension; schema relocation is not supported by the platform.",
+      "compensation": "No direct grants are allowlisted and public SECURITY DEFINER execution is checked in CI."
+    }
+  ]
+}

@@ -2,6 +2,7 @@ import { type ReactNode, type ComponentType, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { AppSwitcher, type AppId, useTheme } from "@workspace/elaine-ui";
 import { MessengerNavIcon } from "@workspace/messenger-ui";
+import { NotificationBell } from "./NotificationBell";
 import { useBackgroundTasks } from "@/lib/background-tasks";
 import { InstallBanner } from "@workspace/web-core";
 import {
@@ -333,6 +334,10 @@ export function ModuleShell({ children }: { children: ReactNode }) {
               >
                 <CalendarDays className="h-4 w-4" />
               </Button>
+              <NotificationBell
+                buttonClassName="text-muted-foreground hover:text-foreground"
+                iconSize={16}
+              />
               <MessengerNavIcon
                 buttonClassName="text-muted-foreground hover:text-foreground"
                 iconSize={16}

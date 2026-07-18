@@ -223,6 +223,11 @@ function remapOperationsPath(p: string): string {
   return "/operations" + p;
 }
 
+function remapNotificationsPath(p: string): string {
+  if (p === "/") return "/notifications";
+  return "/notifications" + p;
+}
+
 // ---------------------------------------------------------------------------
 // Build
 // ---------------------------------------------------------------------------
@@ -242,6 +247,7 @@ function main(): void {
   const messenger = loadSpec("messenger.yaml");
   const jobs = loadSpec("jobs.yaml");
   const operations = loadSpec("operations.yaml");
+  const notifications = loadSpec("notifications.yaml");
 
   const potterySchemas: Record<string, Json> = (pottery.components?.schemas ??
     {}) as Json;
@@ -260,6 +266,8 @@ function main(): void {
   const jobsSchemas: Record<string, Json> = (jobs.components?.schemas ??
     {}) as Json;
   const operationsSchemas: Record<string, Json> = (operations.components
+    ?.schemas ?? {}) as Json;
+  const notificationsSchemas: Record<string, Json> = (notifications.components
     ?.schemas ?? {}) as Json;
 
   // ----- Shared schema set: transitive closure of refs from quilting shared paths
@@ -344,6 +352,13 @@ function main(): void {
   for (const name of Object.keys(operationsSchemas)) {
     if (!sharedSchemaNames.has(name)) {
       operationsSchemaRename.set(name, "Operations" + name);
+    }
+  }
+
+  const notificationsSchemaRename = new Map<string, string>();
+  for (const name of Object.keys(notificationsSchemas)) {
+    if (!sharedSchemaNames.has(name)) {
+      notificationsSchemaRename.set(name, "Notifications" + name);
     }
   }
 
@@ -510,6 +525,30 @@ function main(): void {
       ]).has(op)
     ) {
       operationsOpRename.set(op, renameOpId(op, "operations"));
+    }
+  }
+
+  const notificationsFeatureOps = collectFeatureOpIds(
+    notifications.paths as Json,
+  );
+  const notificationsOpRename = new Map<string, string>();
+  for (const op of notificationsFeatureOps) {
+    if (
+      seenOpsFromSets([
+        sharedOpIds,
+        potteryFeatureOps,
+        quiltingFeatureOps,
+        travelsFeatureOps,
+        ornamentsFeatureOps,
+        officeFeatureOps,
+        hubFeatureOps,
+        configFeatureOps,
+        messengerFeatureOps,
+        jobsFeatureOps,
+        operationsFeatureOps,
+      ]).has(op)
+    ) {
+      notificationsOpRename.set(op, renameOpId(op, "notifications"));
     }
   }
 
@@ -682,6 +721,21 @@ function main(): void {
     outPaths[newPath] = cloned;
   }
 
+  for (const [p, item] of Object.entries(
+    notifications.paths as Record<string, Json>,
+  )) {
+    const newPath = remapNotificationsPath(p);
+    const cloned = deepClone(item);
+    rewriteSchemaRefs(cloned, notificationsSchemaRename);
+    applyOpIdRenames(cloned, notificationsOpRename);
+    if (outPaths[newPath] !== undefined) {
+      throw new Error(
+        `Duplicate path key after notifications remap: ${newPath}`,
+      );
+    }
+    outPaths[newPath] = cloned;
+  }
+
   // ----- Components: schemas
   const outSchemas: Record<string, Json> = {};
 
@@ -805,6 +859,17 @@ function main(): void {
     const newName = operationsSchemaRename.get(name)!;
     const cloned = deepClone(schema);
     rewriteSchemaRefs(cloned, operationsSchemaRename);
+    if (outSchemas[newName] !== undefined) {
+      throw new Error(`Duplicate schema key: ${newName}`);
+    }
+    outSchemas[newName] = cloned;
+  }
+
+  for (const [name, schema] of Object.entries(notificationsSchemas)) {
+    if (sharedSchemaNames.has(name)) continue;
+    const newName = notificationsSchemaRename.get(name)!;
+    const cloned = deepClone(schema);
+    rewriteSchemaRefs(cloned, notificationsSchemaRename);
     if (outSchemas[newName] !== undefined) {
       throw new Error(`Duplicate schema key: ${newName}`);
     }

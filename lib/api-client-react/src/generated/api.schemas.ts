@@ -2072,6 +2072,127 @@ export interface OperationsUpdateBudgetBody {
   degradationAction: string;
 }
 
+export type NotificationsSeverity = typeof NotificationsSeverity[keyof typeof NotificationsSeverity];
+
+
+export const NotificationsSeverity = {
+  informational: 'informational',
+  attention: 'attention',
+  important: 'important',
+  critical: 'critical',
+} as const;
+
+export interface NotificationsNotificationItem {
+  recipientId: number;
+  eventId: number;
+  eventType: string;
+  module: string;
+  severity: NotificationsSeverity;
+  subjectType?: string | null;
+  subjectId?: number | null;
+  title: string;
+  summary: string;
+  actionUrl?: string | null;
+  actionLabel?: string | null;
+  occurredAt: string;
+  expiresAt?: string | null;
+  createdAt: string;
+  isRead: boolean;
+  readAt?: string | null;
+  isAcknowledged: boolean;
+  acknowledgedAt?: string | null;
+  isDismissed: boolean;
+  dismissedAt?: string | null;
+  snoozedUntil?: string | null;
+}
+
+export interface NotificationsListResponse {
+  items: NotificationsNotificationItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export type NotificationsCountsResponseByModule = {[key: string]: number};
+
+export interface NotificationsCountsResponse {
+  total: number;
+  byModule: NotificationsCountsResponseByModule;
+}
+
+export interface NotificationsRecipientState {
+  recipientId: number;
+  isRead: boolean;
+  readAt?: string | null;
+  isAcknowledged: boolean;
+  acknowledgedAt?: string | null;
+  isDismissed: boolean;
+  dismissedAt?: string | null;
+  snoozedUntil?: string | null;
+}
+
+export interface NotificationsUpdateStateBody {
+  read?: boolean;
+  acknowledged?: boolean;
+  dismissed?: boolean;
+  snoozedUntil?: string | null;
+}
+
+export type NotificationsBulkStateBodyAction = typeof NotificationsBulkStateBodyAction[keyof typeof NotificationsBulkStateBodyAction];
+
+
+export const NotificationsBulkStateBodyAction = {
+  read: 'read',
+  unread: 'unread',
+  dismissed: 'dismissed',
+  acknowledged: 'acknowledged',
+} as const;
+
+export interface NotificationsBulkStateBody {
+  /** @maxItems 200 */
+  recipientIds: number[];
+  action: NotificationsBulkStateBodyAction;
+}
+
+export interface NotificationsBulkStateResponse {
+  updated: number;
+}
+
+export type NotificationsPreferenceEntryScope = typeof NotificationsPreferenceEntryScope[keyof typeof NotificationsPreferenceEntryScope];
+
+
+export const NotificationsPreferenceEntryScope = {
+  global: 'global',
+  module: 'module',
+  event_type: 'event_type',
+} as const;
+
+export interface NotificationsPreferenceEntry {
+  id?: number;
+  scope: NotificationsPreferenceEntryScope;
+  scopeValue?: string | null;
+  channelInApp: boolean;
+  channelEmail: boolean;
+  channelSms: boolean;
+  channelPush: boolean;
+  quietHoursEnabled: boolean;
+  quietHoursTimezone: string;
+  /** HH:MM in 24h format */
+  quietHoursStart: string;
+  /** HH:MM in 24h format */
+  quietHoursEnd: string;
+  criticalOverride: boolean;
+}
+
+export interface NotificationsPreferencesResponse {
+  entries: NotificationsPreferenceEntry[];
+}
+
+export interface NotificationsPreferencesBody {
+  /** @maxItems 50 */
+  entries: NotificationsPreferenceEntry[];
+}
+
 export type ListPotteryParams = {
 /**
  * Text search across name, pattern description, style, shape, maker, and motifs
@@ -2261,4 +2382,38 @@ limit?: number;
 export type OverrideOperationBudgetBody = {
   expiresAt: string;
 };
+
+export type ListParams = {
+/**
+ * Filter by module (pottery, quilting, travels, ornaments, hub, etc.)
+ */
+module?: string;
+/**
+ * Filter by minimum severity
+ */
+severity?: ListSeverity;
+/**
+ * If true, return only unread notifications
+ */
+unread?: boolean;
+/**
+ * @minimum 1
+ */
+page?: number;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+pageSize?: number;
+};
+
+export type ListSeverity = typeof ListSeverity[keyof typeof ListSeverity];
+
+
+export const ListSeverity = {
+  informational: 'informational',
+  attention: 'attention',
+  important: 'important',
+  critical: 'critical',
+} as const;
 

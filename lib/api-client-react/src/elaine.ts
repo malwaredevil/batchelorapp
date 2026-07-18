@@ -280,10 +280,34 @@ function parseSseDataLines(rawEvent: string): string | null {
   return dataLines.length > 0 ? dataLines.join("\n") : null;
 }
 
+/**
+ * Structured alternative to a freeform pageContext string.
+ * - `module` is validated against known app IDs.
+ * - `description` must be a developer-controlled template string (no raw user
+ *   content). Max 500 chars — truncated server-side if exceeded.
+ * - `items` carries per-field user-supplied values that will be sanitized
+ *   separately before injection. Each value is capped at 300 chars server-side.
+ */
+export interface PageContext {
+  module:
+    | "pottery"
+    | "quilting"
+    | "travels"
+    | "ornaments"
+    | "hub"
+    | "elaine"
+    | "office";
+  /** Developer-controlled description of what's on screen. No raw user input. */
+  description: string;
+  /** Per-field user-supplied values shown to Elaine as labelled pairs. */
+  items?: Array<{ label: string; value: string }>;
+}
+
 export async function streamElaineMessage(
   body: {
     message: string;
-    pageContext?: string;
+    /** Pass a `PageContext` object (preferred) or a legacy freeform string. */
+    pageContext?: PageContext | string;
     appId: ElaineAppId;
     /** ID of the named conversation to continue. Omit to start a new one. */
     conversationId?: number;
@@ -303,7 +327,18 @@ export async function streamElaineMessage(
       "Content-Type": "application/json",
       Accept: "text/event-stream",
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      ...body,
+      pageContext:
+        typeof body.pageContext === "object" && body.pageContext !== null
+          ? [
+              `[${body.pageContext.module}] ${body.pageContext.description}`,
+              ...(body.pageContext.items?.map(
+                ({ label, value }) => `${label}: ${value}`,
+              ) ?? []),
+            ].join("\n")
+          : body.pageContext,
+    }),
     signal,
   });
 

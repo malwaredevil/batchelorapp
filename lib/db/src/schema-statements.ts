@@ -1954,4 +1954,112 @@ export const STATEMENTS: string[] = [
        REVOKE EXECUTE ON FUNCTION public.auto_enable_rls() FROM anon, authenticated, PUBLIC;
      END IF;
    END $$`,
+
+  // ── Phase 3 Step 2: Unified notification center (#235) ───────────────────
+
+  `CREATE TABLE IF NOT EXISTS notification_events (
+    id            SERIAL PRIMARY KEY,
+    event_type    TEXT NOT NULL,
+    module        TEXT NOT NULL,
+    severity      TEXT NOT NULL DEFAULT 'informational'
+                    CHECK (severity IN ('informational','attention','important','critical')),
+    scope         TEXT NOT NULL DEFAULT 'household'
+                    CHECK (scope IN ('household','personal')),
+    subject_type  TEXT,
+    subject_id    INTEGER,
+    title         TEXT NOT NULL,
+    summary       TEXT NOT NULL,
+    action_url    TEXT,
+    action_label  TEXT,
+    payload       JSONB,
+    dedup_key     TEXT UNIQUE,
+    last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at    TIMESTAMPTZ,
+    superseded_by INTEGER REFERENCES notification_events(id) ON DELETE SET NULL,
+    occurred_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by    INTEGER REFERENCES app_users(id) ON DELETE SET NULL,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS notification_events_type_idx
+     ON notification_events (event_type)`,
+  `CREATE INDEX IF NOT EXISTS notification_events_module_idx
+     ON notification_events (module)`,
+  `CREATE INDEX IF NOT EXISTS notification_events_occurred_at_idx
+     ON notification_events (occurred_at DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS notification_recipients (
+    id                SERIAL PRIMARY KEY,
+    event_id          INTEGER NOT NULL REFERENCES notification_events(id) ON DELETE CASCADE,
+    user_id           INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+    read_at           TIMESTAMPTZ,
+    acknowledged_at   TIMESTAMPTZ,
+    dismissed_at      TIMESTAMPTZ,
+    snoozed_until     TIMESTAMPTZ,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (event_id, user_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS notification_recipients_user_idx
+     ON notification_recipients (user_id)`,
+  `CREATE INDEX IF NOT EXISTS notification_recipients_event_idx
+     ON notification_recipients (event_id)`,
+  `CREATE INDEX IF NOT EXISTS notification_recipients_unread_idx
+     ON notification_recipients (user_id, created_at DESC)
+     WHERE read_at IS NULL`,
+
+  `CREATE TABLE IF NOT EXISTS notification_deliveries (
+    id                  SERIAL PRIMARY KEY,
+    recipient_id        INTEGER NOT NULL REFERENCES notification_recipients(id) ON DELETE CASCADE,
+    event_id            INTEGER NOT NULL REFERENCES notification_events(id) ON DELETE CASCADE,
+    channel             TEXT NOT NULL CHECK (channel IN ('in_app','email','sms','push')),
+    status              TEXT NOT NULL DEFAULT 'pending'
+                          CHECK (status IN ('pending','queued','sending','delivered',
+                                            'failed_retryable','failed_terminal',
+                                            'suppressed','cancelled')),
+    attempt_count       INTEGER NOT NULL DEFAULT 0,
+    scheduled_at        TIMESTAMPTZ,
+    sent_at             TIMESTAMPTZ,
+    delivered_at        TIMESTAMPTZ,
+    failed_at           TIMESTAMPTZ,
+    failure_class       TEXT,
+    provider_message_id TEXT,
+    idempotency_key     TEXT UNIQUE,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS notification_deliveries_recipient_idx
+     ON notification_deliveries (recipient_id)`,
+  `CREATE INDEX IF NOT EXISTS notification_deliveries_status_idx
+     ON notification_deliveries (status)`,
+  `CREATE INDEX IF NOT EXISTS notification_deliveries_channel_status_idx
+     ON notification_deliveries (channel, status)`,
+
+  `CREATE TABLE IF NOT EXISTS notification_preferences (
+    id                    SERIAL PRIMARY KEY,
+    user_id               INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+    scope                 TEXT NOT NULL DEFAULT 'global'
+                            CHECK (scope IN ('global','module','event_type')),
+    scope_value           TEXT,
+    channel_in_app        BOOLEAN NOT NULL DEFAULT true,
+    channel_email         BOOLEAN NOT NULL DEFAULT false,
+    channel_sms           BOOLEAN NOT NULL DEFAULT false,
+    channel_push          BOOLEAN NOT NULL DEFAULT false,
+    quiet_hours_enabled   BOOLEAN NOT NULL DEFAULT false,
+    quiet_hours_timezone  TEXT NOT NULL DEFAULT 'America/New_York',
+    quiet_hours_start     TEXT NOT NULL DEFAULT '22:00',
+    quiet_hours_end       TEXT NOT NULL DEFAULT '08:00',
+    critical_override     BOOLEAN NOT NULL DEFAULT true,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS notification_prefs_global_idx
+     ON notification_preferences (user_id)
+     WHERE scope = 'global'`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS notification_prefs_module_idx
+     ON notification_preferences (user_id, scope_value)
+     WHERE scope = 'module'`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS notification_prefs_type_idx
+     ON notification_preferences (user_id, scope_value)
+     WHERE scope = 'event_type'`,
+  `CREATE INDEX IF NOT EXISTS notification_preferences_user_idx
+     ON notification_preferences (user_id)`,
 ];

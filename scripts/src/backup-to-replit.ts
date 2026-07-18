@@ -27,6 +27,8 @@
  *             travels_gmail_scan_decisions, travels_card_layout_preferences,
  *             travels_trip_card_collapse_state, travels_custom_document_types,
  *             travels_calendar_trip_suggestions
+ *   Notifications: notification_events, notification_recipients, notification_deliveries,
+ *                  notification_preferences
  *   Messenger: messenger_conversations, messenger_messages, messenger_attachments,
  *              messenger_link_previews
  *   Elaine:   elaine_conversations, elaine_settings, elaine_memory, elaine_nudges,
@@ -1084,6 +1086,76 @@ CREATE TABLE IF NOT EXISTS market_watches (
   alert_currency        TEXT NOT NULL DEFAULT 'USD',
   last_run_at           TIMESTAMPTZ,
   notes                 TEXT,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS notification_events (
+  id             SERIAL PRIMARY KEY,
+  event_type     TEXT NOT NULL,
+  module         TEXT NOT NULL,
+  severity       TEXT NOT NULL DEFAULT 'informational',
+  scope          TEXT NOT NULL DEFAULT 'household',
+  subject_type   TEXT,
+  subject_id     INTEGER,
+  title          TEXT NOT NULL,
+  summary        TEXT NOT NULL,
+  action_url     TEXT,
+  action_label   TEXT,
+  payload        JSONB,
+  dedup_key      TEXT UNIQUE,
+  last_seen_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at     TIMESTAMPTZ,
+  superseded_by  INTEGER,
+  occurred_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by     INTEGER,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS notification_recipients (
+  id               SERIAL PRIMARY KEY,
+  event_id         INTEGER NOT NULL REFERENCES notification_events(id) ON DELETE CASCADE,
+  user_id          INTEGER NOT NULL,
+  read_at          TIMESTAMPTZ,
+  acknowledged_at  TIMESTAMPTZ,
+  dismissed_at     TIMESTAMPTZ,
+  snoozed_until    TIMESTAMPTZ,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (event_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS notification_deliveries (
+  id                  SERIAL PRIMARY KEY,
+  recipient_id        INTEGER NOT NULL REFERENCES notification_recipients(id) ON DELETE CASCADE,
+  event_id            INTEGER NOT NULL REFERENCES notification_events(id) ON DELETE CASCADE,
+  channel             TEXT NOT NULL,
+  status              TEXT NOT NULL DEFAULT 'pending',
+  attempt_count       INTEGER NOT NULL DEFAULT 0,
+  scheduled_at        TIMESTAMPTZ,
+  sent_at             TIMESTAMPTZ,
+  delivered_at        TIMESTAMPTZ,
+  failed_at           TIMESTAMPTZ,
+  failure_class       TEXT,
+  provider_message_id TEXT,
+  idempotency_key     TEXT UNIQUE,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS notification_preferences (
+  id                    SERIAL PRIMARY KEY,
+  user_id               INTEGER NOT NULL,
+  scope                 TEXT NOT NULL DEFAULT 'global',
+  scope_value           TEXT,
+  channel_in_app        BOOLEAN NOT NULL DEFAULT true,
+  channel_email         BOOLEAN NOT NULL DEFAULT false,
+  channel_sms           BOOLEAN NOT NULL DEFAULT false,
+  channel_push          BOOLEAN NOT NULL DEFAULT false,
+  quiet_hours_enabled   BOOLEAN NOT NULL DEFAULT false,
+  quiet_hours_timezone  TEXT NOT NULL DEFAULT 'America/New_York',
+  quiet_hours_start     TEXT NOT NULL DEFAULT '22:00',
+  quiet_hours_end       TEXT NOT NULL DEFAULT '08:00',
+  critical_override     BOOLEAN NOT NULL DEFAULT true,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -2468,6 +2540,97 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "market_watches", "id");
+
+  // ── Notifications ─────────────────────────────────────────────────────────
+  summary["notification_events"] = await copyTable(source, dest, {
+    table: "notification_events",
+    columns: [
+      "id",
+      "event_type",
+      "module",
+      "severity",
+      "scope",
+      "subject_type",
+      "subject_id",
+      "title",
+      "summary",
+      "action_url",
+      "action_label",
+      "payload",
+      "dedup_key",
+      "last_seen_at",
+      "expires_at",
+      "superseded_by",
+      "occurred_at",
+      "created_by",
+      "created_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["payload"],
+  });
+  await resetSequence(dest, "notification_events", "id");
+
+  summary["notification_recipients"] = await copyTable(source, dest, {
+    table: "notification_recipients",
+    columns: [
+      "id",
+      "event_id",
+      "user_id",
+      "read_at",
+      "acknowledged_at",
+      "dismissed_at",
+      "snoozed_until",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "notification_recipients", "id");
+
+  summary["notification_deliveries"] = await copyTable(source, dest, {
+    table: "notification_deliveries",
+    columns: [
+      "id",
+      "recipient_id",
+      "event_id",
+      "channel",
+      "status",
+      "attempt_count",
+      "scheduled_at",
+      "sent_at",
+      "delivered_at",
+      "failed_at",
+      "failure_class",
+      "provider_message_id",
+      "idempotency_key",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "notification_deliveries", "id");
+
+  summary["notification_preferences"] = await copyTable(source, dest, {
+    table: "notification_preferences",
+    columns: [
+      "id",
+      "user_id",
+      "scope",
+      "scope_value",
+      "channel_in_app",
+      "channel_email",
+      "channel_sms",
+      "channel_push",
+      "quiet_hours_enabled",
+      "quiet_hours_timezone",
+      "quiet_hours_start",
+      "quiet_hours_end",
+      "critical_override",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "notification_preferences", "id");
 
   // ── Record backup history ─────────────────────────────────────────────────
   const note = Object.entries(summary)

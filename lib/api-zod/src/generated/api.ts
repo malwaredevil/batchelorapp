@@ -4716,3 +4716,166 @@ export const OverrideOperationBudgetResponse = zod.object({
 })
 
 
+/**
+ * @summary Get unread notification counts for the current user
+ */
+export const GetCountsResponse = zod.object({
+  "total": zod.number(),
+  "byModule": zod.record(zod.string(), zod.number())
+})
+
+
+/**
+ * @summary List notifications for the current user
+ */
+export const listQueryPageDefault = 1;
+
+export const listQueryPageSizeDefault = 30;
+export const listQueryPageSizeMax = 100;
+
+
+
+export const ListQueryParams = zod.object({
+  "module": zod.coerce.string().optional().describe('Filter by module (pottery, quilting, travels, ornaments, hub, etc.)'),
+  "severity": zod.enum(['informational', 'attention', 'important', 'critical']).optional().describe('Filter by minimum severity'),
+  "unread": zod.coerce.boolean().optional().describe('If true, return only unread notifications'),
+  "page": zod.coerce.number().min(1).default(listQueryPageDefault),
+  "pageSize": zod.coerce.number().min(1).max(listQueryPageSizeMax).default(listQueryPageSizeDefault)
+})
+
+export const ListResponse = zod.object({
+  "items": zod.array(zod.object({
+  "recipientId": zod.number(),
+  "eventId": zod.number(),
+  "eventType": zod.string(),
+  "module": zod.string(),
+  "severity": zod.enum(['informational', 'attention', 'important', 'critical']),
+  "subjectType": zod.string().nullish(),
+  "subjectId": zod.number().nullish(),
+  "title": zod.string(),
+  "summary": zod.string(),
+  "actionUrl": zod.string().nullish(),
+  "actionLabel": zod.string().nullish(),
+  "occurredAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "isRead": zod.boolean(),
+  "readAt": zod.coerce.date().nullish(),
+  "isAcknowledged": zod.boolean(),
+  "acknowledgedAt": zod.coerce.date().nullish(),
+  "isDismissed": zod.boolean(),
+  "dismissedAt": zod.coerce.date().nullish(),
+  "snoozedUntil": zod.coerce.date().nullish()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number()
+})
+
+
+/**
+ * @summary Bulk-update read/dismiss state for multiple notifications
+ */
+export const bulkUpdateStateBodyRecipientIdsMax = 200;
+
+
+
+export const BulkUpdateStateBody = zod.object({
+  "recipientIds": zod.array(zod.number()).max(bulkUpdateStateBodyRecipientIdsMax),
+  "action": zod.enum(['read', 'unread', 'dismissed', 'acknowledged'])
+})
+
+export const BulkUpdateStateResponse = zod.object({
+  "updated": zod.number()
+})
+
+
+/**
+ * @summary Get notification preferences for the current user
+ */
+export const GetNotificationsPreferencesResponse = zod.object({
+  "entries": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "scope": zod.enum(['global', 'module', 'event_type']),
+  "scopeValue": zod.string().nullish(),
+  "channelInApp": zod.boolean(),
+  "channelEmail": zod.boolean(),
+  "channelSms": zod.boolean(),
+  "channelPush": zod.boolean(),
+  "quietHoursEnabled": zod.boolean(),
+  "quietHoursTimezone": zod.string(),
+  "quietHoursStart": zod.string().describe('HH:MM in 24h format'),
+  "quietHoursEnd": zod.string().describe('HH:MM in 24h format'),
+  "criticalOverride": zod.boolean()
+}))
+})
+
+
+/**
+ * @summary Update notification preferences for the current user
+ */
+export const updateNotificationsPreferencesBodyEntriesMax = 50;
+
+
+
+export const UpdateNotificationsPreferencesBody = zod.object({
+  "entries": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "scope": zod.enum(['global', 'module', 'event_type']),
+  "scopeValue": zod.string().nullish(),
+  "channelInApp": zod.boolean(),
+  "channelEmail": zod.boolean(),
+  "channelSms": zod.boolean(),
+  "channelPush": zod.boolean(),
+  "quietHoursEnabled": zod.boolean(),
+  "quietHoursTimezone": zod.string(),
+  "quietHoursStart": zod.string().describe('HH:MM in 24h format'),
+  "quietHoursEnd": zod.string().describe('HH:MM in 24h format'),
+  "criticalOverride": zod.boolean()
+})).max(updateNotificationsPreferencesBodyEntriesMax)
+})
+
+export const UpdateNotificationsPreferencesResponse = zod.object({
+  "entries": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "scope": zod.enum(['global', 'module', 'event_type']),
+  "scopeValue": zod.string().nullish(),
+  "channelInApp": zod.boolean(),
+  "channelEmail": zod.boolean(),
+  "channelSms": zod.boolean(),
+  "channelPush": zod.boolean(),
+  "quietHoursEnabled": zod.boolean(),
+  "quietHoursTimezone": zod.string(),
+  "quietHoursStart": zod.string().describe('HH:MM in 24h format'),
+  "quietHoursEnd": zod.string().describe('HH:MM in 24h format'),
+  "criticalOverride": zod.boolean()
+}))
+})
+
+
+/**
+ * @summary Update read/ack/dismiss/snooze state for a single notification
+ */
+export const UpdateStateParams = zod.object({
+  "recipientId": zod.coerce.number()
+})
+
+export const UpdateStateBody = zod.object({
+  "read": zod.boolean().optional(),
+  "acknowledged": zod.boolean().optional(),
+  "dismissed": zod.boolean().optional(),
+  "snoozedUntil": zod.coerce.date().nullish()
+})
+
+export const UpdateStateResponse = zod.object({
+  "recipientId": zod.number(),
+  "isRead": zod.boolean(),
+  "readAt": zod.coerce.date().nullish(),
+  "isAcknowledged": zod.boolean(),
+  "acknowledgedAt": zod.coerce.date().nullish(),
+  "isDismissed": zod.boolean(),
+  "dismissedAt": zod.coerce.date().nullish(),
+  "snoozedUntil": zod.coerce.date().nullish()
+})
+
+

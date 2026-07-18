@@ -1,0 +1,405 @@
+openapi: 3.1.0
+info:
+  title: Notifications
+  version: 0.1.0
+paths:
+  /counts:
+    get:
+      operationId: getCounts
+      tags:
+        - notifications
+      summary: Get unread notification counts for the current user
+      responses:
+        "200":
+          description: Notification counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CountsResponse"
+
+  /:
+    get:
+      operationId: list
+      tags:
+        - notifications
+      summary: List notifications for the current user
+      parameters:
+        - in: query
+          name: module
+          schema:
+            type: string
+          description: Filter by module (pottery, quilting, travels, ornaments, hub, etc.)
+        - in: query
+          name: severity
+          schema:
+            type: string
+            enum: [informational, attention, important, critical]
+          description: Filter by minimum severity
+        - in: query
+          name: unread
+          schema:
+            type: boolean
+          description: If true, return only unread notifications
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 30
+      responses:
+        "200":
+          description: Paginated notification list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListResponse"
+
+  /bulk-state:
+    post:
+      operationId: bulkUpdateState
+      tags:
+        - notifications
+      summary: Bulk-update read/dismiss state for multiple notifications
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkStateBody"
+      responses:
+        "200":
+          description: Number of updated recipients
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkStateResponse"
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /preferences:
+    get:
+      operationId: getPreferences
+      tags:
+        - notifications
+      summary: Get notification preferences for the current user
+      responses:
+        "200":
+          description: User notification preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreferencesResponse"
+    put:
+      operationId: updatePreferences
+      tags:
+        - notifications
+      summary: Update notification preferences for the current user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PreferencesBody"
+      responses:
+        "200":
+          description: Updated preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreferencesResponse"
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /{recipientId}:
+    patch:
+      operationId: updateState
+      tags:
+        - notifications
+      summary: Update read/ack/dismiss/snooze state for a single notification
+      parameters:
+        - in: path
+          name: recipientId
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStateBody"
+      responses:
+        "200":
+          description: Updated recipient state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecipientState"
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Notification not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    Severity:
+      type: string
+      enum: [informational, attention, important, critical]
+
+    NotificationItem:
+      type: object
+      required:
+        - recipientId
+        - eventId
+        - eventType
+        - module
+        - severity
+        - title
+        - summary
+        - occurredAt
+        - createdAt
+        - isRead
+        - isAcknowledged
+        - isDismissed
+      properties:
+        recipientId:
+          type: integer
+        eventId:
+          type: integer
+        eventType:
+          type: string
+        module:
+          type: string
+        severity:
+          $ref: "#/components/schemas/Severity"
+        subjectType:
+          type: string
+          nullable: true
+        subjectId:
+          type: integer
+          nullable: true
+        title:
+          type: string
+        summary:
+          type: string
+        actionUrl:
+          type: string
+          nullable: true
+        actionLabel:
+          type: string
+          nullable: true
+        occurredAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        isRead:
+          type: boolean
+        readAt:
+          type: string
+          format: date-time
+          nullable: true
+        isAcknowledged:
+          type: boolean
+        acknowledgedAt:
+          type: string
+          format: date-time
+          nullable: true
+        isDismissed:
+          type: boolean
+        dismissedAt:
+          type: string
+          format: date-time
+          nullable: true
+        snoozedUntil:
+          type: string
+          format: date-time
+          nullable: true
+
+    ListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotificationItem"
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    CountsResponse:
+      type: object
+      required: [total, byModule]
+      properties:
+        total:
+          type: integer
+        byModule:
+          type: object
+          additionalProperties:
+            type: integer
+
+    RecipientState:
+      type: object
+      required: [recipientId, isRead, isAcknowledged, isDismissed]
+      properties:
+        recipientId:
+          type: integer
+        isRead:
+          type: boolean
+        readAt:
+          type: string
+          format: date-time
+          nullable: true
+        isAcknowledged:
+          type: boolean
+        acknowledgedAt:
+          type: string
+          format: date-time
+          nullable: true
+        isDismissed:
+          type: boolean
+        dismissedAt:
+          type: string
+          format: date-time
+          nullable: true
+        snoozedUntil:
+          type: string
+          format: date-time
+          nullable: true
+
+    UpdateStateBody:
+      type: object
+      properties:
+        read:
+          type: boolean
+        acknowledged:
+          type: boolean
+        dismissed:
+          type: boolean
+        snoozedUntil:
+          type: string
+          format: date-time
+          nullable: true
+
+    BulkStateBody:
+      type: object
+      required: [recipientIds, action]
+      properties:
+        recipientIds:
+          type: array
+          items:
+            type: integer
+          maxItems: 200
+        action:
+          type: string
+          enum: [read, unread, dismissed, acknowledged]
+
+    BulkStateResponse:
+      type: object
+      required: [updated]
+      properties:
+        updated:
+          type: integer
+
+    PreferenceEntry:
+      type: object
+      required:
+        [
+          scope,
+          channelInApp,
+          channelEmail,
+          channelSms,
+          channelPush,
+          quietHoursEnabled,
+          quietHoursTimezone,
+          quietHoursStart,
+          quietHoursEnd,
+          criticalOverride,
+        ]
+      properties:
+        id:
+          type: integer
+        scope:
+          type: string
+          enum: [global, module, event_type]
+        scopeValue:
+          type: string
+          nullable: true
+        channelInApp:
+          type: boolean
+        channelEmail:
+          type: boolean
+        channelSms:
+          type: boolean
+        channelPush:
+          type: boolean
+        quietHoursEnabled:
+          type: boolean
+        quietHoursTimezone:
+          type: string
+        quietHoursStart:
+          type: string
+          description: "HH:MM in 24h format"
+        quietHoursEnd:
+          type: string
+          description: "HH:MM in 24h format"
+        criticalOverride:
+          type: boolean
+
+    PreferencesResponse:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/PreferenceEntry"
+
+    PreferencesBody:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/PreferenceEntry"
+          maxItems: 50

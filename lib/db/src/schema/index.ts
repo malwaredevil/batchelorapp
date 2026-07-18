@@ -15,3 +15,4 @@ export * from "./ai-provenance";
 export * from "./ingestion";
 export * from "./search-feedback";
 export * from "./market";
+export * from "./notifications";

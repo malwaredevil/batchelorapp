@@ -82,6 +82,7 @@ import {
   SmsOptedOutError,
 } from "../lib/sms";
 import { webSearch, fetchPage } from "../lib/web-search";
+import { fetchJsonSafe } from "../lib/ssrf-safe-fetch";
 import { consultExperts } from "../lib/expert-consult";
 import {
   getWeatherForecast,
@@ -249,12 +250,9 @@ async function geocodeDestination(
 ): Promise<{ lat: number; lng: number } | null> {
   try {
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(destination)}&format=json&limit=1`;
-    const res = await fetch(url, {
+    const data = await fetchJsonSafe<Array<{ lat: string; lon: string }>>(url, {
       headers: { "User-Agent": "Batchelor-App/1.0" },
-      signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return null;
-    const data = (await res.json()) as Array<{ lat: string; lon: string }>;
     if (data[0])
       return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
     return null;
@@ -4244,6 +4242,36 @@ async function buildUserContext(userId: number): Promise<{
   return { userName, memoryBlock, memorySummary, existingFactContents };
 }
 
+/**
+ * Sanitize a raw pageContext string before injecting it into the system prompt.
+ * Strips HTML, HTML entities, and common prompt-injection trigger phrases, then
+ * caps the result at 6 000 characters so it cannot crowd out tool definitions.
+ */
+function sanitizePageContext(raw: string | null | undefined): string {
+  if (!raw) return "(no page context was shared for this screen)";
+  return raw
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&[a-zA-Z0-9#]+;/g, " ")
+    .replace(
+      /ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|constraints?|rules?|guidelines?)/gi,
+      "[filtered]",
+    )
+    .replace(/you\s+are\s+now\s+(a|an|the)\b/gi, "[filtered]")
+    .replace(
+      /disregard\s+(your\s+)?(training|instructions?|guidelines?|rules?)/gi,
+      "[filtered]",
+    )
+    .replace(
+      /your\s+(new\s+)?(primary\s+)?(instructions?|task|goal|objective|purpose)\s+(is|are)/gi,
+      "[filtered]",
+    )
+    .replace(/\[\[[\s\S]*?\]\]/g, "[filtered]")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 6000);
+}
+
 function buildElaineCoreSystemPrompt(params: {
   userName: string;
   channelLabel: string;
@@ -4704,15 +4732,7 @@ router.post("/chat", async (req, res) => {
     userName,
     channelLabel: appLabel,
     contextBlockLabel: `live, possibly unsaved, on-screen state in ${appLabel}`,
-    contextBlock: pageContext
-      ? pageContext
-          .replace(/<script[\s\S]*?<\/script>/gi, "")
-          .replace(/<[^>]+>/g, " ")
-          .replace(/&[a-zA-Z0-9#]+;/g, " ")
-          .replace(/\s+/g, " ")
-          .trim()
-          .slice(0, 6000)
-      : "(no page context was shared for this screen)",
+    contextBlock: sanitizePageContext(pageContext),
     memoryBlock,
     memorySummary,
     actionConfirmationMode,

@@ -1838,7 +1838,7 @@ components:
   schemas:
     FabricsListResponse:
       type: object
-      required: [items, total, page, pageSize]
+      required: [items, total, page, pageSize, searchMode]
       properties:
         items:
           type: array
@@ -1850,6 +1850,9 @@ components:
           type: integer
         pageSize:
           type: integer
+        searchMode:
+          type: string
+          enum: [semantic, keyword]
 
     PatternsListResponse:
       type: object
@@ -2568,8 +2571,10 @@ components:
 
     BulkReanalyzeResult:
       type: object
-      required: [succeeded, failed]
+      required: [total, succeeded, failed, errors]
       properties:
+        total:
+          type: integer
         succeeded:
           type: array
           items:
@@ -2578,6 +2583,16 @@ components:
           type: array
           items:
             type: integer
+        errors:
+          type: array
+          items:
+            type: object
+            required: [id, error]
+            properties:
+              id:
+                type: integer
+              error:
+                type: string
 
     ExtractBlocksResult:
       type: object

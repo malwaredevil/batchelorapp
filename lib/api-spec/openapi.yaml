@@ -4531,6 +4531,7 @@ components:
         - total
         - page
         - pageSize
+        - searchMode
       properties:
         items:
           type: array
@@ -4543,6 +4544,11 @@ components:
           type: integer
         pageSize:
           type: integer
+        searchMode:
+          type: string
+          enum:
+            - semantic
+            - keyword
     PotteryPotteryItem:
       type: object
       required:
@@ -4779,9 +4785,13 @@ components:
     PotteryPotteryBulkReanalyzeResult:
       type: object
       required:
+        - total
         - succeeded
         - failed
+        - errors
       properties:
+        total:
+          type: integer
         succeeded:
           type: array
           items:
@@ -4790,6 +4800,18 @@ components:
           type: array
           items:
             type: integer
+        errors:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - error
+            properties:
+              id:
+                type: integer
+              error:
+                type: string
     PotteryMotifCount:
       type: object
       required:
@@ -4837,6 +4859,7 @@ components:
         - total
         - page
         - pageSize
+        - searchMode
       properties:
         items:
           type: array
@@ -4848,6 +4871,11 @@ components:
           type: integer
         pageSize:
           type: integer
+        searchMode:
+          type: string
+          enum:
+            - semantic
+            - keyword
     QuiltingPatternsListResponse:
       type: object
       required:
@@ -5426,9 +5454,13 @@ components:
     QuiltingBulkReanalyzeResult:
       type: object
       required:
+        - total
         - succeeded
         - failed
+        - errors
       properties:
+        total:
+          type: integer
         succeeded:
           type: array
           items:
@@ -5437,6 +5469,18 @@ components:
           type: array
           items:
             type: integer
+        errors:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - error
+            properties:
+              id:
+                type: integer
+              error:
+                type: string
     QuiltingExtractBlocksResult:
       type: object
       required:
@@ -7060,6 +7104,7 @@ components:
         - total
         - page
         - pageSize
+        - searchMode
       properties:
         items:
           type: array
@@ -7072,6 +7117,11 @@ components:
           type: integer
         pageSize:
           type: integer
+        searchMode:
+          type: string
+          enum:
+            - semantic
+            - keyword
     OrnamentsOrnamentItem:
       type: object
       required:
@@ -7271,9 +7321,13 @@ components:
     OrnamentsBulkReanalyzeResult:
       type: object
       required:
+        - total
         - succeeded
         - failed
+        - errors
       properties:
+        total:
+          type: integer
         succeeded:
           type: array
           items:
@@ -7282,6 +7336,18 @@ components:
           type: array
           items:
             type: integer
+        errors:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - error
+            properties:
+              id:
+                type: integer
+              error:
+                type: string
     OrnamentsBarcodeLookupInput:
       type: object
       required:

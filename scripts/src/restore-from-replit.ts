@@ -31,16 +31,30 @@ const { Client } = pg;
 async function copyTable(
   source: pg.Client,
   dest: pg.Client,
-  opts: { table: string; columns: string[]; orderBy?: string },
+  opts: {
+    table: string;
+    columns: string[];
+    orderBy?: string;
+    jsonbColumns?: string[];
+  },
 ): Promise<number> {
   const cols = opts.columns.join(", ");
   const order = opts.orderBy ? ` ORDER BY ${opts.orderBy}` : "";
   const { rows } = await source.query(
     `SELECT ${cols} FROM ${opts.table}${order}`,
   );
-  const placeholders = opts.columns.map((_, i) => `$${i + 1}`).join(", ");
+  const jsonbCols = new Set(opts.jsonbColumns ?? []);
+  const placeholders = opts.columns
+    .map((c, i) => (jsonbCols.has(c) ? `$${i + 1}::jsonb` : `$${i + 1}`))
+    .join(", ");
   for (const row of rows) {
-    const values = opts.columns.map((c) => row[c] ?? null);
+    const values = opts.columns.map((c) => {
+      const v = row[c] ?? null;
+      if (jsonbCols.has(c) && v !== null && typeof v !== "string") {
+        return JSON.stringify(v);
+      }
+      return v;
+    });
     await dest.query(
       `INSERT INTO ${opts.table} (${cols}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`,
       values,
@@ -226,6 +240,10 @@ async function main() {
   // ── Ornaments ─────────────────────────────────────────────────────────────
   await dest.query("TRUNCATE ornaments_item_categories CASCADE");
   await dest.query("TRUNCATE ornaments_images CASCADE");
+  await dest.query("TRUNCATE ornament_item_series_links CASCADE");
+  await dest.query("TRUNCATE ornament_identity_research CASCADE");
+  await dest.query("TRUNCATE ornament_series_entries CASCADE");
+  await dest.query("TRUNCATE ornament_series CASCADE");
   await dest.query("TRUNCATE ornaments_items CASCADE");
   await dest.query("TRUNCATE ornaments_categories CASCADE");
   await dest.query("TRUNCATE ornaments_barcode_cache CASCADE");
@@ -319,6 +337,82 @@ async function main() {
   });
   await resetSequence(dest, "ornaments_hallmark_events", "id");
 
+  await copyTable(source, dest, {
+    table: "ornament_series",
+    columns: [
+      "id",
+      "name",
+      "brand",
+      "description",
+      "start_year",
+      "end_year",
+      "is_active",
+      "total_known_entries",
+      "source_url",
+      "source_authority",
+      "is_provisional",
+      "last_confirmed_at",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ornament_series", "id");
+
+  await copyTable(source, dest, {
+    table: "ornament_series_entries",
+    columns: [
+      "id",
+      "series_id",
+      "sequence_number",
+      "year",
+      "official_name",
+      "catalog_number",
+      "upc",
+      "artist",
+      "retail_price_usd",
+      "release_type",
+      "is_exclusive",
+      "notes",
+      "source_url",
+      "is_provisional",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ornament_series_entries", "id");
+
+  await copyTable(source, dest, {
+    table: "ornament_item_series_links",
+    columns: [
+      "item_id",
+      "series_entry_id",
+      "confirmed_by_user_id",
+      "confirmed_at",
+      "confidence",
+      "created_at",
+    ],
+    orderBy: "item_id",
+  });
+
+  await copyTable(source, dest, {
+    table: "ornament_identity_research",
+    columns: [
+      "id",
+      "item_id",
+      "status",
+      "candidates",
+      "selected_candidate_index",
+      "decided_by_user_id",
+      "decided_at",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["candidates"],
+  });
+  await resetSequence(dest, "ornament_identity_research", "id");
+
   // ── Office ────────────────────────────────────────────────────────────────
   await dest.query("TRUNCATE office_notes CASCADE");
 
@@ -338,7 +432,7 @@ async function main() {
 
   // ── Quilting ──────────────────────────────────────────────────────────────
   await dest.query(
-    "TRUNCATE quilting_entity_categories, quilting_fabric_links, quilting_pattern_links, quilting_images, quilting_blocks, quilting_block_templates, quilting_layouts, quilting_shopping_items CASCADE",
+    "TRUNCATE quilting_entity_categories, quilting_fabric_links, quilting_pattern_links, quilting_images, quilting_blocks, quilting_block_templates, quilting_layouts, quilting_shopping_items, quilting_fabric_identifiers, quilting_pattern_requirements, quilting_pattern_variants, quilting_analyses, quilting_fabric_identity_research CASCADE",
   );
   await dest.query("TRUNCATE quilting_finished_quilts CASCADE");
   await dest.query("TRUNCATE quilting_fabrics CASCADE");
@@ -526,6 +620,101 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "quilting_shopping_items", "id");
+
+  await copyTable(source, dest, {
+    table: "quilting_fabric_identifiers",
+    columns: [
+      "id",
+      "fabric_id",
+      "identifier_type",
+      "identifier_value",
+      "source_url",
+      "confirmed_by_user_id",
+      "confirmed_at",
+      "confidence",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "quilting_fabric_identifiers", "id");
+
+  await copyTable(source, dest, {
+    table: "quilting_pattern_variants",
+    columns: [
+      "id",
+      "pattern_id",
+      "name",
+      "finished_width",
+      "finished_height",
+      "size_unit",
+      "block_count",
+      "skill_level",
+      "notes",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "quilting_pattern_variants", "id");
+
+  await copyTable(source, dest, {
+    table: "quilting_pattern_requirements",
+    columns: [
+      "id",
+      "variant_id",
+      "role",
+      "color_description",
+      "quantity_yards",
+      "quantity_fat_quarters",
+      "width_assumption_inches",
+      "seam_allowance_inches",
+      "notes",
+      "is_extracted",
+      "extraction_confidence",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "quilting_pattern_requirements", "id");
+
+  await copyTable(source, dest, {
+    table: "quilting_analyses",
+    columns: [
+      "id",
+      "pattern_id",
+      "variant_id",
+      "created_by_user_id",
+      "status",
+      "readiness",
+      "stash_snapshot_at",
+      "assumptions",
+      "requirement_rows",
+      "shopping_proposal",
+      "applied_at",
+      "applied_by_user_id",
+      "created_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["assumptions", "requirement_rows", "shopping_proposal"],
+  });
+  await resetSequence(dest, "quilting_analyses", "id");
+
+  await copyTable(source, dest, {
+    table: "quilting_fabric_identity_research",
+    columns: [
+      "id",
+      "fabric_id",
+      "status",
+      "candidates",
+      "selected_candidate_index",
+      "decided_by_user_id",
+      "decided_at",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["candidates"],
+  });
+  await resetSequence(dest, "quilting_fabric_identity_research", "id");
 
   // ── Travels ───────────────────────────────────────────────────────────────
   await dest.query(

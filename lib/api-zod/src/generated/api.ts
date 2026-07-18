@@ -2794,6 +2794,389 @@ export const DeleteBlockTemplateParams = zod.object({
 
 
 /**
+ * @summary List size/colorway variants for a pattern
+ */
+export const ListPatternVariantsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListPatternVariantsResponseItem = zod.object({
+  "id": zod.number(),
+  "patternId": zod.number(),
+  "name": zod.string(),
+  "finishedWidth": zod.number().nullish(),
+  "finishedHeight": zod.number().nullish(),
+  "sizeUnit": zod.string().nullish(),
+  "blockCount": zod.number().nullish(),
+  "colorwayDescription": zod.string().nullish(),
+  "notes": zod.string().nullish()
+})
+export const ListPatternVariantsResponse = zod.array(ListPatternVariantsResponseItem)
+
+
+/**
+ * @summary Create a new variant for a pattern
+ */
+export const CreatePatternVariantParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const createPatternVariantBodyNameMax = 120;
+
+
+
+export const CreatePatternVariantBody = zod.object({
+  "name": zod.string().min(1).max(createPatternVariantBodyNameMax),
+  "finishedWidth": zod.number().nullish(),
+  "finishedHeight": zod.number().nullish(),
+  "sizeUnit": zod.string().nullish(),
+  "blockCount": zod.number().nullish(),
+  "colorwayDescription": zod.string().nullish(),
+  "notes": zod.string().nullish()
+})
+
+
+/**
+ * @summary Update a variant
+ */
+export const UpdatePatternVariantParams = zod.object({
+  "id": zod.coerce.number(),
+  "variantId": zod.coerce.number()
+})
+
+export const updatePatternVariantBodyNameMax = 120;
+
+
+
+export const UpdatePatternVariantBody = zod.object({
+  "name": zod.string().min(1).max(updatePatternVariantBodyNameMax),
+  "finishedWidth": zod.number().nullish(),
+  "finishedHeight": zod.number().nullish(),
+  "sizeUnit": zod.string().nullish(),
+  "blockCount": zod.number().nullish(),
+  "colorwayDescription": zod.string().nullish(),
+  "notes": zod.string().nullish()
+})
+
+export const UpdatePatternVariantResponse = zod.object({
+  "id": zod.number(),
+  "patternId": zod.number(),
+  "name": zod.string(),
+  "finishedWidth": zod.number().nullish(),
+  "finishedHeight": zod.number().nullish(),
+  "sizeUnit": zod.string().nullish(),
+  "blockCount": zod.number().nullish(),
+  "colorwayDescription": zod.string().nullish(),
+  "notes": zod.string().nullish()
+})
+
+
+/**
+ * @summary Delete a variant
+ */
+export const DeletePatternVariantParams = zod.object({
+  "id": zod.coerce.number(),
+  "variantId": zod.coerce.number()
+})
+
+
+/**
+ * @summary Get fabric requirements for a variant
+ */
+export const GetPatternRequirementsParams = zod.object({
+  "id": zod.coerce.number(),
+  "variantId": zod.coerce.number()
+})
+
+export const GetPatternRequirementsResponseItem = zod.object({
+  "id": zod.number(),
+  "variantId": zod.number(),
+  "role": zod.string(),
+  "colorDescription": zod.string().nullish(),
+  "quantityYards": zod.number().nullish(),
+  "quantityFatQuarters": zod.number().nullish(),
+  "widthAssumptionInches": zod.number().nullish(),
+  "suggestedSearchQuery": zod.string().nullish()
+})
+export const GetPatternRequirementsResponse = zod.array(GetPatternRequirementsResponseItem)
+
+
+/**
+ * @summary Replace all fabric requirements for a variant
+ */
+export const SavePatternRequirementsParams = zod.object({
+  "id": zod.coerce.number(),
+  "variantId": zod.coerce.number()
+})
+
+export const SavePatternRequirementsBody = zod.object({
+  "requirements": zod.array(zod.object({
+  "role": zod.string(),
+  "colorDescription": zod.string().nullish(),
+  "quantityYards": zod.number().nullish(),
+  "quantityFatQuarters": zod.number().nullish(),
+  "widthAssumptionInches": zod.number().nullish(),
+  "suggestedSearchQuery": zod.string().nullish()
+}))
+})
+
+export const SavePatternRequirementsResponseItem = zod.object({
+  "id": zod.number(),
+  "variantId": zod.number(),
+  "role": zod.string(),
+  "colorDescription": zod.string().nullish(),
+  "quantityYards": zod.number().nullish(),
+  "quantityFatQuarters": zod.number().nullish(),
+  "widthAssumptionInches": zod.number().nullish(),
+  "suggestedSearchQuery": zod.string().nullish()
+})
+export const SavePatternRequirementsResponse = zod.array(SavePatternRequirementsResponseItem)
+
+
+/**
+ * @summary Use AI to extract fabric requirements from pattern image/notes
+ */
+export const ExtractPatternRequirementsParams = zod.object({
+  "id": zod.coerce.number(),
+  "variantId": zod.coerce.number()
+})
+
+export const ExtractPatternRequirementsResponse = zod.object({
+  "requirements": zod.array(zod.object({
+  "role": zod.string(),
+  "colorDescription": zod.string().nullish(),
+  "quantityYards": zod.number().nullish(),
+  "quantityFatQuarters": zod.number().nullish(),
+  "widthAssumptionInches": zod.number().nullish(),
+  "suggestedSearchQuery": zod.string().nullish()
+})).optional()
+})
+
+
+/**
+ * @summary List can-i-make-this analyses for a pattern
+ */
+export const ListPatternAnalysesParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListPatternAnalysesResponseItem = zod.object({
+  "id": zod.number(),
+  "patternId": zod.number(),
+  "variantId": zod.number().nullish(),
+  "status": zod.enum(['running', 'done', 'failed']),
+  "readiness": zod.enum(['ready', 'partial', 'shopping_needed', 'unknown']).nullish(),
+  "stashMatchSummary": zod.string().nullish(),
+  "shoppingProposal": zod.array(zod.object({
+
+}).passthrough()).nullish(),
+  "requirementRows": zod.array(zod.object({
+
+}).passthrough()).nullish(),
+  "assumptions": zod.object({
+
+}).passthrough().nullish(),
+  "stashSnapshotAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date().optional()
+})
+export const ListPatternAnalysesResponse = zod.array(ListPatternAnalysesResponseItem)
+
+
+/**
+ * @summary Run a can-i-make-this analysis against the fabric stash
+ */
+export const RunPatternAnalysisParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RunPatternAnalysisBody = zod.object({
+  "variantId": zod.number().nullish(),
+  "assumptions": zod.object({
+
+}).passthrough().nullish()
+})
+
+
+/**
+ * @summary Get a single analysis result
+ */
+export const GetPatternAnalysisParams = zod.object({
+  "id": zod.coerce.number(),
+  "analysisId": zod.coerce.number()
+})
+
+export const GetPatternAnalysisResponse = zod.object({
+  "id": zod.number(),
+  "patternId": zod.number(),
+  "variantId": zod.number().nullish(),
+  "status": zod.enum(['running', 'done', 'failed']),
+  "readiness": zod.enum(['ready', 'partial', 'shopping_needed', 'unknown']).nullish(),
+  "stashMatchSummary": zod.string().nullish(),
+  "shoppingProposal": zod.array(zod.object({
+
+}).passthrough()).nullish(),
+  "requirementRows": zod.array(zod.object({
+
+}).passthrough()).nullish(),
+  "assumptions": zod.object({
+
+}).passthrough().nullish(),
+  "stashSnapshotAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date().optional()
+})
+
+
+/**
+ * @summary Push shopping-needed items from an analysis into the shopping list
+ */
+export const ApplyPatternAnalysisParams = zod.object({
+  "id": zod.coerce.number(),
+  "analysisId": zod.coerce.number()
+})
+
+export const ApplyPatternAnalysisBody = zod.object({
+  "requirementIds": zod.array(zod.number()).nullish()
+})
+
+export const ApplyPatternAnalysisResponse = zod.object({
+  "added": zod.number().optional(),
+  "items": zod.array(zod.object({
+
+}).passthrough()).optional()
+})
+
+
+/**
+ * @summary List known identifiers (SKU/selvedge/barcode) for a fabric
+ */
+export const ListFabricIdentifiersParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListFabricIdentifiersResponseItem = zod.object({
+  "id": zod.number(),
+  "fabricId": zod.number(),
+  "identifierType": zod.enum(['sku', 'selvedge', 'barcode', 'other']),
+  "value": zod.string(),
+  "source": zod.string().nullish(),
+  "notes": zod.string().nullish()
+})
+export const ListFabricIdentifiersResponse = zod.array(ListFabricIdentifiersResponseItem)
+
+
+/**
+ * @summary Add an identifier to a fabric
+ */
+export const AddFabricIdentifierParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const AddFabricIdentifierBody = zod.object({
+  "identifierType": zod.enum(['sku', 'selvedge', 'barcode', 'other']),
+  "value": zod.string().min(1),
+  "source": zod.string().nullish(),
+  "notes": zod.string().nullish()
+})
+
+
+/**
+ * @summary Delete a fabric identifier
+ */
+export const DeleteFabricIdentifierParams = zod.object({
+  "id": zod.coerce.number(),
+  "identifierId": zod.coerce.number()
+})
+
+
+/**
+ * @summary List identity-research jobs for a fabric
+ */
+export const ListFabricIdentityResearchParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListFabricIdentityResearchResponseItem = zod.object({
+  "id": zod.number(),
+  "fabricId": zod.number(),
+  "status": zod.enum(['running', 'done', 'failed']),
+  "candidates": zod.array(zod.object({
+
+}).passthrough()).nullish(),
+  "selectedCandidateIndex": zod.number().nullish(),
+  "error": zod.string().nullish(),
+  "createdAt": zod.coerce.date().optional()
+})
+export const ListFabricIdentityResearchResponse = zod.array(ListFabricIdentityResearchResponseItem)
+
+
+/**
+ * @summary Run an AI identity-research job for a fabric
+ */
+export const RunFabricIdentityResearchParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Apply a research candidate to the fabric
+ */
+export const ApplyFabricIdentityResearchParams = zod.object({
+  "id": zod.coerce.number(),
+  "researchId": zod.coerce.number()
+})
+
+export const applyFabricIdentityResearchBodyCandidateIndexMin = 0;
+
+
+
+export const ApplyFabricIdentityResearchBody = zod.object({
+  "candidateIndex": zod.number().min(applyFabricIdentityResearchBodyCandidateIndexMin),
+  "fields": zod.array(zod.string()).optional().describe('Specific fields to apply (defaults to all non-locked fields)')
+})
+
+export const ApplyFabricIdentityResearchResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "lineName": zod.string().nullish(),
+  "designer": zod.string().nullish(),
+  "manufacturer": zod.string().nullish(),
+  "colorway": zod.string().nullish(),
+  "printType": zod.string().nullish(),
+  "fiberContent": zod.string().nullish(),
+  "widthInches": zod.number().nullish(),
+  "quantity": zod.number(),
+  "quantityUnit": zod.string(),
+  "sku": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "aiDescription": zod.string().nullish(),
+  "dominantColors": zod.array(zod.string()),
+  "motifs": zod.array(zod.string()),
+  "styleDescriptors": zod.array(zod.string()),
+  "acquiredAt": zod.string().nullish(),
+  "lockedFields": zod.array(zod.string()),
+  "categories": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "bgColor": zod.string().nullish(),
+  "textColor": zod.string().nullish()
+})),
+  "images": zod.array(zod.object({
+  "id": zod.number(),
+  "url": zod.string(),
+  "label": zod.string().nullish(),
+  "position": zod.number()
+})),
+  "imageUrl": zod.string(),
+  "tileImageUrl": zod.string().describe('Flat-field-corrected, tileable crop of the fabric photo. Use this (not imageUrl) for SVG pattern-fill rendering — it removes the source photo\'s natural lighting\/vignette falloff so tiled squares don\'t show a \"puffy\" embossed grid.'),
+  "hasEmbedding": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
  * @summary List all trips for the current user
  */
 export const ListTripsResponseItem = zod.object({
@@ -3988,6 +4371,132 @@ export const MergeOrnamentCategoryParams = zod.object({
 
 export const MergeOrnamentCategoryBody = zod.object({
   "intoId": zod.number()
+})
+
+
+/**
+ * @summary List identity-research jobs for an ornament
+ */
+export const GetOrnamentIdentityResearchParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetOrnamentIdentityResearchResponseItem = zod.object({
+  "id": zod.number(),
+  "itemId": zod.number(),
+  "status": zod.enum(['running', 'done', 'failed']),
+  "candidates": zod.array(zod.object({
+
+}).passthrough()).nullish(),
+  "selectedCandidateIndex": zod.number().nullish(),
+  "error": zod.string().nullish(),
+  "createdAt": zod.coerce.date().optional()
+})
+export const GetOrnamentIdentityResearchResponse = zod.array(GetOrnamentIdentityResearchResponseItem)
+
+
+/**
+ * @summary Kick off an AI identity-research job for an ornament
+ */
+export const RunOrnamentIdentityResearchParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Apply a research candidate to the ornament
+ */
+export const ApplyOrnamentIdentityResearchParams = zod.object({
+  "id": zod.coerce.number(),
+  "researchId": zod.coerce.number()
+})
+
+export const applyOrnamentIdentityResearchBodyCandidateIndexMin = 0;
+
+
+
+export const ApplyOrnamentIdentityResearchBody = zod.object({
+  "candidateIndex": zod.number().min(applyOrnamentIdentityResearchBodyCandidateIndexMin),
+  "fields": zod.array(zod.string()).optional().describe('Specific fields to apply (defaults to all non-locked fields)')
+})
+
+export const ApplyOrnamentIdentityResearchResponse = zod.object({
+
+}).passthrough()
+
+
+/**
+ * @summary List all canonical ornament series
+ */
+export const ListOrnamentCanonicalSeriesResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "brand": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "startYear": zod.number().nullish(),
+  "endYear": zod.number().nullish(),
+  "entryCount": zod.number().optional()
+})
+export const ListOrnamentCanonicalSeriesResponse = zod.array(ListOrnamentCanonicalSeriesResponseItem)
+
+
+/**
+ * @summary Get a canonical series with its entries and linked ornaments
+ */
+export const GetOrnamentCanonicalSeriesParams = zod.object({
+  "seriesId": zod.coerce.number()
+})
+
+export const GetOrnamentCanonicalSeriesResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "brand": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "startYear": zod.number().nullish(),
+  "endYear": zod.number().nullish(),
+  "entries": zod.array(zod.object({
+
+}).passthrough()),
+  "linkedOrnaments": zod.array(zod.object({
+
+}).passthrough()).optional()
+})
+
+
+/**
+ * @summary Get the series link for an ornament
+ */
+export const GetOrnamentSeriesLinkParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetOrnamentSeriesLinkResponse = zod.object({
+
+}).passthrough().nullable()
+
+
+/**
+ * @summary Link an ornament to a canonical series entry
+ */
+export const LinkOrnamentToSeriesParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const LinkOrnamentToSeriesBody = zod.object({
+  "seriesEntryId": zod.number(),
+  "notes": zod.string().nullish()
+})
+
+export const LinkOrnamentToSeriesResponse = zod.object({
+
+}).passthrough()
+
+
+/**
+ * @summary Remove the series link from an ornament
+ */
+export const UnlinkOrnamentFromSeriesParams = zod.object({
+  "id": zod.coerce.number()
 })
 
 

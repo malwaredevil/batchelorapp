@@ -38,6 +38,7 @@ import { TagSelector } from "@/quilting/components/tag-selector";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { downloadCollectionImage } from "@/quilting/lib/svg-export";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
+import { FabricIdentityResearchPanel } from "@/quilting/components/FabricIdentityResearchPanel";
 
 type Fabric = {
   id: number;
@@ -950,6 +951,9 @@ export default function FabricDetail() {
 
           {/* Pairings — fabrics that pair well */}
           <FabricPairings fabricId={f.id} />
+
+          {/* Identity research */}
+          <FabricIdentityResearchPanel fabricId={f.id} />
 
           {/* Notes */}
           <section className="rounded-xl border border-card-border bg-card p-4">

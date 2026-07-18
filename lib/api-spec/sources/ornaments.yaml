@@ -613,6 +613,175 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+
+  /items/{id}/identity-research:
+    get:
+      operationId: getOrnamentIdentityResearch
+      tags: [ornaments]
+      summary: List identity-research jobs for an ornament
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of research jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OrnamentIdentityResearch"
+    post:
+      operationId: runOrnamentIdentityResearch
+      tags: [ornaments]
+      summary: Kick off an AI identity-research job for an ornament
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "202":
+          description: Job accepted; poll for status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrnamentIdentityResearch"
+        "404":
+          description: Ornament not found
+
+  /items/{id}/identity-research/{researchId}:
+    patch:
+      operationId: applyOrnamentIdentityResearch
+      tags: [ornaments]
+      summary: Apply a research candidate to the ornament
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: researchId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplyOrnamentResearchInput"
+      responses:
+        "200":
+          description: Updated ornament
+          content:
+            application/json:
+              schema:
+                type: object
+        "404":
+          description: Not found
+
+  /canonical-series:
+    get:
+      operationId: listOrnamentCanonicalSeries
+      tags: [ornaments]
+      summary: List all canonical ornament series
+      responses:
+        "200":
+          description: List of series
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OrnamentSeries"
+
+  /canonical-series/{seriesId}:
+    get:
+      operationId: getOrnamentCanonicalSeries
+      tags: [ornaments]
+      summary: Get a canonical series with its entries and linked ornaments
+      parameters:
+        - name: seriesId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Series detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrnamentSeriesDetail"
+        "404":
+          description: Not found
+
+  /items/{id}/series-link:
+    get:
+      operationId: getOrnamentSeriesLink
+      tags: [ornaments]
+      summary: Get the series link for an ornament
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Series link or null
+          content:
+            application/json:
+              schema:
+                type: object
+                nullable: true
+    post:
+      operationId: linkOrnamentToSeries
+      tags: [ornaments]
+      summary: Link an ornament to a canonical series entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrnamentSeriesLinkInput"
+      responses:
+        "200":
+          description: Link created/updated
+          content:
+            application/json:
+              schema:
+                type: object
+        "404":
+          description: Not found
+    delete:
+      operationId: unlinkOrnamentFromSeries
+      tags: [ornaments]
+      summary: Remove the series link from an ornament
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Unlinked
+        "404":
+          description: Not found
+
 components:
   schemas:
     Category:
@@ -1037,3 +1206,104 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SeriesValueBreakdown"
+
+    OrnamentIdentityResearch:
+      type: object
+      required: [id, itemId, status]
+      properties:
+        id:
+          type: integer
+        itemId:
+          type: integer
+        status:
+          type: string
+          enum: [running, done, failed]
+        candidates:
+          type: array
+          nullable: true
+          items:
+            type: object
+        selectedCandidateIndex:
+          type: integer
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    ApplyOrnamentResearchInput:
+      type: object
+      required: [candidateIndex]
+      properties:
+        candidateIndex:
+          type: integer
+          minimum: 0
+        fields:
+          type: array
+          items:
+            type: string
+          description: Specific fields to apply (defaults to all non-locked fields)
+
+    OrnamentSeries:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        brand:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        startYear:
+          type: integer
+          nullable: true
+        endYear:
+          type: integer
+          nullable: true
+        entryCount:
+          type: integer
+
+    OrnamentSeriesDetail:
+      type: object
+      required: [id, name, entries]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        brand:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        startYear:
+          type: integer
+          nullable: true
+        endYear:
+          type: integer
+          nullable: true
+        entries:
+          type: array
+          items:
+            type: object
+        linkedOrnaments:
+          type: array
+          items:
+            type: object
+
+    OrnamentSeriesLinkInput:
+      type: object
+      required: [seriesEntryId]
+      properties:
+        seriesEntryId:
+          type: integer
+        notes:
+          type: string
+          nullable: true

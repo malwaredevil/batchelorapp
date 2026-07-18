@@ -44,6 +44,7 @@ import { TagSelector } from "@/quilting/components/tag-selector";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { downloadCollectionImage } from "@/quilting/lib/svg-export";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
+import { PatternAnalysisPanel } from "@/quilting/components/PatternAnalysisPanel";
 
 type PatternData = {
   id: number;
@@ -890,6 +891,8 @@ export default function PatternDetail() {
               <p className="text-xs text-muted-foreground italic">No notes</p>
             )}
           </section>
+
+          <PatternAnalysisPanel patternId={p.id} />
 
           {!isEditing && (
             <p className="flex items-center gap-1 text-xs text-muted-foreground/60">

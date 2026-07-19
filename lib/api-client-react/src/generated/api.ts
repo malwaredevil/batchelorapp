@@ -14826,7 +14826,7 @@ export const getLookupOrnamentBarcodeUrl = (id: number,) => {
 
 
 
-  return `/api/ornaments/items/${id}/barcode-lookup`
+  return `/api/ornaments/items/${id}/lookup-barcode`
 }
 
 /**
@@ -14898,7 +14898,7 @@ export const getLookupBarcodeUrl = () => {
 
 
 
-  return `/api/ornaments/barcode-lookup`
+  return `/api/ornaments/items/lookup-barcode`
 }
 
 /**

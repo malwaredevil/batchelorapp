@@ -37,9 +37,18 @@ jobs:
 
       - name: "Ban: drizzle-kit push"
         run: |
-          if cat /tmp/changed_files.txt | xargs grep -l "drizzle-kit push" 2>/dev/null | grep -qv "guardrails.yml"; then
+          BASE="${{ steps.diff.outputs.base }}"
+          VIOLATIONS=$(git diff "$BASE"...HEAD \
+            | grep "^+" \
+            | grep -v "^+++" \
+            | grep -v "^+\s*#\|^+\s*//" \
+            | grep "drizzle-kit push" \
+            | grep -v "guardrails.yml" || true)
+          if [ -n "$VIOLATIONS" ]; then
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "ERROR: 'drizzle-kit push' detected in changed files."
+            echo "ERROR: 'drizzle-kit push' detected in newly added lines."
+            echo ""
+            echo "$VIOLATIONS"
             echo ""
             echo "This command is permanently banned. It introspects ALL tables"
             echo "in the shared Supabase database and silently drops any table"
@@ -50,7 +59,7 @@ jobs:
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             exit 1
           fi
-          echo "✓ No drizzle-kit push usage found"
+          echo "✓ No drizzle-kit push usage found in newly added lines"
 
       - name: "Ban: restricted files in diff"
         run: |

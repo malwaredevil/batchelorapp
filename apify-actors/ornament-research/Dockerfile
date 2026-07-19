@@ -1,0 +1,11 @@
+FROM apify/actor-node-playwright-chrome:22
+
+COPY package*.json ./
+RUN npm --quiet set progress=false \
+    && npm install --only=prod --no-optional \
+    && echo "All dependencies installed"
+
+COPY . ./
+RUN npm run build
+
+CMD npm start

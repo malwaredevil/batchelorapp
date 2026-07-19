@@ -17,7 +17,7 @@ import { requireOwner } from "../middleware/owner";
 import { adminLimiter, aiLimiter } from "../middleware/rateLimit";
 
 const router = Router();
-router.use(requireAuth);
+router.use("/market", requireAuth);
 
 const ALLOWED_MODULES = new Set([
   "pottery",

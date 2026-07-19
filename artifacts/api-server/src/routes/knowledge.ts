@@ -20,7 +20,7 @@ import { pool } from "@workspace/db";
 import { requireAuth } from "../middleware/auth";
 
 const router = Router();
-router.use(requireAuth);
+router.use("/knowledge", requireAuth);
 
 // ---------------------------------------------------------------------------
 // Helpers

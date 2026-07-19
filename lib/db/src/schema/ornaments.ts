@@ -311,3 +311,45 @@ export const ornamentIdentityResearch = pgTable(
 
 export type OrnamentIdentityResearchRow =
   typeof ornamentIdentityResearch.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Hallmark catalog — raw scraped product data keyed by Hallmark SKU/MPN
+// ---------------------------------------------------------------------------
+
+/**
+ * Flat catalog of Hallmark ornaments scraped from hallmark.com via the
+ * Apify catalog-crawl actor. One row per unique Hallmark SKU.
+ * Not linked to household ownership — pure reference/catalog data.
+ */
+export const hallmarkCatalog = pgTable(
+  "hallmark_catalog",
+  {
+    id: serial("id").primaryKey(),
+    hallmarkSku: text("hallmark_sku").notNull().unique(),
+    name: text("name").notNull(),
+    description: text("description"),
+    seriesName: text("series_name"),
+    sequenceNumber: integer("sequence_number"),
+    year: integer("year"),
+    artist: text("artist"),
+    retailPriceUsd: numeric("retail_price_usd", { precision: 10, scale: 2 }),
+    productUrl: text("product_url"),
+    images: text("images").array(),
+    ornamentCategory: text("ornament_category"),
+    crawledAt: timestamp("crawled_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("hallmark_catalog_sku_idx").on(table.hallmarkSku),
+    index("hallmark_catalog_year_idx").on(table.year),
+    index("hallmark_catalog_series_idx").on(table.seriesName),
+  ],
+).enableRLS();
+
+export type HallmarkCatalogRow = typeof hallmarkCatalog.$inferSelect;
+export type InsertHallmarkCatalog = typeof hallmarkCatalog.$inferInsert;

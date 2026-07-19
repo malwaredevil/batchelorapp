@@ -1,23 +1,36 @@
 /**
  * Hallmark Ornament Research Actor
  *
- * Given a barcode, Hallmark SKU, or ornament name+year, this actor:
- * 1. Searches hallmark.com using a headless browser (handles JS-rendered results)
- * 2. Follows the product detail page URL
- * 3. Extracts: name, MPN, series, sequence number, artist, retail price, images
- * 4. Outputs a structured result to the Apify dataset
+ * Two modes:
+ *
+ * 1. single-item (default) — Given a barcode, Hallmark SKU, or ornament name+year,
+ *    uses a headless Playwright browser to search hallmark.com (JS-rendered) and
+ *    extract structured data from the product page.
+ *
+ * 2. catalog-crawl — Fetches Hallmark's product sitemap, filters for ornament URLs,
+ *    and uses CheerioCrawler (static HTML, fast + cheap) to extract structured data
+ *    from every ornament page. Outputs one dataset item per ornament.
  *
  * Phase 2 (when eBay API key available): add eBay Browse API valuation step.
  */
 
 import { Actor } from "apify";
-import { PlaywrightCrawler, Dataset } from "crawlee";
+import { PlaywrightCrawler, CheerioCrawler, Dataset } from "crawlee";
+
+type Mode = "single-item" | "catalog-crawl";
 
 interface Input {
+  // Mode selector
+  mode?: Mode;
+  // single-item fields
   barcode?: string;
   hallmarkSku?: string;
   name?: string;
   year?: number;
+  // catalog-crawl fields
+  sitemapUrl?: string;
+  urlFilter?: string;
+  maxProducts?: number;
 }
 
 interface HallmarkProduct {
@@ -38,9 +51,205 @@ interface HallmarkProduct {
   scrapedAt: string;
 }
 
+interface CatalogProduct {
+  hallmarkSku: string | null;
+  name: string | null;
+  description: string | null;
+  seriesName: string | null;
+  sequenceNumber: number | null;
+  year: number | null;
+  artist: string | null;
+  retailPriceUsd: number | null;
+  productUrl: string;
+  images: string[];
+  ornamentCategory: string | null;
+  source: "hallmark.com-sitemap";
+  crawledAt: string;
+}
+
+/** Parse series + sequence from a Hallmark description string. */
+function parseSeriesFromDescription(description: string): {
+  seriesName: string | null;
+  sequenceNumber: number | null;
+} {
+  const m = description.match(
+    /(\d+)(?:st|nd|rd|th)\s+in\s+(?:the\s+)?(.+?)\s+(?:Keepsake\s+Ornament\s+)?[Ss]eries/,
+  );
+  if (!m) return { seriesName: null, sequenceNumber: null };
+  return {
+    sequenceNumber: parseInt(m[1], 10),
+    seriesName: m[2].replace(/Keepsake Ornament/i, "").trim(),
+  };
+}
+
+/** Extract a 4-digit year from a string. */
+function parseYear(text: string): number | null {
+  const m = text.match(/\b(19|20)\d{2}\b/);
+  return m ? parseInt(m[0], 10) : null;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+
 await Actor.init();
 
 const input = (await Actor.getInput<Input>()) ?? {};
+const mode: Mode = input.mode ?? "single-item";
+
+// ============================================================================
+// MODE: catalog-crawl
+// ============================================================================
+if (mode === "catalog-crawl") {
+  const sitemapUrl =
+    input.sitemapUrl ?? "https://www.hallmark.com/sitemap_0-product.xml";
+  const urlFilter = input.urlFilter ?? "/ornaments/";
+  const maxProducts = input.maxProducts ?? 5000;
+
+  console.log(`Catalog crawl mode — fetching sitemap: ${sitemapUrl}`);
+
+  // Fetch sitemap XML (plain fetch — no browser needed)
+  const sitemapResp = await fetch(sitemapUrl, {
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; Apify/1.0)" },
+  });
+  if (!sitemapResp.ok) {
+    throw new Error(`Sitemap fetch failed: ${sitemapResp.status}`);
+  }
+  const sitemapXml = await sitemapResp.text();
+
+  // Extract and filter URLs
+  const urlMatches = sitemapXml.match(/<loc>([\s\S]*?)<\/loc>/g) ?? [];
+  let productUrls = urlMatches
+    .map((m) => m.replace(/<\/?loc>/g, "").trim())
+    .filter((u) => u.includes(urlFilter));
+
+  if (maxProducts > 0) productUrls = productUrls.slice(0, maxProducts);
+
+  console.log(
+    `Found ${productUrls.length} ornament URLs to crawl (filter="${urlFilter}")`,
+  );
+
+  if (productUrls.length === 0) {
+    console.warn("No URLs matched — check sitemapUrl and urlFilter");
+    await Actor.exit();
+  }
+
+  const catalogCrawler = new CheerioCrawler({
+    maxConcurrency: 8,
+    requestHandlerTimeoutSecs: 30,
+    maxRequestRetries: 2,
+
+    async requestHandler({ request, $, log }) {
+      const url = request.url;
+
+      const product: CatalogProduct = {
+        hallmarkSku: null,
+        name: null,
+        description: null,
+        seriesName: null,
+        sequenceNumber: null,
+        year: null,
+        artist: null,
+        retailPriceUsd: null,
+        productUrl: url,
+        images: [],
+        ornamentCategory: null,
+        source: "hallmark.com-sitemap",
+        crawledAt: new Date().toISOString(),
+      };
+
+      // ── JSON-LD Product schema ─────────────────────────────────────────
+      $('script[type="application/ld+json"]').each((_, el) => {
+        try {
+          const data = JSON.parse($(el).html() ?? "") as Record<
+            string,
+            unknown
+          >;
+          if (data["@type"] === "Product") {
+            product.hallmarkSku =
+              (data["mpn"] as string) ?? (data["sku"] as string) ?? null;
+            product.name = (data["name"] as string) ?? null;
+            product.description = (data["description"] as string) ?? null;
+
+            const image = data["image"];
+            product.images = Array.isArray(image)
+              ? (image as unknown[])
+                  .filter((u): u is string => typeof u === "string")
+                  .slice(0, 4)
+              : typeof image === "string"
+                ? [image]
+                : [];
+
+            const offers = data["offers"] as
+              | Record<string, unknown>
+              | undefined;
+            if (offers?.["price"]) {
+              const p = parseFloat(String(offers["price"]));
+              if (!isNaN(p)) product.retailPriceUsd = p;
+            }
+          }
+        } catch {
+          // skip malformed JSON-LD
+        }
+      });
+
+      // ── Artist from DOM ────────────────────────────────────────────────
+      $("span, p, li, td, dd").each((_, el) => {
+        const text = $(el).text().trim();
+        if (/^Artist:\s*.+/.test(text)) {
+          const m = text.match(/Artist:\s*(.+)/);
+          if (m) {
+            product.artist = m[1].trim();
+            return false; // break each loop
+          }
+        }
+        return true;
+      });
+
+      // ── Series + sequence from description ────────────────────────────
+      if (product.description) {
+        const { seriesName, sequenceNumber } = parseSeriesFromDescription(
+          product.description,
+        );
+        product.seriesName = seriesName;
+        product.sequenceNumber = sequenceNumber;
+      }
+
+      // ── Year from name ────────────────────────────────────────────────
+      if (!product.year && product.name) {
+        product.year = parseYear(product.name);
+      }
+      if (!product.year && product.description) {
+        product.year = parseYear(product.description);
+      }
+
+      // ── Ornament category from URL path ───────────────────────────────
+      const catMatch = url.match(/\/ornaments\/([^/]+)\//);
+      if (catMatch) {
+        product.ornamentCategory = catMatch[1]
+          .replace(/-ornaments$/, "")
+          .replace(/-/g, " ");
+      }
+
+      if (product.name) {
+        log.info(`✓ ${product.name} (${product.hallmarkSku ?? "no-sku"})`);
+        await Dataset.pushData(product);
+      } else {
+        log.warning(`No name extracted from: ${url}`);
+      }
+    },
+
+    failedRequestHandler({ request, log }) {
+      log.error(`Request failed: ${request.url}`);
+    },
+  });
+
+  await catalogCrawler.run(productUrls.map((url) => ({ url })));
+  console.log("Catalog crawl complete");
+  await Actor.exit();
+}
+
+// ============================================================================
+// MODE: single-item (default)
+// ============================================================================
 const { hallmarkSku, name, year } = input;
 
 if (!hallmarkSku && !name) {
@@ -170,21 +379,15 @@ const crawler = new PlaywrightCrawler({
       }
 
       // ── Parse series and sequence from description ──────────────────────
-      // e.g. "26th in the Toymaker Santa Keepsake Ornament series"
       if (result.description) {
-        const seriesMatch = result.description.match(
-          /(\d+)(?:st|nd|rd|th)\s+in\s+(?:the\s+)?(.+?)\s+(?:Keepsake\s+Ornament\s+)?[Ss]eries/,
+        const { seriesName, sequenceNumber } = parseSeriesFromDescription(
+          result.description,
         );
-        if (seriesMatch) {
-          result.sequenceNumber = parseInt(seriesMatch[1], 10);
-          result.seriesName = seriesMatch[2]
-            .replace(/Keepsake Ornament/i, "")
-            .trim();
-        }
+        result.seriesName = seriesName;
+        result.sequenceNumber = sequenceNumber;
       }
 
       // ── Artist ──────────────────────────────────────────────────────────
-      // Hallmark pages include: <span>Artist:</span> <span>Name Here</span>
       const artistText = await page
         .$$eval("span, p, li", (els: Element[]) => {
           for (const el of els) {
@@ -234,8 +437,7 @@ const crawler = new PlaywrightCrawler({
 
       // ── Year from name if not provided ──────────────────────────────────
       if (!result.year && result.name) {
-        const yearMatch = result.name.match(/\b(20\d{2})\b/);
-        if (yearMatch) result.year = parseInt(yearMatch[1], 10);
+        result.year = parseYear(result.name);
       }
 
       // ── Confidence scoring ──────────────────────────────────────────────

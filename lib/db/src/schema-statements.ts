@@ -2527,4 +2527,27 @@ export const STATEMENTS: string[] = [
      ON pottery_item_categories (category_id)`,
   `CREATE INDEX IF NOT EXISTS quilting_block_templates_created_by_user_id_idx
      ON quilting_block_templates (created_by_user_id)`,
+
+  // ── Hallmark catalog ────────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS hallmark_catalog (
+    id                serial PRIMARY KEY,
+    hallmark_sku      text NOT NULL UNIQUE,
+    name              text NOT NULL,
+    description       text,
+    series_name       text,
+    sequence_number   integer,
+    year              integer,
+    artist            text,
+    retail_price_usd  numeric(10,2),
+    product_url       text,
+    images            text[],
+    ornament_category text,
+    crawled_at        timestamptz NOT NULL,
+    created_at        timestamptz NOT NULL DEFAULT now(),
+    updated_at        timestamptz NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE hallmark_catalog ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS hallmark_catalog_sku_idx ON hallmark_catalog (hallmark_sku)`,
+  `CREATE INDEX IF NOT EXISTS hallmark_catalog_year_idx ON hallmark_catalog (year)`,
+  `CREATE INDEX IF NOT EXISTS hallmark_catalog_series_idx ON hallmark_catalog (series_name)`,
 ];

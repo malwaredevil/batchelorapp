@@ -2504,4 +2504,17 @@ export const STATEMENTS: string[] = [
      ON knowledge_relationships (object_entity_id)`,
   `CREATE INDEX IF NOT EXISTS knowledge_relationships_predicate_idx
      ON knowledge_relationships (predicate)`,
+
+  // Foreign-key support indexes identified as missing by Supabase advisor.
+  // Without these, deletions and joins on the parent side do a full table scan.
+  `CREATE INDEX IF NOT EXISTS messenger_attachments_message_id_idx
+     ON messenger_attachments (message_id)`,
+  `CREATE INDEX IF NOT EXISTS messenger_messages_sender_id_idx
+     ON messenger_messages (sender_id)`,
+  `CREATE INDEX IF NOT EXISTS ornaments_categories_user_id_idx
+     ON ornaments_categories (user_id)`,
+  `CREATE INDEX IF NOT EXISTS pottery_item_categories_category_id_idx
+     ON pottery_item_categories (category_id)`,
+  `CREATE INDEX IF NOT EXISTS quilting_block_templates_created_by_user_id_idx
+     ON quilting_block_templates (created_by_user_id)`,
 ];

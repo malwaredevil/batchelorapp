@@ -10,6 +10,7 @@
 
 import fs from "fs";
 import path from "path";
+import { execSync } from "child_process";
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "../..");
 const STATE_FILE = path.join(
@@ -35,17 +36,55 @@ type Stage4File = {
   publishedAt: string;
   baselineCount: number;
   baselineIds: string[];
+  releaseVersion?: string;
 };
 
 function ensureDir(file: string) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
 }
 
+function getGitSha(): string {
+  try {
+    return execSync("git rev-parse --short HEAD", { encoding: "utf-8" }).trim();
+  } catch {
+    return "unknown";
+  }
+}
+
+async function notifySentryRelease(version: string): Promise<void> {
+  const webhookUrl = process.env.SENTRY_RELEASE_WEBHOOK_URL;
+  if (!webhookUrl) {
+    console.log(
+      "  ⚠  SENTRY_RELEASE_WEBHOOK_URL not set — skipping release notification.",
+    );
+    return;
+  }
+  try {
+    const res = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ version }),
+    });
+    if (res.ok) {
+      console.log(
+        `  ✓ Sentry release created: ${version} (HTTP ${res.status})`,
+      );
+    } else {
+      const body = await res.text();
+      console.warn(
+        `  ⚠  Sentry release webhook returned ${res.status}: ${body.slice(0, 200)}`,
+      );
+    }
+  } catch (err) {
+    console.warn(
+      `  ⚠  Sentry release webhook failed (non-fatal): ${(err as Error).message}`,
+    );
+  }
+}
+
 const cmd = process.argv[2];
 
 if (cmd === "write") {
-  // The actual Sentry query must be done via the MCP tool in the agent session.
-  // This script records what the agent captured.
   const count = parseInt(process.argv[3] ?? "0", 10);
   const ids: string[] = process.argv[4] ? process.argv[4].split(",") : [];
   const data: BaselineFile = {
@@ -74,16 +113,24 @@ if (cmd === "write") {
   const baselineData: BaselineFile = fs.existsSync(STATE_FILE)
     ? JSON.parse(fs.readFileSync(STATE_FILE, "utf8"))
     : { count: 0, ids: [], writtenAt: new Date().toISOString() };
+
+  const releaseVersion = getGitSha();
+
   const stage4: Stage4File = {
     publishedAt: new Date().toISOString(),
     baselineCount: baselineData.count,
     baselineIds: baselineData.ids,
+    releaseVersion,
   };
   ensureDir(STAGE4_FILE);
   fs.writeFileSync(STAGE4_FILE, JSON.stringify(stage4, null, 2));
   console.log(
     `Stage 4 pending file written. Baseline was ${baselineData.count} issue(s).`,
   );
+
+  console.log(`Notifying Sentry of release: ${releaseVersion}`);
+  await notifySentryRelease(releaseVersion);
+
   console.log(
     "At the start of the next session, the agent will check for new Sentry issues.",
   );
@@ -111,7 +158,7 @@ if (cmd === "write") {
     process.exit(0);
   }
   console.log(
-    `PENDING_STAGE4: published at ${data.publishedAt} (${hours.toFixed(1)}h ago), baseline=${data.baselineCount}`,
+    `PENDING_STAGE4: published at ${data.publishedAt} (${hours.toFixed(1)}h ago), baseline=${data.baselineCount}${data.releaseVersion ? `, release=${data.releaseVersion}` : ""}`,
   );
   process.exit(2);
 } else {

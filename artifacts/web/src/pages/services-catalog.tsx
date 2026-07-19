@@ -147,10 +147,15 @@ const SERVICES: ServiceEntry[] = [
     name: "Sentry",
     purpose: "Production error tracking and monitoring",
     usedFor:
-      "Captures and reports unhandled exceptions and errors from the API server in production. Pre-publish baseline and post-publish delta checks are part of the release checklist.",
-    implementedIn: ["artifacts/api-server/src/lib/sentry.ts"],
+      "Captures and reports unhandled exceptions and errors from both the API server and all browser SPAs (modules, web, elaine) in production. Source maps are uploaded at build time so stack traces resolve to original TypeScript. Pre-publish baseline and post-publish delta checks are part of the release checklist.",
+    implementedIn: [
+      "artifacts/api-server/src/lib/sentry.ts",
+      "artifacts/modules/src/sentry.ts",
+      "artifacts/web/src/sentry.ts",
+      "artifacts/elaine/src/sentry.ts",
+    ],
     modules: ["All"],
-    env: ["SENTRY_DSN"],
+    env: ["SENTRY_DSN", "VITE_SENTRY_DSN"],
   },
   {
     name: "Apify",

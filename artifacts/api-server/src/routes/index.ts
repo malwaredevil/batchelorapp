@@ -22,6 +22,7 @@ import ingestionRouter from "./ingestion";
 import searchFeedbackRouter from "./search-feedback";
 import marketRouter from "./market";
 import notificationsRouter from "./notifications";
+import knowledgeRouter from "./knowledge";
 
 const router: IRouter = Router();
 
@@ -44,6 +45,7 @@ router.use("/ingestion", ingestionRouter);
 router.use(searchFeedbackRouter);
 router.use(marketRouter);
 router.use("/notifications", notificationsRouter);
+router.use(knowledgeRouter);
 // Must be mounted before elaineRouter: elaineRouter applies a blanket
 // requireAuth middleware to every /elaine/* path, which would otherwise
 // swallow this unauthenticated (signature-gated) webhook route before it's

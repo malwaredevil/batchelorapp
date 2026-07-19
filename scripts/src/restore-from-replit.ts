@@ -1723,6 +1723,101 @@ async function main() {
   });
   await resetSequence(dest, "notification_preferences", "id");
 
+  // ── Knowledge graph (#239) ─────────────────────────────────────────────────
+  await copyTable(source, dest, {
+    table: "knowledge_entities",
+    columns: [
+      "id",
+      "entity_type",
+      "display_name",
+      "normalized_name",
+      "summary",
+      "lifecycle_state",
+      "confidence",
+      "canonical",
+      "merged_into_id",
+      "created_by_user_id",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "knowledge_entities", "id");
+
+  await copyTable(source, dest, {
+    table: "knowledge_entity_aliases",
+    columns: [
+      "id",
+      "entity_id",
+      "alias_text",
+      "normalized_alias",
+      "alias_type",
+      "locale",
+      "source",
+      "confirmed",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "knowledge_entity_aliases", "id");
+
+  await copyTable(source, dest, {
+    table: "knowledge_external_identifiers",
+    columns: [
+      "id",
+      "entity_id",
+      "namespace",
+      "identifier",
+      "normalized_identifier",
+      "scope",
+      "provenance",
+      "confirmed",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "knowledge_external_identifiers", "id");
+
+  await copyTable(source, dest, {
+    table: "knowledge_domain_links",
+    columns: [
+      "id",
+      "entity_id",
+      "domain_type",
+      "record_id",
+      "relationship_role",
+      "provenance",
+      "confidence",
+      "state",
+      "decided_by_user_id",
+      "decided_at",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "knowledge_domain_links", "id");
+
+  await copyTable(source, dest, {
+    table: "knowledge_relationships",
+    columns: [
+      "id",
+      "subject_entity_id",
+      "predicate",
+      "object_entity_id",
+      "effective_from",
+      "effective_until",
+      "attributes",
+      "provenance",
+      "confidence",
+      "state",
+      "created_at",
+      "updated_at",
+    ],
+    jsonbColumns: ["attributes"],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "knowledge_relationships", "id");
+
   await dest.query("SET session_replication_role = DEFAULT");
 
   console.log("\n✓ Restore complete.");

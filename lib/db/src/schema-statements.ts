@@ -2398,4 +2398,110 @@ export const STATEMENTS: string[] = [
   `CREATE UNIQUE INDEX IF NOT EXISTS pottery_watchlist_alerts_dedup_idx
     ON pottery_watchlist_alerts (watchlist_item_id, platform, listing_id)`,
   `CREATE INDEX IF NOT EXISTS pottery_watchlist_alerts_item_idx ON pottery_watchlist_alerts (watchlist_item_id)`,
+
+  // ---------------------------------------------------------------------------
+  // #239 — Household knowledge graph
+  // ---------------------------------------------------------------------------
+
+  `CREATE TABLE IF NOT EXISTS knowledge_entities (
+    id                  SERIAL PRIMARY KEY,
+    entity_type         TEXT NOT NULL,
+    display_name        TEXT NOT NULL,
+    normalized_name     TEXT NOT NULL,
+    summary             TEXT,
+    lifecycle_state     TEXT NOT NULL DEFAULT 'active',
+    confidence          REAL NOT NULL DEFAULT 1.0,
+    canonical           BOOLEAN NOT NULL DEFAULT false,
+    merged_into_id      INTEGER,
+    created_by_user_id  INTEGER REFERENCES app_users(id) ON DELETE SET NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE knowledge_entities ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS knowledge_entities_type_idx
+     ON knowledge_entities (entity_type)`,
+  `CREATE INDEX IF NOT EXISTS knowledge_entities_lifecycle_idx
+     ON knowledge_entities (lifecycle_state)`,
+  `CREATE INDEX IF NOT EXISTS knowledge_entities_normalized_idx
+     ON knowledge_entities (normalized_name)`,
+
+  `CREATE TABLE IF NOT EXISTS knowledge_entity_aliases (
+    id               SERIAL PRIMARY KEY,
+    entity_id        INTEGER NOT NULL REFERENCES knowledge_entities(id) ON DELETE CASCADE,
+    alias_text       TEXT NOT NULL,
+    normalized_alias TEXT NOT NULL,
+    alias_type       TEXT NOT NULL DEFAULT 'alternate_name',
+    locale           TEXT,
+    source           TEXT,
+    confirmed        BOOLEAN NOT NULL DEFAULT false,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (entity_id, normalized_alias)
+  )`,
+  `ALTER TABLE knowledge_entity_aliases ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS knowledge_aliases_entity_idx
+     ON knowledge_entity_aliases (entity_id)`,
+  `CREATE INDEX IF NOT EXISTS knowledge_aliases_normalized_idx
+     ON knowledge_entity_aliases (normalized_alias)`,
+  `CREATE INDEX IF NOT EXISTS knowledge_aliases_confirmed_idx
+     ON knowledge_entity_aliases (confirmed) WHERE confirmed = true`,
+
+  `CREATE TABLE IF NOT EXISTS knowledge_external_identifiers (
+    id                    SERIAL PRIMARY KEY,
+    entity_id             INTEGER NOT NULL REFERENCES knowledge_entities(id) ON DELETE CASCADE,
+    namespace             TEXT NOT NULL,
+    identifier            TEXT NOT NULL,
+    normalized_identifier TEXT NOT NULL,
+    scope                 TEXT,
+    provenance            TEXT,
+    confirmed             BOOLEAN NOT NULL DEFAULT false,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (namespace, normalized_identifier, scope)
+  )`,
+  `ALTER TABLE knowledge_external_identifiers ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS knowledge_ext_ids_entity_idx
+     ON knowledge_external_identifiers (entity_id)`,
+  `CREATE INDEX IF NOT EXISTS knowledge_ext_ids_namespace_idx
+     ON knowledge_external_identifiers (namespace, normalized_identifier)`,
+
+  `CREATE TABLE IF NOT EXISTS knowledge_domain_links (
+    id                  SERIAL PRIMARY KEY,
+    entity_id           INTEGER NOT NULL REFERENCES knowledge_entities(id) ON DELETE CASCADE,
+    domain_type         TEXT NOT NULL,
+    record_id           INTEGER NOT NULL,
+    relationship_role   TEXT NOT NULL DEFAULT 'represents',
+    provenance          TEXT,
+    confidence          REAL NOT NULL DEFAULT 1.0,
+    state               TEXT NOT NULL DEFAULT 'active',
+    decided_by_user_id  INTEGER REFERENCES app_users(id) ON DELETE SET NULL,
+    decided_at          TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (entity_id, domain_type, record_id, relationship_role)
+  )`,
+  `ALTER TABLE knowledge_domain_links ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS knowledge_links_entity_idx
+     ON knowledge_domain_links (entity_id)`,
+  `CREATE INDEX IF NOT EXISTS knowledge_links_domain_idx
+     ON knowledge_domain_links (domain_type, record_id)`,
+
+  `CREATE TABLE IF NOT EXISTS knowledge_relationships (
+    id                SERIAL PRIMARY KEY,
+    subject_entity_id INTEGER NOT NULL REFERENCES knowledge_entities(id) ON DELETE CASCADE,
+    predicate         TEXT NOT NULL,
+    object_entity_id  INTEGER NOT NULL REFERENCES knowledge_entities(id) ON DELETE CASCADE,
+    effective_from    TIMESTAMPTZ,
+    effective_until   TIMESTAMPTZ,
+    attributes        JSONB NOT NULL DEFAULT '{}',
+    provenance        TEXT,
+    confidence        REAL NOT NULL DEFAULT 1.0,
+    state             TEXT NOT NULL DEFAULT 'active',
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE knowledge_relationships ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS knowledge_relationships_subject_idx
+     ON knowledge_relationships (subject_entity_id)`,
+  `CREATE INDEX IF NOT EXISTS knowledge_relationships_object_idx
+     ON knowledge_relationships (object_entity_id)`,
+  `CREATE INDEX IF NOT EXISTS knowledge_relationships_predicate_idx
+     ON knowledge_relationships (predicate)`,
 ];

@@ -109,7 +109,15 @@ export async function extractBarcodeFromPhoto(
       messages: [
         {
           role: "system",
-          content: `You are a barcode reader. Find and read the UPC or EAN barcode in the image. Look for 1D barcodes (parallel vertical bars) and read the digits printed below or next to them. Return JSON with exactly one key: "barcode" — a string containing only the barcode digits (typically 12–13 digits for UPC/EAN), or null if no barcode is visible or the digits cannot be clearly read. Never guess or fabricate digits.`,
+          content: `You are a barcode reader. Find and read the UPC or EAN barcode in the image.
+
+Rules:
+- Look for a 1D barcode (parallel vertical bars) and read the human-readable digits printed directly below or beside it.
+- UPC-A barcodes are ALWAYS exactly 12 digits. EAN-13 barcodes are ALWAYS exactly 13 digits. Count every digit carefully — do not drop leading or trailing digits.
+- Return the digits EXACTLY as printed. If the printed number has a leading zero or leading digit that is partially obscured, include it.
+- Before returning, count the digits in your answer. If you get 11, you likely dropped a leading digit — look again.
+- Return JSON with exactly one key: "barcode" — a string of the digit characters only (no spaces, no dashes), or null if no barcode is visible or legible.
+- Never guess or fabricate any digit you cannot clearly see.`,
         },
         {
           role: "user",

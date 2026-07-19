@@ -161,7 +161,7 @@ const SERVICES: ServiceEntry[] = [
     name: "Apify",
     purpose: "Web scraping and market-price lookup platform",
     usedFor:
-      "eBay sold-listing price lookups for pottery and ornaments (market value estimates), Etsy price suggestions for quilting shopping items, live flight price checks for the travels wishlist, Hallmark book-value lookups for ornaments (supplemental to UPCitemdb). All calls are gated by the APIFY_API_TOKEN secret.",
+      "eBay sold-listing price lookups for pottery and ornaments (market value estimates), Etsy price suggestions for quilting shopping items, live flight price checks for the travels wishlist, Hallmark book-value lookups for ornaments (supplemental to UPCitemdb). Crawls the Hallmark historical and current catalogs via custom actors. Webhook callbacks auto-ingest crawl results on completion (APIFY_WEBHOOK_SECRET gates the inbound webhook). All outbound calls are gated by the APIFY_API_TOKEN secret.",
     implementedIn: [
       "artifacts/api-server/src/lib/apify-client.ts",
       "artifacts/api-server/src/lib/pottery/market-value.ts",
@@ -169,9 +169,10 @@ const SERVICES: ServiceEntry[] = [
       "artifacts/api-server/src/lib/quilting/etsy-price.ts",
       "artifacts/api-server/src/lib/travels/flight-prices.ts",
       "artifacts/api-server/src/lib/ornaments/hallmark-book-value.ts",
+      "artifacts/api-server/src/routes/ornaments/apify-webhook.ts",
     ],
     modules: ["Pottery", "Quilting", "Ornaments", "Travels"],
-    env: ["APIFY_API_TOKEN"],
+    env: ["APIFY_API_TOKEN", "APIFY_WEBHOOK_SECRET"],
   },
   {
     name: "UPCitemdb",

@@ -218,11 +218,46 @@ export interface AssistantSettings {
   chatWindowSize: ChatWindowSize;
 }
 
+export type MemoryScope = "household" | "personal" | "temporary";
+export type MemoryCategory =
+  | "fact"
+  | "preference"
+  | "instruction"
+  | "person"
+  | "place"
+  | "collection";
+export type MemorySensitivity = "low" | "medium" | "high";
+
 export interface HouseholdMemoryItem {
   id: number;
   content: string;
+  type: string;
+  scope: MemoryScope;
+  category: MemoryCategory;
+  sensitivity: MemorySensitivity;
+  ownerUserId: number | null;
+  expiresAt: string | null;
+  active: boolean;
   createdAt: string;
-  createdByUserId: number;
+  updatedAt: string;
+  deletedAt: string | null;
+  createdByUserId: number | null;
+}
+
+export interface CreateMemoryBody {
+  content: string;
+  scope?: MemoryScope;
+  category?: MemoryCategory;
+  sensitivity?: MemorySensitivity;
+  expiresInDays?: number;
+}
+
+export interface UpdateMemoryBody {
+  content?: string;
+  scope?: MemoryScope;
+  category?: MemoryCategory;
+  sensitivity?: MemorySensitivity;
+  expiresAt?: string | null;
 }
 
 export const getGetElaineConversationQueryKey = () =>
@@ -578,6 +613,56 @@ export function useDeleteElaineMemoryItem(options?: {
 }): UseMutationResult<void, unknown, number> {
   const mutationFn: MutationFunction<void, number> = (id) =>
     deleteElaineMemoryItemFn(id);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const createElaineMemoryFn = (
+  body: CreateMemoryBody,
+): Promise<HouseholdMemoryItem> =>
+  customFetch<HouseholdMemoryItem>("/api/elaine/memory", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export function useCreateElaineMemory(options?: {
+  mutation?: UseMutationOptions<
+    HouseholdMemoryItem,
+    unknown,
+    CreateMemoryBody
+  >;
+}): UseMutationResult<HouseholdMemoryItem, unknown, CreateMemoryBody> {
+  const mutationFn: MutationFunction<HouseholdMemoryItem, CreateMemoryBody> = (
+    body,
+  ) => createElaineMemoryFn(body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+const updateElaineMemoryFn = (
+  id: number,
+  body: UpdateMemoryBody,
+): Promise<HouseholdMemoryItem> =>
+  customFetch<HouseholdMemoryItem>(`/api/elaine/memory/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export function useUpdateElaineMemory(options?: {
+  mutation?: UseMutationOptions<
+    HouseholdMemoryItem,
+    unknown,
+    { id: number; body: UpdateMemoryBody }
+  >;
+}): UseMutationResult<
+  HouseholdMemoryItem,
+  unknown,
+  { id: number; body: UpdateMemoryBody }
+> {
+  const mutationFn: MutationFunction<
+    HouseholdMemoryItem,
+    { id: number; body: UpdateMemoryBody }
+  > = ({ id, body }) => updateElaineMemoryFn(id, body);
   return useMutation({ mutationFn, ...options?.mutation });
 }
 

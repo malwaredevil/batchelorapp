@@ -1401,6 +1401,78 @@ CREATE TABLE IF NOT EXISTS quilting_fabric_identity_research (
   created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- #239 Knowledge graph
+CREATE TABLE IF NOT EXISTS knowledge_entities (
+  id                  SERIAL PRIMARY KEY,
+  entity_type         TEXT NOT NULL,
+  display_name        TEXT NOT NULL,
+  normalized_name     TEXT NOT NULL,
+  summary             TEXT,
+  lifecycle_state     TEXT NOT NULL DEFAULT 'active',
+  confidence          REAL NOT NULL DEFAULT 1.0,
+  canonical           BOOLEAN NOT NULL DEFAULT false,
+  merged_into_id      INTEGER,
+  created_by_user_id  INTEGER,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_entity_aliases (
+  id               SERIAL PRIMARY KEY,
+  entity_id        INTEGER NOT NULL REFERENCES knowledge_entities(id) ON DELETE CASCADE,
+  alias_text       TEXT NOT NULL,
+  normalized_alias TEXT NOT NULL,
+  alias_type       TEXT NOT NULL DEFAULT 'alternate_name',
+  locale           TEXT,
+  source           TEXT,
+  confirmed        BOOLEAN NOT NULL DEFAULT false,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (entity_id, normalized_alias)
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_external_identifiers (
+  id                    SERIAL PRIMARY KEY,
+  entity_id             INTEGER NOT NULL REFERENCES knowledge_entities(id) ON DELETE CASCADE,
+  namespace             TEXT NOT NULL,
+  identifier            TEXT NOT NULL,
+  normalized_identifier TEXT NOT NULL,
+  scope                 TEXT,
+  provenance            TEXT,
+  confirmed             BOOLEAN NOT NULL DEFAULT false,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (namespace, normalized_identifier, scope)
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_domain_links (
+  id                  SERIAL PRIMARY KEY,
+  entity_id           INTEGER NOT NULL REFERENCES knowledge_entities(id) ON DELETE CASCADE,
+  domain_type         TEXT NOT NULL,
+  record_id           INTEGER NOT NULL,
+  relationship_role   TEXT NOT NULL DEFAULT 'represents',
+  provenance          TEXT,
+  confidence          REAL NOT NULL DEFAULT 1.0,
+  state               TEXT NOT NULL DEFAULT 'active',
+  decided_by_user_id  INTEGER,
+  decided_at          TIMESTAMPTZ,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (entity_id, domain_type, record_id, relationship_role)
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_relationships (
+  id                SERIAL PRIMARY KEY,
+  subject_entity_id INTEGER NOT NULL REFERENCES knowledge_entities(id) ON DELETE CASCADE,
+  predicate         TEXT NOT NULL,
+  object_entity_id  INTEGER NOT NULL REFERENCES knowledge_entities(id) ON DELETE CASCADE,
+  effective_from    TIMESTAMPTZ,
+  effective_until   TIMESTAMPTZ,
+  attributes        JSONB NOT NULL DEFAULT '{}',
+  provenance        TEXT,
+  confidence        REAL NOT NULL DEFAULT 1.0,
+  state             TEXT NOT NULL DEFAULT 'active',
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 `;
 
 async function copyTable(
@@ -3197,6 +3269,101 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "notification_preferences", "id");
+
+  // ── Knowledge graph (#239) ────────────────────────────────────────────────
+  summary["knowledge_entities"] = await copyTable(source, dest, {
+    table: "knowledge_entities",
+    columns: [
+      "id",
+      "entity_type",
+      "display_name",
+      "normalized_name",
+      "summary",
+      "lifecycle_state",
+      "confidence",
+      "canonical",
+      "merged_into_id",
+      "created_by_user_id",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "knowledge_entities", "id");
+
+  summary["knowledge_entity_aliases"] = await copyTable(source, dest, {
+    table: "knowledge_entity_aliases",
+    columns: [
+      "id",
+      "entity_id",
+      "alias_text",
+      "normalized_alias",
+      "alias_type",
+      "locale",
+      "source",
+      "confirmed",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "knowledge_entity_aliases", "id");
+
+  summary["knowledge_external_identifiers"] = await copyTable(source, dest, {
+    table: "knowledge_external_identifiers",
+    columns: [
+      "id",
+      "entity_id",
+      "namespace",
+      "identifier",
+      "normalized_identifier",
+      "scope",
+      "provenance",
+      "confirmed",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "knowledge_external_identifiers", "id");
+
+  summary["knowledge_domain_links"] = await copyTable(source, dest, {
+    table: "knowledge_domain_links",
+    columns: [
+      "id",
+      "entity_id",
+      "domain_type",
+      "record_id",
+      "relationship_role",
+      "provenance",
+      "confidence",
+      "state",
+      "decided_by_user_id",
+      "decided_at",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "knowledge_domain_links", "id");
+
+  summary["knowledge_relationships"] = await copyTable(source, dest, {
+    table: "knowledge_relationships",
+    columns: [
+      "id",
+      "subject_entity_id",
+      "predicate",
+      "object_entity_id",
+      "effective_from",
+      "effective_until",
+      "attributes",
+      "provenance",
+      "confidence",
+      "state",
+      "created_at",
+      "updated_at",
+    ],
+    jsonbColumns: ["attributes"],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "knowledge_relationships", "id");
 
   // ── Record backup history ─────────────────────────────────────────────────
   const note = Object.entries(summary)

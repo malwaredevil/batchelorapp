@@ -139,7 +139,7 @@ const enqueuedProductUrls = new Set<string>();
 const yearProductCount: Record<string, number> = {};
 
 const historicalCrawler = new CheerioCrawler({
-  maxConcurrency: 6,
+  maxConcurrency: 20,
   requestHandlerTimeoutSecs: 30,
   maxRequestRetries: 2,
 
@@ -271,8 +271,13 @@ const historicalCrawler = new CheerioCrawler({
           const m = text.match(/(\d+)/);
           if (m) product.sequenceNumber = parseInt(m[1], 10);
         }
-        if (/^Artist[:\s]/i.test(text)) {
-          const m = text.match(/Artist[:\s]+(.+)/i);
+        if (
+          /^Artist[s]?[:\s]/i.test(text) ||
+          /^(?:Sculptor|Designed by)[:\s]/i.test(text)
+        ) {
+          const m = text.match(
+            /(?:Artist[s]?|Sculptor|Designed by)[:\s]+(.+)/i,
+          );
           if (m) product.artist = m[1].trim().split(/\s{2,}/)[0];
         }
       });
@@ -283,6 +288,21 @@ const historicalCrawler = new CheerioCrawler({
         );
         product.seriesName = seriesName;
         product.sequenceNumber = sequenceNumber;
+      }
+
+      // Fallback: parse series from the URL slug — the slug often encodes the
+      // full title including ordinal+series, e.g.
+      // "1995-Frosty-Friends-16th-in-Frosty-Friends-Series_p_3422.html"
+      if (!product.seriesName) {
+        const slug = url
+          .replace(/^.*\//, "")
+          .replace(/_p_\d+\.html$/, "")
+          .replace(/-/g, " ");
+        const { seriesName, sequenceNumber } = parseSeriesFromDescription(slug);
+        if (seriesName) {
+          product.seriesName = seriesName;
+          product.sequenceNumber = sequenceNumber;
+        }
       }
 
       if (product.name) {

@@ -8,8 +8,13 @@ import canonicalSeriesRouter from "./canonical-series";
 import hallmarkSearchRouter from "./hallmark-search";
 import catalogCrawlRouter from "./catalog-crawl";
 import historicalCrawlRouter from "./historical-crawl";
+import apifyWebhookRouter from "./apify-webhook";
 
 const router: IRouter = Router();
+
+// Apify webhook — unauthenticated (token-gated), must be mounted before any
+// router that applies requireAuth so the signature check isn't pre-empted.
+router.use(apifyWebhookRouter);
 
 router.use(ornamentsRouter);
 router.use(categoriesRouter);

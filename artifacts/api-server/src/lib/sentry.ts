@@ -1,6 +1,17 @@
 import * as Sentry from "@sentry/node";
+import { execSync } from "child_process";
 import { ZodError } from "zod";
 import { env } from "./env";
+
+function getGitSha(): string | undefined {
+  try {
+    return execSync("git rev-parse --short HEAD", { encoding: "utf-8" }).trim();
+  } catch {
+    return undefined;
+  }
+}
+
+const appVersion = getGitSha();
 
 const SENSITIVE_BODY_KEYS = new Set([
   "password",
@@ -46,6 +57,7 @@ export function initSentry() {
   Sentry.init({
     dsn: env.sentryDsn,
     environment: env.isProduction ? "production" : "development",
+    release: appVersion,
     tracesSampleRate: 0.1,
     beforeSend(event, hint) {
       // ZodError from request validation is handled gracefully (400 response)

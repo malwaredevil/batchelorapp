@@ -4,11 +4,13 @@ import * as Sentry from "@sentry/react";
 // Only activates in production builds (import.meta.env.PROD = true).
 // A missing or empty DSN is a silent no-op — safe to deploy without it.
 const dsn = import.meta.env.VITE_SENTRY_DSN as string | undefined;
+const release = import.meta.env.VITE_APP_VERSION as string | undefined;
 
 if (dsn && import.meta.env.PROD) {
   Sentry.init({
     dsn,
     environment: "production",
+    release: release || undefined,
     integrations: [
       Sentry.browserTracingIntegration(),
       Sentry.replayIntegration(),

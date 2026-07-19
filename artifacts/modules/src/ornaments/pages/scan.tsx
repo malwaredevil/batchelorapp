@@ -2,7 +2,12 @@ import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Loader2, Camera, Search, ArrowRight, ScanLine } from "lucide-react";
 import { useLookupOrnamentBarcode } from "@workspace/api-client-react";
-import { BrowserMultiFormatReader, NotFoundException } from "@zxing/library";
+import {
+  BrowserMultiFormatReader,
+  NotFoundException,
+  BarcodeFormat,
+  DecodeHintType,
+} from "@zxing/library";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +31,20 @@ export default function ScanPage() {
   );
 
   useEffect(() => {
-    codeReaderRef.current = new BrowserMultiFormatReader();
+    // Limit detection to 1D barcode formats (UPC/EAN/Code128/Code39) so the
+    // scanner doesn't waste cycles trying QR, DataMatrix, Aztec, etc. on every
+    // frame. Combined with a 150ms decode interval (vs the 500ms default) this
+    // makes auto-detection fast enough to lock on without manual shutter.
+    const hints = new Map<DecodeHintType, unknown>();
+    hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+      BarcodeFormat.UPC_A,
+      BarcodeFormat.UPC_E,
+      BarcodeFormat.EAN_13,
+      BarcodeFormat.EAN_8,
+      BarcodeFormat.CODE_128,
+      BarcodeFormat.CODE_39,
+    ]);
+    codeReaderRef.current = new BrowserMultiFormatReader(hints, 150);
 
     // Check if camera is available
     navigator.mediaDevices
@@ -54,7 +72,13 @@ export default function ScanPage() {
     setIsScanning(true);
     try {
       await codeReaderRef.current.decodeFromConstraints(
-        { video: { facingMode: "environment" } },
+        {
+          video: {
+            facingMode: "environment",
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        },
         videoRef.current,
         (result, err) => {
           if (result) {

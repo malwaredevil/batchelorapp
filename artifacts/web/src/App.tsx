@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import * as Sentry from "@sentry/react";
 import { Switch, Route, Redirect, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
@@ -55,6 +56,14 @@ function ThemeSync() {
 function Routes() {
   const { user, isLoading } = useAuth();
 
+  useEffect(() => {
+    if (user) {
+      Sentry.setUser({ id: String(user.id), email: user.email });
+    } else {
+      Sentry.setUser(null);
+    }
+  }, [user]);
+
   if (isLoading) return <Splash />;
 
   if (!user) {
@@ -99,7 +108,25 @@ function App() {
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <AuthProvider>
               <ElainePageContextProvider>
-                <Routes />
+                <Sentry.ErrorBoundary
+                  fallback={
+                    <div className="flex min-h-screen items-center justify-center bg-background">
+                      <div className="text-center space-y-3">
+                        <p className="text-muted-foreground">
+                          Something went wrong.
+                        </p>
+                        <button
+                          onClick={() => window.location.reload()}
+                          className="text-sm text-primary underline"
+                        >
+                          Reload page
+                        </button>
+                      </div>
+                    </div>
+                  }
+                >
+                  <Routes />
+                </Sentry.ErrorBoundary>
               </ElainePageContextProvider>
             </AuthProvider>
           </WouterRouter>

@@ -10,11 +10,9 @@
     "dev": "tsc && node dist/main.js"
   },
   "dependencies": {
-    "apify": "^3.2.6",
-    "crawlee": "^3.12.0"
-  },
-  "devDependencies": {
     "@apify/tsconfig": "^0.1.0",
+    "apify": "^3.2.6",
+    "crawlee": "^3.12.0",
     "typescript": "^5.4.5"
   }
 }

@@ -1,13 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Trash2 } from "lucide-react";
+import { Brain, ArrowRight } from "lucide-react";
 import {
   useGetElaineSettings,
   useUpdateElaineSettings,
   getGetElaineSettingsQueryKey,
   useListElaineMemory,
-  getListElaineMemoryQueryKey,
-  useDeleteElaineMemoryItem,
   type ActionConfirmationMode,
   type ChatWindowSize,
 } from "@workspace/api-client-react";
@@ -38,7 +36,6 @@ export function ElaineSettingsCard({
     useGetElaineSettings();
   const updateAssistantSettings = useUpdateElaineSettings();
   const { data: memory = [], isLoading: memoryLoading } = useListElaineMemory();
-  const deleteMemory = useDeleteElaineMemoryItem();
 
   function handleToggle(enabled: boolean) {
     updateAssistantSettings.mutate(
@@ -111,14 +108,6 @@ export function ElaineSettingsCard({
           ),
       },
     );
-  }
-
-  function handleDeleteMemory(id: number) {
-    deleteMemory.mutate(id, {
-      onSuccess: () =>
-        qc.invalidateQueries({ queryKey: getListElaineMemoryQueryKey() }),
-      onError: () => toast.error("Failed to remove memory"),
-    });
   }
 
   return (
@@ -204,43 +193,27 @@ export function ElaineSettingsCard({
         </Select>
       </div>
 
-      <div className="space-y-2">
-        <p className="text-sm font-medium text-foreground">
-          What <ElaineName /> remembers
-        </p>
-        <p className="text-xs text-muted-foreground pb-1">
-          Shared facts <ElaineName /> has picked up about your household.
-        </p>
-        {memoryLoading && (
-          <p className="text-xs text-muted-foreground">Loading…</p>
-        )}
-        {!memoryLoading && memory.length === 0 && (
-          <p className="text-xs text-muted-foreground italic">
-            Nothing remembered yet.
-          </p>
-        )}
-        {memory.length > 0 && (
-          <ul className="space-y-1.5">
-            {memory.map((m) => (
-              <li
-                key={m.id}
-                className="flex items-center justify-between gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm"
-              >
-                <span className="text-foreground">{m.content}</span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
-                  onClick={() => handleDeleteMemory(m.id)}
-                  disabled={deleteMemory.isPending}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      <a
+        href="/elaine/memory"
+        className="flex items-center justify-between gap-3 rounded-lg border border-card-border p-4 hover:border-primary/30 hover:bg-muted/30 transition-colors group"
+      >
+        <div className="flex items-center gap-3">
+          <Brain className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              What <ElaineName /> remembers
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {memoryLoading
+                ? "Loading…"
+                : memory.length === 0
+                  ? "Nothing remembered yet"
+                  : `${memory.filter((m) => m.type !== "summary").length} fact${memory.filter((m) => m.type !== "summary").length !== 1 ? "s" : ""} stored`}
+            </p>
+          </div>
+        </div>
+        <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+      </a>
     </div>
   );
 }

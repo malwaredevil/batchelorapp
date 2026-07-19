@@ -62,12 +62,30 @@ export type InsertElaineSettings = typeof elaineSettings.$inferInsert;
 // Shared household memory — facts Elaine has learned from any family member
 // that are relevant across the whole Batchelor app, not siloed per-user.
 // Populated by the assistant itself via a remember_household_fact tool call.
+//
+// Scoped memory model (#240):
+//   scope = 'household'  — visible to all authenticated household members
+//   scope = 'personal'   — visible only to owner_user_id
+//   scope = 'temporary'  — auto-expires at expires_at (or 30 days by default)
+//
+// category: fact | preference | instruction | person | place | collection
+// sensitivity: low | medium | high
 export const elaineMemory = pgTable("elaine_memory", {
   id: serial("id").primaryKey(),
   // 'fact'    — an explicit factoid stored by the remember tool or auto-extracted
   // 'summary' — the single maintained prose summary updated after every turn
   type: text("type").notNull().default("fact"),
   content: text("content").notNull(),
+  scope: text("scope").notNull().default("household"),
+  category: text("category").notNull().default("fact"),
+  sensitivity: text("sensitivity").notNull().default("low"),
+  ownerUserId: integer("owner_user_id"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  active: boolean("active").notNull().default(true),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
   createdByUserId: integer("created_by_user_id").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()

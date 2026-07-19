@@ -862,7 +862,18 @@ export const STATEMENTS: string[] = [
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
   `ALTER TABLE elaine_memory ENABLE ROW LEVEL SECURITY`,
-  `ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS type text NOT NULL DEFAULT 'fact'`,
+  `ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS type        text      NOT NULL DEFAULT 'fact'`,
+  `ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS scope       text      NOT NULL DEFAULT 'household'`,
+  `ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS category    text      NOT NULL DEFAULT 'fact'`,
+  `ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS sensitivity text      NOT NULL DEFAULT 'low'`,
+  `ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS owner_user_id INTEGER`,
+  `ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS expires_at  TIMESTAMPTZ`,
+  `ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS active      BOOLEAN   NOT NULL DEFAULT true`,
+  `ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS deleted_at  TIMESTAMPTZ`,
+  `ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()`,
+  `CREATE INDEX IF NOT EXISTS elaine_memory_scope_active_idx ON elaine_memory (scope, active)`,
+  `CREATE INDEX IF NOT EXISTS elaine_memory_owner_idx        ON elaine_memory (owner_user_id)`,
+  `CREATE INDEX IF NOT EXISTS elaine_memory_expires_idx      ON elaine_memory (expires_at) WHERE active = true`,
 
   `CREATE TABLE IF NOT EXISTS elaine_nudges (
     id          SERIAL PRIMARY KEY,

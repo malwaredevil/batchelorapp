@@ -16,6 +16,7 @@ import { Header } from "@/components/Header";
 import { InstallBanner } from "@workspace/web-core";
 import "@/features";
 import Chat from "@/pages/Chat";
+import Memory from "@/pages/Memory";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -66,6 +67,7 @@ function Routes() {
         <main>
           <Switch>
             <Route path="/" component={Chat} />
+            <Route path="/memory" component={Memory} />
             <Route component={NotFound} />
           </Switch>
         </main>

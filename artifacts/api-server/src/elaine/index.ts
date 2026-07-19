@@ -2848,7 +2848,7 @@ const NAVIGATE_ALLOWED_PATHS_BY_APP: Record<AppId, readonly string[]> = {
     "/settings",
   ],
   hub: ["/", "/account"],
-  elaine: ["/"],
+  elaine: ["/", "/memory"],
 };
 
 // Dynamic-id path shapes allowed per app, checked against the same regex
@@ -2893,6 +2893,19 @@ const NavigateToolPayload = z.object({
 
 const RememberToolPayload = z.object({
   content: z.string().min(1).max(2000),
+  scope: z.enum(["household", "personal", "temporary"]).optional(),
+  category: z
+    .enum([
+      "fact",
+      "preference",
+      "instruction",
+      "person",
+      "place",
+      "collection",
+    ])
+    .optional(),
+  sensitivity: z.enum(["low", "medium", "high"]).optional(),
+  expires_in_days: z.number().int().positive().optional(),
 });
 
 const SET_MODE_TOOL_NAME = "set_action_confirmation_mode";
@@ -3105,11 +3118,39 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: REMEMBER_TOOL_NAME,
       description:
-        "Save a durable, household-relevant fact for later (a preference, a recurring detail, something another family member would want to know). Applied immediately, without a user confirmation step — only use this for genuinely durable facts, never small talk or one-off questions.",
+        "Save a durable fact for later — a preference, a recurring detail, or something a family member would want to know. Use scope='personal' for things that only apply to the current user (e.g. personal preferences they asked to keep private), scope='temporary' for context that should expire (e.g. travel-week reminders), and scope='household' (default) for shared family knowledge. Applied immediately, without a user confirmation step — only use this for genuinely durable facts, never small talk or one-off questions.",
       parameters: {
         type: "object",
         properties: {
           content: { type: "string", description: "The fact, written plainly" },
+          scope: {
+            type: "string",
+            enum: ["household", "personal", "temporary"],
+            description:
+              "household (default) = visible to whole family; personal = only for this user; temporary = expires after expires_in_days (default 30)",
+          },
+          category: {
+            type: "string",
+            enum: [
+              "fact",
+              "preference",
+              "instruction",
+              "person",
+              "place",
+              "collection",
+            ],
+            description: "Category of the memory",
+          },
+          sensitivity: {
+            type: "string",
+            enum: ["low", "medium", "high"],
+            description:
+              "low (default) = general household fact; high = only surface when directly relevant",
+          },
+          expires_in_days: {
+            type: "number",
+            description: "For temporary scope only — days until auto-expiry",
+          },
         },
         required: ["content"],
       },
@@ -4218,17 +4259,27 @@ async function buildUserContext(userId: number): Promise<{
     .where(eq(appUsers.id, userId));
   const userName = user?.displayName || user?.email || "there";
 
+  const activeMemoryFilter = and(
+    eq(elaineMemory.active, true),
+    isNull(elaineMemory.deletedAt),
+    or(isNull(elaineMemory.expiresAt), sql`${elaineMemory.expiresAt} > NOW()`),
+    or(
+      sql`${elaineMemory.scope} != 'personal'`,
+      eq(elaineMemory.ownerUserId, userId),
+    ),
+  );
+
   const [factRows, summaryRows] = await Promise.all([
     db
       .select({ content: elaineMemory.content })
       .from(elaineMemory)
-      .where(eq(elaineMemory.type, "fact"))
+      .where(and(eq(elaineMemory.type, "fact"), activeMemoryFilter))
       .orderBy(desc(elaineMemory.createdAt))
-      .limit(50),
+      .limit(30),
     db
       .select({ content: elaineMemory.content })
       .from(elaineMemory)
-      .where(eq(elaineMemory.type, "summary"))
+      .where(and(eq(elaineMemory.type, "summary"), activeMemoryFilter))
       .limit(1),
   ]);
 
@@ -4696,17 +4747,26 @@ router.post("/chat", async (req, res) => {
   }
 
   // ── Load memory (facts + rolling summary) ───────────────────────────────
+  const turnMemoryFilter = and(
+    eq(elaineMemory.active, true),
+    isNull(elaineMemory.deletedAt),
+    or(isNull(elaineMemory.expiresAt), sql`${elaineMemory.expiresAt} > NOW()`),
+    or(
+      sql`${elaineMemory.scope} != 'personal'`,
+      eq(elaineMemory.ownerUserId, userId),
+    ),
+  );
   const [factRows, memorySummaryRows] = await Promise.all([
     db
       .select({ content: elaineMemory.content })
       .from(elaineMemory)
-      .where(eq(elaineMemory.type, "fact"))
+      .where(and(eq(elaineMemory.type, "fact"), turnMemoryFilter))
       .orderBy(desc(elaineMemory.createdAt))
-      .limit(50),
+      .limit(30),
     db
       .select({ content: elaineMemory.content })
       .from(elaineMemory)
-      .where(eq(elaineMemory.type, "summary"))
+      .where(and(eq(elaineMemory.type, "summary"), turnMemoryFilter))
       .limit(1),
   ]);
   const existingFactContents = factRows.map((r) => r.content);
@@ -4962,8 +5022,19 @@ router.post("/chat", async (req, res) => {
         try {
           const parsed = RememberToolPayload.safeParse(JSON.parse(args));
           if (parsed.success) {
+            const scope = parsed.data.scope ?? "household";
+            const expiresAt = parsed.data.expires_in_days
+              ? new Date(Date.now() + parsed.data.expires_in_days * 86400000)
+              : scope === "temporary"
+                ? new Date(Date.now() + 30 * 86400000)
+                : undefined;
             await db.insert(elaineMemory).values({
               content: parsed.data.content,
+              scope,
+              category: parsed.data.category ?? "fact",
+              sensitivity: parsed.data.sensitivity ?? "low",
+              ownerUserId: scope === "personal" ? userId : null,
+              expiresAt,
               createdByUserId: userId,
             });
           }
@@ -6646,34 +6717,250 @@ router.get("/admin/models", async (req, res) => {
   }
 });
 
-router.get("/memory", async (_req, res) => {
+const MemoryUpsertBody = z.object({
+  content: z.string().min(1).max(2000),
+  scope: z.enum(["household", "personal", "temporary"]).optional(),
+  category: z
+    .enum([
+      "fact",
+      "preference",
+      "instruction",
+      "person",
+      "place",
+      "collection",
+    ])
+    .optional(),
+  sensitivity: z.enum(["low", "medium", "high"]).optional(),
+  expiresInDays: z.number().int().positive().optional(),
+});
+
+function memoryRow(row: {
+  id: number;
+  content: string;
+  type: string;
+  scope: string;
+  category: string;
+  sensitivity: string;
+  ownerUserId: number | null;
+  expiresAt: Date | null;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt: Date | null;
+  createdByUserId: number | null;
+}) {
+  return {
+    id: row.id,
+    content: row.content,
+    type: row.type,
+    scope: row.scope,
+    category: row.category,
+    sensitivity: row.sensitivity,
+    ownerUserId: row.ownerUserId,
+    expiresAt: row.expiresAt?.toISOString() ?? null,
+    active: row.active,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    deletedAt: row.deletedAt?.toISOString() ?? null,
+    createdByUserId: row.createdByUserId,
+  };
+}
+
+router.get("/memory", async (req, res) => {
+  const userId = req.session.userId as number;
   const rows = await db
     .select({
       id: elaineMemory.id,
       content: elaineMemory.content,
+      type: elaineMemory.type,
+      scope: elaineMemory.scope,
+      category: elaineMemory.category,
+      sensitivity: elaineMemory.sensitivity,
+      ownerUserId: elaineMemory.ownerUserId,
+      expiresAt: elaineMemory.expiresAt,
+      active: elaineMemory.active,
       createdAt: elaineMemory.createdAt,
+      updatedAt: elaineMemory.updatedAt,
+      deletedAt: elaineMemory.deletedAt,
       createdByUserId: elaineMemory.createdByUserId,
     })
     .from(elaineMemory)
+    .where(
+      and(
+        eq(elaineMemory.active, true),
+        isNull(elaineMemory.deletedAt),
+        or(
+          sql`${elaineMemory.scope} != 'personal'`,
+          eq(elaineMemory.ownerUserId, userId),
+        ),
+      ),
+    )
     .orderBy(desc(elaineMemory.createdAt));
-  res.json(rows);
+  res.json(rows.map(memoryRow));
 });
 
-router.delete("/memory/:id", async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+router.post("/memory", async (req, res) => {
+  const userId = req.session.userId as number;
+  const parsed = MemoryUpsertBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request body" });
+    return;
+  }
+  const {
+    content,
+    scope = "household",
+    category = "fact",
+    sensitivity = "low",
+    expiresInDays,
+  } = parsed.data;
+  const expiresAt = expiresInDays
+    ? new Date(Date.now() + expiresInDays * 86400000)
+    : scope === "temporary"
+      ? new Date(Date.now() + 30 * 86400000)
+      : null;
+  const [inserted] = await db
+    .insert(elaineMemory)
+    .values({
+      content,
+      scope,
+      category,
+      sensitivity,
+      ownerUserId: scope === "personal" ? userId : null,
+      expiresAt: expiresAt ?? undefined,
+      createdByUserId: userId,
+    })
+    .returning({
+      id: elaineMemory.id,
+      content: elaineMemory.content,
+      type: elaineMemory.type,
+      scope: elaineMemory.scope,
+      category: elaineMemory.category,
+      sensitivity: elaineMemory.sensitivity,
+      ownerUserId: elaineMemory.ownerUserId,
+      expiresAt: elaineMemory.expiresAt,
+      active: elaineMemory.active,
+      createdAt: elaineMemory.createdAt,
+      updatedAt: elaineMemory.updatedAt,
+      deletedAt: elaineMemory.deletedAt,
+      createdByUserId: elaineMemory.createdByUserId,
+    });
+  res.status(201).json(memoryRow(inserted));
+});
+
+router.patch("/memory/:id", async (req, res) => {
+  const userId = req.session.userId as number;
+  const id = parseInt(req.params["id"] as string, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
   }
   const [existing] = await db
-    .select({ id: elaineMemory.id })
+    .select({
+      id: elaineMemory.id,
+      scope: elaineMemory.scope,
+      ownerUserId: elaineMemory.ownerUserId,
+      active: elaineMemory.active,
+    })
     .from(elaineMemory)
-    .where(eq(elaineMemory.id, id));
+    .where(
+      and(
+        eq(elaineMemory.id, id),
+        eq(elaineMemory.active, true),
+        isNull(elaineMemory.deletedAt),
+      ),
+    );
   if (!existing) {
     res.status(404).json({ error: "Not found" });
     return;
   }
-  await db.delete(elaineMemory).where(eq(elaineMemory.id, id));
+  if (existing.scope === "personal" && existing.ownerUserId !== userId) {
+    res
+      .status(403)
+      .json({ error: "Cannot edit another user's personal memory" });
+    return;
+  }
+  const parsed = MemoryUpsertBody.partial().safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request body" });
+    return;
+  }
+  const { content, scope, category, sensitivity, expiresInDays } = parsed.data;
+  const newScope =
+    scope ?? (existing.scope as "household" | "personal" | "temporary");
+  const updates: Record<string, unknown> = {};
+  if (content !== undefined) updates["content"] = content;
+  if (scope !== undefined) {
+    updates["scope"] = scope;
+    updates["ownerUserId"] = scope === "personal" ? userId : null;
+  }
+  if (category !== undefined) updates["category"] = category;
+  if (sensitivity !== undefined) updates["sensitivity"] = sensitivity;
+  if (expiresInDays !== undefined) {
+    updates["expiresAt"] = new Date(Date.now() + expiresInDays * 86400000);
+  } else if (scope !== undefined && newScope !== "temporary") {
+    updates["expiresAt"] = null;
+  }
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "Nothing to update" });
+    return;
+  }
+  const [updated] = await db
+    .update(elaineMemory)
+    .set(updates)
+    .where(eq(elaineMemory.id, id))
+    .returning({
+      id: elaineMemory.id,
+      content: elaineMemory.content,
+      type: elaineMemory.type,
+      scope: elaineMemory.scope,
+      category: elaineMemory.category,
+      sensitivity: elaineMemory.sensitivity,
+      ownerUserId: elaineMemory.ownerUserId,
+      expiresAt: elaineMemory.expiresAt,
+      active: elaineMemory.active,
+      createdAt: elaineMemory.createdAt,
+      updatedAt: elaineMemory.updatedAt,
+      deletedAt: elaineMemory.deletedAt,
+      createdByUserId: elaineMemory.createdByUserId,
+    });
+  res.json(memoryRow(updated));
+});
+
+router.delete("/memory/:id", async (req, res) => {
+  const userId = req.session.userId as number;
+  const id = parseInt(req.params["id"] as string, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const [existing] = await db
+    .select({
+      id: elaineMemory.id,
+      scope: elaineMemory.scope,
+      ownerUserId: elaineMemory.ownerUserId,
+    })
+    .from(elaineMemory)
+    .where(
+      and(
+        eq(elaineMemory.id, id),
+        eq(elaineMemory.active, true),
+        isNull(elaineMemory.deletedAt),
+      ),
+    );
+  if (!existing) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  if (existing.scope === "personal" && existing.ownerUserId !== userId) {
+    res
+      .status(403)
+      .json({ error: "Cannot delete another user's personal memory" });
+    return;
+  }
+  await db
+    .update(elaineMemory)
+    .set({ active: false, deletedAt: new Date() })
+    .where(eq(elaineMemory.id, id));
   res.status(204).end();
 });
 
@@ -7637,8 +7924,19 @@ async function runRestrictedElaineTurn(params: {
           resultText = "Couldn't save that note.";
         } else {
           try {
+            const rScope = parsed.data.scope ?? "household";
+            const rExpiresAt = parsed.data.expires_in_days
+              ? new Date(Date.now() + parsed.data.expires_in_days * 86400000)
+              : rScope === "temporary"
+                ? new Date(Date.now() + 30 * 86400000)
+                : undefined;
             await db.insert(elaineMemory).values({
               content: parsed.data.content,
+              scope: rScope,
+              category: parsed.data.category ?? "fact",
+              sensitivity: parsed.data.sensitivity ?? "low",
+              ownerUserId: rScope === "personal" ? userId : null,
+              expiresAt: rExpiresAt,
               createdByUserId: userId,
             });
             resultText = "Noted and saved for later.";

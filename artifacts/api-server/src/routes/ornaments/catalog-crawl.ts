@@ -3,11 +3,15 @@
  *
  * POST /ornaments/admin/catalog-crawl
  *   Fire the Apify catalog-crawl actor (non-blocking). Returns runId immediately.
- *   Requires isOwner.
+ *   Attaches an ad-hoc Apify webhook (if APIFY_WEBHOOK_SECRET is set) so
+ *   ingest triggers automatically on completion. Requires isOwner.
  *
  * GET /ornaments/admin/catalog-crawl/:runId
- *   Check run status. If SUCCEEDED and ?ingest=true, pull all dataset items
- *   and upsert them into hallmark_catalog. Returns status + counts.
+ *   Check run status. If SUCCEEDED or TIMED-OUT and ?ingest=true, pull all
+ *   dataset items and upsert them into hallmark_catalog. Requires isOwner.
+ *
+ * POST /ornaments/admin/catalog-crawl/:runId/resurrect
+ *   Resurrect a TIMED-OUT or ABORTED run to continue from where it left off.
  *   Requires isOwner.
  *
  * GET /ornaments/admin/catalog-crawl/stats
@@ -17,14 +21,15 @@
 
 import { Router, type IRouter } from "express";
 import { sql } from "drizzle-orm";
-import { db, hallmarkCatalog } from "@workspace/db";
+import { db } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { requireOwner } from "../../middleware/owner";
 import {
   startApifyActor,
   getApifyRunStatus,
-  fetchApifyDataset,
+  resurrectApifyRun,
 } from "../../lib/apify-client";
+import { ingestCatalogDataset } from "../../lib/ornaments/ingest-catalog";
 import { env } from "../../lib/env";
 import { logger } from "../../lib/logger";
 
@@ -33,10 +38,19 @@ const ACTOR_ID = "Kb7QGS6aXUVgTDoIV";
 
 const router: IRouter = Router();
 
+/** Build the public webhook URL for Apify callbacks. */
+function buildWebhookUrl(reqHost: string): string | undefined {
+  const secret = env.apifyWebhookSecret;
+  if (!secret) return undefined;
+  const domain =
+    process.env["REPLIT_DOMAINS"]?.split(",")[0]?.trim() ?? reqHost;
+  return `https://${domain}/api/ornaments/webhook/apify?token=${secret}`;
+}
+
 // ---------------------------------------------------------------------------
 // GET /admin/catalog-crawl/stats — catalog coverage (any authenticated user)
 // ---------------------------------------------------------------------------
-router.get("/admin/catalog-crawl/stats", requireAuth, async (req, res) => {
+router.get("/admin/catalog-crawl/stats", requireAuth, async (_req, res) => {
   const rows = await db.execute(sql`
     SELECT
       COUNT(*)::int                                        AS total,
@@ -49,7 +63,6 @@ router.get("/admin/catalog-crawl/stats", requireAuth, async (req, res) => {
       MAX(crawled_at)                                      AS last_crawled_at
     FROM hallmark_catalog
   `);
-
   res.json({ stats: rows.rows[0] ?? {} });
 });
 
@@ -73,16 +86,25 @@ router.post("/admin/catalog-crawl", requireOwner, async (req, res) => {
     return;
   }
 
+  const webhookUrl = buildWebhookUrl(req.get("host") ?? "");
+
   const { runId, defaultDatasetId } = await startApifyActor(
     ACTOR_ID,
     { mode: "catalog-crawl", sitemapUrl, urlFilter, maxProducts },
     token,
     1024, // CheerioCrawler is lightweight — 1 GB is plenty
     3600, // 1-hour platform timeout for full catalog crawl
+    webhookUrl,
   );
 
   logger.info(
-    { runId, defaultDatasetId, urlFilter, maxProducts },
+    {
+      runId,
+      defaultDatasetId,
+      urlFilter,
+      maxProducts,
+      webhookUrl: !!webhookUrl,
+    },
     "ornaments: catalog crawl started",
   );
 
@@ -90,8 +112,10 @@ router.post("/admin/catalog-crawl", requireOwner, async (req, res) => {
     message: "Catalog crawl started",
     runId,
     defaultDatasetId,
+    webhookConfigured: !!webhookUrl,
     apifyRunUrl: `https://console.apify.com/actors/${ACTOR_ID}/runs/${runId}`,
     statusEndpoint: `/api/ornaments/admin/catalog-crawl/${runId}?ingest=true`,
+    resurrectEndpoint: `/api/ornaments/admin/catalog-crawl/${runId}/resurrect`,
   });
 });
 
@@ -108,8 +132,11 @@ router.get("/admin/catalog-crawl/:runId", requireOwner, async (req, res) => {
     return;
   }
 
-  const runData = await getApifyRunStatus(ACTOR_ID, runId, token);
-  const { status, defaultDatasetId } = runData;
+  const { status, defaultDatasetId } = await getApifyRunStatus(
+    ACTOR_ID,
+    runId,
+    token,
+  );
 
   const canIngest = ["SUCCEEDED", "TIMED-OUT"].includes(status);
   if (!canIngest || !ingest) {
@@ -118,102 +145,50 @@ router.get("/admin/catalog-crawl/:runId", requireOwner, async (req, res) => {
       status,
       ingestRequested: ingest,
       message: canIngest
-        ? `Run ${status.toLowerCase()} — add ?ingest=true to pull partial results.`
-        : `Run is ${status}. Check back later.`,
+        ? `Run ${status.toLowerCase()} — add ?ingest=true to pull results.`
+        : `Run is ${status}. Check back later or use /resurrect to continue.`,
+      resurrectEndpoint: `/api/ornaments/admin/catalog-crawl/${runId}/resurrect`,
     });
     return;
   }
 
-  // ── Ingest dataset into hallmark_catalog ──────────────────────────────
   logger.info(
     { runId, defaultDatasetId },
     "ornaments: ingesting catalog crawl results",
   );
 
-  const items = await fetchApifyDataset(defaultDatasetId, token, 10_000);
-
-  let inserted = 0;
-  let skipped = 0;
-  let errors = 0;
-
-  for (const item of items) {
-    const sku = item["hallmarkSku"] as string | null;
-    const name = item["name"] as string | null;
-
-    if (!sku || !name) {
-      skipped++;
-      continue;
-    }
-
-    try {
-      await db
-        .insert(hallmarkCatalog)
-        .values({
-          hallmarkSku: sku,
-          name,
-          description: (item["description"] as string | null) ?? null,
-          seriesName: (item["seriesName"] as string | null) ?? null,
-          sequenceNumber: (item["sequenceNumber"] as number | null) ?? null,
-          year: (item["year"] as number | null) ?? null,
-          artist: (item["artist"] as string | null) ?? null,
-          retailPriceUsd:
-            (item["retailPriceUsd"] as number | null) != null
-              ? String(item["retailPriceUsd"])
-              : null,
-          productUrl: (item["productUrl"] as string | null) ?? null,
-          images: Array.isArray(item["images"])
-            ? (item["images"] as string[])
-            : [],
-          ornamentCategory: (item["ornamentCategory"] as string | null) ?? null,
-          crawledAt: item["crawledAt"]
-            ? new Date(item["crawledAt"] as string)
-            : new Date(),
-        })
-        .onConflictDoUpdate({
-          target: hallmarkCatalog.hallmarkSku,
-          set: {
-            name,
-            description: (item["description"] as string | null) ?? null,
-            seriesName: (item["seriesName"] as string | null) ?? null,
-            sequenceNumber: (item["sequenceNumber"] as number | null) ?? null,
-            year: (item["year"] as number | null) ?? null,
-            artist: (item["artist"] as string | null) ?? null,
-            retailPriceUsd:
-              (item["retailPriceUsd"] as number | null) != null
-                ? String(item["retailPriceUsd"])
-                : null,
-            productUrl: (item["productUrl"] as string | null) ?? null,
-            images: Array.isArray(item["images"])
-              ? (item["images"] as string[])
-              : [],
-            ornamentCategory:
-              (item["ornamentCategory"] as string | null) ?? null,
-            crawledAt: item["crawledAt"]
-              ? new Date(item["crawledAt"] as string)
-              : new Date(),
-            updatedAt: new Date(),
-          },
-        });
-      inserted++;
-    } catch (err) {
-      errors++;
-      logger.warn({ sku, err }, "ornaments: catalog ingest row error");
-    }
-  }
-
-  logger.info(
-    { runId, inserted, skipped, errors, total: items.length },
-    "ornaments: catalog ingest complete",
-  );
-
-  res.json({
-    runId,
-    status,
-    totalItems: items.length,
-    inserted,
-    skipped,
-    errors,
-  });
+  const result = await ingestCatalogDataset(defaultDatasetId, token);
+  res.json({ runId, status, ...result });
 });
+
+// ---------------------------------------------------------------------------
+// POST /admin/catalog-crawl/:runId/resurrect — resume a timed-out run
+// ---------------------------------------------------------------------------
+router.post(
+  "/admin/catalog-crawl/:runId/resurrect",
+  requireOwner,
+  async (req, res) => {
+    const runId = String(req.params["runId"]);
+
+    const token = env.apifyApiToken;
+    if (!token) {
+      res.status(503).json({ error: "Apify API token not configured" });
+      return;
+    }
+
+    const result = await resurrectApifyRun(runId, token);
+
+    logger.info({ runId, ...result }, "ornaments: catalog crawl resurrected");
+
+    res.json({
+      runId,
+      status: result.status,
+      defaultDatasetId: result.defaultDatasetId,
+      message: `Run resurrected — status is now ${result.status}`,
+      monitorUrl: `https://console.apify.com/actors/${ACTOR_ID}/runs/${runId}`,
+      statusEndpoint: `/api/ornaments/admin/catalog-crawl/${runId}?ingest=true`,
+    });
+  },
+);
 
 export default router;

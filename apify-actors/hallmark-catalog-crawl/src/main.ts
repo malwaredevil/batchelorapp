@@ -91,7 +91,7 @@ if (productUrls.length === 0) {
 }
 
 const catalogCrawler = new CheerioCrawler({
-  maxConcurrency: 8,
+  maxConcurrency: 20,
   requestHandlerTimeoutSecs: 30,
   maxRequestRetries: 2,
 

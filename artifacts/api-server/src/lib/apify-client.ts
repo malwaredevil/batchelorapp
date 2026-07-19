@@ -129,6 +129,11 @@ export async function runApifyActor(
 /**
  * Fire an actor run without waiting for it to complete.
  * Returns the runId and defaultDatasetId for later polling.
+ *
+ * @param webhookUrl Optional URL Apify will POST to when the run reaches a
+ *   terminal state (SUCCEEDED, TIMED-OUT, FAILED). The URL should include
+ *   a secret token query param for authentication. Base64-encoded and passed
+ *   as the `webhooks` query param per Apify's ad-hoc webhook spec.
  */
 export async function startApifyActor(
   actorId: string,
@@ -137,13 +142,38 @@ export async function startApifyActor(
   memoryMbytes = 512,
   /** Apify platform timeout in seconds (default: 300 = 5min). Use 3600 for long crawls. */
   timeoutSecs = 300,
+  webhookUrl?: string,
 ): Promise<{ runId: string; defaultDatasetId: string }> {
   const headers = {
     Authorization: `Bearer ${apiToken}`,
     "Content-Type": "application/json",
   };
 
-  const runUrl = `${APIFY_BASE}/acts/${encodeURIComponent(actorId)}/runs?memory=${memoryMbytes}&timeout=${timeoutSecs}`;
+  let runUrl = `${APIFY_BASE}/acts/${encodeURIComponent(actorId)}/runs?memory=${memoryMbytes}&timeout=${timeoutSecs}`;
+
+  if (webhookUrl) {
+    const webhookPayload = Buffer.from(
+      JSON.stringify([
+        {
+          eventTypes: [
+            "ACTOR.RUN.SUCCEEDED",
+            "ACTOR.RUN.TIMED_OUT",
+            "ACTOR.RUN.FAILED",
+          ],
+          requestUrl: webhookUrl,
+          payloadTemplate: `{
+  "eventType": {{eventType}},
+  "actorId": {{resource.actId}},
+  "actorRunId": {{resource.id}},
+  "defaultDatasetId": {{resource.defaultDatasetId}},
+  "status": {{resource.status}}
+}`,
+        },
+      ]),
+    ).toString("base64");
+    runUrl += `&webhooks=${encodeURIComponent(webhookPayload)}`;
+  }
+
   const runResp = await fetch(runUrl, {
     method: "POST",
     headers,
@@ -184,6 +214,33 @@ export async function fetchApifyDataset(
   );
   if (!resp.ok) throw new Error(`Apify dataset fetch failed: ${resp.status}`);
   return (await resp.json()) as Record<string, unknown>[];
+}
+
+/**
+ * Resurrect a TIMED-OUT or ABORTED Apify run, continuing from where it left off.
+ * Only works for non-terminal runs (TIMED-OUT, ABORTED) — not SUCCEEDED or FAILED.
+ * Returns the updated run status and dataset ID.
+ */
+export async function resurrectApifyRun(
+  runId: string,
+  apiToken: string,
+): Promise<{ status: string; defaultDatasetId: string }> {
+  const resp = await fetch(`${APIFY_BASE}/actor-runs/${runId}/resurrect`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiToken}` },
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(
+      `Apify resurrect failed (${resp.status}): ${text.slice(0, 300)}`,
+    );
+  }
+  const data = (await resp.json()) as {
+    data: { status: string; defaultDatasetId: string };
+  };
+  logger.info({ runId, status: data.data.status }, "apify: run resurrected");
+  return data.data;
 }
 
 /**

@@ -58,6 +58,10 @@ export const env = {
   // Apify API token for the ingestion framework (#230). Optional — only
   // required when Apify-backed ingestion sources are configured.
   apifyApiToken: optional("APIFY_API_TOKEN"),
+  // Shared secret included in Apify ad-hoc webhook URLs so the webhook
+  // endpoint can reject forged/unsolicited POST requests. Optional — the
+  // webhook route returns 503 until this is set.
+  apifyWebhookSecret: optional("APIFY_WEBHOOK_SECRET"),
   sentryDsn: optional("SENTRY_DSN"),
   // Comma-separated list of allowed host names for OAuth redirect URIs and
   // password-reset URLs. Validated server-side so a forged Host header

@@ -1,23 +1,24 @@
 /**
- * Admin-only routes for triggering and ingesting the Hallmark catalog crawl.
+ * Admin-only routes for triggering and ingesting the historical Hallmark
+ * catalog crawl from hallmarkornaments.com (1973–present).
  *
- * POST /ornaments/admin/catalog-crawl
- *   Fire the Apify catalog-crawl actor (non-blocking). Returns runId immediately.
+ * POST /ornaments/admin/historical-crawl
+ *   Fire the Apify historical-crawl actor (non-blocking). Returns runId.
  *   Requires isOwner.
  *
- * GET /ornaments/admin/catalog-crawl/:runId
- *   Check run status. If SUCCEEDED and ?ingest=true, pull all dataset items
- *   and upsert them into hallmark_catalog. Returns status + counts.
+ * GET /ornaments/admin/historical-crawl/:runId
+ *   Check run status. If done (SUCCEEDED or TIMED-OUT) and ?ingest=true,
+ *   pull all dataset items and upsert into hallmark_historical_catalog.
  *   Requires isOwner.
  *
- * GET /ornaments/admin/catalog-crawl/stats
- *   Return row count and coverage summary from hallmark_catalog.
+ * GET /ornaments/admin/historical-crawl/stats
+ *   Row count and year coverage summary from hallmark_historical_catalog.
  *   Requires auth (any household member).
  */
 
 import { Router, type IRouter } from "express";
 import { sql } from "drizzle-orm";
-import { db, hallmarkCatalog } from "@workspace/db";
+import { db, hallmarkHistoricalCatalog } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { requireOwner } from "../../middleware/owner";
 import {
@@ -33,37 +34,37 @@ const ACTOR_ID = "AjsBGHmLvJOQrNbZL";
 const router: IRouter = Router();
 
 // ---------------------------------------------------------------------------
-// GET /admin/catalog-crawl/stats — catalog coverage (any authenticated user)
+// GET /admin/historical-crawl/stats — coverage (any authenticated user)
 // ---------------------------------------------------------------------------
-router.get("/admin/catalog-crawl/stats", requireAuth, async (req, res) => {
+router.get("/admin/historical-crawl/stats", requireAuth, async (req, res) => {
   const rows = await db.execute(sql`
     SELECT
       COUNT(*)::int                                        AS total,
       COUNT(*) FILTER (WHERE year IS NOT NULL)::int        AS with_year,
       COUNT(*) FILTER (WHERE series_name IS NOT NULL)::int AS with_series,
       COUNT(*) FILTER (WHERE artist IS NOT NULL)::int      AS with_artist,
-      COUNT(*) FILTER (WHERE retail_price_usd IS NOT NULL)::int AS with_price,
+      COUNT(*) FILTER (WHERE hallmark_sku IS NOT NULL)::int AS with_sku,
+      COUNT(*) FILTER (WHERE collector_price_usd IS NOT NULL)::int AS with_price,
       MIN(year)                                            AS earliest_year,
       MAX(year)                                            AS latest_year,
       MAX(crawled_at)                                      AS last_crawled_at
-    FROM hallmark_catalog
+    FROM hallmark_historical_catalog
   `);
-
   res.json({ stats: rows.rows[0] ?? {} });
 });
 
 // ---------------------------------------------------------------------------
-// POST /admin/catalog-crawl — trigger a new catalog crawl (owner only)
+// POST /admin/historical-crawl — trigger crawl (owner only)
 // ---------------------------------------------------------------------------
-router.post("/admin/catalog-crawl", requireOwner, async (req, res) => {
+router.post("/admin/historical-crawl", requireOwner, async (req, res) => {
   const {
-    urlFilter = "/ornaments/",
-    maxProducts = 5000,
-    sitemapUrl = "https://www.hallmark.com/sitemap_0-product.xml",
+    startYear = 1973,
+    endYear = 2026,
+    maxOrnamentsPerYear = 0,
   } = req.body as {
-    urlFilter?: string;
-    maxProducts?: number;
-    sitemapUrl?: string;
+    startYear?: number;
+    endYear?: number;
+    maxOrnamentsPerYear?: number;
   };
 
   const token = env.apifyApiToken;
@@ -74,30 +75,31 @@ router.post("/admin/catalog-crawl", requireOwner, async (req, res) => {
 
   const { runId, defaultDatasetId } = await startApifyActor(
     ACTOR_ID,
-    { mode: "catalog-crawl", sitemapUrl, urlFilter, maxProducts },
+    { mode: "historical-crawl", startYear, endYear, maxOrnamentsPerYear },
     token,
-    1024, // CheerioCrawler is lightweight — 1 GB is plenty
-    3600, // 1-hour platform timeout for full catalog crawl
+    2048, // historical crawl may queue ~10k+ product pages
+    7200, // 2-hour platform timeout for full 1973–2026 crawl
   );
 
   logger.info(
-    { runId, defaultDatasetId, urlFilter, maxProducts },
-    "ornaments: catalog crawl started",
+    { runId, defaultDatasetId, startYear, endYear },
+    "ornaments: historical crawl started",
   );
 
   res.status(202).json({
-    message: "Catalog crawl started",
+    message: "Historical crawl started",
     runId,
     defaultDatasetId,
     apifyRunUrl: `https://console.apify.com/actors/${ACTOR_ID}/runs/${runId}`,
-    statusEndpoint: `/api/ornaments/admin/catalog-crawl/${runId}?ingest=true`,
+    statusEndpoint: `/api/ornaments/admin/historical-crawl/${runId}?ingest=true`,
+    estimatedOrnaments: `${endYear - startYear + 1} years × ~100–200 ornaments/year`,
   });
 });
 
 // ---------------------------------------------------------------------------
-// GET /admin/catalog-crawl/:runId — check status + optionally ingest (owner only)
+// GET /admin/historical-crawl/:runId — status + optional ingest (owner only)
 // ---------------------------------------------------------------------------
-router.get("/admin/catalog-crawl/:runId", requireOwner, async (req, res) => {
+router.get("/admin/historical-crawl/:runId", requireOwner, async (req, res) => {
   const runId = String(req.params["runId"]);
   const ingest = req.query["ingest"] === "true";
 
@@ -117,76 +119,71 @@ router.get("/admin/catalog-crawl/:runId", requireOwner, async (req, res) => {
       status,
       ingestRequested: ingest,
       message: canIngest
-        ? `Run ${status.toLowerCase()} — add ?ingest=true to pull partial results.`
+        ? `Run ${status.toLowerCase()} — add ?ingest=true to pull results.`
         : `Run is ${status}. Check back later.`,
     });
     return;
   }
 
-  // ── Ingest dataset into hallmark_catalog ──────────────────────────────
   logger.info(
     { runId, defaultDatasetId },
-    "ornaments: ingesting catalog crawl results",
+    "ornaments: ingesting historical crawl results",
   );
 
-  const items = await fetchApifyDataset(defaultDatasetId, token, 10_000);
+  const items = await fetchApifyDataset(defaultDatasetId, token, 50_000);
 
   let inserted = 0;
   let skipped = 0;
   let errors = 0;
 
   for (const item of items) {
-    const sku = item["hallmarkSku"] as string | null;
+    const productUrl = item["productUrl"] as string | null;
     const name = item["name"] as string | null;
 
-    if (!sku || !name) {
+    if (!productUrl || !name) {
       skipped++;
       continue;
     }
 
     try {
       await db
-        .insert(hallmarkCatalog)
+        .insert(hallmarkHistoricalCatalog)
         .values({
-          hallmarkSku: sku,
+          hallmarkSku: (item["hallmarkSku"] as string | null) ?? null,
           name,
-          description: (item["description"] as string | null) ?? null,
+          year: (item["year"] as number | null) ?? null,
           seriesName: (item["seriesName"] as string | null) ?? null,
           sequenceNumber: (item["sequenceNumber"] as number | null) ?? null,
-          year: (item["year"] as number | null) ?? null,
           artist: (item["artist"] as string | null) ?? null,
-          retailPriceUsd:
-            (item["retailPriceUsd"] as number | null) != null
-              ? String(item["retailPriceUsd"])
+          collectorPriceUsd:
+            (item["collectorPriceUsd"] as number | null) != null
+              ? String(item["collectorPriceUsd"])
               : null,
-          productUrl: (item["productUrl"] as string | null) ?? null,
+          productUrl,
           images: Array.isArray(item["images"])
             ? (item["images"] as string[])
             : [],
-          ornamentCategory: (item["ornamentCategory"] as string | null) ?? null,
+          source: "hallmarkornaments.com",
           crawledAt: item["crawledAt"]
             ? new Date(item["crawledAt"] as string)
             : new Date(),
         })
         .onConflictDoUpdate({
-          target: hallmarkCatalog.hallmarkSku,
+          target: hallmarkHistoricalCatalog.productUrl,
           set: {
+            hallmarkSku: (item["hallmarkSku"] as string | null) ?? null,
             name,
-            description: (item["description"] as string | null) ?? null,
+            year: (item["year"] as number | null) ?? null,
             seriesName: (item["seriesName"] as string | null) ?? null,
             sequenceNumber: (item["sequenceNumber"] as number | null) ?? null,
-            year: (item["year"] as number | null) ?? null,
             artist: (item["artist"] as string | null) ?? null,
-            retailPriceUsd:
-              (item["retailPriceUsd"] as number | null) != null
-                ? String(item["retailPriceUsd"])
+            collectorPriceUsd:
+              (item["collectorPriceUsd"] as number | null) != null
+                ? String(item["collectorPriceUsd"])
                 : null,
-            productUrl: (item["productUrl"] as string | null) ?? null,
             images: Array.isArray(item["images"])
               ? (item["images"] as string[])
               : [],
-            ornamentCategory:
-              (item["ornamentCategory"] as string | null) ?? null,
             crawledAt: item["crawledAt"]
               ? new Date(item["crawledAt"] as string)
               : new Date(),
@@ -195,15 +192,13 @@ router.get("/admin/catalog-crawl/:runId", requireOwner, async (req, res) => {
         });
       inserted++;
     } catch (err) {
+      logger.warn(
+        { url: productUrl, err },
+        "ornaments: historical ingest row error",
+      );
       errors++;
-      logger.warn({ sku, err }, "ornaments: catalog ingest row error");
     }
   }
-
-  logger.info(
-    { runId, inserted, skipped, errors, total: items.length },
-    "ornaments: catalog ingest complete",
-  );
 
   res.json({
     runId,

@@ -135,13 +135,15 @@ export async function startApifyActor(
   input: Record<string, unknown>,
   apiToken: string,
   memoryMbytes = 512,
+  /** Apify platform timeout in seconds (default: 300 = 5min). Use 3600 for long crawls. */
+  timeoutSecs = 300,
 ): Promise<{ runId: string; defaultDatasetId: string }> {
   const headers = {
     Authorization: `Bearer ${apiToken}`,
     "Content-Type": "application/json",
   };
 
-  const runUrl = `${APIFY_BASE}/acts/${encodeURIComponent(actorId)}/runs?memory=${memoryMbytes}`;
+  const runUrl = `${APIFY_BASE}/acts/${encodeURIComponent(actorId)}/runs?memory=${memoryMbytes}&timeout=${timeoutSecs}`;
   const runResp = await fetch(runUrl, {
     method: "POST",
     headers,
@@ -161,7 +163,7 @@ export async function startApifyActor(
   };
   const { id: runId, defaultDatasetId } = runData.data;
   logger.info(
-    { actorId, runId, memoryMbytes },
+    { actorId, runId, memoryMbytes, timeoutSecs },
     "apify: actor run started (fire-and-forget)",
   );
   return { runId, defaultDatasetId };

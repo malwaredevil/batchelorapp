@@ -2550,4 +2550,27 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS hallmark_catalog_sku_idx ON hallmark_catalog (hallmark_sku)`,
   `CREATE INDEX IF NOT EXISTS hallmark_catalog_year_idx ON hallmark_catalog (year)`,
   `CREATE INDEX IF NOT EXISTS hallmark_catalog_series_idx ON hallmark_catalog (series_name)`,
+
+  // ── Hallmark historical catalog (hallmarkornaments.com, 1973-present) ────────
+  `CREATE TABLE IF NOT EXISTS hallmark_historical_catalog (
+    id                    serial PRIMARY KEY,
+    hallmark_sku          text,
+    name                  text NOT NULL,
+    year                  integer,
+    series_name           text,
+    sequence_number       integer,
+    artist                text,
+    collector_price_usd   numeric(10,2),
+    product_url           text NOT NULL UNIQUE,
+    images                text[],
+    source                text NOT NULL DEFAULT 'hallmarkornaments.com',
+    crawled_at            timestamptz NOT NULL,
+    created_at            timestamptz NOT NULL DEFAULT now(),
+    updated_at            timestamptz NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE hallmark_historical_catalog ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS hallmark_hist_sku_idx ON hallmark_historical_catalog (hallmark_sku)`,
+  `CREATE INDEX IF NOT EXISTS hallmark_hist_year_idx ON hallmark_historical_catalog (year)`,
+  `CREATE INDEX IF NOT EXISTS hallmark_hist_series_idx ON hallmark_historical_catalog (series_name)`,
+  `CREATE INDEX IF NOT EXISTS hallmark_hist_url_idx ON hallmark_historical_catalog (product_url)`,
 ];

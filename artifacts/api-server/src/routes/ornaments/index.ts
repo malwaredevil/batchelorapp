@@ -7,6 +7,7 @@ import identityResearchRouter from "./identity-research";
 import canonicalSeriesRouter from "./canonical-series";
 import hallmarkSearchRouter from "./hallmark-search";
 import catalogCrawlRouter from "./catalog-crawl";
+import historicalCrawlRouter from "./historical-crawl";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(identityResearchRouter);
 router.use(canonicalSeriesRouter);
 router.use(hallmarkSearchRouter);
 router.use(catalogCrawlRouter);
+router.use(historicalCrawlRouter);
 
 export default router;

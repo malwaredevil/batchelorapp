@@ -3,6 +3,8 @@ name: Guardrails
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
 
 concurrency:
   group: guardrails-${{ github.ref }}
@@ -20,9 +22,22 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Resolve changed files
+        id: diff
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            BASE="${{ github.event.before }}"
+          else
+            BASE="origin/main"
+          fi
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+          git diff --name-only "$BASE"...HEAD > /tmp/changed_files.txt
+          echo "Changed files:"
+          cat /tmp/changed_files.txt
+
       - name: "Ban: drizzle-kit push"
         run: |
-          if git diff --name-only origin/main...HEAD | xargs grep -l "drizzle-kit push" 2>/dev/null | grep -qv "guardrails.yml"; then
+          if cat /tmp/changed_files.txt | xargs grep -l "drizzle-kit push" 2>/dev/null | grep -qv "guardrails.yml"; then
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "ERROR: 'drizzle-kit push' detected in changed files."
             echo ""
@@ -37,12 +52,12 @@ jobs:
           fi
           echo "✓ No drizzle-kit push usage found"
 
-      - name: "Ban: restricted files in PR diff"
+      - name: "Ban: restricted files in diff"
         run: |
-          RESTRICTED=$(git diff --name-only origin/main...HEAD | grep -E "^\.agents/|^\.local/|^threat_model\.md|^\.env$|^\.env\." || true)
+          RESTRICTED=$(cat /tmp/changed_files.txt | grep -E "^\.agents/|^\.local/|^threat_model\.md|^\.env$|^\.env\." || true)
           if [ -n "$RESTRICTED" ]; then
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "ERROR: The following restricted files appear in this PR:"
+            echo "ERROR: The following restricted files appear in this diff:"
             echo "$RESTRICTED"
             echo ""
             echo "These files must never be committed or pushed:"
@@ -55,11 +70,11 @@ jobs:
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             exit 1
           fi
-          echo "✓ No restricted files in PR diff"
+          echo "✓ No restricted files in diff"
 
       - name: "Ban: direct OpenAI SDK instantiation in server code"
         run: |
-          VIOLATIONS=$(git diff --name-only origin/main...HEAD \
+          VIOLATIONS=$(cat /tmp/changed_files.txt \
             | grep -E "\.(ts|tsx)$" \
             | xargs grep -n "new OpenAI(" 2>/dev/null \
             | grep -v "node_modules" \
@@ -80,7 +95,7 @@ jobs:
 
       - name: "Ban: passOnStoreError: true in rate limiters"
         run: |
-          VIOLATIONS=$(git diff --name-only origin/main...HEAD \
+          VIOLATIONS=$(cat /tmp/changed_files.txt \
             | grep -E "\.(ts|tsx)$" \
             | xargs grep -n "passOnStoreError.*true\|passOnStoreError:true" 2>/dev/null \
             | grep -v "node_modules" || true)
@@ -99,7 +114,8 @@ jobs:
 
       - name: "Ban: destructive SQL in schema-statements diff"
         run: |
-          VIOLATIONS=$(git diff origin/main...HEAD -- lib/db/src/schema-statements.ts \
+          BASE="${{ steps.diff.outputs.base }}"
+          VIOLATIONS=$(git diff "$BASE"...HEAD -- lib/db/src/schema-statements.ts \
             | grep "^+" \
             | grep -v "^+++" \
             | grep -iE "^\+\s*(DROP|TRUNCATE|DELETE FROM|ALTER TABLE.*DROP COLUMN)" \
@@ -137,17 +153,18 @@ jobs:
 
       - name: "Guard: RESTRICTED_EXCLUDED_ACTION_TYPES must not shrink"
         run: |
-          CURRENT=$(grep -A 30 "RESTRICTED_EXCLUDED_ACTION_TYPES" \
+          BASE="${{ steps.diff.outputs.base }}"
+          CURRENT=$(grep -A 50 "RESTRICTED_EXCLUDED_ACTION_TYPES" \
             artifacts/api-server/src/elaine/index.ts 2>/dev/null \
-            | grep -c '"' || echo "0")
-          BASE=$(git show origin/main:artifacts/api-server/src/elaine/index.ts 2>/dev/null \
-            | grep -A 30 "RESTRICTED_EXCLUDED_ACTION_TYPES" \
-            | grep -c '"' || echo "0")
-          if [ "$CURRENT" -lt "$BASE" ]; then
+            | grep -cE '^\s*"[a-z][a-z_]+"' || echo "0")
+          BASE_COUNT=$(git show "${BASE}:artifacts/api-server/src/elaine/index.ts" 2>/dev/null \
+            | grep -A 50 "RESTRICTED_EXCLUDED_ACTION_TYPES" \
+            | grep -cE '^\s*"[a-z][a-z_]+"' || echo "0")
+          if [ "$CURRENT" -lt "$BASE_COUNT" ]; then
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "ERROR: RESTRICTED_EXCLUDED_ACTION_TYPES has fewer entries than main."
-            echo "  main branch: $BASE entries"
-            echo "  this PR:     $CURRENT entries"
+            echo "ERROR: RESTRICTED_EXCLUDED_ACTION_TYPES has fewer entries than base."
+            echo "  base:        $BASE_COUNT entries"
+            echo "  this commit: $CURRENT entries"
             echo ""
             echo "This set is a deliberate security boundary for AgentPhone SMS/voice"
             echo "and inbound email channels. It cannot be reduced without a reviewed"
@@ -155,4 +172,4 @@ jobs:
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             exit 1
           fi
-          echo "✓ RESTRICTED_EXCLUDED_ACTION_TYPES has not shrunk (main: $BASE, PR: $CURRENT)"
+          echo "✓ RESTRICTED_EXCLUDED_ACTION_TYPES has not shrunk (base: $BASE_COUNT, this: $CURRENT)"

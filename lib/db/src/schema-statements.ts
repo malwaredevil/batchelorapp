@@ -2573,4 +2573,31 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS hallmark_hist_year_idx ON hallmark_historical_catalog (year)`,
   `CREATE INDEX IF NOT EXISTS hallmark_hist_series_idx ON hallmark_historical_catalog (series_name)`,
   `CREATE INDEX IF NOT EXISTS hallmark_hist_url_idx ON hallmark_historical_catalog (product_url)`,
+
+  // ── Hallmark HookedOnHallmark catalog (hookedonhallmark.com, 1973-present) ──
+  // Retail/collector prices, availability, and series from the world's largest
+  // Hallmark ornament retailer. Upserted on product_url. Cross-reference with
+  // hallmark_historical_catalog by hallmark_sku to backfill prices.
+  `CREATE TABLE IF NOT EXISTS hallmark_hooh_catalog (
+    id               serial PRIMARY KEY,
+    product_url      text NOT NULL UNIQUE,
+    catalog_id       integer,
+    hallmark_sku     text,
+    name             text,
+    year             integer,
+    subcategory      text,
+    series_name      text,
+    sequence_number  integer,
+    retail_price_usd numeric(10,2),
+    in_stock         boolean,
+    source           text NOT NULL DEFAULT 'hookedonhallmark.com',
+    crawled_at       timestamptz NOT NULL,
+    created_at       timestamptz NOT NULL DEFAULT now(),
+    updated_at       timestamptz NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE hallmark_hooh_catalog ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS hallmark_hooh_sku_idx ON hallmark_hooh_catalog (hallmark_sku)`,
+  `CREATE INDEX IF NOT EXISTS hallmark_hooh_year_idx ON hallmark_hooh_catalog (year)`,
+  `CREATE INDEX IF NOT EXISTS hallmark_hooh_series_idx ON hallmark_hooh_catalog (series_name)`,
+  `CREATE INDEX IF NOT EXISTS hallmark_hooh_url_idx ON hallmark_hooh_catalog (product_url)`,
 ];

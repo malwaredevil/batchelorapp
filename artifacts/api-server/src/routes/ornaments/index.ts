@@ -8,6 +8,7 @@ import canonicalSeriesRouter from "./canonical-series";
 import hallmarkSearchRouter from "./hallmark-search";
 import catalogCrawlRouter from "./catalog-crawl";
 import historicalCrawlRouter from "./historical-crawl";
+import hoohCrawlRouter from "./hooh-crawl";
 import apifyWebhookRouter from "./apify-webhook";
 
 const router: IRouter = Router();
@@ -25,5 +26,6 @@ router.use(canonicalSeriesRouter);
 router.use(hallmarkSearchRouter);
 router.use(catalogCrawlRouter);
 router.use(historicalCrawlRouter);
+router.use(hoohCrawlRouter);
 
 export default router;

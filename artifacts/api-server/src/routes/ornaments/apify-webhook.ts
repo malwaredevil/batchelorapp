@@ -26,10 +26,13 @@ import { env } from "../../lib/env";
 import { logger } from "../../lib/logger";
 import { ingestHistoricalDataset } from "../../lib/ornaments/ingest-historical";
 import { ingestCatalogDataset } from "../../lib/ornaments/ingest-catalog";
+import { ingestHoohDataset } from "../../lib/ornaments/ingest-hooh";
 
-// Actor IDs — must match the IDs used in catalog-crawl.ts and historical-crawl.ts
+// Actor IDs — must match the IDs used in catalog-crawl.ts, historical-crawl.ts,
+// and hooh-crawl.ts
 const HISTORICAL_ACTOR_ID = "yGAVM3iruskyfE4ZQ";
 const CATALOG_ACTOR_ID = "Kb7QGS6aXUVgTDoIV";
+const HOOH_ACTOR_ID = "rFw8VLb3KM2g4DVrE";
 
 const INGESTABLE_STATUSES = new Set(["SUCCEEDED", "TIMED-OUT"]);
 
@@ -121,6 +124,23 @@ router.post("/webhook/apify", async (req, res) => {
         logger.error(
           { actorRunId, err },
           "ornaments: webhook catalog auto-ingest failed",
+        );
+      });
+    return;
+  }
+
+  if (actorId === HOOH_ACTOR_ID) {
+    ingestHoohDataset(defaultDatasetId, token)
+      .then((result) => {
+        logger.info(
+          { actorRunId, ...result },
+          "ornaments: webhook hooh auto-ingest complete",
+        );
+      })
+      .catch((err: unknown) => {
+        logger.error(
+          { actorRunId, err },
+          "ornaments: webhook hooh auto-ingest failed",
         );
       });
     return;

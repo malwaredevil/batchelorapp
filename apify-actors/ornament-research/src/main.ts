@@ -41,7 +41,7 @@ interface HallmarkProduct {
 await Actor.init();
 
 const input = (await Actor.getInput<Input>()) ?? {};
-const { barcode, hallmarkSku, name, year } = input;
+const { hallmarkSku, name, year } = input;
 
 if (!hallmarkSku && !name) {
   console.error("Input must include at least hallmarkSku or name");
@@ -91,7 +91,7 @@ const crawler = new PlaywrightCrawler({
       // Try to find product URLs from JSON-LD ItemList
       const jsonLdTexts = await page.$$eval(
         'script[type="application/ld+json"]',
-        (els) => els.map((el) => el.textContent ?? ""),
+        (els: Element[]) => els.map((el: Element) => el.textContent ?? ""),
       );
 
       let productUrls: string[] = [];
@@ -115,10 +115,10 @@ const crawler = new PlaywrightCrawler({
       if (productUrls.length === 0) {
         productUrls = await page.$$eval(
           'a[href*="/ornaments/"][href*=".html"]',
-          (els) =>
+          (els: Element[]) =>
             els
-              .map((el) => (el as HTMLAnchorElement).href)
-              .filter((h) => /[A-Z0-9]{5,10}\.html$/.test(h))
+              .map((el: Element) => (el as HTMLAnchorElement).href)
+              .filter((h: string) => /[A-Z0-9]{5,10}\.html$/.test(h))
               .slice(0, 5),
         );
       }
@@ -145,7 +145,7 @@ const crawler = new PlaywrightCrawler({
       // JSON-LD Product schema — most reliable source
       const jsonLdTexts = await page.$$eval(
         'script[type="application/ld+json"]',
-        (els) => els.map((el) => el.textContent ?? ""),
+        (els: Element[]) => els.map((el: Element) => el.textContent ?? ""),
       );
 
       for (const text of jsonLdTexts) {
@@ -186,7 +186,7 @@ const crawler = new PlaywrightCrawler({
       // ── Artist ──────────────────────────────────────────────────────────
       // Hallmark pages include: <span>Artist:</span> <span>Name Here</span>
       const artistText = await page
-        .$$eval("span, p, li", (els) => {
+        .$$eval("span, p, li", (els: Element[]) => {
           for (const el of els) {
             const text = el.textContent?.trim() ?? "";
             if (/^Artist:\s*.+/.test(text)) return text;
@@ -221,8 +221,9 @@ const crawler = new PlaywrightCrawler({
       const priceText = await page
         .$$eval(
           ".price-sales, .sales .value, [itemprop=price], .product__price",
-          (els) =>
-            els.map((el) => el.textContent?.trim()).find(Boolean) ?? null,
+          (els: Element[]) =>
+            els.map((el: Element) => el.textContent?.trim()).find(Boolean) ??
+            null,
         )
         .catch(() => null);
 

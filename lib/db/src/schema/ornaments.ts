@@ -146,6 +146,23 @@ export const ornamentsBarcodeCache = pgTable("ornaments_barcode_cache", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
+  // Hallmark.com enrichment (added via schema-statements.ts ALTER TABLE)
+  hallmarkSku: text("hallmark_sku"),
+  hallmarkSeriesName: text("hallmark_series_name"),
+  hallmarkSequenceNumber: integer("hallmark_sequence_number"),
+  hallmarkArtist: text("hallmark_artist"),
+  hallmarkOriginalRetailPrice: numeric("hallmark_original_retail_price", {
+    precision: 10,
+    scale: 2,
+  }),
+  hallmarkProductUrl: text("hallmark_product_url"),
+  hallmarkConfidence: numeric("hallmark_confidence", {
+    precision: 4,
+    scale: 3,
+  }),
+  hallmarkEnrichedAt: timestamp("hallmark_enriched_at", {
+    withTimezone: true,
+  }),
 }).enableRLS();
 
 export type OrnamentCategoryRow = typeof ornamentsCategories.$inferSelect;

@@ -94,6 +94,24 @@ vi.mock("./documents", () => ({
     syncItineraryFromDocument(...args),
 }));
 
+// Rate limiters use `pool` from @workspace/db which has no credentials in CI.
+// Bypass them with no-op pass-through middleware so route logic is tested
+// without the Postgres store attempting a live DB connection.
+vi.mock("../../middleware/rateLimit", () => {
+  const passthrough = (_req: unknown, _res: unknown, next: () => void) =>
+    next();
+  return {
+    aiLimiter: passthrough,
+    bulkAiLimiter: passthrough,
+    compareLimiter: passthrough,
+    loginLimiter: passthrough,
+    phoneVerifyLimiter: passthrough,
+    supplementalUploadLimiter: passthrough,
+    passwordResetLimiter: passthrough,
+    adminLimiter: passthrough,
+  };
+});
+
 vi.mock("../../middleware/auth", () => ({
   requireAuth: (
     req: { session: { userId?: number } },

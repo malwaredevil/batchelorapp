@@ -98,6 +98,8 @@ import type {
   OrnamentsApplyOrnamentResearchInput,
   OrnamentsBarcodeLookupInput,
   OrnamentsBarcodeLookupResult,
+  OrnamentsBarcodePhotoInput,
+  OrnamentsBarcodePhotoResult,
   OrnamentsBulkReanalyzeInput,
   OrnamentsBulkReanalyzeResult,
   OrnamentsCategory,
@@ -14960,6 +14962,77 @@ export const useLookupBarcode = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getLookupBarcodeMutationOptions(options));
+    }
+
+export const getExtractOrnamentBarcodePhotoUrl = () => {
+
+
+
+
+  return `/api/ornaments/barcode-photo-lookup`
+}
+
+/**
+ * @summary Extract a barcode number from a photo using AI vision (escape hatch when camera scan fails)
+ */
+export const extractOrnamentBarcodePhoto = async (ornamentsBarcodePhotoInput: OrnamentsBarcodePhotoInput, options?: RequestInit): Promise<OrnamentsBarcodePhotoResult> => {
+
+  return customFetch<OrnamentsBarcodePhotoResult>(getExtractOrnamentBarcodePhotoUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      ornamentsBarcodePhotoInput,)
+  }
+);}
+
+
+
+
+export const getExtractOrnamentBarcodePhotoMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof extractOrnamentBarcodePhoto>>, TError,{data: BodyType<OrnamentsBarcodePhotoInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof extractOrnamentBarcodePhoto>>, TError,{data: BodyType<OrnamentsBarcodePhotoInput>}, TContext> => {
+
+const mutationKey = ['extractOrnamentBarcodePhoto'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof extractOrnamentBarcodePhoto>>, {data: BodyType<OrnamentsBarcodePhotoInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  extractOrnamentBarcodePhoto(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExtractOrnamentBarcodePhotoMutationResult = NonNullable<Awaited<ReturnType<typeof extractOrnamentBarcodePhoto>>>
+    export type ExtractOrnamentBarcodePhotoMutationBody = BodyType<OrnamentsBarcodePhotoInput>
+    export type ExtractOrnamentBarcodePhotoMutationError = ErrorType<Error>
+
+    /**
+ * @summary Extract a barcode number from a photo using AI vision (escape hatch when camera scan fails)
+ */
+export const useExtractOrnamentBarcodePhoto = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof extractOrnamentBarcodePhoto>>, TError,{data: BodyType<OrnamentsBarcodePhotoInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof extractOrnamentBarcodePhoto>>,
+        TError,
+        {data: BodyType<OrnamentsBarcodePhotoInput>},
+        TContext
+      > => {
+      return useMutation(getExtractOrnamentBarcodePhotoMutationOptions(options));
     }
 
 export const getLookupOrnamentEbayPriceUrl = (id: number,) => {

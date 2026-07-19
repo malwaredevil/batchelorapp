@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
+import { z } from "zod";
 import {
   and,
   asc,
@@ -66,6 +67,7 @@ import {
   analyzeOrnamentImage,
   buildEmbeddingText,
   embedText,
+  extractBarcodeFromPhoto,
 } from "../../lib/ornaments/openai";
 import { lookupBarcode } from "../../lib/ornaments/barcode";
 import { lookupBookValue } from "../../lib/ornaments/book-value";
@@ -351,6 +353,38 @@ router.post("/items/lookup-barcode", async (req, res) => {
       imageUrl: result.imageUrl,
     }),
   );
+});
+
+// AI-powered barcode extraction from a user-supplied photo.
+// Used as an escape hatch when the native BarcodeDetector API and ZXing
+// both fail to scan a barcode from the live camera feed (e.g. awkward angle,
+// poor lighting, worn packaging). The client sends a base64 data URL; we run
+// it through a fast vision model and return the extracted digit string.
+const BarcodePhotoBody = z.object({
+  imageDataUrl: z
+    .string()
+    .min(10)
+    .refine(
+      (v) => /^data:image\/(jpeg|jpg|png|webp);base64,/.test(v),
+      "Must be a JPEG, PNG, or WEBP base64 data URL",
+    ),
+});
+
+router.post("/barcode-photo-lookup", aiLimiter, async (req, res) => {
+  const parsed = BarcodePhotoBody.safeParse(req.body);
+  if (!parsed.success) {
+    res
+      .status(400)
+      .json({ error: "An image data URL (JPEG/PNG/WEBP) is required." });
+    return;
+  }
+  try {
+    const barcode = await extractBarcodeFromPhoto(parsed.data.imageDataUrl);
+    res.json({ barcode });
+  } catch (err) {
+    req.log.error({ err }, "Barcode photo extraction failed");
+    res.json({ barcode: null });
+  }
 });
 
 router.get("/items/:id", async (req, res) => {

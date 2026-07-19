@@ -2335,6 +2335,19 @@ export interface OrnamentsBarcodeLookupResult {
   imageUrl?: string | null;
 }
 
+export interface OrnamentsBarcodePhotoInput {
+  /** A base64 data URL of the image (e.g. data:image/jpeg;base64,...) */
+  imageDataUrl: string;
+}
+
+export interface OrnamentsBarcodePhotoResult {
+  /**
+     * Extracted barcode digits (null if not found or not legible)
+     * @nullable
+     */
+  barcode: string | null;
+}
+
 export interface OrnamentsSeriesCount {
   seriesOrCollection: string;
   count: number;

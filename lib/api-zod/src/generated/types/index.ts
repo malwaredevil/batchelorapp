@@ -111,6 +111,8 @@ export * from './operationsUpdateBudgetBody';
 export * from './ornamentsApplyOrnamentResearchInput';
 export * from './ornamentsBarcodeLookupInput';
 export * from './ornamentsBarcodeLookupResult';
+export * from './ornamentsBarcodePhotoInput';
+export * from './ornamentsBarcodePhotoResult';
 export * from './ornamentsBulkReanalyzeInput';
 export * from './ornamentsBulkReanalyzeResult';
 export * from './ornamentsBulkReanalyzeResultErrorsItem';

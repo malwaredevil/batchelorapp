@@ -4925,6 +4925,18 @@ export const LookupBarcodeResponse = zod.object({
 
 
 /**
+ * @summary Extract a barcode number from a photo using AI vision (escape hatch when camera scan fails)
+ */
+export const ExtractOrnamentBarcodePhotoBody = zod.object({
+  "imageDataUrl": zod.string().describe('A base64 data URL of the image (e.g. data:image\/jpeg;base64,...)')
+})
+
+export const ExtractOrnamentBarcodePhotoResponse = zod.object({
+  "barcode": zod.string().nullable().describe('Extracted barcode digits (null if not found or not legible)')
+})
+
+
+/**
  * @summary Look up eBay sold-listing prices and cache them on the ornament
  */
 export const LookupOrnamentEbayPriceParams = zod.object({

@@ -65,6 +65,9 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 app.use("/api/quilting/blocks/detect-seams", express.json({ limit: "5mb" }));
+// Barcode photo extraction endpoint accepts a base64 data URL JSON payload
+// which can reach ~4MB for a typical phone JPEG → base64-encoded image.
+app.use("/api/ornaments/barcode-photo-lookup", express.json({ limit: "5mb" }));
 // AgentPhone webhook signatures are HMAC'd over the raw request body, so the
 // exact bytes must be captured before body-parser reformats them as JSON.
 app.use(

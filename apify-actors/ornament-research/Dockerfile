@@ -1,11 +1,9 @@
 FROM apify/actor-node-playwright-chrome:22
 
 COPY package*.json ./
-RUN npm --quiet set progress=false \
-    && npm install --only=prod --no-optional \
-    && echo "All dependencies installed"
+RUN npm --quiet set progress=false && npm install --no-optional
 
 COPY . ./
-RUN npm run build
+RUN npm run build && npm prune --omit=dev
 
-CMD npm start
+CMD ["node", "dist/main.js"]

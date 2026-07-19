@@ -353,3 +353,41 @@ export const hallmarkCatalog = pgTable(
 
 export type HallmarkCatalogRow = typeof hallmarkCatalog.$inferSelect;
 export type InsertHallmarkCatalog = typeof hallmarkCatalog.$inferInsert;
+
+export const hallmarkHistoricalCatalog = pgTable(
+  "hallmark_historical_catalog",
+  {
+    id: serial("id").primaryKey(),
+    hallmarkSku: text("hallmark_sku"),
+    name: text("name").notNull(),
+    year: integer("year"),
+    seriesName: text("series_name"),
+    sequenceNumber: integer("sequence_number"),
+    artist: text("artist"),
+    collectorPriceUsd: numeric("collector_price_usd", {
+      precision: 10,
+      scale: 2,
+    }),
+    productUrl: text("product_url").notNull().unique(),
+    images: text("images").array(),
+    source: text("source").notNull().default("hallmarkornaments.com"),
+    crawledAt: timestamp("crawled_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("hallmark_hist_sku_idx").on(table.hallmarkSku),
+    index("hallmark_hist_year_idx").on(table.year),
+    index("hallmark_hist_series_idx").on(table.seriesName),
+    index("hallmark_hist_url_idx").on(table.productUrl),
+  ],
+).enableRLS();
+
+export type HallmarkHistoricalCatalogRow =
+  typeof hallmarkHistoricalCatalog.$inferSelect;
+export type InsertHallmarkHistoricalCatalog =
+  typeof hallmarkHistoricalCatalog.$inferInsert;

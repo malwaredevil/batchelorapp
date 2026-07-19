@@ -38,12 +38,13 @@ jobs:
       - name: "Ban: drizzle-kit push"
         run: |
           BASE="${{ steps.diff.outputs.base }}"
+          # Exclude this file itself from the diff so its own error-message text
+          # doesn't trigger the check. Scan only newly-added lines.
           VIOLATIONS=$(git diff "$BASE"...HEAD \
+            -- ':!.github/workflows/guardrails.yml' \
             | grep "^+" \
             | grep -v "^+++" \
-            | grep -v "^+\s*#\|^+\s*//" \
-            | grep "drizzle-kit push" \
-            | grep -v "guardrails.yml" || true)
+            | grep "drizzle-kit push" || true)
           if [ -n "$VIOLATIONS" ]; then
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "ERROR: 'drizzle-kit push' detected in newly added lines."

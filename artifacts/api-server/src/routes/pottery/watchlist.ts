@@ -15,6 +15,7 @@ import {
   potteryWatchlistAlerts,
 } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
+import { aiLimiter } from "../../middleware/rateLimit";
 import {
   lookupEbayMarketValue,
   buildEbayQuery,
@@ -142,7 +143,7 @@ router.delete("/watchlist/:id", async (req, res) => {
 // On-demand scan — runs eBay sold-listings search and upserts alerts
 // ---------------------------------------------------------------------------
 
-router.post("/watchlist/:id/scan", async (req, res) => {
+router.post("/watchlist/:id/scan", aiLimiter, async (req, res) => {
   const { id } = WatchlistIdParams.parse(req.params);
 
   if (!env.apifyApiToken) {

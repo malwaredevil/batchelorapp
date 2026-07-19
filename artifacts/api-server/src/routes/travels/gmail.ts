@@ -10,6 +10,7 @@ import {
   travelsTripDocuments,
 } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
+import { aiLimiter } from "../../middleware/rateLimit";
 import {
   createGmailOAuthClient,
   gmailOAuthEnabled,
@@ -233,7 +234,7 @@ router.delete("/gmail/disconnect", async (req, res) => {
 });
 
 // POST /gmail/scan — manual "Scan now" trigger for the current user's inbox.
-router.post("/gmail/scan", async (req, res) => {
+router.post("/gmail/scan", aiLimiter, async (req, res) => {
   const userId = req.session.userId!;
   try {
     const result = await scanGmailForUser(userId);

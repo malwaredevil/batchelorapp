@@ -74,6 +74,27 @@ export async function createWorkspaceViteConfig(
         ]
       : [];
 
+  // Source-map upload to Sentry — production builds only, skipped when
+  // SENTRY_AUTH_TOKEN is absent (e.g. local dev without the secret set).
+  const sentryPlugins: PluginOption[] =
+    process.env.NODE_ENV === "production" && process.env.SENTRY_AUTH_TOKEN
+      ? [
+          await import("@sentry/vite-plugin").then((m) =>
+            m.sentryVitePlugin({
+              org: process.env.SENTRY_ORG_SLUG,
+              project: process.env.SENTRY_PROJECT_SLUG,
+              authToken: process.env.SENTRY_AUTH_TOKEN,
+              silent: true,
+              sourcemaps: {
+                // Delete the uploaded .map files from the dist directory so
+                // they are never served to end users.
+                filesToDeleteAfterUpload: ["./dist/public/**/*.map"],
+              },
+            }),
+          ),
+        ]
+      : [];
+
   return {
     base: basePath,
     plugins: [
@@ -81,6 +102,7 @@ export async function createWorkspaceViteConfig(
       tailwindcss(),
       runtimeErrorOverlay(),
       ...extraPlugins,
+      ...sentryPlugins,
       ...replitDevPlugins,
     ],
     resolve: {
@@ -95,9 +117,21 @@ export async function createWorkspaceViteConfig(
       dedupe: ["react", "react-dom"],
     },
     root: path.resolve(artifactDir),
+    define: {
+      // Expose the server-side SENTRY_DSN as a build-time constant so the
+      // browser bundle can initialise @sentry/react without a separate secret.
+      // The Sentry DSN is a public identifier — safe to embed in the bundle.
+      "import.meta.env.VITE_SENTRY_DSN": JSON.stringify(
+        process.env.SENTRY_DSN ?? "",
+      ),
+    },
     build: {
       outDir: path.resolve(artifactDir, "dist/public"),
       emptyOutDir: true,
+      // Hidden source maps are generated during production builds so the
+      // Sentry Vite plugin can upload them, but they are deleted from dist/
+      // afterwards (filesToDeleteAfterUpload above) and never served publicly.
+      sourcemap: process.env.NODE_ENV === "production" ? "hidden" : false,
     },
     server: {
       port,

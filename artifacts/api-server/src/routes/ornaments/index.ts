@@ -6,6 +6,7 @@ import hallmarkEventsRouter from "./hallmark-events";
 import identityResearchRouter from "./identity-research";
 import canonicalSeriesRouter from "./canonical-series";
 import hallmarkSearchRouter from "./hallmark-search";
+import catalogCrawlRouter from "./catalog-crawl";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(hallmarkEventsRouter);
 router.use(identityResearchRouter);
 router.use(canonicalSeriesRouter);
 router.use(hallmarkSearchRouter);
+router.use(catalogCrawlRouter);
 
 export default router;

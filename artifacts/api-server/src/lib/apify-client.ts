@@ -47,16 +47,14 @@ export async function runApifyActor(
     "Content-Type": "application/json",
   };
 
-  // Start run
-  const runResp = await fetch(
-    `${APIFY_BASE}/acts/${encodeURIComponent(actorId)}/runs`,
-    {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ ...input, __memoryMbytes: undefined }),
-      signal: AbortSignal.timeout(30_000),
-    },
-  );
+  // Start run — memory is passed as a query param per Apify API spec
+  const runUrl = `${APIFY_BASE}/acts/${encodeURIComponent(actorId)}/runs?memory=${memoryMbytes}`;
+  const runResp = await fetch(runUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(input),
+    signal: AbortSignal.timeout(30_000),
+  });
 
   if (!runResp.ok) {
     const text = await runResp.text();
@@ -70,7 +68,7 @@ export async function runApifyActor(
   };
   const { id: runId, defaultDatasetId } = runData.data;
 
-  logger.info({ actorId, runId }, "apify: actor run started");
+  logger.info({ actorId, runId, memoryMbytes }, "apify: actor run started");
 
   // Poll for completion
   const deadline = Date.now() + timeoutMs;
@@ -126,4 +124,83 @@ export async function runApifyActor(
     "apify: actor run completed",
   );
   return items;
+}
+
+/**
+ * Fire an actor run without waiting for it to complete.
+ * Returns the runId and defaultDatasetId for later polling.
+ */
+export async function startApifyActor(
+  actorId: string,
+  input: Record<string, unknown>,
+  apiToken: string,
+  memoryMbytes = 512,
+): Promise<{ runId: string; defaultDatasetId: string }> {
+  const headers = {
+    Authorization: `Bearer ${apiToken}`,
+    "Content-Type": "application/json",
+  };
+
+  const runUrl = `${APIFY_BASE}/acts/${encodeURIComponent(actorId)}/runs?memory=${memoryMbytes}`;
+  const runResp = await fetch(runUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(input),
+    signal: AbortSignal.timeout(30_000),
+  });
+
+  if (!runResp.ok) {
+    const text = await runResp.text();
+    throw new Error(
+      `Apify actor start failed (${runResp.status}): ${text.slice(0, 300)}`,
+    );
+  }
+
+  const runData = (await runResp.json()) as {
+    data: { id: string; status: string; defaultDatasetId: string };
+  };
+  const { id: runId, defaultDatasetId } = runData.data;
+  logger.info(
+    { actorId, runId, memoryMbytes },
+    "apify: actor run started (fire-and-forget)",
+  );
+  return { runId, defaultDatasetId };
+}
+
+/**
+ * Fetch all items from an Apify dataset (paginated).
+ */
+export async function fetchApifyDataset(
+  datasetId: string,
+  apiToken: string,
+  limit = 10_000,
+): Promise<Record<string, unknown>[]> {
+  const headers = { Authorization: `Bearer ${apiToken}` };
+  const resp = await fetch(
+    `${APIFY_BASE}/datasets/${datasetId}/items?limit=${limit}&format=json`,
+    { headers, signal: AbortSignal.timeout(120_000) },
+  );
+  if (!resp.ok) throw new Error(`Apify dataset fetch failed: ${resp.status}`);
+  return (await resp.json()) as Record<string, unknown>[];
+}
+
+/**
+ * Get the status of an Apify run.
+ */
+export async function getApifyRunStatus(
+  actorId: string,
+  runId: string,
+  apiToken: string,
+): Promise<{ status: string; defaultDatasetId: string }> {
+  const headers = { Authorization: `Bearer ${apiToken}` };
+  const resp = await fetch(
+    `${APIFY_BASE}/acts/${encodeURIComponent(actorId)}/runs/${runId}`,
+    { headers, signal: AbortSignal.timeout(10_000) },
+  );
+  if (!resp.ok)
+    throw new Error(`Apify run status fetch failed: ${resp.status}`);
+  const data = (await resp.json()) as {
+    data: { status: string; defaultDatasetId: string };
+  };
+  return data.data;
 }

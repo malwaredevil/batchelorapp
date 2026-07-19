@@ -93,14 +93,14 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
 
   **Stage 3 — backup + GitHub sync (only after Stage 2 passes), in this exact order:**
   - 3a. Run the Supabase → Replit built-in DB backup: `pnpm --filter @workspace/scripts run backup-to-replit`.
-  - 3b. Scan open GitHub issues for any completed this session and close them.
+  - 3b. If a GitHub issue was opened for this session's work, close it. On routine sessions with no pre-opened issues this is a quick no-op scan.
   - 3c. Batch-sync all changed files to GitHub in a **single commit** using `pnpm --filter @workspace/scripts run github-sync "commit message"`. This script: runs prettier --write on every changed file, creates one Git tree with all changes, pushes one commit, and triggers exactly one CI run. **Never** use the GitHub Contents API per-file (each file triggers its own CI run) or loop `git push` per file. The excluded paths (.local/, .agents/, threat_model.md) are enforced by the script.
   - 3d. Wait for GitHub CI to go fully green (all checks including CodeQL): `pnpm --filter @workspace/scripts run check-ci-status`. This is a hard stop — do not publish until this passes.
 
-  **Publish:** only after all stages pass, call `suggest_deploy`. Immediately after calling suggest_deploy, run `pnpm --filter @workspace/scripts run sentry-baseline mark-published` to write the pending-stage4 file so Stage 4 survives a session boundary.
+  **Publish:** only after all stages pass, verify `VITE_SENTRY_DSN` is set in Replit Secrets (it is baked in at Vite build time — a missing secret silently disables all browser error tracking in production). Then call `suggest_deploy`. Immediately after calling suggest_deploy, run `pnpm --filter @workspace/scripts run sentry-baseline mark-published` to write the pending-stage4 file so Stage 4 survives a session boundary.
 
   **Stage 4 — post-publish Sentry delta check (after publishing):**
-  Wait ~5 minutes for production traffic, then use Sentry MCP tools to check for issues that are NEW since the baseline written in Step 1. Compare against the IDs in `.local/state/sentry-baseline.json`. Look specifically at routes/features that changed. If new issues appear, fix them before considering the release stable. When done, clear state: `pnpm --filter @workspace/scripts run sentry-baseline clear`.
+  Wait ~5 minutes for production traffic, then use Sentry MCP tools to check for issues that are NEW since the baseline written in Step 1. Compare against the IDs in `.local/state/sentry-baseline.json`. Look specifically at routes/features that changed. Check browser and server separately — filter by `platform:javascript` to surface client-side JS errors from the three frontend apps (modules/web/elaine). If new issues appear, fix them before considering the release stable. When done, clear state: `pnpm --filter @workspace/scripts run sentry-baseline clear`.
 
 ## Secrets checklist (for moving to a Team Workspace, or any new environment)
 

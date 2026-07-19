@@ -1,8 +1,17 @@
 import path from "path";
+import { execSync } from "child_process";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 import type { PluginOption, UserConfig } from "vite";
+
+function getGitSha(): string {
+  try {
+    return execSync("git rev-parse --short HEAD", { encoding: "utf-8" }).trim();
+  } catch {
+    return "unknown";
+  }
+}
 
 export interface WorkspaceViteConfigOptions {
   /** The artifact's own directory — pass `import.meta.dirname`. */
@@ -124,6 +133,9 @@ export async function createWorkspaceViteConfig(
       "import.meta.env.VITE_SENTRY_DSN": JSON.stringify(
         process.env.SENTRY_DSN ?? "",
       ),
+      // Inject the git commit SHA as VITE_APP_VERSION so Sentry can tag
+      // errors with the exact release that produced them.
+      "import.meta.env.VITE_APP_VERSION": JSON.stringify(getGitSha()),
     },
     build: {
       outDir: path.resolve(artifactDir, "dist/public"),

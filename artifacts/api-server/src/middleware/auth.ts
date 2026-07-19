@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db, appUsers } from "@workspace/db";
 import { env } from "../lib/env";
+import { Sentry } from "../lib/sentry";
 
 function timingSafeTokenMatch(provided: string, expected: string): boolean {
   const a = Buffer.from(provided);
@@ -64,5 +65,6 @@ export async function requireAuth(
     }
     req.session.userId = userId;
   }
+  Sentry.setUser({ id: String(req.session.userId) });
   next();
 }

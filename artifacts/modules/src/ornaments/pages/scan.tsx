@@ -400,7 +400,7 @@ export default function ScanPage() {
         aria-label="Take a photo to read barcode"
       />
 
-      {isScanning && (
+      {(isScanning || !hasCamera) && (
         <div className="text-center">
           <Button
             variant="outline"
@@ -410,7 +410,7 @@ export default function ScanPage() {
             onClick={() => photoInputRef.current?.click()}
           >
             <ImageUp className="mr-2 h-4 w-4" />
-            Can't scan? Take a photo
+            {isScanning ? "Can't scan? Take a photo" : "Take a photo instead"}
           </Button>
           <p className="text-xs text-muted-foreground mt-1.5">
             AI will read the barcode digits from the photo

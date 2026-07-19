@@ -5,7 +5,7 @@
  * hallmark.com's search results are rendered client-side and return zero
  * results with a plain HTTP fetch.
  *
- * Actor ID: AjsBGHmLvJOQrNbZL  (malwaredevil/batchelorapp on Apify)
+ * Actor ID: NE2FKT2a7bh9AnKvE  (apify-actors/hallmark-single-lookup in batchelorapp repo)
  * Memory:   2048 MB  — Playwright/Chromium requires it; 1 GB hits 95% and risks OOM
  * Timeout:  120 s   — typical run is ~60 s
  *
@@ -20,7 +20,7 @@ import { runApifyActor } from "../apify-client";
 import { env } from "../env";
 import { logger } from "../logger";
 
-const ACTOR_ID = "AjsBGHmLvJOQrNbZL";
+const ACTOR_ID = "NE2FKT2a7bh9AnKvE";
 
 export interface HallmarkSearchInput {
   /** Hallmark product SKU / MPN (e.g. "QXI7404"). Takes precedence over name. */

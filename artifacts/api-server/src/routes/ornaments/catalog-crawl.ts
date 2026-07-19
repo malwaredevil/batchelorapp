@@ -28,7 +28,8 @@ import {
 import { env } from "../../lib/env";
 import { logger } from "../../lib/logger";
 
-const ACTOR_ID = "AjsBGHmLvJOQrNbZL";
+// hallmark-catalog-crawl actor (apify-actors/hallmark-catalog-crawl in batchelorapp repo)
+const ACTOR_ID = "Kb7QGS6aXUVgTDoIV";
 
 const router: IRouter = Router();
 

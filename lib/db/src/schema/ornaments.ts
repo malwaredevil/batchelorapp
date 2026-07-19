@@ -391,3 +391,45 @@ export type HallmarkHistoricalCatalogRow =
   typeof hallmarkHistoricalCatalog.$inferSelect;
 export type InsertHallmarkHistoricalCatalog =
   typeof hallmarkHistoricalCatalog.$inferInsert;
+
+/**
+ * Collector price + availability catalog scraped from hookedonhallmark.com
+ * via the Apify hooh-crawl actor. Covers 1973-present with ~16 500 rows.
+ * Key value-add over the other two tables: real retail/collector prices,
+ * in-stock status, and richer series data from product name parsing.
+ * Cross-reference with hallmark_historical_catalog by hallmark_sku to
+ * backfill collector_price_usd on that table.
+ */
+export const hallmarkHoohCatalog = pgTable(
+  "hallmark_hooh_catalog",
+  {
+    id: serial("id").primaryKey(),
+    productUrl: text("product_url").notNull().unique(),
+    catalogId: integer("catalog_id"),
+    hallmarkSku: text("hallmark_sku"),
+    name: text("name"),
+    year: integer("year"),
+    subcategory: text("subcategory"),
+    seriesName: text("series_name"),
+    sequenceNumber: integer("sequence_number"),
+    retailPriceUsd: numeric("retail_price_usd", { precision: 10, scale: 2 }),
+    inStock: boolean("in_stock"),
+    source: text("source").notNull().default("hookedonhallmark.com"),
+    crawledAt: timestamp("crawled_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("hallmark_hooh_sku_idx").on(table.hallmarkSku),
+    index("hallmark_hooh_year_idx").on(table.year),
+    index("hallmark_hooh_series_idx").on(table.seriesName),
+    index("hallmark_hooh_url_idx").on(table.productUrl),
+  ],
+).enableRLS();
+
+export type HallmarkHoohCatalogRow = typeof hallmarkHoohCatalog.$inferSelect;
+export type InsertHallmarkHoohCatalog = typeof hallmarkHoohCatalog.$inferInsert;

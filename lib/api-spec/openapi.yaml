@@ -4482,6 +4482,31 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OrnamentsBarcodeLookupResult"
+  /ornaments/barcode-photo-lookup:
+    post:
+      operationId: extractOrnamentBarcodePhoto
+      tags:
+        - ornaments
+      summary: Extract a barcode number from a photo using AI vision (escape hatch when camera scan fails)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrnamentsBarcodePhotoInput"
+      responses:
+        "200":
+          description: Extracted barcode digits (null if no barcode visible or legible)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrnamentsBarcodePhotoResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /ornaments/items/{id}/ebay-price-lookup:
     post:
       operationId: lookupOrnamentEbayPrice
@@ -10078,6 +10103,24 @@ components:
           type:
             - string
             - "null"
+    OrnamentsBarcodePhotoInput:
+      type: object
+      required:
+        - imageDataUrl
+      properties:
+        imageDataUrl:
+          type: string
+          description: A base64 data URL of the image (e.g. data:image/jpeg;base64,...)
+    OrnamentsBarcodePhotoResult:
+      type: object
+      required:
+        - barcode
+      properties:
+        barcode:
+          type:
+            - string
+            - "null"
+          description: Extracted barcode digits (null if not found or not legible)
     OrnamentsSeriesCount:
       type: object
       required:

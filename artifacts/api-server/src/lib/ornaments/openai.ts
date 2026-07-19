@@ -90,6 +90,52 @@ export async function analyzeOrnamentImage(
   };
 }
 
+/**
+ * Extract a barcode number from a photo using AI vision.
+ * Used as the escape hatch when the native BarcodeDetector API and ZXing
+ * both fail to scan a barcode from the live camera feed.
+ *
+ * @param imageDataUrl - A base64 data URL (data:image/jpeg;base64,...)
+ * @returns The extracted barcode digits, or null if not found/legible.
+ */
+export async function extractBarcodeFromPhoto(
+  imageDataUrl: string,
+): Promise<string | null> {
+  const models = await getModels();
+  const completion = await callModel(models.fastVision, (c, model) =>
+    c.chat.completions.create({
+      model,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: `You are a barcode reader. Find and read the UPC or EAN barcode in the image. Look for 1D barcodes (parallel vertical bars) and read the digits printed below or next to them. Return JSON with exactly one key: "barcode" — a string containing only the barcode digits (typically 12–13 digits for UPC/EAN), or null if no barcode is visible or the digits cannot be clearly read. Never guess or fabricate digits.`,
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text" as const,
+              text: "Read the barcode in this image. Return JSON only.",
+            },
+            {
+              type: "image_url" as const,
+              image_url: { url: imageDataUrl },
+            },
+          ],
+        },
+      ],
+    }),
+  );
+
+  const raw = completion.choices[0]?.message?.content ?? "{}";
+  const parsed = parseJson(raw);
+  const barcodeRaw =
+    typeof parsed?.["barcode"] === "string" ? parsed["barcode"] : null;
+  const digits = barcodeRaw ? barcodeRaw.replace(/\D/g, "") : null;
+  return digits && digits.length >= 4 ? digits : null;
+}
+
 export function buildEmbeddingText(analysis: OrnamentAnalysis): string {
   return [
     analysis.name,

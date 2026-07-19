@@ -376,6 +376,31 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BarcodeLookupResult"
+  /barcode-photo-lookup:
+    post:
+      operationId: extractOrnamentBarcodePhoto
+      tags:
+        - ornaments
+      summary: Extract a barcode number from a photo using AI vision (escape hatch when camera scan fails)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BarcodePhotoInput"
+      responses:
+        "200":
+          description: Extracted barcode digits (null if no barcode visible or legible)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BarcodePhotoResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   # #214 — eBay sold-listings fallback
   /items/{id}/ebay-price-lookup:
     post:
@@ -1242,6 +1267,24 @@ components:
           type:
             - string
             - "null"
+    BarcodePhotoInput:
+      type: object
+      required:
+        - imageDataUrl
+      properties:
+        imageDataUrl:
+          type: string
+          description: A base64 data URL of the image (e.g. data:image/jpeg;base64,...)
+    BarcodePhotoResult:
+      type: object
+      required:
+        - barcode
+      properties:
+        barcode:
+          type:
+            - string
+            - "null"
+          description: Extracted barcode digits (null if not found or not legible)
     SeriesCount:
       type: object
       required:

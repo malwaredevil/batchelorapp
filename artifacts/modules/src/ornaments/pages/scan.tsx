@@ -1,7 +1,17 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
-import { Loader2, Camera, Search, ArrowRight, ScanLine } from "lucide-react";
-import { useLookupOrnamentBarcode } from "@workspace/api-client-react";
+import {
+  Loader2,
+  Camera,
+  Search,
+  ArrowRight,
+  ScanLine,
+  ImageUp,
+} from "lucide-react";
+import {
+  useLookupOrnamentBarcode,
+  useExtractOrnamentBarcodePhoto,
+} from "@workspace/api-client-react";
 import {
   BrowserMultiFormatReader,
   NotFoundException,
@@ -13,40 +23,85 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePageAssistantContext } from "@/ornaments/lib/assistant-context";
 
+/// <reference path="../types/barcode-detector.d.ts" />
+
+const BARCODE_FORMATS_ZXING = [
+  BarcodeFormat.UPC_A,
+  BarcodeFormat.UPC_E,
+  BarcodeFormat.EAN_13,
+  BarcodeFormat.EAN_8,
+  BarcodeFormat.CODE_128,
+  BarcodeFormat.CODE_39,
+];
+
+const BARCODE_FORMATS_NATIVE: NativeBarcodeFormat[] = [
+  "upc_a",
+  "upc_e",
+  "ean_13",
+  "ean_8",
+  "code_128",
+  "code_39",
+];
+
 export default function ScanPage() {
   const [_, setLocation] = useLocation();
   const lookupBarcode = useLookupOrnamentBarcode();
+  const extractBarcodePhoto = useExtractOrnamentBarcodePhoto();
 
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  // ZXing fallback reader (created only when BarcodeDetector is unavailable)
   const codeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
+
+  // Native BarcodeDetector (Chrome/Android — hardware-accelerated)
+  const detectorRef = useRef<BarcodeDetector | null>(null);
+
+  // Camera stream, managed manually for the BarcodeDetector path
+  const streamRef = useRef<MediaStream | null>(null);
+
+  // A ref (not state) so the rAF loop always sees the current value without
+  // a stale closure. Updated in sync with the `isScanning` state.
+  const isScanningRef = useRef(false);
+  const animFrameRef = useRef<number | null>(null);
+
+  // Hidden file input for the "take a photo" escape hatch
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   const [isScanning, setIsScanning] = useState(false);
   const [hasCamera, setHasCamera] = useState(true);
   const [manualCode, setManualCode] = useState("");
   const [isLookingUp, setIsLookingUp] = useState(false);
+  const [isPhotoExtracting, setIsPhotoExtracting] = useState(false);
 
   usePageAssistantContext(
     "ornaments-scan",
     `Barcode scanning page to quickly add an ornament. Uses device camera or manual UPC entry.`,
   );
 
+  // Determine which scanning engine to use on mount.
+  // BarcodeDetector (native, hardware-accelerated) is preferred when available.
+  // ZXing is the fallback for Safari/Firefox.
   useEffect(() => {
-    // Limit detection to 1D barcode formats (UPC/EAN/Code128/Code39) so the
-    // scanner doesn't waste cycles trying QR, DataMatrix, Aztec, etc. on every
-    // frame. Combined with a 150ms decode interval (vs the 500ms default) this
-    // makes auto-detection fast enough to lock on without manual shutter.
-    const hints = new Map<DecodeHintType, unknown>();
-    hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-      BarcodeFormat.UPC_A,
-      BarcodeFormat.UPC_E,
-      BarcodeFormat.EAN_13,
-      BarcodeFormat.EAN_8,
-      BarcodeFormat.CODE_128,
-      BarcodeFormat.CODE_39,
-    ]);
-    codeReaderRef.current = new BrowserMultiFormatReader(hints, 150);
+    let useBarcodeDetector = false;
 
-    // Check if camera is available
+    if ("BarcodeDetector" in window) {
+      try {
+        detectorRef.current = new BarcodeDetector({
+          formats: BARCODE_FORMATS_NATIVE,
+        });
+        useBarcodeDetector = true;
+      } catch {
+        // Construction failed — fall through to ZXing
+      }
+    }
+
+    if (!useBarcodeDetector) {
+      const hints = new Map<DecodeHintType, unknown>();
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, BARCODE_FORMATS_ZXING);
+      // 150ms decode interval (vs 500ms default) for fast lock-on
+      codeReaderRef.current = new BrowserMultiFormatReader(hints, 150);
+    }
+
     navigator.mediaDevices
       .enumerateDevices()
       .then((devices) => {
@@ -56,53 +111,122 @@ export default function ScanPage() {
           startScanning();
         }
       })
-      .catch((err) => {
-        console.error("Camera access error:", err);
-        setHasCamera(false);
-      });
+      .catch(() => setHasCamera(false));
 
     return () => {
       stopScanning();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const startScanning = async () => {
-    if (!codeReaderRef.current || !videoRef.current) return;
-
-    setIsScanning(true);
+  // -------------------------------------------------------------------------
+  // BarcodeDetector rAF loop
+  // -------------------------------------------------------------------------
+  const barcodeDetectorLoop = useCallback(async () => {
+    if (!isScanningRef.current || !detectorRef.current || !videoRef.current) {
+      return;
+    }
+    // Video must have a frame to decode
+    if (videoRef.current.readyState < 2) {
+      animFrameRef.current = requestAnimationFrame(barcodeDetectorLoop);
+      return;
+    }
     try {
-      await codeReaderRef.current.decodeFromConstraints(
-        {
+      const barcodes = await detectorRef.current.detect(videoRef.current);
+      // Re-check after the async detect() call in case we stopped while waiting
+      if (!isScanningRef.current) return;
+      if (barcodes.length > 0) {
+        handleScannedCode(barcodes[0].rawValue);
+        return;
+      }
+    } catch {
+      // Frame not ready or detect threw; continue to next frame
+    }
+    if (isScanningRef.current) {
+      animFrameRef.current = requestAnimationFrame(barcodeDetectorLoop);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // -------------------------------------------------------------------------
+  // Scanning lifecycle
+  // -------------------------------------------------------------------------
+  const startScanning = async () => {
+    if (!videoRef.current) return;
+    isScanningRef.current = true;
+    setIsScanning(true);
+
+    if (detectorRef.current) {
+      // BarcodeDetector path — set up camera stream manually
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: "environment",
             width: { ideal: 1280 },
             height: { ideal: 720 },
           },
-        },
-        videoRef.current,
-        (result, err) => {
-          if (result) {
-            handleScannedCode(result.getText());
-          }
-          if (err && !(err instanceof NotFoundException)) {
-            console.error(err);
-          }
-        },
-      );
-    } catch (err) {
-      console.error("Failed to start scanner:", err);
-      setIsScanning(false);
-      setHasCamera(false);
+        });
+        streamRef.current = stream;
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        requestAnimationFrame(barcodeDetectorLoop);
+      } catch {
+        isScanningRef.current = false;
+        setIsScanning(false);
+        setHasCamera(false);
+      }
+    } else if (codeReaderRef.current) {
+      // ZXing fallback — handles camera stream internally
+      try {
+        await codeReaderRef.current.decodeFromConstraints(
+          {
+            video: {
+              facingMode: "environment",
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
+          },
+          videoRef.current,
+          (result, err) => {
+            if (result) {
+              handleScannedCode(result.getText());
+            }
+            if (err && !(err instanceof NotFoundException)) {
+              console.error(err);
+            }
+          },
+        );
+      } catch {
+        isScanningRef.current = false;
+        setIsScanning(false);
+        setHasCamera(false);
+      }
     }
   };
 
   const stopScanning = () => {
+    isScanningRef.current = false;
+
+    if (animFrameRef.current !== null) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+
     if (codeReaderRef.current) {
       codeReaderRef.current.reset();
     }
+
     setIsScanning(false);
   };
 
+  // -------------------------------------------------------------------------
+  // Lookup after a code is detected (camera scan or manual entry)
+  // -------------------------------------------------------------------------
   const handleScannedCode = async (code: string) => {
     if (isLookingUp) return;
     stopScanning();
@@ -119,7 +243,6 @@ export default function ScanPage() {
 
       if (result.found) {
         toast.success("Found match!");
-        // Store prefilled data in session storage to pick up on the /add page
         sessionStorage.setItem(
           "ornaments-add-prefill",
           JSON.stringify({
@@ -130,27 +253,20 @@ export default function ScanPage() {
             barcodeValue: code,
           }),
         );
-        setLocation("/ornaments/add");
       } else {
         toast.error("Not found in database. Proceed to manual entry.");
         sessionStorage.setItem(
           "ornaments-add-prefill",
-          JSON.stringify({
-            barcodeValue: code,
-            brand: "Hallmark",
-          }),
+          JSON.stringify({ barcodeValue: code, brand: "Hallmark" }),
         );
-        setLocation("/ornaments/add");
       }
-    } catch (err) {
+      setLocation("/ornaments/add");
+    } catch {
       toast.dismiss("lookup");
       toast.error("Lookup failed. Proceeding to manual entry.");
       sessionStorage.setItem(
         "ornaments-add-prefill",
-        JSON.stringify({
-          barcodeValue: code,
-          brand: "Hallmark",
-        }),
+        JSON.stringify({ barcodeValue: code, brand: "Hallmark" }),
       );
       setLocation("/ornaments/add");
     } finally {
@@ -163,6 +279,44 @@ export default function ScanPage() {
     if (!manualCode.trim()) return;
     handleScannedCode(manualCode.trim());
   };
+
+  // -------------------------------------------------------------------------
+  // "Take a photo" escape hatch — AI vision extracts the barcode digits
+  // -------------------------------------------------------------------------
+  const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Reset the input immediately so the same file can be re-selected if needed
+    e.target.value = "";
+    if (!file || isLookingUp || isPhotoExtracting) return;
+
+    stopScanning();
+    setIsPhotoExtracting(true);
+    toast.loading("Reading barcode from photo…", { id: "photo-lookup" });
+
+    try {
+      const imageDataUrl = await fileToDataUrl(file);
+      const result = await extractBarcodePhoto.mutateAsync({
+        data: { imageDataUrl },
+      });
+      toast.dismiss("photo-lookup");
+
+      if (result.barcode) {
+        toast.success(`Barcode found: ${result.barcode}`);
+        handleScannedCode(result.barcode);
+      } else {
+        toast.error(
+          "Couldn't read a barcode from the photo. Try a different angle or use manual entry.",
+        );
+      }
+    } catch {
+      toast.dismiss("photo-lookup");
+      toast.error("Photo scan failed. Please try manual entry.");
+    } finally {
+      setIsPhotoExtracting(false);
+    }
+  };
+
+  const isAnyLoading = isLookingUp || isPhotoExtracting;
 
   return (
     <div className="mx-auto max-w-md space-y-6 pt-4">
@@ -188,18 +342,18 @@ export default function ScanPage() {
 
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="w-64 h-40 border-2 border-primary/80 rounded-xl relative">
-              {/* Corner markers */}
               <div className="absolute top-[-2px] left-[-2px] w-6 h-6 border-t-4 border-l-4 border-primary rounded-tl-xl" />
               <div className="absolute top-[-2px] right-[-2px] w-6 h-6 border-t-4 border-r-4 border-primary rounded-tr-xl" />
               <div className="absolute bottom-[-2px] left-[-2px] w-6 h-6 border-b-4 border-l-4 border-primary rounded-bl-xl" />
               <div className="absolute bottom-[-2px] right-[-2px] w-6 h-6 border-b-4 border-r-4 border-primary rounded-br-xl" />
 
-              {/* Scan line animation */}
-              <div className="absolute top-0 left-0 right-0 h-0.5 bg-primary shadow-[0_0_8px_2px_rgba(255,100,50,0.6)] animate-[scan_2s_ease-in-out_infinite]" />
+              {isScanning && (
+                <div className="absolute top-0 left-0 right-0 h-0.5 bg-primary shadow-[0_0_8px_2px_rgba(255,100,50,0.6)] animate-[scan_2s_ease-in-out_infinite]" />
+              )}
             </div>
           </div>
 
-          {!isScanning && !isLookingUp && (
+          {!isScanning && !isAnyLoading && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
               <Button
                 onClick={startScanning}
@@ -211,10 +365,14 @@ export default function ScanPage() {
             </div>
           )}
 
-          {isLookingUp && (
+          {isAnyLoading && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm text-white space-y-4">
               <Loader2 className="h-10 w-10 animate-spin text-primary" />
-              <p className="font-medium tracking-wide">Searching database...</p>
+              <p className="font-medium tracking-wide">
+                {isPhotoExtracting
+                  ? "Reading barcode from photo…"
+                  : "Searching database…"}
+              </p>
             </div>
           )}
         </div>
@@ -226,7 +384,36 @@ export default function ScanPage() {
           <h3 className="font-serif text-lg font-medium">Camera Unavailable</h3>
           <p className="text-sm text-muted-foreground mt-2 mb-6">
             We couldn't access your device's camera. You can still enter the
-            barcode manually below.
+            barcode manually below, or take a photo to have AI read it.
+          </p>
+        </div>
+      )}
+
+      {/* Photo escape hatch — hidden file input triggered by button */}
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        capture="environment"
+        className="hidden"
+        onChange={handlePhotoCapture}
+        aria-label="Take a photo to read barcode"
+      />
+
+      {isScanning && (
+        <div className="text-center">
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-muted-foreground"
+            disabled={isAnyLoading}
+            onClick={() => photoInputRef.current?.click()}
+          >
+            <ImageUp className="mr-2 h-4 w-4" />
+            Can't scan? Take a photo
+          </Button>
+          <p className="text-xs text-muted-foreground mt-1.5">
+            AI will read the barcode digits from the photo
           </p>
         </div>
       )}
@@ -240,15 +427,15 @@ export default function ScanPage() {
                 placeholder="e.g. 76379512345"
                 value={manualCode}
                 onChange={(e) => setManualCode(e.target.value)}
-                disabled={isLookingUp}
+                disabled={isAnyLoading}
                 className="bg-card font-mono text-base h-12"
               />
               <Button
                 type="submit"
-                disabled={!manualCode.trim() || isLookingUp}
+                disabled={!manualCode.trim() || isAnyLoading}
                 className="h-12 w-12 shrink-0 p-0"
               >
-                {isLookingUp ? (
+                {isAnyLoading ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
                 ) : (
                   <Search className="h-5 w-5" />
@@ -270,4 +457,13 @@ export default function ScanPage() {
       </div>
     </div>
   );
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
 }

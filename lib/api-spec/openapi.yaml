@@ -4438,7 +4438,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  /ornaments/items/{id}/barcode-lookup:
+  /ornaments/items/{id}/lookup-barcode:
     post:
       operationId: lookupOrnamentBarcode
       tags:
@@ -4463,7 +4463,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OrnamentsBarcodeLookupResult"
-  /ornaments/barcode-lookup:
+  /ornaments/items/lookup-barcode:
     post:
       operationId: lookupBarcode
       tags:

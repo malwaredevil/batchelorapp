@@ -9,7 +9,7 @@ import {
   ImageUp,
 } from "lucide-react";
 import {
-  useLookupOrnamentBarcode,
+  useLookupBarcode,
   useExtractOrnamentBarcodePhoto,
 } from "@workspace/api-client-react";
 import {
@@ -45,7 +45,7 @@ const BARCODE_FORMATS_NATIVE: NativeBarcodeFormat[] = [
 
 export default function ScanPage() {
   const [_, setLocation] = useLocation();
-  const lookupBarcode = useLookupOrnamentBarcode();
+  const lookupBarcode = useLookupBarcode();
   const extractBarcodePhoto = useExtractOrnamentBarcodePhoto();
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -236,7 +236,6 @@ export default function ScanPage() {
     try {
       toast.loading(`Looking up ${code}...`, { id: "lookup" });
       const result = await lookupBarcode.mutateAsync({
-        id: 0,
         data: { barcode: code },
       });
       toast.dismiss("lookup");

@@ -7,6 +7,7 @@ import {
   travelsTrips,
 } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
+import { aiLimiter } from "../../middleware/rateLimit";
 import { scanCalendarForTripSuggestions } from "../../lib/travels-calendar-scan";
 import { linkExistingCalendarEvent } from "../../lib/trip-calendar-sync";
 import { logger } from "../../lib/logger";
@@ -31,7 +32,7 @@ router.get("/calendar-trip-suggestions", async (_req, res) => {
 });
 
 // POST /calendar-trip-suggestions/scan — manual "Scan now" trigger
-router.post("/calendar-trip-suggestions/scan", async (req, res) => {
+router.post("/calendar-trip-suggestions/scan", aiLimiter, async (req, res) => {
   try {
     const result = await scanCalendarForTripSuggestions();
     res.json(result);

@@ -1219,6 +1219,16 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE ornaments_images ENABLE ROW LEVEL SECURITY`,
   `ALTER TABLE ornaments_barcode_cache ENABLE ROW LEVEL SECURITY`,
 
+  // ── Hallmark.com enrichment columns on barcode cache (additive, idempotent) ─
+  `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_sku TEXT`,
+  `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_series_name TEXT`,
+  `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_sequence_number INTEGER`,
+  `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_artist TEXT`,
+  `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_original_retail_price NUMERIC(10,2)`,
+  `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_product_url TEXT`,
+  `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_confidence NUMERIC(4,3)`,
+  `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_enriched_at TIMESTAMPTZ`,
+
   // ── Realtime replication (issue #128) ───────────────────────────────────────
   // Adds the household-shared collection tables to Supabase's built-in
   // `supabase_realtime` publication so the api-server's Realtime relay

@@ -5,6 +5,7 @@ import statsRouter from "./stats";
 import hallmarkEventsRouter from "./hallmark-events";
 import identityResearchRouter from "./identity-research";
 import canonicalSeriesRouter from "./canonical-series";
+import hallmarkSearchRouter from "./hallmark-search";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use(statsRouter);
 router.use(hallmarkEventsRouter);
 router.use(identityResearchRouter);
 router.use(canonicalSeriesRouter);
+router.use(hallmarkSearchRouter);
 
 export default router;

@@ -116,7 +116,30 @@ export default function OrnamentDetail() {
 
   usePageAssistantContext(
     "ornaments-detail",
-    `Ornament detail for ${ornament?.name || id}. Edit fields, manage photos, or look up book value.${configSummary ? `\n\n${configSummary}` : ""}`,
+    ornament
+      ? [
+          `Ornament detail — itemId: ${ornament.id}`,
+          `Name: "${ornament.name || ""}"`,
+          ornament.brand ? `Brand: ${ornament.brand}` : null,
+          ornament.seriesOrCollection
+            ? `Series/Collection: "${ornament.seriesOrCollection}"`
+            : null,
+          ornament.year ? `Year: ${ornament.year}` : null,
+          ornament.barcodeValue
+            ? `Barcode/UPC: ${ornament.barcodeValue}`
+            : null,
+          ornament.condition ? `Condition: ${ornament.condition}` : null,
+          ornament.bookValue != null
+            ? `Book value on file: $${ornament.bookValue.toFixed(2)}${ornament.bookValueSource ? ` (source: ${ornament.bookValueSource})` : ""}`
+            : "No book value on file yet.",
+          ornament.aiDescription
+            ? `AI description: "${ornament.aiDescription.slice(0, 200)}"`
+            : null,
+          configSummary ? `\n${configSummary}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n")
+      : `Loading ornament ${id}...`,
   );
 
   useEffect(() => {

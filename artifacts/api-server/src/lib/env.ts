@@ -62,6 +62,12 @@ export const env = {
   // endpoint can reject forged/unsolicited POST requests. Optional — the
   // webhook route returns 503 until this is set.
   apifyWebhookSecret: optional("APIFY_WEBHOOK_SECRET"),
+  // eBay Developer API credentials. Used for sold-listing price lookups
+  // (Finding API) and structured item data (Browse API). Optional at the env
+  // layer — routes that need them return 503 if absent.
+  ebayAppId: optional("EBAY_APP_ID"),
+  ebayCertId: optional("EBAY_CERT_ID"),
+  ebayDevId: optional("EBAY_DEV_ID"),
   sentryDsn: optional("SENTRY_DSN"),
   // Comma-separated list of allowed host names for OAuth redirect URIs and
   // password-reset URLs. Validated server-side so a forged Host header

@@ -475,7 +475,41 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
     }
   }
 
-  const imagePath = await uploadImage(cleanBuffer, contentType);
+  // Build the effective item name for eBay lookup before the image upload
+  // so we can run both in parallel.
+  const effectiveName =
+    nameField ??
+    analysis.name ??
+    (barcodeLookup?.found ? barcodeLookup.name : null);
+  const effectiveBrand =
+    brandField ?? (barcodeLookup?.found ? barcodeLookup.brand : null);
+  const effectiveYear =
+    analysis.year ?? (barcodeLookup?.found ? barcodeLookup.year : null);
+
+  // If we have a name, try to get eBay sold-price data in parallel with the
+  // image upload. Use this to pre-populate bookValue when no Hallmark price
+  // is available.
+  const [imagePath, ebayCreationLookup] = await Promise.all([
+    uploadImage(cleanBuffer, contentType),
+    env.ebayAppId && effectiveName
+      ? lookupEbayMarketValue(
+          // Text-based query as primary; UPC (when available) as a parallel
+          // keyword search — whichever returns more sold listings wins.
+          buildEbayQuery(effectiveName, {
+            maker: effectiveBrand ?? undefined,
+            year: effectiveYear ?? undefined,
+          }),
+          { withAspects: false, upc: barcodeField ?? undefined },
+        ).catch((err: unknown) => {
+          logger.warn(
+            { err },
+            "eBay lookup during ornament creation failed (non-fatal)",
+          );
+          return null;
+        })
+      : Promise.resolve(null),
+  ]);
+
   const today = new Date().toISOString().slice(0, 10);
 
   try {
@@ -483,33 +517,35 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
       .insert(ornamentsItems)
       .values({
         userId,
-        name:
-          nameField ??
-          analysis.name ??
-          (barcodeLookup?.found ? barcodeLookup.name : null),
-        brand:
-          brandField ??
-          (barcodeLookup?.found ? barcodeLookup.brand : null) ??
-          "Hallmark",
+        name: effectiveName,
+        brand: effectiveBrand ?? "Hallmark",
         seriesOrCollection:
           analysis.seriesOrCollection ??
           (barcodeLookup?.found
             ? (barcodeLookup.hallmarkSeriesName ??
               barcodeLookup.seriesOrCollection)
             : null),
-        year:
-          analysis.year ?? (barcodeLookup?.found ? barcodeLookup.year : null),
+        year: effectiveYear,
         barcodeValue: barcodeField,
         quantity: quantityField,
         notes: notesField,
-        // Pre-populate book value from the Hallmark collector price if known
-        bookValue: barcodeLookup?.hallmarkCollectorPriceUsd ?? null,
+        // Priority: Hallmark collector price > eBay sold median > null
+        bookValue:
+          barcodeLookup?.hallmarkCollectorPriceUsd != null
+            ? String(barcodeLookup.hallmarkCollectorPriceUsd)
+            : ebayCreationLookup?.priceMedianUsd != null
+              ? String(ebayCreationLookup.priceMedianUsd)
+              : null,
         bookValueSource: barcodeLookup?.hallmarkCollectorPriceUsd
           ? "hallmarkornaments.com"
-          : null,
-        bookValueUpdatedAt: barcodeLookup?.hallmarkCollectorPriceUsd
-          ? new Date()
-          : null,
+          : ebayCreationLookup?.priceMedianUsd
+            ? "ebay"
+            : null,
+        bookValueUpdatedAt:
+          barcodeLookup?.hallmarkCollectorPriceUsd != null ||
+          ebayCreationLookup?.priceMedianUsd != null
+            ? new Date()
+            : null,
         dimensions: userDimensions ?? analysis.dimensions,
         condition: conditionField,
         origin: originField,
@@ -1111,8 +1147,8 @@ export async function runItemAnalysis(id: number): Promise<unknown> {
 router.post("/items/:id/ebay-price-lookup", aiLimiter, async (req, res) => {
   const { id } = GetOrnamentParams.parse(req.params);
 
-  if (!env.apifyApiToken) {
-    res.status(503).json({ error: "Apify integration not configured." });
+  if (!env.ebayAppId) {
+    res.status(503).json({ error: "eBay API not configured." });
     return;
   }
 
@@ -1138,7 +1174,7 @@ router.post("/items/:id/ebay-price-lookup", aiLimiter, async (req, res) => {
     year: item.year,
   });
 
-  const result = await lookupEbayMarketValue(query, env.apifyApiToken);
+  const result = await lookupEbayMarketValue(query, { withAspects: true });
   if (!result) {
     res
       .status(422)
@@ -1177,6 +1213,7 @@ router.post("/items/:id/ebay-price-lookup", aiLimiter, async (req, res) => {
     listingCount: result.listingCount,
     listings: result.listings,
     searchQuery: query,
+    itemSpecifics: result.itemSpecifics ?? null,
   });
 });
 

@@ -1,12 +1,18 @@
 /**
- * eBay sold-listings lookup for pottery items and ornaments (#213, #214).
+ * eBay sold-listings lookup for pottery items and ornaments.
  *
- * Uses the `crawloop/ebay-sold-listings-scraper` Apify actor which searches
- * eBay's Sold + Completed filter so every result is a real transaction, not
- * just an asking price.
+ * Uses the official eBay Finding API (findCompletedItems) to search sold +
+ * completed listings — every result is a real transaction, not just an asking
+ * price. Replaced the previous Apify scraper approach with the official API.
+ *
+ * For ornament lookups, also calls the Browse API to retrieve structured
+ * item attributes (year, artist, series, theme) via aspect refinements.
  */
 
-import { runApifyActor } from "../apify-client";
+import { env } from "../env";
+import { findCompletedItems, type FindingListing } from "../ebay/finding";
+import { searchItemAspects, topAspectValues } from "../ebay/browse";
+import { logger } from "../logger";
 
 export interface EbayListing {
   title: string;
@@ -25,9 +31,9 @@ export interface EbayMarketValueResult {
   listingCount: number;
   listings: EbayListing[];
   cachedAt: string;
+  /** Structured item attributes from Browse API aspect refinements (ornament lookups only). */
+  itemSpecifics?: Record<string, string>;
 }
-
-const ACTOR_ID = "crawloop/ebay-sold-listings-scraper";
 
 function buildQuery(
   name: string,
@@ -48,15 +54,6 @@ function buildQuery(
   return parts.filter(Boolean).join(" ");
 }
 
-function parsePrice(raw: unknown): number | null {
-  if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) return raw;
-  if (typeof raw === "string") {
-    const n = parseFloat(raw.replace(/[^0-9.]/g, ""));
-    if (Number.isFinite(n) && n > 0) return n;
-  }
-  return null;
-}
-
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
@@ -65,40 +62,70 @@ function median(values: number[]): number {
     : sorted[mid];
 }
 
+/**
+ * Look up eBay sold-listing market value for an item.
+ *
+ * @param query       Search query (use buildEbayQuery to construct, or pass a
+ *                    UPC / Hallmark item number directly — eBay handles all of
+ *                    these as keywords and matches them to product listings).
+ * @param opts.upc    Optional raw UPC or Hallmark SKU (e.g. "661127022308" or
+ *                    "QXI7404"). When provided, the function tries a direct UPC
+ *                    keyword search alongside the text query and uses whichever
+ *                    returns more sold listings.
+ * @param opts.withAspects If true, also calls the Browse API for structured item
+ *                    attributes (year, artist, series, etc.). Adds ~1s latency.
+ */
 export async function lookupEbayMarketValue(
   query: string,
-  apiToken: string,
+  opts: { withAspects?: boolean; upc?: string | null } = {},
 ): Promise<EbayMarketValueResult | null> {
-  const items = await runApifyActor(
-    ACTOR_ID,
-    {
-      searchQuery: query,
-      maxResults: 20,
-      soldListingsOnly: true,
-    },
-    apiToken,
-    { timeoutMs: 60_000, maxItems: 20 },
-  );
-
-  const listings: EbayListing[] = [];
-
-  for (const item of items) {
-    const price = parsePrice(item.soldPrice ?? item.price);
-    if (price === null) continue;
-
-    listings.push({
-      title: String(item.title ?? ""),
-      soldPrice: price,
-      currency: String(item.currency ?? "USD"),
-      soldDate: item.soldDate ? String(item.soldDate) : null,
-      condition: item.condition ? String(item.condition) : null,
-      imageUrl: item.imageUrl ? String(item.imageUrl) : null,
-      itemUrl:
-        (item.itemUrl ?? item.url) ? String(item.itemUrl ?? item.url) : null,
-    });
+  if (!env.ebayAppId) {
+    throw new Error("eBay API not configured (EBAY_APP_ID missing)");
   }
 
-  if (listings.length === 0) return null;
+  // If a UPC / item-number is provided, run both the UPC keyword search and the
+  // text query in parallel; use whichever returns more results (UPC search is
+  // usually more precise when the value matches a real eBay product page).
+  const upcQuery = opts.upc?.trim();
+  const [primaryResults, upcResults, aspectResult] = await Promise.all([
+    findCompletedItems(query, 20),
+    upcQuery && upcQuery !== query
+      ? findCompletedItems(upcQuery, 20).catch((err: unknown) => {
+          logger.warn(
+            { err, upc: upcQuery },
+            "ebay upc keyword search failed (non-fatal)",
+          );
+          return [] as FindingListing[];
+        })
+      : Promise.resolve([] as FindingListing[]),
+    opts.withAspects
+      ? searchItemAspects(upcQuery ?? query).catch((err) => {
+          logger.warn(
+            { err, query },
+            "ebay browse aspects fetch failed (non-fatal)",
+          );
+          return null;
+        })
+      : Promise.resolve(null),
+  ]);
+
+  // Prefer UPC results when they outnumber the text-query results (better precision)
+  const findingResults =
+    upcResults.length >= primaryResults.length && upcResults.length > 0
+      ? upcResults
+      : primaryResults;
+
+  if (findingResults.length === 0) return null;
+
+  const listings: EbayListing[] = findingResults.map((l) => ({
+    title: l.title,
+    soldPrice: l.soldPrice,
+    currency: l.currency,
+    soldDate: l.soldDate,
+    condition: l.condition,
+    imageUrl: l.imageUrl,
+    itemUrl: l.itemUrl,
+  }));
 
   const prices = listings.map((l) => l.soldPrice);
   return {
@@ -108,6 +135,7 @@ export async function lookupEbayMarketValue(
     listingCount: listings.length,
     listings: listings.slice(0, 10),
     cachedAt: new Date().toISOString(),
+    itemSpecifics: aspectResult ? topAspectValues(aspectResult) : undefined,
   };
 }
 

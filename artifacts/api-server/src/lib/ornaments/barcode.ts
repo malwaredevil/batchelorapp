@@ -1,7 +1,16 @@
-import { eq } from "drizzle-orm";
-import { db, ornamentsBarcodeCache, hallmarkOrnaments } from "@workspace/db";
+import { and, eq, isNull } from "drizzle-orm";
+import {
+  db,
+  ornamentsBarcodeCache,
+  hallmarkOrnaments,
+  hallmarkHoohCatalog,
+  ornamentsItems,
+} from "@workspace/db";
 import { logger } from "../logger";
 import { getConfig } from "../app-config";
+import { env } from "../env";
+import { lookupHoohBySku } from "./hooh-single-lookup";
+import { searchHallmark } from "./hallmark-search";
 
 /**
  * UPCitemdb barcode lookup, cached per-UPC in ornaments_barcode_cache so
@@ -284,6 +293,175 @@ async function enrichFromHallmarkCatalog(sku: string): Promise<{
   };
 }
 
+/**
+ * Persist a HooH single-lookup result into hallmark_hooh_catalog, then
+ * re-run enrichFromHallmarkCatalog (reads the merged view) to return the
+ * full enrichment struct. Returns null if HooH found nothing.
+ */
+async function enrichViaHooh(
+  sku: string,
+  barcode: string,
+): Promise<Awaited<ReturnType<typeof enrichFromHallmarkCatalog>>> {
+  const hoohResult = await lookupHoohBySku(sku);
+  if (!hoohResult) return null;
+
+  const productUrl =
+    hoohResult.productUrl ||
+    `https://www.hookedonhallmark.com/?s=${encodeURIComponent(sku)}`;
+
+  await db
+    .insert(hallmarkHoohCatalog)
+    .values({
+      productUrl,
+      catalogId: hoohResult.catalogId,
+      hallmarkSku: hoohResult.hallmarkSku,
+      name: hoohResult.name,
+      year: hoohResult.year,
+      subcategory: hoohResult.subcategory,
+      seriesName: hoohResult.seriesName,
+      sequenceNumber: hoohResult.sequenceNumber,
+      retailPriceUsd:
+        hoohResult.retailPriceUsd != null
+          ? String(hoohResult.retailPriceUsd)
+          : null,
+      inStock: hoohResult.inStock,
+      crawledAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: hallmarkHoohCatalog.productUrl,
+      set: {
+        hallmarkSku: hoohResult.hallmarkSku,
+        name: hoohResult.name,
+        retailPriceUsd:
+          hoohResult.retailPriceUsd != null
+            ? String(hoohResult.retailPriceUsd)
+            : null,
+        inStock: hoohResult.inStock,
+        updatedAt: new Date(),
+      },
+    });
+
+  logger.info(
+    { sku, name: hoohResult.name, price: hoohResult.retailPriceUsd },
+    "HooH single-lookup: persisted to hallmark_hooh_catalog",
+  );
+
+  const enriched = await enrichFromHallmarkCatalog(sku);
+  if (enriched) {
+    void patchOrnamentsFromEnrichment(barcode, enriched);
+  }
+  return enriched;
+}
+
+/**
+ * Background fallback: run the Apify hallmark-single-lookup Playwright actor
+ * when HooH didn't have the ornament. Fire-and-forget — does not block the
+ * barcode response. Saves to hallmark_hooh_catalog and patches any ornaments
+ * already saved with this barcode.
+ */
+async function enrichCatalogViaApify(
+  sku: string,
+  barcode: string,
+): Promise<void> {
+  try {
+    const result = await searchHallmark({ hallmarkSku: sku });
+    if (!result) {
+      logger.info({ sku }, "Apify hallmark-search: no result for SKU");
+      return;
+    }
+
+    const productUrl =
+      result.hallmarkProductUrl ??
+      `https://www.hallmark.com/search/?q=${encodeURIComponent(sku)}`;
+
+    await db
+      .insert(hallmarkHoohCatalog)
+      .values({
+        productUrl,
+        catalogId: null,
+        hallmarkSku: result.hallmarkSku ?? sku,
+        name: result.name,
+        year: result.year,
+        subcategory: null,
+        seriesName: result.seriesName,
+        sequenceNumber: result.sequenceNumber,
+        retailPriceUsd:
+          result.originalRetailPrice != null
+            ? String(result.originalRetailPrice)
+            : null,
+        inStock: false,
+        source: "hallmark.com",
+        crawledAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: hallmarkHoohCatalog.productUrl,
+        set: {
+          hallmarkSku: result.hallmarkSku ?? sku,
+          name: result.name,
+          retailPriceUsd:
+            result.originalRetailPrice != null
+              ? String(result.originalRetailPrice)
+              : null,
+          updatedAt: new Date(),
+        },
+      });
+
+    logger.info(
+      { sku, name: result.name },
+      "Apify hallmark-search: persisted to hallmark_hooh_catalog",
+    );
+
+    const enriched = await enrichFromHallmarkCatalog(sku);
+    if (enriched) {
+      await patchOrnamentsFromEnrichment(barcode, enriched);
+    }
+  } catch (err) {
+    logger.warn({ err, sku }, "Apify background enrichment failed");
+  }
+}
+
+/**
+ * Auto-patch ornament items that were saved with this barcode before the
+ * Hallmark catalog enrichment was available. Only fills fields that are still
+ * null — never overwrites data the user has already entered.
+ */
+async function patchOrnamentsFromEnrichment(
+  barcode: string,
+  hallmark: NonNullable<Awaited<ReturnType<typeof enrichFromHallmarkCatalog>>>,
+): Promise<void> {
+  try {
+    const patch: Record<string, unknown> = {};
+    if (hallmark.seriesName) patch.seriesOrCollection = hallmark.seriesName;
+    if (hallmark.collectorPriceUsd) {
+      patch.bookValue = hallmark.collectorPriceUsd;
+      patch.bookValueSource = "hallmark-catalog";
+      patch.bookValueUpdatedAt = new Date();
+    }
+
+    if (Object.keys(patch).length === 0) return;
+
+    const result = await db
+      .update(ornamentsItems)
+      .set(patch)
+      .where(
+        and(
+          eq(ornamentsItems.barcodeValue, barcode),
+          isNull(ornamentsItems.seriesOrCollection),
+        ),
+      );
+
+    logger.info(
+      { barcode, fields: Object.keys(patch), rowCount: result.rowCount ?? 0 },
+      "Auto-patched ornament(s) from HooH/Apify enrichment",
+    );
+  } catch (err) {
+    logger.warn(
+      { err, barcode },
+      "Failed to auto-patch ornaments from enrichment",
+    );
+  }
+}
+
 export async function lookupBarcode(
   rawBarcode: string,
 ): Promise<BarcodeLookupResult> {
@@ -364,8 +542,22 @@ export async function lookupBarcode(
       } else {
         logger.info(
           { barcode, sku },
-          "Hallmark SKU extracted but not in catalog",
+          "Hallmark SKU extracted but not in catalog — trying HooH single-lookup",
         );
+        // ── 3b. Direct HooH scrape (static HTML, fast, no Apify needed) ──────
+        try {
+          hallmark = await enrichViaHooh(sku, barcode);
+        } catch (hoohErr) {
+          logger.warn({ err: hoohErr, sku }, "HooH single-lookup threw");
+        }
+        // ── 3c. HooH miss → background Apify Playwright fallback ─────────────
+        if (!hallmark && env.apifyApiToken) {
+          void enrichCatalogViaApify(sku, barcode);
+          logger.info(
+            { sku },
+            "HooH miss — Apify enrichment queued in background",
+          );
+        }
       }
     } catch (err) {
       logger.warn({ err, barcode, sku }, "Hallmark catalog enrichment failed");

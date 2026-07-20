@@ -16,6 +16,36 @@ import { ImageModal } from "./ImageModal";
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🎉", "👏", "🔥"];
 
+/** Two small circles: hollow = delivered, filled blue = read. Only shown on own messages. */
+function ReadReceipt({ isRead }: { isRead: boolean }) {
+  return (
+    <span
+      title={isRead ? "Read" : "Delivered"}
+      aria-label={isRead ? "Read" : "Delivered"}
+      style={{ display: "flex", alignItems: "center" }}
+    >
+      <svg width="17" height="8" viewBox="0 0 17 8" fill="none">
+        <circle
+          cx="4"
+          cy="4"
+          r="2.8"
+          stroke={isRead ? "#3b82f6" : "currentColor"}
+          strokeWidth="1.4"
+          fill={isRead ? "#3b82f6" : "none"}
+        />
+        <circle
+          cx="12"
+          cy="4"
+          r="2.8"
+          stroke={isRead ? "#3b82f6" : "currentColor"}
+          strokeWidth="1.4"
+          fill={isRead ? "#3b82f6" : "none"}
+        />
+      </svg>
+    </span>
+  );
+}
+
 interface MessageItemProps {
   message: MessengerMessengerMessage;
   isOwn: boolean;
@@ -567,7 +597,7 @@ export function MessageItem({
         )}
       </div>
 
-      {/* Timestamp + edited indicator */}
+      {/* Timestamp + edited indicator + read receipt */}
       <div
         style={{
           fontSize: 10,
@@ -576,6 +606,7 @@ export function MessageItem({
           paddingRight: isOwn ? 4 : 0,
           paddingLeft: isOwn ? 0 : 4,
           display: "flex",
+          alignItems: "center",
           gap: 4,
           opacity: 0.7,
         }}
@@ -588,6 +619,9 @@ export function MessageItem({
         </span>
         {message.editedAt && !isDeleted && (
           <span style={{ fontStyle: "italic" }}>edited</span>
+        )}
+        {isOwn && !isDeleted && !editing && (
+          <ReadReceipt isRead={!!message.readAt} />
         )}
       </div>
 

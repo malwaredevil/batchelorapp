@@ -193,6 +193,18 @@ const SERVICES: ServiceEntry[] = [
     env: [],
   },
   {
+    name: "HookedOnHallmark.com (direct fetch)",
+    purpose: "Hallmark ornament catalog enrichment on barcode miss",
+    usedFor:
+      "When a barcode lookup returns a Hallmark SKU but the local catalog has no price data, the server fetches the ornament's product page directly from hookedonhallmark.com (two HTTP requests: search page + product page, 8 s timeout). Parses the same _3d_item JS literal used by the Apify HooH actor. Runs in the background after the barcode response is returned; Apify is used as a deeper fallback if the direct fetch also misses. No API key required.",
+    implementedIn: [
+      "artifacts/api-server/src/lib/ornaments/hooh-single-lookup.ts",
+      "artifacts/api-server/src/lib/ornaments/barcode.ts",
+    ],
+    modules: ["Ornaments"],
+    env: [],
+  },
+  {
     name: "YouTube oEmbed API",
     purpose: "Link preview metadata for YouTube videos",
     usedFor:

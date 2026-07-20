@@ -192,6 +192,28 @@ const SERVICES: ServiceEntry[] = [
     modules: ["Ornaments"],
     env: [],
   },
+  {
+    name: "YouTube oEmbed API",
+    purpose: "Link preview metadata for YouTube videos",
+    usedFor:
+      "Fetches title and thumbnail for YouTube URLs (youtu.be, youtube.com/watch, youtube.com/shorts) shared in the household Messenger or Elaine chat. Public API, no key required. Results are cached in the messenger_link_previews table.",
+    implementedIn: [
+      "artifacts/api-server/src/routes/messenger/link-preview.ts",
+    ],
+    modules: ["Office", "Elaine"],
+    env: [],
+  },
+  {
+    name: "Vimeo oEmbed API",
+    purpose: "Link preview metadata for Vimeo videos",
+    usedFor:
+      "Fetches title and thumbnail for Vimeo video URLs shared in the household Messenger or Elaine chat. Public API, no key required. Results are cached in the messenger_link_previews table.",
+    implementedIn: [
+      "artifacts/api-server/src/routes/messenger/link-preview.ts",
+    ],
+    modules: ["Office", "Elaine"],
+    env: [],
+  },
 ];
 
 const MODULE_COLORS: Record<Module, string> = {

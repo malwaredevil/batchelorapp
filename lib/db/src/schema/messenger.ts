@@ -88,6 +88,25 @@ export type MessengerLinkPreviewRow = typeof messengerLinkPreviews.$inferSelect;
 export type InsertMessengerLinkPreview =
   typeof messengerLinkPreviews.$inferInsert;
 
+export const messengerReactions = pgTable(
+  "messenger_reactions",
+  {
+    id: serial("id").primaryKey(),
+    messageId: integer("message_id").notNull(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => appUsers.id, { onDelete: "cascade" }),
+    emoji: text("emoji").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [unique().on(t.messageId, t.userId, t.emoji)],
+).enableRLS();
+
+export type MessengerReactionRow = typeof messengerReactions.$inferSelect;
+export type InsertMessengerReaction = typeof messengerReactions.$inferInsert;
+
 export const messengerPushSubscriptions = pgTable(
   "messenger_push_subscriptions",
   {

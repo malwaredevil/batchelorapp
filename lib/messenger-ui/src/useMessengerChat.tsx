@@ -8,6 +8,8 @@ import {
   useDeleteMessage,
   useEditMessage,
   useClearConversation,
+  useAddReaction,
+  useRemoveReaction,
   getGetConversationMessagesQueryKey,
   getGetUnreadCountQueryKey,
   getListConversationsQueryKey,
@@ -56,6 +58,8 @@ export function useMessengerChat(isOpen: boolean, conversationId?: number) {
   const { mutateAsync: deleteMessageMutation } = useDeleteMessage();
   const { mutateAsync: editMessageMutation } = useEditMessage();
   const { mutateAsync: clearConversationMutation } = useClearConversation();
+  const { mutateAsync: addReactionMutation } = useAddReaction();
+  const { mutateAsync: removeReactionMutation } = useRemoveReaction();
 
   const sendMessage = useCallback(
     async (
@@ -128,6 +132,30 @@ export function useMessengerChat(isOpen: boolean, conversationId?: number) {
     qc.invalidateQueries({ queryKey: getListConversationsQueryKey() });
   }, [clearConversationMutation, qc, convId]);
 
+  const addReaction = useCallback(
+    async (messageId: number, emoji: string) => {
+      await addReactionMutation({ id: messageId, data: { emoji } });
+      if (convId) {
+        qc.invalidateQueries({
+          queryKey: getGetConversationMessagesQueryKey(convId),
+        });
+      }
+    },
+    [addReactionMutation, qc, convId],
+  );
+
+  const removeReaction = useCallback(
+    async (messageId: number, emoji: string) => {
+      await removeReactionMutation({ id: messageId, emoji });
+      if (convId) {
+        qc.invalidateQueries({
+          queryKey: getGetConversationMessagesQueryKey(convId),
+        });
+      }
+    },
+    [removeReactionMutation, qc, convId],
+  );
+
   const currentConversation =
     conversations?.find((c) => c.id === convId) ?? null;
 
@@ -142,6 +170,8 @@ export function useMessengerChat(isOpen: boolean, conversationId?: number) {
     deleteMessage,
     editMessage,
     clearConversation,
+    addReaction,
+    removeReaction,
     refetchMessages,
   };
 }

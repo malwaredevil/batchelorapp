@@ -7,15 +7,66 @@ import {
   Sparkles,
   Trash2,
   Users,
+  FileText,
 } from "lucide-react";
 import { useMessengerChat } from "./useMessengerChat";
 import { MessageItem } from "./MessageItem";
 import {
-  useUploadAttachment,
   useListHouseholdMembers,
   type MessengerHouseholdMember,
 } from "@workspace/api-client-react";
 import type { MessengerSendMessageBody } from "@workspace/api-client-react";
+
+type PendingAttachment = NonNullable<
+  MessengerSendMessageBody["attachments"]
+>[number] & {
+  previewUrl?: string;
+};
+
+interface UploadingFile {
+  name: string;
+  progress: number;
+}
+
+async function uploadFileWithProgress(
+  file: File,
+  onProgress: (pct: number) => void,
+): Promise<{
+  storagePath: string;
+  url: string;
+  mimeType: string;
+  fileName: string;
+  sizeBytes: number;
+}> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/messenger/attachments/upload");
+    xhr.upload.addEventListener("progress", (e) => {
+      if (e.lengthComputable) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    });
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(
+          JSON.parse(xhr.responseText) as {
+            storagePath: string;
+            url: string;
+            mimeType: string;
+            fileName: string;
+            sizeBytes: number;
+          },
+        );
+      } else {
+        reject(new Error(`Upload failed: ${xhr.status}`));
+      }
+    });
+    xhr.addEventListener("error", () => reject(new Error("Upload failed")));
+    const fd = new FormData();
+    fd.append("file", file);
+    xhr.send(fd);
+  });
+}
 
 interface MessengerChatPanelProps {
   currentUserId: number;
@@ -114,9 +165,9 @@ export function MessengerChatPanel({
 }: MessengerChatPanelProps) {
   const [input, setInput] = useState("");
   const [pendingAttachments, setPendingAttachments] = useState<
-    NonNullable<MessengerSendMessageBody["attachments"]>
+    PendingAttachment[]
   >([]);
-  const [isUploading, setIsUploading] = useState(false);
+  const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
   const [mentionAnchor, setMentionAnchor] = useState<MentionAnchor | null>(
     null,
   );
@@ -138,6 +189,8 @@ export function MessengerChatPanel({
     deleteMessage,
     editMessage,
     clearConversation,
+    addReaction,
+    removeReaction,
   } = useMessengerChat(isOpen, conversationId);
 
   // The only editable message: the last non-deleted message sent by the current user,
@@ -152,7 +205,6 @@ export function MessengerChatPanel({
     setShowClearConfirm(false);
   }, [clearConversation]);
 
-  const { mutateAsync: uploadAttachment } = useUploadAttachment();
   const { data: rawMembers = [] } = useListHouseholdMembers();
 
   const allMembers: MemberEntry[] = [
@@ -211,7 +263,12 @@ export function MessengerChatPanel({
   const handleSend = useCallback(async () => {
     const body = input.trim();
     if (!body && pendingAttachments.length === 0) return;
-    const attachments = [...pendingAttachments];
+    const attachments = pendingAttachments.map(
+      ({ previewUrl: _p, ...rest }) => rest,
+    );
+    pendingAttachments.forEach((a) => {
+      if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+    });
     setInput("");
     setPendingAttachments([]);
     setMentionAnchor(null);
@@ -307,30 +364,36 @@ export function MessengerChatPanel({
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
-    setIsUploading(true);
+    const previews = files.map((f) =>
+      f.type.startsWith("image/") ? URL.createObjectURL(f) : undefined,
+    );
+    setUploadingFiles(files.map((f) => ({ name: f.name, progress: 0 })));
     try {
       const results = await Promise.all(
-        files.map(async (file) => {
-          const formData = new FormData();
-          formData.append("file", file);
-          return uploadAttachment({
-            data: formData as unknown as { file: Blob },
-          });
-        }),
+        files.map((file, i) =>
+          uploadFileWithProgress(file, (pct) => {
+            setUploadingFiles((prev) =>
+              prev.map((u, j) => (j === i ? { ...u, progress: pct } : u)),
+            );
+          }),
+        ),
       );
       setPendingAttachments((prev) => [
         ...prev,
-        ...results.map((r) => ({
+        ...results.map((r, i) => ({
           storagePath: r.storagePath,
           mimeType: r.mimeType,
           fileName: r.fileName,
           sizeBytes: r.sizeBytes,
+          previewUrl: previews[i],
         })),
       ]);
     } catch {
-      // silent
+      previews.forEach((p) => {
+        if (p) URL.revokeObjectURL(p);
+      });
     } finally {
-      setIsUploading(false);
+      setUploadingFiles([]);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
@@ -548,6 +611,8 @@ export function MessengerChatPanel({
                     canEdit={msg.id === editableMessageId}
                     onDelete={deleteMessage}
                     onEdit={editMessage}
+                    onAddReaction={addReaction}
+                    onRemoveReaction={removeReaction}
                   />
                 );
               })}
@@ -627,63 +692,171 @@ export function MessengerChatPanel({
         <div ref={bottomRef} />
       </div>
 
+      {/* Upload progress bars */}
+      {uploadingFiles.length > 0 && (
+        <div
+          style={{
+            padding: "6px 12px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+            borderTop: "1px solid hsl(var(--border))",
+          }}
+        >
+          {uploadingFiles.map((uf, i) => (
+            <div key={i}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  fontSize: 11,
+                  color: "hsl(var(--muted-foreground))",
+                  marginBottom: 2,
+                }}
+              >
+                <span
+                  style={{
+                    maxWidth: 200,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {uf.name}
+                </span>
+                <span>{uf.progress}%</span>
+              </div>
+              <div
+                style={{
+                  height: 3,
+                  background: "hsl(var(--border))",
+                  borderRadius: 9999,
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    height: "100%",
+                    width: `${uf.progress}%`,
+                    background: "#3b82f6",
+                    borderRadius: 9999,
+                    transition: "width 0.1s ease",
+                  }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Pending attachments preview */}
       {pendingAttachments.length > 0 && (
         <div
           style={{
-            padding: "4px 12px",
+            padding: "6px 12px",
             display: "flex",
             flexWrap: "wrap",
             gap: 6,
-            borderTop: "1px solid hsl(var(--border))",
+            borderTop:
+              uploadingFiles.length === 0
+                ? "1px solid hsl(var(--border))"
+                : undefined,
           }}
         >
-          {pendingAttachments.map((a, i) => (
-            <div
-              key={i}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-                background: "rgba(59,130,246,0.1)",
-                border: "1px solid rgba(59,130,246,0.3)",
-                borderRadius: 6,
-                padding: "3px 8px",
-                fontSize: 11,
-                color: "#3b82f6",
-              }}
-            >
-              <span
-                style={{
-                  maxWidth: 120,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
+          {pendingAttachments.map((a, i) =>
+            a.mimeType.startsWith("image/") && a.previewUrl ? (
+              <div
+                key={i}
+                style={{ position: "relative", display: "inline-flex" }}
               >
-                {a.fileName}
-              </span>
-              <button
-                onClick={() =>
-                  setPendingAttachments((prev) =>
-                    prev.filter((_, j) => j !== i),
-                  )
-                }
+                <img
+                  src={a.previewUrl}
+                  alt={a.fileName}
+                  style={{
+                    width: 56,
+                    height: 56,
+                    objectFit: "cover",
+                    borderRadius: 6,
+                    border: "1px solid hsl(var(--border))",
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+                    setPendingAttachments((prev) =>
+                      prev.filter((_, j) => j !== i),
+                    );
+                  }}
+                  aria-label={`Remove ${a.fileName}`}
+                  style={{
+                    position: "absolute",
+                    top: -5,
+                    right: -5,
+                    width: 16,
+                    height: 16,
+                    borderRadius: "50%",
+                    background: "#1e293b",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "#fff",
+                    fontSize: 10,
+                    lineHeight: 1,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            ) : (
+              <div
+                key={i}
                 style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  background: "rgba(59,130,246,0.08)",
+                  border: "1px solid rgba(59,130,246,0.25)",
+                  borderRadius: 6,
+                  padding: "4px 8px",
+                  fontSize: 11,
                   color: "#3b82f6",
-                  opacity: 0.6,
-                  padding: 0,
-                  fontSize: 12,
-                  lineHeight: 1,
                 }}
               >
-                ×
-              </button>
-            </div>
-          ))}
+                <FileText size={12} />
+                <span
+                  style={{
+                    maxWidth: 120,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {a.fileName}
+                </span>
+                <button
+                  onClick={() =>
+                    setPendingAttachments((prev) =>
+                      prev.filter((_, j) => j !== i),
+                    )
+                  }
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "#3b82f6",
+                    opacity: 0.6,
+                    padding: 0,
+                    fontSize: 13,
+                    lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            ),
+          )}
         </div>
       )}
 
@@ -820,20 +993,23 @@ export function MessengerChatPanel({
         />
         <button
           onClick={() => fileInputRef.current?.click()}
-          disabled={isUploading}
+          disabled={uploadingFiles.length > 0}
           aria-label="Attach file"
           style={{
             background: "none",
             border: "none",
-            cursor: "pointer",
-            color: "hsl(var(--muted-foreground))",
+            cursor: uploadingFiles.length > 0 ? "default" : "pointer",
+            color:
+              uploadingFiles.length > 0
+                ? "#3b82f6"
+                : "hsl(var(--muted-foreground))",
             padding: "6px",
             borderRadius: 8,
             display: "flex",
             flexShrink: 0,
           }}
         >
-          {isUploading ? (
+          {uploadingFiles.length > 0 ? (
             <Loader2
               size={18}
               style={{ animation: "spin 1s linear infinite" }}

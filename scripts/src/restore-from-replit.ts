@@ -756,7 +756,7 @@ async function main() {
 
   // ── Travels ───────────────────────────────────────────────────────────────
   await dest.query(
-    "TRUNCATE messenger_link_previews, messenger_attachments, messenger_messages, messenger_conversations, travels_calendar_trip_suggestions, travels_custom_document_types, travels_trip_card_collapse_state, travels_card_layout_preferences, travels_gmail_scan_decisions, travels_gmail_connections, elaine_history_messages, elaine_history_conversations, elaine_global_config, elaine_nudges, elaine_memory, elaine_settings, elaine_email_webhook_deliveries, elaine_email_conversations, elaine_conversations, travels_reminder_calendar_events, travels_connected_calendars, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_trip_photos, travels_trip_documents CASCADE",
+    "TRUNCATE messenger_reactions, messenger_link_previews, messenger_attachments, messenger_messages, messenger_conversations, travels_calendar_trip_suggestions, travels_custom_document_types, travels_trip_card_collapse_state, travels_card_layout_preferences, travels_gmail_scan_decisions, travels_gmail_connections, elaine_history_messages, elaine_history_conversations, elaine_global_config, elaine_nudges, elaine_memory, elaine_settings, elaine_email_webhook_deliveries, elaine_email_conversations, elaine_conversations, travels_reminder_calendar_events, travels_connected_calendars, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_trip_photos, travels_trip_documents CASCADE",
   );
   await dest.query("TRUNCATE travels_trips CASCADE");
 
@@ -1148,6 +1148,13 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "messenger_link_previews", "id");
+
+  await copyTable(source, dest, {
+    table: "messenger_reactions",
+    columns: ["id", "message_id", "user_id", "emoji", "created_at"],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "messenger_reactions", "id");
 
   // ── Phase 2: Operations ───────────────────────────────────────────────────
   await copyTable(source, dest, {

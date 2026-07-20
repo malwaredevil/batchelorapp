@@ -2600,4 +2600,16 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS hallmark_hooh_year_idx ON hallmark_hooh_catalog (year)`,
   `CREATE INDEX IF NOT EXISTS hallmark_hooh_series_idx ON hallmark_hooh_catalog (series_name)`,
   `CREATE INDEX IF NOT EXISTS hallmark_hooh_url_idx ON hallmark_hooh_catalog (product_url)`,
+
+  // ── Messenger reactions ──────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS messenger_reactions (
+    id          serial PRIMARY KEY,
+    message_id  integer NOT NULL REFERENCES messenger_messages(id) ON DELETE CASCADE,
+    user_id     integer NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+    emoji       text NOT NULL,
+    created_at  timestamptz NOT NULL DEFAULT now(),
+    UNIQUE(message_id, user_id, emoji)
+  )`,
+  `ALTER TABLE messenger_reactions ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS messenger_reactions_msg_idx ON messenger_reactions (message_id)`,
 ];

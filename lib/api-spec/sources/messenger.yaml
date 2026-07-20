@@ -193,6 +193,47 @@ paths:
                 properties:
                   markedCount:
                     type: integer
+  /messages/{id}/reactions:
+    post:
+      operationId: addReaction
+      tags:
+        - messenger
+      summary: Add an emoji reaction to a message (idempotent)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddReactionBody"
+      responses:
+        "204":
+          description: Reaction added (or already existed)
+  /messages/{id}/reactions/{emoji}:
+    delete:
+      operationId: removeReaction
+      tags:
+        - messenger
+      summary: Remove your emoji reaction from a message
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: emoji
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Removed
   /messages/{id}:
     delete:
       operationId: deleteMessage
@@ -433,6 +474,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MessengerAttachment"
+        reactions:
+          type: array
+          items:
+            $ref: "#/components/schemas/MessengerReaction"
     SendMessageBody:
       type: object
       required:
@@ -578,4 +623,24 @@ components:
         - endpoint
       properties:
         endpoint:
+          type: string
+    MessengerReaction:
+      type: object
+      required:
+        - emoji
+        - count
+        - userReacted
+      properties:
+        emoji:
+          type: string
+        count:
+          type: integer
+        userReacted:
+          type: boolean
+    AddReactionBody:
+      type: object
+      required:
+        - emoji
+      properties:
+        emoji:
           type: string

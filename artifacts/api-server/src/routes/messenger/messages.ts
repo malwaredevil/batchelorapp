@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, lte, isNull, gt } from "drizzle-orm";
-import { db, messengerMessages } from "@workspace/db";
+import { db, messengerMessages, messengerReactions } from "@workspace/db";
 import {
   MarkMessageReadParams,
   DeleteMessageParams,
@@ -157,6 +157,53 @@ router.patch("/messages/:id", async (req, res) => {
     id: updated.id,
     editedAt: updated.editedAt?.toISOString() ?? new Date().toISOString(),
   });
+});
+
+router.post("/messages/:id/reactions", async (req, res) => {
+  const msgId = Number(req.params.id);
+  if (isNaN(msgId)) {
+    res.status(400).json({ error: "Invalid message id" });
+    return;
+  }
+
+  const emoji =
+    typeof req.body?.emoji === "string" ? req.body.emoji.trim() : "";
+  if (!emoji) {
+    res.status(400).json({ error: "emoji is required" });
+    return;
+  }
+
+  const userId = req.session?.userId as number;
+
+  await db
+    .insert(messengerReactions)
+    .values({ messageId: msgId, userId, emoji })
+    .onConflictDoNothing();
+
+  res.status(204).send();
+});
+
+router.delete("/messages/:id/reactions/:emoji", async (req, res) => {
+  const msgId = Number(req.params.id);
+  if (isNaN(msgId)) {
+    res.status(400).json({ error: "Invalid message id" });
+    return;
+  }
+
+  const emoji = req.params.emoji;
+  const userId = req.session?.userId as number;
+
+  await db
+    .delete(messengerReactions)
+    .where(
+      and(
+        eq(messengerReactions.messageId, msgId),
+        eq(messengerReactions.userId, userId),
+        eq(messengerReactions.emoji, emoji),
+      ),
+    );
+
+  res.status(204).send();
 });
 
 export default router;

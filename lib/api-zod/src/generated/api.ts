@@ -5562,6 +5562,11 @@ export const ListConversationsResponseItem = zod.object({
   "fileName": zod.string(),
   "sizeBytes": zod.number().optional(),
   "url": zod.string()
+})).optional(),
+  "reactions": zod.array(zod.object({
+  "emoji": zod.string(),
+  "count": zod.number(),
+  "userReacted": zod.boolean()
 })).optional()
 }).optional(),
   "unreadCount": zod.number(),
@@ -5606,6 +5611,11 @@ export const CreateConversationResponse = zod.object({
   "fileName": zod.string(),
   "sizeBytes": zod.number().optional(),
   "url": zod.string()
+})).optional(),
+  "reactions": zod.array(zod.object({
+  "emoji": zod.string(),
+  "count": zod.number(),
+  "userReacted": zod.boolean()
 })).optional()
 }).optional(),
   "unreadCount": zod.number(),
@@ -5660,6 +5670,11 @@ export const UpdateConversationResponse = zod.object({
   "fileName": zod.string(),
   "sizeBytes": zod.number().optional(),
   "url": zod.string()
+})).optional(),
+  "reactions": zod.array(zod.object({
+  "emoji": zod.string(),
+  "count": zod.number(),
+  "userReacted": zod.boolean()
 })).optional()
 }).optional(),
   "unreadCount": zod.number(),
@@ -5709,6 +5724,11 @@ export const GetConversationMessagesResponseItem = zod.object({
   "fileName": zod.string(),
   "sizeBytes": zod.number().optional(),
   "url": zod.string()
+})).optional(),
+  "reactions": zod.array(zod.object({
+  "emoji": zod.string(),
+  "count": zod.number(),
+  "userReacted": zod.boolean()
 })).optional()
 })
 export const GetConversationMessagesResponse = zod.array(GetConversationMessagesResponseItem)
@@ -5749,6 +5769,27 @@ export const MarkMessageReadParams = zod.object({
 
 export const MarkMessageReadResponse = zod.object({
   "markedCount": zod.number()
+})
+
+
+/**
+ * @summary Add an emoji reaction to a message (idempotent)
+ */
+export const AddReactionParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const AddReactionBody = zod.object({
+  "emoji": zod.string()
+})
+
+
+/**
+ * @summary Remove your emoji reaction from a message
+ */
+export const RemoveReactionParams = zod.object({
+  "id": zod.coerce.number(),
+  "emoji": zod.coerce.string()
 })
 
 

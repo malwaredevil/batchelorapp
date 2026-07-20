@@ -33,7 +33,7 @@
  *   Notifications: notification_events, notification_recipients, notification_deliveries,
  *                  notification_preferences
  *   Messenger: messenger_conversations, messenger_messages, messenger_attachments,
- *              messenger_link_previews
+ *              messenger_link_previews, messenger_reactions
  *   Elaine:   elaine_conversations, elaine_settings, elaine_memory, elaine_nudges,
  *             elaine_global_config, elaine_history_conversations, elaine_history_messages
  *             (shared assistant, not namespaced per-app)
@@ -285,6 +285,15 @@ CREATE TABLE IF NOT EXISTS messenger_link_previews (
   description TEXT,
   image_url   TEXT,
   fetched_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS messenger_reactions (
+  id         SERIAL PRIMARY KEY,
+  message_id INTEGER NOT NULL REFERENCES messenger_messages(id) ON DELETE CASCADE,
+  user_id    INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+  emoji      TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (message_id, user_id, emoji)
 );
 
 CREATE TABLE IF NOT EXISTS ornaments_hallmark_events (
@@ -2694,6 +2703,13 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "messenger_link_previews", "id");
+
+  summary["messenger_reactions"] = await copyTable(source, dest, {
+    table: "messenger_reactions",
+    columns: ["id", "message_id", "user_id", "emoji", "created_at"],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "messenger_reactions", "id");
 
   // ── Phase 2: Operations ───────────────────────────────────────────────────
   summary["app_schema_migrations"] = await copyTable(source, dest, {

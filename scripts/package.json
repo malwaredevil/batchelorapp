@@ -6,6 +6,7 @@
   "scripts": {
     "backup-to-replit": "tsx ./src/backup-to-replit.ts",
     "ingest-hooh-now": "tsx ./src/ingest-hooh-now.ts",
+    "merge-hallmark-catalogs": "tsx ./src/merge-hallmark-catalogs.ts",
     "restore-from-replit": "tsx ./src/restore-from-replit.ts",
     "seed-travels": "tsx ./src/seed-travels-data.ts",
     "seed-quilting-block-templates": "tsx ./src/seed-quilting-block-templates.ts",

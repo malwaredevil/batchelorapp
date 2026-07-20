@@ -1228,6 +1228,9 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_product_url TEXT`,
   `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_confidence NUMERIC(4,3)`,
   `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_enriched_at TIMESTAMPTZ`,
+  `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_collector_price_usd NUMERIC(10,2)`,
+  `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_in_stock BOOLEAN`,
+  `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_images TEXT[]`,
 
   // ── Realtime replication (issue #128) ───────────────────────────────────────
   // Adds the household-shared collection tables to Supabase's built-in
@@ -2600,6 +2603,39 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS hallmark_hooh_year_idx ON hallmark_hooh_catalog (year)`,
   `CREATE INDEX IF NOT EXISTS hallmark_hooh_series_idx ON hallmark_hooh_catalog (series_name)`,
   `CREATE INDEX IF NOT EXISTS hallmark_hooh_url_idx ON hallmark_hooh_catalog (product_url)`,
+
+  // ── Hallmark ornaments — merged single-table view ─────────────────────────
+  // Populated by the merge-hallmark-catalogs script. Keyed by hallmark_sku.
+  // Consolidates hallmark_catalog + hallmark_historical_catalog + hallmark_hooh_catalog.
+  // Source tables are retained as read-only history; queries use this table only.
+  `CREATE TABLE IF NOT EXISTS hallmark_ornaments (
+    id                     serial PRIMARY KEY,
+    hallmark_sku           text NOT NULL UNIQUE,
+    name                   text NOT NULL,
+    description            text,
+    series_name            text,
+    sequence_number        integer,
+    year                   integer,
+    artist                 text,
+    retail_price_usd       numeric(10,2),
+    collector_price_usd    numeric(10,2),
+    in_stock               boolean,
+    ornament_category      text,
+    subcategory            text,
+    images                 text[],
+    product_url_hallmark   text,
+    product_url_historical text,
+    product_url_hooh       text,
+    in_hallmark_catalog    boolean NOT NULL DEFAULT false,
+    in_historical_catalog  boolean NOT NULL DEFAULT false,
+    in_hooh_catalog        boolean NOT NULL DEFAULT false,
+    created_at             timestamptz NOT NULL DEFAULT now(),
+    updated_at             timestamptz NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE hallmark_ornaments ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS hallmark_ornaments_sku_idx    ON hallmark_ornaments (hallmark_sku)`,
+  `CREATE INDEX IF NOT EXISTS hallmark_ornaments_year_idx   ON hallmark_ornaments (year)`,
+  `CREATE INDEX IF NOT EXISTS hallmark_ornaments_series_idx ON hallmark_ornaments (series_name)`,
 
   // ── Messenger reactions ──────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS messenger_reactions (

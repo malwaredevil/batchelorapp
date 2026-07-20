@@ -285,6 +285,7 @@ async function main() {
   await dest.query("TRUNCATE ornaments_items CASCADE");
   await dest.query("TRUNCATE ornaments_categories CASCADE");
   await dest.query("TRUNCATE ornaments_barcode_cache CASCADE");
+  await dest.query("TRUNCATE hallmark_ornaments CASCADE");
   await dest.query("TRUNCATE ornaments_hallmark_events CASCADE");
 
   await copyTable(source, dest, {
@@ -354,9 +355,50 @@ async function main() {
       "description",
       "image_url",
       "created_at",
+      "hallmark_sku",
+      "hallmark_series_name",
+      "hallmark_sequence_number",
+      "hallmark_artist",
+      "hallmark_original_retail_price",
+      "hallmark_product_url",
+      "hallmark_confidence",
+      "hallmark_enriched_at",
+      "hallmark_collector_price_usd",
+      "hallmark_in_stock",
+      "hallmark_images",
     ],
     orderBy: "barcode",
   });
+
+  await copyTable(source, dest, {
+    table: "hallmark_ornaments",
+    columns: [
+      "id",
+      "hallmark_sku",
+      "name",
+      "description",
+      "series_name",
+      "sequence_number",
+      "year",
+      "artist",
+      "retail_price_usd",
+      "collector_price_usd",
+      "in_stock",
+      "ornament_category",
+      "subcategory",
+      "images",
+      "product_url_hallmark",
+      "product_url_historical",
+      "product_url_hooh",
+      "in_hallmark_catalog",
+      "in_historical_catalog",
+      "in_hooh_catalog",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "hallmark_ornaments", "id");
 
   await copyTable(source, dest, {
     table: "ornaments_hallmark_events",

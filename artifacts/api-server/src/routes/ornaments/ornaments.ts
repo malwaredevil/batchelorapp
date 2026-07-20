@@ -351,6 +351,15 @@ router.post("/items/lookup-barcode", async (req, res) => {
       year: result.year,
       description: result.description,
       imageUrl: result.imageUrl,
+      hallmarkSku: result.hallmarkSku,
+      hallmarkArtist: result.hallmarkArtist,
+      hallmarkSeriesName: result.hallmarkSeriesName,
+      hallmarkSequenceNumber: result.hallmarkSequenceNumber,
+      hallmarkRetailPriceUsd: result.hallmarkRetailPriceUsd,
+      hallmarkCollectorPriceUsd: result.hallmarkCollectorPriceUsd,
+      hallmarkInStock: result.hallmarkInStock,
+      hallmarkImages: result.hallmarkImages,
+      hallmarkProductUrl: result.hallmarkProductUrl,
     }),
   );
 });
@@ -484,12 +493,23 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
           "Hallmark",
         seriesOrCollection:
           analysis.seriesOrCollection ??
-          (barcodeLookup?.found ? barcodeLookup.seriesOrCollection : null),
+          (barcodeLookup?.found
+            ? (barcodeLookup.hallmarkSeriesName ??
+              barcodeLookup.seriesOrCollection)
+            : null),
         year:
           analysis.year ?? (barcodeLookup?.found ? barcodeLookup.year : null),
         barcodeValue: barcodeField,
         quantity: quantityField,
         notes: notesField,
+        // Pre-populate book value from the Hallmark collector price if known
+        bookValue: barcodeLookup?.hallmarkCollectorPriceUsd ?? null,
+        bookValueSource: barcodeLookup?.hallmarkCollectorPriceUsd
+          ? "hallmarkornaments.com"
+          : null,
+        bookValueUpdatedAt: barcodeLookup?.hallmarkCollectorPriceUsd
+          ? new Date()
+          : null,
         dimensions: userDimensions ?? analysis.dimensions,
         condition: conditionField,
         origin: originField,
@@ -907,6 +927,15 @@ router.post("/items/:id/lookup-barcode", async (req, res) => {
       year: result.year,
       description: result.description,
       imageUrl: result.imageUrl,
+      hallmarkSku: result.hallmarkSku,
+      hallmarkArtist: result.hallmarkArtist,
+      hallmarkSeriesName: result.hallmarkSeriesName,
+      hallmarkSequenceNumber: result.hallmarkSequenceNumber,
+      hallmarkRetailPriceUsd: result.hallmarkRetailPriceUsd,
+      hallmarkCollectorPriceUsd: result.hallmarkCollectorPriceUsd,
+      hallmarkInStock: result.hallmarkInStock,
+      hallmarkImages: result.hallmarkImages,
+      hallmarkProductUrl: result.hallmarkProductUrl,
     }),
   );
 });

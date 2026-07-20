@@ -13,7 +13,7 @@
  *            pottery_images, pottery_item_categories
  *   Ornaments: ornaments_categories, ornaments_items (WITHOUT embedding/visual_embedding),
  *              ornaments_images, ornaments_item_categories, ornaments_barcode_cache,
- *              ornaments_hallmark_events
+ *              ornaments_hallmark_events, hallmark_ornaments
  *   Quilting: quilting_categories, quilting_fabrics (WITHOUT embedding/visual_embedding),
  *             quilting_patterns (WITHOUT embedding/visual_embedding),
  *             quilting_finished_quilts, quilting_fabric_links, quilting_pattern_links,
@@ -231,15 +231,51 @@ CREATE TABLE IF NOT EXISTS ornaments_item_categories (
 );
 
 CREATE TABLE IF NOT EXISTS ornaments_barcode_cache (
-  barcode              TEXT PRIMARY KEY,
-  found                INTEGER NOT NULL DEFAULT 0,
-  name                 TEXT,
-  brand                TEXT,
-  series_or_collection TEXT,
-  year                 INTEGER,
-  description          TEXT,
-  image_url            TEXT,
-  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  barcode                     TEXT PRIMARY KEY,
+  found                       INTEGER NOT NULL DEFAULT 0,
+  name                        TEXT,
+  brand                       TEXT,
+  series_or_collection        TEXT,
+  year                        INTEGER,
+  description                 TEXT,
+  image_url                   TEXT,
+  created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  hallmark_sku                TEXT,
+  hallmark_series_name        TEXT,
+  hallmark_sequence_number    INTEGER,
+  hallmark_artist             TEXT,
+  hallmark_original_retail_price NUMERIC(10,2),
+  hallmark_product_url        TEXT,
+  hallmark_confidence         NUMERIC(4,3),
+  hallmark_enriched_at        TIMESTAMPTZ,
+  hallmark_collector_price_usd NUMERIC(10,2),
+  hallmark_in_stock           BOOLEAN,
+  hallmark_images             TEXT[]
+);
+
+CREATE TABLE IF NOT EXISTS hallmark_ornaments (
+  id                     SERIAL PRIMARY KEY,
+  hallmark_sku           TEXT NOT NULL UNIQUE,
+  name                   TEXT NOT NULL,
+  description            TEXT,
+  series_name            TEXT,
+  sequence_number        INTEGER,
+  year                   INTEGER,
+  artist                 TEXT,
+  retail_price_usd       NUMERIC(10,2),
+  collector_price_usd    NUMERIC(10,2),
+  in_stock               BOOLEAN,
+  ornament_category      TEXT,
+  subcategory            TEXT,
+  images                 TEXT[],
+  product_url_hallmark   TEXT,
+  product_url_historical TEXT,
+  product_url_hooh       TEXT,
+  in_hallmark_catalog    BOOLEAN NOT NULL DEFAULT false,
+  in_historical_catalog  BOOLEAN NOT NULL DEFAULT false,
+  in_hooh_catalog        BOOLEAN NOT NULL DEFAULT false,
+  created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Office
@@ -834,6 +870,18 @@ ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS extra_models JSONB NOT
 ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS timeouts JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS features JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS thresholds JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_sku TEXT;
+ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_series_name TEXT;
+ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_sequence_number INTEGER;
+ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_artist TEXT;
+ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_original_retail_price NUMERIC(10,2);
+ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_product_url TEXT;
+ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_confidence NUMERIC(4,3);
+ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_enriched_at TIMESTAMPTZ;
+ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_collector_price_usd NUMERIC(10,2);
+ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_in_stock BOOLEAN;
+ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_images TEXT[];
 
 -- Phase 2: Operations (job queue + external cost tracking)
 CREATE TABLE IF NOT EXISTS app_schema_migrations (
@@ -1781,9 +1829,50 @@ async function main() {
       "description",
       "image_url",
       "created_at",
+      "hallmark_sku",
+      "hallmark_series_name",
+      "hallmark_sequence_number",
+      "hallmark_artist",
+      "hallmark_original_retail_price",
+      "hallmark_product_url",
+      "hallmark_confidence",
+      "hallmark_enriched_at",
+      "hallmark_collector_price_usd",
+      "hallmark_in_stock",
+      "hallmark_images",
     ],
     orderBy: "barcode",
   });
+
+  summary["hallmark_ornaments"] = await copyTable(source, dest, {
+    table: "hallmark_ornaments",
+    columns: [
+      "id",
+      "hallmark_sku",
+      "name",
+      "description",
+      "series_name",
+      "sequence_number",
+      "year",
+      "artist",
+      "retail_price_usd",
+      "collector_price_usd",
+      "in_stock",
+      "ornament_category",
+      "subcategory",
+      "images",
+      "product_url_hallmark",
+      "product_url_historical",
+      "product_url_hooh",
+      "in_hallmark_catalog",
+      "in_historical_catalog",
+      "in_hooh_catalog",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "hallmark_ornaments", "id");
 
   summary["ornaments_hallmark_events"] = await copyTable(source, dest, {
     table: "ornaments_hallmark_events",

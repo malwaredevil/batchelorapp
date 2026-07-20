@@ -7,6 +7,45 @@ const router: IRouter = Router();
 
 const PREVIEW_TIMEOUT_MS = 6000;
 
+const YOUTUBE_RE =
+  /^https?:\/\/(www\.)?(youtube\.com\/(watch|shorts|embed)|youtu\.be)(\/|\?|$)/;
+const VIMEO_RE = /^https?:\/\/(www\.)?vimeo\.com\/\d+/;
+
+async function tryOEmbed(url: string): Promise<{
+  title: string | null;
+  description: string | null;
+  imageUrl: string | null;
+} | null> {
+  let oembedUrl: string | null = null;
+  if (YOUTUBE_RE.test(url)) {
+    oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+  } else if (VIMEO_RE.test(url)) {
+    oembedUrl = `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(url)}`;
+  }
+  if (!oembedUrl) return null;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), PREVIEW_TIMEOUT_MS);
+    const resp = await fetch(oembedUrl, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!resp.ok) return null;
+    const data = (await resp.json()) as {
+      title?: string;
+      author_name?: string;
+      thumbnail_url?: string;
+    };
+    return {
+      title: data.title ?? null,
+      description: data.author_name ? `By ${data.author_name}` : null,
+      imageUrl: data.thumbnail_url ?? null,
+    };
+  } catch (err) {
+    logger.warn({ url, err }, "messenger: oEmbed fetch failed");
+    return null;
+  }
+}
+
 function extractMeta(html: string, property: string): string | null {
   const patterns = [
     new RegExp(
@@ -35,6 +74,9 @@ async function fetchPreview(url: string): Promise<{
   description: string | null;
   imageUrl: string | null;
 }> {
+  const oEmbed = await tryOEmbed(url);
+  if (oEmbed) return oEmbed;
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PREVIEW_TIMEOUT_MS);
   try {
@@ -92,13 +134,22 @@ router.get("/link-preview", async (req, res) => {
     .limit(1);
 
   if (cached[0]) {
-    res.json({
-      url: cached[0].url,
-      title: cached[0].title,
-      description: cached[0].description,
-      imageUrl: cached[0].imageUrl,
-    });
-    return;
+    // Video platforms (YouTube, Vimeo) always return a thumbnail via oEmbed.
+    // A cached entry with no imageUrl means it was scraped before the oEmbed
+    // fix and contains bad data — treat it as a cache miss.
+    const isVideoUrl = YOUTUBE_RE.test(url) || VIMEO_RE.test(url);
+    const hasMeaningfulData = isVideoUrl
+      ? cached[0].imageUrl !== null
+      : cached[0].title !== null || cached[0].imageUrl !== null;
+    if (hasMeaningfulData) {
+      res.json({
+        url: cached[0].url,
+        title: cached[0].title,
+        description: cached[0].description,
+        imageUrl: cached[0].imageUrl,
+      });
+      return;
+    }
   }
 
   const preview = await fetchPreview(url);

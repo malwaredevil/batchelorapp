@@ -40,6 +40,13 @@ import { ElaineAvatar, ElaineName } from "./ElaineAvatar";
 import type { ElaineChat } from "./useElaineChat";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { ChatWidget } from "./ChatWidgets";
+import { LinkPreviewCard } from "./LinkPreviewCard";
+
+const URL_RE = /https?:\/\/[^\s)>"]+/;
+function extractFirstUrl(text: string | undefined | null): string | null {
+  if (!text) return null;
+  return text.match(URL_RE)?.[0] ?? null;
+}
 
 /** Splits a stored message content into display text + citation URL list.
  *  \x1f (ASCII unit separator) is the delimiter — safe in PostgreSQL JSONB
@@ -268,72 +275,77 @@ export function ElaineChatPanel({
 
         {messages.map((msg, i) => {
           if (msg.role === "user") {
+            const firstUserUrl = extractFirstUrl(msg.content);
             return (
-              <div key={i} className="flex gap-2.5 justify-end">
-                <div
-                  className={`${bubbleWidthClass} rounded-2xl rounded-tr-sm bg-primary px-3.5 py-2.5 text-sm leading-relaxed text-primary-foreground`}
-                >
-                  {msg.attachmentUrls && msg.attachmentUrls.length > 0 && (
-                    <div className="mb-1.5 flex flex-wrap gap-1.5">
-                      {msg.attachmentUrls.map((ref, j) => {
-                        // Older stored messages may still be plain URL strings —
-                        // fall back to sniffing the URL when there's no `type`/`name`.
-                        const url = typeof ref === "string" ? ref : ref.url;
-                        const isPdf =
-                          typeof ref === "string"
-                            ? /\.pdf([?#]|$)/i.test(ref)
-                            : ref.type === "pdf";
-                        if (isPdf) {
-                          const storedName =
-                            typeof ref === "string" ? undefined : ref.name;
-                          const match = url.match(/\/([^/?#]+\.pdf)/i);
-                          const filename =
-                            storedName ??
-                            (match
-                              ? decodeURIComponent(match[1])
-                              : "document.pdf");
+              <div key={i} className="flex flex-col items-end gap-1">
+                <div className="flex gap-2.5 justify-end w-full">
+                  <div
+                    className={`${bubbleWidthClass} rounded-2xl rounded-tr-sm bg-primary px-3.5 py-2.5 text-sm leading-relaxed text-primary-foreground`}
+                  >
+                    {msg.attachmentUrls && msg.attachmentUrls.length > 0 && (
+                      <div className="mb-1.5 flex flex-wrap gap-1.5">
+                        {msg.attachmentUrls.map((ref, j) => {
+                          // Older stored messages may still be plain URL strings —
+                          // fall back to sniffing the URL when there's no `type`/`name`.
+                          const url = typeof ref === "string" ? ref : ref.url;
+                          const isPdf =
+                            typeof ref === "string"
+                              ? /\.pdf([?#]|$)/i.test(ref)
+                              : ref.type === "pdf";
+                          if (isPdf) {
+                            const storedName =
+                              typeof ref === "string" ? undefined : ref.name;
+                            const match = url.match(/\/([^/?#]+\.pdf)/i);
+                            const filename =
+                              storedName ??
+                              (match
+                                ? decodeURIComponent(match[1])
+                                : "document.pdf");
+                            return (
+                              <a
+                                key={j}
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1.5 rounded-lg bg-primary-foreground/15 px-2 py-1 transition-colors hover:bg-primary-foreground/25"
+                                title={`Open ${filename}`}
+                              >
+                                <FileText className="h-4 w-4 shrink-0" />
+                                <span className="max-w-[140px] truncate text-xs">
+                                  {filename}
+                                </span>
+                              </a>
+                            );
+                          }
                           return (
-                            <a
+                            <button
                               key={j}
-                              href={url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-1.5 rounded-lg bg-primary-foreground/15 px-2 py-1 transition-colors hover:bg-primary-foreground/25"
-                              title={`Open ${filename}`}
+                              type="button"
+                              onClick={() => setLightboxUrl(url)}
+                              className="block cursor-zoom-in"
+                              title="View image"
                             >
-                              <FileText className="h-4 w-4 shrink-0" />
-                              <span className="max-w-[140px] truncate text-xs">
-                                {filename}
-                              </span>
-                            </a>
+                              <img
+                                src={url}
+                                alt=""
+                                className="h-20 w-20 rounded-lg object-cover"
+                              />
+                            </button>
                           );
-                        }
-                        return (
-                          <button
-                            key={j}
-                            type="button"
-                            onClick={() => setLightboxUrl(url)}
-                            className="block cursor-zoom-in"
-                            title="View image"
-                          >
-                            <img
-                              src={url}
-                              alt=""
-                              className="h-20 w-20 rounded-lg object-cover"
-                            />
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {msg.content && (
-                    <span className="whitespace-pre-wrap">{msg.content}</span>
-                  )}
+                        })}
+                      </div>
+                    )}
+                    {msg.content && (
+                      <span className="whitespace-pre-wrap">{msg.content}</span>
+                    )}
+                  </div>
                 </div>
+                {firstUserUrl && <LinkPreviewCard url={firstUserUrl} />}
               </div>
             );
           }
           const { text, citations } = parseMessageCitations(msg.content);
+          const firstAssistantUrl = extractFirstUrl(text);
           const widgets = messageWidgets.get(i);
           return (
             <div key={i} className="flex gap-2.5 justify-start">
@@ -378,6 +390,9 @@ export function ElaineChatPanel({
                       );
                     })}
                   </div>
+                )}
+                {firstAssistantUrl && (
+                  <LinkPreviewCard url={firstAssistantUrl} />
                 )}
               </div>
             </div>

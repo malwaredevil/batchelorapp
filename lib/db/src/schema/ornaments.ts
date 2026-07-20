@@ -163,6 +163,12 @@ export const ornamentsBarcodeCache = pgTable("ornaments_barcode_cache", {
   hallmarkEnrichedAt: timestamp("hallmark_enriched_at", {
     withTimezone: true,
   }),
+  hallmarkCollectorPriceUsd: numeric("hallmark_collector_price_usd", {
+    precision: 10,
+    scale: 2,
+  }),
+  hallmarkInStock: boolean("hallmark_in_stock"),
+  hallmarkImages: text("hallmark_images").array(),
 }).enableRLS();
 
 export type OrnamentCategoryRow = typeof ornamentsCategories.$inferSelect;
@@ -433,3 +439,61 @@ export const hallmarkHoohCatalog = pgTable(
 
 export type HallmarkHoohCatalogRow = typeof hallmarkHoohCatalog.$inferSelect;
 export type InsertHallmarkHoohCatalog = typeof hallmarkHoohCatalog.$inferInsert;
+
+/**
+ * Single merged view of all three Hallmark catalog sources.
+ * Keyed by hallmark_sku (unique). Populated by the merge-hallmark-catalogs
+ * script and kept in sync whenever Apify re-crawls update the source tables.
+ *
+ * Priority rules (applied at merge time):
+ *   name / series / year: hallmark_historical_catalog > hallmark_catalog > hallmark_hooh_catalog
+ *   artist:               hallmark_catalog > hallmark_historical_catalog
+ *   retail_price_usd:     hallmark_catalog only (official Hallmark.com retail)
+ *   collector_price_usd:  hallmark_historical_catalog only (hallmarkornaments.com)
+ *   in_stock:             hallmark_hooh_catalog only (hookedonhallmark.com availability)
+ *   images:               hallmark_catalog + hallmark_historical_catalog, merged & deduped
+ */
+export const hallmarkOrnaments = pgTable(
+  "hallmark_ornaments",
+  {
+    id: serial("id").primaryKey(),
+    hallmarkSku: text("hallmark_sku").notNull().unique(),
+    name: text("name").notNull(),
+    description: text("description"),
+    seriesName: text("series_name"),
+    sequenceNumber: integer("sequence_number"),
+    year: integer("year"),
+    artist: text("artist"),
+    retailPriceUsd: numeric("retail_price_usd", { precision: 10, scale: 2 }),
+    collectorPriceUsd: numeric("collector_price_usd", {
+      precision: 10,
+      scale: 2,
+    }),
+    inStock: boolean("in_stock"),
+    ornamentCategory: text("ornament_category"),
+    subcategory: text("subcategory"),
+    images: text("images").array(),
+    productUrlHallmark: text("product_url_hallmark"),
+    productUrlHistorical: text("product_url_historical"),
+    productUrlHooh: text("product_url_hooh"),
+    inHallmarkCatalog: boolean("in_hallmark_catalog").notNull().default(false),
+    inHistoricalCatalog: boolean("in_historical_catalog")
+      .notNull()
+      .default(false),
+    inHoohCatalog: boolean("in_hooh_catalog").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("hallmark_ornaments_sku_idx").on(table.hallmarkSku),
+    index("hallmark_ornaments_year_idx").on(table.year),
+    index("hallmark_ornaments_series_idx").on(table.seriesName),
+  ],
+).enableRLS();
+
+export type HallmarkOrnamentsRow = typeof hallmarkOrnaments.$inferSelect;
+export type InsertHallmarkOrnament = typeof hallmarkOrnaments.$inferInsert;

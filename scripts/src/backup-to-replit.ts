@@ -1550,24 +1550,31 @@ async function copyTable(
   if (rows.length === 0) return 0;
 
   await dest.query(`TRUNCATE ${opts.table} CASCADE`);
-  const placeholders = opts.columns.map((_, i) => `$${i + 1}`).join(", ");
   const jsonbCols = new Set(opts.jsonbColumns ?? []);
-  for (const row of rows) {
-    const values = opts.columns.map((c) => {
-      const v = row[c] ?? null;
-      if (v !== null && jsonbCols.has(c) && typeof v === "object") {
-        return JSON.stringify(v);
-      }
-      return v;
+  const BATCH = 500;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const batch = rows.slice(i, i + BATCH);
+    const values: unknown[] = [];
+    const rowPlaceholders = batch.map((row, ri) => {
+      const tuple = opts.columns.map((c, ci) => {
+        const v = row[c] ?? null;
+        values.push(
+          v !== null && jsonbCols.has(c) && typeof v === "object"
+            ? JSON.stringify(v)
+            : v,
+        );
+        return `$${ri * opts.columns.length + ci + 1}`;
+      });
+      return `(${tuple.join(", ")})`;
     });
     try {
       await dest.query(
-        `INSERT INTO ${opts.table} (${cols}) VALUES (${placeholders})`,
+        `INSERT INTO ${opts.table} (${cols}) VALUES ${rowPlaceholders.join(", ")} ON CONFLICT DO NOTHING`,
         values,
       );
     } catch (err) {
       console.error(
-        `[copyTable] failed on table="${opts.table}" row id=${row["id"] ?? "?"}`,
+        `[copyTable] batch failed on table="${opts.table}" rows ${i}–${i + batch.length - 1}`,
       );
       throw err;
     }

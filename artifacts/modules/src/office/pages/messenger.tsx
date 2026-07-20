@@ -18,7 +18,9 @@ export default function MessengerPage() {
   const [selectedConvId, setSelectedConvId] = useState<number | null>(null);
   const [view, setView] = useState<"chat" | "contacts">("chat");
   const [pendingPrefill, setPendingPrefill] = useState("");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(
+    () => window.innerWidth >= 640,
+  );
 
   const { data: conversations = [] } = useListConversations({
     query: {

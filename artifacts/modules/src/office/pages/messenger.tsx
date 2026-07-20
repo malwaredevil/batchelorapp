@@ -15,7 +15,11 @@ import type { UseQueryOptions } from "@tanstack/react-query";
 
 export default function MessengerPage() {
   const { user } = useAuth();
-  const [selectedConvId, setSelectedConvId] = useState<number | null>(null);
+  const [selectedConvId, setSelectedConvId] = useState<number | null>(() => {
+    const raw = new URLSearchParams(window.location.search).get("convId");
+    const n = raw ? parseInt(raw, 10) : NaN;
+    return Number.isFinite(n) ? n : null;
+  });
   const [view, setView] = useState<"chat" | "contacts">("chat");
   const [pendingPrefill, setPendingPrefill] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(
@@ -29,7 +33,8 @@ export default function MessengerPage() {
     } as UseQueryOptions<MessengerConversationSummary[]>,
   });
 
-  // Auto-select the first active conversation on load
+  // Auto-select the first active conversation on load, unless a convId was
+  // supplied in the URL (e.g. from a notification link or the widget).
   useEffect(() => {
     if (selectedConvId !== null) return;
     const first = conversations.find((c) => !c.archivedAt);

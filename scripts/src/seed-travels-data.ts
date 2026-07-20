@@ -7,6 +7,7 @@
  *
  * Usage: pnpm --filter @workspace/scripts run seed-travels
  */
+export {};
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL ?? "https://gadhlfluflknlwgmlmos.supabase.co";

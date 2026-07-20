@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { useMessengerChat } from "./useMessengerChat";
 import { MessageItem } from "./MessageItem";
+import { useTypingIndicator } from "./useTypingIndicator";
+import { TypingIndicator } from "./TypingIndicator";
 import {
   useListHouseholdMembers,
   type MessengerHouseholdMember,
@@ -192,6 +194,8 @@ export function MessengerChatPanel({
     addReaction,
     removeReaction,
   } = useMessengerChat(isOpen, conversationId);
+
+  const typingNames = useTypingIndicator(convId ?? undefined, input);
 
   // The only editable message: the last non-deleted message sent by the current user,
   // AND it must be the last non-deleted message in the conversation overall.
@@ -971,6 +975,9 @@ export function MessengerChatPanel({
           })}
         </div>
       )}
+
+      {/* Typing indicator */}
+      <TypingIndicator names={typingNames} />
 
       {/* Composer */}
       <div

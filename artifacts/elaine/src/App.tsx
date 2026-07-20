@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth, redirectToMainLogin } from "@/lib/auth";
+import { AuthProvider as WebCoreAuthProvider } from "@workspace/web-core/auth";
 import { MessengerNotification } from "@workspace/messenger-ui";
 import {
   ElainePageContextProvider,
@@ -93,27 +94,29 @@ function App() {
         <TooltipProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <AuthProvider>
-              <ElainePageContextProvider>
-                <Sentry.ErrorBoundary
-                  fallback={
-                    <div className="flex min-h-screen items-center justify-center bg-background">
-                      <div className="text-center space-y-3">
-                        <p className="text-muted-foreground">
-                          Something went wrong.
-                        </p>
-                        <button
-                          onClick={() => window.location.reload()}
-                          className="text-sm text-primary underline"
-                        >
-                          Reload page
-                        </button>
+              <WebCoreAuthProvider>
+                <ElainePageContextProvider>
+                  <Sentry.ErrorBoundary
+                    fallback={
+                      <div className="flex min-h-screen items-center justify-center bg-background">
+                        <div className="text-center space-y-3">
+                          <p className="text-muted-foreground">
+                            Something went wrong.
+                          </p>
+                          <button
+                            onClick={() => window.location.reload()}
+                            className="text-sm text-primary underline"
+                          >
+                            Reload page
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  }
-                >
-                  <Routes />
-                </Sentry.ErrorBoundary>
-              </ElainePageContextProvider>
+                    }
+                  >
+                    <Routes />
+                  </Sentry.ErrorBoundary>
+                </ElainePageContextProvider>
+              </WebCoreAuthProvider>
             </AuthProvider>
           </WouterRouter>
           <Toaster richColors position="top-right" />

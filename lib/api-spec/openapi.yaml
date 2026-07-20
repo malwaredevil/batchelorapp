@@ -5422,6 +5422,47 @@ paths:
                 properties:
                   markedCount:
                     type: integer
+  /messenger/messages/{id}/reactions:
+    post:
+      operationId: addReaction
+      tags:
+        - messenger
+      summary: Add an emoji reaction to a message (idempotent)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessengerAddReactionBody"
+      responses:
+        "204":
+          description: Reaction added (or already existed)
+  /messenger/messages/{id}/reactions/{emoji}:
+    delete:
+      operationId: removeReaction
+      tags:
+        - messenger
+      summary: Remove your emoji reaction from a message
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: emoji
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Removed
   /messenger/messages/{id}:
     delete:
       operationId: deleteMessage
@@ -10600,6 +10641,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MessengerMessengerAttachment"
+        reactions:
+          type: array
+          items:
+            $ref: "#/components/schemas/MessengerMessengerReaction"
     MessengerSendMessageBody:
       type: object
       required:
@@ -10745,6 +10790,26 @@ components:
         - endpoint
       properties:
         endpoint:
+          type: string
+    MessengerMessengerReaction:
+      type: object
+      required:
+        - emoji
+        - count
+        - userReacted
+      properties:
+        emoji:
+          type: string
+        count:
+          type: integer
+        userReacted:
+          type: boolean
+    MessengerAddReactionBody:
+      type: object
+      required:
+        - emoji
+      properties:
+        emoji:
           type: string
     JobsJob:
       type: object

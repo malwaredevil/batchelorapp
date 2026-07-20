@@ -7,6 +7,7 @@
  */
 import type { MessengerMessengerAttachment } from './messengerMessengerAttachment';
 import type { MessengerMessengerMessageMetadata } from './messengerMessengerMessageMetadata';
+import type { MessengerMessengerReaction } from './messengerMessengerReaction';
 
 export interface MessengerMessengerMessage {
   id: number;
@@ -21,4 +22,5 @@ export interface MessengerMessengerMessage {
   /** Optional structured data attached to the message (e.g. Elaine widget cards) */
   metadata?: MessengerMessengerMessageMetadata;
   attachments?: MessengerMessengerAttachment[];
+  reactions?: MessengerMessengerReaction[];
 }

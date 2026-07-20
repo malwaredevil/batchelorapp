@@ -1,10 +1,20 @@
 import { useState, useRef, useEffect } from "react";
-import { Trash2, FileText, Sparkles, Pencil, Check, X } from "lucide-react";
+import {
+  Trash2,
+  FileText,
+  Sparkles,
+  Pencil,
+  Check,
+  X,
+  SmilePlus,
+} from "lucide-react";
 import type { MessengerMessengerMessage } from "@workspace/api-client-react";
 import { MarkdownMessage, ChatWidget } from "@workspace/elaine-ui";
 import type { ChatWidget as ChatWidgetType } from "@workspace/elaine-ui";
 import { LinkPreviewCard } from "./LinkPreviewCard";
 import { ImageModal } from "./ImageModal";
+
+const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🎉", "👏", "🔥"];
 
 interface MessageItemProps {
   message: MessengerMessengerMessage;
@@ -12,6 +22,8 @@ interface MessageItemProps {
   canEdit?: boolean;
   onDelete?: (id: number) => void;
   onEdit?: (id: number, newBody: string) => Promise<void>;
+  onAddReaction?: (id: number, emoji: string) => Promise<void>;
+  onRemoveReaction?: (id: number, emoji: string) => Promise<void>;
 }
 
 const URL_RE = /https?:\/\/[^\s]+/g;
@@ -26,16 +38,20 @@ export function MessageItem({
   canEdit,
   onDelete,
   onEdit,
+  onAddReaction,
+  onRemoveReaction,
 }: MessageItemProps) {
   const [hovered, setHovered] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(message.body);
   const [saving, setSaving] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
   const [imageModal, setImageModal] = useState<{
     url: string;
     name: string;
   } | null>(null);
   const editRef = useRef<HTMLTextAreaElement>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
 
   const isElaine = message.senderId === null;
   const isDeleted = !!message.deletedAt;
@@ -46,6 +62,18 @@ export function MessageItem({
       editRef.current.select();
     }
   }, [editing]);
+
+  // Close picker on outside click
+  useEffect(() => {
+    if (!showPicker) return;
+    function handleClick(e: MouseEvent) {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setShowPicker(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showPicker]);
 
   const urls = isDeleted ? [] : extractUrls(message.body);
   const firstUrl = urls[0] ?? null;
@@ -60,11 +88,6 @@ export function MessageItem({
       ? ((message.metadata as { widgets: ChatWidgetType[] }).widgets ?? [])
       : [];
 
-  // Bubble colours:
-  //  - Own messages: blue gradient (dark bg, white text)
-  //  - Elaine: light lavender tint with dark text so MarkdownMessage classes work
-  //  - Other members: theme muted bg with theme foreground text
-  //  - Deleted: muted bg with muted-foreground text
   const bubbleBg = isDeleted
     ? "hsl(var(--muted))"
     : isElaine
@@ -113,10 +136,107 @@ export function MessageItem({
     }
   };
 
+  const handlePickEmoji = async (emoji: string) => {
+    setShowPicker(false);
+    if (!onAddReaction) return;
+    await onAddReaction(message.id, emoji);
+  };
+
+  const handleReactionChipClick = async (
+    emoji: string,
+    userReacted: boolean,
+  ) => {
+    if (userReacted) {
+      await onRemoveReaction?.(message.id, emoji);
+    } else {
+      await onAddReaction?.(message.id, emoji);
+    }
+  };
+
+  const reactions = message.reactions ?? [];
+  const canReact = !isDeleted && (onAddReaction || onRemoveReaction);
+
+  const reactionButton = canReact && hovered && !editing && (
+    <div style={{ position: "relative" }} ref={pickerRef}>
+      <button
+        onClick={() => setShowPicker((v) => !v)}
+        aria-label="Add reaction"
+        style={{
+          background: showPicker
+            ? "hsl(var(--muted))"
+            : "hsl(var(--background))",
+          border: "1px solid hsl(var(--border))",
+          cursor: "pointer",
+          color: "hsl(var(--muted-foreground))",
+          padding: "2px 5px",
+          borderRadius: 6,
+          display: "flex",
+          alignItems: "center",
+          gap: 2,
+          fontSize: 12,
+        }}
+      >
+        <SmilePlus size={13} />
+      </button>
+      {showPicker && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: "calc(100% + 4px)",
+            ...(isOwn ? { right: 0 } : { left: 0 }),
+            background: "hsl(var(--card))",
+            border: "1px solid hsl(var(--border))",
+            borderRadius: 10,
+            padding: "6px 8px",
+            display: "flex",
+            gap: 2,
+            boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+            zIndex: 50,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {QUICK_EMOJIS.map((emoji) => (
+            <button
+              key={emoji}
+              onClick={() => void handlePickEmoji(emoji)}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontSize: 20,
+                padding: "2px 4px",
+                borderRadius: 6,
+                lineHeight: 1,
+                transition: "transform 0.1s",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.transform =
+                  "scale(1.3)";
+                (e.currentTarget as HTMLButtonElement).style.background =
+                  "hsl(var(--muted))";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.transform =
+                  "scale(1)";
+                (e.currentTarget as HTMLButtonElement).style.background =
+                  "none";
+              }}
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div
       onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseLeave={() => {
+        setHovered(false);
+        setShowPicker(false);
+      }}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -158,7 +278,8 @@ export function MessageItem({
       {/* Bubble row */}
       <div style={{ display: "flex", alignItems: "flex-end", gap: 6 }}>
         {isOwn && hovered && !isDeleted && !editing && (
-          <div style={{ display: "flex", gap: 2 }}>
+          <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
+            {reactionButton}
             {canEdit && onEdit && (
               <button
                 onClick={() => setEditing(true)}
@@ -389,7 +510,61 @@ export function MessageItem({
                 })}
               </div>
             )}
+
+          {/* Reaction chips */}
+          {!editing && reactions.length > 0 && (
+            <div
+              style={{
+                marginTop: 4,
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 4,
+                justifyContent: isOwn ? "flex-end" : "flex-start",
+              }}
+            >
+              {reactions.map((r) => (
+                <button
+                  key={r.emoji}
+                  onClick={() =>
+                    void handleReactionChipClick(r.emoji, r.userReacted)
+                  }
+                  title={
+                    r.userReacted ? "Remove your reaction" : "Add reaction"
+                  }
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 3,
+                    padding: "2px 7px",
+                    borderRadius: 12,
+                    border: r.userReacted
+                      ? "1.5px solid #3b82f6"
+                      : "1px solid hsl(var(--border))",
+                    background: r.userReacted
+                      ? "rgba(59,130,246,0.12)"
+                      : "hsl(var(--background))",
+                    cursor: "pointer",
+                    fontSize: 13,
+                    lineHeight: 1,
+                    color: r.userReacted ? "#2563eb" : "hsl(var(--foreground))",
+                    fontWeight: r.userReacted ? 600 : 400,
+                    transition: "all 0.1s",
+                  }}
+                >
+                  <span style={{ fontSize: 14 }}>{r.emoji}</span>
+                  <span style={{ fontSize: 11 }}>{r.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
+
+        {/* Reaction button for non-own messages (right side of bubble) */}
+        {!isOwn && hovered && !isDeleted && !editing && (
+          <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
+            {reactionButton}
+          </div>
+        )}
       </div>
 
       {/* Timestamp + edited indicator */}

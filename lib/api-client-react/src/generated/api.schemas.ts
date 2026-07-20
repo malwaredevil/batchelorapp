@@ -2570,6 +2570,12 @@ export interface MessengerMessengerAttachment {
   url: string;
 }
 
+export interface MessengerMessengerReaction {
+  emoji: string;
+  count: number;
+  userReacted: boolean;
+}
+
 /**
  * Optional structured data attached to the message (e.g. Elaine widget cards)
  */
@@ -2588,6 +2594,7 @@ export interface MessengerMessengerMessage {
   /** Optional structured data attached to the message (e.g. Elaine widget cards) */
   metadata?: MessengerMessengerMessageMetadata;
   attachments?: MessengerMessengerAttachment[];
+  reactions?: MessengerMessengerReaction[];
 }
 
 export interface MessengerConversationSummary {
@@ -2670,6 +2677,10 @@ export interface MessengerPushSubscribeBody {
 
 export interface MessengerPushUnsubscribeBody {
   endpoint: string;
+}
+
+export interface MessengerAddReactionBody {
+  emoji: string;
 }
 
 export interface JobsJob {

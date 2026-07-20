@@ -17,6 +17,7 @@ import {
   messengerConversationParticipants,
   messengerMessages,
   messengerAttachments,
+  messengerReactions,
   appUsers,
 } from "@workspace/db";
 import {
@@ -105,6 +106,12 @@ async function serializeMessages(
     fileName: string;
     sizeBytes: number;
   }>,
+  reactionRows: Array<{
+    messageId: number;
+    userId: number;
+    emoji: string;
+  }> = [],
+  currentUserId: number = 0,
 ) {
   const paths = attachmentRows.map((a) => a.storagePath);
   const urlMap = await getSignedUrls(paths);
@@ -134,19 +141,56 @@ async function serializeMessages(
     attachmentsByMessage.set(a.messageId, list);
   }
 
-  return msgRows.map((m) => ({
-    id: m.id,
-    conversationId: m.conversationId,
-    senderId: m.senderId,
-    senderName: m.senderName,
-    body: m.deletedAt ? "" : m.body,
-    createdAt: m.createdAt.toISOString(),
-    readAt: m.readAt?.toISOString() ?? null,
-    deletedAt: m.deletedAt?.toISOString() ?? null,
-    editedAt: m.editedAt?.toISOString() ?? null,
-    metadata: m.metadata ?? {},
-    attachments: attachmentsByMessage.get(m.id) ?? [],
-  }));
+  // Aggregate reactions by (messageId, emoji)
+  const reactionsByMessage = new Map<
+    number,
+    Map<string, { count: number; userReacted: boolean }>
+  >();
+  for (const r of reactionRows) {
+    let emojiMap = reactionsByMessage.get(r.messageId);
+    if (!emojiMap) {
+      emojiMap = new Map();
+      reactionsByMessage.set(r.messageId, emojiMap);
+    }
+    const entry = emojiMap.get(r.emoji);
+    if (entry) {
+      entry.count++;
+      if (r.userId === currentUserId) entry.userReacted = true;
+    } else {
+      emojiMap.set(r.emoji, {
+        count: 1,
+        userReacted: r.userId === currentUserId,
+      });
+    }
+  }
+
+  return msgRows.map((m) => {
+    const emojiMap = reactionsByMessage.get(m.id);
+    const reactions = emojiMap
+      ? Array.from(emojiMap.entries()).map(
+          ([emoji, { count, userReacted }]) => ({
+            emoji,
+            count,
+            userReacted,
+          }),
+        )
+      : [];
+
+    return {
+      id: m.id,
+      conversationId: m.conversationId,
+      senderId: m.senderId,
+      senderName: m.senderName,
+      body: m.deletedAt ? "" : m.body,
+      createdAt: m.createdAt.toISOString(),
+      readAt: m.readAt?.toISOString() ?? null,
+      deletedAt: m.deletedAt?.toISOString() ?? null,
+      editedAt: m.editedAt?.toISOString() ?? null,
+      metadata: m.metadata ?? {},
+      attachments: attachmentsByMessage.get(m.id) ?? [],
+      reactions,
+    };
+  });
 }
 
 async function buildConversationSummary(
@@ -552,14 +596,32 @@ router.get("/conversations/:id/messages", async (req, res) => {
   }
 
   const msgIds = msgRows.map((m) => m.id);
-  const attRows = await db
-    .select()
-    .from(messengerAttachments)
-    .where(
-      sql`${messengerAttachments.messageId} = ANY(${sql.raw(`ARRAY[${msgIds.join(",")}]::integer[]`)})`,
-    );
+  const [attRows, rxRows] = await Promise.all([
+    db
+      .select()
+      .from(messengerAttachments)
+      .where(
+        sql`${messengerAttachments.messageId} = ANY(${sql.raw(`ARRAY[${msgIds.join(",")}]::integer[]`)})`,
+      ),
+    db
+      .select({
+        messageId: messengerReactions.messageId,
+        userId: messengerReactions.userId,
+        emoji: messengerReactions.emoji,
+      })
+      .from(messengerReactions)
+      .where(
+        sql`${messengerReactions.messageId} = ANY(${sql.raw(`ARRAY[${msgIds.join(",")}]::integer[]`)})`,
+      ),
+  ]);
 
-  const serialized = await serializeMessages(msgRows, attRows);
+  const currentUserId = (req.session?.userId as number) ?? 0;
+  const serialized = await serializeMessages(
+    msgRows,
+    attRows,
+    rxRows,
+    currentUserId,
+  );
   res.json(serialized.reverse());
 });
 

@@ -66,6 +66,7 @@ import type {
   LoginInput,
   MarkMessageRead200,
   MergeQuiltingCategory200,
+  MessengerAddReactionBody,
   MessengerAttachmentUploadResult,
   MessengerConversationSummary,
   MessengerCreateConversationBody,
@@ -17907,6 +17908,150 @@ export const useMarkMessageRead = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getMarkMessageReadMutationOptions(options));
+    }
+
+export const getAddReactionUrl = (id: number,) => {
+
+
+
+
+  return `/api/messenger/messages/${id}/reactions`
+}
+
+/**
+ * @summary Add an emoji reaction to a message (idempotent)
+ */
+export const addReaction = async (id: number,
+    messengerAddReactionBody: MessengerAddReactionBody, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getAddReactionUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      messengerAddReactionBody,)
+  }
+);}
+
+
+
+
+export const getAddReactionMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addReaction>>, TError,{id: number;data: BodyType<MessengerAddReactionBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof addReaction>>, TError,{id: number;data: BodyType<MessengerAddReactionBody>}, TContext> => {
+
+const mutationKey = ['addReaction'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addReaction>>, {id: number;data: BodyType<MessengerAddReactionBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  addReaction(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddReactionMutationResult = NonNullable<Awaited<ReturnType<typeof addReaction>>>
+    export type AddReactionMutationBody = BodyType<MessengerAddReactionBody>
+    export type AddReactionMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Add an emoji reaction to a message (idempotent)
+ */
+export const useAddReaction = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addReaction>>, TError,{id: number;data: BodyType<MessengerAddReactionBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof addReaction>>,
+        TError,
+        {id: number;data: BodyType<MessengerAddReactionBody>},
+        TContext
+      > => {
+      return useMutation(getAddReactionMutationOptions(options));
+    }
+
+export const getRemoveReactionUrl = (id: number,
+    emoji: string,) => {
+
+
+
+
+  return `/api/messenger/messages/${id}/reactions/${emoji}`
+}
+
+/**
+ * @summary Remove your emoji reaction from a message
+ */
+export const removeReaction = async (id: number,
+    emoji: string, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getRemoveReactionUrl(id,emoji),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getRemoveReactionMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeReaction>>, TError,{id: number;emoji: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof removeReaction>>, TError,{id: number;emoji: string}, TContext> => {
+
+const mutationKey = ['removeReaction'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeReaction>>, {id: number;emoji: string}> = (props) => {
+          const {id,emoji} = props ?? {};
+
+          return  removeReaction(id,emoji,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveReactionMutationResult = NonNullable<Awaited<ReturnType<typeof removeReaction>>>
+
+    export type RemoveReactionMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Remove your emoji reaction from a message
+ */
+export const useRemoveReaction = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeReaction>>, TError,{id: number;emoji: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof removeReaction>>,
+        TError,
+        {id: number;emoji: string},
+        TContext
+      > => {
+      return useMutation(getRemoveReactionMutationOptions(options));
     }
 
 export const getDeleteMessageUrl = (id: number,) => {

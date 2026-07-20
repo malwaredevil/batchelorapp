@@ -328,7 +328,11 @@ export function MessengerWidget({ messengerPageHref }: MessengerWidgetProps) {
         >
           {messengerPageHref && (
             <a
-              href={messengerPageHref}
+              href={
+                effectiveConvId
+                  ? `${messengerPageHref}?convId=${effectiveConvId}`
+                  : messengerPageHref
+              }
               aria-label="Open full messenger"
               style={{
                 color: "rgba(255,255,255,0.8)",

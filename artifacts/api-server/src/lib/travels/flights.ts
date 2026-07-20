@@ -56,15 +56,31 @@ export async function lookupFlightPrices(
   originIata: string,
   destination: string,
   apiToken: string,
+  opts?: { departDate?: string; returnDate?: string },
 ): Promise<FlightPriceResult | null> {
-  // Build a flexible date range: next 30–60 days, 7-day trip
-  const today = new Date();
-  const departDate = new Date(today);
-  departDate.setDate(today.getDate() + 30);
-  const returnDate = new Date(departDate);
-  returnDate.setDate(departDate.getDate() + 7);
-
   const fmt = (d: Date) => d.toISOString().slice(0, 10);
+
+  // Use caller-supplied dates when available; otherwise default to ~30 days out, 7-night stay
+  let departDateStr: string;
+  let returnDateStr: string;
+  if (opts?.departDate) {
+    departDateStr = opts.departDate;
+    if (opts.returnDate) {
+      returnDateStr = opts.returnDate;
+    } else {
+      const ret = new Date(opts.departDate);
+      ret.setDate(ret.getDate() + 7);
+      returnDateStr = fmt(ret);
+    }
+  } else {
+    const today = new Date();
+    const dep = new Date(today);
+    dep.setDate(today.getDate() + 30);
+    const ret = new Date(dep);
+    ret.setDate(dep.getDate() + 7);
+    departDateStr = fmt(dep);
+    returnDateStr = fmt(ret);
+  }
 
   let items: Record<string, unknown>[];
   try {
@@ -73,8 +89,8 @@ export async function lookupFlightPrices(
       {
         origin: originIata.toUpperCase(),
         destination,
-        departDate: fmt(departDate),
-        returnDate: fmt(returnDate),
+        departDate: departDateStr,
+        returnDate: returnDateStr,
         adults: 1,
         currency: "USD",
         maxResults: 10,
@@ -102,8 +118,8 @@ export async function lookupFlightPrices(
           : null,
       departureDate: item.departureDate
         ? String(item.departureDate)
-        : fmt(departDate),
-      returnDate: item.returnDate ? String(item.returnDate) : fmt(returnDate),
+        : departDateStr,
+      returnDate: item.returnDate ? String(item.returnDate) : returnDateStr,
       durationMinutes: parseDuration(item.duration ?? item.durationMinutes),
       stops:
         typeof item.stops === "number"

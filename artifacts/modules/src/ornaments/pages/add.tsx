@@ -68,7 +68,22 @@ export default function AddOrnament() {
 
   usePageAssistantContext(
     "ornaments-add",
-    `Add ornament page. Prefilled from scan: ${prefill ? "Yes" : "No"}.${configSummary ? ` ${configSummary}` : ""}`,
+    prefill
+      ? [
+          `Add ornament page — prefilled from barcode scan.`,
+          prefill.name ? `Name: "${prefill.name}"` : null,
+          prefill.brand ? `Brand: ${prefill.brand}` : null,
+          prefill.seriesOrCollection
+            ? `Series/Collection: "${prefill.seriesOrCollection}"`
+            : null,
+          prefill.year ? `Year: ${prefill.year}` : null,
+          prefill.barcodeValue ? `Barcode/UPC: ${prefill.barcodeValue}` : null,
+          `The form is pre-filled — if the user asks "what's this worth?" or "look it up on Hallmark", use the name/barcode above for ebay_search or search_hallmark immediately.`,
+          configSummary ? `\n${configSummary}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n")
+      : `Add ornament page. Enter details manually or scan a barcode first.${configSummary ? ` ${configSummary}` : ""}`,
   );
 
   const form = useForm<z.infer<typeof addSchema>>({

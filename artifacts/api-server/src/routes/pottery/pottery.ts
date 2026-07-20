@@ -1171,8 +1171,8 @@ router.post("/items/:id/set-primary-image", aiLimiter, async (req, res) => {
 router.post("/items/:id/estimate-market-value", aiLimiter, async (req, res) => {
   const { id } = GetPotteryParams.parse(req.params);
 
-  if (!env.apifyApiToken) {
-    res.status(503).json({ error: "Apify integration not configured." });
+  if (!env.ebayAppId) {
+    res.status(503).json({ error: "eBay API not configured." });
     return;
   }
 
@@ -1196,7 +1196,7 @@ router.post("/items/:id/estimate-market-value", aiLimiter, async (req, res) => {
     style: item.style,
   });
 
-  const result = await lookupEbayMarketValue(query, env.apifyApiToken);
+  const result = await lookupEbayMarketValue(query);
   if (!result) {
     res.status(422).json({
       error:

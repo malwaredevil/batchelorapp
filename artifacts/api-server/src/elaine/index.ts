@@ -82,6 +82,15 @@ import {
   SmsOptedOutError,
 } from "../lib/sms";
 import { webSearch, fetchPage } from "../lib/web-search";
+import {
+  lookupEbayMarketValue,
+  buildEbayQuery,
+} from "../lib/pottery/ebay-market-value";
+import {
+  searchHallmark,
+  lookupHallmarkFromDb,
+} from "../lib/ornaments/hallmark-search";
+import { lookupFlightPrices } from "../lib/travels/flights";
 import { fetchJsonSafe } from "../lib/ssrf-safe-fetch";
 import { consultExperts } from "../lib/expert-consult";
 import {
@@ -2920,6 +2929,41 @@ const WebSearchToolPayload = z.object({
   query: z.string().min(1).max(500),
 });
 
+const EBAY_SEARCH_TOOL_NAME = "ebay_search";
+
+const EbaySearchToolPayload = z.object({
+  query: z.string().min(1).max(300),
+  category: z
+    .enum(["ornaments", "pottery", "general"])
+    .optional()
+    .describe(
+      "Hint to narrow the search — 'ornaments' adds Hallmark Christmas context, 'pottery' adds collectible pottery context.",
+    ),
+});
+
+const SEARCH_HALLMARK_TOOL_NAME = "search_hallmark";
+
+const SearchHallmarkToolPayload = z.object({
+  name: z.string().min(1).max(200).optional(),
+  hallmarkSku: z.string().min(1).max(50).optional(),
+  year: z.number().int().min(1970).max(2100).optional(),
+});
+
+const SEARCH_FLIGHTS_TOOL_NAME = "search_flights";
+
+const SearchFlightsToolPayload = z.object({
+  originIata: z.string().min(2).max(10),
+  destination: z.string().min(1).max(200),
+  departDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  returnDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+});
+
 const FETCH_PAGE_TOOL_NAME = "fetch_page";
 
 const FetchPageToolPayload = z.object({
@@ -3173,6 +3217,92 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           },
         },
         required: ["mode"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: EBAY_SEARCH_TOOL_NAME,
+      description:
+        "Search eBay sold listings to get real market prices for any item. Use when the user asks what something is worth, what it sold for, or what eBay prices look like. Returns sold prices (min/median/max) and recent sold listings. IMPORTANT: eBay accepts any of these as a query — item name ('Hallmark Frosty Friends 2003'), a UPC barcode number ('661127022308'), a Hallmark item/SKU number ('QXI7404'), or a mix. Always prefer this tool over web_search for price/value questions. Set category='ornaments' for Hallmark/Christmas ornament searches or category='pottery' for collectible pottery.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description:
+              "Search query — can be an item name ('Hallmark Keepsake Frosty Friends 2003'), a UPC barcode ('661127022308'), a Hallmark SKU/item number ('QXI7404'), or any combination. eBay handles all of these as keyword searches.",
+          },
+          category: {
+            type: "string",
+            enum: ["ornaments", "pottery", "general"],
+            description:
+              "Optional category hint to focus the search. 'ornaments' adds Christmas/Hallmark context, 'pottery' adds collectible pottery context.",
+          },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: SEARCH_HALLMARK_TOOL_NAME,
+      description:
+        "Search Hallmark.com for official product details about a Hallmark Keepsake ornament — name, series, year, artist, original retail price, and product URL. Use when the user asks about a specific Hallmark ornament by name or item/SKU number (e.g. 'QXI7404', 'QHX7404'). Results come directly from Hallmark.com so they are authoritative. Provide at least one of: name or hallmarkSku.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: {
+            type: "string",
+            description: "Ornament name (e.g. 'Wielding The Darksaber')",
+          },
+          hallmarkSku: {
+            type: "string",
+            description:
+              "Hallmark SKU / item number (e.g. 'QXI7404', 'QHX7404'). Takes precedence over name when provided.",
+          },
+          year: {
+            type: "number",
+            description:
+              "Release year — optional, helps narrow results when searching by name.",
+          },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: SEARCH_FLIGHTS_TOOL_NAME,
+      description:
+        "Search for round-trip flight prices between two cities via Skyscanner. Use when the user asks about flight costs or how much it costs to fly somewhere. If you are on a trip detail page, extract the destination and trip start/end dates from the page context and pass them as departDate/returnDate — do not ask the user to repeat them. Omit dates to default to ~30 days from now with a 7-night stay. Origin must be an IATA airport code (e.g. 'JFK', 'ORD', 'LHR'). Destination can be a city name, country, or IATA code.",
+      parameters: {
+        type: "object",
+        properties: {
+          originIata: {
+            type: "string",
+            description:
+              "IATA airport code for departure city (e.g. 'JFK', 'LAX', 'ORD', 'LHR')",
+          },
+          destination: {
+            type: "string",
+            description:
+              "Destination city, country, or IATA code (e.g. 'Dublin', 'Ireland', 'DUB'). If on a trip detail page, extract from the trip's destination field.",
+          },
+          departDate: {
+            type: "string",
+            description:
+              "Optional departure date in YYYY-MM-DD format. If on a trip detail page, extract from the trip's start date. Omit to default to ~30 days from now.",
+          },
+          returnDate: {
+            type: "string",
+            description:
+              "Optional return date in YYYY-MM-DD format. If on a trip detail page, extract from the trip's end date. Omit to default to 7 nights after departDate.",
+          },
+        },
+        required: ["originIata", "destination"],
       },
     },
   },
@@ -4454,6 +4584,27 @@ QUILTING ITEMS: Use update_fabric / delete_fabric, update_pattern / delete_patte
 
 ORNAMENTS ITEMS: Use update_ornament_item to edit an existing ornament (name, notes, quantity, series/collection, year, brand, condition, origin, dimensions) — only include fields that actually change, and only if the ornament's numeric id is visible on screen (look for "itemId: <number>"); never guess one. This also works right after an upload if the user tells you details in chat instead of typing them into the form. Use delete_ornament_item to permanently remove an ornament and its photos — say clearly in your visible reply that this deletes the item, since it's destructive. Use create_ornament_category / delete_ornament_category to manage the categories used to organize the collection; never guess a category id for deletion. Use update_ornament_item_categories to replace the full set of categories assigned to one ornament (pass every category id that should end up assigned, not just the ones to add). Use merge_ornament_categories to fold one category into another — this deletes the source category, so say so clearly since it's destructive; never guess either category id. Use lock_ornament_field to lock or unlock one AI-derived field (name, seriesOrCollection, year, dimensions, dominantColors, motifs, aiDescription, barcodeValue) on an ornament so future AI re-analysis will or won't overwrite it — only with a visible itemId. Use delete_ornament_photo to remove one supplemental photo from an ornament, and promote_ornament_photo to make a supplemental photo the new primary photo (this re-runs AI analysis with the new primary image, subject to locked fields) — both need a visible itemId and imageId, never guessed. Use bulk_reanalyze_ornaments to re-run AI analysis on several ornaments at once; pass itemIds if specific ones are visible on screen, or omit it to run against every ornament still missing AI analysis (capped at 20) — mention in your visible reply that this takes a while and calls AI per item.
 
+CONTEXT-AWARE LOOKUPS — read the on-screen state and act, don't ask: When the user asks a contextual question and the answer is already implicit in the page they're viewing, extract the data silently and call the right tool — never ask them to re-state what you can already see.
+
+**Ornament detail page** (context starts with "Ornament detail — itemId: …"): The context includes the ornament's name, brand, series/collection, year, barcode/UPC, condition, and any existing book value.
+- "What's this worth?", "what would this sell for on eBay?", "check eBay for this", "how much is it?" → call ebay_search immediately, building the query from the ornament's name + year (e.g. "Hallmark 'Darth Vader' 2023 ornament"). Do not ask which ornament.
+- "Look it up on Hallmark", "is this still on Hallmark.com?", "find the Hallmark listing", "what series is this in?", "tell me about this ornament" → call search_hallmark with the ornament's name or series from context. Do not ask which ornament.
+- If both the eBay value and Hallmark listing would help answer the question, call both in the same turn.
+
+**Ornament add page — prefilled from scan** (context starts with "Add ornament page — prefilled from barcode scan"): The user just scanned a barcode and the form is pre-filled with the ornament's name, brand, series/collection, year, and barcode/UPC — all visible in the page context.
+- If the user asks "what's this worth?", "look it up on eBay", "how much is it?", "check the price" → call ebay_search immediately using the name + year from context.
+- If the user asks "look it up on Hallmark", "is this on hallmark.com?", "find the Hallmark page" → call search_hallmark using the name or SKU from context.
+- You may proactively offer: "I can look this up on eBay or Hallmark.com if you'd like — just ask!" after the user lands here from a scan, but only offer once and don't run the lookup unprompted.
+
+**Barcode scanner navigation**: If the user says "open the barcode scanner", "open the scanner", "scan a barcode", "I want to scan something", or similar — navigate to /scan in the ornaments app. Say something brief like "Opening the barcode scanner!" and call the navigate tool with path /scan. After scanning, the app will redirect to the Add Ornament page with the item pre-filled — you'll be able to see the scanned details there and help with eBay or Hallmark lookups.
+
+**Trip detail page** (context starts with "Viewing trip … to <destination> … starts <date>, ends <date>"): The context includes the destination, start date, and end date.
+- "What are flights like?", "how much would it cost to fly?", "check flights", "find me a flight" → call search_flights with destination extracted from context and startDate/endDate as departDate/returnDate. Do not ask where they're going or when.
+- "What's the weather going to be?", "what will the weather be like?" → call get_weather_forecast with the destination from context. Note: weather forecasts are only reliable ~10 days ahead; for trips further out, explain that and offer to search for typical seasonal conditions instead (use web_search).
+- "What's near the hotel?", "what restaurants are nearby?", "find things to do there" → call find_nearby_places if you have coordinates (from on-screen trip data or a prior search result), or use web_search if not.
+
+**General rule**: If the data needed to call a tool is visible in the on-screen context, treat it as already provided and call the tool. Only ask for clarification if a required parameter is genuinely absent from both what the user said and what's on screen.
+
 EMAIL: Whenever you've just given the user something substantial worth keeping — a list of recommendations, an itinerary summary, packing tips, etc. — offer to email it to them, e.g. "Want me to email you this list?" Only call send_email once they say yes; never call it unprompted or assume they want it. It always goes to their own registered account email, so never ask for an address and never offer to send it to anyone else. Write a short subject and a plain-text body (no markdown/HTML, blank line between paragraphs) — it gets formatted into a nice email automatically. You have no way to export a PDF or Word document, so don't offer that; email is the only export option available.
 
 ACCOUNT & NOTIFICATIONS: These only make sense on the shared Account settings page (hub-account context). Use send_test_email if the user wants to confirm email delivery is working — always their own account address. Use send_test_sms the same way for texts, but only if the page context shows they already have a verified phone number; if not, tell them to verify one first instead of calling it. Use send_phone_verification_code when the user wants to add or change their phone number — you must have their explicit, clearly-stated agreement to receive SMS messages before calling it (set consent to true only then), and the number must be in E.164 format (e.g. +12105551234); ask them to reformat a local number if needed. Use verify_phone_code once they tell you the 6-digit code they received by text — never invent or reuse a code from earlier in the conversation. None of these four actions are available outside the Account page, and none of them ever touch another household member's phone/email. Use update_elaine_settings when the user explicitly asks to toggle Elaine on/off or change the chat window size (compact / comfortable / large) — this is also only appropriate on the Account page, never in other apps. For confirmation-mode changes, use set_action_confirmation_mode instead.
@@ -5000,6 +5151,9 @@ router.post("/chat", async (req, res) => {
       SHOW_FABRIC_SWATCH_TOOL_NAME,
       SHOW_ORNAMENT_ITEM_TOOL_NAME,
       WEB_SEARCH_TOOL_NAME,
+      EBAY_SEARCH_TOOL_NAME,
+      SEARCH_HALLMARK_TOOL_NAME,
+      SEARCH_FLIGHTS_TOOL_NAME,
       FETCH_PAGE_TOOL_NAME,
       CONSULT_EXPERTS_TOOL_NAME,
       GET_WEATHER_TOOL_NAME,
@@ -5134,6 +5288,9 @@ router.post("/chat", async (req, res) => {
       [SHOW_FABRIC_SWATCH_TOOL_NAME]: "looking up that fabric",
       [SHOW_ORNAMENT_ITEM_TOOL_NAME]: "looking up that ornament",
       [WEB_SEARCH_TOOL_NAME]: "searching the web",
+      [EBAY_SEARCH_TOOL_NAME]: "checking eBay sold listings",
+      [SEARCH_HALLMARK_TOOL_NAME]: "searching Hallmark.com",
+      [SEARCH_FLIGHTS_TOOL_NAME]: "checking flight prices",
       [FETCH_PAGE_TOOL_NAME]: "reading that page",
       [CONSULT_EXPERTS_TOOL_NAME]: "checking in with a couple of experts",
       [GET_WEATHER_TOOL_NAME]: "checking the forecast",
@@ -5197,6 +5354,155 @@ router.post("/chat", async (req, res) => {
                     sourceUrl: img.sourceUrl,
                   })),
                 });
+              }
+            }
+          } else if (call.name === EBAY_SEARCH_TOOL_NAME) {
+            const parsed = EbaySearchToolPayload.safeParse(
+              JSON.parse(call.args),
+            );
+            if (!parsed.success) {
+              resultText =
+                "Invalid eBay search — ask the user to rephrase the query.";
+            } else {
+              const { query, category } = parsed.data;
+              const fullQuery =
+                category === "ornaments"
+                  ? buildEbayQuery(query, {})
+                  : category === "pottery"
+                    ? buildEbayQuery(query, {})
+                    : query;
+              const ebayResult = await lookupEbayMarketValue(fullQuery, {
+                withAspects: category === "ornaments",
+              });
+              if (!ebayResult) {
+                resultText = `No sold listings found on eBay for "${query}". The item may be rare, recently listed, or the query needs to be more specific.`;
+              } else {
+                const lines = [
+                  `eBay sold listings for "${query}" (${ebayResult.listingCount} found):`,
+                  `Price range: $${ebayResult.priceMinUsd.toFixed(2)} – $${ebayResult.priceMaxUsd.toFixed(2)} (median $${ebayResult.priceMedianUsd.toFixed(2)})`,
+                ];
+                if (
+                  ebayResult.itemSpecifics &&
+                  Object.keys(ebayResult.itemSpecifics).length > 0
+                ) {
+                  lines.push(
+                    "Item attributes: " +
+                      Object.entries(ebayResult.itemSpecifics)
+                        .map(([k, v]) => `${k}: ${v}`)
+                        .join(", "),
+                  );
+                }
+                lines.push("Recent sold listings:");
+                for (const l of ebayResult.listings.slice(0, 5)) {
+                  lines.push(
+                    `  • ${l.title} — $${l.soldPrice.toFixed(2)}${l.condition ? ` (${l.condition})` : ""}${l.soldDate ? `, sold ${l.soldDate.slice(0, 10)}` : ""}${l.itemUrl ? ` — ${l.itemUrl}` : ""}`,
+                  );
+                }
+                resultText = lines.join("\n");
+              }
+            }
+          } else if (call.name === SEARCH_HALLMARK_TOOL_NAME) {
+            const parsed = SearchHallmarkToolPayload.safeParse(
+              JSON.parse(call.args),
+            );
+            if (!parsed.success) {
+              resultText =
+                "Invalid Hallmark search — provide a name or hallmarkSku.";
+            } else {
+              // DB-first: skip Apify if the ornament is already in the local catalog
+              let result = await lookupHallmarkFromDb(parsed.data).catch(
+                () => null,
+              );
+              if (!result && env.apifyApiToken) {
+                result = await searchHallmark(parsed.data).catch(
+                  (err: unknown) => {
+                    logger.warn(
+                      { err },
+                      "elaine hallmark search failed (non-fatal)",
+                    );
+                    return null;
+                  },
+                );
+              }
+              if (!result) {
+                resultText = `No Hallmark product found for "${parsed.data.hallmarkSku ?? parsed.data.name ?? "(unknown)"}". Try a different name or SKU.`;
+              } else {
+                const lines = [`Hallmark product: ${result.name ?? "Unknown"}`];
+                if (result.hallmarkSku)
+                  lines.push(`SKU: ${result.hallmarkSku}`);
+                if (result.year) lines.push(`Year: ${result.year}`);
+                if (result.seriesName)
+                  lines.push(`Series: ${result.seriesName}`);
+                if (result.artist) lines.push(`Artist: ${result.artist}`);
+                if (result.originalRetailPrice != null)
+                  lines.push(
+                    `Original retail: $${result.originalRetailPrice.toFixed(2)}`,
+                  );
+                if (result.collectorPriceUsd != null)
+                  lines.push(
+                    `Collector price: $${result.collectorPriceUsd.toFixed(2)}`,
+                  );
+                if (result.description)
+                  lines.push(`Description: ${result.description}`);
+                if (result.hallmarkProductUrl)
+                  lines.push(`URL: ${result.hallmarkProductUrl}`);
+                resultText = lines.join("\n");
+              }
+            }
+          } else if (call.name === SEARCH_FLIGHTS_TOOL_NAME) {
+            const parsed = SearchFlightsToolPayload.safeParse(
+              JSON.parse(call.args),
+            );
+            if (!parsed.success) {
+              resultText =
+                "Invalid flight search — provide originIata and destination.";
+            } else if (!env.apifyApiToken) {
+              resultText = "Flight search is not configured on this server.";
+            } else {
+              const result = await lookupFlightPrices(
+                parsed.data.originIata,
+                parsed.data.destination,
+                env.apifyApiToken,
+                {
+                  departDate: parsed.data.departDate,
+                  returnDate: parsed.data.returnDate,
+                },
+              ).catch((err: unknown) => {
+                logger.warn({ err }, "elaine flight search failed (non-fatal)");
+                return null;
+              });
+              if (!result || result.options.length === 0) {
+                resultText = `No flights found from ${parsed.data.originIata} to ${parsed.data.destination}. Try a different origin airport code or destination.`;
+              } else {
+                const dateLabel = parsed.data.departDate
+                  ? `${parsed.data.departDate}${parsed.data.returnDate ? ` – ${parsed.data.returnDate}` : ""}`
+                  : "~30 days from now, 7-night stay";
+                const lines = [
+                  `Flights from ${result.originIata} to ${result.destinationQuery}:`,
+                  `Cheapest: $${result.priceMinUsd.toFixed(0)} ${result.currency}`,
+                  `(Dates: ${dateLabel})`,
+                  "",
+                  "Options:",
+                ];
+                for (const opt of result.options.slice(0, 5)) {
+                  const parts = [
+                    `  • $${opt.price.toFixed(0)} ${opt.currency ?? result.currency}`,
+                  ];
+                  if (opt.airline) parts.push(opt.airline);
+                  if (opt.stops != null)
+                    parts.push(
+                      opt.stops === 0
+                        ? "nonstop"
+                        : `${opt.stops} stop${opt.stops > 1 ? "s" : ""}`,
+                    );
+                  if (opt.durationMinutes)
+                    parts.push(
+                      `${Math.floor(opt.durationMinutes / 60)}h ${opt.durationMinutes % 60}m`,
+                    );
+                  if (opt.deepLink) parts.push(`— ${opt.deepLink}`);
+                  lines.push(parts.join(", "));
+                }
+                resultText = lines.join("\n");
               }
             }
           } else if (call.name === FETCH_PAGE_TOOL_NAME) {
@@ -7034,6 +7340,9 @@ const RESTRICTED_SOFT_TOOL_NAMES = new Set<string>([
   SHOW_ORNAMENT_ITEM_TOOL_NAME,
   QUERY_HOUSEHOLD_TOOL_NAME,
   WEB_SEARCH_TOOL_NAME,
+  EBAY_SEARCH_TOOL_NAME,
+  SEARCH_HALLMARK_TOOL_NAME,
+  SEARCH_FLIGHTS_TOOL_NAME,
   FETCH_PAGE_TOOL_NAME,
   GET_EXCHANGE_RATE_TOOL_NAME,
   SEARCH_TRIP_DOCUMENTS_TOOL_NAME,
@@ -7443,6 +7752,132 @@ async function executeRestrictedSoftTool(
           ? `${answer}\n\nSources:\n${citations.map((url, i) => `[${i + 1}] ${url}`).join("\n")}`
           : answer
         : "No results found for this search.";
+    }
+
+    if (name === EBAY_SEARCH_TOOL_NAME) {
+      const parsed = EbaySearchToolPayload.safeParse(JSON.parse(args));
+      if (!parsed.success)
+        return "Invalid eBay search — ask the user to rephrase the query.";
+      const { query, category } = parsed.data;
+      const fullQuery =
+        category === "ornaments" || category === "pottery"
+          ? buildEbayQuery(query, {})
+          : query;
+      const ebayResult = await lookupEbayMarketValue(fullQuery, {
+        withAspects: category === "ornaments",
+      });
+      if (!ebayResult)
+        return `No sold listings found on eBay for "${query}". The item may be rare or the query needs to be more specific.`;
+      const lines = [
+        `eBay sold listings for "${query}" (${ebayResult.listingCount} found):`,
+        `Price range: $${ebayResult.priceMinUsd.toFixed(2)} – $${ebayResult.priceMaxUsd.toFixed(2)} (median $${ebayResult.priceMedianUsd.toFixed(2)})`,
+      ];
+      if (
+        ebayResult.itemSpecifics &&
+        Object.keys(ebayResult.itemSpecifics).length > 0
+      ) {
+        lines.push(
+          "Item attributes: " +
+            Object.entries(ebayResult.itemSpecifics)
+              .map(([k, v]) => `${k}: ${v}`)
+              .join(", "),
+        );
+      }
+      lines.push("Recent sold listings:");
+      for (const l of ebayResult.listings.slice(0, 5)) {
+        lines.push(
+          `  • ${l.title} — $${l.soldPrice.toFixed(2)}${l.condition ? ` (${l.condition})` : ""}${l.soldDate ? `, sold ${l.soldDate.slice(0, 10)}` : ""}`,
+        );
+      }
+      return lines.join("\n");
+    }
+
+    if (name === SEARCH_HALLMARK_TOOL_NAME) {
+      const parsed = SearchHallmarkToolPayload.safeParse(JSON.parse(args));
+      if (!parsed.success)
+        return "Invalid Hallmark search — provide a name or hallmarkSku.";
+      // DB-first: skip Apify if the ornament is already in the local catalog
+      let result = await lookupHallmarkFromDb(parsed.data).catch(() => null);
+      if (!result && env.apifyApiToken) {
+        result = await searchHallmark(parsed.data).catch((err: unknown) => {
+          logger.warn(
+            { err },
+            "restricted-elaine hallmark search failed (non-fatal)",
+          );
+          return null;
+        });
+      }
+      if (!result)
+        return `No Hallmark product found for "${parsed.data.hallmarkSku ?? parsed.data.name ?? "(unknown)"}". Try a different name or SKU.`;
+      const lines = [`Hallmark product: ${result.name ?? "Unknown"}`];
+      if (result.hallmarkSku) lines.push(`SKU: ${result.hallmarkSku}`);
+      if (result.year) lines.push(`Year: ${result.year}`);
+      if (result.seriesName) lines.push(`Series: ${result.seriesName}`);
+      if (result.artist) lines.push(`Artist: ${result.artist}`);
+      if (result.originalRetailPrice != null)
+        lines.push(
+          `Original retail: $${result.originalRetailPrice.toFixed(2)}`,
+        );
+      if (result.collectorPriceUsd != null)
+        lines.push(`Collector price: $${result.collectorPriceUsd.toFixed(2)}`);
+      if (result.description) lines.push(`Description: ${result.description}`);
+      if (result.hallmarkProductUrl)
+        lines.push(`URL: ${result.hallmarkProductUrl}`);
+      return lines.join("\n");
+    }
+
+    if (name === SEARCH_FLIGHTS_TOOL_NAME) {
+      const parsed = SearchFlightsToolPayload.safeParse(JSON.parse(args));
+      if (!parsed.success)
+        return "Invalid flight search — provide originIata and destination.";
+      if (!env.apifyApiToken)
+        return "Flight search is not configured on this server.";
+      const result = await lookupFlightPrices(
+        parsed.data.originIata,
+        parsed.data.destination,
+        env.apifyApiToken,
+        {
+          departDate: parsed.data.departDate,
+          returnDate: parsed.data.returnDate,
+        },
+      ).catch((err: unknown) => {
+        logger.warn(
+          { err },
+          "restricted-elaine flight search failed (non-fatal)",
+        );
+        return null;
+      });
+      if (!result || result.options.length === 0)
+        return `No flights found from ${parsed.data.originIata} to ${parsed.data.destination}. Try a different origin airport code or destination.`;
+      const dateLabel = parsed.data.departDate
+        ? `${parsed.data.departDate}${parsed.data.returnDate ? ` – ${parsed.data.returnDate}` : ""}`
+        : "~30 days from now, 7-night stay";
+      const lines = [
+        `Flights from ${result.originIata} to ${result.destinationQuery}:`,
+        `Cheapest: $${result.priceMinUsd.toFixed(0)} ${result.currency}`,
+        `(Dates: ${dateLabel})`,
+        "",
+        "Options:",
+      ];
+      for (const opt of result.options.slice(0, 5)) {
+        const parts = [
+          `  • $${opt.price.toFixed(0)} ${opt.currency ?? result.currency}`,
+        ];
+        if (opt.airline) parts.push(opt.airline);
+        if (opt.stops != null)
+          parts.push(
+            opt.stops === 0
+              ? "nonstop"
+              : `${opt.stops} stop${opt.stops > 1 ? "s" : ""}`,
+          );
+        if (opt.durationMinutes)
+          parts.push(
+            `${Math.floor(opt.durationMinutes / 60)}h ${opt.durationMinutes % 60}m`,
+          );
+        if (opt.deepLink) parts.push(`— ${opt.deepLink}`);
+        lines.push(parts.join(", "));
+      }
+      return lines.join("\n");
     }
 
     if (name === FETCH_PAGE_TOOL_NAME) {

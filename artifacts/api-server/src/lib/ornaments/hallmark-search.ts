@@ -16,6 +16,8 @@
  *   - Apify token quota exhausted    → HTTP 402 from Apify → throws with message
  */
 
+import { eq, ilike } from "drizzle-orm";
+import { db, hallmarkOrnaments } from "@workspace/db";
 import { runApifyActor } from "../apify-client";
 import { env } from "../env";
 import { logger } from "../logger";
@@ -41,6 +43,8 @@ export interface HallmarkSearchResult {
   year: number | null;
   artist: string | null;
   originalRetailPrice: number | null;
+  /** Collector/secondary-market price from HooH catalog — only populated on DB hits */
+  collectorPriceUsd?: number | null;
   hallmarkProductUrl: string | null;
   images: string[];
   description: string | null;
@@ -124,4 +128,69 @@ export async function searchHallmark(
   }
 
   return raw as HallmarkSearchResult;
+}
+
+/**
+ * Fast local DB lookup against the hallmark_ornaments merged view
+ * (populated from hallmark.com, hallmark_historical_catalog, and
+ * hallmark_hooh_catalog crawls). Tries exact SKU match first, then
+ * case-insensitive name ILIKE as a fallback. Returns null on a miss so
+ * the caller can fall back to the live Apify actor.
+ */
+export async function lookupHallmarkFromDb(
+  input: HallmarkSearchInput,
+): Promise<HallmarkSearchResult | null> {
+  let row: typeof hallmarkOrnaments.$inferSelect | undefined;
+
+  if (input.hallmarkSku) {
+    const rows = await db
+      .select()
+      .from(hallmarkOrnaments)
+      .where(eq(hallmarkOrnaments.hallmarkSku, input.hallmarkSku))
+      .limit(1);
+    row = rows[0];
+  }
+
+  if (!row && input.name) {
+    const rows = await db
+      .select()
+      .from(hallmarkOrnaments)
+      .where(ilike(hallmarkOrnaments.name, `%${input.name}%`))
+      .limit(1);
+    row = rows[0];
+  }
+
+  if (!row) return null;
+
+  logger.info(
+    { sku: row.hallmarkSku, name: row.name },
+    "hallmark-search: DB hit — skipping Apify",
+  );
+
+  const productUrl =
+    row.productUrlHallmark ??
+    row.productUrlHistorical ??
+    row.productUrlHooh ??
+    null;
+
+  return {
+    found: true,
+    hallmarkSku: row.hallmarkSku,
+    name: row.name,
+    brand: "Hallmark",
+    seriesName: row.seriesName ?? null,
+    sequenceNumber: row.sequenceNumber ?? null,
+    year: row.year ?? null,
+    artist: row.artist ?? null,
+    originalRetailPrice: row.retailPriceUsd ? Number(row.retailPriceUsd) : null,
+    collectorPriceUsd: row.collectorPriceUsd
+      ? Number(row.collectorPriceUsd)
+      : null,
+    hallmarkProductUrl: productUrl,
+    images: row.images ?? [],
+    description: row.description ?? null,
+    confidence: 1.0,
+    source: "hallmark.com",
+    scrapedAt: row.updatedAt.toISOString(),
+  };
 }

@@ -95,6 +95,25 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS IDX_quilting_session_expire ON quilting_sessions (expire)`,
   `ALTER TABLE quilting_sessions ENABLE ROW LEVEL SECURITY`,
 
+  // ── Unified session store (replaces pottery_sessions + quilting_sessions) ──
+  // Cookie: batchelor.sid  |  connect-pg-simple tableName: "app_sessions"
+  `CREATE TABLE IF NOT EXISTS app_sessions (
+    sid    VARCHAR   NOT NULL COLLATE "default",
+    sess   JSON      NOT NULL,
+    expire TIMESTAMP(6) NOT NULL,
+    CONSTRAINT app_sessions_pkey PRIMARY KEY (sid)
+  )`,
+  `CREATE INDEX IF NOT EXISTS IDX_app_session_expire ON app_sessions (expire)`,
+  `ALTER TABLE app_sessions ENABLE ROW LEVEL SECURITY`,
+  // One-time idempotent migration: copy any unexpired sessions that were in
+  // quilting_sessions so existing logins survive the cookie-name rename.
+  `INSERT INTO app_sessions (sid, sess, expire)
+    SELECT sid, sess, expire FROM quilting_sessions
+    WHERE expire > NOW()
+      AND NOT EXISTS (
+        SELECT 1 FROM app_sessions a WHERE a.sid = quilting_sessions.sid
+      )`,
+
   // Shared, cross-instance rate limiting counters. Backs express-rate-limit's
   // Store interface so limits are enforced across the whole autoscaled
   // deployment instead of per-process. `key` is `${limiterName}:${clientKey}`.

@@ -347,6 +347,15 @@ importers:
         specifier: ^3.2.6
         version: 3.2.6(@types/node@25.6.2)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@1.8.0))(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.21.0)(yaml@2.9.0)
 
+  artifacts/e2e:
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.61.1
+        version: 1.61.1
+      '@types/node':
+        specifier: 'catalog:'
+        version: 25.6.2
+
   artifacts/elaine:
     devDependencies:
       '@hookform/resolvers':

@@ -44,7 +44,12 @@ export default function MessengerPage() {
   if (!user) return null;
 
   const selectedConv = conversations.find((c) => c.id === selectedConvId);
-  const convName = selectedConv?.name ?? "Group Chat";
+  const convName = selectedConv
+    ? selectedConv.isDirect
+      ? (selectedConv.participants?.find((p) => p.id !== user.id)
+          ?.displayName ?? "Direct Message")
+      : (selectedConv.name ?? "Group Chat")
+    : "Messenger";
 
   function participantSubtitle(
     conv: typeof selectedConv,

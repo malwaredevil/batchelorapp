@@ -33,7 +33,7 @@ interface MessengerConversationSidebarProps {
 
 type CreateStep =
   | null
-  | { step: "picker"; selectedIds: number[] }
+  | { step: "picker"; mode: "dm" | "group"; selectedIds: number[] }
   | { step: "group-name"; selectedIds: number[]; name: string };
 
 function relativeTime(iso: string): string {
@@ -80,6 +80,7 @@ export function MessengerConversationSidebar({
   const currentUserId = user?.id ?? 0;
   const qc = useQueryClient();
   const [showArchived, setShowArchived] = useState(false);
+  const [showCompose, setShowCompose] = useState(false);
   const [createStep, setCreateStep] = useState<CreateStep>(null);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
@@ -386,13 +387,13 @@ export function MessengerConversationSidebar({
 
     if (createStep.step === "picker") {
       const otherMembers = members.filter((m) => m.id !== currentUserId);
-      const { selectedIds } = createStep;
+      const { selectedIds, mode } = createStep;
 
       const toggleMember = (id: number) => {
         const next = selectedIds.includes(id)
           ? selectedIds.filter((x) => x !== id)
           : [...selectedIds, id];
-        setCreateStep({ step: "picker", selectedIds: next });
+        setCreateStep({ step: "picker", mode, selectedIds: next });
       };
 
       return (
@@ -431,9 +432,11 @@ export function MessengerConversationSidebar({
                 flex: 1,
               }}
             >
-              {selectedIds.length === 0
-                ? "Select people"
-                : `${selectedIds.length} selected`}
+              {mode === "dm"
+                ? "Select person"
+                : selectedIds.length === 0
+                  ? "Select members"
+                  : `${selectedIds.length} selected`}
             </span>
             <button
               onClick={() => setCreateStep(null)}
@@ -462,94 +465,110 @@ export function MessengerConversationSidebar({
                 No other household members.
               </div>
             )}
-            {otherMembers.map((m) => {
-              const checked = selectedIds.includes(m.id);
-              return (
-                <div
-                  key={m.id}
-                  onClick={() => toggleMember(m.id)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "5px 6px",
-                    borderRadius: 6,
-                    cursor: "pointer",
-                    background: checked
-                      ? "rgba(59,130,246,0.1)"
-                      : "transparent",
-                  }}
-                >
+            {mode === "dm"
+              ? otherMembers.map((m) => (
                   <div
+                    key={m.id}
+                    onClick={() => void handleCreateDm(m.id)}
                     style={{
-                      width: 14,
-                      height: 14,
-                      borderRadius: 3,
-                      border: checked
-                        ? "2px solid #3b82f6"
-                        : "2px solid hsl(var(--border))",
-                      background: checked ? "#3b82f6" : "hsl(var(--card))",
                       display: "flex",
                       alignItems: "center",
-                      justifyContent: "center",
-                      flexShrink: 0,
+                      gap: 8,
+                      padding: "5px 6px",
+                      borderRadius: 6,
+                      cursor: "pointer",
                     }}
+                    onMouseEnter={(e) =>
+                      ((e.currentTarget as HTMLDivElement).style.background =
+                        "rgba(127,127,127,0.07)")
+                    }
+                    onMouseLeave={(e) =>
+                      ((e.currentTarget as HTMLDivElement).style.background =
+                        "transparent")
+                    }
                   >
-                    {checked && <Check size={9} color="#fff" />}
+                    <User
+                      size={12}
+                      style={{
+                        color: "hsl(var(--muted-foreground))",
+                        flexShrink: 0,
+                      }}
+                    />
+                    <span
+                      style={{ fontSize: 12, color: "hsl(var(--foreground))" }}
+                    >
+                      {m.displayName ?? m.email}
+                    </span>
                   </div>
-                  <span
-                    style={{
-                      fontSize: 12,
-                      color: "hsl(var(--foreground))",
-                    }}
-                  >
-                    {m.displayName ?? m.email}
-                  </span>
-                </div>
-              );
-            })}
+                ))
+              : otherMembers.map((m) => {
+                  const checked = selectedIds.includes(m.id);
+                  return (
+                    <div
+                      key={m.id}
+                      onClick={() => toggleMember(m.id)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: "5px 6px",
+                        borderRadius: 6,
+                        cursor: "pointer",
+                        background: checked
+                          ? "rgba(59,130,246,0.1)"
+                          : "transparent",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 14,
+                          height: 14,
+                          borderRadius: 3,
+                          border: checked
+                            ? "2px solid #3b82f6"
+                            : "2px solid hsl(var(--border))",
+                          background: checked ? "#3b82f6" : "hsl(var(--card))",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {checked && <Check size={9} color="#fff" />}
+                      </div>
+                      <span
+                        style={{
+                          fontSize: 12,
+                          color: "hsl(var(--foreground))",
+                        }}
+                      >
+                        {m.displayName ?? m.email}
+                      </span>
+                    </div>
+                  );
+                })}
           </div>
 
-          {selectedIds.length > 0 && (
+          {mode === "group" && selectedIds.length >= 2 && (
             <div style={{ padding: "4px 10px 0", display: "flex", gap: 4 }}>
-              {selectedIds.length === 1 && (
-                <button
-                  onClick={() => void handleCreateDm(selectedIds[0])}
-                  style={{
-                    flex: 1,
-                    background: "#3b82f6",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: 6,
-                    padding: "5px 0",
-                    fontSize: 11,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  Start DM
-                </button>
-              )}
-              {selectedIds.length >= 2 && (
-                <button
-                  onClick={() =>
-                    setCreateStep({ step: "group-name", selectedIds, name: "" })
-                  }
-                  style={{
-                    flex: 1,
-                    background: "#3b82f6",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: 6,
-                    padding: "5px 0",
-                    fontSize: 11,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  Name Group →
-                </button>
-              )}
+              <button
+                onClick={() =>
+                  setCreateStep({ step: "group-name", selectedIds, name: "" })
+                }
+                style={{
+                  flex: 1,
+                  background: "#3b82f6",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 6,
+                  padding: "5px 0",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Name Group →
+              </button>
             </div>
           )}
         </div>
@@ -574,7 +593,9 @@ export function MessengerConversationSidebar({
             }}
           >
             <button
-              onClick={() => setCreateStep({ step: "picker", selectedIds })}
+              onClick={() =>
+                setCreateStep({ step: "picker", mode: "group", selectedIds })
+              }
               style={{
                 background: "none",
                 border: "none",
@@ -697,26 +718,128 @@ export function MessengerConversationSidebar({
             Chats
           </span>
         </div>
-        <button
-          title="New conversation"
-          onClick={() =>
-            setCreateStep(
-              createStep ? null : { step: "picker", selectedIds: [] },
-            )
-          }
-          style={{
-            background: createStep ? "rgba(59,130,246,0.1)" : "none",
-            border: "none",
-            cursor: "pointer",
-            color: createStep ? "#3b82f6" : "hsl(var(--muted-foreground))",
-            padding: 2,
-            borderRadius: 4,
-            display: "flex",
-            alignItems: "center",
-          }}
-        >
-          <Plus size={15} />
-        </button>
+        <div style={{ position: "relative" }}>
+          <button
+            title="New conversation"
+            onClick={() => {
+              if (createStep) {
+                setCreateStep(null);
+                setShowCompose(false);
+              } else {
+                setShowCompose((v) => !v);
+              }
+            }}
+            style={{
+              background:
+                showCompose || createStep ? "rgba(59,130,246,0.1)" : "none",
+              border: "none",
+              cursor: "pointer",
+              color:
+                showCompose || createStep
+                  ? "#3b82f6"
+                  : "hsl(var(--muted-foreground))",
+              padding: 2,
+              borderRadius: 4,
+              display: "flex",
+              alignItems: "center",
+            }}
+          >
+            <Plus size={15} />
+          </button>
+          {showCompose && (
+            <div
+              style={{
+                position: "absolute",
+                top: "calc(100% + 4px)",
+                right: 0,
+                background: "hsl(var(--card))",
+                border: "1px solid hsl(var(--border))",
+                borderRadius: 8,
+                boxShadow: "0 4px 16px rgba(0,0,0,0.14)",
+                zIndex: 50,
+                minWidth: 168,
+                padding: 4,
+              }}
+            >
+              <button
+                onClick={() => {
+                  setShowCompose(false);
+                  setCreateStep({
+                    step: "picker",
+                    mode: "dm",
+                    selectedIds: [],
+                  });
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  width: "100%",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: "7px 10px",
+                  borderRadius: 6,
+                  fontSize: 12,
+                  color: "hsl(var(--foreground))",
+                  textAlign: "left",
+                }}
+                onMouseEnter={(e) =>
+                  ((e.currentTarget as HTMLButtonElement).style.background =
+                    "rgba(127,127,127,0.07)")
+                }
+                onMouseLeave={(e) =>
+                  ((e.currentTarget as HTMLButtonElement).style.background =
+                    "none")
+                }
+              >
+                <User
+                  size={13}
+                  style={{ color: "hsl(var(--muted-foreground))" }}
+                />
+                Direct Message
+              </button>
+              <button
+                onClick={() => {
+                  setShowCompose(false);
+                  setCreateStep({
+                    step: "picker",
+                    mode: "group",
+                    selectedIds: [],
+                  });
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  width: "100%",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: "7px 10px",
+                  borderRadius: 6,
+                  fontSize: 12,
+                  color: "hsl(var(--foreground))",
+                  textAlign: "left",
+                }}
+                onMouseEnter={(e) =>
+                  ((e.currentTarget as HTMLButtonElement).style.background =
+                    "rgba(127,127,127,0.07)")
+                }
+                onMouseLeave={(e) =>
+                  ((e.currentTarget as HTMLButtonElement).style.background =
+                    "none")
+                }
+              >
+                <Users
+                  size={13}
+                  style={{ color: "hsl(var(--muted-foreground))" }}
+                />
+                New Group Chat
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Create conversation flow */}

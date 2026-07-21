@@ -7,7 +7,6 @@ import ornamentsRouter from "./ornaments";
 import officeRouter from "./office";
 import travelsRouter from "./travels";
 import hubRouter from "./hub";
-import devScreenshotLoginRouter from "./dev-screenshot-login";
 import elaineRouter from "../elaine";
 import gmailRouter from "./gmail";
 import searchRouter from "./search";
@@ -28,7 +27,15 @@ const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(authRouter);
-router.use(devScreenshotLoginRouter);
+// Dev-only: mount the screenshot-login route only outside production.
+// Wrapped in a conditional require so esbuild can dead-code-eliminate the
+// entire dev-screenshot-login module from production bundles when NODE_ENV is
+// substituted at build time via the define option in build.mjs.
+if (process.env.NODE_ENV !== "production") {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const devRouter = require("./dev-screenshot-login") as { default: IRouter };
+  router.use(devRouter.default);
+}
 router.use(searchRouter);
 router.use("/pottery", potteryRouter);
 router.use("/quilting", quiltingRouter);

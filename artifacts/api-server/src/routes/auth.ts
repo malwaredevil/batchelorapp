@@ -70,7 +70,15 @@ function googleCallbackUrl(req: Request): string | null {
   const host = req.get("host");
   if (!host) return null;
   const allowed = env.replitDomains;
-  if (allowed.length > 0 && !allowed.includes(host)) return null;
+  if (!allowed.length) {
+    // No allow-list configured. In production this means we cannot validate the
+    // Host header, so we fail closed to prevent an open-redirect / auth-code
+    // theft via a forged Host header. In development the allow-list is absent
+    // by design (preview domain changes on every reboot), so we allow any host.
+    if (env.isProduction) return null;
+  } else if (!allowed.includes(host)) {
+    return null;
+  }
   return `${req.protocol}://${host}/api/auth/google/callback`;
 }
 
@@ -648,11 +656,14 @@ router.post("/auth/forgot-password", loginLimiter, async (req, res) => {
       // REPLIT_DOMAINS like the Google OAuth flow).
       const host = req.get("host");
       const allowed = env.replitDomains;
-      const hostOk = !allowed.length || allowed.includes(host ?? "");
+      // Only trust the incoming Host header when it appears in the allow-list.
+      // Never fall through with "accept any host" when the list is empty —
+      // that would let a forged Host header shape the password-reset link.
+      const hostOk = allowed.length > 0 && allowed.includes(host ?? "");
       const baseUrl =
         hostOk && host
           ? `${req.protocol}://${host}`
-          : `https://${allowed[0] ?? "localhost"}`;
+          : (env.publicAppUrl ?? `https://${allowed[0] ?? "localhost"}`);
 
       const resetUrl = `${baseUrl}/reset-password?token=${rawToken}`;
 

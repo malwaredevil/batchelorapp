@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 import {
   Send,
   Paperclip,
@@ -271,10 +277,16 @@ export function MessengerChatPanel({
   }, []);
 
   // Signal/Teams-style scroll-to-bottom logic:
-  //   • First load for this conversation → instant jump (no animation)
-  //   • Subsequent new messages → smooth scroll, but only if already near the bottom
-  //     (if the user has scrolled up we leave them there — the "↓ Latest" button appears)
-  useEffect(() => {
+  //   • First load for this conversation → instant jump (no animation).
+  //     useLayoutEffect fires before the browser paints, preventing a flash of
+  //     the previous conversation's scroll position when switching convs.
+  //   • Subsequent new messages → smooth scroll, but only if already near the
+  //     bottom (if the user has scrolled up we leave them there — the "↓ Latest"
+  //     button appears).
+  // convId is in the deps so that switching conversations re-triggers the
+  // initial-scroll branch even when messages.length hasn't changed (React Query
+  // cache hit keeps the count stable across conversation switches).
+  useLayoutEffect(() => {
     if (!isOpen || isLoading) return;
     const el = listRef.current;
     if (!el) return;
@@ -295,7 +307,7 @@ export function MessengerChatPanel({
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
     // If the user has scrolled up, do nothing — the "↓ Latest" button handles it
-  }, [messages.length, isOpen, isLoading]);
+  }, [convId, messages.length, isOpen, isLoading]);
 
   // Mark latest message as read when panel opens / new messages arrive
   useEffect(() => {

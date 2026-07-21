@@ -103,6 +103,22 @@ export const passwordResetLimiter = rateLimit({
   passOnStoreError: false,
 });
 
+// Webhook endpoints for AgentPhone SMS/voice and Resend inbound-email. These
+// are unauthenticated (HMAC-gated) public routes, so rate-limiting by IP is the
+// primary DoS defence in front of the signature verification step. 60 requests
+// per 15-minute window is generous for legitimate webhook re-delivery (AgentPhone
+// and Resend retry with exponential back-off, never hammering at constant rate),
+// but tight enough to blunt a brute-force attempt on the shared HMAC secret.
+export const webhookLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: jsonLimitMessage,
+  store: new PostgresRateLimitStore("webhook"),
+  passOnStoreError: false,
+});
+
 // Admin/owner-only operational routes (jobs dashboard, operations telemetry).
 // Generous cap since they are already gated behind requireOwner, but still
 // bounded to prevent accidental tight-loop polling from saturating the DB.

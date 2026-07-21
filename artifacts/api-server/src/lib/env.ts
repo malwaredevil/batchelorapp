@@ -69,6 +69,12 @@ export const env = {
   ebayCertId: optional("EBAY_CERT_ID"),
   ebayDevId: optional("EBAY_DEV_ID"),
   sentryDsn: optional("SENTRY_DSN"),
+  // Canonical public URL of this deployment (e.g. "https://app.batchelor.app").
+  // Used as a safe fallback for constructing OAuth redirect URIs and
+  // password-reset URLs when REPLIT_DOMAINS is empty. Optional so the app
+  // boots in all environments; callers fall back to REPLIT_DOMAINS[0] or
+  // reject the request if both are unset in production.
+  publicAppUrl: optional("PUBLIC_APP_URL"),
   // Comma-separated list of allowed host names for OAuth redirect URIs and
   // password-reset URLs. Validated server-side so a forged Host header
   // cannot shape sensitive redirect targets. Centralised here so every

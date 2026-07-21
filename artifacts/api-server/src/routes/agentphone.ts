@@ -1,4 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import { webhookLimiter } from "../middleware/rateLimit";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { eq } from "drizzle-orm";
 import {
@@ -349,7 +350,7 @@ async function handleVoice(req: Request, res: Response): Promise<void> {
   res.end();
 }
 
-router.post("/webhook", async (req: Request, res: Response) => {
+router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
   if (!verifySignature(req)) {
     logger.warn("agentphone: webhook signature verification failed");
     res.status(401).json({ error: "Invalid signature" });

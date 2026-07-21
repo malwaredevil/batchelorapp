@@ -1611,6 +1611,10 @@ export const STATEMENTS: string[] = [
      ON ai_generation_runs (module, feature)`,
   `CREATE INDEX IF NOT EXISTS ai_generation_runs_created_at_idx
      ON ai_generation_runs (created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS ai_generation_runs_job_id_idx
+     ON ai_generation_runs (job_id) WHERE job_id IS NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS ai_generation_runs_user_id_idx
+     ON ai_generation_runs (user_id) WHERE user_id IS NOT NULL`,
 
   `CREATE TABLE IF NOT EXISTS ai_field_candidates (
     id                    SERIAL PRIMARY KEY,
@@ -1719,6 +1723,10 @@ export const STATEMENTS: string[] = [
      ON ingestion_runs (status)`,
   `CREATE INDEX IF NOT EXISTS ingestion_runs_created_at_idx
      ON ingestion_runs (created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS ingestion_runs_job_id_idx
+     ON ingestion_runs (job_id) WHERE job_id IS NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS ingestion_runs_triggered_by_idx
+     ON ingestion_runs (triggered_by) WHERE triggered_by IS NOT NULL`,
 
   `CREATE TABLE IF NOT EXISTS ingestion_candidates (
     id               SERIAL PRIMARY KEY,
@@ -1822,6 +1830,12 @@ export const STATEMENTS: string[] = [
      ON travels_field_conflicts (status)`,
   `CREATE INDEX IF NOT EXISTS travels_field_conflicts_field_path_idx
      ON travels_field_conflicts (field_path)`,
+  `CREATE INDEX IF NOT EXISTS travels_field_conflicts_accepted_candidate_idx
+     ON travels_field_conflicts (accepted_candidate_id) WHERE accepted_candidate_id IS NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS travels_field_conflicts_recommended_candidate_idx
+     ON travels_field_conflicts (recommended_candidate_id) WHERE recommended_candidate_id IS NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS travels_field_conflicts_deciding_user_idx
+     ON travels_field_conflicts (deciding_user_id) WHERE deciding_user_id IS NOT NULL`,
 
   // ── Disruption monitoring (#238) ─────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS travels_reservations (
@@ -2112,6 +2126,10 @@ export const STATEMENTS: string[] = [
      ON notification_events (module)`,
   `CREATE INDEX IF NOT EXISTS notification_events_occurred_at_idx
      ON notification_events (occurred_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS notification_events_created_by_idx
+     ON notification_events (created_by) WHERE created_by IS NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS notification_events_superseded_by_idx
+     ON notification_events (superseded_by) WHERE superseded_by IS NOT NULL`,
 
   `CREATE TABLE IF NOT EXISTS notification_recipients (
     id                SERIAL PRIMARY KEY,
@@ -2158,6 +2176,8 @@ export const STATEMENTS: string[] = [
      ON notification_deliveries (status)`,
   `CREATE INDEX IF NOT EXISTS notification_deliveries_channel_status_idx
      ON notification_deliveries (channel, status)`,
+  `CREATE INDEX IF NOT EXISTS notification_deliveries_event_id_idx
+     ON notification_deliveries (event_id)`,
 
   `CREATE TABLE IF NOT EXISTS notification_preferences (
     id                    SERIAL PRIMARY KEY,
@@ -2648,4 +2668,5 @@ export const STATEMENTS: string[] = [
   )`,
   `ALTER TABLE messenger_reactions ENABLE ROW LEVEL SECURITY`,
   `CREATE INDEX IF NOT EXISTS messenger_reactions_msg_idx ON messenger_reactions (message_id)`,
+  `CREATE INDEX IF NOT EXISTS messenger_reactions_user_id_idx ON messenger_reactions (user_id)`,
 ];

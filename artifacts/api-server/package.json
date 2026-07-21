@@ -16,7 +16,8 @@
   "dependencies": {
     "@neplex/vectorizer": "^0.1.0",
     "@opentelemetry/instrumentation": "^0.220.0",
-    "@replit/connectors-sdk": "latest",
+    "@replit/connectors-sdk": "catalog:",
+    "lru-cache": "^11.5.1",
     "@sentry/node": "^10.64.0",
     "@supabase/supabase-js": "^2.108.1",
     "@workspace/api-zod": "workspace:*",

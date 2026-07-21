@@ -1,4 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import { webhookLimiter } from "../middleware/rateLimit";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { eq } from "drizzle-orm";
 import {
@@ -185,262 +186,269 @@ function stripQuotedText(text: string): string {
   return kept.join("\n").trim();
 }
 
-router.post("/email-webhook", async (req: Request, res: Response) => {
-  if (!verifySignature(req)) {
-    logger.warn("elaine-email: webhook signature verification failed");
-    res.status(401).json({ error: "Invalid signature" });
-    return;
-  }
+router.post(
+  "/email-webhook",
+  webhookLimiter,
+  async (req: Request, res: Response) => {
+    if (!verifySignature(req)) {
+      logger.warn("elaine-email: webhook signature verification failed");
+      res.status(401).json({ error: "Invalid signature" });
+      return;
+    }
 
-  const deliveryId = req.get("svix-id") ?? "";
-  if (!deliveryId) {
-    res.status(400).json({ error: "Missing svix-id" });
-    return;
-  }
+    const deliveryId = req.get("svix-id") ?? "";
+    if (!deliveryId) {
+      res.status(400).json({ error: "Missing svix-id" });
+      return;
+    }
 
-  let claimed: boolean;
-  try {
-    claimed = await claimDelivery(deliveryId);
-  } catch (err) {
-    logger.error(
-      { err, deliveryId },
-      "elaine-email: dedup DB error — failing closed",
-    );
-    res.status(503).json({ error: "Service unavailable" });
-    return;
-  }
-  if (!claimed) {
-    logger.warn(
-      { deliveryId },
-      "elaine-email: duplicate webhook delivery rejected",
-    );
-    res.status(200).json({ ok: true, duplicate: true });
-    return;
-  }
-
-  const body = req.body as {
-    type?: string;
-    data?: {
-      email_id?: string;
-      from?: string;
-      subject?: string;
-      text?: string;
-      html?: string;
-      headers?: Record<string, string> | Array<{ name: string; value: string }>;
-      message_id?: string;
-    };
-  };
-
-  const eventType = typeof body?.type === "string" ? body.type : "";
-  logger.info(
-    { deliveryId, eventType },
-    "elaine-email: webhook delivery received",
-  );
-
-  // Only inbound-email events carry a message to act on; other Resend
-  // webhook event types (delivery/bounce/etc. on outbound sends) are no-ops.
-  if (eventType !== "email.received" && eventType !== "inbound.email") {
-    res.status(200).json({ ok: true });
-    return;
-  }
-
-  let data = body.data ?? {};
-
-  // Resend's inbound webhooks intentionally never include the body, headers,
-  // or attachments inline (only metadata) — full content must be fetched via
-  // the Received Emails API using the payload's email_id. See
-  // https://resend.com/docs/dashboard/receiving/introduction.
-  const emailId = typeof data.email_id === "string" ? data.email_id : "";
-  if (
-    emailId &&
-    typeof data.text !== "string" &&
-    typeof data.html !== "string" &&
-    env.resendApiKey
-  ) {
+    let claimed: boolean;
     try {
-      const resend = new Resend(env.resendApiKey);
-      const { data: fullEmail, error } =
-        await resend.emails.receiving.get(emailId);
-      if (error) {
-        logger.warn(
-          { deliveryId, emailId, error },
-          "elaine-email: failed to fetch full email content",
-        );
-      } else if (fullEmail) {
-        data = {
-          ...data,
-          text: fullEmail.text ?? undefined,
-          html: fullEmail.html ?? undefined,
-        };
-      }
+      claimed = await claimDelivery(deliveryId);
     } catch (err) {
+      logger.error(
+        { err, deliveryId },
+        "elaine-email: dedup DB error — failing closed",
+      );
+      res.status(503).json({ error: "Service unavailable" });
+      return;
+    }
+    if (!claimed) {
       logger.warn(
-        { deliveryId, emailId, err },
-        "elaine-email: error fetching full email content",
+        { deliveryId },
+        "elaine-email: duplicate webhook delivery rejected",
       );
+      res.status(200).json({ ok: true, duplicate: true });
+      return;
     }
-  }
 
-  const fromRaw = typeof data.from === "string" ? data.from : "";
-  // From header is typically `"Name" <email@example.com>` — extract the bare
-  // address for an exact match against app_users.email.
-  const fromMatch = /<([^>]+)>/.exec(fromRaw);
-  const fromEmail = (fromMatch ? fromMatch[1] : fromRaw).trim().toLowerCase();
+    const body = req.body as {
+      type?: string;
+      data?: {
+        email_id?: string;
+        from?: string;
+        subject?: string;
+        text?: string;
+        html?: string;
+        headers?:
+          | Record<string, string>
+          | Array<{ name: string; value: string }>;
+        message_id?: string;
+      };
+    };
 
-  if (!fromEmail) {
-    res.status(200).json({ ok: true });
-    return;
-  }
-
-  const [user] = await db
-    .select({ id: appUsers.id, email: appUsers.email })
-    .from(appUsers)
-    .where(eq(appUsers.email, fromEmail))
-    .limit(1);
-
-  if (!user) {
-    // Unrecognized sender: never process or reply. No indication given back
-    // to the sender either way (avoids account-enumeration via email).
+    const eventType = typeof body?.type === "string" ? body.type : "";
     logger.info(
-      { deliveryId },
-      "elaine-email: sender not recognized, ignoring",
+      { deliveryId, eventType },
+      "elaine-email: webhook delivery received",
     );
-    res.status(200).json({ ok: true });
-    return;
-  }
 
-  const rawText = typeof data.text === "string" ? data.text : "";
-  const rawHtml = typeof data.html === "string" ? data.html : "";
-  const bodyText = rawText.trim() || (rawHtml ? htmlToPlainText(rawHtml) : "");
-  const cleanedText = stripQuotedText(bodyText).slice(0, 8000);
-  const subject =
-    typeof data.subject === "string" ? data.subject : "Message from you";
-  const inboundMessageId =
-    typeof data.message_id === "string" ? data.message_id : undefined;
-
-  // Forwarded booking-confirmation emails often carry an attachment with
-  // little or no body text — process attachments regardless of whether
-  // there's usable text, then let a missing-text email short-circuit only
-  // when there were no attachments either.
-  let attachmentOutcomes: EmailAttachmentOutcome[] = [];
-  if (emailId) {
-    try {
-      attachmentOutcomes = await processEmailAttachments({
-        emailId,
-        userId: user.id,
-        fromEmail: user.email,
-        subject,
-      });
-    } catch (err) {
-      logger.error(
-        { err, deliveryId, emailId },
-        "elaine-email: attachment processing failed",
-      );
+    // Only inbound-email events carry a message to act on; other Resend
+    // webhook event types (delivery/bounce/etc. on outbound sends) are no-ops.
+    if (eventType !== "email.received" && eventType !== "inbound.email") {
+      res.status(200).json({ ok: true });
+      return;
     }
-  }
 
-  // Also try to extract a booking document from the email body text itself.
-  // Many hotel/tour confirmations arrive as HTML-only emails with no PDF
-  // attachment — extractFromEmailText classifies whether the body is a genuine
-  // booking confirmation before creating any document, so non-travel emails
-  // are filtered out cheaply. If the same booking is also in an attachment,
-  // the itinerary dedup logic (syncItineraryFromDocument) keeps the richer
-  // source and discards the thinner one — no duplicate itinerary entries.
-  if (cleanedText && emailId) {
-    try {
-      const bodyOutcome = await processEmailBodyAsDocument({
-        emailId,
-        userId: user.id,
-        fromEmail: user.email,
-        subject,
-        bodyText: cleanedText,
-      });
-      if (bodyOutcome) {
-        attachmentOutcomes = [...attachmentOutcomes, bodyOutcome];
+    let data = body.data ?? {};
+
+    // Resend's inbound webhooks intentionally never include the body, headers,
+    // or attachments inline (only metadata) — full content must be fetched via
+    // the Received Emails API using the payload's email_id. See
+    // https://resend.com/docs/dashboard/receiving/introduction.
+    const emailId = typeof data.email_id === "string" ? data.email_id : "";
+    if (
+      emailId &&
+      typeof data.text !== "string" &&
+      typeof data.html !== "string" &&
+      env.resendApiKey
+    ) {
+      try {
+        const resend = new Resend(env.resendApiKey);
+        const { data: fullEmail, error } =
+          await resend.emails.receiving.get(emailId);
+        if (error) {
+          logger.warn(
+            { deliveryId, emailId, error },
+            "elaine-email: failed to fetch full email content",
+          );
+        } else if (fullEmail) {
+          data = {
+            ...data,
+            text: fullEmail.text ?? undefined,
+            html: fullEmail.html ?? undefined,
+          };
+        }
+      } catch (err) {
+        logger.warn(
+          { deliveryId, emailId, err },
+          "elaine-email: error fetching full email content",
+        );
       }
-    } catch (err) {
-      logger.error(
-        { err, deliveryId, emailId },
-        "elaine-email: body document processing failed",
+    }
+
+    const fromRaw = typeof data.from === "string" ? data.from : "";
+    // From header is typically `"Name" <email@example.com>` — extract the bare
+    // address for an exact match against app_users.email.
+    const fromMatch = /<([^>]+)>/.exec(fromRaw);
+    const fromEmail = (fromMatch ? fromMatch[1] : fromRaw).trim().toLowerCase();
+
+    if (!fromEmail) {
+      res.status(200).json({ ok: true });
+      return;
+    }
+
+    const [user] = await db
+      .select({ id: appUsers.id, email: appUsers.email })
+      .from(appUsers)
+      .where(eq(appUsers.email, fromEmail))
+      .limit(1);
+
+    if (!user) {
+      // Unrecognized sender: never process or reply. No indication given back
+      // to the sender either way (avoids account-enumeration via email).
+      logger.info(
+        { deliveryId },
+        "elaine-email: sender not recognized, ignoring",
       );
+      res.status(200).json({ ok: true });
+      return;
     }
-  }
 
-  if (!cleanedText && attachmentOutcomes.length === 0) {
-    logger.info(
-      {
-        deliveryId,
-        hasText: Boolean(rawText),
-        hasHtml: Boolean(rawHtml),
-        dataKeys: Object.keys(data),
-      },
-      "elaine-email: no usable body text or attachments extracted, ignoring",
-    );
-    res.status(200).json({ ok: true });
-    return;
-  }
+    const rawText = typeof data.text === "string" ? data.text : "";
+    const rawHtml = typeof data.html === "string" ? data.html : "";
+    const bodyText =
+      rawText.trim() || (rawHtml ? htmlToPlainText(rawHtml) : "");
+    const cleanedText = stripQuotedText(bodyText).slice(0, 8000);
+    const subject =
+      typeof data.subject === "string" ? data.subject : "Message from you";
+    const inboundMessageId =
+      typeof data.message_id === "string" ? data.message_id : undefined;
 
-  const attachmentSummaryLines = attachmentOutcomes.map((a) => {
-    if (a.outcome === "linked") {
-      return `- Attachment "${a.filename}": saved and matched to an existing trip${a.tripTitle ? ` (${a.tripTitle})` : ""}.`;
+    // Forwarded booking-confirmation emails often carry an attachment with
+    // little or no body text — process attachments regardless of whether
+    // there's usable text, then let a missing-text email short-circuit only
+    // when there were no attachments either.
+    let attachmentOutcomes: EmailAttachmentOutcome[] = [];
+    if (emailId) {
+      try {
+        attachmentOutcomes = await processEmailAttachments({
+          emailId,
+          userId: user.id,
+          fromEmail: user.email,
+          subject,
+        });
+      } catch (err) {
+        logger.error(
+          { err, deliveryId, emailId },
+          "elaine-email: attachment processing failed",
+        );
+      }
     }
-    if (a.outcome === "unmatched") {
-      return `- Attachment "${a.filename}": saved, but I couldn't confidently match it to a trip — it's waiting in the Documents triage inbox for someone to assign it.`;
+
+    // Also try to extract a booking document from the email body text itself.
+    // Many hotel/tour confirmations arrive as HTML-only emails with no PDF
+    // attachment — extractFromEmailText classifies whether the body is a genuine
+    // booking confirmation before creating any document, so non-travel emails
+    // are filtered out cheaply. If the same booking is also in an attachment,
+    // the itinerary dedup logic (syncItineraryFromDocument) keeps the richer
+    // source and discards the thinner one — no duplicate itinerary entries.
+    if (cleanedText && emailId) {
+      try {
+        const bodyOutcome = await processEmailBodyAsDocument({
+          emailId,
+          userId: user.id,
+          fromEmail: user.email,
+          subject,
+          bodyText: cleanedText,
+        });
+        if (bodyOutcome) {
+          attachmentOutcomes = [...attachmentOutcomes, bodyOutcome];
+        }
+      } catch (err) {
+        logger.error(
+          { err, deliveryId, emailId },
+          "elaine-email: body document processing failed",
+        );
+      }
     }
-    if (a.outcome === "skipped") {
-      return `- Attachment "${a.filename}": skipped (unsupported file type — only PDF and image files are supported).`;
+
+    if (!cleanedText && attachmentOutcomes.length === 0) {
+      logger.info(
+        {
+          deliveryId,
+          hasText: Boolean(rawText),
+          hasHtml: Boolean(rawHtml),
+          dataKeys: Object.keys(data),
+        },
+        "elaine-email: no usable body text or attachments extracted, ignoring",
+      );
+      res.status(200).json({ ok: true });
+      return;
     }
-    return `- Attachment "${a.filename}": failed to process.`;
-  });
 
-  const effectiveInputText =
-    attachmentSummaryLines.length > 0
-      ? `${cleanedText || "(forwarded email with no body text)"}\n\n[System note — not from the user: the email had ${attachmentOutcomes.length} attachment(s) processed as follows. Mention this outcome briefly in your reply.]\n${attachmentSummaryLines.join("\n")}`
-      : cleanedText;
-
-  const conversation = await getOrCreateEmailConversation(user.id);
-  const history =
-    (conversation.messages as ElaineEmailChatMessage[] | null) ?? [];
-
-  let replyText: string;
-  let updatedHistory: ElaineEmailChatMessage[];
-  try {
-    const result = await runElaineEmailTurn({
-      userId: user.id,
-      inputText: effectiveInputText,
-      history,
+    const attachmentSummaryLines = attachmentOutcomes.map((a) => {
+      if (a.outcome === "linked") {
+        return `- Attachment "${a.filename}": saved and matched to an existing trip${a.tripTitle ? ` (${a.tripTitle})` : ""}.`;
+      }
+      if (a.outcome === "unmatched") {
+        return `- Attachment "${a.filename}": saved, but I couldn't confidently match it to a trip — it's waiting in the Documents triage inbox for someone to assign it.`;
+      }
+      if (a.outcome === "skipped") {
+        return `- Attachment "${a.filename}": skipped (unsupported file type — only PDF and image files are supported).`;
+      }
+      return `- Attachment "${a.filename}": failed to process.`;
     });
-    replyText = result.replyText;
-    updatedHistory = result.history;
-  } catch (err) {
-    logger.error({ err }, "elaine-email: restricted Elaine turn failed");
-    replyText =
-      "Sorry, something went wrong on our end — please try again or use the app.";
-    updatedHistory = history;
-  }
 
-  let sentMessageId: string | undefined;
-  try {
-    sentMessageId = await sendElaineEmailReply(
-      user.email,
-      subject,
-      replyText,
-      inboundMessageId,
-    );
-  } catch (err) {
-    logger.error({ err }, "elaine-email: reply send failed");
-  }
+    const effectiveInputText =
+      attachmentSummaryLines.length > 0
+        ? `${cleanedText || "(forwarded email with no body text)"}\n\n[System note — not from the user: the email had ${attachmentOutcomes.length} attachment(s) processed as follows. Mention this outcome briefly in your reply.]\n${attachmentSummaryLines.join("\n")}`
+        : cleanedText;
 
-  await db
-    .update(elaineEmailConversations)
-    .set({
-      messages: updatedHistory,
-      lastMessageId: sentMessageId ?? conversation.lastMessageId,
-      updatedAt: new Date(),
-    })
-    .where(eq(elaineEmailConversations.id, conversation.id));
+    const conversation = await getOrCreateEmailConversation(user.id);
+    const history =
+      (conversation.messages as ElaineEmailChatMessage[] | null) ?? [];
 
-  res.status(200).json({ ok: true });
-});
+    let replyText: string;
+    let updatedHistory: ElaineEmailChatMessage[];
+    try {
+      const result = await runElaineEmailTurn({
+        userId: user.id,
+        inputText: effectiveInputText,
+        history,
+      });
+      replyText = result.replyText;
+      updatedHistory = result.history;
+    } catch (err) {
+      logger.error({ err }, "elaine-email: restricted Elaine turn failed");
+      replyText =
+        "Sorry, something went wrong on our end — please try again or use the app.";
+      updatedHistory = history;
+    }
+
+    let sentMessageId: string | undefined;
+    try {
+      sentMessageId = await sendElaineEmailReply(
+        user.email,
+        subject,
+        replyText,
+        inboundMessageId,
+      );
+    } catch (err) {
+      logger.error({ err }, "elaine-email: reply send failed");
+    }
+
+    await db
+      .update(elaineEmailConversations)
+      .set({
+        messages: updatedHistory,
+        lastMessageId: sentMessageId ?? conversation.lastMessageId,
+        updatedAt: new Date(),
+      })
+      .where(eq(elaineEmailConversations.id, conversation.id));
+
+    res.status(200).json({ ok: true });
+  },
+);
 
 export default router;

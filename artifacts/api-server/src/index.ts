@@ -6,7 +6,6 @@ import { startNudgeScheduler } from "./lib/travels-nudges";
 import { startCalendarTripScanScheduler } from "./lib/travels-calendar-scan";
 import { startGmailScanScheduler } from "./lib/gmail-scan";
 import { startErrorRateSummary } from "./lib/error-tracker";
-import { startHallmarkEventsScanScheduler } from "./lib/ornaments/hallmark-events-scan";
 import { startBirthdayScheduler } from "./lib/birthday-scheduler";
 import { startMonitoringScheduler } from "./lib/monitoring-scheduler";
 
@@ -37,7 +36,6 @@ function startListening(): void {
     startCalendarTripScanScheduler();
     startGmailScanScheduler();
     startErrorRateSummary();
-    startHallmarkEventsScanScheduler();
     startBirthdayScheduler();
     startMonitoringScheduler();
   });

@@ -1,0 +1,15 @@
+{
+  "name": "@workspace/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "test": "playwright test --project=chromium-critical",
+    "test:all": "playwright test",
+    "test:ui": "playwright test --ui",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@types/node": "catalog:"
+  }
+}

@@ -12,6 +12,15 @@ vi.mock("../lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
+// Rate-limit middleware uses a PostgresRateLimitStore that requires a live DB
+// connection. Replace it with a passthrough in tests so the store never runs.
+vi.mock("../middleware/rateLimit", () => ({
+  webhookLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
+  authLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
+  apiLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
+  adminLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
+}));
+
 // The webhook secret in whsec_ format: base64-encoding of the raw key.
 const SECRET_RAW = "test-resend-secret";
 const SECRET_WHSEC = `whsec_${Buffer.from(SECRET_RAW).toString("base64")}`;

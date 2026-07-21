@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/node";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod/v4";
 import {
@@ -4806,6 +4807,12 @@ router.post("/chat", async (req, res) => {
     if (!conv) histConvId = null;
   }
 
+  // Tag the active Sentry trace with the DB conversation ID so every
+  // model call in this turn appears in Sentry AI Conversations.
+  if (histConvId !== null) {
+    Sentry.setConversationId(`elaine-${histConvId}`);
+  }
+
   // ── Load history + auto-summarise long threads ───────────────────────────
   // When a named thread exceeds 40 messages, we summarise everything except
   // the last 20 turns into a single system block. The summary is cached on
@@ -8284,6 +8291,9 @@ async function runRestrictedElaineTurn(params: {
     formattingNote,
     onWidget,
   } = params;
+  // Group all model calls in this restricted turn under one Sentry AI
+  // Conversation keyed by channel + user so threads stay stable over time.
+  Sentry.setConversationId(`${channelLabel}-user-${userId}`);
   const config = await getElaineGlobalConfig();
   const [{ userName, memoryBlock, memorySummary }, contextBlock] =
     await Promise.all([buildUserContext(userId), buildAgentphoneContext()]);
@@ -8712,6 +8722,9 @@ export async function runMessengerElaineTurn(params: {
   inputText: string;
   senderName: string;
 }): Promise<{ replyText: string; widgets: Record<string, unknown>[] }> {
+  // Tag Sentry trace so messenger turns appear in AI Conversations grouped
+  // by the messenger conversation thread.
+  Sentry.setConversationId(`messenger-${params.conversationId}`);
   const widgets: Record<string, unknown>[] = [];
 
   // Load the last 20 messages from this conversation as history (excluding

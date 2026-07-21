@@ -90,14 +90,29 @@ function gh<T>(method: string, apiPath: string, body?: unknown): Promise<T> {
 }
 
 const EXCLUDED_PREFIXES = [
+  // Replit-internal directories — never push to public repo
   ".local/",
   ".agents/",
+  ".upm/",
+  // Git internals and build outputs
   ".git/",
   "node_modules/",
   "dist/",
   "attached_assets/",
 ];
-const EXCLUDED_EXACT = ["threat_model.md"];
+const EXCLUDED_EXACT = [
+  // Security: threat model contains internal architecture details
+  "threat_model.md",
+  // Replit-specific config files — may contain plaintext env vars or
+  // Replit-internal state that must never appear in the public repo.
+  // Note: collectFiles() also skips ALL dotfiles via entry.name.startsWith(".")
+  // so .replit / .replitignore / replit.nix are already excluded by that guard.
+  // These entries make the exclusion explicit and survive any future refactor
+  // of that guard.
+  ".replit",
+  ".replitignore",
+  "replit.nix",
+];
 // Binary/media files — large and not meaningful to diff
 const EXCLUDED_EXTENSIONS = new Set([
   ".jpg",

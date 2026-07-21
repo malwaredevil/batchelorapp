@@ -95,10 +95,21 @@ function verifySignature(req: Request): boolean {
 // timeout, etc.) and must NOT be silently swallowed.
 function isDuplicateKeyError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
-  const pgErr = err as Error & { code?: string };
+  const pgErr = err as Error & { code?: string; cause?: unknown };
   if (pgErr.code === "23505") return true;
+  // DrizzleQueryError wraps the pg error in .cause — check there too
+  const cause = pgErr.cause as { code?: string; message?: string } | undefined;
+  if (cause?.code === "23505") return true;
   const msg = err.message.toLowerCase();
-  return msg.includes("unique") || msg.includes("duplicate key");
+  const causeMsg = (
+    typeof cause?.message === "string" ? cause.message : ""
+  ).toLowerCase();
+  return (
+    msg.includes("unique") ||
+    msg.includes("duplicate key") ||
+    causeMsg.includes("unique") ||
+    causeMsg.includes("duplicate key")
+  );
 }
 
 // Records the delivery id before any side effect runs so a redelivered

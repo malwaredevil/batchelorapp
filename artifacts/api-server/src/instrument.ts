@@ -1,6 +1,6 @@
 import * as Sentry from "@sentry/node";
 import { execSync } from "child_process";
-import { ZodError } from "zod";
+import { ZodError } from "zod/v4";
 
 // This file is loaded via `node --import ./dist/instrument.mjs` before the
 // main bundle executes, so Sentry can hook into Express before it is evaluated.

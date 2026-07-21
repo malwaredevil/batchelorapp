@@ -7,5 +7,9 @@
     "noEmit": true,
     "types": ["@playwright/test", "node"]
   },
-  "include": ["playwright.config.ts", "tests/**/*.ts"]
+  "include": [
+    "playwright.config.ts",
+    "playwright.smoke.config.ts",
+    "tests/**/*.ts"
+  ]
 }

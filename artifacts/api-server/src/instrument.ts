@@ -57,7 +57,16 @@ if (process.env.SENTRY_DSN) {
     environment:
       process.env.NODE_ENV === "production" ? "production" : "development",
     release: getGitSha(),
-    tracesSampleRate: 0.1,
+    // 100% sample rate: single-user household app, low traffic. Needed so
+    // every Elaine conversation is captured in Sentry AI Conversations.
+    tracesSampleRate: 1.0,
+    integrations: [
+      // Auto-instruments all calls through the `openai` npm package (including
+      // our OpenRouter client which uses it with a custom baseURL). Each model
+      // call becomes a child span inside the parent request trace, and Sentry
+      // groups them into AI Conversations via setConversationId() call sites.
+      Sentry.openAIIntegration(),
+    ],
     beforeSend(event, hint) {
       if (hint.originalException instanceof ZodError) return null;
       return scrubSensitiveData(event);

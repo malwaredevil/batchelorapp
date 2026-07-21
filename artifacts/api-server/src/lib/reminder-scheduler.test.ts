@@ -30,6 +30,14 @@ vi.mock("./sms", () => ({
   sendReminderAlertSms: (...args: unknown[]) => sendReminderAlertSms(...args),
 }));
 
+const slackConfigured = vi.fn().mockReturnValue(false);
+const sendReminderAlertSlack = vi.fn().mockResolvedValue(undefined);
+vi.mock("./slack", () => ({
+  slackConfigured: () => slackConfigured(),
+  sendReminderAlertSlack: (...args: unknown[]) =>
+    sendReminderAlertSlack(...args),
+}));
+
 vi.mock("../routes/travels/reminders", () => ({
   pullReminderAlertDaysFromCalendar: vi.fn((_id: number, days: number[]) =>
     Promise.resolve(days),

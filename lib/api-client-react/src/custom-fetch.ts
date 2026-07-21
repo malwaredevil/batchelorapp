@@ -89,13 +89,43 @@ export function getScreenshotToken(): string | null {
 }
 
 /**
+ * Returns true only for same-origin /api/ URLs (relative or absolute).
+ * Used to ensure dev credentials (screenshot token) are never forwarded to
+ * third-party hosts — e.g. an absolute CDN URL that happens to pass through
+ * this code path should never carry the token.
+ */
+function isTrustedApiUrl(url: string): boolean {
+  if (!url || typeof url !== "string") return false;
+  if (url.startsWith("data:") || url.startsWith("blob:")) return false;
+  // Relative paths to /api/ are inherently same-origin.
+  if (url.startsWith("/api/")) return true;
+  // Absolute URLs: accept only when origin matches the current page and the
+  // path targets /api/.
+  try {
+    const parsed = new URL(url);
+    return (
+      typeof window !== "undefined" &&
+      parsed.origin === window.location.origin &&
+      parsed.pathname.startsWith("/api/")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Appends the dev-only screenshot token (if present) to a URL as a
  * `screenshotToken` query param, for raw `<img>`/`<image>` tags that can't
  * carry the `X-Screenshot-Token` header. No-op (returns the URL unchanged)
- * when no token is set, so this is inert for normal users.
+ * when no token is set or when the URL is not a trusted same-origin /api/
+ * path, so this is inert for normal users and never leaks the token to
+ * external hosts.
  */
 export function appendScreenshotToken(url: string): string {
   if (!_screenshotToken || !url) return url;
+  // Only append to same-origin /api/ URLs. An unguarded rewrite would forward
+  // the dev credential to any host that receives a URL (e.g. external CDNs).
+  if (!isTrustedApiUrl(url)) return url;
   // Guard against double-appending (e.g. when buildFabricUrlMap already called
   // this and the setAttribute patcher fires again for the same SVG <image href>
   // element). A double screenshotToken param makes Express parse it as an array,
@@ -517,7 +547,16 @@ export async function customFetch<T = unknown>(
   }
 
   // Dev-only automation support (see module-level comment above).
-  if (_screenshotToken && !headers.has("x-screenshot-token")) {
+  // Guard: only attach the token to same-origin /api/ requests. Without this
+  // guard an absolute URL to an external host would silently forward the dev
+  // credential to a third party (latent leak — no current call site does this,
+  // but defence-in-depth is warranted for a credential that grants a full
+  // cookie-free authenticated session).
+  if (
+    _screenshotToken &&
+    !headers.has("x-screenshot-token") &&
+    isTrustedApiUrl(resolveUrl(input))
+  ) {
     headers.set("x-screenshot-token", _screenshotToken);
   }
 

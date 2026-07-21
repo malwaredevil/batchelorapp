@@ -292,9 +292,12 @@ export function MessengerChatPanel({
       initialScrollDoneRef.current = false;
       prevConvIdRef.current = convId ?? undefined;
       setIsAtBottom(true);
-      // Return early — the re-render triggered by setIsAtBottom will run this
-      // effect again and enter the scroll branches below.
-      return;
+      // Do NOT return here. When isAtBottom is already true, setIsAtBottom(true)
+      // is a React state bail-out (no re-render fires), so the effect would never
+      // re-run to reach the initial-scroll branch below — the conversation opens
+      // at whatever scroll position the DOM last held. Fall through directly so
+      // the scroll executes in this same effect pass. The !isOpen / isLoading
+      // guard immediately below handles the closed-panel and loading cases.
     }
 
     if (!isOpen || isLoading) return;

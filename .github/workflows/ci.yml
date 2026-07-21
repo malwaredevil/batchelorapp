@@ -22,7 +22,7 @@ jobs:
       - uses: pnpm/action-setup@v6
         with:
           version: 10
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: "pnpm"
@@ -31,6 +31,7 @@ jobs:
 
   build-api:
     name: Build API server
+    needs: [typecheck]
     runs-on: ubuntu-latest
     env:
       NODE_ENV: production
@@ -39,12 +40,72 @@ jobs:
       - uses: pnpm/action-setup@v6
         with:
           version: 10
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @workspace/api-server run build
+
+  build-modules:
+    name: Build modules frontend
+    needs: [typecheck]
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: production
+      PORT: "3001"
+      BASE_PATH: "/modules/"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/modules run build
+
+  build-web:
+    name: Build web frontend
+    needs: [typecheck]
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: production
+      PORT: "3002"
+      BASE_PATH: "/"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/web run build
+
+  build-elaine:
+    name: Build elaine frontend
+    needs: [typecheck]
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: production
+      PORT: "3003"
+      BASE_PATH: "/elaine/"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/elaine run build
 
   lint:
     name: Lint
@@ -54,7 +115,7 @@ jobs:
       - uses: pnpm/action-setup@v6
         with:
           version: 10
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: "pnpm"
@@ -69,7 +130,7 @@ jobs:
       - uses: pnpm/action-setup@v6
         with:
           version: 10
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: "pnpm"
@@ -84,7 +145,7 @@ jobs:
       - uses: pnpm/action-setup@v6
         with:
           version: 10
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: "pnpm"
@@ -99,7 +160,7 @@ jobs:
       - uses: pnpm/action-setup@v6
         with:
           version: 10
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: "pnpm"
@@ -112,3 +173,34 @@ jobs:
             git --no-pager diff --stat
             exit 1
           fi
+
+  e2e-critical:
+    name: E2E critical-path (Chromium)
+    needs: [typecheck]
+    runs-on: ubuntu-latest
+    env:
+      PORT: "4173"
+      BASE_PATH: "/"
+      NODE_ENV: production
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Install Playwright Chromium
+        run: pnpm --filter @workspace/e2e exec playwright install chromium --with-deps
+      - name: Build web artifact
+        run: pnpm --filter @workspace/web run build
+      - name: Run critical-path E2E tests
+        run: pnpm --filter @workspace/e2e run test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: artifacts/e2e/playwright-report/
+          retention-days: 7

@@ -97,6 +97,9 @@ overrides:
   esbuild>@esbuild/win32-arm64: "-"
   esbuild>@esbuild/win32-ia32: "-"
   esbuild>@esbuild/win32-x64: "-"
+  "brace-expansion@^2": "^2.1.2"
+  "brace-expansion@^5": "^5.0.7"
+  body-parser: ">=2.3.0"
   js-yaml: 4.3.0
   lightningcss>lightningcss-android-arm64: "-"
   lightningcss>lightningcss-darwin-arm64: "-"

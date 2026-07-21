@@ -10,7 +10,12 @@
  * - ALL changed files go into ONE commit via the Git Data API (never per-file).
  * - Prettier --write is run on every changed file before the blobs are created.
  * - A single CI run is triggered. Never loop the Contents API per file.
- * - Files in .local/, .agents/, threat_model.md are excluded (never pushed).
+ * - Excluded: .local/, .agents/, .upm/, .cache/, dist/, threat_model.md,
+ *   Replit config files (.replit, replit.nix), and Playwright test artifacts
+ *   (smoke-auth.json can contain live session cookies).
+ * - Allowed dotfiles: .github/ (CI workflows), .gitignore, .husky/, .vscode/.
+ *   All other dotfiles/dotdirs are blocked by default.
+ * - Hard abort if any credential-bearing file pattern enters the upload list.
  * - If nothing changed vs GitHub HEAD, exits 0 cleanly.
  */
 
@@ -94,25 +99,39 @@ const EXCLUDED_PREFIXES = [
   ".local/",
   ".agents/",
   ".upm/",
+  ".cache/",
   // Git internals and build outputs
   ".git/",
   "node_modules/",
   "dist/",
   "attached_assets/",
+  // Playwright test artifacts — may contain live session cookies (smoke-auth.json)
+  // and large HTML reports. None of this belongs in the public repo.
+  "artifacts/e2e/playwright-report/",
+  "artifacts/e2e/playwright-smoke-report/",
+  "artifacts/e2e/test-results/",
 ];
 const EXCLUDED_EXACT = [
   // Security: threat model contains internal architecture details
   "threat_model.md",
   // Replit-specific config files — may contain plaintext env vars or
   // Replit-internal state that must never appear in the public repo.
-  // Note: collectFiles() also skips ALL dotfiles via entry.name.startsWith(".")
-  // so .replit / .replitignore / replit.nix are already excluded by that guard.
-  // These entries make the exclusion explicit and survive any future refactor
-  // of that guard.
   ".replit",
   ".replitignore",
   "replit.nix",
+  // Playwright storageState — contains live authenticated browser session cookies.
+  // Pushing this to a public repo would expose a valid session credential.
+  "artifacts/e2e/smoke-auth.json",
 ];
+// Dotfile/dotdir names that ARE allowed through to GitHub.
+// Everything else starting with "." is skipped (replaces the old blanket
+// entry.name.startsWith(".") guard that accidentally blocked .github/).
+const ALLOWED_DOT_NAMES = new Set([
+  ".github", // CI workflows, Dependabot, PR templates — must reach GitHub
+  ".gitignore",
+  ".husky", // git hook scripts
+  ".vscode", // shared editor settings
+]);
 // Binary/media files — large and not meaningful to diff
 const EXCLUDED_EXTENSIONS = new Set([
   ".jpg",
@@ -151,7 +170,13 @@ function collectFiles(dir: string, root: string): string[] {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const abs = path.join(dir, entry.name);
     const rel = path.relative(root, abs);
-    if (isExcluded(rel) || entry.name.startsWith(".")) continue;
+    if (isExcluded(rel)) continue;
+    // Dotfile/dotdir guard: skip by default, only allow explicit allowlist.
+    // This replaces the old blanket `entry.name.startsWith(".")` which
+    // accidentally blocked .github/ (CI workflows never reached GitHub).
+    if (entry.name.startsWith(".") && !ALLOWED_DOT_NAMES.has(entry.name)) {
+      continue;
+    }
     if (entry.isDirectory()) {
       results.push(...collectFiles(abs, root));
     } else if (entry.isFile()) {
@@ -226,6 +251,27 @@ async function main() {
   if (changedFiles.length === 0) {
     console.log("✓ Nothing to sync — all local files match GitHub HEAD.");
     process.exit(0);
+  }
+
+  // Hard abort: refuse to push any file that could carry live session cookies
+  // or other credentials. This is a defence-in-depth check — these files should
+  // already be excluded by EXCLUDED_EXACT/EXCLUDED_PREFIXES, but an explicit
+  // abort here catches any future path that accidentally bypasses those lists.
+  const FORBIDDEN_PATTERNS = [
+    /smoke-auth\.json$/i,
+    /storageState\.json$/i,
+    /playwright-auth/i,
+  ];
+  const forbidden = changedFiles.filter((f) =>
+    FORBIDDEN_PATTERNS.some((re) => re.test(f)),
+  );
+  if (forbidden.length > 0) {
+    console.error(
+      `\n🚫 ABORTED: refusing to push credential-bearing files:\n` +
+        forbidden.map((f) => `  ${f}`).join("\n") +
+        `\nAdd them to EXCLUDED_EXACT in github-sync.ts and re-run.`,
+    );
+    process.exit(1);
   }
 
   console.log(`\nChanged files (${changedFiles.length}):`);

@@ -105,8 +105,13 @@ export const STATEMENTS: string[] = [
   )`,
   `CREATE INDEX IF NOT EXISTS IDX_app_session_expire ON app_sessions (expire)`,
   `ALTER TABLE app_sessions ENABLE ROW LEVEL SECURITY`,
-  // One-time idempotent migration: copy any unexpired sessions that were in
-  // quilting_sessions so existing logins survive the cookie-name rename.
+  // One-time idempotent migration: copy any unexpired session rows from
+  // quilting_sessions into app_sessions for record-keeping continuity.
+  // NOTE: this does NOT preserve active browser logins. The cookie was renamed
+  // from "connect.sid" to "batchelor.sid" at the same time; browsers hold the
+  // old value under the original name and will not send it under the new name,
+  // so the server never finds these copied rows. The one-time logout on first
+  // deploy after this migration is expected and intentional.
   `INSERT INTO app_sessions (sid, sess, expire)
     SELECT sid, sess, expire FROM quilting_sessions
     WHERE expire > NOW()

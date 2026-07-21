@@ -17,6 +17,7 @@ jobs:
         id: metadata
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Auto-merge high/critical security patches
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

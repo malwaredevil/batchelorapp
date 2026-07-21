@@ -57,6 +57,13 @@ attached_assets/
 # Security-sensitive docs (keep local only)
 threat_model.md
 
+# Playwright test artifacts — smoke-auth.json contains live authenticated
+# browser session cookies; reports and results are local-only noise.
+artifacts/e2e/smoke-auth.json
+artifacts/e2e/playwright-report/
+artifacts/e2e/playwright-smoke-report/
+artifacts/e2e/test-results/
+
 # Local secrets — NEVER commit
 .env
 .env.local

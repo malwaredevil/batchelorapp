@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: PR body must reference a GitHub issue
+        if: github.actor != 'dependabot[bot]'
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_TITLE: ${{ github.event.pull_request.title }}
@@ -46,13 +47,4 @@ jobs:
             echo "  feat/*, fix/*, chore/*, perf/*, refactor/*, security/*, docs/*"
             echo ""
             echo "This is a warning only — the PR is not blocked."
-            echo "Recommended branch names for this project:"
-            echo "  feat/batch-quick-wins"
-            echo "  feat/epic-241-search-quality"
-            echo "  feat/epic-242-elaine-completeness"
-            echo "  feat/strategic-phase1"
           fi
-
-      - name: Dependabot PRs are exempt from issue reference requirement
-        if: github.actor == 'dependabot[bot]'
-        run: echo "✓ Dependabot PR — issue reference check skipped"

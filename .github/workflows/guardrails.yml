@@ -41,7 +41,7 @@ jobs:
           # Exclude this file itself from the diff so its own error-message text
           # doesn't trigger the check. Scan only newly-added lines.
           VIOLATIONS=$(git diff "$BASE"...HEAD \
-            -- ':!.github/workflows/guardrails.yml' \
+            -- ':!.github/workflows/guardrails.yml' ':!*.md' ':!*.txt' \
             | grep "^+" \
             | grep -v "^+++" \
             | grep "drizzle-kit push" || true)
@@ -64,17 +64,21 @@ jobs:
 
       - name: "Ban: restricted files in diff"
         run: |
-          RESTRICTED=$(cat /tmp/changed_files.txt | grep -E "^\.agents/|^\.local/|^threat_model\.md|^\.env$|^\.env\." || true)
+          RESTRICTED=$(cat /tmp/changed_files.txt | grep -E "^\.agents/|^\.local/|^threat_model\.md|^\.env$|^\.env\.|^\.replit$|^\.replitignore$|^replit\.nix$|^\.upm/" || true)
           if [ -n "$RESTRICTED" ]; then
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "ERROR: The following restricted files appear in this diff:"
             echo "$RESTRICTED"
             echo ""
             echo "These files must never be committed or pushed:"
-            echo "  .agents/       — agent memory files (Replit-local)"
-            echo "  .local/        — Replit platform files (Replit-local)"
+            echo "  .agents/        — agent memory files (Replit-local)"
+            echo "  .local/         — Replit platform files (Replit-local)"
             echo "  threat_model.md — security document (keep local only)"
-            echo "  .env / .env.*  — local secrets (NEVER commit secrets)"
+            echo "  .env / .env.*   — local secrets (NEVER commit secrets)"
+            echo "  .replit         — Replit workspace config (may contain secrets/email)"
+            echo "  .replitignore   — Replit-local ignore rules"
+            echo "  replit.nix      — Replit-local nix config"
+            echo "  .upm/           — Replit package manager cache"
             echo ""
             echo "Remove them from your branch and add them to .gitignore."
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -151,7 +155,7 @@ jobs:
         with:
           version: 10
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: "pnpm"

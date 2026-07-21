@@ -76,6 +76,11 @@ export function MessageItem({
   const [editValue, setEditValue] = useState(message.body);
   const [saving, setSaving] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
+  // On touch devices hover never fires, so always show the reaction / action
+  // buttons (they are small and unobtrusive even when persistently visible).
+  const isTouchDevice =
+    typeof window !== "undefined" &&
+    ("ontouchstart" in window || navigator.maxTouchPoints > 0);
   const [imageModal, setImageModal] = useState<{
     url: string;
     name: string;
@@ -186,86 +191,91 @@ export function MessageItem({
   const reactions = message.reactions ?? [];
   const canReact = !isDeleted && (onAddReaction || onRemoveReaction);
 
-  const reactionButton = canReact && hovered && !editing && (
-    <div style={{ position: "relative" }} ref={pickerRef}>
-      <button
-        onClick={() => setShowPicker((v) => !v)}
-        aria-label="Add reaction"
-        style={{
-          background: showPicker
-            ? "hsl(var(--muted))"
-            : "hsl(var(--background))",
-          border: "1px solid hsl(var(--border))",
-          cursor: "pointer",
-          color: "hsl(var(--muted-foreground))",
-          padding: "2px 5px",
-          borderRadius: 6,
-          display: "flex",
-          alignItems: "center",
-          gap: 2,
-          fontSize: 12,
-        }}
-      >
-        <SmilePlus size={13} />
-      </button>
-      {showPicker && (
-        <div
+  const reactionButton = canReact &&
+    (hovered || isTouchDevice || showPicker) &&
+    !editing && (
+      <div style={{ position: "relative" }} ref={pickerRef}>
+        <button
+          onClick={() => setShowPicker((v) => !v)}
+          aria-label="Add reaction"
           style={{
-            position: "absolute",
-            bottom: "calc(100% + 4px)",
-            ...(isOwn ? { right: 0 } : { left: 0 }),
-            background: "hsl(var(--card))",
+            background: showPicker
+              ? "hsl(var(--muted))"
+              : "hsl(var(--background))",
             border: "1px solid hsl(var(--border))",
-            borderRadius: 10,
-            padding: "6px 8px",
+            cursor: "pointer",
+            color: "hsl(var(--muted-foreground))",
+            padding: "2px 5px",
+            borderRadius: 6,
             display: "flex",
+            alignItems: "center",
             gap: 2,
-            boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
-            zIndex: 50,
-            whiteSpace: "nowrap",
+            fontSize: 12,
           }}
         >
-          {QUICK_EMOJIS.map((emoji) => (
-            <button
-              key={emoji}
-              onClick={() => void handlePickEmoji(emoji)}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                fontSize: 20,
-                padding: "2px 4px",
-                borderRadius: 6,
-                lineHeight: 1,
-                transition: "transform 0.1s",
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.transform =
-                  "scale(1.3)";
-                (e.currentTarget as HTMLButtonElement).style.background =
-                  "hsl(var(--muted))";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.transform =
-                  "scale(1)";
-                (e.currentTarget as HTMLButtonElement).style.background =
-                  "none";
-              }}
-            >
-              {emoji}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+          <SmilePlus size={13} />
+        </button>
+        {showPicker && (
+          <div
+            style={{
+              position: "absolute",
+              bottom: "calc(100% + 4px)",
+              ...(isOwn ? { right: 0 } : { left: 0 }),
+              background: "hsl(var(--card))",
+              border: "1px solid hsl(var(--border))",
+              borderRadius: 10,
+              padding: "6px 8px",
+              display: "flex",
+              gap: 2,
+              boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+              zIndex: 50,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {QUICK_EMOJIS.map((emoji) => (
+              <button
+                key={emoji}
+                onClick={() => void handlePickEmoji(emoji)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: 20,
+                  padding: "2px 4px",
+                  borderRadius: 6,
+                  lineHeight: 1,
+                  transition: "transform 0.1s",
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.transform =
+                    "scale(1.3)";
+                  (e.currentTarget as HTMLButtonElement).style.background =
+                    "hsl(var(--muted))";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.transform =
+                    "scale(1)";
+                  (e.currentTarget as HTMLButtonElement).style.background =
+                    "none";
+                }}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
 
   return (
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => {
         setHovered(false);
-        setShowPicker(false);
+        // Don't close showPicker here — the emoji picker floats above the
+        // message row (position:absolute, bottom:100%), so moving the mouse
+        // into it triggers mouseleave on this div. The click-outside handler
+        // (above) already closes the picker when the user clicks elsewhere.
       }}
       style={{
         display: "flex",
@@ -307,45 +317,48 @@ export function MessageItem({
 
       {/* Bubble row */}
       <div style={{ display: "flex", alignItems: "flex-end", gap: 6 }}>
-        {isOwn && hovered && !isDeleted && !editing && (
-          <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
-            {reactionButton}
-            {canEdit && onEdit && (
-              <button
-                onClick={() => setEditing(true)}
-                aria-label="Edit message"
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "hsl(var(--muted-foreground))",
-                  padding: 4,
-                  borderRadius: 4,
-                  display: "flex",
-                }}
-              >
-                <Pencil size={13} />
-              </button>
-            )}
-            {onDelete && (
-              <button
-                onClick={() => onDelete(message.id)}
-                aria-label="Delete message"
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "#ef4444",
-                  padding: 4,
-                  borderRadius: 4,
-                  display: "flex",
-                }}
-              >
-                <Trash2 size={13} />
-              </button>
-            )}
-          </div>
-        )}
+        {isOwn &&
+          (hovered || isTouchDevice || showPicker) &&
+          !isDeleted &&
+          !editing && (
+            <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
+              {reactionButton}
+              {canEdit && onEdit && (
+                <button
+                  onClick={() => setEditing(true)}
+                  aria-label="Edit message"
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "hsl(var(--muted-foreground))",
+                    padding: 4,
+                    borderRadius: 4,
+                    display: "flex",
+                  }}
+                >
+                  <Pencil size={13} />
+                </button>
+              )}
+              {onDelete && (
+                <button
+                  onClick={() => onDelete(message.id)}
+                  aria-label="Delete message"
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "#ef4444",
+                    padding: 4,
+                    borderRadius: 4,
+                    display: "flex",
+                  }}
+                >
+                  <Trash2 size={13} />
+                </button>
+              )}
+            </div>
+          )}
 
         <div style={{ maxWidth: 280 }}>
           {/* Bubble — normal or edit mode */}
@@ -590,11 +603,14 @@ export function MessageItem({
         </div>
 
         {/* Reaction button for non-own messages (right side of bubble) */}
-        {!isOwn && hovered && !isDeleted && !editing && (
-          <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
-            {reactionButton}
-          </div>
-        )}
+        {!isOwn &&
+          (hovered || isTouchDevice || showPicker) &&
+          !isDeleted &&
+          !editing && (
+            <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
+              {reactionButton}
+            </div>
+          )}
       </div>
 
       {/* Timestamp + edited indicator + read receipt */}

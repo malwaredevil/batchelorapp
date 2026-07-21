@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { MessageSquare, X, ExternalLink, ChevronLeft } from "lucide-react";
 import { useAuth } from "@workspace/web-core/auth";
@@ -41,7 +41,25 @@ export function MessengerWidget({ messengerPageHref }: MessengerWidgetProps) {
       refetchInterval: isOpen ? 5_000 : 60_000,
     } as UseQueryOptions<MessengerConversationSummary[]>,
   });
-  const firstActiveId = conversations?.find((c) => !c.archivedAt)?.id ?? null;
+  // Default to the most relevant active conversation: prefer one with unread
+  // messages (so a fresh notification auto-selects the right thread), then
+  // fall back to the most recently messaged, then the first non-archived.
+  const firstActiveId = useMemo(() => {
+    if (!conversations) return null;
+    const active = conversations.filter((c) => !c.archivedAt);
+    const withUnread = active.find((c) => c.unreadCount > 0);
+    if (withUnread) return withUnread.id;
+    const byRecent = active.slice().sort((a, b) => {
+      const at = a.lastMessage
+        ? new Date(a.lastMessage.createdAt).getTime()
+        : 0;
+      const bt = b.lastMessage
+        ? new Date(b.lastMessage.createdAt).getTime()
+        : 0;
+      return bt - at;
+    })[0];
+    return byRecent?.id ?? null;
+  }, [conversations]);
   const effectiveConvId = selectedConvId ?? firstActiveId;
 
   /** Display name of the currently selected conversation */

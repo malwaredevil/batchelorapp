@@ -16,6 +16,7 @@ async function buildAll() {
 
   await esbuild({
     entryPoints: [
+      path.resolve(artifactDir, "src/instrument.ts"),
       path.resolve(artifactDir, "src/index.ts"),
       path.resolve(artifactDir, "src/scripts/send-reminder-alerts.ts"),
     ],
@@ -32,6 +33,11 @@ async function buildAll() {
     // - use path traversal to read files (e.g. @google-cloud/secret-manager loads sibling .proto files)
     external: [
       "*.node",
+      // @sentry/node is externalized so that instrument.mjs (loaded via
+      // --import before the main bundle) and the main bundle share one SDK
+      // instance. @sentry/node resolves its own @opentelemetry/* peers via
+      // pnpm's virtual store, so those no longer need to be bundled here.
+      "@sentry/node",
       "sharp",
       "@neplex/vectorizer",
       "@neplex/vectorizer-*",
@@ -67,9 +73,6 @@ async function buildAll() {
       "@swc/*",
       "@aws-sdk/*",
       "@azure/*",
-      // @opentelemetry/* intentionally NOT externalized — @sentry/node imports
-      // these at startup and esbuild must bundle them, otherwise Node cannot
-      // resolve them at runtime from the dist/ output directory.
       "@google-cloud/*",
       "@google/*",
       "googleapis",

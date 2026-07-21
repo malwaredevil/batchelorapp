@@ -1,5 +1,6 @@
 import express, {
   type Express,
+  type ErrorRequestHandler,
   type NextFunction,
   type Request,
   type Response,
@@ -15,10 +16,6 @@ import { env } from "./lib/env";
 import { sessionMiddleware } from "./lib/session";
 import { csrfGuard } from "./middleware/csrf";
 import { recordResponseStatus } from "./lib/error-tracker";
-import { initSentry } from "./lib/sentry";
-
-initSentry();
-
 const SLOW_REQUEST_THRESHOLD_MS = 2_000;
 
 const app: Express = express();
@@ -101,8 +98,11 @@ app.use("/api", csrfGuard);
 app.use("/api", router);
 
 // Sentry error handler must come before the custom error handler.
+// Using expressErrorHandler() directly avoids the ensureIsWrapped() check
+// that fires a startup warning when Express is esbuild-bundled (not loaded
+// as a separate module). Error capture behaviour is identical.
 if (env.sentryDsn) {
-  SentryNode.setupExpressErrorHandler(app);
+  app.use(SentryNode.expressErrorHandler() as unknown as ErrorRequestHandler);
 }
 
 // Centralised error handler. Express 5 forwards async errors here automatically.

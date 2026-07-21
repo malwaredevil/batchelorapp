@@ -2669,4 +2669,41 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE messenger_reactions ENABLE ROW LEVEL SECURITY`,
   `CREATE INDEX IF NOT EXISTS messenger_reactions_msg_idx ON messenger_reactions (message_id)`,
   `CREATE INDEX IF NOT EXISTS messenger_reactions_user_id_idx ON messenger_reactions (user_id)`,
+
+  // ── Phase-2 partial FK indexes (Supabase advisor pass 2) ──────────────────
+  // The Phase-1 pass added 11 indexes. These 8 cover the remaining FK columns
+  // flagged by the Supabase advisor. They are partial WHERE id IS NOT NULL so
+  // the planner can use them for both JOIN conditions and existence checks,
+  // while keeping the index small (null FKs — orphaned rows — are excluded).
+  `CREATE INDEX IF NOT EXISTS ai_generation_runs_op_event_id_idx
+     ON ai_generation_runs (operation_event_id)
+     WHERE operation_event_id IS NOT NULL`,
+
+  `CREATE INDEX IF NOT EXISTS app_jobs_created_by_user_id_idx
+     ON app_jobs (created_by_user_id)
+     WHERE created_by_user_id IS NOT NULL`,
+
+  `CREATE INDEX IF NOT EXISTS external_operation_events_user_id_idx
+     ON external_operation_events (user_id)
+     WHERE user_id IS NOT NULL`,
+
+  `CREATE INDEX IF NOT EXISTS knowledge_domain_links_decided_by_idx
+     ON knowledge_domain_links (decided_by_user_id)
+     WHERE decided_by_user_id IS NOT NULL`,
+
+  `CREATE INDEX IF NOT EXISTS knowledge_entities_created_by_idx
+     ON knowledge_entities (created_by_user_id)
+     WHERE created_by_user_id IS NOT NULL`,
+
+  `CREATE INDEX IF NOT EXISTS market_valuations_created_by_idx
+     ON market_valuations (created_by)
+     WHERE created_by IS NOT NULL`,
+
+  `CREATE INDEX IF NOT EXISTS quilting_analyses_variant_id_idx
+     ON quilting_analyses (variant_id)
+     WHERE variant_id IS NOT NULL`,
+
+  `CREATE INDEX IF NOT EXISTS similarity_evaluations_user_id_idx
+     ON similarity_evaluations (user_id)
+     WHERE user_id IS NOT NULL`,
 ];

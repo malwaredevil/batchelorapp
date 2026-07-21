@@ -259,15 +259,6 @@ export function MessengerChatPanel({
     }, 30);
   }, [prefillInput, onPrefillApplied]);
 
-  // Reset scroll tracking whenever the conversation changes or panel closes.
-  useEffect(() => {
-    if (convId !== prevConvIdRef.current || !isOpen) {
-      initialScrollDoneRef.current = false;
-      prevConvIdRef.current = convId ?? undefined;
-      setIsAtBottom(true);
-    }
-  }, [convId, isOpen]);
-
   // Scroll handler: keeps isAtBottom in sync as the user scrolls.
   const handleScroll = useCallback(() => {
     const el = listRef.current;
@@ -276,23 +267,43 @@ export function MessengerChatPanel({
     setIsAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 80);
   }, []);
 
-  // Signal/Teams-style scroll-to-bottom logic:
-  //   • First load for this conversation → instant jump (no animation).
-  //     useLayoutEffect fires before the browser paints, preventing a flash of
-  //     the previous conversation's scroll position when switching convs.
-  //   • Subsequent new messages → smooth scroll, but only if already near the
-  //     bottom (if the user has scrolled up we leave them there — the "↓ Latest"
-  //     button appears).
-  // convId is in the deps so that switching conversations re-triggers the
-  // initial-scroll branch even when messages.length hasn't changed (React Query
-  // cache hit keeps the count stable across conversation switches).
+  // Combined layout effect for reset + scroll.
+  //
+  // The reset (clearing initialScrollDoneRef when convId changes or the panel
+  // closes) and the scroll-to-bottom logic are in one useLayoutEffect so both
+  // run synchronously before the browser paints. Separating them into a
+  // useEffect (reset) + useLayoutEffect (scroll) created a race: layout effects
+  // run before passive effects, so on a cached conversation switch the scroll
+  // branch could see initialScrollDoneRef=true (not yet cleared) and skip the
+  // initial jump. Then the reset useEffect would fire and clear the ref, but
+  // nothing would re-trigger the layout effect to re-attempt the scroll.
+  //
+  // With both branches in one useLayoutEffect:
+  //   1. convId changes → reset branch fires first, clears ref, returns early.
+  //   2. setIsAtBottom(true) schedules a re-render; on that render the effect
+  //      re-fires with convId === prevConvIdRef.current → falls through to the
+  //      initial-scroll branch and jumps to the bottom instantly.
+  //   3. Subsequent messages while already near bottom → smooth follow-scroll.
   useLayoutEffect(() => {
+    // Detect conversation switch or panel close → reset scroll state first.
+    const convChanged = convId !== prevConvIdRef.current;
+    const panelClosed = !isOpen;
+    if (convChanged || panelClosed) {
+      initialScrollDoneRef.current = false;
+      prevConvIdRef.current = convId ?? undefined;
+      setIsAtBottom(true);
+      // Return early — the re-render triggered by setIsAtBottom will run this
+      // effect again and enter the scroll branches below.
+      return;
+    }
+
     if (!isOpen || isLoading) return;
     const el = listRef.current;
     if (!el) return;
 
     if (!initialScrollDoneRef.current) {
-      // Initial open / conversation switch: jump instantly so long threads don't animate
+      // Initial open / conversation switch: jump instantly so long threads
+      // don't animate and there is no flash of the previous scroll position.
       if (messages.length > 0) {
         el.scrollTop = el.scrollHeight;
         initialScrollDoneRef.current = true;
@@ -301,12 +312,12 @@ export function MessengerChatPanel({
       return;
     }
 
-    // New message while already near the bottom → gentle follow-scroll
+    // New message while already near the bottom → gentle follow-scroll.
+    // If the user has scrolled up, do nothing — the "↓ Latest" button handles it.
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
     if (atBottom) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-    // If the user has scrolled up, do nothing — the "↓ Latest" button handles it
   }, [convId, messages.length, isOpen, isLoading]);
 
   // Mark latest message as read when panel opens / new messages arrive

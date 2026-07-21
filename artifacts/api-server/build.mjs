@@ -108,6 +108,14 @@ async function buildAll() {
       "puppeteer-core",
       "electron",
     ],
+    // Substitute process.env.NODE_ENV at bundle time so esbuild can
+    // dead-code-eliminate dev-only branches (e.g. the screenshot-login router)
+    // when NODE_ENV=production is set in the build environment.
+    define: {
+      "process.env.NODE_ENV": JSON.stringify(
+        process.env.NODE_ENV ?? "development",
+      ),
+    },
     sourcemap: "linked",
     plugins: [
       // pino relies on workers to handle logging, instead of externalizing it we use a plugin to handle it

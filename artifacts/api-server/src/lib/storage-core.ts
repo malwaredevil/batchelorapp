@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
+import { LRUCache } from "lru-cache";
 import { env } from "./env";
 import type { SupportedImageType } from "./image";
 
@@ -24,42 +25,34 @@ const EXT_BY_TYPE: Record<SupportedImageType, string> = {
 // at once, not just quilting fabrics.
 // ---------------------------------------------------------------------------
 
-const DOWNLOAD_CACHE_MAX_ENTRIES = 500;
-const DOWNLOAD_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-
-const downloadCache = new Map<
+// Byte-capped LRU image cache: max 256 MB or 500 entries, whichever is reached
+// first. sizeCalculation charges each entry the actual buffer byte length, so
+// one 10 MB TIFF doesn't silently crowd out hundreds of thumbnails. The built-in
+// TTL (5 min) and updateAgeOnGet (LRU promotion) replace the manual Map-delete-
+// reinsert pattern that was previously used to simulate LRU ordering.
+const downloadCache = new LRUCache<
   string,
-  { buffer: Buffer; contentType: string; expiry: number }
->();
+  { buffer: Buffer; contentType: string }
+>({
+  max: 500,
+  maxSize: 256 * 1024 * 1024, // 256 MB hard ceiling
+  sizeCalculation: (v) => v.buffer.length,
+  ttl: 5 * 60 * 1000, // 5 minutes
+  allowStale: false,
+  updateAgeOnGet: true,
+});
 
 function cacheGet(
   key: string,
 ): { buffer: Buffer; contentType: string } | undefined {
-  const hit = downloadCache.get(key);
-  if (hit === undefined) return undefined;
-  if (Date.now() > hit.expiry) {
-    downloadCache.delete(key);
-    return undefined;
-  }
-  // LRU: move to tail
-  downloadCache.delete(key);
-  downloadCache.set(key, hit);
-  return hit;
+  return downloadCache.get(key);
 }
 
 function cacheSet(
   key: string,
   value: { buffer: Buffer; contentType: string },
 ): void {
-  downloadCache.delete(key);
-  downloadCache.set(key, {
-    ...value,
-    expiry: Date.now() + DOWNLOAD_CACHE_TTL_MS,
-  });
-  if (downloadCache.size > DOWNLOAD_CACHE_MAX_ENTRIES) {
-    const oldestKey = downloadCache.keys().next().value;
-    if (oldestKey !== undefined) downloadCache.delete(oldestKey);
-  }
+  downloadCache.set(key, value);
 }
 
 const DOWNLOAD_CONCURRENCY = 8;

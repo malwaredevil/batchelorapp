@@ -80,6 +80,7 @@ catalogs:
       version: 3.25.76
 
 overrides:
+  adm-zip: '>=0.5.19'
   '@babel/core': ^7.29.6
   '@esbuild-kit/esm-loader': npm:tsx@^4.21.0
   '@expo/ngrok-bin>@expo/ngrok-bin-darwin-arm64': '-'

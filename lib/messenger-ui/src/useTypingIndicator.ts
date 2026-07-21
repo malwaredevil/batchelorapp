@@ -28,10 +28,10 @@ export function useTypingIndicator(
     }
     if (pingRef.current) clearTimeout(pingRef.current);
     pingRef.current = setTimeout(() => {
-      void fetch(`/api/messenger/conversations/${conversationId}/typing`, {
+      fetch(`/api/messenger/conversations/${conversationId}/typing`, {
         method: "POST",
         credentials: "include",
-      });
+      }).catch(() => {});
     }, 150);
     return () => {
       if (pingRef.current) clearTimeout(pingRef.current);

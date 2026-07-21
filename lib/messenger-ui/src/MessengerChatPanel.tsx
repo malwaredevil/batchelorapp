@@ -8,6 +8,7 @@ import {
   Trash2,
   Users,
   FileText,
+  ChevronsDown,
 } from "lucide-react";
 import { useMessengerChat } from "./useMessengerChat";
 import { MessageItem } from "./MessageItem";
@@ -177,6 +178,13 @@ export function MessengerChatPanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Tracks whether the user is currently near the bottom of the message list.
+  // Used to decide whether to auto-scroll on new messages (Signal/Teams style).
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  // Set to true after we've done the initial instant-scroll for this conv session.
+  const initialScrollDoneRef = useRef(false);
+  // Detects when the active conversation changes so we can reset scroll state.
+  const prevConvIdRef = useRef<number | undefined>(undefined);
 
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
@@ -245,12 +253,49 @@ export function MessengerChatPanel({
     }, 30);
   }, [prefillInput, onPrefillApplied]);
 
-  // Auto-scroll on new messages
+  // Reset scroll tracking whenever the conversation changes or panel closes.
   useEffect(() => {
-    if (isOpen) {
+    if (convId !== prevConvIdRef.current || !isOpen) {
+      initialScrollDoneRef.current = false;
+      prevConvIdRef.current = convId ?? undefined;
+      setIsAtBottom(true);
+    }
+  }, [convId, isOpen]);
+
+  // Scroll handler: keeps isAtBottom in sync as the user scrolls.
+  const handleScroll = useCallback(() => {
+    const el = listRef.current;
+    if (!el) return;
+    // "at bottom" = within 80 px of the end (matches Teams/Signal's fuzzy threshold)
+    setIsAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 80);
+  }, []);
+
+  // Signal/Teams-style scroll-to-bottom logic:
+  //   • First load for this conversation → instant jump (no animation)
+  //   • Subsequent new messages → smooth scroll, but only if already near the bottom
+  //     (if the user has scrolled up we leave them there — the "↓ Latest" button appears)
+  useEffect(() => {
+    if (!isOpen || isLoading) return;
+    const el = listRef.current;
+    if (!el) return;
+
+    if (!initialScrollDoneRef.current) {
+      // Initial open / conversation switch: jump instantly so long threads don't animate
+      if (messages.length > 0) {
+        el.scrollTop = el.scrollHeight;
+        initialScrollDoneRef.current = true;
+        setIsAtBottom(true);
+      }
+      return;
+    }
+
+    // New message while already near the bottom → gentle follow-scroll
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (atBottom) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages.length, isOpen]);
+    // If the user has scrolled up, do nothing — the "↓ Latest" button handles it
+  }, [messages.length, isOpen, isLoading]);
 
   // Mark latest message as read when panel opens / new messages arrive
   useEffect(() => {
@@ -537,163 +582,205 @@ export function MessengerChatPanel({
         </div>
       )}
 
-      {/* Message list */}
-      <div
-        ref={listRef}
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          paddingTop: 12,
-          paddingBottom: 8,
-          display: "flex",
-          flexDirection: "column",
-          gap: 4,
-        }}
-      >
-        {isLoading ? (
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              height: "100%",
-              color: "hsl(var(--muted-foreground))",
-            }}
-          >
-            <Loader2
-              size={20}
-              style={{ animation: "spin 1s linear infinite" }}
-            />
-          </div>
-        ) : messages.length === 0 ? (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              height: "100%",
-              gap: 8,
-              color: "hsl(var(--muted-foreground))",
-              fontSize: 13,
-            }}
-          >
-            <MessageSquare size={28} strokeWidth={1.5} />
-            <span>No messages yet</span>
-            <span
+      {/* Message list — relative so the "↓ Latest" pill can anchor to its bottom */}
+      <div style={{ flex: 1, overflow: "hidden", position: "relative" }}>
+        <div
+          ref={listRef}
+          onScroll={handleScroll}
+          style={{
+            height: "100%",
+            overflowY: "auto",
+            paddingTop: 12,
+            paddingBottom: 8,
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+          }}
+        >
+          {isLoading ? (
+            <div
               style={{
-                fontSize: 11,
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                height: "100%",
                 color: "hsl(var(--muted-foreground))",
-                opacity: 0.6,
               }}
             >
-              Say hi, or try @elaine
-            </span>
-          </div>
-        ) : (
-          dateGroups.map((group) => (
-            <div key={group.date}>
-              <div
+              <Loader2
+                size={20}
+                style={{ animation: "spin 1s linear infinite" }}
+              />
+            </div>
+          ) : messages.length === 0 ? (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                height: "100%",
+                gap: 8,
+                color: "hsl(var(--muted-foreground))",
+                fontSize: 13,
+              }}
+            >
+              <MessageSquare size={28} strokeWidth={1.5} />
+              <span>No messages yet</span>
+              <span
                 style={{
-                  textAlign: "center",
                   fontSize: 11,
                   color: "hsl(var(--muted-foreground))",
-                  padding: "8px 0 4px",
-                  userSelect: "none",
+                  opacity: 0.6,
                 }}
               >
-                {group.date}
-              </div>
-              {group.ids.map((id) => {
-                const msg = msgById.get(id);
-                if (!msg) return null;
-                return (
-                  <MessageItem
-                    key={msg.id}
-                    message={msg}
-                    isOwn={msg.senderId === currentUserId}
-                    canEdit={msg.id === editableMessageId}
-                    onDelete={deleteMessage}
-                    onEdit={editMessage}
-                    onAddReaction={addReaction}
-                    onRemoveReaction={removeReaction}
-                  />
-                );
-              })}
+                Say hi, or try @elaine
+              </span>
             </div>
-          ))
-        )}
-        {/* Elaine typing indicator — shown while waiting for her reply */}
-        {isSending && (
+          ) : (
+            dateGroups.map((group) => (
+              <div key={group.date}>
+                <div
+                  style={{
+                    textAlign: "center",
+                    fontSize: 11,
+                    color: "hsl(var(--muted-foreground))",
+                    padding: "8px 0 4px",
+                    userSelect: "none",
+                  }}
+                >
+                  {group.date}
+                </div>
+                {group.ids.map((id) => {
+                  const msg = msgById.get(id);
+                  if (!msg) return null;
+                  return (
+                    <MessageItem
+                      key={msg.id}
+                      message={msg}
+                      isOwn={msg.senderId === currentUserId}
+                      canEdit={msg.id === editableMessageId}
+                      onDelete={deleteMessage}
+                      onEdit={editMessage}
+                      onAddReaction={addReaction}
+                      onRemoveReaction={removeReaction}
+                    />
+                  );
+                })}
+              </div>
+            ))
+          )}
+          {/* Elaine typing indicator — shown while waiting for her reply */}
+          {isSending && (
+            <div
+              style={{
+                padding: "2px 12px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "flex-start",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "#8b5cf6",
+                  marginBottom: 2,
+                  paddingLeft: 4,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 3,
+                }}
+              >
+                <Sparkles size={10} />
+                Elaine
+              </div>
+              <div
+                style={{
+                  background: "rgba(109, 40, 217, 0.07)",
+                  border: "1px solid rgba(109, 40, 217, 0.15)",
+                  borderRadius: "16px 16px 16px 4px",
+                  padding: "10px 16px",
+                  display: "flex",
+                  gap: 5,
+                  alignItems: "center",
+                }}
+              >
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: "#8b5cf6",
+                    display: "inline-block",
+                    animation: "bounce 1s infinite",
+                  }}
+                />
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: "#8b5cf6",
+                    display: "inline-block",
+                    animation: "bounce 1s infinite",
+                    animationDelay: "0.15s",
+                  }}
+                />
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: "#8b5cf6",
+                    display: "inline-block",
+                    animation: "bounce 1s infinite",
+                    animationDelay: "0.3s",
+                  }}
+                />
+              </div>
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+
+        {/* "↓ Latest" pill — floats at the bottom when the user has scrolled up */}
+        {!isAtBottom && (
           <div
             style={{
-              padding: "2px 12px",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "flex-start",
+              position: "absolute",
+              bottom: 10,
+              left: "50%",
+              transform: "translateX(-50%)",
+              zIndex: 10,
             }}
           >
-            <div
+            <button
+              onClick={() => {
+                const el = listRef.current;
+                if (el) el.scrollTop = el.scrollHeight;
+                setIsAtBottom(true);
+              }}
               style={{
-                fontSize: 11,
-                color: "#8b5cf6",
-                marginBottom: 2,
-                paddingLeft: 4,
                 display: "flex",
                 alignItems: "center",
-                gap: 3,
+                gap: 4,
+                background: "hsl(var(--card))",
+                border: "1px solid hsl(var(--border))",
+                borderRadius: 20,
+                padding: "4px 12px 4px 8px",
+                fontSize: 12,
+                fontWeight: 500,
+                color: "hsl(var(--foreground))",
+                cursor: "pointer",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                whiteSpace: "nowrap",
               }}
             >
-              <Sparkles size={10} />
-              Elaine
-            </div>
-            <div
-              style={{
-                background: "rgba(109, 40, 217, 0.07)",
-                border: "1px solid rgba(109, 40, 217, 0.15)",
-                borderRadius: "16px 16px 16px 4px",
-                padding: "10px 16px",
-                display: "flex",
-                gap: 5,
-                alignItems: "center",
-              }}
-            >
-              <span
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: "50%",
-                  background: "#8b5cf6",
-                  display: "inline-block",
-                  animation: "bounce 1s infinite",
-                }}
-              />
-              <span
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: "50%",
-                  background: "#8b5cf6",
-                  display: "inline-block",
-                  animation: "bounce 1s infinite",
-                  animationDelay: "0.15s",
-                }}
-              />
-              <span
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: "50%",
-                  background: "#8b5cf6",
-                  display: "inline-block",
-                  animation: "bounce 1s infinite",
-                  animationDelay: "0.3s",
-                }}
-              />
-            </div>
+              <ChevronsDown size={13} />
+              Latest
+            </button>
           </div>
         )}
-        <div ref={bottomRef} />
       </div>
 
       {/* Upload progress bars */}

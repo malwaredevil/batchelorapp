@@ -6,6 +6,7 @@ import {
   type ReminderAlertType,
 } from "./email";
 import { sendReminderAlertSms, smsConfigured } from "./sms";
+import { sendReminderAlertSlack, slackConfigured } from "./slack";
 import { pullReminderAlertDaysFromCalendar } from "../routes/travels/reminders";
 import { shouldRunScheduledTask } from "./scheduler-guard";
 import { logger } from "./logger";
@@ -59,10 +60,11 @@ export function daysUntilDue(dueDate: string, now: Date = new Date()): number {
 export async function runReminderAlerts(): Promise<void> {
   const emailEnabled = resendConfigured();
   const smsEnabled = smsConfigured();
+  const slackEnabled = slackConfigured();
 
-  if (!emailEnabled && !smsEnabled) {
+  if (!emailEnabled && !smsEnabled && !slackEnabled) {
     logger.debug(
-      "reminder-scheduler: neither Resend nor AgentPhone configured, skipping",
+      "reminder-scheduler: no alert channels configured (email/SMS/Slack), skipping",
     );
     return;
   }
@@ -83,24 +85,27 @@ export async function runReminderAlerts(): Promise<void> {
       due_date: string;
       recipient_emails: string[];
       sms_recipient_user_ids: number[];
+      slack_recipient_user_ids: number[];
       alert_days_before: number[];
     }>(
-      `SELECT r.id                     AS reminder_id,
+      `SELECT r.id                       AS reminder_id,
               r.user_id,
-              r.title                  AS reminder_title,
-              t.title                  AS trip_title,
-              t.destination            AS trip_destination,
-              r.due_date::text         AS due_date,
-              r.recipient_emails       AS recipient_emails,
-              r.sms_recipient_user_ids AS sms_recipient_user_ids,
-              r.alert_days_before      AS alert_days_before
+              r.title                    AS reminder_title,
+              t.title                    AS trip_title,
+              t.destination              AS trip_destination,
+              r.due_date::text           AS due_date,
+              r.recipient_emails         AS recipient_emails,
+              r.sms_recipient_user_ids   AS sms_recipient_user_ids,
+              r.slack_recipient_user_ids AS slack_recipient_user_ids,
+              r.alert_days_before        AS alert_days_before
          FROM travels_reminders r
          JOIN travels_trips  t ON t.id  = r.trip_id
         WHERE r.done = false
           AND r.due_date >= CURRENT_DATE
           AND r.due_date <= CURRENT_DATE + 30
           AND (array_length(r.recipient_emails, 1) > 0
-               OR array_length(r.sms_recipient_user_ids, 1) > 0)`,
+               OR array_length(r.sms_recipient_user_ids, 1) > 0
+               OR array_length(r.slack_recipient_user_ids, 1) > 0)`,
     );
 
     // Pre-fetch ALL alert-log rows for this run's candidates in one query so
@@ -306,6 +311,89 @@ export async function runReminderAlerts(): Promise<void> {
                   failedRecipients: failures.map((f) => f.userId),
                 },
                 "reminder-scheduler: sms alert not fully delivered, will retry next run",
+              );
+            }
+          }
+        }
+
+        // --- Slack channel ---
+        if (
+          slackEnabled &&
+          row.slack_recipient_user_ids.length > 0 &&
+          !alreadySent.has("slack")
+        ) {
+          const { rows: slackRows } = await client.query<{
+            id: number;
+            slack_user_id: string;
+          }>(
+            `SELECT id, slack_user_id FROM app_users
+              WHERE id = ANY($1::int[]) AND slack_user_id IS NOT NULL`,
+            [row.slack_recipient_user_ids],
+          );
+
+          if (slackRows.length > 0) {
+            const label = alertLabel(days);
+            const formatted = new Date(
+              `${row.due_date}T12:00:00Z`,
+            ).toLocaleDateString("en-GB", {
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            });
+
+            const failures: { userId: number; err: unknown }[] = [];
+            let successCount = 0;
+
+            for (const recipient of slackRows) {
+              try {
+                await sendReminderAlertSlack(
+                  recipient.slack_user_id,
+                  row.reminder_title,
+                  row.trip_title,
+                  row.trip_destination,
+                  label,
+                  formatted,
+                );
+                successCount++;
+              } catch (err) {
+                failures.push({ userId: recipient.id, err });
+                logger.error(
+                  {
+                    err,
+                    reminderId: row.reminder_id,
+                    alertType: type,
+                    userId: recipient.id,
+                  },
+                  "reminder-scheduler: failed to send slack alert to recipient",
+                );
+              }
+            }
+
+            if (failures.length === 0 && successCount > 0) {
+              await client.query(
+                `INSERT INTO travels_reminder_alert_log (reminder_id, user_id, alert_type, channel)
+                 VALUES ($1, $2, $3, 'slack')
+                 ON CONFLICT (reminder_id, alert_type, channel) DO NOTHING`,
+                [row.reminder_id, row.user_id, type],
+              );
+
+              logger.info(
+                {
+                  reminderId: row.reminder_id,
+                  alertType: type,
+                  recipientCount: successCount,
+                },
+                "reminder-scheduler: alert slack DM(s) sent",
+              );
+            } else {
+              logger.warn(
+                {
+                  reminderId: row.reminder_id,
+                  alertType: type,
+                  successCount,
+                  failedRecipients: failures.map((f) => f.userId),
+                },
+                "reminder-scheduler: slack alert not fully delivered, will retry next run",
               );
             }
           }

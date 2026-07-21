@@ -8767,4 +8767,36 @@ export async function runMessengerElaineTurn(params: {
   return { replyText, widgets };
 }
 
+// ---------------------------------------------------------------------------
+// Elaine Slack bridge — used by routes/slack.ts when a DM or /elaine slash
+// command arrives from a known household member. Reuses the exact same
+// restricted engine and AGENTPHONE_ACTION_TYPES allowlist as the AgentPhone
+// and email bridges — same tool set, same auto-run semantics — but with a
+// Slack-appropriate formatting note that permits basic Slack markdown and
+// slightly richer output than SMS.
+// ---------------------------------------------------------------------------
+
+export interface ElaineSlackChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+const ELAINE_SLACK_CHANNEL_ADDENDUM =
+  "CHANNEL: You are replying via Slack DM. Use share_app_link to give the user a direct URL whenever a request needs an actual screen (e.g. connecting a calendar, uploading a photo). Actions run immediately — always briefly confirm what you did (or that it failed). Slack supports basic markdown (*bold*, _italic_) — use it lightly.";
+
+export async function runElaineSlackTurn(params: {
+  userId: number;
+  inputText: string;
+  history: ElaineSlackChatMessage[];
+}): Promise<{ replyText: string; history: ElaineSlackChatMessage[] }> {
+  return runRestrictedElaineTurn({
+    ...params,
+    maxTokens: 600,
+    channelLabel: "Slack",
+    channelAddendum: ELAINE_SLACK_CHANNEL_ADDENDUM,
+    formattingNote:
+      "Your replies will be sent as Slack messages. You may use basic Slack markdown (*bold*, _italic_) lightly. Keep responses concise — two to four sentences is usually ideal, though more detail is fine when genuinely needed. Do not use email-style sign-offs.",
+  });
+}
+
 export default router;

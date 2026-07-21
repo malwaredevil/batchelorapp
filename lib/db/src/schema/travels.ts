@@ -191,6 +191,12 @@ export const travelsReminders = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::integer[]`),
+    // app_users.id values who should get a Slack DM alert for this reminder.
+    // A user must have slack_user_id set on their account to receive alerts.
+    slackRecipientUserIds: integer("slack_recipient_user_ids")
+      .array()
+      .notNull()
+      .default(sql`'{}'::integer[]`),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

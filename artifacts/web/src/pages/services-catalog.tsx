@@ -144,6 +144,19 @@ const SERVICES: ServiceEntry[] = [
     env: ["AGENTPHONE_API_KEY", "AGENTPHONE_WEBHOOK_SECRET"],
   },
   {
+    name: "Slack",
+    purpose: "Slack DM bot and reminder notifications",
+    usedFor:
+      "Household members can DM the Elaine bot in Slack or use the /elaine slash command. Inbound messages run a full restricted Elaine turn (same engine as AgentPhone/email). Trip reminder alerts can also be delivered as Slack DMs alongside email/SMS.",
+    implementedIn: [
+      "artifacts/api-server/src/lib/slack.ts",
+      "artifacts/api-server/src/routes/slack.ts",
+      "artifacts/api-server/src/elaine/index.ts",
+    ],
+    modules: ["Elaine", "Travels"],
+    env: ["SLACK_BOT_TOKEN", "SLACK_SIGNING_SECRET"],
+  },
+  {
     name: "Sentry",
     purpose: "Production error tracking and monitoring",
     usedFor:

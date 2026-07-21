@@ -17,3 +17,4 @@ export * from "./search-feedback";
 export * from "./market";
 export * from "./notifications";
 export * from "./knowledge";
+export * from "./slack";

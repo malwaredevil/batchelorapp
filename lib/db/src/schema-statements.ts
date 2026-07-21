@@ -2730,4 +2730,41 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS similarity_evaluations_user_id_idx
      ON similarity_evaluations (user_id)
      WHERE user_id IS NOT NULL`,
+
+  // ── Slack bridge (Elaine DMs + reminder DM notifications) ──────────────────
+  // slack_user_id on app_users: links a household member to their Slack
+  // identity so inbound DMs are routed and outbound reminder DMs are delivered.
+  // Unique partial index (WHERE NOT NULL) so multiple NULL values are allowed
+  // while duplicate non-null Slack user IDs are prevented.
+  `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS slack_user_id TEXT`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS app_users_slack_user_id_unique_idx
+     ON app_users (slack_user_id)
+     WHERE slack_user_id IS NOT NULL`,
+
+  // Slack reminder recipients: app_users.id values of household members who
+  // want Slack DM reminder alerts for a given reminder.
+  `ALTER TABLE travels_reminders
+     ADD COLUMN IF NOT EXISTS slack_recipient_user_ids INTEGER[] NOT NULL DEFAULT '{}'`,
+
+  // Webhook delivery dedup log for the Slack Events API.
+  // Keyed by Slack's event_id — recorded before any side effect so retried
+  // deliveries (Slack retries up to 3× via X-Slack-Retry-Num) are no-ops.
+  `CREATE TABLE IF NOT EXISTS slack_webhook_deliveries (
+    id          TEXT PRIMARY KEY,
+    received_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE slack_webhook_deliveries ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS slack_webhook_deliveries_received_at_idx
+     ON slack_webhook_deliveries (received_at)`,
+
+  // Rolling Slack conversation history per household member (independent of
+  // the in-app widget, AgentPhone, and email conversations).
+  `CREATE TABLE IF NOT EXISTS elaine_slack_conversations (
+    id            SERIAL PRIMARY KEY,
+    user_id       INTEGER NOT NULL UNIQUE REFERENCES app_users(id) ON DELETE CASCADE,
+    slack_user_id TEXT NOT NULL,
+    messages      JSONB NOT NULL DEFAULT '[]'::jsonb,
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE elaine_slack_conversations ENABLE ROW LEVEL SECURITY`,
 ];

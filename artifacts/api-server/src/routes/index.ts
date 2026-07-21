@@ -12,6 +12,7 @@ import gmailRouter from "./gmail";
 import searchRouter from "./search";
 import agentphoneRouter from "./agentphone";
 import elaineEmailRouter from "./elaine-email";
+import slackRouter from "./slack";
 import configRouter from "./config";
 import messengerRouter from "./messenger";
 import jobsRouter from "./jobs";
@@ -60,6 +61,11 @@ router.use(knowledgeRouter);
 router.use("/elaine", elaineEmailRouter);
 router.use("/elaine", elaineRouter);
 router.use("/agentphone", agentphoneRouter);
+// Slack Events API webhook (/api/slack/webhook) and slash command receiver
+// (/api/slack/slash) — both are unauthenticated (signature-gated only) so
+// must be mounted before elaineRouter applies blanket requireAuth to /elaine.
+// Mounting after agentphoneRouter mirrors the same pattern.
+router.use("/slack", slackRouter);
 router.use(hubRouter);
 
 export default router;

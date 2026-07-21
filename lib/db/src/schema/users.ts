@@ -49,6 +49,11 @@ export const appUsers = pgTable("app_users", {
   // outbound SMS send path (verification code, test SMS, reminder alerts)
   // must skip this number. Cleared when the number replies START/UNSTOP/YES.
   smsOptedOutAt: timestamp("sms_opted_out_at", { withTimezone: true }),
+  // Slack user ID (e.g. "U1234567890") for the Elaine Slack bot. Used to
+  // route inbound DMs and deliver reminder notifications via Slack DM.
+  // Set automatically on first DM via Slack email-address lookup, or
+  // manually cleared via account settings.
+  slackUserId: text("slack_user_id").unique(),
   // Birthday as "MM-DD" string (year omitted — just month and day).
   // Used to show a birthday banner on login and trigger a birthday email from Elaine.
   birthday: text("birthday"),

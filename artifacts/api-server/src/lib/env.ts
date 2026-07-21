@@ -62,6 +62,14 @@ export const env = {
   // endpoint can reject forged/unsolicited POST requests. Optional — the
   // webhook route returns 503 until this is set.
   apifyWebhookSecret: optional("APIFY_WEBHOOK_SECRET"),
+  // Slack bot credentials for the Elaine Slack bridge (inbound DMs + reminder
+  // DM notifications). Both are optional at the env layer — the webhook route
+  // returns 401 until SLACK_SIGNING_SECRET is set, and any outbound call
+  // (postMessage, openDmChannel) is skipped until SLACK_BOT_TOKEN is set.
+  // Get these from the Slack app's "Basic Information" and "OAuth & Permissions"
+  // pages after installing the app to your workspace.
+  slackSigningSecret: optional("SLACK_SIGNING_SECRET"),
+  slackBotToken: optional("SLACK_BOT_TOKEN"),
   // eBay Developer API credentials. Used for sold-listing price lookups
   // (Finding API) and structured item data (Browse API). Optional at the env
   // layer — routes that need them return 503 if absent.

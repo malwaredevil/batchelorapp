@@ -65,6 +65,29 @@ app.use("/api/quilting/blocks/detect-seams", express.json({ limit: "5mb" }));
 // Barcode photo extraction endpoint accepts a base64 data URL JSON payload
 // which can reach ~4MB for a typical phone JPEG → base64-encoded image.
 app.use("/api/ornaments/barcode-photo-lookup", express.json({ limit: "5mb" }));
+// Slack Events API (JSON) and slash commands (form-encoded) both require the
+// raw request body for HMAC-SHA256 signature verification. Two separate paths
+// are used so each can have the correct body parser (json vs urlencoded) with
+// rawBody capture. Both must be mounted before the global parsers below.
+app.use(
+  "/api/slack/webhook",
+  express.json({
+    limit: "512kb",
+    verify: (req, _res, buf) => {
+      (req as Request & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+    },
+  }),
+);
+app.use(
+  "/api/slack/slash",
+  express.urlencoded({
+    extended: false,
+    limit: "64kb",
+    verify: (req, _res, buf) => {
+      (req as Request & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+    },
+  }),
+);
 // AgentPhone webhook signatures are HMAC'd over the raw request body, so the
 // exact bytes must be captured before body-parser reformats them as JSON.
 app.use(

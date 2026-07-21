@@ -30,7 +30,19 @@ if (typeof window !== "undefined" && typeof window.location !== "undefined") {
   const fromUrl = new URLSearchParams(window.location.search).get(
     "screenshotToken",
   );
-  if (fromUrl) _screenshotToken = fromUrl;
+  if (fromUrl) {
+    _screenshotToken = fromUrl;
+    // Strip the token from the address bar immediately so it is not visible in
+    // browser history, not leaked in Referer headers on subsequent navigations,
+    // and not accidentally bookmarked or shared.
+    try {
+      const clean = new URL(window.location.href);
+      clean.searchParams.delete("screenshotToken");
+      history.replaceState(null, "", clean.toString());
+    } catch {
+      // replaceState is unavailable in some sandboxed iframes — ignore.
+    }
+  }
 }
 
 /**
@@ -111,11 +123,26 @@ export function installScreenshotImageAutoAuth(): void {
   if (_screenshotImagePatchInstalled) return;
   _screenshotImagePatchInstalled = true;
 
-  const shouldRewrite = (value: string): boolean =>
-    typeof value === "string" &&
-    value.length > 0 &&
-    !value.startsWith("data:") &&
-    !value.startsWith("blob:");
+  // Only rewrite URLs that are same-origin and target /api/. An unrestricted
+  // rewrite would append the dev token to externally-hosted images (e.g. a
+  // fabric tile whose src is an absolute URL on a CDN), leaking it to a
+  // third-party host. Relative /api/ paths are inherently same-origin.
+  // Absolute URLs are accepted only when their origin matches window.location
+  // and their pathname starts with /api/.
+  const shouldRewrite = (value: string): boolean => {
+    if (typeof value !== "string" || value.length === 0) return false;
+    if (value.startsWith("data:") || value.startsWith("blob:")) return false;
+    if (value.startsWith("/api/")) return true;
+    try {
+      const url = new URL(value);
+      return (
+        url.origin === window.location.origin &&
+        url.pathname.startsWith("/api/")
+      );
+    } catch {
+      return false;
+    }
+  };
 
   // <img src="...">
   const imgProto = window.HTMLImageElement?.prototype;

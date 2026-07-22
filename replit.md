@@ -78,8 +78,9 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
 - When the user has queued multiple feature requests, don't silently barrel from one to the next. If a step needs something from the user (a manual action, a confirmation, a choice), stop and ask a simple yes/no or short question via user_query before proceeding — don't let the queue push past unanswered questions.
 - Pre-publish checklist — run this automatically every time before creating a checkpoint (or immediately after), without waiting to be asked. Gated in stages; do not move to the next stage until the current one passes:
 
-  **Session start — always do this first:**
+  **Session start — always do these first, in order:**
   - Check for a pending Stage 4: run `pnpm --filter @workspace/scripts run sentry-baseline check-pending-stage4`. If it exits with code 2, a publish happened in a prior session and Stage 4 was never completed. Do the Sentry delta check now (see Stage 4 below), then delete the file with `pnpm --filter @workspace/scripts run sentry-baseline clear`.
+  - **Bot-created GitHub issue scan (mandatory):** Query open issues and look for any created by bots or automated tools (Dependabot, GitHub Actions, CodeQL, Seer, etc.) using: `curl -s -H "Authorization: Bearer $GH_PAT" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/malwaredevil/batchelorapp/issues?state=open&per_page=50" | jq '[.[] | select(.pull_request == null) | {number: .number, title: .title, user: .user.login}]'`. For each bot-created issue: triage it immediately if straightforward, fix it if the fix is small, or surface it to the user now (not after publishing) if it needs discussion.
 
   **Stage 1 — review (manual steps first, then run the automated gate):**
   1. Sentry baseline: use the Sentry MCP tools to query open/unresolved issues. Triage each one before proceeding:
@@ -100,7 +101,12 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
   **Stage 3 — backup + GitHub sync (only after Stage 2 passes), in this exact order:**
   - 3a. Run the Supabase → Replit built-in DB backup: `pnpm --filter @workspace/scripts run backup-to-replit`.
   - 3b. If a GitHub issue was opened for this session's work, close it. On routine sessions with no pre-opened issues this is a quick no-op scan.
-  - 3b2. **Open PR review:** Before pushing, use the GitHub integration/connector to list open PRs on `malwaredevil/batchelorapp`. Review any open PRs — if the underlying issue is already fixed by this session's changes, close the PR with a comment; if it surfaces a real unfixed issue, fix it now. (Note: Sentry is on the Free plan — Seer auto-draft PRs are a Business-tier feature and no longer active. This step is a routine open-PR scan.)
+  - 3b2. **Open PR review + Dependabot merges (required):** List all open PRs: `curl -s -H "Authorization: Bearer $GH_PAT" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/malwaredevil/batchelorapp/pulls?state=open&per_page=50" | jq '[.[] | {number: .number, title: .title, user: .user.login}]'`. For each open PR:
+    - **Dependabot PRs with all CI checks green:** merge immediately using squash (`PUT /repos/.../pulls/:n/merge` with `merge_method: "squash"`). Verify CI first by checking the PR head SHA's check-runs. Do not skip this — letting Dependabot PRs pile up defeats the security hardening that created them.
+    - **Dependabot PRs with failing CI:** investigate the failure; fix it if it's a simple conflict, or surface it to the user.
+    - **Human/bot PRs that this session's changes already fixed:** close with a comment explaining why.
+    - **Human/bot PRs that surface an unfixed issue:** fix it now before publishing.
+      (Note: Sentry is on the Free plan — Seer auto-draft PRs are a Business-tier feature and no longer active.)
   - 3c. Batch-sync all changed files to GitHub in a **single commit** using `pnpm --filter @workspace/scripts run github-sync "commit message"`. This script: runs prettier --write on every changed file, creates one Git tree with all changes, pushes one commit, and triggers exactly one CI run. **Never** use the GitHub Contents API per-file (each file triggers its own CI run) or loop `git push` per file. The excluded paths (.local/, .agents/, threat_model.md, .replit, .replitignore, replit.nix, .upm/) are enforced by the script — Replit-specific files must never reach the public repo.
   - 3d. Wait for GitHub CI to go fully green (all checks including CodeQL): `pnpm --filter @workspace/scripts run check-ci-status`. This is a hard stop — do not publish until this passes.
 

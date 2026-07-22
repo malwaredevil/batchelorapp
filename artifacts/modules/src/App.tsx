@@ -96,6 +96,9 @@ const FabricPhotoPreviewDevPage = lazy(
   () => import("@/quilting/pages/dev/fabric-photo-preview"),
 );
 
+// Barcode lookup (hub-level, not app-specific)
+const BarcodeLookupPage = lazy(() => import("@/pages/barcode-lookup"));
+
 // Ornaments
 const OrnamentsCollection = lazy(() => import("@/ornaments/pages/collection"));
 const OrnamentsAdd = lazy(() => import("@/ornaments/pages/add"));
@@ -188,6 +191,7 @@ function Routes() {
             <Suspense fallback={<Splash />}>
               <Switch>
                 <Route path="/" component={Home} />
+                <Route path="/barcode-lookup" component={BarcodeLookupPage} />
                 <Route path="/pottery" component={PotteryCollection} />
                 <Route path="/pottery/add" component={PotteryAdd} />
                 <Route path="/pottery/compare" component={PotteryCompare} />

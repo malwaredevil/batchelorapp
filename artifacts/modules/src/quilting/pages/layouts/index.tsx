@@ -636,9 +636,28 @@ function LayoutCard({
   const [zoomOpen, setZoomOpen] = useState(false);
   return (
     <>
-      <div className="group relative overflow-hidden rounded-xl border border-card-border bg-card transition-shadow hover:shadow-md">
-        <Link href={`/quilting/layouts/${layout.id}`} className="block">
-          <div className="relative flex aspect-square items-center justify-center overflow-hidden bg-white p-2">
+      <div className="group relative rounded-xl border border-card-border bg-card transition-shadow hover:shadow-md">
+        {/* Zoom button — outside Link so it intercepts clicks independently */}
+        <button
+          type="button"
+          onClick={() => setZoomOpen(true)}
+          className="absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/70"
+          title="Zoom preview"
+        >
+          <ZoomIn className="h-3.5 w-3.5" />
+        </button>
+        <Link
+          href={`/quilting/layouts/${layout.id}`}
+          className="block overflow-hidden rounded-xl"
+        >
+          <div
+            className="relative flex aspect-square items-center justify-center overflow-hidden bg-white p-2 cursor-zoom-in"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              setZoomOpen(true);
+            }}
+          >
             <LayoutPreview
               layout={layout}
               blocks={blocks}
@@ -646,17 +665,6 @@ function LayoutCard({
               fabricUrlMap={fabricUrlMap}
               patternPrefix={`lth-${layout.id}-`}
             />
-            <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setZoomOpen(true);
-              }}
-              className="absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/70"
-              title="Zoom preview"
-            >
-              <ZoomIn className="h-3.5 w-3.5" />
-            </button>
           </div>
           <div className="border-t border-card-border px-3 py-2 pr-8">
             <p className="truncate text-sm font-semibold text-foreground">

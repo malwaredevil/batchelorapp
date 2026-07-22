@@ -7,6 +7,10 @@ import {
   ArrowRight,
   ScanLine,
   ImageUp,
+  RefreshCw,
+  Plus,
+  Tag,
+  Calendar,
 } from "lucide-react";
 import {
   useLookupBarcode,
@@ -72,6 +76,14 @@ export default function ScanPage() {
   const [manualCode, setManualCode] = useState("");
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [isPhotoExtracting, setIsPhotoExtracting] = useState(false);
+  const [scannedCode, setScannedCode] = useState("");
+  const [scanResult, setScanResult] = useState<{
+    found: boolean;
+    name?: string | null;
+    brand?: string | null;
+    seriesOrCollection?: string | null;
+    year?: number | null;
+  } | null>(null);
 
   usePageAssistantContext(
     "ornaments-scan",
@@ -232,6 +244,8 @@ export default function ScanPage() {
     stopScanning();
     setIsLookingUp(true);
     setManualCode(code);
+    setScannedCode(code);
+    setScanResult(null);
 
     try {
       toast.loading(`Looking up ${code}...`, { id: "lookup" });
@@ -239,27 +253,13 @@ export default function ScanPage() {
         data: { barcode: code },
       });
       toast.dismiss("lookup");
+      setScanResult(result);
 
       if (result.found) {
-        toast.success("Found match!");
-        sessionStorage.setItem(
-          "ornaments-add-prefill",
-          JSON.stringify({
-            name: result.name,
-            brand: result.brand || "Hallmark",
-            seriesOrCollection: result.seriesOrCollection,
-            year: result.year,
-            barcodeValue: code,
-          }),
-        );
+        toast.success("Found it!");
       } else {
-        toast.error("Not found in database. Proceed to manual entry.");
-        sessionStorage.setItem(
-          "ornaments-add-prefill",
-          JSON.stringify({ barcodeValue: code, brand: "Hallmark" }),
-        );
+        toast.info("Not in database — you can still add it manually.");
       }
-      setLocation("/ornaments/add");
     } catch {
       toast.dismiss("lookup");
       toast.error("Lookup failed. Proceeding to manual entry.");
@@ -271,6 +271,13 @@ export default function ScanPage() {
     } finally {
       setIsLookingUp(false);
     }
+  };
+
+  const handleScanAnother = () => {
+    setScanResult(null);
+    setScannedCode("");
+    setManualCode("");
+    void startScanning();
   };
 
   const handleManualSubmit = (e: React.FormEvent) => {
@@ -444,16 +451,89 @@ export default function ScanPage() {
           </div>
         </form>
 
-        <div className="mt-8 text-center">
-          <Button
-            variant="ghost"
-            className="text-muted-foreground hover:text-foreground"
-            onClick={() => setLocation("/ornaments/add")}
-          >
-            Skip to manual entry <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
-        </div>
+        {!scanResult && (
+          <div className="mt-8 text-center">
+            <Button
+              variant="ghost"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => setLocation("/ornaments/add")}
+            >
+              Skip to manual entry <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </div>
+        )}
       </div>
+
+      {/* Inline results — shown instead of redirecting to /add */}
+      {scanResult && (
+        <div className="pt-4 border-t border-border space-y-4">
+          {scanResult.found ? (
+            <div className="bg-card rounded-2xl border border-border p-5 space-y-3">
+              <div>
+                <h2 className="text-lg font-serif font-bold">
+                  {scanResult.name ?? "Unknown ornament"}
+                </h2>
+                {scanResult.brand && (
+                  <p className="text-sm text-muted-foreground">
+                    {scanResult.brand}
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
+                {scanResult.year && (
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5" />
+                    <span>{scanResult.year}</span>
+                  </div>
+                )}
+                {scanResult.seriesOrCollection && (
+                  <div className="flex items-center gap-1.5">
+                    <Tag className="h-3.5 w-3.5" />
+                    <span>{scanResult.seriesOrCollection}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="bg-muted/50 rounded-xl p-4 text-center">
+              <p className="text-sm text-muted-foreground">
+                No product info found for{" "}
+                <span className="font-mono">{scannedCode}</span>. You can still
+                add it manually.
+              </p>
+            </div>
+          )}
+          <div className="flex gap-3">
+            <Button
+              className="flex-1"
+              onClick={() => {
+                sessionStorage.setItem(
+                  "ornaments-add-prefill",
+                  JSON.stringify({
+                    name: scanResult.found ? scanResult.name : undefined,
+                    brand:
+                      (scanResult.found ? scanResult.brand : null) ??
+                      "Hallmark",
+                    seriesOrCollection: scanResult.found
+                      ? scanResult.seriesOrCollection
+                      : undefined,
+                    year: scanResult.found ? scanResult.year : undefined,
+                    barcodeValue: scannedCode,
+                  }),
+                );
+                setLocation("/ornaments/add");
+              }}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              {scanResult.found ? "Add to Collection" : "Add Manually"}
+            </Button>
+            <Button variant="outline" onClick={handleScanAnother}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Scan Another
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

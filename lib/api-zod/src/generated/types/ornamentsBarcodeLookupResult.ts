@@ -20,4 +20,22 @@ export interface OrnamentsBarcodeLookupResult {
   description?: string | null;
   /** @nullable */
   imageUrl?: string | null;
+  /** @nullable */
+  hallmarkSku?: string | null;
+  /** @nullable */
+  hallmarkArtist?: string | null;
+  /** @nullable */
+  hallmarkSeriesName?: string | null;
+  /** @nullable */
+  hallmarkSequenceNumber?: number | null;
+  /** @nullable */
+  hallmarkRetailPriceUsd?: number | null;
+  /** @nullable */
+  hallmarkCollectorPriceUsd?: number | null;
+  /** @nullable */
+  hallmarkInStock?: boolean | null;
+  /** @nullable */
+  hallmarkImages?: string[] | null;
+  /** @nullable */
+  hallmarkProductUrl?: string | null;
 }

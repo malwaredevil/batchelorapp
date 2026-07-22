@@ -4902,7 +4902,16 @@ export const LookupOrnamentBarcodeResponse = zod.object({
   "seriesOrCollection": zod.string().nullish(),
   "year": zod.number().nullish(),
   "description": zod.string().nullish(),
-  "imageUrl": zod.string().nullish()
+  "imageUrl": zod.string().nullish(),
+  "hallmarkSku": zod.string().nullish(),
+  "hallmarkArtist": zod.string().nullish(),
+  "hallmarkSeriesName": zod.string().nullish(),
+  "hallmarkSequenceNumber": zod.number().nullish(),
+  "hallmarkRetailPriceUsd": zod.number().nullish(),
+  "hallmarkCollectorPriceUsd": zod.number().nullish(),
+  "hallmarkInStock": zod.boolean().nullish(),
+  "hallmarkImages": zod.array(zod.string()).nullish(),
+  "hallmarkProductUrl": zod.string().nullish()
 })
 
 
@@ -4925,7 +4934,16 @@ export const LookupBarcodeResponse = zod.object({
   "seriesOrCollection": zod.string().nullish(),
   "year": zod.number().nullish(),
   "description": zod.string().nullish(),
-  "imageUrl": zod.string().nullish()
+  "imageUrl": zod.string().nullish(),
+  "hallmarkSku": zod.string().nullish(),
+  "hallmarkArtist": zod.string().nullish(),
+  "hallmarkSeriesName": zod.string().nullish(),
+  "hallmarkSequenceNumber": zod.number().nullish(),
+  "hallmarkRetailPriceUsd": zod.number().nullish(),
+  "hallmarkCollectorPriceUsd": zod.number().nullish(),
+  "hallmarkInStock": zod.boolean().nullish(),
+  "hallmarkImages": zod.array(zod.string()).nullish(),
+  "hallmarkProductUrl": zod.string().nullish()
 })
 
 

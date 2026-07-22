@@ -5,6 +5,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { BarcodeScanButton } from "./BarcodeScanButton";
 import {
   Send,
   ArrowRight,
@@ -692,6 +693,14 @@ export function ElaineChatPanel({
           >
             <Paperclip className="h-3.5 w-3.5" />
           </Button>
+          <BarcodeScanButton
+            onScanned={(code) => {
+              void handleSend(
+                `I scanned a barcode: ${code}. Can you tell me what this product is?`,
+              );
+            }}
+            disabled={isStreaming}
+          />
           <div className="flex-1" />
           {voice.isSupported && (
             <Button

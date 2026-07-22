@@ -91,6 +91,7 @@ import {
   searchHallmark,
   lookupHallmarkFromDb,
 } from "../lib/ornaments/hallmark-search";
+import { lookupBarcode } from "../lib/ornaments/barcode";
 import { lookupFlightPrices } from "../lib/travels/flights";
 import { fetchJsonSafe } from "../lib/ssrf-safe-fetch";
 import { consultExperts } from "../lib/expert-consult";
@@ -2879,7 +2880,7 @@ const NAVIGATE_PATH_RE_BY_APP: Record<AppId, RegExp> = {
 // The client detects these prefixes and uses window.location.href instead of
 // the SPA router so the correct React bundle loads.
 const CROSS_APP_NAVIGATE_RE =
-  /^\/(pottery|quilting|travels|ornaments|elaine)(\/[^?#]*)?(\?[a-zA-Z0-9=+%._~!$&'()*+,;:-]*)?\/?$/;
+  /^\/(pottery|quilting|travels|ornaments|elaine)(\/[^?#]*)?(\?[a-zA-Z0-9=+%._~!$&'()*+,;:-]*)?\/?$|^\/barcode-lookup$/;
 
 function navigatePayloadSchemaFor(appId: AppId) {
   return z.object({
@@ -2943,6 +2944,7 @@ const EbaySearchToolPayload = z.object({
 });
 
 const SEARCH_HALLMARK_TOOL_NAME = "search_hallmark";
+const LOOKUP_BARCODE_TOOL_NAME = "lookup_product_barcode";
 
 const SearchHallmarkToolPayload = z.object({
   name: z.string().min(1).max(200).optional(),
@@ -3661,6 +3663,25 @@ const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
+      name: LOOKUP_BARCODE_TOOL_NAME,
+      description:
+        "Look up any product by its barcode or UPC number. Returns the product name, brand, year, series/collection, description, and for Hallmark ornaments: SKU, artist, series, retail price, and collector value. Call this immediately whenever the user shares a barcode or UPC number — do not navigate anywhere, report the results in chat. Also use when the user asks what a scanned barcode is, or asks you to look up a product by code.",
+      parameters: {
+        type: "object",
+        properties: {
+          barcode: {
+            type: "string",
+            description:
+              "The UPC, EAN-13, EAN-8, or other barcode number to look up",
+          },
+        },
+        required: ["barcode"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: QUERY_HOUSEHOLD_TOOL_NAME,
       description:
         "Look up live counts and recent items from the household's pottery collection, quilting stash, ornaments collection, and travel plans — use this when the user asks summary questions like 'how many pieces do I have', 'what's in my quilting stash', 'how many ornaments do I have', 'how many trips am I planning', etc. Returns real numbers and recent record names directly from the database. Do not estimate or guess counts — always call this instead. For questions about a SPECIFIC named item, use search_household_data first. Also supports 'app_config' to fetch current Control Panel settings (AI token limits, timeouts) — use this when the user asks about or describes a performance/quality problem that a tuning constant might fix.",
@@ -4343,12 +4364,36 @@ router.get("/nudges/unseen-count", async (req, res) => {
 
 router.delete("/conversation", async (req, res) => {
   const userId = req.session.userId!;
+
+  // Archive the current widget-default conversation so its history remains
+  // accessible in the history panel, then create a fresh default thread.
+  // This is what backs the "New conversation" button in the floating widget:
+  // the next message with conversationId=null would otherwise load the OLD
+  // isWidgetDefault row (with all the old messages), so we rotate it here
+  // and return the new conversation's ID so the client can pin subsequent
+  // sends to the fresh thread explicitly.
+  await db
+    .update(elaineHistoryConversations)
+    .set({ isWidgetDefault: false, updatedAt: new Date() })
+    .where(
+      and(
+        eq(elaineHistoryConversations.userId, userId),
+        eq(elaineHistoryConversations.isWidgetDefault, true),
+      ),
+    );
+  const [newConv] = await db
+    .insert(elaineHistoryConversations)
+    .values({ userId, title: "Household", isWidgetDefault: true })
+    .returning({ id: elaineHistoryConversations.id });
+
+  // Also clear the legacy rolling thread (pre-history-system storage).
   await getOrCreateConversation(userId);
   await db
     .update(elaineConversations)
     .set({ messages: [], updatedAt: new Date() })
     .where(eq(elaineConversations.userId, userId));
-  res.json({ messages: [] });
+
+  res.json({ messages: [], conversationId: newConv?.id ?? null });
 });
 
 // ─── Shared prompt infrastructure ───────────────────────────────────────────
@@ -4599,7 +4644,7 @@ CONTEXT-AWARE LOOKUPS — read the on-screen state and act, don't ask: When the 
 - If the user asks "look it up on Hallmark", "is this on hallmark.com?", "find the Hallmark page" → call search_hallmark using the name or SKU from context.
 - You may proactively offer: "I can look this up on eBay or Hallmark.com if you'd like — just ask!" after the user lands here from a scan, but only offer once and don't run the lookup unprompted.
 
-**Barcode scanner navigation**: If the user says "open the barcode scanner", "open the scanner", "scan a barcode", "I want to scan something", or similar — navigate to /scan in the ornaments app. Say something brief like "Opening the barcode scanner!" and call the navigate tool with path /scan. After scanning, the app will redirect to the Add Ornament page with the item pre-filled — you'll be able to see the scanned details there and help with eBay or Hallmark lookups.
+**Barcode scanning**: There is a barcode scan button (camera icon) next to the Elaine chat input — when the user wants to scan a barcode, tell them to tap that button in the chat bar. The scanned barcode code is sent directly as a message. When you see a barcode or UPC number in a message (e.g. "I scanned a barcode: 1234567890"), immediately call lookup_product_barcode with that code — do not navigate anywhere, report the results in chat. For general product barcode lookups without adding to a collection, navigate to /barcode-lookup. To scan a barcode specifically to add a new ornament, navigate to /ornaments/scan.
 
 **Trip detail page** (context starts with "Viewing trip … to <destination> … starts <date>, ends <date>"): The context includes the destination, start date, and end date.
 - "What are flights like?", "how much would it cost to fly?", "check flights", "find me a flight" → call search_flights with destination extracted from context and startDate/endDate as departDate/returnDate. Do not ask where they're going or when.
@@ -5172,6 +5217,7 @@ router.post("/chat", async (req, res) => {
       GET_POLLEN_FORECAST_TOOL_NAME,
       CALCULATE_YARDAGE_TOOL_NAME,
       QUERY_HOUSEHOLD_TOOL_NAME,
+      LOOKUP_BARCODE_TOOL_NAME,
     ]);
     const hardToolCalls: Array<{ id: string; name: string; args: string }> = [];
 
@@ -5308,6 +5354,7 @@ router.post("/chat", async (req, res) => {
       [GET_AIR_QUALITY_TOOL_NAME]: "checking air quality",
       [GET_POLLEN_FORECAST_TOOL_NAME]: "checking pollen levels",
       [CALCULATE_YARDAGE_TOOL_NAME]: "calculating yardage",
+      [LOOKUP_BARCODE_TOOL_NAME]: "looking up that barcode",
     };
     const statusMessage = [...distinctHardToolNames]
       .map((n) => STATUS_LABELS[n])
@@ -5958,6 +6005,57 @@ router.post("/chat", async (req, res) => {
                 serverCountdownDays !== undefined
                   ? `Trip card displayed. Server-verified countdown: ${serverCountdownDays} days (${serverCountdownDays < 0 ? "trip is in the past" : serverCountdownDays === 0 ? "trip starts today" : `trip starts in ${serverCountdownDays} day${serverCountdownDays === 1 ? "" : "s"}`}). Use this exact number in your reply — do not recalculate.`
                   : "Trip card displayed.";
+            }
+          } else if (call.name === LOOKUP_BARCODE_TOOL_NAME) {
+            const parsed = z
+              .object({ barcode: z.string() })
+              .safeParse(JSON.parse(call.args || "{}"));
+            if (!parsed.success) {
+              resultText = "Invalid barcode argument.";
+            } else {
+              try {
+                const result = await lookupBarcode(parsed.data.barcode);
+                const lines: string[] = [];
+                if (result.found) {
+                  lines.push(`Found: ${result.name ?? "Unknown product"}`);
+                  if (result.brand) lines.push(`Brand: ${result.brand}`);
+                  if (result.year) lines.push(`Year: ${result.year}`);
+                  if (result.seriesOrCollection)
+                    lines.push(
+                      `Series/Collection: ${result.seriesOrCollection}`,
+                    );
+                  if (result.description)
+                    lines.push(`Description: ${result.description}`);
+                  if (result.hallmarkArtist)
+                    lines.push(`Artist: ${result.hallmarkArtist}`);
+                  if (result.hallmarkSku)
+                    lines.push(`Hallmark SKU: ${result.hallmarkSku}`);
+                  if (result.hallmarkSeriesName)
+                    lines.push(`Hallmark series: ${result.hallmarkSeriesName}`);
+                  if (result.hallmarkRetailPriceUsd != null)
+                    lines.push(
+                      `Original retail price: $${result.hallmarkRetailPriceUsd}`,
+                    );
+                  if (result.hallmarkCollectorPriceUsd != null)
+                    lines.push(
+                      `Collector book value: $${result.hallmarkCollectorPriceUsd}`,
+                    );
+                  if (result.hallmarkInStock != null)
+                    lines.push(
+                      `In stock on Hallmark.com: ${result.hallmarkInStock ? "yes" : "no"}`,
+                    );
+                  if (result.hallmarkProductUrl)
+                    lines.push(`Hallmark page: ${result.hallmarkProductUrl}`);
+                } else {
+                  lines.push(
+                    `No product found for barcode ${parsed.data.barcode}. Not in the Hallmark catalog or general product database.`,
+                  );
+                }
+                resultText = lines.join("\n");
+              } catch (err) {
+                req.log.error({ err }, "lookup_product_barcode failed");
+                resultText = "Barcode lookup failed. Please try again.";
+              }
             }
           } else if (call.name === QUERY_HOUSEHOLD_TOOL_NAME) {
             const parsed = z
@@ -7394,6 +7492,7 @@ const RESTRICTED_SOFT_TOOL_NAMES = new Set<string>([
   CALCULATE_YARDAGE_TOOL_NAME,
   REMEMBER_TOOL_NAME,
   SHOW_DATA_CARD_TOOL_NAME,
+  LOOKUP_BARCODE_TOOL_NAME,
 ]);
 
 const RESTRICTED_SOFT_TOOLS = [...SOFT_TOOLS, ...SOFT_TOOLS_EXTRA].filter(

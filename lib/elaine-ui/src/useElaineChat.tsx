@@ -177,13 +177,27 @@ export function useElaineChat({
   }, [conversation, initialized, qc]);
 
   function handleNewConversation() {
-    setConversationId(null);
+    // Clear the UI immediately — don't wait for the server round-trip.
+    setMessages([]);
+    setPendingNavigate(null);
+    setPendingActions([]);
+    setExecutedActions([]);
+    setActionDone(false);
+    setMessageWidgets(new Map());
     setPendingAttachments([]);
+
     newConversation.mutate(undefined, {
       onSuccess: (result) => {
-        setMessages(result.messages);
-        setPendingNavigate(null);
-        qc.setQueryData(getGetElaineConversationQueryKey(), result);
+        // The server rotates the isWidgetDefault conversation and returns the
+        // new (empty) conversation's ID.  Pin conversationId to it so the next
+        // send goes to the fresh thread rather than the old rolling one.
+        setConversationId(result.conversationId ?? null);
+        qc.setQueryData(getGetElaineConversationQueryKey(), {
+          messages: [] as AssistantMessage[],
+        });
+        qc.invalidateQueries({
+          queryKey: getListElaineConversationsQueryKey(),
+        });
       },
     });
   }

@@ -1267,6 +1267,44 @@ components:
           type:
             - string
             - "null"
+        hallmarkSku:
+          type:
+            - string
+            - "null"
+        hallmarkArtist:
+          type:
+            - string
+            - "null"
+        hallmarkSeriesName:
+          type:
+            - string
+            - "null"
+        hallmarkSequenceNumber:
+          type:
+            - integer
+            - "null"
+        hallmarkRetailPriceUsd:
+          type:
+            - number
+            - "null"
+        hallmarkCollectorPriceUsd:
+          type:
+            - number
+            - "null"
+        hallmarkInStock:
+          type:
+            - boolean
+            - "null"
+        hallmarkImages:
+          type:
+            - array
+            - "null"
+          items:
+            type: string
+        hallmarkProductUrl:
+          type:
+            - string
+            - "null"
     BarcodePhotoInput:
       type: object
       required:

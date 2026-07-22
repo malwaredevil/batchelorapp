@@ -444,14 +444,16 @@ export async function streamElaineMessage(
 
 const newElaineConversationFn = (): Promise<{
   messages: AssistantMessage[];
+  conversationId?: number | null;
 }> =>
-  customFetch<{ messages: AssistantMessage[] }>("/api/elaine/conversation", {
-    method: "DELETE",
-  });
+  customFetch<{ messages: AssistantMessage[]; conversationId?: number | null }>(
+    "/api/elaine/conversation",
+    { method: "DELETE" },
+  );
 
 export function useNewElaineConversation(options?: {
   mutation?: UseMutationOptions<
-    { messages: AssistantMessage[] },
+    { messages: AssistantMessage[]; conversationId?: number | null },
     unknown,
     void
   >;

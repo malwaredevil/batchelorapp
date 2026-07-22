@@ -13,6 +13,7 @@
     "@radix-ui/react-switch": "^1.1.4",
     "@workspace/api-client-react": "workspace:*",
     "@workspace/web-core": "workspace:*",
+    "@zxing/library": "^0.21.3",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
     "html2canvas": "^1.4.1",

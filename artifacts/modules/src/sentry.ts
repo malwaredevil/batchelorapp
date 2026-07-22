@@ -1,8 +1,5 @@
 import * as Sentry from "@sentry/react";
 
-// Browser-side Sentry error monitoring.
-// Only activates in production builds (import.meta.env.PROD = true).
-// A missing or empty DSN is a silent no-op — safe to deploy without it.
 const dsn = import.meta.env.VITE_SENTRY_DSN as string | undefined;
 const release = import.meta.env.VITE_APP_VERSION as string | undefined;
 
@@ -14,10 +11,21 @@ if (dsn && import.meta.env.PROD) {
     integrations: [
       Sentry.browserTracingIntegration(),
       Sentry.replayIntegration(),
+      // Captures failed HTTP requests (4xx/5xx from fetch/XHR) as Sentry events
+      Sentry.httpClientIntegration(),
+      // Floating "Report a Bug" widget — lets household members flag issues directly
+      Sentry.feedbackIntegration({
+        colorScheme: "system",
+        showBranding: false,
+        triggerLabel: "Report a bug",
+        formTitle: "Report a Bug",
+        submitButtonLabel: "Send Report",
+      }),
     ],
-    tracesSampleRate: 0.1,
-    // Don't capture normal session replays — only capture when an error occurs
-    // (uses the 50 free replays/month on the Sentry Developer plan).
+    // 100% trace sample rate — single-household app, very low traffic.
+    // Captures every page load / navigation / API call for full performance visibility.
+    tracesSampleRate: 1.0,
+    // Replays: only on errors (50 free/month on Developer plan, 0 wasted on routine visits)
     replaysSessionSampleRate: 0,
     replaysOnErrorSampleRate: 1.0,
   });

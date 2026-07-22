@@ -3,14 +3,12 @@ name: Dependabot auto-merge
 on:
   pull_request_target:
 
-# Minimal permissions: metadata read is needed by fetch-metadata; contents +
-# pull-requests write are needed only in the auto-merge step.  The checkout
-# step was removed — it is not needed for a workflow that only calls the gh
-# CLI and the GitHub REST API.
+# Minimal permissions for this workflow: contents + pull-requests write are
+# needed for the auto-merge step. fetch-metadata reads from the event payload
+# and does not require a separate metadata permission.
 permissions:
   contents: write
   pull-requests: write
-  metadata: read
 
 jobs:
   auto-merge:

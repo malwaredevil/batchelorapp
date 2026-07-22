@@ -49,6 +49,14 @@ export const appUsers = pgTable("app_users", {
   // outbound SMS send path (verification code, test SMS, reminder alerts)
   // must skip this number. Cleared when the number replies START/UNSTOP/YES.
   smsOptedOutAt: timestamp("sms_opted_out_at", { withTimezone: true }),
+  // A2P 10DLC first-message compliance: timestamp of the first successfully
+  // sent outbound SMS to this number (non-compliance messages only — STOP/
+  // HELP/START responses are exempted). Once set, the per-carrier required
+  // compliance header (brand + opt-in confirmation + STOP instructions) is
+  // no longer prepended to outbound messages sent to this number.
+  smsFirstOutboundSentAt: timestamp("sms_first_outbound_sent_at", {
+    withTimezone: true,
+  }),
   // Slack user ID (e.g. "U1234567890") for the Elaine Slack bot. Used to
   // route inbound DMs and deliver reminder notifications via Slack DM.
   // Set automatically on first DM via Slack email-address lookup, or

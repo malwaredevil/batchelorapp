@@ -352,6 +352,10 @@ export async function streamElaineMessage(
     attachmentPdfs?: Array<{ url: string; name: string; extractedText?: string }>;
     /** Auto-captured page screenshot URL — sent to model for visual context but not persisted. */
     pageScreenshotUrl?: string;
+    /** User's current latitude (from navigator.geolocation) — enables location-aware queries. */
+    userLat?: number;
+    /** User's current longitude (from navigator.geolocation) — enables location-aware queries. */
+    userLng?: number;
   },
   callbacks: AssistantChatStreamCallbacks = {},
   signal?: AbortSignal,

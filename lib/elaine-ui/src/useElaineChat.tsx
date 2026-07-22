@@ -90,6 +90,11 @@ export function useElaineChat({
   const bgScreenshotUrlRef = useRef<string | null>(null);
   const bgCapturingRef = useRef(false);
 
+  // User's current geolocation — collected once per session when chat opens.
+  // Enables location-aware queries (nearby places, weather, directions) without
+  // asking the user to type their city. Optional — silently skipped on denial.
+  const geoRef = useRef<{ lat: number; lng: number } | null>(null);
+
   const captureBgScreenshot = useCallback(async () => {
     if (bgCapturingRef.current) return;
     bgCapturingRef.current = true;
@@ -119,6 +124,22 @@ export function useElaineChat({
     }
   }, []);
 
+  // Collect geolocation once per session when chat opens. 10 s browser timeout,
+  // 5 min cached position acceptable. Silently skipped on denial or unavailable.
+  const captureGeo = useCallback(() => {
+    if (!navigator.geolocation || geoRef.current) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        geoRef.current = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        };
+      },
+      () => {}, // silently ignore — geolocation is optional context
+      { timeout: 10000, maximumAge: 5 * 60 * 1000 },
+    );
+  }, []);
+
   // Capture a fresh screenshot whenever the chat becomes active, and keep it
   // current while the panel is open: re-capture on scroll (debounced 1.5 s so
   // it doesn't thrash during fast scrolling) and on any URL change (SPA
@@ -127,6 +148,7 @@ export function useElaineChat({
     if (!active) return;
 
     void captureBgScreenshot();
+    captureGeo();
 
     let scrollTimer: ReturnType<typeof setTimeout> | null = null;
     const onScroll = () => {
@@ -153,7 +175,7 @@ export function useElaineChat({
       // Restore the original pushState when the panel closes.
       history.pushState = origPush;
     };
-  }, [active, captureBgScreenshot]);
+  }, [active, captureBgScreenshot, captureGeo]);
 
   const { data: settings } = useGetElaineSettings();
   const updateSettings = useUpdateElaineSettings();
@@ -361,6 +383,9 @@ export function useElaineChat({
             : {}),
           ...(uploadedPdfs.length > 0 ? { attachmentPdfs: uploadedPdfs } : {}),
           ...(pageScreenshotUrl ? { pageScreenshotUrl } : {}),
+          ...(geoRef.current
+            ? { userLat: geoRef.current.lat, userLng: geoRef.current.lng }
+            : {}),
         },
         {
           onDelta: (text) => {

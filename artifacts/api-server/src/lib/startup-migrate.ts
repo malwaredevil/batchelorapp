@@ -80,6 +80,12 @@ export async function runStartupMigration(): Promise<void> {
 
   try {
     await client.query("BEGIN");
+    // Bound how long any single DDL statement waits for a table lock.
+    // ALTER TABLE on a busy table can hang indefinitely otherwise — 5 s
+    // is plenty for an uncontested schema change; if locked it fails fast
+    // and the server still starts (catch below logs and continues).
+    await client.query("SET LOCAL lock_timeout = '5s'");
+    await client.query("SET LOCAL statement_timeout = '10s'");
     for (const statement of STATEMENTS) {
       await client.query(statement);
     }

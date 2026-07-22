@@ -16,7 +16,7 @@ interface AgentPhoneListResponse {
 }
 
 // AgentPhone has exactly one provisioned number for this workspace
-// (+14785518975 at time of writing). We look it up lazily (and cache it)
+// (+19385292547 at time of writing). We look it up lazily (and cache it)
 // rather than hardcoding it, so a future re-provision doesn't require a
 // code change.
 async function getFromNumber(): Promise<string> {
@@ -89,24 +89,32 @@ export class SmsOptedOutError extends Error {
   }
 }
 
-// Single choke point for opted-out enforcement: every existing send path
-// (verification code, test SMS, reminder alerts) already goes through
-// sendSms, so checking here covers all of them without touching each call
-// site. `bypassOptOutCheck` exists ONLY for the two compliance-required
-// replies the webhook itself sends in response to STOP/HELP (a carrier-
-// mandated confirmation must go out even to an already-opted-out number) —
-// never pass it from anywhere else.
+// Single choke point for opted-out enforcement and A2P 10DLC first-message
+// compliance. Every existing send path (verification code, test SMS, reminder
+// alerts, Elaine responses) goes through sendSms.
+//
+// `bypassOptOutCheck` is ONLY for carrier-mandated STOP/HELP/START compliance
+// responses — those must go out regardless of opt-out state and already
+// contain brand name + STOP instructions, so they also bypass the first-
+// message compliance header. Never pass it from any other call site.
 export async function sendSms(
   toNumber: string,
   body: string,
   options?: { bypassOptOutCheck?: boolean },
 ): Promise<void> {
-  if (!options?.bypassOptOutCheck) {
+  const isComplianceReply = options?.bypassOptOutCheck === true;
+
+  let isFirstMessage = false;
+  if (!isComplianceReply) {
     const [recipient] = await db
-      .select({ smsOptedOutAt: appUsers.smsOptedOutAt })
+      .select({
+        smsOptedOutAt: appUsers.smsOptedOutAt,
+        smsFirstOutboundSentAt: appUsers.smsFirstOutboundSentAt,
+      })
       .from(appUsers)
       .where(eq(appUsers.phoneNumber, toNumber))
       .limit(1);
+
     if (recipient?.smsOptedOutAt) {
       logger.info(
         { toNumber },
@@ -114,14 +122,25 @@ export async function sendSms(
       );
       throw new SmsOptedOutError();
     }
+
+    isFirstMessage = !recipient?.smsFirstOutboundSentAt;
   }
+
+  // A2P 10DLC first-message requirement: the very first outbound SMS to any
+  // contact must include (1) brand name, (2) opt-in confirmation, and
+  // (3) opt-out instructions. Prepend a short compliance banner so the
+  // required elements are always present regardless of the message content.
+  const messageBody = isFirstMessage
+    ? `Batchelor App: You're opted in to receive household notifications. Msg & data rates may apply. Reply STOP to unsubscribe, HELP for info.\n\n${body}`
+    : body;
+
   const from = await getFromNumber();
   const response = await connectors.proxy("agentphone", "/v1/messages", {
     method: "POST",
     body: {
       to_number: toNumber,
       from_number: from,
-      body,
+      body: messageBody,
     },
   });
   if (!response.ok) {
@@ -134,5 +153,21 @@ export async function sendSms(
       throw new SmsRegistrationPendingError();
     }
     throw new Error(`Failed to send SMS (status ${response.status})`);
+  }
+
+  // Record the first outbound timestamp so subsequent messages skip the
+  // compliance header. Fire-and-forget: a failure here is non-critical
+  // (the worst case is we prepend the header again on the next send).
+  if (isFirstMessage) {
+    await db
+      .update(appUsers)
+      .set({ smsFirstOutboundSentAt: new Date() })
+      .where(eq(appUsers.phoneNumber, toNumber))
+      .catch((err) =>
+        logger.error(
+          { err, toNumber },
+          "agentphone: failed to record first outbound SMS timestamp",
+        ),
+      );
   }
 }

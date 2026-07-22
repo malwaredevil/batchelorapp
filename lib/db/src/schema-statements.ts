@@ -1090,6 +1090,10 @@ export const STATEMENTS: string[] = [
   // UNSUBSCRIBE/CANCEL/END/QUIT via the AgentPhone webhook; cleared on
   // START/UNSTOP/YES. Every outbound SMS send path must skip a set number.
   `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS sms_opted_out_at TIMESTAMPTZ`,
+  // A2P 10DLC first-message compliance: set on the first successfully sent
+  // outbound SMS (non-compliance only). Once set, the mandatory compliance
+  // header (brand + opt-in confirmation + STOP instructions) is not prepended.
+  `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS sms_first_outbound_sent_at TIMESTAMPTZ`,
   // Enforce uniqueness on verified phone numbers so that no two accounts can
   // share the same number. The AgentPhone webhook resolves household identity
   // purely by matching the caller's number against this column — duplicates

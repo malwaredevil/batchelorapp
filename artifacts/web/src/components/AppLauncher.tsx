@@ -880,9 +880,15 @@ export function AppLauncher() {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
+  const nextTrip = travelsStatsData?.nextTrip;
   usePageAssistantContext(
     "hub-launcher",
-    `On the app launcher (the Batchelor hub home page) — lets the household pick which app to open: Pottery (${potteryStatsData?.totalItems ?? "?"} items), Quilting (${quiltingStatsData?.totalFabrics ?? "?"} fabrics), or Travels (${travelsStatsData?.totalTrips ?? "?"} trips). ${totalCount} widget(s) are shown on the dashboard.`,
+    [
+      `On the app launcher (the Batchelor hub home page) — lets the household pick which app to open: Pottery (${potteryStatsData?.totalItems ?? "?"} items), Quilting (${quiltingStatsData?.totalFabrics ?? "?"} fabrics), or Travels (${travelsStatsData?.totalTrips ?? "?"} trips). ${totalCount} widget(s) are shown on the dashboard.`,
+      nextTrip
+        ? `Next upcoming trip: "${nextTrip.title}" to ${nextTrip.destination}${nextTrip.startDate ? `, starting ${nextTrip.startDate}` : ""}${nextTrip.endDate ? ` to ${nextTrip.endDate}` : ""} (status: ${nextTrip.status}, tripId: ${nextTrip.id})`
+        : "No upcoming trips currently planned.",
+    ].join(" "),
   );
 
   type CardCfg = {

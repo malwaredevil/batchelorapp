@@ -15,6 +15,8 @@ import {
   ChevronDown,
   ChevronUp,
   Search,
+  ScrollText,
+  RefreshCw,
 } from "lucide-react";
 import {
   useListElaineMemory,
@@ -436,7 +438,10 @@ export default function Memory() {
   );
   const [showAdd, setShowAdd] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [clearingSum, setClearingSum] = useState(false);
+  const deleteMemory = useDeleteElaineMemoryItem();
 
+  const summary = memory.find((m) => m.type === "summary") ?? null;
   const facts = memory.filter((m) => m.type !== "summary");
 
   const filtered = facts.filter((m) => {
@@ -449,6 +454,24 @@ export default function Memory() {
 
   function refresh() {
     qc.invalidateQueries({ queryKey: getListElaineMemoryQueryKey() });
+  }
+
+  function handleClearSummary() {
+    if (!summary) return;
+    setClearingSum(true);
+    deleteMemory.mutate(summary.id, {
+      onSuccess: () => {
+        toast.success(
+          "Memory summary cleared — it will rebuild from your next conversation",
+        );
+        refresh();
+        setClearingSum(false);
+      },
+      onError: () => {
+        toast.error("Failed to clear summary");
+        setClearingSum(false);
+      },
+    });
   }
 
   const householdCount = facts.filter((m) => m.scope === "household").length;
@@ -478,6 +501,57 @@ export default function Memory() {
           Add
         </Button>
       </div>
+
+      {/* ── Conversation Summary ── */}
+      {!isLoading && (
+        <div className="rounded-xl border border-card-border bg-card overflow-hidden">
+          <div className="flex items-center gap-2.5 px-4 pt-4 pb-3 border-b border-card-border">
+            <ScrollText className="h-4 w-4 text-primary shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-foreground">
+                Conversation Summary
+              </p>
+              <p className="text-xs text-muted-foreground">
+                A rolling portrait of your household — updated automatically
+                after every conversation
+              </p>
+            </div>
+            {summary && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-muted-foreground hover:text-destructive gap-1 shrink-0"
+                onClick={handleClearSummary}
+                disabled={clearingSum}
+                title="Clear summary — Elaine will rebuild it from scratch"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Clear
+              </Button>
+            )}
+          </div>
+          <div className="px-4 py-4">
+            {summary ? (
+              <div className="space-y-2">
+                <p className="text-sm text-foreground leading-relaxed">
+                  {summary.content}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Last updated {formatRelative(summary.updatedAt)}
+                </p>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Clock className="h-4 w-4 shrink-0" />
+                <span>
+                  No summary yet — it builds up automatically as you chat with{" "}
+                  <ElaineName />.
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-3">
         {[

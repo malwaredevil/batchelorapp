@@ -119,11 +119,6 @@ const EXCLUDED_PREFIXES = [
   // Husky-generated wrapper scripts — auto-generated, not authored, gitignored locally.
   // The custom sync does not honour .gitignore, so exclude explicitly.
   ".husky/_/",
-  // orval-generated Zod schemas — orval runs clean:true so these are wiped and
-  // regenerated on every codegen invocation; committing them causes constant churn
-  // and large diffs. The package is consumed via compiled declarations, so the
-  // generated source files do not need to live in the public repo.
-  "lib/api-zod/src/generated/",
 ];
 const EXCLUDED_EXACT = [
   // Security: threat model contains internal architecture details
@@ -293,13 +288,16 @@ async function main() {
       deletedFiles.push(ghPath);
     }
   }
-  if (deletedFiles.length > MAX_DELETIONS) {
+  if (deletedFiles.length > MAX_DELETIONS && !confirmDeletions) {
     console.error(
       `\n🚫 ABORTED: ${deletedFiles.length} files would be deleted from GitHub, which exceeds the ` +
         `safety cap of ${MAX_DELETIONS}. This usually means an exclusion list entry is wrong.\n` +
         `Files to delete:\n` +
         deletedFiles.map((f) => `  ${f}`).join("\n") +
-        `\nReview EXCLUDED_PREFIXES/EXCLUDED_EXACT and re-run.`,
+        `\nReview EXCLUDED_PREFIXES/EXCLUDED_EXACT and re-run.` +
+        `\nIf the deletions are intentional (e.g. a large-scale rename or generated-file cleanup),` +
+        `\nre-run with --confirm-deletions to bypass this cap:\n` +
+        `  pnpm --filter @workspace/scripts run github-sync "${commitMessage}" --confirm-deletions`,
     );
     process.exit(1);
   }

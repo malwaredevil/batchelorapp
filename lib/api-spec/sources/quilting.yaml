@@ -2423,6 +2423,10 @@ components:
           type: string
           nullable: true
           description: "Birthday as MM-DD (e.g. 03-15 for March 15th). Year is omitted."
+        slackUserId:
+          type: string
+          nullable: true
+          description: "Slack member ID used to deliver reminder DMs and enable the Elaine Slack bot."
 
     UpdateAccountInput:
       type: object
@@ -2438,6 +2442,10 @@ components:
           type: string
           nullable: true
           description: "Birthday as MM-DD (e.g. 03-15 for March 15th). Year is omitted."
+        slackUserId:
+          type: string
+          nullable: true
+          description: "Slack member ID used to deliver reminder DMs and enable the Elaine Slack bot."
 
     SendPhoneCodeInput:
       type: object

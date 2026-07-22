@@ -40,7 +40,8 @@ export const LoginResponse = zod.object({
   "isOwner": zod.boolean().optional(),
   "phoneNumber": zod.string().nullish(),
   "phoneVerified": zod.boolean().optional(),
-  "birthday": zod.string().nullish().describe('Birthday as MM-DD (e.g. 03-15 for March 15th). Year is omitted.')
+  "birthday": zod.string().nullish().describe('Birthday as MM-DD (e.g. 03-15 for March 15th). Year is omitted.'),
+  "slackUserId": zod.string().nullish().describe('Slack member ID used to deliver reminder DMs and enable the Elaine Slack bot.')
 })
 
 
@@ -55,7 +56,8 @@ export const GetCurrentUserResponse = zod.object({
   "isOwner": zod.boolean().optional(),
   "phoneNumber": zod.string().nullish(),
   "phoneVerified": zod.boolean().optional(),
-  "birthday": zod.string().nullish().describe('Birthday as MM-DD (e.g. 03-15 for March 15th). Year is omitted.')
+  "birthday": zod.string().nullish().describe('Birthday as MM-DD (e.g. 03-15 for March 15th). Year is omitted.'),
+  "slackUserId": zod.string().nullish().describe('Slack member ID used to deliver reminder DMs and enable the Elaine Slack bot.')
 })
 
 
@@ -65,7 +67,8 @@ export const GetCurrentUserResponse = zod.object({
 export const UpdateCurrentUserBody = zod.object({
   "displayName": zod.string().nullish(),
   "themePreference": zod.enum(['light', 'dark']).nullish(),
-  "birthday": zod.string().nullish().describe('Birthday as MM-DD (e.g. 03-15 for March 15th). Year is omitted.')
+  "birthday": zod.string().nullish().describe('Birthday as MM-DD (e.g. 03-15 for March 15th). Year is omitted.'),
+  "slackUserId": zod.string().nullish().describe('Slack member ID used to deliver reminder DMs and enable the Elaine Slack bot.')
 })
 
 export const UpdateCurrentUserResponse = zod.object({
@@ -76,7 +79,8 @@ export const UpdateCurrentUserResponse = zod.object({
   "isOwner": zod.boolean().optional(),
   "phoneNumber": zod.string().nullish(),
   "phoneVerified": zod.boolean().optional(),
-  "birthday": zod.string().nullish().describe('Birthday as MM-DD (e.g. 03-15 for March 15th). Year is omitted.')
+  "birthday": zod.string().nullish().describe('Birthday as MM-DD (e.g. 03-15 for March 15th). Year is omitted.'),
+  "slackUserId": zod.string().nullish().describe('Slack member ID used to deliver reminder DMs and enable the Elaine Slack bot.')
 })
 
 
@@ -134,7 +138,8 @@ export const VerifyPhoneCodeResponse = zod.object({
   "isOwner": zod.boolean().optional(),
   "phoneNumber": zod.string().nullish(),
   "phoneVerified": zod.boolean().optional(),
-  "birthday": zod.string().nullish().describe('Birthday as MM-DD (e.g. 03-15 for March 15th). Year is omitted.')
+  "birthday": zod.string().nullish().describe('Birthday as MM-DD (e.g. 03-15 for March 15th). Year is omitted.'),
+  "slackUserId": zod.string().nullish().describe('Slack member ID used to deliver reminder DMs and enable the Elaine Slack bot.')
 })
 
 

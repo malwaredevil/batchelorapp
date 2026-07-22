@@ -17,4 +17,6 @@ export interface AuthUser {
   phoneVerified?: boolean;
   /** Birthday as MM-DD (e.g. 03-15 for March 15th). Year is omitted. */
   birthday?: string | null;
+  /** Slack member ID used to deliver reminder DMs and enable the Elaine Slack bot. */
+  slackUserId?: string | null;
 }

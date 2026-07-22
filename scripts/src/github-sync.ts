@@ -134,6 +134,19 @@ const ALLOWED_DOT_NAMES = new Set([
   ".gitignore",
   ".husky", // git hook scripts
   ".vscode", // shared editor settings
+  ".npmrc", // pnpm workspace config (catalog, strict-peer-deps)
+  ".prettierrc", // prettier format config
+  ".prettierignore", // prettier exclusions
+  ".lintstagedrc.json", // lint-staged config (pre-commit hook)
+  ".editorconfig", // editor indent/whitespace config
+]);
+// Dotfile directories that are Replit-internal and must never appear on GitHub.
+// These are skipped by collectFiles (dotfile guard) so they never appear in
+// localFiles, but they CAN appear in ghShaMap if previously pushed by another
+// tool. Marking them here prevents the deletion logic from queuing them as
+// "legitimate deletions" (they're not managed by this script at all).
+const EXCLUDED_DOT_DIRS = new Set([
+  ".replit-artifact", // Replit proxy routing config — Replit-internal
 ]);
 // Binary/media files — large and not meaningful to diff
 const EXCLUDED_EXTENSIONS = new Set([
@@ -163,6 +176,11 @@ function isExcluded(filePath: string): boolean {
   // Also exclude nested node_modules/ and dist/ directories (e.g. lib/ui/node_modules/, artifacts/api-server/dist/)
   if (filePath.includes("/node_modules/") || filePath.includes("/dist/"))
     return true;
+  // Exclude paths containing Replit-internal dotdirs that are never collected
+  // by collectFiles. This prevents the deletion logic from treating them as
+  // "deleted locally" (they were never managed by this script to begin with).
+  const segments = filePath.split("/");
+  if (segments.some((seg) => EXCLUDED_DOT_DIRS.has(seg))) return true;
   const ext = path.extname(filePath).toLowerCase();
   return EXCLUDED_EXTENSIONS.has(ext);
 }

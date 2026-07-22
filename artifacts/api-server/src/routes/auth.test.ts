@@ -11,7 +11,7 @@
  * email, rate-limiters, etc.) are all mocked so no live database is required.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 import express, {
   type Express,
   type Request,
@@ -234,14 +234,28 @@ function injectSession(
 // App factory
 // ---------------------------------------------------------------------------
 
+// Cached router — populated once in beforeAll so that the first dynamic
+// import of "./auth" runs after every vi.mock() factory is in place.
+// A bare `await import("./auth")` inside buildApp() on the very first call
+// would see the real @workspace/db Pool (created by importOriginal()) try to
+// connect, timing out after connectionTimeoutMillis (5 s) and failing test 1.
+// Using beforeAll to pre-warm the import means the mock is already in the
+// ESM registry by the time individual tests call buildApp().
+import type { IRouter } from "express";
+let authRouter: IRouter;
+
+beforeAll(async () => {
+  const mod = await import("./auth");
+  authRouter = mod.default;
+});
+
 async function buildApp(
   sessionOpts: { maxAge?: number; expires?: Date } = {},
 ): Promise<Express> {
-  const { default: router } = await import("./auth");
   const app = express();
   app.use(express.json());
   app.use(injectSession(4, sessionOpts));
-  app.use("/api", router);
+  app.use("/api", authRouter);
   return app;
 }
 

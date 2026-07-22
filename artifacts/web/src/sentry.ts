@@ -13,14 +13,6 @@ if (dsn && import.meta.env.PROD) {
       Sentry.replayIntegration(),
       // Captures failed HTTP requests (4xx/5xx from fetch/XHR) as Sentry events
       Sentry.httpClientIntegration(),
-      // Floating "Report a Bug" widget — lets household members flag issues directly
-      Sentry.feedbackIntegration({
-        colorScheme: "system",
-        showBranding: false,
-        triggerLabel: "Report a bug",
-        formTitle: "Report a Bug",
-        submitButtonLabel: "Send Report",
-      }),
     ],
     // 100% trace sample rate — single-household app, very low traffic.
     // Captures every page load / navigation / API call for full performance visibility.

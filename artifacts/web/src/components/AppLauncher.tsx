@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Search,
   Plus,
@@ -70,6 +70,7 @@ import {
   useListConnectedCalendars,
   useListConnectedCalendarEvents,
   getListConnectedCalendarEventsQueryKey,
+  useListAllConnectedCalendarEvents,
   useGetElaineNudgesUnseenCount,
   useListElaineMemory,
 } from "@workspace/api-client-react";
@@ -661,29 +662,6 @@ function HallmarkEventStatTile() {
   );
 }
 
-// Loads upcoming (next 30 days) event count for a single connected calendar
-// and reports it up to the parent. Kept as its own component (rather than a
-// hook called in a loop) so each connected calendar can independently call
-// useListConnectedCalendarEvents — mirrors the CalendarEventsLoader pattern
-// used on Office's own calendar page.
-function UpcomingCalendarEventsLoader({
-  calendarId,
-  start,
-  end,
-  onCount,
-}: {
-  calendarId: number;
-  start: string;
-  end: string;
-  onCount: (calendarId: number, count: number) => void;
-}) {
-  const { data } = useListConnectedCalendarEvents(calendarId, start, end);
-  useEffect(() => {
-    onCount(calendarId, data?.length ?? 0);
-  }, [calendarId, data, onCount]);
-  return null;
-}
-
 // ── Main ──────────────────────────────────────────────────────────────────────
 export function AppLauncher() {
   const { isDark, toggleTheme } = useTheme();
@@ -738,20 +716,14 @@ export function AppLauncher() {
     () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     [],
   );
-  const [upcomingEventsByCalendar, setUpcomingEventsByCalendar] = useState<
-    Record<number, number>
-  >({});
-  const handleUpcomingEventsCount = useCallback(
-    (calendarId: number, count: number) => {
-      setUpcomingEventsByCalendar((prev) =>
-        prev[calendarId] === count ? prev : { ...prev, [calendarId]: count },
-      );
-    },
-    [],
+  const { data: allCalendarEventsData } = useListAllConnectedCalendarEvents(
+    upcomingEventsRangeStart,
+    upcomingEventsRangeEnd,
   );
-  const upcomingEventsTotal = (connectedCalendarsData ?? []).length
-    ? Object.values(upcomingEventsByCalendar).reduce((a, b) => a + b, 0)
-    : null;
+  const upcomingEventsTotal =
+    (connectedCalendarsData ?? []).length > 0
+      ? (allCalendarEventsData?.length ?? null)
+      : null;
 
   function liveStats(
     appId: string,
@@ -976,15 +948,6 @@ export function AppLauncher() {
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans flex flex-col overflow-x-hidden">
-      {(connectedCalendarsData ?? []).map((cal) => (
-        <UpcomingCalendarEventsLoader
-          key={cal.id}
-          calendarId={cal.id}
-          start={upcomingEventsRangeStart}
-          end={upcomingEventsRangeEnd}
-          onCount={handleUpcomingEventsCount}
-        />
-      ))}
       {/* Header — max-w-6xl matches pottery/quilting shells */}
       <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">

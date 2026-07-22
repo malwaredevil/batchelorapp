@@ -1673,6 +1673,42 @@ export function useListConnectedCalendarEvents<TData = TravelCalendarEvent[], TE
   return { ...query, queryKey: queryOpts.queryKey };
 }
 
+const listAllConnectedCalendarEvents = (
+  start: string,
+  end: string,
+  options?: RequestInit,
+): Promise<TravelCalendarEvent[]> =>
+  customFetch<TravelCalendarEvent[]>(
+    `/api/travels/connected-calendars/all-events?${new URLSearchParams({ start, end }).toString()}`,
+    { ...options, method: "GET" },
+  );
+
+export const getListAllConnectedCalendarEventsQueryKey = (start: string, end: string) =>
+  [`/api/travels/connected-calendars/all-events`, start, end] as const;
+
+export function useListAllConnectedCalendarEvents<
+  TData = TravelCalendarEvent[],
+  TError = unknown,
+>(
+  start: string,
+  end: string,
+  options?: { query?: UseQueryOptions<TravelCalendarEvent[], TError, TData> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey =
+    queryOptions?.queryKey ?? getListAllConnectedCalendarEventsQueryKey(start, end);
+  const queryFn: QueryFunction<TravelCalendarEvent[]> = ({ signal }) =>
+    listAllConnectedCalendarEvents(start, end, { signal });
+  const queryOpts = {
+    queryKey,
+    queryFn,
+    enabled: Boolean(start && end),
+    ...queryOptions,
+  } as UseQueryOptions<TravelCalendarEvent[], TError, TData> & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
 const postConnectedCalendarEventFn = (
   id: number,
   body: TravelCalendarEventInput,

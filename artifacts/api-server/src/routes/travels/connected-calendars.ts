@@ -236,6 +236,63 @@ const EventsQuery = z.object({
   end: z.string().min(1),
 });
 
+// GET /connected-calendars/all-events?start=ISO&end=ISO — events across ALL
+// of the current user's connected calendars in a single request. Used by the
+// Hub launcher to show an upcoming-events count without making one API call
+// per calendar (N+1 pattern). Events from calendars that fail to load are
+// silently omitted — the batch still succeeds for the other calendars.
+// NOTE: this route MUST be declared before /:id/events so Express doesn't
+// match the literal string "all-events" as the :id param.
+router.get("/connected-calendars/all-events", requireAuth, async (req, res) => {
+  const userId = req.session.userId!;
+  const parsed = EventsQuery.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: "start and end query params are required." });
+    return;
+  }
+
+  const calendars = await db
+    .select()
+    .from(travelsConnectedCalendars)
+    .where(eq(travelsConnectedCalendars.userId, userId))
+    .orderBy(travelsConnectedCalendars.id);
+
+  if (calendars.length === 0) {
+    res.json([]);
+    return;
+  }
+
+  const accessToken = await getValidAccessToken(userId);
+  if (!accessToken) {
+    res.status(502).json({ error: "Could not connect to Google Calendar." });
+    return;
+  }
+
+  const results = await Promise.allSettled(
+    calendars.map((cal) =>
+      listCalendarEvents(
+        accessToken,
+        cal.googleCalendarId,
+        parsed.data.start,
+        parsed.data.end,
+      ),
+    ),
+  );
+
+  const events = results.flatMap((r, i) => {
+    if (r.status === "rejected") {
+      logger.warn(
+        { calendarId: calendars[i]?.id, reason: r.reason },
+        "connected-calendars/all-events: skipping calendar that failed to load",
+      );
+      return [];
+    }
+    return r.value;
+  });
+
+  res.json(events);
+});
+
 // GET /connected-calendars/:id/events?start=ISO&end=ISO — events on one of
 // the current user's own connected calendars, for the overlay UI. (The
 // shared Travel calendar's events are served separately by

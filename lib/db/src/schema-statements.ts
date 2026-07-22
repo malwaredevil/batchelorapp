@@ -2767,4 +2767,37 @@ export const STATEMENTS: string[] = [
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
   )`,
   `ALTER TABLE elaine_slack_conversations ENABLE ROW LEVEL SECURITY`,
+
+  // ── Per-recipient reminder alert delivery tracking ──────────────────────────
+  // One row per (reminder, alert_type, channel, recipient_key) delivery attempt.
+  // Enables per-recipient retry and ensures the DB client is held only for the
+  // short "collect work items" and "record results" phases — not during the
+  // external-I/O send phase.  recipient_key is the email address, E.164 phone
+  // number, or Slack user ID depending on channel.  The UNIQUE constraint makes
+  // UPSERT-based deduplication safe across concurrent scheduler processes.
+  `CREATE TABLE IF NOT EXISTS travels_reminder_alert_deliveries (
+    id                 SERIAL      PRIMARY KEY,
+    reminder_id        INTEGER     NOT NULL,
+    user_id            INTEGER     NOT NULL,
+    alert_type         TEXT        NOT NULL,
+    channel            TEXT        NOT NULL,
+    recipient_key      TEXT        NOT NULL,
+    status             TEXT        NOT NULL DEFAULT 'pending',
+    attempt_count      INTEGER     NOT NULL DEFAULT 0,
+    next_attempt_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    claimed_at         TIMESTAMPTZ,
+    claim_expires_at   TIMESTAMPTZ,
+    sent_at            TIMESTAMPTZ,
+    provider_message_id TEXT,
+    last_error         TEXT,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (reminder_id, alert_type, channel, recipient_key)
+  )`,
+  `ALTER TABLE travels_reminder_alert_deliveries ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travels_reminder_alert_deliveries_reminder_id_idx
+     ON travels_reminder_alert_deliveries (reminder_id)`,
+  `CREATE INDEX IF NOT EXISTS travels_reminder_alert_deliveries_status_next_attempt_idx
+     ON travels_reminder_alert_deliveries (status, next_attempt_at)
+     WHERE status IN ('pending', 'retryable')`,
 ];

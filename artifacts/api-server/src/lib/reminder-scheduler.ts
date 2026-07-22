@@ -57,6 +57,73 @@ export function daysUntilDue(dueDate: string, now: Date = new Date()): number {
   return Math.round((dueMidnightUtc - nowMidnightUtc) / 86_400_000);
 }
 
+// ---------------------------------------------------------------------------
+// Work-item types
+// ---------------------------------------------------------------------------
+
+type EmailWorkItem = {
+  channel: "email";
+  reminderId: number;
+  userId: number;
+  alertType: ReminderAlertType;
+  toEmail: string;
+  reminderTitle: string;
+  tripTitle: string;
+  tripDestination: string;
+  dueDate: string;
+};
+
+type SmsWorkItem = {
+  channel: "sms";
+  reminderId: number;
+  userId: number;
+  alertType: ReminderAlertType;
+  toPhone: string;
+  reminderTitle: string;
+  tripTitle: string;
+  tripDestination: string;
+  label: string;
+  formattedDate: string;
+};
+
+type SlackWorkItem = {
+  channel: "slack";
+  reminderId: number;
+  userId: number;
+  alertType: ReminderAlertType;
+  toSlackUserId: string;
+  reminderTitle: string;
+  tripTitle: string;
+  tripDestination: string;
+  label: string;
+  formattedDate: string;
+};
+
+type WorkItem = EmailWorkItem | SmsWorkItem | SlackWorkItem;
+
+type WorkResult =
+  | { item: WorkItem; success: true }
+  | { item: WorkItem; success: false; error: unknown };
+
+// ---------------------------------------------------------------------------
+// Public entry point
+// ---------------------------------------------------------------------------
+
+/**
+ * Sends reminder alert emails/SMS/Slack DMs for any (reminder, alert_type)
+ * whose alertDaysBefore matches today.
+ *
+ * Redesigned in three phases so the pool client is never held open during
+ * external-I/O operations (Resend, AgentPhone SMS, Slack API):
+ *
+ *   Phase 1  — short DB hold: query due reminders + pre-fetch phone/Slack
+ *              lookups, build a typed work-item list, release the client.
+ *
+ *   Phase 2  — no DB held: execute each send independently; collect results.
+ *
+ *   Phase 3  — short DB hold: record per-recipient delivery rows plus the
+ *              backwards-compatible channel-level alert_log entry.
+ */
 export async function runReminderAlerts(): Promise<void> {
   const emailEnabled = resendConfigured();
   const smsEnabled = smsConfigured();
@@ -68,6 +135,12 @@ export async function runReminderAlerts(): Promise<void> {
     );
     return;
   }
+
+  // ── Phase 1: collect work items ──────────────────────────────────────────
+  // Acquire the pool client only for the synchronous DB-read phase.  All slow
+  // network operations (Resend, SMS gateway, Slack API) happen AFTER release.
+
+  const workItems: WorkItem[] = [];
 
   const client = await pool.connect().catch((err: unknown) => {
     logger.warn({ err }, "reminder-scheduler: could not connect to DB");
@@ -108,11 +181,13 @@ export async function runReminderAlerts(): Promise<void> {
                OR array_length(r.slack_recipient_user_ids, 1) > 0)`,
     );
 
+    if (candidates.length === 0) return;
+
     // Pre-fetch ALL alert-log rows for this run's candidates in one query so
     // the inner loop doesn't need a per-(reminder, type) round-trip.
     const candidateIds = candidates.map((c) => c.reminder_id);
     const alertLogMap = new Map<string, Set<string>>();
-    if (candidateIds.length > 0) {
+    {
       const { rows: alertLogRows } = await client.query<{
         reminder_id: number;
         alert_type: string;
@@ -131,10 +206,73 @@ export async function runReminderAlerts(): Promise<void> {
       }
     }
 
+    // Also read per-recipient delivery rows so already-sent individual
+    // addresses are skipped even when the channel-level log row is absent
+    // (e.g., partial failure on a previous run left some sent, some unsent).
+    const deliveredKeys = new Set<string>(); // `${reminderId}:${alertType}:${channel}:${recipientKey}`
+    {
+      const { rows: deliveryRows } = await client.query<{
+        reminder_id: number;
+        alert_type: string;
+        channel: string;
+        recipient_key: string;
+      }>(
+        `SELECT reminder_id, alert_type, channel, recipient_key
+           FROM travels_reminder_alert_deliveries
+          WHERE reminder_id = ANY($1::int[]) AND status = 'sent'`,
+        [candidateIds],
+      );
+      for (const row of deliveryRows) {
+        deliveredKeys.add(
+          `${row.reminder_id}:${row.alert_type}:${row.channel}:${row.recipient_key}`,
+        );
+      }
+    }
+
+    // Pre-fetch phone numbers for ALL SMS candidates in one batch query.
+    const allSmsUserIds = [
+      ...new Set(candidates.flatMap((c) => c.sms_recipient_user_ids)),
+    ];
+    const phoneMap = new Map<number, string>(); // userId → E.164 phone
+    if (smsEnabled && allSmsUserIds.length > 0) {
+      const { rows: phoneRows } = await client.query<{
+        id: number;
+        phone_number: string;
+      }>(
+        `SELECT id, phone_number FROM app_users
+          WHERE id = ANY($1::int[]) AND phone_verified = true AND phone_number IS NOT NULL`,
+        [allSmsUserIds],
+      );
+      for (const row of phoneRows) {
+        phoneMap.set(row.id, row.phone_number);
+      }
+    }
+
+    // Pre-fetch Slack user IDs for ALL Slack candidates in one batch query.
+    const allSlackUserIds = [
+      ...new Set(candidates.flatMap((c) => c.slack_recipient_user_ids)),
+    ];
+    const slackMap = new Map<number, string>(); // userId → slack_user_id
+    if (slackEnabled && allSlackUserIds.length > 0) {
+      const { rows: slackRows } = await client.query<{
+        id: number;
+        slack_user_id: string;
+      }>(
+        `SELECT id, slack_user_id FROM app_users
+          WHERE id = ANY($1::int[]) AND slack_user_id IS NOT NULL`,
+        [allSlackUserIds],
+      );
+      for (const row of slackRows) {
+        slackMap.set(row.id, row.slack_user_id);
+      }
+    }
+
+    // Build the flat work-item list.  pullReminderAlertDaysFromCalendar may
+    // acquire its own DB connection internally; calling it here (while this
+    // client is still held) is intentional — it avoids holding the client
+    // open during the later external-I/O phase while still letting the
+    // calendar pull happen before we decide what alerts are needed.
     for (const candidate of candidates) {
-      // Pull-back: Google Calendar edits to the reminder's own notification
-      // overrides win, so a user who nudges the popup time in their Google
-      // Calendar app sees that reflected in future alert-day gating here.
       const alertDaysBefore = await pullReminderAlertDaysFromCalendar(
         candidate.reminder_id,
         candidate.alert_days_before,
@@ -144,264 +282,287 @@ export async function runReminderAlerts(): Promise<void> {
 
       for (const days of alertDaysBefore) {
         if (dueInDays !== days) continue;
+
         const type =
           alertTypeForDays(days) ?? (`${days}_day` as ReminderAlertType);
 
-        const row = candidate;
+        const alreadySentChannels =
+          alertLogMap.get(`${candidate.reminder_id}:${type}`) ??
+          new Set<string>();
 
-        const alreadySent =
-          alertLogMap.get(`${row.reminder_id}:${type}`) ?? new Set<string>();
+        const label = alertLabel(days);
+        const formattedDate = new Date(
+          `${candidate.due_date}T12:00:00Z`,
+        ).toLocaleDateString("en-GB", {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        });
 
-        // --- Email channel ---
-        if (
-          emailEnabled &&
-          row.recipient_emails.length > 0 &&
-          !alreadySent.has("email")
-        ) {
-          const failures: { toEmail: string; err: unknown }[] = [];
-          let successCount = 0;
-
-          for (const toEmail of row.recipient_emails) {
+        // --- Email work items ---
+        if (emailEnabled && !alreadySentChannels.has("email")) {
+          for (const toEmail of candidate.recipient_emails) {
             if (!isValidEmailAddress(toEmail)) {
               logger.warn(
-                { reminderId: row.reminder_id, alertType: type, toEmail },
+                {
+                  reminderId: candidate.reminder_id,
+                  alertType: type,
+                  toEmail,
+                },
                 "reminder-scheduler: skipping malformed recipient email address",
               );
               continue;
             }
-            try {
-              await sendReminderAlertEmail(
-                toEmail,
-                row.reminder_title,
-                row.trip_title,
-                row.trip_destination,
-                type,
-                row.due_date,
-              );
-              successCount++;
-            } catch (err) {
-              failures.push({ toEmail, err });
-              logger.error(
-                { err, reminderId: row.reminder_id, alertType: type, toEmail },
-                "reminder-scheduler: failed to send email alert to recipient",
-              );
-            }
-          }
-
-          // Only mark the alert as sent once at least one recipient actually
-          // received it AND there were no failures. If every email was
-          // filtered out as malformed (successCount === 0) or even one
-          // delivery failed, leave the log row absent so the next run retries
-          // the whole reminder rather than silently dropping it.
-          if (failures.length === 0 && successCount > 0) {
-            await client.query(
-              `INSERT INTO travels_reminder_alert_log (reminder_id, user_id, alert_type, channel)
-               VALUES ($1, $2, $3, 'email')
-               ON CONFLICT (reminder_id, alert_type, channel) DO NOTHING`,
-              [row.reminder_id, row.user_id, type],
-            );
-
-            logger.info(
-              {
-                reminderId: row.reminder_id,
-                alertType: type,
-                recipientCount: successCount,
-              },
-              "reminder-scheduler: alert email(s) sent",
-            );
-          } else {
-            logger.warn(
-              {
-                reminderId: row.reminder_id,
-                alertType: type,
-                successCount,
-                failedRecipients: failures.map((f) => f.toEmail),
-              },
-              "reminder-scheduler: email alert not fully delivered, will retry next run",
-            );
+            const deliveryKey = `${candidate.reminder_id}:${type}:email:${toEmail}`;
+            if (deliveredKeys.has(deliveryKey)) continue;
+            workItems.push({
+              channel: "email",
+              reminderId: candidate.reminder_id,
+              userId: candidate.user_id,
+              alertType: type,
+              toEmail,
+              reminderTitle: candidate.reminder_title,
+              tripTitle: candidate.trip_title,
+              tripDestination: candidate.trip_destination,
+              dueDate: candidate.due_date,
+            });
           }
         }
 
-        // --- SMS channel ---
-        if (
-          smsEnabled &&
-          row.sms_recipient_user_ids.length > 0 &&
-          !alreadySent.has("sms")
-        ) {
-          const { rows: phoneRows } = await client.query<{
-            id: number;
-            phone_number: string;
-          }>(
-            `SELECT id, phone_number FROM app_users
-              WHERE id = ANY($1::int[]) AND phone_verified = true AND phone_number IS NOT NULL`,
-            [row.sms_recipient_user_ids],
-          );
-
-          if (phoneRows.length > 0) {
-            const label = alertLabel(days);
-            const formatted = new Date(
-              `${row.due_date}T12:00:00Z`,
-            ).toLocaleDateString("en-GB", {
-              day: "numeric",
-              month: "long",
-              year: "numeric",
-            });
-
-            const failures: { userId: number; err: unknown }[] = [];
-            let successCount = 0;
-
-            for (const recipient of phoneRows) {
-              if (!isValidE164PhoneNumber(recipient.phone_number)) {
-                logger.warn(
-                  {
-                    reminderId: row.reminder_id,
-                    alertType: type,
-                    userId: recipient.id,
-                  },
-                  "reminder-scheduler: skipping malformed phone number for sms alert",
-                );
-                continue;
-              }
-              try {
-                await sendReminderAlertSms(
-                  recipient.phone_number,
-                  row.reminder_title,
-                  row.trip_title,
-                  row.trip_destination,
-                  label,
-                  formatted,
-                );
-                successCount++;
-              } catch (err) {
-                failures.push({ userId: recipient.id, err });
-                logger.error(
-                  {
-                    err,
-                    reminderId: row.reminder_id,
-                    alertType: type,
-                    userId: recipient.id,
-                  },
-                  "reminder-scheduler: failed to send sms alert to recipient",
-                );
-              }
-            }
-
-            if (failures.length === 0 && successCount > 0) {
-              await client.query(
-                `INSERT INTO travels_reminder_alert_log (reminder_id, user_id, alert_type, channel)
-                 VALUES ($1, $2, $3, 'sms')
-                 ON CONFLICT (reminder_id, alert_type, channel) DO NOTHING`,
-                [row.reminder_id, row.user_id, type],
-              );
-
-              logger.info(
-                {
-                  reminderId: row.reminder_id,
-                  alertType: type,
-                  recipientCount: successCount,
-                },
-                "reminder-scheduler: alert sms(s) sent",
-              );
-            } else {
+        // --- SMS work items ---
+        if (smsEnabled && !alreadySentChannels.has("sms")) {
+          for (const userId of candidate.sms_recipient_user_ids) {
+            const phone = phoneMap.get(userId);
+            if (!phone) continue;
+            if (!isValidE164PhoneNumber(phone)) {
               logger.warn(
                 {
-                  reminderId: row.reminder_id,
+                  reminderId: candidate.reminder_id,
                   alertType: type,
-                  successCount,
-                  failedRecipients: failures.map((f) => f.userId),
+                  userId,
                 },
-                "reminder-scheduler: sms alert not fully delivered, will retry next run",
+                "reminder-scheduler: skipping malformed phone number for sms alert",
               );
+              continue;
             }
+            const deliveryKey = `${candidate.reminder_id}:${type}:sms:${phone}`;
+            if (deliveredKeys.has(deliveryKey)) continue;
+            workItems.push({
+              channel: "sms",
+              reminderId: candidate.reminder_id,
+              userId: candidate.user_id,
+              alertType: type,
+              toPhone: phone,
+              reminderTitle: candidate.reminder_title,
+              tripTitle: candidate.trip_title,
+              tripDestination: candidate.trip_destination,
+              label,
+              formattedDate,
+            });
           }
         }
 
-        // --- Slack channel ---
-        if (
-          slackEnabled &&
-          row.slack_recipient_user_ids.length > 0 &&
-          !alreadySent.has("slack")
-        ) {
-          const { rows: slackRows } = await client.query<{
-            id: number;
-            slack_user_id: string;
-          }>(
-            `SELECT id, slack_user_id FROM app_users
-              WHERE id = ANY($1::int[]) AND slack_user_id IS NOT NULL`,
-            [row.slack_recipient_user_ids],
-          );
-
-          if (slackRows.length > 0) {
-            const label = alertLabel(days);
-            const formatted = new Date(
-              `${row.due_date}T12:00:00Z`,
-            ).toLocaleDateString("en-GB", {
-              day: "numeric",
-              month: "long",
-              year: "numeric",
+        // --- Slack work items ---
+        if (slackEnabled && !alreadySentChannels.has("slack")) {
+          for (const userId of candidate.slack_recipient_user_ids) {
+            const slackUserId = slackMap.get(userId);
+            if (!slackUserId) continue;
+            const deliveryKey = `${candidate.reminder_id}:${type}:slack:${slackUserId}`;
+            if (deliveredKeys.has(deliveryKey)) continue;
+            workItems.push({
+              channel: "slack",
+              reminderId: candidate.reminder_id,
+              userId: candidate.user_id,
+              alertType: type,
+              toSlackUserId: slackUserId,
+              reminderTitle: candidate.reminder_title,
+              tripTitle: candidate.trip_title,
+              tripDestination: candidate.trip_destination,
+              label,
+              formattedDate,
             });
-
-            const failures: { userId: number; err: unknown }[] = [];
-            let successCount = 0;
-
-            for (const recipient of slackRows) {
-              try {
-                await sendReminderAlertSlack(
-                  recipient.slack_user_id,
-                  row.reminder_title,
-                  row.trip_title,
-                  row.trip_destination,
-                  label,
-                  formatted,
-                );
-                successCount++;
-              } catch (err) {
-                failures.push({ userId: recipient.id, err });
-                logger.error(
-                  {
-                    err,
-                    reminderId: row.reminder_id,
-                    alertType: type,
-                    userId: recipient.id,
-                  },
-                  "reminder-scheduler: failed to send slack alert to recipient",
-                );
-              }
-            }
-
-            if (failures.length === 0 && successCount > 0) {
-              await client.query(
-                `INSERT INTO travels_reminder_alert_log (reminder_id, user_id, alert_type, channel)
-                 VALUES ($1, $2, $3, 'slack')
-                 ON CONFLICT (reminder_id, alert_type, channel) DO NOTHING`,
-                [row.reminder_id, row.user_id, type],
-              );
-
-              logger.info(
-                {
-                  reminderId: row.reminder_id,
-                  alertType: type,
-                  recipientCount: successCount,
-                },
-                "reminder-scheduler: alert slack DM(s) sent",
-              );
-            } else {
-              logger.warn(
-                {
-                  reminderId: row.reminder_id,
-                  alertType: type,
-                  successCount,
-                  failedRecipients: failures.map((f) => f.userId),
-                },
-                "reminder-scheduler: slack alert not fully delivered, will retry next run",
-              );
-            }
           }
         }
       }
     }
   } finally {
+    // IMPORTANT: release BEFORE any external-I/O (Resend, SMS, Slack).
+    // The sends in Phase 2 can take seconds each; holding a pool connection
+    // during that time starves concurrent requests (issue #312).
     client.release();
+  }
+
+  if (workItems.length === 0) return;
+
+  // ── Phase 2: execute sends (no DB connection held) ───────────────────────
+
+  const results: WorkResult[] = [];
+
+  for (const item of workItems) {
+    try {
+      if (item.channel === "email") {
+        await sendReminderAlertEmail(
+          item.toEmail,
+          item.reminderTitle,
+          item.tripTitle,
+          item.tripDestination,
+          item.alertType,
+          item.dueDate,
+        );
+      } else if (item.channel === "sms") {
+        await sendReminderAlertSms(
+          item.toPhone,
+          item.reminderTitle,
+          item.tripTitle,
+          item.tripDestination,
+          item.label,
+          item.formattedDate,
+        );
+      } else {
+        await sendReminderAlertSlack(
+          item.toSlackUserId,
+          item.reminderTitle,
+          item.tripTitle,
+          item.tripDestination,
+          item.label,
+          item.formattedDate,
+        );
+      }
+      results.push({ item, success: true });
+    } catch (err) {
+      results.push({ item, success: false, error: err });
+      logger.error(
+        {
+          err,
+          reminderId: item.reminderId,
+          alertType: item.alertType,
+          channel: item.channel,
+        },
+        "reminder-scheduler: failed to send alert to recipient",
+      );
+    }
+  }
+
+  const anySucceeded = results.some((r) => r.success);
+  if (!anySucceeded) return;
+
+  // ── Phase 3: record results (short new DB connection) ────────────────────
+  // Write per-recipient rows into travels_reminder_alert_deliveries so
+  // future runs skip already-sent recipients without needing a full channel
+  // retry.  Also write the backwards-compatible channel-level alert_log row
+  // when every recipient in the channel succeeded (preserving the existing
+  // behaviour that the log row is absent on partial failure, triggering a
+  // full channel retry next run).
+
+  const recordClient = await pool.connect().catch((err: unknown) => {
+    logger.warn(
+      { err },
+      "reminder-scheduler: could not connect to DB for results recording",
+    );
+    return null;
+  });
+  if (!recordClient) return;
+
+  try {
+    // Write per-recipient delivery rows.
+    for (const result of results) {
+      const recipientKey =
+        result.item.channel === "email"
+          ? (result.item as EmailWorkItem).toEmail
+          : result.item.channel === "sms"
+            ? (result.item as SmsWorkItem).toPhone
+            : (result.item as SlackWorkItem).toSlackUserId;
+
+      await recordClient
+        .query(
+          `INSERT INTO travels_reminder_alert_deliveries
+             (reminder_id, user_id, alert_type, channel, recipient_key,
+              status, attempt_count, sent_at, last_error, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, 1, $7, $8, NOW())
+           ON CONFLICT (reminder_id, alert_type, channel, recipient_key) DO UPDATE
+             SET status        = EXCLUDED.status,
+                 attempt_count = travels_reminder_alert_deliveries.attempt_count + 1,
+                 sent_at       = EXCLUDED.sent_at,
+                 last_error    = EXCLUDED.last_error,
+                 updated_at    = NOW()`,
+          [
+            result.item.reminderId,
+            result.item.userId,
+            result.item.alertType,
+            result.item.channel,
+            recipientKey,
+            result.success ? "sent" : "retryable",
+            result.success ? new Date() : null,
+            result.success
+              ? null
+              : result.error instanceof Error
+                ? result.error.message
+                : String(result.error),
+          ],
+        )
+        .catch((err: unknown) => {
+          logger.warn(
+            { err, reminderId: result.item.reminderId },
+            "reminder-scheduler: failed to record per-recipient delivery row",
+          );
+        });
+    }
+
+    // Write backwards-compatible channel-level log rows.
+    // Group results by (reminderId, alertType, channel).
+    type ChannelKey = `${number}:${string}:${string}`;
+    const byChannel = new Map<
+      ChannelKey,
+      { successes: number; failures: number; userId: number }
+    >();
+    for (const result of results) {
+      const key: ChannelKey = `${result.item.reminderId}:${result.item.alertType}:${result.item.channel}`;
+      const existing = byChannel.get(key) ?? {
+        successes: 0,
+        failures: 0,
+        userId: result.item.userId,
+      };
+      if (result.success) existing.successes++;
+      else existing.failures++;
+      byChannel.set(key, existing);
+    }
+
+    for (const [key, counts] of byChannel) {
+      const [remidStr, alertType, channel] = key.split(":") as [
+        string,
+        string,
+        string,
+      ];
+      const reminderId = Number(remidStr);
+      if (counts.failures > 0) {
+        logger.warn(
+          { reminderId, alertType, channel, ...counts },
+          "reminder-scheduler: partial channel delivery — will retry failed recipients next run",
+        );
+        continue;
+      }
+      // All sends for this channel succeeded: mark channel as done.
+      await recordClient
+        .query(
+          `INSERT INTO travels_reminder_alert_log (reminder_id, user_id, alert_type, channel)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (reminder_id, alert_type, channel) DO NOTHING`,
+          [reminderId, counts.userId, alertType, channel],
+        )
+        .catch((err: unknown) => {
+          logger.warn(
+            { err, reminderId, alertType, channel },
+            "reminder-scheduler: failed to write channel-level alert log row",
+          );
+        });
+
+      logger.info(
+        { reminderId, alertType, channel, recipientCount: counts.successes },
+        "reminder-scheduler: channel alert fully delivered",
+      );
+    }
+  } finally {
+    recordClient.release();
   }
 }
 

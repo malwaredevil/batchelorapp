@@ -19,7 +19,7 @@
  * - If nothing changed vs GitHub HEAD, exits 0 cleanly.
  */
 
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 import fs from "fs";
 import https from "https";
 import path from "path";
@@ -34,10 +34,16 @@ if (!TOKEN) {
   process.exit(1);
 }
 
-const commitMessage = process.argv.slice(2).join(" ").trim();
+const rawArgs = process.argv.slice(2);
+const confirmDeletions = rawArgs.includes("--confirm-deletions");
+const commitMessage = rawArgs
+  .filter((a) => a !== "--confirm-deletions")
+  .join(" ")
+  .trim();
 if (!commitMessage) {
   console.error(
-    'Usage: pnpm --filter @workspace/scripts run github-sync "commit message"',
+    'Usage: pnpm --filter @workspace/scripts run github-sync "commit message" [--confirm-deletions]\n' +
+      "  --confirm-deletions  Required to actually remove files from GitHub that are missing locally.",
   );
   process.exit(1);
 }
@@ -113,6 +119,11 @@ const EXCLUDED_PREFIXES = [
   // Husky-generated wrapper scripts — auto-generated, not authored, gitignored locally.
   // The custom sync does not honour .gitignore, so exclude explicitly.
   ".husky/_/",
+  // orval-generated Zod schemas — orval runs clean:true so these are wiped and
+  // regenerated on every codegen invocation; committing them causes constant churn
+  // and large diffs. The package is consumed via compiled declarations, so the
+  // generated source files do not need to live in the public repo.
+  "lib/api-zod/src/generated/",
 ];
 const EXCLUDED_EXACT = [
   // Security: threat model contains internal architecture details
@@ -300,7 +311,22 @@ async function main() {
 
   if (deletedFiles.length > 0) {
     console.log(`\nFiles to delete from GitHub (${deletedFiles.length}):`);
-    deletedFiles.forEach((f) => console.log(`  ${f}`));
+    deletedFiles.forEach((f) => console.log(`  - ${f}`));
+  }
+
+  // Require an explicit --confirm-deletions flag before writing any sha:null
+  // entries into the Git tree (#310). Without it, perform a dry-run for
+  // the deletion set and exit non-zero so the caller can review the list
+  // before deliberately removing files from main. Additions and modifications
+  // are also withheld in dry-run mode so the commit is not split across two runs.
+  if (deletedFiles.length > 0 && !confirmDeletions) {
+    console.log(
+      `\n⚠️  DRY RUN — the deletions listed above were NOT pushed.` +
+        `\nTo apply them, re-run with --confirm-deletions:` +
+        `\n  pnpm --filter @workspace/scripts run github-sync "${commitMessage}" --confirm-deletions` +
+        `\nAdditions/modifications (${changedFiles.length} file(s)) were also withheld to keep the commit atomic.`,
+    );
+    process.exit(1);
   }
 
   // Hard abort: refuse to push any file that could carry live session cookies
@@ -327,17 +353,20 @@ async function main() {
   console.log(`\nChanged files (${changedFiles.length}):`);
   changedFiles.forEach((f) => console.log(`  ${f}`));
 
-  // Run prettier --write on text files before creating blobs
-  const prettierTargets = changedFiles
-    .filter((f) => /\.(ts|tsx|js|jsx|json|yaml|yml|md|css)$/.test(f))
-    .map((f) => `"${f}"`)
-    .join(" ");
-  if (prettierTargets) {
+  // Run prettier --write on text files before creating blobs.
+  // Use spawnSync with an argument array instead of execSync + string
+  // interpolation so that file paths containing spaces or shell-special
+  // characters cannot be interpreted as extra shell commands (#309).
+  const prettierTargets = changedFiles.filter((f) =>
+    /\.(ts|tsx|js|jsx|json|yaml|yml|md|css)$/.test(f),
+  );
+  if (prettierTargets.length > 0) {
     console.log("\nRunning prettier --write on changed files...");
-    execSync(`npx prettier --write ${prettierTargets} --log-level warn`, {
-      cwd: root,
-      stdio: "inherit",
-    });
+    spawnSync(
+      "npx",
+      ["prettier", "--write", ...prettierTargets, "--log-level", "warn"],
+      { cwd: root, stdio: "inherit" },
+    );
     console.log("Prettier done.");
   }
 

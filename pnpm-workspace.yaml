@@ -47,7 +47,7 @@ onlyBuiltDependencies:
   - unrs-resolver
 
 overrides:
-  adm-zip: ">=0.5.19"
+  adm-zip: ">=0.5.19 <1" # CVE-2024-26256: arbitrary-file-write; patched 0.5.19; 0.x series only
   "@babel/core": ^7.29.6
   "@esbuild-kit/esm-loader": npm:tsx@^4.21.0
   "@expo/ngrok-bin>@expo/ngrok-bin-darwin-arm64": "-"
@@ -111,11 +111,13 @@ overrides:
   lightningcss>lightningcss-linux-x64-musl: "-"
   lightningcss>lightningcss-win32-arm64-msvc: "-"
   lightningcss>lightningcss-win32-x64-msvc: "-"
-  dompurify: ">=3.4.12"
-  fast-uri: ">=3.1.4"
-  linkify-it: ">=5.0.2"
-  markdown-it: ">=14.2.0"
-  qs: ">=6.15.2"
+  # Security overrides — each is bounded to the patched major so an unreviewed
+  # new major can never be silently selected by a future lockfile regeneration.
+  dompurify: ">=3.4.12 <4" # GHSA: XSS bypass; patched 3.4.12; parent expects ^3
+  fast-uri: ">=3.1.4 <4" # GHSA: URI confusion; patched 3.1.4; parent expects ^3
+  linkify-it: ">=5.0.2 <6" # GHSA: ReDoS; patched 5.0.2; parent expects ^5
+  markdown-it: ">=14.2.0 <15" # GHSA: HTML injection; patched 14.2.0; parent expects ^14
+  qs: ">=6.15.2 <7" # CVE: prototype pollution; patched 6.15.2; parent expects ^6
   rollup>@rollup/rollup-android-arm-eabi: "-"
   rollup>@rollup/rollup-android-arm64: "-"
   rollup>@rollup/rollup-darwin-arm64: "-"

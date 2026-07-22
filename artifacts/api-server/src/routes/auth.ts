@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request } from "express";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
-import { eq, and, gt, isNull, desc } from "drizzle-orm";
+import { eq, and, gt, isNull, desc, sql } from "drizzle-orm";
 import {
   db,
   pool,
@@ -345,24 +345,52 @@ router.post("/auth/change-password", requireAuth, async (req, res) => {
   }
 
   const newHash = await bcrypt.hash(newPassword, 12);
-  await db
-    .update(appUsers)
-    .set({ passwordHash: newHash })
-    .where(eq(appUsers.id, user.id));
 
-  // Revoke ALL sessions for this user (including the current one) so that any
-  // stolen session cookie stops working immediately. Then regenerate the
-  // session ID and restore the user's identity so they stay logged in under a
-  // fresh, unguessable session that the attacker does not possess.
+  // Phase 1 (#307): Atomically update the password hash and revoke all
+  // sessions in one database transaction. This closes the window where a
+  // stolen session could remain valid after the password change commits.
+  // If the DELETE fails the UPDATE also rolls back — no partial state.
   const savedUserId = req.session.userId!;
-  await pool.query(`DELETE FROM app_sessions WHERE sess->>'userId' = $1`, [
-    String(user.id),
-  ]);
+  // Phase 2 (#313): Preserve the user's original session-persistence choice
+  // (remember-me = 30-day cookie vs. browser-session cookie). Without this,
+  // regenerate() inherits the middleware's 30-day default and silently
+  // converts a non-persistent session into a persistent one.
+  const savedMaxAge = req.session.cookie.maxAge as number | undefined;
+  const savedExpires = req.session.cookie.expires as Date | undefined;
 
+  const pgClient = await pool.connect();
+  try {
+    await pgClient.query("BEGIN");
+    await pgClient.query(
+      `UPDATE app_users SET password_hash = $1 WHERE id = $2`,
+      [newHash, user.id],
+    );
+    await pgClient.query(
+      `DELETE FROM app_sessions WHERE sess->>'userId' = $1`,
+      [String(user.id)],
+    );
+    await pgClient.query("COMMIT");
+  } catch (err) {
+    await pgClient.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    pgClient.release();
+  }
+
+  // Phase 2 continued: create a fresh session so the user stays logged in.
+  // If regenerate fails (rare DB error), all sessions were already revoked
+  // above — the user must log in again, which is safe and recoverable.
   await new Promise<void>((resolve, reject) => {
     req.session.regenerate((err) => {
       if (err) return reject(err);
       req.session.userId = savedUserId;
+      // Restore the original cookie-persistence choice.
+      if (savedMaxAge != null) {
+        req.session.cookie.maxAge = savedMaxAge;
+      } else {
+        req.session.cookie.expires = savedExpires;
+        (req.session.cookie as { maxAge?: number }).maxAge = undefined;
+      }
       req.session.save((saveErr) => {
         if (saveErr) return reject(saveErr);
         resolve();
@@ -731,10 +759,11 @@ router.post("/auth/reset-password", passwordResetLimiter, async (req, res) => {
   // doesn't hold a DB connection for longer than necessary.
   const newHash = await bcrypt.hash(newPassword, 12);
 
-  // Atomically claim the token and update the password in one transaction.
-  // The UPDATE...RETURNING approach means only one concurrent request can flip
-  // used=false → used=true — any parallel request races to the same row and
-  // gets 0 rows back, preventing token replay even under simultaneous requests.
+  // Atomically claim the token, update the password, and revoke all sessions
+  // in one transaction (#307). The UPDATE...RETURNING approach means only one
+  // concurrent request can flip used=false → used=true. Including the session
+  // DELETE inside the same transaction means there is no window where the new
+  // password is committed but old sessions remain valid.
   const claimed = await db.transaction(async (tx) => {
     const [row] = await tx
       .update(passwordResetTokens)
@@ -759,6 +788,12 @@ router.post("/auth/reset-password", passwordResetLimiter, async (req, res) => {
       .set({ passwordHash: newHash })
       .where(eq(appUsers.id, row.userId));
 
+    // Revoke all sessions atomically within the same transaction so there is
+    // no window where the password is updated but old sessions are still live.
+    await tx.execute(
+      sql`DELETE FROM app_sessions WHERE sess->>'userId' = ${String(row.userId)}`,
+    );
+
     return row;
   });
 
@@ -768,13 +803,6 @@ router.post("/auth/reset-password", passwordResetLimiter, async (req, res) => {
       .json({ error: "This reset link is invalid, expired, or already used." });
     return;
   }
-
-  // Revoke ALL sessions for this user so that any stolen session cookie is
-  // immediately invalidated. Password reset is the primary account recovery
-  // mechanism; it must not leave existing sessions alive.
-  await pool.query(`DELETE FROM app_sessions WHERE sess->>'userId' = $1`, [
-    String(claimed.userId),
-  ]);
 
   res.status(204).end();
 });

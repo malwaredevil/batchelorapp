@@ -3,17 +3,21 @@ name: Dependabot auto-merge
 on:
   pull_request_target:
 
+# Minimal permissions: metadata read is needed by fetch-metadata; contents +
+# pull-requests write are needed only in the auto-merge step.  The checkout
+# step was removed — it is not needed for a workflow that only calls the gh
+# CLI and the GitHub REST API.
 permissions:
   contents: write
   pull-requests: write
+  metadata: read
 
 jobs:
   auto-merge:
     runs-on: ubuntu-latest
     if: github.actor == 'dependabot[bot]'
     steps:
-      - uses: actions/checkout@v7
-      - uses: dependabot/fetch-metadata@v3
+      - uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3
         id: metadata
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -21,18 +25,26 @@ jobs:
       - name: Auto-merge high/critical security patches
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHSA_IDS: ${{ steps.metadata.outputs.ghsa-ids }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          GHSA_IDS="${{ steps.metadata.outputs.ghsa-ids }}"
           if [ -z "$GHSA_IDS" ]; then
             echo "No GHSA IDs found — skipping auto-merge"
             exit 0
           fi
           for GHSA in $(echo "$GHSA_IDS" | tr ',' '\n'); do
+            # Validate GHSA ID format before using in a shell command.
+            # GHSA IDs are always GHSA-xxxx-xxxx-xxxx (alphanumeric segments).
+            # An invalid-format ID is a signal of unexpected input; skip it.
+            if [[ ! "$GHSA" =~ ^GHSA-[0-9a-zA-Z]{4}-[0-9a-zA-Z]{4}-[0-9a-zA-Z]{4}$ ]]; then
+              echo "Skipping malformed GHSA ID: $GHSA"
+              continue
+            fi
             SEVERITY=$(gh api "/advisories/$GHSA" --jq '.severity' 2>/dev/null || echo "unknown")
             echo "Advisory $GHSA severity: $SEVERITY"
             if [ "$SEVERITY" = "high" ] || [ "$SEVERITY" = "critical" ]; then
-              echo "Auto-merging PR for $SEVERITY advisory $GHSA"
-              gh pr merge --auto --squash "${{ github.event.pull_request.number }}"
+              echo "Auto-merging PR #$PR_NUMBER for $SEVERITY advisory $GHSA"
+              gh pr merge --auto --squash "$PR_NUMBER"
               exit 0
             fi
           done

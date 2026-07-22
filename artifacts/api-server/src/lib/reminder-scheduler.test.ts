@@ -105,7 +105,10 @@ function pushCandidate(
       },
     ],
   });
-  // Second query is the alert-log check — return empty (not already sent)
+  // Second query: travels_reminder_alert_log check — return empty (not already sent)
+  queryQueue.push({ rows: [] });
+  // Third query (new): travels_reminder_alert_deliveries per-recipient check —
+  // return empty so no recipient is considered already delivered.
   queryQueue.push({ rows: [] });
 }
 
@@ -347,14 +350,17 @@ describe("runReminderAlerts — malformed phone numbers in the DB", () => {
   });
 
   /**
-   * Push a candidate with SMS recipients, the alert-log check (not sent yet),
-   * and then the phone-rows query result — the query the SMS loop issues to
-   * look up verified phone numbers for the given sms_recipient_user_ids.
+   * Push a candidate with SMS recipients, the alert-log + delivery-rows checks
+   * (not sent yet), and then the phone-rows query result — the batch query the
+   * scheduler issues to look up verified phone numbers for all sms_recipient_user_ids.
+   *
+   * The sms_recipient_user_ids on the candidate are derived automatically from the
+   * phone rows so the batch phone-lookup query returns them all.
    */
   function pushSmsCandidate(phoneRows: { id: number; phone_number: string }[]) {
     pushCandidate({
       recipient_emails: [],
-      sms_recipient_user_ids: [1],
+      sms_recipient_user_ids: phoneRows.map((r) => r.id),
     });
     queryQueue.push({ rows: phoneRows });
   }

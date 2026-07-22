@@ -6,6 +6,8 @@
     "test": "playwright test --project=chromium-critical",
     "test:all": "playwright test",
     "test:smoke": "playwright test --config=playwright.smoke.config.ts",
+    "test:modules": "playwright test --config=playwright.modules.config.ts",
+    "test:elaine": "playwright test --config=playwright.elaine.config.ts",
     "test:ui": "playwright test --ui",
     "typecheck": "tsc --noEmit"
   },

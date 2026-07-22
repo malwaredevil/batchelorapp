@@ -178,8 +178,15 @@ async function runTurnAndPersist(
 
     return replyText;
   } finally {
-    await client.query("SELECT pg_advisory_unlock($1::bigint)", [userId]);
-    client.release();
+    // Inner try/finally guarantees client.release() runs even when the unlock
+    // query itself throws (e.g. broken connection). Without this nesting,
+    // a thrown unlock error exits the outer finally before release() is reached,
+    // permanently leaking the pool slot.
+    try {
+      await client.query("SELECT pg_advisory_unlock($1::bigint)", [userId]);
+    } finally {
+      client.release();
+    }
   }
 }
 

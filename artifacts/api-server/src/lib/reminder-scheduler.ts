@@ -286,7 +286,7 @@ export async function runReminderAlerts(): Promise<void> {
               }
             }
 
-            if (failures.length === 0) {
+            if (failures.length === 0 && successCount > 0) {
               await client.query(
                 `INSERT INTO travels_reminder_alert_log (reminder_id, user_id, alert_type, channel)
                  VALUES ($1, $2, $3, 'sms')

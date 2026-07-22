@@ -110,6 +110,9 @@ const EXCLUDED_PREFIXES = [
   "artifacts/e2e/playwright-report/",
   "artifacts/e2e/playwright-smoke-report/",
   "artifacts/e2e/test-results/",
+  // Husky-generated wrapper scripts — auto-generated, not authored, gitignored locally.
+  // The custom sync does not honour .gitignore, so exclude explicitly.
+  ".husky/_/",
 ];
 const EXCLUDED_EXACT = [
   // Security: threat model contains internal architecture details
@@ -200,7 +203,7 @@ type GHTreeEntry = {
   path: string;
   mode: string;
   type: string;
-  sha: string;
+  sha: string | null;
   size?: number;
 };
 
@@ -232,11 +235,13 @@ async function main() {
   // Build a map of path → sha from GitHub
   const ghShaMap = new Map<string, string>();
   for (const entry of treeData.tree) {
-    if (entry.type === "blob") ghShaMap.set(entry.path, entry.sha);
+    if (entry.type === "blob" && entry.sha != null)
+      ghShaMap.set(entry.path, entry.sha);
   }
 
   // Collect local files
   const localFiles = collectFiles(root, root);
+  const localFileSet = new Set(localFiles);
 
   // Find files that differ (new or changed)
   const changedFiles: string[] = [];
@@ -248,9 +253,36 @@ async function main() {
     }
   }
 
-  if (changedFiles.length === 0) {
+  // Find files that exist on GitHub but were deleted locally.
+  // Only include paths that are not excluded — the same isExcluded guard
+  // that prevents local files from being pushed also prevents GitHub-only
+  // files outside the managed root from being deleted.
+  const MAX_DELETIONS = 20;
+  const deletedFiles: string[] = [];
+  for (const ghPath of ghShaMap.keys()) {
+    if (!localFileSet.has(ghPath) && !isExcluded(ghPath)) {
+      deletedFiles.push(ghPath);
+    }
+  }
+  if (deletedFiles.length > MAX_DELETIONS) {
+    console.error(
+      `\n🚫 ABORTED: ${deletedFiles.length} files would be deleted from GitHub, which exceeds the ` +
+        `safety cap of ${MAX_DELETIONS}. This usually means an exclusion list entry is wrong.\n` +
+        `Files to delete:\n` +
+        deletedFiles.map((f) => `  ${f}`).join("\n") +
+        `\nReview EXCLUDED_PREFIXES/EXCLUDED_EXACT and re-run.`,
+    );
+    process.exit(1);
+  }
+
+  if (changedFiles.length === 0 && deletedFiles.length === 0) {
     console.log("✓ Nothing to sync — all local files match GitHub HEAD.");
     process.exit(0);
+  }
+
+  if (deletedFiles.length > 0) {
+    console.log(`\nFiles to delete from GitHub (${deletedFiles.length}):`);
+    deletedFiles.forEach((f) => console.log(`  ${f}`));
   }
 
   // Hard abort: refuse to push any file that could carry live session cookies
@@ -303,7 +335,7 @@ async function main() {
     path: string;
     mode: string;
     type: string;
-    sha: string;
+    sha: string | null;
   }[] = [];
   for (const filePath of changedFiles) {
     const localSha = localBlobSha(path.join(root, filePath));
@@ -333,6 +365,18 @@ async function main() {
       mode: "100644",
       type: "blob",
       sha: ghBlobSha,
+    });
+  }
+
+  // Add null-sha deletion entries for files removed locally.
+  // sha: null tells the Git Data API to remove those paths from the new tree.
+  for (const filePath of deletedFiles) {
+    console.log(`  delete ${filePath}`);
+    treeEntries.push({
+      path: filePath,
+      mode: "100644",
+      type: "blob",
+      sha: null,
     });
   }
 

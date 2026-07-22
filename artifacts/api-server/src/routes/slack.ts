@@ -3,6 +3,7 @@ import { webhookLimiter } from "../middleware/rateLimit";
 import { eq } from "drizzle-orm";
 import {
   db,
+  pool,
   appUsers,
   elaineSlackConversations,
   slackWebhookDeliveries,
@@ -136,28 +137,50 @@ async function runTurnAndPersist(
   userId: number,
   inputText: string,
 ): Promise<string> {
-  const history =
-    (conversation.messages as ElaineSlackChatMessage[] | null) ?? [];
-  let replyText: string;
-  let updatedHistory: ElaineSlackChatMessage[];
-
+  // Acquire a session-level PostgreSQL advisory lock keyed by userId before
+  // reading history. This serializes concurrent turns from the same Slack
+  // user so two simultaneous messages cannot both read the same starting
+  // history and then overwrite each other's writes (last-writer-wins).
+  // We hold the lock for the full turn including the AI call; the pool
+  // client is released in the finally block regardless of outcome.
+  const client = await pool.connect();
   try {
-    const result = await runElaineSlackTurn({ userId, inputText, history });
-    replyText = result.replyText;
-    updatedHistory = result.history;
-  } catch (err) {
-    logger.error({ err }, "slack: Elaine turn failed");
-    replyText =
-      "Sorry, something went wrong — please try again or open the app.";
-    updatedHistory = history;
+    await client.query("SELECT pg_advisory_lock($1::bigint)", [userId]);
+
+    // Re-read the conversation now that we hold the lock to get the
+    // freshest history (a prior concurrent turn may have just written it).
+    const [fresh] = await db
+      .select()
+      .from(elaineSlackConversations)
+      .where(eq(elaineSlackConversations.userId, userId))
+      .limit(1);
+    const current = fresh ?? conversation;
+    const history = (current.messages as ElaineSlackChatMessage[] | null) ?? [];
+
+    let replyText: string;
+    let updatedHistory: ElaineSlackChatMessage[];
+
+    try {
+      const result = await runElaineSlackTurn({ userId, inputText, history });
+      replyText = result.replyText;
+      updatedHistory = result.history;
+    } catch (err) {
+      logger.error({ err }, "slack: Elaine turn failed");
+      replyText =
+        "Sorry, something went wrong — please try again or open the app.";
+      updatedHistory = history;
+    }
+
+    await db
+      .update(elaineSlackConversations)
+      .set({ messages: updatedHistory, updatedAt: new Date() })
+      .where(eq(elaineSlackConversations.id, current.id));
+
+    return replyText;
+  } finally {
+    await client.query("SELECT pg_advisory_unlock($1::bigint)", [userId]);
+    client.release();
   }
-
-  await db
-    .update(elaineSlackConversations)
-    .set({ messages: updatedHistory, updatedAt: new Date() })
-    .where(eq(elaineSlackConversations.id, conversation.id));
-
-  return replyText;
 }
 
 // ---------------------------------------------------------------------------

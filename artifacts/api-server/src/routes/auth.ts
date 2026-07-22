@@ -24,6 +24,7 @@ import {
   VerifyPhoneCodeResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middleware/auth";
+import { getSlackUserEmail } from "../lib/slack";
 import {
   loginLimiter,
   passwordResetLimiter,
@@ -155,7 +156,11 @@ router.post("/auth/login", loginLimiter, async (req, res) => {
 
 router.post("/auth/logout", (req, res) => {
   req.session.destroy(() => {
-    res.clearCookie("pottery.sid");
+    res.clearCookie("batchelor.sid", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+    });
     res.status(204).end();
   });
 });
@@ -226,7 +231,41 @@ router.patch("/auth/me", requireAuth, async (req, res) => {
   }
   if (parsed.data.slackUserId !== undefined) {
     const sid = parsed.data.slackUserId;
-    updates.slackUserId = sid === null || sid === "" ? null : sid.trim();
+    if (sid === null || sid === "") {
+      updates.slackUserId = null;
+    } else {
+      const trimmed = sid.trim();
+      // Verify the supplied Slack member ID actually belongs to the
+      // authenticated user by fetching its profile email from the Slack API
+      // and requiring it to match. This prevents one household member from
+      // claiming another person's Slack ID, which would hijack their inbound
+      // Elaine messages/commands.
+      const [currentUser] = await db
+        .select({ email: appUsers.email })
+        .from(appUsers)
+        .where(eq(appUsers.id, req.session.userId!))
+        .limit(1);
+      if (!currentUser) {
+        res.status(401).json({ error: "Not authenticated" });
+        return;
+      }
+      const slackEmail = await getSlackUserEmail(trimmed);
+      if (!slackEmail) {
+        res.status(400).json({
+          error: "Could not verify that Slack ID — check the ID and try again.",
+        });
+        return;
+      }
+      if (slackEmail !== currentUser.email.toLowerCase().trim()) {
+        res.status(400).json({
+          error:
+            "The Slack account's email does not match your Batchelor account email. " +
+            "You can only link a Slack account that uses the same email address.",
+        });
+        return;
+      }
+      updates.slackUserId = trimmed;
+    }
   }
 
   let user;
@@ -316,14 +355,9 @@ router.post("/auth/change-password", requireAuth, async (req, res) => {
   // session ID and restore the user's identity so they stay logged in under a
   // fresh, unguessable session that the attacker does not possess.
   const savedUserId = req.session.userId!;
-  try {
-    await pool.query(
-      `DELETE FROM quilting_sessions WHERE sess->>'userId' = $1`,
-      [String(user.id)],
-    );
-  } catch (err) {
-    req.log.error({ err }, "failed to revoke sessions on password change");
-  }
+  await pool.query(`DELETE FROM app_sessions WHERE sess->>'userId' = $1`, [
+    String(user.id),
+  ]);
 
   await new Promise<void>((resolve, reject) => {
     req.session.regenerate((err) => {
@@ -738,14 +772,9 @@ router.post("/auth/reset-password", passwordResetLimiter, async (req, res) => {
   // Revoke ALL sessions for this user so that any stolen session cookie is
   // immediately invalidated. Password reset is the primary account recovery
   // mechanism; it must not leave existing sessions alive.
-  try {
-    await pool.query(
-      `DELETE FROM quilting_sessions WHERE sess->>'userId' = $1`,
-      [String(claimed.userId)],
-    );
-  } catch (err) {
-    req.log.error({ err }, "failed to revoke sessions on password reset");
-  }
+  await pool.query(`DELETE FROM app_sessions WHERE sess->>'userId' = $1`, [
+    String(claimed.userId),
+  ]);
 
   res.status(204).end();
 });

@@ -4491,6 +4491,8 @@ function buildElaineCoreSystemPrompt(params: {
 
 PERSONALITY: You're conversational, upbeat, and genuinely helpful — like a knowledgeable friend, not a generic corporate assistant. You can be a little playful. You still give concrete, accurate, step-by-step help when asked.
 
+TODAY'S DATE: ${new Date().toISOString().slice(0, 10)} — always use this when calculating countdowns, "days until", ages, or anything else that depends on knowing what today is. Never guess or rely on training data for the current date.
+
 APP MAP (every page in every app, so you can always explain what a page is for or point the user to the right one, even if they're not currently on it or in a different app):
 
 Travels app:
@@ -5924,8 +5926,38 @@ router.post("/chat", async (req, res) => {
             if (!parsed.success) {
               resultText = "Invalid trip data — skipping card.";
             } else {
-              sendEvent("widget", { type: "trip_card", trip: parsed.data });
-              resultText = "Trip card displayed.";
+              // Always compute countdownDays server-side — never trust the
+              // model's arithmetic (it guesses "today" from training data).
+              let resolvedStartDate = parsed.data.startDate;
+              if (!resolvedStartDate && parsed.data.tripId) {
+                const [row] = await db
+                  .select({ startDate: travelsTrips.startDate })
+                  .from(travelsTrips)
+                  .where(eq(travelsTrips.id, parsed.data.tripId))
+                  .limit(1);
+                resolvedStartDate = row?.startDate ?? undefined;
+              }
+              let serverCountdownDays: number | undefined = undefined;
+              if (resolvedStartDate) {
+                const tripStart = new Date(resolvedStartDate + "T00:00:00Z");
+                const todayUtc = new Date();
+                todayUtc.setUTCHours(0, 0, 0, 0);
+                serverCountdownDays = Math.round(
+                  (tripStart.getTime() - todayUtc.getTime()) /
+                    (1000 * 60 * 60 * 24),
+                );
+              }
+              const tripData = {
+                ...parsed.data,
+                ...(serverCountdownDays !== undefined
+                  ? { countdownDays: serverCountdownDays }
+                  : {}),
+              };
+              sendEvent("widget", { type: "trip_card", trip: tripData });
+              resultText =
+                serverCountdownDays !== undefined
+                  ? `Trip card displayed. Server-verified countdown: ${serverCountdownDays} days (${serverCountdownDays < 0 ? "trip is in the past" : serverCountdownDays === 0 ? "trip starts today" : `trip starts in ${serverCountdownDays} day${serverCountdownDays === 1 ? "" : "s"}`}). Use this exact number in your reply — do not recalculate.`
+                  : "Trip card displayed.";
             }
           } else if (call.name === QUERY_HOUSEHOLD_TOOL_NAME) {
             const parsed = z
@@ -8397,8 +8429,36 @@ async function runRestrictedElaineTurn(params: {
         if (!parsed.success) {
           resultText = "Invalid trip data.";
         } else {
-          if (onWidget) onWidget({ type: "trip_card", trip: parsed.data });
-          resultText = "Trip card shown.";
+          let resolvedStartDate = parsed.data.startDate;
+          if (!resolvedStartDate && parsed.data.tripId) {
+            const [row] = await db
+              .select({ startDate: travelsTrips.startDate })
+              .from(travelsTrips)
+              .where(eq(travelsTrips.id, parsed.data.tripId))
+              .limit(1);
+            resolvedStartDate = row?.startDate ?? undefined;
+          }
+          let serverCountdownDays: number | undefined = undefined;
+          if (resolvedStartDate) {
+            const tripStart = new Date(resolvedStartDate + "T00:00:00Z");
+            const todayUtc = new Date();
+            todayUtc.setUTCHours(0, 0, 0, 0);
+            serverCountdownDays = Math.round(
+              (tripStart.getTime() - todayUtc.getTime()) /
+                (1000 * 60 * 60 * 24),
+            );
+          }
+          const tripData = {
+            ...parsed.data,
+            ...(serverCountdownDays !== undefined
+              ? { countdownDays: serverCountdownDays }
+              : {}),
+          };
+          if (onWidget) onWidget({ type: "trip_card", trip: tripData });
+          resultText =
+            serverCountdownDays !== undefined
+              ? `Trip card shown. Server-verified countdown: ${serverCountdownDays} days (${serverCountdownDays < 0 ? "trip is in the past" : serverCountdownDays === 0 ? "trip starts today" : `trip starts in ${serverCountdownDays} day${serverCountdownDays === 1 ? "" : "s"}`}). Use this exact number in your reply — do not recalculate.`
+              : "Trip card shown.";
         }
       } else if (name === SHOW_POTTERY_ITEM_TOOL_NAME) {
         const parsed = ShowPotteryItemToolPayload.safeParse(

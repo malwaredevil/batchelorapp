@@ -181,6 +181,7 @@ router.get("/auth/me", requireAuth, async (req, res) => {
       phoneNumber: user.phoneNumber ?? null,
       phoneVerified: user.phoneVerified ?? false,
       birthday: user.birthday ?? null,
+      slackUserId: user.slackUserId ?? null,
     }),
   );
 });
@@ -200,6 +201,7 @@ router.patch("/auth/me", requireAuth, async (req, res) => {
     displayName: string | null;
     themePreference: string | null;
     birthday: string | null;
+    slackUserId: string | null;
   }> = {};
 
   if (parsed.data.displayName !== undefined) {
@@ -221,6 +223,10 @@ router.patch("/auth/me", requireAuth, async (req, res) => {
       res.status(400).json({ error: "Birthday must be in MM-DD format." });
       return;
     }
+  }
+  if (parsed.data.slackUserId !== undefined) {
+    const sid = parsed.data.slackUserId;
+    updates.slackUserId = sid === null || sid === "" ? null : sid.trim();
   }
 
   let user;
@@ -252,6 +258,7 @@ router.patch("/auth/me", requireAuth, async (req, res) => {
       phoneNumber: user.phoneNumber ?? null,
       phoneVerified: user.phoneVerified ?? false,
       birthday: user.birthday ?? null,
+      slackUserId: user.slackUserId ?? null,
     }),
   );
 });

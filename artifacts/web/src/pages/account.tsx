@@ -563,6 +563,100 @@ function GmailConnectionCard() {
   );
 }
 
+function SlackCard() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [slackUserId, setSlackUserId] = useState(user?.slackUserId ?? "");
+
+  const update = useUpdateCurrentUser({
+    mutation: {
+      onSuccess: (result) => {
+        queryClient.setQueryData(getGetCurrentUserQueryKey(), result);
+        void queryClient.invalidateQueries({
+          queryKey: getGetCurrentUserQueryKey(),
+        });
+        toast.success(
+          result.slackUserId
+            ? "Slack account connected."
+            : "Slack account disconnected.",
+        );
+      },
+      onError: (err: unknown) =>
+        toast.error(extractError(err, "Could not update Slack settings.")),
+    },
+  });
+
+  const isConnected = Boolean(user?.slackUserId);
+
+  function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    update.mutate({ data: { slackUserId: slackUserId.trim() || null } });
+  }
+
+  function handleDisconnect() {
+    setSlackUserId("");
+    update.mutate({ data: { slackUserId: null } });
+  }
+
+  return (
+    <div className="rounded-xl border border-card-border bg-card p-6 shadow-sm">
+      <div className="mb-1 flex items-center justify-between">
+        <div className="flex items-center gap-2 font-semibold">
+          <MessageSquareText className="h-5 w-5" />
+          Slack
+        </div>
+        {isConnected && (
+          <span className="flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+            <CheckCircle2 className="h-3 w-3" />
+            Connected
+          </span>
+        )}
+      </div>
+      <p className="mb-4 text-sm text-muted-foreground">
+        Connect your Slack account to receive reminder notifications and chat
+        with Elaine via DM or the{" "}
+        <code className="rounded bg-muted px-1 text-xs">/batchelor</code> slash
+        command.
+      </p>
+      <form onSubmit={handleSave} className="space-y-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Slack Member ID
+          </Label>
+          <Input
+            value={slackUserId}
+            onChange={(e) => setSlackUserId(e.target.value)}
+            placeholder="e.g. U0BJS1T5FD3"
+            maxLength={20}
+          />
+          <p className="text-xs text-muted-foreground">
+            In Slack: click your profile picture → <strong>View profile</strong>{" "}
+            → three-dot menu (⋮) → <strong>Copy member ID</strong>.
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <Button type="submit" className="flex-1" disabled={update.isPending}>
+            {update.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : null}
+            {isConnected ? "Update" : "Connect"}
+          </Button>
+          {isConnected && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={update.isPending}
+              onClick={handleDisconnect}
+            >
+              Disconnect
+            </Button>
+          )}
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function AppearanceCard() {
   const { theme, setTheme } = useTheme();
   const queryClient = useQueryClient();
@@ -763,6 +857,7 @@ export default function Account() {
           <PhoneCard />
           <GoogleCalendarCard />
           <GmailConnectionCard />
+          <SlackCard />
           <AppearanceCard />
           <PasswordCard />
           <ElaineSettingsCard subtitle="Your household's AI assistant across every app" />

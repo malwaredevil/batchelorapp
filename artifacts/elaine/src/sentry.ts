@@ -12,11 +12,13 @@ if (dsn && import.meta.env.PROD) {
       Sentry.browserTracingIntegration(),
       Sentry.replayIntegration(),
       // Captures failed HTTP requests (4xx/5xx) as Sentry events.
-      // 502/503 are excluded — they are always deployment-restart noise (server
-      // briefly unavailable while Replit restarts the production container).
+      // 401 excluded: always unauthenticated page load / expired session;
+      //   useAuth handles the redirect to login before the user notices.
+      // 502/503 excluded: deployment-restart noise (container briefly down).
       Sentry.httpClientIntegration({
         failedRequestStatusCodes: [
-          [400, 501],
+          [400, 400],
+          [402, 501],
           [504, 599],
         ],
       }),

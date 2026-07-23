@@ -42,6 +42,10 @@
  *   - embedding / visual_embedding columns (require pgvector, unavailable on Replit DB)
  *   - *_sessions tables (ephemeral login data)
  *   - password_reset_tokens (ephemeral, regeneratable)
+ *   - password_hash — bcrypt credential; users must reset passwords after a restore
+ *   - OAuth refresh/access tokens (travels_google_calendar_connections,
+ *     travels_gmail_connections, app_gmail_connections) — Google connections must
+ *     be reconnected after a restore; tokens are too sensitive for a backup DB
  *   - Actual image files (stored in Supabase Storage, unaffected by DB disasters)
  *
  * Source:      Supabase  — DATABASE_URL (rewritten to pooler by resolveDatabaseUrl)
@@ -64,7 +68,7 @@ CREATE TABLE IF NOT EXISTS backup_history (
 CREATE TABLE IF NOT EXISTS app_users (
   id            SERIAL PRIMARY KEY,
   email         TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
+  password_hash TEXT,            -- excluded: credential, not backed up (#326)
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS display_name TEXT;
@@ -79,6 +83,10 @@ ALTER TABLE app_users ADD COLUMN IF NOT EXISTS phone_verified BOOLEAN NOT NULL D
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS phone_verified_at TIMESTAMPTZ;
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS sms_consent_at TIMESTAMPTZ;
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS sms_opted_out_at TIMESTAMPTZ;
+ALTER TABLE app_users ALTER COLUMN password_hash DROP NOT NULL;
+ALTER TABLE app_gmail_connections ALTER COLUMN refresh_token DROP NOT NULL;
+ALTER TABLE travels_google_calendar_connections ALTER COLUMN refresh_token DROP NOT NULL;
+ALTER TABLE travels_gmail_connections ALTER COLUMN refresh_token DROP NOT NULL;
 
 -- AgentPhone SMS/voice webhook
 CREATE TABLE IF NOT EXISTS agentphone_conversations (
@@ -98,7 +106,7 @@ CREATE TABLE IF NOT EXISTS app_gmail_connections (
   id                      SERIAL PRIMARY KEY,
   user_id                 INTEGER NOT NULL UNIQUE,
   google_email            TEXT NOT NULL,
-  refresh_token           TEXT NOT NULL,
+  refresh_token           TEXT,            -- excluded: OAuth token, not backed up (#326)
   access_token            TEXT,
   access_token_expires_at TIMESTAMPTZ,
   created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -593,7 +601,7 @@ CREATE TABLE IF NOT EXISTS travels_google_calendar_connections (
   id                        SERIAL PRIMARY KEY,
   user_id                   INTEGER NOT NULL UNIQUE,
   google_email              TEXT NOT NULL,
-  refresh_token             TEXT NOT NULL,
+  refresh_token             TEXT,            -- excluded: OAuth token, not backed up (#326)
   access_token              TEXT,
   access_token_expires_at   TIMESTAMPTZ,
   calendar_id               TEXT,
@@ -707,7 +715,7 @@ CREATE TABLE IF NOT EXISTS travels_gmail_connections (
   id                        SERIAL PRIMARY KEY,
   user_id                   INTEGER NOT NULL UNIQUE,
   google_email              TEXT NOT NULL,
-  refresh_token             TEXT NOT NULL,
+  refresh_token             TEXT,            -- excluded: OAuth token, not backed up (#326)
   access_token              TEXT,
   access_token_expires_at   TIMESTAMPTZ,
   last_history_id           TEXT,
@@ -1625,7 +1633,7 @@ async function main() {
     columns: [
       "id",
       "email",
-      "password_hash",
+      // password_hash excluded — credential, not safe to store in backup DB (#326)
       "display_name",
       "theme_preference",
       "hub_widget_ids",
@@ -1664,9 +1672,7 @@ async function main() {
       "id",
       "user_id",
       "google_email",
-      "refresh_token",
-      "access_token",
-      "access_token_expires_at",
+      // refresh_token, access_token, access_token_expires_at excluded — OAuth tokens (#326)
       "created_at",
       "updated_at",
     ],
@@ -2406,9 +2412,7 @@ async function main() {
         "id",
         "user_id",
         "google_email",
-        "refresh_token",
-        "access_token",
-        "access_token_expires_at",
+        // refresh_token, access_token, access_token_expires_at excluded — OAuth tokens (#326)
         "calendar_id",
         "calendar_summary",
         "created_at",
@@ -2550,9 +2554,7 @@ async function main() {
       "id",
       "user_id",
       "google_email",
-      "refresh_token",
-      "access_token",
-      "access_token_expires_at",
+      // refresh_token, access_token, access_token_expires_at excluded — OAuth tokens (#326)
       "last_history_id",
       "last_scan_at",
       "created_at",

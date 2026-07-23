@@ -105,19 +105,11 @@ export const STATEMENTS: string[] = [
   )`,
   `CREATE INDEX IF NOT EXISTS IDX_app_session_expire ON app_sessions (expire)`,
   `ALTER TABLE app_sessions ENABLE ROW LEVEL SECURITY`,
-  // One-time idempotent migration: copy any unexpired session rows from
-  // quilting_sessions into app_sessions for record-keeping continuity.
-  // NOTE: this does NOT preserve active browser logins. The cookie was renamed
-  // from "connect.sid" to "batchelor.sid" at the same time; browsers hold the
-  // old value under the original name and will not send it under the new name,
-  // so the server never finds these copied rows. The one-time logout on first
-  // deploy after this migration is expected and intentional.
-  `INSERT INTO app_sessions (sid, sess, expire)
-    SELECT sid, sess, expire FROM quilting_sessions
-    WHERE expire > NOW()
-      AND NOT EXISTS (
-        SELECT 1 FROM app_sessions a WHERE a.sid = quilting_sessions.sid
-      )`,
+  // NOTE: the one-time quilting_sessions → app_sessions row copy that used to
+  // live here has been removed. It ran on every boot (~1,200+ times in prod)
+  // and was the source of the 150K+ read/update workload seen on quilting_sessions.
+  // The migration completed long ago; the quilting_sessions table is retained
+  // above only so the CREATE TABLE IF NOT EXISTS is a safe no-op on prod.
 
   // Shared, cross-instance rate limiting counters. Backs express-rate-limit's
   // Store interface so limits are enforced across the whole autoscaled

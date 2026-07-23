@@ -61,19 +61,10 @@ export default createWorkspaceViteConfig({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
-        runtimeCaching: [
-          {
-            urlPattern: ({ url }: { url: URL }) =>
-              url.pathname.startsWith("/api/elaine/"),
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "elaine-api-cache",
-              expiration: { maxEntries: 200, maxAgeSeconds: 86400 },
-              networkTimeoutSeconds: 10,
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-        ],
+        // Authenticated API responses must NOT be runtime-cached. Service-worker
+        // caching does not vary by session/user and Cache Storage survives logout,
+        // so a cached Elaine response can be served to a different household
+        // member or after session expiry. Static assets above are safe to cache.
       },
     }),
   ],

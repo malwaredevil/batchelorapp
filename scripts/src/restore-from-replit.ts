@@ -18,6 +18,8 @@
  *   - Mirrors backup-to-replit.ts's table/column set exactly, including
  *     app_users phone/SMS fields and the agentphone_* tables — keep both
  *     scripts in sync when adding new tables or columns.
+ *   - password_hash and OAuth tokens are NOT restored — after a restore users
+ *     must reset their passwords and reconnect Google Calendar / Gmail.
  *
  * Source:      Replit DB — PGHOST / PGPORT / PGUSER / PGPASSWORD / PGDATABASE
  * Destination: Supabase  — DATABASE_URL (rewritten to pooler by resolveDatabaseUrl)
@@ -114,6 +116,12 @@ async function main() {
 
   console.log("\nRestoring to Supabase (TRUNCATE + INSERT per table)...");
 
+  // Wrap the entire restore in a single transaction: any mid-run failure
+  // automatically rolls back all TRUNCATEs and leaves Supabase unchanged.
+  // PostgreSQL rolls back open transactions automatically when the connection
+  // closes, so a script crash also cleans up without leaving a partial state.
+  await dest.query("BEGIN");
+
   // Disable triggers so FK order doesn't matter
   await dest.query("SET session_replication_role = replica");
 
@@ -124,7 +132,7 @@ async function main() {
     columns: [
       "id",
       "email",
-      "password_hash",
+      // password_hash excluded — credential, not stored in backup DB (#326)
       "display_name",
       "theme_preference",
       "hub_widget_ids",
@@ -166,9 +174,7 @@ async function main() {
       "id",
       "user_id",
       "google_email",
-      "refresh_token",
-      "access_token",
-      "access_token_expires_at",
+      // refresh_token, access_token, access_token_expires_at excluded — OAuth tokens (#326)
       "created_at",
       "updated_at",
     ],
@@ -924,9 +930,7 @@ async function main() {
       "id",
       "user_id",
       "google_email",
-      "refresh_token",
-      "access_token",
-      "access_token_expires_at",
+      // refresh_token, access_token, access_token_expires_at excluded — OAuth tokens (#326)
       "calendar_id",
       "calendar_summary",
       "created_at",
@@ -1061,9 +1065,7 @@ async function main() {
       "id",
       "user_id",
       "google_email",
-      "refresh_token",
-      "access_token",
-      "access_token_expires_at",
+      // refresh_token, access_token, access_token_expires_at excluded — OAuth tokens (#326)
       "last_history_id",
       "last_scan_at",
       "created_at",
@@ -1868,6 +1870,7 @@ async function main() {
   await resetSequence(dest, "knowledge_relationships", "id");
 
   await dest.query("SET session_replication_role = DEFAULT");
+  await dest.query("COMMIT");
 
   console.log("\n✓ Restore complete.");
   console.log(

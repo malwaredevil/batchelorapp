@@ -20,6 +20,7 @@
  * — it never blocks startup.
  */
 
+import { createHash } from "crypto";
 import { pool, STATEMENTS } from "@workspace/db";
 import { logger } from "./logger";
 
@@ -79,6 +80,17 @@ export async function runStartupMigration(): Promise<void> {
   logger.info("startup-migrate: running idempotent table check");
 
   try {
+    // Create the migration log table in autocommit mode (before BEGIN).
+    // Running DDL outside the main transaction means two instances starting
+    // simultaneously can block briefly on each other's catalog lock without
+    // any risk of deadlocking with the other locks each holds from STATEMENTS.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS schema_migration_log (
+        statement_hash TEXT PRIMARY KEY,
+        applied_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
     await client.query("BEGIN");
     // Bound how long any single DDL statement waits for a table lock.
     // ALTER TABLE on a busy table can hang indefinitely otherwise — 5 s
@@ -86,11 +98,40 @@ export async function runStartupMigration(): Promise<void> {
     // and the server still starts (catch below logs and continues).
     await client.query("SET LOCAL lock_timeout = '5s'");
     await client.query("SET LOCAL statement_timeout = '10s'");
+
+    // Load already-applied statement hashes in one round-trip.
+    // On the very first boot this returns an empty set and every STATEMENT
+    // runs; on subsequent boots only new/changed statements execute, cutting
+    // startup time from ~70 s to <1 s once the schema is fully initialised.
+    const { rows } = await client.query<{ statement_hash: string }>(
+      "SELECT statement_hash FROM schema_migration_log",
+    );
+    const applied = new Set(rows.map((r) => r.statement_hash));
+
+    let ran = 0;
+    let skipped = 0;
     for (const statement of STATEMENTS) {
+      const h = createHash("sha256")
+        .update(statement)
+        .digest("hex")
+        .slice(0, 16);
+      if (applied.has(h)) {
+        skipped++;
+        continue;
+      }
       await client.query(statement);
+      await client.query(
+        "INSERT INTO schema_migration_log (statement_hash) VALUES ($1) ON CONFLICT DO NOTHING",
+        [h],
+      );
+      ran++;
     }
+
     await client.query("COMMIT");
-    logger.info("startup-migrate: all tables verified / created successfully");
+    logger.info(
+      { ran, skipped },
+      "startup-migrate: all tables verified / created successfully",
+    );
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
     logger.error(

@@ -4534,7 +4534,7 @@ function buildElaineCoreSystemPrompt(params: {
   const isAutoRun = actionConfirmationMode === "auto_run";
 
   const confirmationModeSection = isAutoRun
-    ? `CONFIRMATION MODE: This channel uses auto-run mode — all action tools execute immediately without any confirmation step. Always confirm in your reply what you actually did (or that something failed). Do not mention confirmation modes to the user; do not call ${SET_MODE_TOOL_NAME}.`
+    ? `CONFIRMATION MODE: This channel uses auto-run mode — all action tools execute immediately without any confirmation step. When you do call an action tool, always confirm in your reply what you actually did (or that it failed). For conversational questions, jokes, general knowledge, or anything else that requires no tool call, just answer naturally — you do not need an action to justify a reply. Do not mention confirmation modes to the user; do not call ${SET_MODE_TOOL_NAME}.`
     : `CONFIRMATION MODE: This user's current mode for confirming proposed actions is "${actionConfirmationMode}" — ${CONFIRMATION_MODE_EXPLANATION[actionConfirmationMode]} The three modes are: ${Object.values(CONFIRMATION_MODE_EXPLANATION).join(" | ")} If the user asks how you confirm actions, or asks to change it (e.g. "just do it automatically", "ask me one at a time", "show me everything together"), explain the modes in your visible reply and call ${SET_MODE_TOOL_NAME} once they've decided — never call it just to describe the options. Mention that they can also change this anytime from Settings.`;
 
   const defaultFormattingNote = `Your visible replies are rendered in a chat bubble with a markdown renderer. Use markdown naturally to make replies easier to read, but keep it light — this is a chat bubble, not a document. Good uses: **bold** for key terms or place names, bullet lists (- item) for 3+ items, numbered lists (1. step) for instructions, ## for a section heading only when the reply is genuinely multi-section. Do not use headers for short replies. Do not use markdown for a single sentence or two — plain prose is fine. Never use backtick code blocks. When you call a weather, places, air-quality, or pollen tool and it succeeds, a rich visual card is automatically shown below your reply — so in that case keep your reply text very short (1–2 sentences summarising the key point) rather than spelling out all the data again in text.`;
@@ -8812,6 +8812,30 @@ async function runRestrictedElaineTurn(params: {
         tool_call_id: call.id,
         content: resultText,
       });
+    }
+  }
+
+  // If all MAX_ROUNDS were consumed by tool calls and the model never produced
+  // a text reply (e.g. show_trip_card → web_search → fetch_page used all 3
+  // rounds), make one final forced call with tool_choice:"none" so the model
+  // can synthesise the tool results it already has into an actual answer.
+  // Only fires when there are accumulated tool results in context (messages
+  // will have grown beyond the initial system+history+user set).
+  if (!replyText && messages.length > 2 + Math.min(history.length, 10)) {
+    try {
+      const finalCompletion = await callModel(
+        config.chatModel,
+        (client, model) =>
+          client.chat.completions.create({
+            model,
+            max_tokens: maxTokens,
+            messages,
+            tool_choice: "none",
+          }),
+      );
+      replyText = (finalCompletion.choices[0]?.message?.content ?? "").trim();
+    } catch (err) {
+      logger.warn({ err }, `${channelLabel} final-synthesis call failed`);
     }
   }
 

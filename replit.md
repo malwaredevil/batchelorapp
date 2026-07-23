@@ -72,7 +72,7 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
 - Always run backup before any schema change or publish
 - DATABASE_URL must point to the live Supabase (not the Replit built-in helium DB)
 - All three "optional" AI secrets (OPENROUTER_API_KEY, JINA_API_KEY, VOYAGE_API_KEY) are required
-- Legacy pre-migration rows with NULL `user_id` were backfilled to Jonathan Batchelor (`batchelorjc@gmail.com`, `app_users.id=4`, `isOwner=true`) as the attributed creator
+- Legacy pre-migration rows with NULL `user_id` were backfilled to the owner account (`app_users.isOwner=true`) as the attributed creator
 - Single combined domain: app.batchelor.app (target), pottery.batchelor.app + quilting.batchelor.app (decommissioned after go-live)
 - GitHub syncs from this sandbox must always batch every changed file into a single commit via the Git Data API — never loop the Contents API once per file. Per-file commits each independently trigger the full CI suite plus CodeQL, causing workflow pileups. Before every push, run the local pre-push gate (lint, typecheck, build, codegen-drift check) and fix everything it finds — see `github-backup-issue-tracking` skill for the exact steps. `ci.yml` also has `concurrency: cancel-in-progress` as a backstop.
 - When the user has queued multiple feature requests, don't silently barrel from one to the next. If a step needs something from the user (a manual action, a confirmation, a choice), stop and ask a simple yes/no or short question via user_query before proceeding — don't let the queue push past unanswered questions.

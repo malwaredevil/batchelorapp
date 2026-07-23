@@ -8,6 +8,7 @@ import express, {
 import pinoHttp from "pino-http";
 import multer from "multer";
 import cookieParser from "cookie-parser";
+import helmet from "helmet";
 import { ZodError } from "zod";
 import * as SentryNode from "@sentry/node";
 import router from "./routes";
@@ -23,6 +24,26 @@ const app: Express = express();
 // Trust the Replit reverse proxy so req.secure / req.ip reflect the real
 // client connection (needed for Secure cookies and rate limiting).
 app.set("trust proxy", 1);
+
+// Security response headers (#331).
+// contentSecurityPolicy is deferred: requires explicit allowlists for
+// Supabase Storage, Google Maps, Sentry, and service-worker script origins.
+// crossOriginEmbedderPolicy is off: COEP blocks Supabase Storage / Maps loads.
+// crossOriginOpenerPolicy allows popups for the Google OAuth callback window.
+// All other helmet defaults are enabled:
+//   X-Content-Type-Options: nosniff
+//   X-Frame-Options: DENY
+//   Referrer-Policy: no-referrer
+//   Strict-Transport-Security (redundant with CDN but harmless in-depth)
+//   Permissions-Policy, Origin-Agent-Cluster, X-Permitted-Cross-Domain-Policies
+app.disable("x-powered-by");
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
+  }),
+);
 
 app.use(
   pinoHttp({

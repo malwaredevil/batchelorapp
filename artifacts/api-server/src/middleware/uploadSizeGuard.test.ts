@@ -190,6 +190,11 @@ function rawPostChunked(
 
   return new Promise((resolve, reject) => {
     let resolved = false;
+    // Track the response status separately so we can resolve on ECONNRESET/EPIPE
+    // if the server sent a 413 and then destroyed the socket before the response
+    // body `end` event fired (a race seen on slower CI runners).
+    let responseStatus: number | null = null;
+    const responseChunks: Buffer[] = [];
 
     const req = http.request(
       {
@@ -203,13 +208,14 @@ function rawPostChunked(
         },
       },
       (res) => {
-        const chunks: Buffer[] = [];
-        res.on("data", (c: Buffer) => chunks.push(c));
+        responseStatus = res.statusCode!;
+        res.on("data", (c: Buffer) => responseChunks.push(c));
         res.on("end", () => {
+          if (resolved) return;
           resolved = true;
           let parsed: unknown = null;
           try {
-            parsed = JSON.parse(Buffer.concat(chunks).toString());
+            parsed = JSON.parse(Buffer.concat(responseChunks).toString());
           } catch {
             // non-JSON body
           }
@@ -221,8 +227,24 @@ function rawPostChunked(
       },
     );
 
-    req.on("error", (e: Error) => {
-      // Tolerate ECONNRESET/EPIPE after server-side socket destruction on 413.
+    req.on("error", (e: NodeJS.ErrnoException) => {
+      // ECONNRESET / EPIPE are expected when the server sends a 413 and then
+      // destroys the socket.  Resolve with the already-captured status rather
+      // than rejecting — CI runners can surface the reset before the response
+      // `end` event fires.
+      if ((e.code === "ECONNRESET" || e.code === "EPIPE") && !resolved) {
+        if (responseStatus !== null) {
+          resolved = true;
+          let parsed: unknown = null;
+          try {
+            parsed = JSON.parse(Buffer.concat(responseChunks).toString());
+          } catch {
+            // partial body
+          }
+          resolve({ status: responseStatus, body: parsed });
+          return;
+        }
+      }
       if (!resolved) reject(e);
     });
 

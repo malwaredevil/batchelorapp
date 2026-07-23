@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { pool } from "@workspace/db";
 import { env } from "./env";
 
 // ---------------------------------------------------------------------------
@@ -105,7 +106,6 @@ export async function listAllObjects(
 type DbRow = { path: string };
 
 async function fetchDbPaths(query: string): Promise<Set<string>> {
-  const { pool } = await import("@workspace/db");
   const result = await pool.query<DbRow>(query);
   const paths = new Set<string>();
   for (const row of result.rows) {
@@ -162,7 +162,6 @@ export function extractAttachmentUrl(item: unknown): string | null {
 }
 
 async function fetchElaineAttachmentPaths(): Promise<Set<string>> {
-  const { pool } = await import("@workspace/db");
   const result = await pool.query<{ attachment_urls: unknown }>(
     `SELECT attachment_urls FROM elaine_history_messages
      WHERE attachment_urls IS NOT NULL AND jsonb_array_length(attachment_urls::jsonb) > 0`,

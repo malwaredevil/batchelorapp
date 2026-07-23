@@ -1,0 +1,68 @@
+name: One-time PII history scrub (BFG)
+on:
+  workflow_dispatch:
+
+jobs:
+  scrub:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download BFG Repo Cleaner
+        run: |
+          wget -q https://repo1.maven.org/maven2/com/madgag/bfg/1.14.0/bfg-1.14.0.jar -O bfg.jar
+          java -jar bfg.jar --version || true
+
+      - name: Create text-replacement file
+        run: |
+          cat > replacements.txt << 'EOF'
+          REDACTED==>REDACTED
+          REDACTED==>REDACTED
+          EOF
+
+      - name: Clone repository as mirror
+        run: |
+          git clone --mirror \
+            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" \
+            repo.git
+
+      - name: Run BFG - delete add-users.ts from all history
+        run: java -jar bfg.jar --delete-files 'add-users.ts' repo.git
+
+      - name: Run BFG - replace email addresses in all blobs
+        run: java -jar bfg.jar --replace-text replacements.txt repo.git
+
+      - name: Expire reflogs and pack
+        run: |
+          cd repo.git
+          git reflog expire --expire=now --all
+          git gc --prune=now --aggressive
+
+      - name: Verify - check file is gone from all history
+        run: |
+          cd repo.git
+          COUNT=$(git log --all --full-history -- scripts/src/add-users.ts 2>/dev/null | wc -l)
+          echo "Commits still referencing add-users.ts: $COUNT"
+          if [ "$COUNT" -gt 0 ]; then
+            echo "ERROR: add-users.ts still present in history"
+            exit 1
+          fi
+          echo "PASS: add-users.ts is gone from all history"
+
+      - name: Verify - check email addresses are scrubbed
+        run: |
+          cd repo.git
+          if git grep 'REDACTED' --all; then
+            echo "ERROR: email still present in history"
+            exit 1
+          fi
+          if git grep 'REDACTED' --all; then
+            echo "ERROR: email still present in history"
+            exit 1
+          fi
+          echo "PASS: no household email addresses found in any blob"
+
+      - name: Force-push rewritten history
+        run: |
+          cd repo.git
+          git push --force --mirror

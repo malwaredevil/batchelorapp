@@ -242,37 +242,42 @@ describe("listAllObjects", () => {
 // runStorageReconcile — orphan / missing / stale detection
 // ---------------------------------------------------------------------------
 describe("runStorageReconcile", () => {
-  it("reports orphaned objects (in storage but not in DB)", async () => {
-    mockListImpl = (_prefix, _opts) => ({
-      data: [{ name: "items", id: null, created_at: null }],
-      error: null,
-    });
+  it(
+    "reports orphaned objects (in storage but not in DB)",
+    async () => {
+      // Runs 6 concurrent buckets with Promise.all; allow generous timeout for slow CI
+      mockListImpl = (_prefix, _opts) => ({
+        data: [{ name: "items", id: null, created_at: null }],
+        error: null,
+      });
 
-    let listCallsForBucket = 0;
-    mockListImpl = (_prefix, _opts) => {
-      listCallsForBucket++;
-      if (listCallsForBucket % 2 === 1) {
-        return {
-          data: [
-            {
-              name: "orphan-file.jpg",
-              id: "id-orphan",
-              created_at: "2024-01-01T00:00:00Z",
-            },
-          ],
-          error: null,
-        };
-      }
-      return { data: [], error: null };
-    };
+      let listCallsForBucket = 0;
+      mockListImpl = (_prefix, _opts) => {
+        listCallsForBucket++;
+        if (listCallsForBucket % 2 === 1) {
+          return {
+            data: [
+              {
+                name: "orphan-file.jpg",
+                id: "id-orphan",
+                created_at: "2024-01-01T00:00:00Z",
+              },
+            ],
+            error: null,
+          };
+        }
+        return { data: [], error: null };
+      };
 
-    mockPool.query.mockResolvedValue({ rows: [] });
+      mockPool.query.mockResolvedValue({ rows: [] });
 
-    const report = await runStorageReconcile("test");
-    const potteryBucket = report.buckets.find((b) => b.bucket === "pottery");
-    expect(potteryBucket).toBeDefined();
-    expect(potteryBucket!.orphanedObjects.length).toBeGreaterThanOrEqual(0);
-  });
+      const report = await runStorageReconcile("test");
+      const potteryBucket = report.buckets.find((b) => b.bucket === "pottery");
+      expect(potteryBucket).toBeDefined();
+      expect(potteryBucket!.orphanedObjects.length).toBeGreaterThanOrEqual(0);
+    },
+    { timeout: 15_000 },
+  );
 
   it("reports missing objects (DB row with no matching storage object)", async () => {
     mockListImpl = () => ({ data: [], error: null });

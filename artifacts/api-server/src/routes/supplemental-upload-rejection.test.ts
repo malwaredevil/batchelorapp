@@ -38,6 +38,7 @@ import {
   makeEagerSelectBuilder,
   createTrackedMutationBuilders,
 } from "../test-helpers/db-mock";
+import { generateVisualEmbedding } from "../lib/visual-embed";
 
 // ---------------------------------------------------------------------------
 // Shared DB mock — used by all route builders
@@ -481,8 +482,9 @@ beforeEach(() => {
   selectQueue.length = 0;
   lastReturning.value = [];
   vi.clearAllMocks();
-  // Re-apply default for execute after clearAllMocks
+  // Re-apply defaults that clearAllMocks may clear depending on Vitest version
   dbMock.execute.mockResolvedValue({ rows: [] });
+  vi.mocked(generateVisualEmbedding).mockResolvedValue(null);
 });
 
 // ---------------------------------------------------------------------------
@@ -914,8 +916,7 @@ describe("Travels POST /api/travels/magnets/check — upload rejection", () => {
 
   it("accepts a valid JPEG and returns a verdict", async () => {
     // generateVisualEmbedding must return a non-null embedding for the handler
-    // to proceed past the 503 guard. Override the default null mock for this test.
-    const { generateVisualEmbedding } = await import("../lib/visual-embed");
+    // to proceed past the 503 guard. Override the null default for this test.
     vi.mocked(generateVisualEmbedding).mockResolvedValueOnce(
       new Array(1024).fill(0),
     );

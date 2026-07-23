@@ -125,6 +125,10 @@ interface ElaineChatPanelProps {
   /** Rendered above the composer, below the message list — for app-specific
    *  in-progress cards (travels uses this for the magnet-check result). */
   belowMessagesSlot?: ReactNode;
+  /** When true, suppresses the morning brief banner inside the panel. Use
+   *  this on surfaces that already render the brief themselves (e.g. the
+   *  full Elaine chat page renders it as a top-level banner above the panel). */
+  hideBrief?: boolean;
 }
 
 /**
@@ -141,6 +145,7 @@ export function ElaineChatPanel({
   emptyState,
   composerLeftSlot,
   belowMessagesSlot,
+  hideBrief = false,
 }: ElaineChatPanelProps) {
   const {
     settings,
@@ -242,7 +247,7 @@ export function ElaineChatPanel({
     mutation: { onSuccess: () => void refetchBrief() },
   });
   const showBrief =
-    brief != null && !brief.dismissed && brief.content.length > 0;
+    !hideBrief && brief != null && !brief.dismissed && brief.content.length > 0;
 
   return (
     <>

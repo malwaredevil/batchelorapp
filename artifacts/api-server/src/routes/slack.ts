@@ -1,14 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { webhookLimiter } from "../middleware/rateLimit";
 import { eq } from "drizzle-orm";
-import {
-  db,
-  pool,
-  appUsers,
-  elaineSlackConversations,
-  slackWebhookDeliveries,
-  type ElaineSlackConversationRow,
-} from "@workspace/db";
+import { db, appUsers, slackWebhookDeliveries } from "@workspace/db";
 import { logger } from "../lib/logger";
 import {
   verifySlackSignature,
@@ -16,7 +9,7 @@ import {
   getSlackUserEmail,
   postSlashCommandResponse,
 } from "../lib/slack";
-import { runElaineSlackTurn, type ElaineSlackChatMessage } from "../elaine";
+import { enqueueJob } from "../lib/jobs/queue";
 import { env } from "../lib/env";
 
 // ---------------------------------------------------------------------------
@@ -29,8 +22,9 @@ import { env } from "../lib/env";
 // Security posture mirrors routes/agentphone.ts and routes/elaine-email.ts:
 // HMAC-SHA256 signature verification over raw body + bounded timestamp, then
 // dedup by event_id, then user resolution by slack_user_id (or auto-link via
-// email if first contact), then runElaineSlackTurn (same restricted engine as
-// AgentPhone and email — same tool allowlist, same auto-run semantics).
+// email if first contact), then enqueue a slack.turn job (processed by the
+// dedicated "slack" queue worker). The webhook acknowledges immediately so the
+// DB pool connection is released before the AI turn begins.
 // See threat_model.md for the full security model.
 // ---------------------------------------------------------------------------
 
@@ -66,31 +60,6 @@ async function claimDelivery(id: string): Promise<boolean> {
     if (isDuplicateKeyError(err)) return false;
     throw err;
   }
-}
-
-async function getOrCreateSlackConversation(
-  userId: number,
-  slackUserId: string,
-): Promise<ElaineSlackConversationRow> {
-  const [existing] = await db
-    .select()
-    .from(elaineSlackConversations)
-    .where(eq(elaineSlackConversations.userId, userId));
-  if (existing) return existing;
-
-  const [created] = await db
-    .insert(elaineSlackConversations)
-    .values({ userId, slackUserId, messages: [] })
-    .onConflictDoNothing()
-    .returning();
-  if (created) return created;
-
-  // Lost a race (unlikely for Slack DMs, but safe to handle).
-  const [row] = await db
-    .select()
-    .from(elaineSlackConversations)
-    .where(eq(elaineSlackConversations.userId, userId));
-  return row;
 }
 
 // Resolves a Slack user ID to a Batchelor app_user.
@@ -130,64 +99,6 @@ async function resolveUser(
     "slack: auto-linked Slack user ID via email match",
   );
   return byEmail;
-}
-
-async function runTurnAndPersist(
-  conversation: ElaineSlackConversationRow,
-  userId: number,
-  inputText: string,
-): Promise<string> {
-  // Acquire a session-level PostgreSQL advisory lock keyed by userId before
-  // reading history. This serializes concurrent turns from the same Slack
-  // user so two simultaneous messages cannot both read the same starting
-  // history and then overwrite each other's writes (last-writer-wins).
-  // We hold the lock for the full turn including the AI call; the pool
-  // client is released in the finally block regardless of outcome.
-  const client = await pool.connect();
-  try {
-    await client.query("SELECT pg_advisory_lock($1::bigint)", [userId]);
-
-    // Re-read the conversation now that we hold the lock to get the
-    // freshest history (a prior concurrent turn may have just written it).
-    const [fresh] = await db
-      .select()
-      .from(elaineSlackConversations)
-      .where(eq(elaineSlackConversations.userId, userId))
-      .limit(1);
-    const current = fresh ?? conversation;
-    const history = (current.messages as ElaineSlackChatMessage[] | null) ?? [];
-
-    let replyText: string;
-    let updatedHistory: ElaineSlackChatMessage[];
-
-    try {
-      const result = await runElaineSlackTurn({ userId, inputText, history });
-      replyText = result.replyText;
-      updatedHistory = result.history;
-    } catch (err) {
-      logger.error({ err }, "slack: Elaine turn failed");
-      replyText =
-        "Sorry, something went wrong — please try again or open the app.";
-      updatedHistory = history;
-    }
-
-    await db
-      .update(elaineSlackConversations)
-      .set({ messages: updatedHistory, updatedAt: new Date() })
-      .where(eq(elaineSlackConversations.id, current.id));
-
-    return replyText;
-  } finally {
-    // Inner try/finally guarantees client.release() runs even when the unlock
-    // query itself throws (e.g. broken connection). Without this nesting,
-    // a thrown unlock error exits the outer finally before release() is reached,
-    // permanently leaking the pool slot.
-    try {
-      await client.query("SELECT pg_advisory_unlock($1::bigint)", [userId]);
-    } finally {
-      client.release();
-    }
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -266,42 +177,55 @@ router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
     return;
   }
 
-  logger.info(
-    { eventId, slackUserId, channelId },
-    "slack: inbound DM received",
-  );
+  // Resolve user synchronously before acknowledging so we can reply inline
+  // for unrecognised users (no job to enqueue in that case).
+  const user = await resolveUser(slackUserId).catch((err) => {
+    logger.error({ err, slackUserId }, "slack: user resolution failed");
+    return null;
+  });
 
-  // Acknowledge immediately — Slack requires a 200 response quickly. All
-  // LLM processing happens after the response is sent, same as voice calls.
+  if (!user) {
+    // Acknowledge first, then post the help message asynchronously so we
+    // don't hold up the 200 response.
+    res.json({ ok: true });
+    void postSlackMessage(
+      channelId,
+      "Hi! I don't recognise your Slack account yet. " +
+        "Open the Batchelor app → Account Settings and connect your Slack account, " +
+        "then send me another message.",
+    ).catch((err) =>
+      logger.warn({ err, slackUserId }, "slack: failed to post help message"),
+    );
+    return;
+  }
+
+  // Enqueue the turn job — the worker will run the AI turn and post the reply.
+  // Using the event_id as idempotency key means a retried delivery (same
+  // event_id, already claimed above) would be a DO UPDATE no-op in app_jobs,
+  // but we never reach here for duplicates because claimDelivery returned
+  // false above and we already exited.
+  try {
+    await enqueueJob({
+      type: "slack.turn",
+      payload: {
+        userId: user.id,
+        slackEventId: eventId,
+        inputText: messageText || "(empty message)",
+        channelId,
+      },
+      idempotencyKey: eventId,
+      createdByUserId: user.id,
+    });
+    logger.info(
+      { eventId, slackUserId, channelId, userId: user.id },
+      "slack: DM enqueued",
+    );
+  } catch (err) {
+    logger.error({ err, eventId }, "slack: failed to enqueue turn job");
+    // Still ack 200 — Slack would retry otherwise and hit the dedup guard.
+  }
+
   res.json({ ok: true });
-
-  void (async () => {
-    try {
-      const user = await resolveUser(slackUserId);
-      if (!user) {
-        await postSlackMessage(
-          channelId,
-          "Hi! I don't recognise your Slack account yet. " +
-            "Open the Batchelor app → Account Settings and connect your Slack account, " +
-            "then send me another message.",
-        );
-        return;
-      }
-
-      const conversation = await getOrCreateSlackConversation(
-        user.id,
-        slackUserId,
-      );
-      const replyText = await runTurnAndPersist(
-        conversation,
-        user.id,
-        messageText || "(empty message)",
-      );
-      await postSlackMessage(channelId, replyText);
-    } catch (err) {
-      logger.error({ err, slackUserId }, "slack: DM processing failed");
-    }
-  })();
 });
 
 // ---------------------------------------------------------------------------
@@ -339,50 +263,56 @@ router.post("/slash", webhookLimiter, async (req: Request, res: Response) => {
     "slack: slash command received",
   );
 
+  // Resolve user before the 200 so we can give an inline error for unknowns.
+  const user = await resolveUser(slackUserId).catch((err) => {
+    logger.error({ err, slackUserId }, "slack: slash user resolution failed");
+    return null;
+  });
+
+  if (!user) {
+    res.json({
+      response_type: "ephemeral",
+      text: "I don't recognise your Slack account. Send me a DM first so I can link it to your Batchelor account.",
+    });
+    return;
+  }
+
+  // Use a deterministic idempotency key so rapid double-submits don't fan out.
+  // Slash commands don't have a stable event_id, so we use slackUserId + a
+  // minute-bucketed timestamp to deduplicate within a 60-second window.
+  const minuteBucket = Math.floor(Date.now() / 60_000);
+  const idempotencyKey = `slash:${slackUserId}:${minuteBucket}`;
+
   // Acknowledge immediately with a brief ephemeral message. The LLM turn
-  // result is posted via response_url once it's ready.
+  // result is posted via response_url once the worker picks up the job.
   res.json({
     response_type: "ephemeral",
     text: "_One moment, I'm thinking…_",
   });
 
-  void (async () => {
-    try {
-      const user = await resolveUser(slackUserId);
-      if (!user) {
-        await postSlashCommandResponse(
-          responseUrl,
-          "I don't recognise your Slack account. Send me a DM first so I can link it to your Batchelor account.",
-        );
-        return;
-      }
-
-      const conversation = await getOrCreateSlackConversation(
-        user.id,
-        slackUserId,
-      );
-      const effectiveInput = inputText || "Hi Elaine!";
-      const replyText = await runTurnAndPersist(
-        conversation,
-        user.id,
-        effectiveInput,
-      );
-      await postSlashCommandResponse(responseUrl, replyText);
-    } catch (err) {
-      logger.error(
-        { err, slackUserId },
-        "slack: slash command processing failed",
-      );
-      try {
-        await postSlashCommandResponse(
-          responseUrl,
-          "Sorry, something went wrong — please try again.",
-        );
-      } catch {
-        // best effort
-      }
-    }
-  })();
+  try {
+    await enqueueJob({
+      type: "slack.turn",
+      payload: {
+        userId: user.id,
+        slackEventId: idempotencyKey,
+        inputText: inputText || "Hi Elaine!",
+        responseUrl,
+      },
+      idempotencyKey,
+      createdByUserId: user.id,
+    });
+    logger.info(
+      { slackUserId, userId: user.id, command: slashBody.command },
+      "slack: slash command enqueued",
+    );
+  } catch (err) {
+    logger.error({ err, slackUserId }, "slack: failed to enqueue slash job");
+    void postSlashCommandResponse(
+      responseUrl,
+      "Sorry, something went wrong — please try again.",
+    ).catch(() => undefined);
+  }
 });
 
 export default router;

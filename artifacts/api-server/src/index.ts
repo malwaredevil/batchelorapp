@@ -8,6 +8,7 @@ import { startGmailScanScheduler } from "./lib/gmail-scan";
 import { startErrorRateSummary } from "./lib/error-tracker";
 import { startBirthdayScheduler } from "./lib/birthday-scheduler";
 import { startMonitoringScheduler } from "./lib/monitoring-scheduler";
+import { startJobWorker } from "./lib/jobs/worker";
 
 const rawPort = process.env["PORT"];
 
@@ -38,6 +39,9 @@ function startListening(): void {
     startErrorRateSummary();
     startBirthdayScheduler();
     startMonitoringScheduler();
+    // Dedicated worker for Slack AI turns — keeps Slack processing isolated
+    // from other job queues so a burst of DMs cannot starve other work.
+    startJobWorker("slack");
   });
 
   function shutdown(signal: string): void {

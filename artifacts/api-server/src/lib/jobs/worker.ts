@@ -12,10 +12,20 @@ type ClaimedJob = {
   max_attempts: number;
 };
 
-let interval: NodeJS.Timeout | null = null;
-let controller: AbortController | null = null;
+type ActiveWorker = {
+  interval: NodeJS.Timeout;
+  controller: AbortController;
+};
 
-async function claimJob(workerId: string): Promise<ClaimedJob | null> {
+// Keyed by queue name ("__all__" when no queue filter is set).
+const activeWorkers = new Map<string, ActiveWorker>();
+
+async function claimJob(
+  workerId: string,
+  queue?: string,
+): Promise<ClaimedJob | null> {
+  const queueFilter = queue ? "AND queue = $2" : "";
+  const params: unknown[] = queue ? [workerId, queue] : [workerId];
   const result = await pool.query<ClaimedJob>(
     `
       UPDATE app_jobs
@@ -28,16 +38,26 @@ async function claimJob(workerId: string): Promise<ClaimedJob | null> {
       WHERE id = (
         SELECT id
         FROM app_jobs
-        WHERE status IN ('queued', 'scheduled', 'retry_wait')
-          AND scheduled_for <= now()
-          AND (lease_expires_at IS NULL OR lease_expires_at < now())
+        WHERE (
+          -- Normal claim: ready jobs that have never been leased or whose
+          -- retry backoff has elapsed.
+          (status IN ('queued', 'scheduled', 'retry_wait')
+           AND scheduled_for <= now()
+           AND (lease_expires_at IS NULL OR lease_expires_at < now()))
+          OR
+          -- Stale-lease recovery: a running job whose lease expired means the
+          -- worker process died mid-turn.  Re-claim it so the job is retried
+          -- automatically rather than stuck in 'running' forever.
+          (status = 'running' AND lease_expires_at < now())
+        )
+          ${queueFilter}
         ORDER BY priority DESC, scheduled_for ASC, id ASC
         FOR UPDATE SKIP LOCKED
         LIMIT 1
       )
       RETURNING id, type, payload, attempt_count, max_attempts
     `,
-    [workerId],
+    params,
   );
   return result.rows[0] ?? null;
 }
@@ -82,8 +102,9 @@ async function markFailed(job: ClaimedJob, err: unknown): Promise<void> {
 async function processOne(
   workerId: string,
   signal: AbortSignal,
+  queue?: string,
 ): Promise<void> {
-  const job = await claimJob(workerId);
+  const job = await claimJob(workerId, queue);
   if (!job) return;
   const definition = JOB_REGISTRY_BY_TYPE.get(job.type);
   if (!definition) {
@@ -107,22 +128,39 @@ async function processOne(
   }
 }
 
-export function startJobWorker(): void {
-  if (interval) return;
-  const workerId = `api-${process.pid}-${randomUUID()}`;
-  controller = new AbortController();
-  interval = setInterval(() => {
-    void processOne(workerId, controller!.signal);
+// Starts a polling worker for the given queue (or all queues when omitted).
+// Multiple independent workers can be started for different queues.
+// Calling startJobWorker with the same queue argument a second time is a no-op.
+export function startJobWorker(queue?: string): void {
+  const key = queue ?? "__all__";
+  if (activeWorkers.has(key)) return;
+  const workerId = `api-${process.pid}-${queue ?? "all"}-${randomUUID()}`;
+  const controller = new AbortController();
+  const interval = setInterval(() => {
+    void processOne(workerId, controller.signal, queue);
   }, 5_000);
   interval.unref();
-  logger.info({ workerId }, "job-worker: started");
+  activeWorkers.set(key, { interval, controller });
+  logger.info({ workerId, queue: queue ?? "(all)" }, "job-worker: started");
 }
 
-export async function stopJobWorker(): Promise<void> {
-  if (!interval) return;
-  clearInterval(interval);
-  interval = null;
-  controller?.abort();
-  controller = null;
-  logger.info("job-worker: stopped");
+// Stops the worker for the given queue (or all queues when omitted).
+export async function stopJobWorker(queue?: string): Promise<void> {
+  const key = queue ?? "__all__";
+  const worker = activeWorkers.get(key);
+  if (!worker) return;
+  clearInterval(worker.interval);
+  worker.controller.abort();
+  activeWorkers.delete(key);
+  logger.info({ queue: queue ?? "(all)" }, "job-worker: stopped");
+}
+
+// Stops all active workers (used during graceful shutdown).
+export async function stopAllJobWorkers(): Promise<void> {
+  for (const [key, worker] of activeWorkers) {
+    clearInterval(worker.interval);
+    worker.controller.abort();
+    activeWorkers.delete(key);
+  }
+  logger.info("job-worker: all workers stopped");
 }

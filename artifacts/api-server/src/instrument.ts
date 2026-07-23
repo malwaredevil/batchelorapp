@@ -60,6 +60,12 @@ if (process.env.SENTRY_DSN) {
     // 100% sample rate: single-user household app, low traffic. Needed so
     // every Elaine conversation is captured in Sentry AI Conversations.
     tracesSampleRate: 1.0,
+    // Record AI inputs and outputs so the AI Conversations dashboard can
+    // display the full message thread (prompts + responses + tool calls).
+    // Without this, spans are captured but conversations appear empty.
+    dataCollection: {
+      genAI: { inputs: true, outputs: true },
+    },
     integrations: [
       // Auto-instruments all calls through the `openai` npm package (including
       // our OpenRouter client which uses it with a custom baseURL). Each model

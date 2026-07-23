@@ -38,6 +38,10 @@ async function buildAll() {
       // instance. @sentry/node resolves its own @opentelemetry/* peers via
       // pnpm's virtual store, so those no longer need to be bundled here.
       "@sentry/node",
+      // openai must be externalized so that @sentry/node's openAIIntegration()
+      // can instrument it at runtime via OpenTelemetry module patching.
+      // When bundled inline, OTel can't find the module to hook into.
+      "openai",
       "sharp",
       "@neplex/vectorizer",
       "@neplex/vectorizer-*",

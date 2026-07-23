@@ -112,9 +112,12 @@ export function uploadSizeGuard(
         res.status(413).json({
           error: `Upload too large. Maximum file size is ${limitBytes / (1024 * 1024)} MB.`,
         });
-        // Destroy the socket after the response is flushed so the 413 reaches
-        // the client before the connection is torn down.
-        res.on("finish", () => req.socket?.destroy());
+        // Half-close the socket after the response is flushed (FIN not RST)
+        // so the 413 response body reaches the client before the connection
+        // tears down.  Using destroy() sends a TCP RST which discards
+        // buffered receive data on the client side — end() sends FIN, which
+        // lets the client drain the 413 response first.
+        res.on("finish", () => req.socket?.end());
       }
     }
   };

@@ -9,12 +9,11 @@ jobs:
       contents: write
     steps:
       - name: Download BFG Repo Cleaner
-        run: |
-          wget -q https://repo1.maven.org/maven2/com/madgag/bfg/1.14.0/bfg-1.14.0.jar -O bfg.jar
+        run: wget -q https://repo1.maven.org/maven2/com/madgag/bfg/1.14.0/bfg-1.14.0.jar -O bfg.jar
 
       - name: Create text-replacement file
         run: |
-          printf 'REDACTED==>REDACTED\nREDACTED==>REDACTED\n' > replacements.txt
+          printf 'batchelorkm@gmail.com==>REDACTED\nangela.batchelor.fi@gmail.com==>REDACTED\n' > replacements.txt
 
       - name: Clone repository as mirror
         run: |
@@ -34,19 +33,18 @@ jobs:
           git reflog expire --expire=now --all
           git gc --prune=now --aggressive
 
-      - name: Verify - check file is gone from all history
+      - name: Verify - add-users.ts gone from all history
         run: |
           cd repo.git
           COUNT=$(git log --all --full-history -- scripts/src/add-users.ts 2>/dev/null | wc -l)
           echo "Commits still referencing add-users.ts: $COUNT"
-          if [ "$COUNT" -gt 0 ]; then
-            echo "ERROR: add-users.ts still present in history"
-            exit 1
-          fi
+          if [ "$COUNT" -gt 0 ]; then echo "ERROR"; exit 1; fi
           echo "PASS: add-users.ts is gone from all history"
 
-      - name: Force-push all branch refs (excluding PR refs)
+      - name: Force-push all branch refs
         run: |
           cd repo.git
+          # Unset mirror mode so we can use refspecs
+          git config --unset remote.origin.mirror || true
           git push --force origin 'refs/heads/*:refs/heads/*'
-          echo "Done pushing branch refs"
+          echo "Done"

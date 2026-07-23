@@ -71,6 +71,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "413":
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /items/stragglers:
     get:
       operationId: getOrnamentStragglers
@@ -267,6 +273,12 @@ paths:
                 $ref: "#/components/schemas/Error"
         "404":
           description: Ornament not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: File too large
           content:
             application/json:
               schema:

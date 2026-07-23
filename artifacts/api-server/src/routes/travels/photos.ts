@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, eq, asc } from "drizzle-orm";
 import multer from "multer";
+import { multerLimitForPrefix } from "../../lib/upload-limits";
 import { db, travelsTrips, travelsTripPhotos } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import {
@@ -10,6 +11,13 @@ import {
 } from "../../lib/travels/storage";
 import { generateVisualEmbedding } from "../../lib/visual-embed";
 import { tripExists } from "../../lib/travels/db-helpers";
+import {
+  createImageFileFilter,
+  sniffAndValidateMime,
+  isImageMimeType,
+  stripMetadata,
+  type SupportedMimeType,
+} from "@workspace/upload-validation";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -18,10 +26,8 @@ const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    cb(null, ALLOWED_TYPES.has(file.mimetype));
-  },
+  limits: { fileSize: multerLimitForPrefix("/api/travels/trips/") },
+  fileFilter: createImageFileFilter(ALLOWED_TYPES),
 });
 
 function parsePhotoType(raw: unknown): "photo" | "magnet" {
@@ -81,11 +87,26 @@ router.post("/trips/:id/photos", upload.single("photo"), async (req, res) => {
     return;
   }
 
-  const contentType = req.file.mimetype as
-    | "image/jpeg"
-    | "image/png"
-    | "image/webp";
-  const storagePath = await uploadTripPhoto(req.file.buffer, contentType);
+  let contentType: SupportedMimeType;
+  let cleanBuffer: Buffer;
+  try {
+    const sniffed = sniffAndValidateMime(req.file.buffer, req.file.mimetype);
+    if (!isImageMimeType(sniffed)) {
+      res
+        .status(400)
+        .json({ error: "Only image uploads are allowed for photos." });
+      return;
+    }
+    contentType = sniffed;
+    cleanBuffer = await stripMetadata(req.file.buffer, contentType);
+  } catch {
+    res.status(400).json({
+      error:
+        "Unsupported image format. Please upload a JPEG, PNG, or WEBP photo.",
+    });
+    return;
+  }
+  const storagePath = await uploadTripPhoto(cleanBuffer, contentType);
 
   const photoType = parsePhotoType(req.body["type"]);
 
@@ -93,7 +114,7 @@ router.post("/trips/:id/photos", upload.single("photo"), async (req, res) => {
   // magnet spotted in a store is already owned. Never fails the upload.
   const visualEmbedding =
     photoType === "magnet"
-      ? await generateVisualEmbedding(req.file.buffer).catch(() => null)
+      ? await generateVisualEmbedding(cleanBuffer).catch(() => null)
       : null;
 
   const maxOrderRow = await db

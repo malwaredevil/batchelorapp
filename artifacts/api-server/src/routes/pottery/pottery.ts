@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
+import { DEFAULT_MULTER_FILE_BYTES } from "../../middleware/uploadSizeGuard";
 import {
   and,
   asc,
@@ -46,11 +47,14 @@ import {
   bulkAiLimiter,
   supplementalUploadLimiter,
 } from "../../middleware/rateLimit";
+import { toDataUrl } from "../../lib/pottery/image";
 import {
+  createImageFileFilter,
   sniffImageType,
-  stripImageMetadata,
-  toDataUrl,
-} from "../../lib/pottery/image";
+  sniffAndValidateMime,
+  isImageMimeType,
+  stripMetadata,
+} from "@workspace/upload-validation";
 import {
   uploadImage,
   deleteImage,
@@ -107,9 +111,17 @@ const MAX_SUPPLEMENTAL_IMAGES = 20;
  */
 const MAX_AI_SUPPLEMENTAL = 5;
 
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 8, fieldSize: 8192 },
+  limits: {
+    fileSize: DEFAULT_MULTER_FILE_BYTES,
+    files: 1,
+    fields: 8,
+    fieldSize: 8192,
+  },
+  fileFilter: createImageFileFilter(ALLOWED_IMAGE_TYPES),
 });
 
 function clampField(value: unknown, max: number): string | null {
@@ -323,17 +335,25 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
     res.status(400).json({ error: "An image file is required." });
     return;
   }
-  const contentType = sniffImageType(file.buffer);
-  if (!contentType) {
+  let sniffedType: ReturnType<typeof sniffAndValidateMime>;
+  try {
+    sniffedType = sniffAndValidateMime(file.buffer, file.mimetype);
+  } catch {
     res.status(400).json({
       error: "Unsupported image. Please upload a JPEG, PNG, or WEBP photo.",
     });
     return;
   }
-
+  if (!isImageMimeType(sniffedType)) {
+    res.status(400).json({
+      error: "Unsupported image. Please upload a JPEG, PNG, or WEBP photo.",
+    });
+    return;
+  }
+  const contentType = sniffedType;
   // Strip all embedded metadata (EXIF, GPS, XMP, ICC) before any further use
   // of the image data — before it goes to OpenAI and before it is stored.
-  const cleanBuffer = await stripImageMetadata(file.buffer, contentType);
+  const cleanBuffer = await stripMetadata(file.buffer, contentType);
 
   // Parse manually selected category IDs from the form field
   let manualCategoryIds: number[] = [];
@@ -694,13 +714,19 @@ router.post(
       res.status(400).json({ error: "An image file is required." });
       return;
     }
-    const contentType = sniffImageType(file.buffer);
-    if (!contentType) {
+    let sniffedType: ReturnType<typeof sniffAndValidateMime>;
+    try {
+      sniffedType = sniffAndValidateMime(file.buffer, file.mimetype);
+    } catch {
       res.status(400).json({ error: "Unsupported image format." });
       return;
     }
-
-    const cleanBuffer = await stripImageMetadata(file.buffer, contentType);
+    if (!isImageMimeType(sniffedType)) {
+      res.status(400).json({ error: "Unsupported image format." });
+      return;
+    }
+    const contentType = sniffedType;
+    const cleanBuffer = await stripMetadata(file.buffer, contentType);
     const label = clampField(req.body?.label, MAX_LABEL);
 
     // Determine next position and enforce per-item count cap.

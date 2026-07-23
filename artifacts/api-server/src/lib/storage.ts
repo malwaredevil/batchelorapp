@@ -1,7 +1,7 @@
-import { buildStorageAdapter } from "./storage-core";
+import { buildStorageAdapter, IMAGE_ONLY_POLICY } from "./storage-core";
 import { sniffImageType, toAiDataUrl, type SupportedImageType } from "./image";
 
-const adapter = buildStorageAdapter("quilting");
+const adapter = buildStorageAdapter("quilting", IMAGE_ONLY_POLICY);
 
 export const uploadImage = adapter.uploadImage;
 export const downloadImageBuffer = adapter.downloadImageBuffer;

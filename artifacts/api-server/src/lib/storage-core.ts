@@ -3,6 +3,11 @@ import { randomUUID } from "node:crypto";
 import { LRUCache } from "lru-cache";
 import { env } from "./env";
 import type { SupportedImageType } from "./image";
+import {
+  DEFAULT_MULTER_FILE_BYTES,
+  HIGH_MULTER_FILE_BYTES,
+  ELAINE_ATTACHMENT_FILE_BYTES,
+} from "./upload-limits";
 
 const EXT_BY_TYPE: Record<SupportedImageType, string> = {
   "image/jpeg": "jpg",
@@ -108,6 +113,127 @@ export function invalidateCachedDownload(key: string): void {
   downloadCache.delete(key);
 }
 
+// ---------------------------------------------------------------------------
+// Bucket policy helpers
+// ---------------------------------------------------------------------------
+
+export interface BucketPolicy {
+  fileSizeLimit: number;
+  allowedMimeTypes: string[];
+}
+
+/**
+ * Minimal structural interface for the Supabase storage admin methods we need.
+ * Using a structural type avoids the generic-parameter mismatch that arises
+ * when passing `SupabaseClient<any, "public", ...>` to a signature that
+ * expects a different generic instantiation.  Callers pass `supabase.storage`
+ * directly.
+ *
+ * The parameter types use `any` intentionally so that the actual
+ * `StorageClient` (which has more specific option shapes) is assignable here
+ * — TypeScript's contravariant parameter checks would reject a narrower
+ * `object` type.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+interface StorageAdmin {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getBucket(id: string): Promise<{ data: any; error: any }>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  createBucket(id: string, options?: any): Promise<{ error: any }>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  updateBucket(id: string, options: any): Promise<{ error: any }>;
+}
+
+/**
+ * Create a Supabase storage bucket with an explicit policy (size limit +
+ * MIME-type allow-list) and always call `updateBucket` to patch any
+ * already-existing bucket that was provisioned without those settings.
+ *
+ * Calling this on every server start is intentional: the `updateBucket` call
+ * is idempotent and ensures live buckets that pre-date this feature are
+ * brought up to the correct policy without a destructive recreate.
+ *
+ * @param storage — pass `supabase.storage` from your Supabase client.
+ */
+export async function ensureBucketWithPolicy(
+  storage: StorageAdmin,
+  bucket: string,
+  policy: BucketPolicy,
+): Promise<void> {
+  const { data } = await storage.getBucket(bucket);
+  if (!data) {
+    const { error } = await storage.createBucket(bucket, {
+      public: false,
+      fileSizeLimit: policy.fileSizeLimit,
+      allowedMimeTypes: policy.allowedMimeTypes,
+    });
+    if (error && !/already exists/i.test(error.message)) {
+      throw error;
+    }
+  }
+  // Always patch the policy on already-existing buckets so pre-policy buckets
+  // are brought up to spec on the next server start without manual intervention.
+  const { error: updateError } = await storage.updateBucket(bucket, {
+    public: false,
+    fileSizeLimit: policy.fileSizeLimit,
+    allowedMimeTypes: policy.allowedMimeTypes,
+  });
+  if (updateError) {
+    throw updateError;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Per-bucket policies
+// ---------------------------------------------------------------------------
+
+export const IMAGE_ONLY_POLICY: BucketPolicy = {
+  // Matches DEFAULT_MULTER_FILE_BYTES — shared constant prevents silent drift
+  // above the upload guard threshold.
+  fileSizeLimit: DEFAULT_MULTER_FILE_BYTES,
+  allowedMimeTypes: ["image/jpeg", "image/png", "image/webp"],
+};
+
+export const TRAVELS_BUCKET_POLICY: BucketPolicy = {
+  // Matches HIGH_MULTER_FILE_BYTES — shared constant prevents silent drift
+  // above the upload guard threshold.
+  fileSizeLimit: HIGH_MULTER_FILE_BYTES,
+  allowedMimeTypes: [
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "application/pdf",
+  ],
+};
+
+export const MESSENGER_BUCKET_POLICY: BucketPolicy = {
+  // Matches HIGH_MULTER_FILE_BYTES — shared constant prevents silent drift
+  // above the upload guard threshold.
+  fileSizeLimit: HIGH_MULTER_FILE_BYTES,
+  allowedMimeTypes: [
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "application/pdf",
+    "text/plain",
+  ],
+};
+
+export const ELAINE_ATTACHMENTS_BUCKET_POLICY: BucketPolicy = {
+  // Intentionally smaller than DEFAULT_MULTER_FILE_BYTES — Elaine attachments
+  // are images/PDFs only and aren't expected to be large.  The value is
+  // imported from upload-limits.ts so the invariant tests in
+  // uploadSizeGuard.test.ts can reference it without importing this module
+  // (which pulls in env).
+  fileSizeLimit: ELAINE_ATTACHMENT_FILE_BYTES,
+  allowedMimeTypes: [
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "application/pdf",
+  ],
+};
+
 /**
  * Bucket-scoped wrapper around Supabase private object storage. Both apps store
  * uploaded images identically — the only difference is the bucket name — so the
@@ -123,22 +249,21 @@ export class ImageStorageService {
   );
   private bucketReady: Promise<void> | null = null;
 
-  constructor(private readonly bucket: string) {}
+  constructor(
+    private readonly bucket: string,
+    private readonly policy: BucketPolicy = IMAGE_ONLY_POLICY,
+  ) {}
 
   private ensureBucket(): Promise<void> {
     if (!this.bucketReady) {
-      this.bucketReady = (async () => {
-        const { data } = await this.supabase.storage.getBucket(this.bucket);
-        if (!data) {
-          const { error } = await this.supabase.storage.createBucket(
-            this.bucket,
-            { public: false, fileSizeLimit: 20 * 1024 * 1024 },
-          );
-          if (error && !/already exists/i.test(error.message)) {
-            throw error;
-          }
-        }
-      })();
+      this.bucketReady = ensureBucketWithPolicy(
+        this.supabase.storage,
+        this.bucket,
+        this.policy,
+      ).catch((err) => {
+        this.bucketReady = null;
+        throw err;
+      });
     }
     return this.bucketReady;
   }
@@ -207,8 +332,11 @@ export class ImageStorageService {
 //   export const { uploadImage, downloadImageBuffer, deleteImage } = adapter;
 // ---------------------------------------------------------------------------
 
-export function buildStorageAdapter(bucket: string) {
-  const svc = new ImageStorageService(bucket);
+export function buildStorageAdapter(
+  bucket: string,
+  policy: BucketPolicy = IMAGE_ONLY_POLICY,
+) {
+  const svc = new ImageStorageService(bucket, policy);
   return {
     uploadImage: (
       buffer: Buffer,

@@ -1,7 +1,7 @@
-import { buildStorageAdapter } from "../storage-core";
+import { buildStorageAdapter, IMAGE_ONLY_POLICY } from "../storage-core";
 import { shrinkForAi, toDataUrl, AI_IMAGE_CONTENT_TYPE } from "./image";
 
-const adapter = buildStorageAdapter("pottery");
+const adapter = buildStorageAdapter("pottery", IMAGE_ONLY_POLICY);
 
 export const uploadImage = adapter.uploadImage;
 export const downloadImageBuffer = adapter.downloadImageBuffer;

@@ -317,6 +317,53 @@ export const JOB_REGISTRY = [
       );
     },
   },
+  {
+    type: "storage.reconcile",
+    queue: "maintenance",
+    payloadSchemaVersion: 1,
+    payloadSchema: z.object({ triggeredBy: z.string() }),
+    maxAttempts: 2,
+    idempotencyStrategy:
+      "Daily singleton key storage.reconcile:<yyyy-mm-dd> so only one scan runs per calendar day.",
+    handler: async (payload, context) => {
+      const { pool } = await import("@workspace/db");
+      const { runStorageReconcile } = await import("../storage-reconcile");
+      const { logger } = await import("../logger");
+
+      await context.updateProgress(10, "Starting storage reconciliation scan…");
+      logger.info(
+        { jobId: context.jobId, triggeredBy: payload.triggeredBy },
+        "storage.reconcile: scan started",
+      );
+
+      const report = await runStorageReconcile(payload.triggeredBy);
+
+      await context.updateProgress(90, "Storing reconciliation report…");
+
+      await pool.query(
+        `UPDATE app_jobs SET result = $2::jsonb, updated_at = now() WHERE id = $1`,
+        [context.jobId, JSON.stringify(report)],
+      );
+
+      const { summary } = report;
+      logger.info(
+        {
+          jobId: context.jobId,
+          durationMs: report.durationMs,
+          totalOrphans: summary.totalOrphans,
+          totalMissing: summary.totalMissing,
+          totalStaleTemp: summary.totalStaleTemp,
+          bucketsWithErrors: summary.bucketsWithErrors,
+        },
+        "storage.reconcile: scan complete",
+      );
+
+      await context.updateProgress(
+        100,
+        `Reconcile complete: ${summary.totalOrphans} orphans, ${summary.totalMissing} missing, ${summary.totalStaleTemp} stale-temp across ${report.buckets.length} buckets.`,
+      );
+    },
+  },
 ] satisfies JobDefinition<z.ZodTypeAny>[];
 
 export const JOB_REGISTRY_BY_TYPE = new Map(

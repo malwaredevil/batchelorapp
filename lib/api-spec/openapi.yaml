@@ -327,6 +327,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "413":
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /pottery/items/stragglers:
     get:
       operationId: getStragglers
@@ -443,6 +449,12 @@ paths:
                 $ref: "#/components/schemas/Error"
         "404":
           description: Piece not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: File too large
           content:
             application/json:
               schema:
@@ -1001,6 +1013,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "413":
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /pottery/stats:
     get:
       operationId: getCollectionStats
@@ -1068,6 +1086,12 @@ paths:
                 $ref: "#/components/schemas/QuiltingFabric"
         "400":
           description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: File too large
           content:
             application/json:
               schema:
@@ -1233,6 +1257,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/QuiltingEntityImage"
+        "413":
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /quilting/fabrics/{id}/images/{imageId}:
     get:
       operationId: getFabricSupplementalImage
@@ -1329,6 +1359,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/QuiltingQuiltPattern"
+        "413":
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /quilting/patterns/{id}:
     get:
       operationId: getPattern
@@ -1500,6 +1536,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/QuiltingEntityImage"
+        "413":
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /quilting/patterns/{id}/images/{imageId}:
     get:
       operationId: getPatternSupplementalImage
@@ -1596,6 +1638,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/QuiltingFinishedQuilt"
+        "413":
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /quilting/quilts/{id}:
     get:
       operationId: getQuilt
@@ -1719,6 +1767,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/QuiltingEntityImage"
+        "413":
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /quilting/quilts/{id}/images/{imageId}:
     get:
       operationId: getQuiltSupplementalImage
@@ -3140,6 +3194,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "413":
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /travels/trips/{id}/documents/{docId}:
     patch:
       operationId: updateTripDocument
@@ -4177,6 +4237,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "413":
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /ornaments/items/stragglers:
     get:
       operationId: getOrnamentStragglers
@@ -4373,6 +4439,12 @@ paths:
                 $ref: "#/components/schemas/Error"
         "404":
           description: Ornament not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: File too large
           content:
             application/json:
               schema:
@@ -5531,6 +5603,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MessengerAttachmentUploadResult"
+        "413":
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /messenger/conversations/members:
     get:
       operationId: listHouseholdMembers

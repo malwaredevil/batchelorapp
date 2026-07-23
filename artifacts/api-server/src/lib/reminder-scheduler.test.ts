@@ -86,6 +86,7 @@ function pushCandidate(
     due_date: string;
     recipient_emails: string[];
     sms_recipient_user_ids: number[];
+    slack_recipient_user_ids: number[];
     alert_days_before: number[];
   }> = {},
 ) {
@@ -100,6 +101,7 @@ function pushCandidate(
         due_date: today(),
         recipient_emails: ["user@example.com"],
         sms_recipient_user_ids: [],
+        slack_recipient_user_ids: [],
         alert_days_before: [0],
         ...overrides,
       },
@@ -424,5 +426,209 @@ describe("runReminderAlerts — malformed phone numbers in the DB", () => {
     );
     expect(calledWith).toContain("+447911123456");
     expect(calledWith).toContain("+12025551234");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: runReminderAlerts — SMS delivery failures should not write alert-log
+// ---------------------------------------------------------------------------
+
+describe("runReminderAlerts — SMS delivery failure retry behaviour", () => {
+  beforeEach(() => {
+    queryQueue.length = 0;
+    mockClient.query.mockClear();
+    mockClient.release.mockClear();
+    sendReminderAlertSms.mockClear();
+    resendConfigured.mockReturnValue(false);
+    smsConfigured.mockReturnValue(true);
+  });
+
+  function pushSmsCandidate(phoneRows: { id: number; phone_number: string }[]) {
+    pushCandidate({
+      recipient_emails: [],
+      sms_recipient_user_ids: phoneRows.map((r) => r.id),
+    });
+    queryQueue.push({ rows: phoneRows });
+  }
+
+  it("does NOT insert an alert-log row when the SMS send throws, so the next run retries", async () => {
+    pushSmsCandidate([{ id: 1, phone_number: "+12025551234" }]);
+    sendReminderAlertSms.mockRejectedValueOnce(new Error("SMS gateway error"));
+
+    await runReminderAlerts();
+
+    // The send was attempted (phone number is valid — it reached the network call).
+    expect(sendReminderAlertSms).toHaveBeenCalledTimes(1);
+    expect(sendReminderAlertSms.mock.calls[0][0]).toBe("+12025551234");
+
+    // Crucially, no INSERT INTO travels_reminder_alert_log should have been
+    // executed for the sms channel; if it were, the scheduler would believe
+    // the alert was delivered and silently drop the retry.
+    const insertAlertLogCalls = mockClient.query.mock.calls.filter(
+      (args: unknown[]) =>
+        typeof args[0] === "string" &&
+        args[0].includes("INSERT INTO travels_reminder_alert_log"),
+    );
+    expect(insertAlertLogCalls).toHaveLength(0);
+  });
+
+  it("does NOT insert an alert-log row when one of multiple SMS recipients fails", async () => {
+    pushSmsCandidate([
+      { id: 1, phone_number: "+12025551234" },
+      { id: 2, phone_number: "+447911123456" },
+    ]);
+    // First recipient succeeds, second throws.
+    sendReminderAlertSms
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("upstream timeout"));
+
+    await runReminderAlerts();
+
+    expect(sendReminderAlertSms).toHaveBeenCalledTimes(2);
+
+    // Partial failure → no channel-level alert-log row; next run will retry
+    // the failed recipient (via the per-recipient deliveries table).
+    const insertAlertLogCalls = mockClient.query.mock.calls.filter(
+      (args: unknown[]) =>
+        typeof args[0] === "string" &&
+        args[0].includes("INSERT INTO travels_reminder_alert_log"),
+    );
+    expect(insertAlertLogCalls).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: runReminderAlerts — Slack delivery failures should not write alert-log
+// ---------------------------------------------------------------------------
+
+describe("runReminderAlerts — Slack delivery failure retry behaviour", () => {
+  beforeEach(() => {
+    queryQueue.length = 0;
+    mockClient.query.mockClear();
+    mockClient.release.mockClear();
+    sendReminderAlertSlack.mockClear();
+    resendConfigured.mockReturnValue(false);
+    smsConfigured.mockReturnValue(false);
+    slackConfigured.mockReturnValue(true);
+  });
+
+  /**
+   * Push a candidate with Slack recipients, the alert-log + delivery-rows
+   * checks (not yet sent), and the Slack user-ID batch lookup result.
+   *
+   * slackRows maps app_users.id → slack_user_id and drives both the candidate's
+   * slack_recipient_user_ids array and the batch lookup query result.
+   */
+  function pushSlackCandidate(
+    slackRows: { id: number; slack_user_id: string }[],
+  ) {
+    pushCandidate({
+      recipient_emails: [],
+      sms_recipient_user_ids: [],
+      slack_recipient_user_ids: slackRows.map((r) => r.id),
+    });
+    queryQueue.push({ rows: slackRows });
+  }
+
+  it("does NOT insert an alert-log row when the Slack send throws, so the next run retries", async () => {
+    pushSlackCandidate([{ id: 1, slack_user_id: "U012AB3CD" }]);
+    sendReminderAlertSlack.mockRejectedValueOnce(
+      new Error("Slack API error: channel_not_found"),
+    );
+
+    await runReminderAlerts();
+
+    // The send was attempted (slack_user_id is valid — it reached the network call).
+    expect(sendReminderAlertSlack).toHaveBeenCalledTimes(1);
+    expect(sendReminderAlertSlack.mock.calls[0][0]).toBe("U012AB3CD");
+
+    // Crucially, no INSERT INTO travels_reminder_alert_log should have been
+    // executed for the slack channel; if it were, the scheduler would believe
+    // the alert was delivered and silently drop the retry.
+    const insertAlertLogCalls = mockClient.query.mock.calls.filter(
+      (args: unknown[]) =>
+        typeof args[0] === "string" &&
+        args[0].includes("INSERT INTO travels_reminder_alert_log"),
+    );
+    expect(insertAlertLogCalls).toHaveLength(0);
+  });
+
+  it("does NOT insert an alert-log row when one of multiple Slack recipients fails", async () => {
+    pushSlackCandidate([
+      { id: 1, slack_user_id: "U012AB3CD" },
+      { id: 2, slack_user_id: "U999XY7ZZ" },
+    ]);
+    // First recipient succeeds, second throws.
+    sendReminderAlertSlack
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("upstream timeout"));
+
+    await runReminderAlerts();
+
+    expect(sendReminderAlertSlack).toHaveBeenCalledTimes(2);
+
+    // Partial failure → no channel-level alert-log row; next run will retry
+    // the failed recipient (via the per-recipient deliveries table).
+    const insertAlertLogCalls = mockClient.query.mock.calls.filter(
+      (args: unknown[]) =>
+        typeof args[0] === "string" &&
+        args[0].includes("INSERT INTO travels_reminder_alert_log"),
+    );
+    expect(insertAlertLogCalls).toHaveLength(0);
+  });
+
+  it("skips a Slack recipient that already has a 'sent' delivery row, even when the channel-level alert log is absent", async () => {
+    // Simulate two Slack recipients where user 1 was already sent in a prior
+    // partial-failure run (delivery row present with status='sent') but user 2
+    // was not.  The channel-level alert log is absent — the scheduler never
+    // recorded a full channel success — so without per-recipient dedup it
+    // would naively re-send to both recipients on this retry run.
+
+    // 1. Candidates query
+    queryQueue.push({
+      rows: [
+        {
+          reminder_id: 1,
+          user_id: 1,
+          reminder_title: "Pack bags",
+          trip_title: "Paris",
+          trip_destination: "Paris",
+          due_date: today(),
+          recipient_emails: [],
+          sms_recipient_user_ids: [],
+          slack_recipient_user_ids: [1, 2],
+          alert_days_before: [0],
+        },
+      ],
+    });
+    // 2. Alert log — absent (channel-level success was never recorded because
+    //    the prior run was a partial failure).
+    queryQueue.push({ rows: [] });
+    // 3. Per-recipient deliveries — user 1's Slack DM was already delivered.
+    //    The recipient_key for Slack is the slack_user_id string.
+    queryQueue.push({
+      rows: [
+        {
+          reminder_id: 1,
+          alert_type: "0_day",
+          channel: "slack",
+          recipient_key: "U012AB3CD",
+        },
+      ],
+    });
+    // 4. Slack user-ID batch lookup — both users resolve to a slack_user_id.
+    queryQueue.push({
+      rows: [
+        { id: 1, slack_user_id: "U012AB3CD" },
+        { id: 2, slack_user_id: "U999XY7ZZ" },
+      ],
+    });
+
+    await runReminderAlerts();
+
+    // Only user 2 (no prior delivery row) should receive a Slack message;
+    // user 1 must be skipped because their 'sent' delivery row is in deliveredKeys.
+    expect(sendReminderAlertSlack).toHaveBeenCalledTimes(1);
+    expect(sendReminderAlertSlack.mock.calls[0][0]).toBe("U999XY7ZZ");
   });
 });

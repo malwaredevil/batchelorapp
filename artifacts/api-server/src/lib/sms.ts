@@ -15,10 +15,9 @@ interface AgentPhoneListResponse {
   data: AgentPhoneNumber[];
 }
 
-// AgentPhone has exactly one provisioned number for this workspace
-// (+19385292547 at time of writing). We look it up lazily (and cache it)
-// rather than hardcoding it, so a future re-provision doesn't require a
-// code change.
+// AgentPhone has exactly one provisioned number for this workspace.
+// We look it up lazily (and cache it) rather than hardcoding it, so a
+// future re-provision doesn't require a code change.
 async function getFromNumber(): Promise<string> {
   if (cachedFromNumber) {
     return cachedFromNumber;

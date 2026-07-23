@@ -1100,6 +1100,23 @@ export const STATEMENTS: string[] = [
   `CREATE UNIQUE INDEX IF NOT EXISTS app_users_phone_number_unique_idx
      ON app_users (phone_number)
      WHERE phone_number IS NOT NULL`,
+  // E.164 format enforcement: leading +, first digit 1-9, 7-15 digits total.
+  // Prevents malformed values from reaching the DB via direct edits or any
+  // future code path that bypasses the API-layer validation. NULL is allowed
+  // (phone number is optional until verified).
+  // Uses a DO block because PostgreSQL does not support ADD CONSTRAINT IF NOT
+  // EXISTS directly — the existence check against pg_constraint makes this
+  // statement idempotent so the bootstrap can be re-run safely.
+  `DO $bootstrap$ BEGIN
+     IF NOT EXISTS (
+       SELECT 1 FROM pg_constraint
+       WHERE conname = 'app_users_phone_number_e164_check'
+         AND conrelid = 'app_users'::regclass
+     ) THEN
+       ALTER TABLE app_users ADD CONSTRAINT app_users_phone_number_e164_check
+         CHECK (phone_number IS NULL OR phone_number ~ '^\\+[1-9]\\d{6,14}$');
+     END IF;
+   END $bootstrap$`,
 
   // ── AgentPhone webhook (SMS/voice) — rolling conversation + dedup log ──────
   `CREATE TABLE IF NOT EXISTS agentphone_conversations (
@@ -2702,6 +2719,8 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS ai_generation_runs_op_event_id_idx
      ON ai_generation_runs (operation_event_id)
      WHERE operation_event_id IS NOT NULL`,
+
+  `ALTER TABLE app_jobs ADD COLUMN IF NOT EXISTS result JSONB`,
 
   `CREATE INDEX IF NOT EXISTS app_jobs_created_by_user_id_idx
      ON app_jobs (created_by_user_id)

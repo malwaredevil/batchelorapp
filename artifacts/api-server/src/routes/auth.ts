@@ -424,6 +424,13 @@ router.post(
       return;
     }
     const phoneNumber = parsed.data.phoneNumber.trim();
+    if (!E164_RE.test(phoneNumber)) {
+      res.status(400).json({
+        error:
+          'Phone number must be in E.164 format (e.g. "+12105551234"): a leading +, a non-zero country code digit, and 6–14 more digits.',
+      });
+      return;
+    }
 
     const code = crypto.randomInt(0, 1_000_000).toString().padStart(6, "0");
     const codeHash = crypto.createHash("sha256").update(code).digest("hex");

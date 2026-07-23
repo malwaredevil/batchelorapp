@@ -13,11 +13,15 @@ import {
   useCreateFabric,
   getListFabricsQueryKey,
   useListQuiltingCategories,
+  getUploadErrorMessage,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { TagSelector } from "@/quilting/components/tag-selector";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
 import { useAppConfigSummary } from "@workspace/elaine-ui";
+
+// Must match MAX_UPLOAD_BYTES in lib/upload-validation/src/index.ts
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
 
 const AddFabricSchema = z.object({
   name: z.string().optional(),
@@ -60,13 +64,21 @@ export default function AddFabric() {
         toast.success("Fabric added!");
         navigate(`/quilting/fabrics/${fabric.id}`);
       },
-      onError: () => toast.error("Failed to add fabric. Please try again."),
+      onError: (err) =>
+        toast.error(
+          getUploadErrorMessage(err, "Failed to add fabric. Please try again."),
+        ),
     },
   });
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
+    e.target.value = "";
     if (!f) return;
+    if (f.size > MAX_UPLOAD_BYTES) {
+      toast.error(`${f.name} — skipped (max 10 MB per file)`);
+      return;
+    }
     setFile(f);
     const url = URL.createObjectURL(f);
     setPreview(url);

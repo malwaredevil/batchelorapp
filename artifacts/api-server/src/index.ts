@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { runStartupMigration } from "./lib/startup-migrate";
+import { provisionAllBuckets } from "./lib/bucket-provisioning";
 import { startReminderScheduler } from "./lib/reminder-scheduler";
 import { startNudgeScheduler } from "./lib/travels-nudges";
 import { startCalendarTripScanScheduler } from "./lib/travels-calendar-scan";
@@ -42,6 +43,10 @@ function startListening(): void {
     // Dedicated worker for Slack AI turns — keeps Slack processing isolated
     // from other job queues so a burst of DMs cannot starve other work.
     startJobWorker("slack");
+    // Maintenance queue: low-priority housekeeping jobs (storage reconcile,
+    // retention aggregation, etc.) — separate from Slack so bulk scans don't
+    // starve chat responses.
+    startJobWorker("maintenance");
   });
 
   function shutdown(signal: string): void {
@@ -63,12 +68,20 @@ function startListening(): void {
   process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
-runStartupMigration()
-  .then(startListening)
-  .catch((err) => {
+// Run DB migration and bucket provisioning in parallel — they are independent.
+// Bucket provisioning failing is non-fatal: uploads may fail at runtime but
+// the server still starts so that existing read paths are unaffected.
+Promise.all([
+  runStartupMigration().catch((err) => {
     logger.error(
       { err },
       "Startup migration threw unexpectedly — starting server anyway",
     );
-    startListening();
-  });
+  }),
+  provisionAllBuckets().catch((err) => {
+    logger.error(
+      { err },
+      "Bucket provisioning threw unexpectedly — server starting without guaranteed bucket policies",
+    );
+  }),
+]).then(startListening);

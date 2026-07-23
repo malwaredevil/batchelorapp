@@ -10,6 +10,7 @@ import multer from "multer";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import { ZodError } from "zod";
+import { UploadValidationError } from "@workspace/upload-validation";
 import * as SentryNode from "@sentry/node";
 import router from "./routes";
 import { logger } from "./lib/logger";
@@ -17,6 +18,7 @@ import { env } from "./lib/env";
 import { sessionMiddleware } from "./lib/session";
 import { csrfGuard } from "./middleware/csrf";
 import { recordResponseStatus } from "./lib/error-tracker";
+import { uploadSizeGuard } from "./middleware/uploadSizeGuard";
 const SLOW_REQUEST_THRESHOLD_MS = 2_000;
 
 const app: Express = express();
@@ -121,6 +123,10 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
+// Global upload size guard — runs before all body parsers and multer.
+// See ./middleware/uploadSizeGuard.ts for the full implementation and constants.
+app.use(uploadSizeGuard);
+
 app.use("/api/quilting/blocks/detect-seams", express.json({ limit: "5mb" }));
 // Barcode photo extraction endpoint accepts a base64 data URL JSON payload
 // which can reach ~4MB for a typical phone JPEG → base64-encoded image.
@@ -196,9 +202,17 @@ app.use(
     if (err instanceof multer.MulterError) {
       const message =
         err.code === "LIMIT_FILE_SIZE"
-          ? "Image is too large. Please upload a photo under 10 MB."
+          ? "File is too large. Please upload a smaller file."
           : "Could not process the uploaded file.";
-      res.status(400).json({ error: message });
+      // Use 413 for size limit errors (per RFC 9110) so clients can
+      // distinguish "file too big" from a generic validation failure.
+      const status = err.code === "LIMIT_FILE_SIZE" ? 413 : 400;
+      res.status(status).json({ error: message });
+      return;
+    }
+
+    if (err instanceof UploadValidationError) {
+      res.status(400).json({ error: err.message });
       return;
     }
 

@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
+import { DEFAULT_MULTER_FILE_BYTES } from "../../middleware/uploadSizeGuard";
 import { z } from "zod";
 import {
   and,
@@ -53,11 +54,14 @@ import {
   bulkAiLimiter,
   supplementalUploadLimiter,
 } from "../../middleware/rateLimit";
+import { toDataUrl } from "../../lib/ornaments/image";
 import {
+  createImageFileFilter,
   sniffImageType,
-  stripImageMetadata,
-  toDataUrl,
-} from "../../lib/ornaments/image";
+  sniffAndValidateMime,
+  isImageMimeType,
+  stripMetadata,
+} from "@workspace/upload-validation";
 import {
   uploadImage,
   deleteImage,
@@ -101,9 +105,17 @@ const MAX_SUPPLEMENTAL_IMAGES = 20;
 const MAX_AI_SUPPLEMENTAL = 5;
 export const MAX_BULK_REANALYZE = 20;
 
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 8, fieldSize: 8192 },
+  limits: {
+    fileSize: DEFAULT_MULTER_FILE_BYTES,
+    files: 1,
+    fields: 8,
+    fieldSize: 8192,
+  },
+  fileFilter: createImageFileFilter(ALLOWED_IMAGE_TYPES),
 });
 
 function clampField(value: unknown, max: number): string | null {
@@ -417,15 +429,23 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
     res.status(400).json({ error: "An image file is required." });
     return;
   }
-  const contentType = sniffImageType(file.buffer);
-  if (!contentType) {
+  let sniffedType: ReturnType<typeof sniffAndValidateMime>;
+  try {
+    sniffedType = sniffAndValidateMime(file.buffer, file.mimetype);
+  } catch {
     res.status(400).json({
       error: "Unsupported image. Please upload a JPEG, PNG, or WEBP photo.",
     });
     return;
   }
-
-  const cleanBuffer = await stripImageMetadata(file.buffer, contentType);
+  if (!isImageMimeType(sniffedType)) {
+    res.status(400).json({
+      error: "Unsupported image. Please upload a JPEG, PNG, or WEBP photo.",
+    });
+    return;
+  }
+  const contentType = sniffedType;
+  const cleanBuffer = await stripMetadata(file.buffer, contentType);
 
   let manualCategoryIds: number[] = [];
   try {
@@ -805,13 +825,19 @@ router.post(
       res.status(400).json({ error: "An image file is required." });
       return;
     }
-    const contentType = sniffImageType(file.buffer);
-    if (!contentType) {
+    let sniffedType: ReturnType<typeof sniffAndValidateMime>;
+    try {
+      sniffedType = sniffAndValidateMime(file.buffer, file.mimetype);
+    } catch {
       res.status(400).json({ error: "Unsupported image format." });
       return;
     }
-
-    const cleanBuffer = await stripImageMetadata(file.buffer, contentType);
+    if (!isImageMimeType(sniffedType)) {
+      res.status(400).json({ error: "Unsupported image format." });
+      return;
+    }
+    const contentType = sniffedType;
+    const cleanBuffer = await stripMetadata(file.buffer, contentType);
     const label = clampField(req.body?.label, MAX_LABEL);
 
     const existing = await db

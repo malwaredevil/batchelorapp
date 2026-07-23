@@ -10,6 +10,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import type { PotteryCompareResult as CompareResult } from "@workspace/api-client-react";
+import { getUploadErrorMessage } from "@workspace/api-client-react";
 import { useUploadCompare } from "@/pottery/hooks/use-pottery";
 import { VerdictPill, type Verdict } from "@/pottery/components/verdict";
 import { Button } from "@/components/ui/button";
@@ -241,7 +242,12 @@ export default function Scan() {
     if (!capturedFile) return;
     compare.mutate(
       { image: capturedFile },
-      { onError: () => toast.error("Analysis failed. Try again.") },
+      {
+        onError: (err) =>
+          toast.error(
+            getUploadErrorMessage(err, "Analysis failed. Try again."),
+          ),
+      },
     );
   };
 

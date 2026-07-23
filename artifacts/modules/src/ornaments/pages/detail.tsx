@@ -27,6 +27,7 @@ import {
   useSetOrnamentPrimaryImage,
   useDeleteOrnamentImage,
   useUploadOrnamentImage,
+  getUploadErrorMessage,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -364,6 +365,12 @@ export default function OrnamentDetail() {
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length) return;
     const file = e.target.files[0];
+    e.target.value = "";
+    const MAX_FILE_BYTES = 10 * 1024 * 1024;
+    if (file.size > MAX_FILE_BYTES) {
+      toast.error(`${file.name} — skipped (max 10 MB per file)`);
+      return;
+    }
     try {
       const formData = new FormData();
       formData.append("image", file);
@@ -375,7 +382,7 @@ export default function OrnamentDetail() {
       queryClient.invalidateQueries({ queryKey: getGetOrnamentQueryKey(id) });
     } catch (err) {
       toast.dismiss("upload");
-      toast.error("Failed to upload image");
+      toast.error(getUploadErrorMessage(err, "Failed to upload image"));
     }
   };
 

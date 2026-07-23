@@ -1,15 +1,18 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
+import { DEFAULT_MULTER_FILE_BYTES } from "../../middleware/uploadSizeGuard";
 import { asc, getTableColumns, inArray, sql } from "drizzle-orm";
 import { db, potteryItems, potteryImages } from "@workspace/db";
 import { ComparePotteryResponse } from "@workspace/api-zod";
 import { requireAuth } from "../../middleware/auth";
 import { compareLimiter } from "../../middleware/rateLimit";
+import { toDataUrl } from "../../lib/pottery/image";
 import {
-  sniffImageType,
-  stripImageMetadata,
-  toDataUrl,
-} from "../../lib/pottery/image";
+  createImageFileFilter,
+  sniffAndValidateMime,
+  isImageMimeType,
+  stripMetadata,
+} from "@workspace/upload-validation";
 import {
   analyzeImage,
   buildEmbeddingText,
@@ -26,9 +29,17 @@ import { downloadAndShrinkImageForAi } from "../../lib/pottery/storage";
 import { serializeItems } from "../../lib/pottery/serialize";
 import { getThresholds } from "../../lib/ai-client";
 
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 2, fieldSize: 8192 },
+  limits: {
+    fileSize: DEFAULT_MULTER_FILE_BYTES,
+    files: 1,
+    fields: 2,
+    fieldSize: 8192,
+  },
+  fileFilter: createImageFileFilter(ALLOWED_IMAGE_TYPES),
 });
 
 // How many top candidates (after reranking) go to the GPT vision call. A private
@@ -97,17 +108,26 @@ router.post(
       res.status(400).json({ error: "An image file is required." });
       return;
     }
-    const contentType = sniffImageType(file.buffer);
-    if (!contentType) {
+    let sniffedType: ReturnType<typeof sniffAndValidateMime>;
+    try {
+      sniffedType = sniffAndValidateMime(file.buffer, file.mimetype);
+    } catch {
       res.status(400).json({
         error: "Unsupported image. Please upload a JPEG, PNG, or WEBP photo.",
       });
       return;
     }
+    if (!isImageMimeType(sniffedType)) {
+      res.status(400).json({
+        error: "Unsupported image. Please upload a JPEG, PNG, or WEBP photo.",
+      });
+      return;
+    }
+    const contentType = sniffedType;
 
     // Strip all embedded metadata (EXIF, GPS, XMP, ICC) before sending the
     // candidate image to the AI — the feature needs pixels, not metadata.
-    const cleanBuffer = await stripImageMetadata(file.buffer, contentType);
+    const cleanBuffer = await stripMetadata(file.buffer, contentType);
     const dataUrl = toDataUrl(cleanBuffer, contentType);
 
     // Analyse text + generate the visual embedding in parallel. The visual

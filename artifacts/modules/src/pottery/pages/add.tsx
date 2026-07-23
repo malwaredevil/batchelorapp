@@ -17,6 +17,7 @@ import {
 import {
   useListPotteryCategories as useListCategories,
   uploadPotteryImage,
+  getUploadErrorMessage,
 } from "@workspace/api-client-react";
 import type { PotteryCategory as Category } from "@workspace/api-client-react";
 import { useUploadPottery } from "@/pottery/hooks/use-pottery";
@@ -30,6 +31,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { usePageAssistantContext } from "@/pottery/lib/assistant-context";
 import { useAppConfigSummary } from "@workspace/elaine-ui";
+
+// Must match MAX_UPLOAD_BYTES in lib/upload-validation/src/index.ts
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
 
 const LABEL_SUGGESTIONS = [
   "Front",
@@ -90,8 +94,15 @@ export default function AddPiece() {
   // Primary photo handlers
   // ---------------------------------------------------------------------------
   function handleSelect(f: File | null) {
-    if (f) setEditingFile(f);
-    else setFile(null);
+    if (!f) {
+      setFile(null);
+      return;
+    }
+    if (f.size > MAX_UPLOAD_BYTES) {
+      toast.error(`${f.name} — skipped (max 10 MB per file)`);
+      return;
+    }
+    setEditingFile(f);
   }
 
   function handleEditorSave(edited: File) {
@@ -104,6 +115,10 @@ export default function AddPiece() {
   // ---------------------------------------------------------------------------
   function handleSuppCapture(captured: File) {
     setShowSuppCamera(false);
+    if (captured.size > MAX_UPLOAD_BYTES) {
+      toast.error(`${captured.name} — skipped (max 10 MB per file)`);
+      return;
+    }
     setEditingSuppFile(captured);
     setEditingSuppIdx(null);
   }
@@ -112,6 +127,10 @@ export default function AddPiece() {
     const f = e.target.files?.[0];
     e.target.value = "";
     if (!f) return;
+    if (f.size > MAX_UPLOAD_BYTES) {
+      toast.error(`${f.name} — skipped (max 10 MB per file)`);
+      return;
+    }
     setEditingSuppFile(f);
     setEditingSuppIdx(null);
   }
@@ -185,7 +204,7 @@ export default function AddPiece() {
           navigate(`/pottery/piece/${item.id}`);
         },
         onError: (err) => {
-          toast.error(err instanceof Error ? err.message : "Upload failed.");
+          toast.error(getUploadErrorMessage(err, "Upload failed."));
         },
       },
     );

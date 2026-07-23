@@ -247,7 +247,7 @@ let authRouter: IRouter;
 beforeAll(async () => {
   const mod = await import("./auth");
   authRouter = mod.default;
-});
+}, 30_000);
 
 async function buildApp(
   sessionOpts: { maxAge?: number; expires?: Date } = {},

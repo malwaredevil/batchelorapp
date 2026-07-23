@@ -13,6 +13,7 @@ import {
   getListPotteryQueryKey,
   getGetCollectionStatsQueryKey,
   getGetPotteryQueryKey,
+  getUploadErrorMessage,
 } from "@workspace/api-client-react";
 import type {
   PotteryCategory as Category,
@@ -221,13 +222,23 @@ function ImageGallery({
 
   function handleCapture(captured: File) {
     setShowCamera(false);
+    if (captured.size > 10 * 1024 * 1024) {
+      toast.error(`${captured.name} — skipped (max 10 MB per file)`);
+      return;
+    }
     setEditingFile(captured);
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (e.target) e.target.value = "";
-    if (file) setEditingFile(file);
+    if (!file) return;
+    const MAX_FILE_BYTES = 10 * 1024 * 1024;
+    if (file.size > MAX_FILE_BYTES) {
+      toast.error(`${file.name} — skipped (max 10 MB per file)`);
+      return;
+    }
+    setEditingFile(file);
   }
 
   const openLabelAfterUpload = useRef(false);
@@ -240,7 +251,7 @@ function ImageGallery({
       {
         onError: (err) => {
           openLabelAfterUpload.current = false;
-          toast.error(err.message);
+          toast.error(getUploadErrorMessage(err, "Upload failed."));
         },
       },
     );

@@ -302,6 +302,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AttachmentUploadResult"
+        "413":
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /conversations/members:
     get:
       operationId: listHouseholdMembers

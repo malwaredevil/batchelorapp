@@ -4209,7 +4209,7 @@ if(quiltingAddImageInput.label !== undefined) {
 
 
 
-export const getAddFabricImageMutationOptions = <TError = ErrorType<unknown>,
+export const getAddFabricImageMutationOptions = <TError = ErrorType<Error>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addFabricImage>>, TError,{id: number;data: BodyType<QuiltingAddImageInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof addFabricImage>>, TError,{id: number;data: BodyType<QuiltingAddImageInput>}, TContext> => {
 
@@ -4238,12 +4238,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type AddFabricImageMutationResult = NonNullable<Awaited<ReturnType<typeof addFabricImage>>>
     export type AddFabricImageMutationBody = BodyType<QuiltingAddImageInput>
-    export type AddFabricImageMutationError = ErrorType<unknown>
+    export type AddFabricImageMutationError = ErrorType<Error>
 
     /**
  * @summary Add a supplemental image to a fabric
  */
-export const useAddFabricImage = <TError = ErrorType<unknown>,
+export const useAddFabricImage = <TError = ErrorType<Error>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addFabricImage>>, TError,{id: number;data: BodyType<QuiltingAddImageInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof addFabricImage>>,
@@ -4621,7 +4621,7 @@ if(quiltingCreatePatternInput.categories !== undefined) {
 
 
 
-export const getCreatePatternMutationOptions = <TError = ErrorType<unknown>,
+export const getCreatePatternMutationOptions = <TError = ErrorType<Error>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPattern>>, TError,{data: BodyType<QuiltingCreatePatternInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof createPattern>>, TError,{data: BodyType<QuiltingCreatePatternInput>}, TContext> => {
 
@@ -4650,12 +4650,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type CreatePatternMutationResult = NonNullable<Awaited<ReturnType<typeof createPattern>>>
     export type CreatePatternMutationBody = BodyType<QuiltingCreatePatternInput>
-    export type CreatePatternMutationError = ErrorType<unknown>
+    export type CreatePatternMutationError = ErrorType<Error>
 
     /**
  * @summary Add a quilt pattern
  */
-export const useCreatePattern = <TError = ErrorType<unknown>,
+export const useCreatePattern = <TError = ErrorType<Error>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPattern>>, TError,{data: BodyType<QuiltingCreatePatternInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof createPattern>>,
@@ -5275,7 +5275,7 @@ if(quiltingAddImageInput.label !== undefined) {
 
 
 
-export const getAddPatternImageMutationOptions = <TError = ErrorType<unknown>,
+export const getAddPatternImageMutationOptions = <TError = ErrorType<Error>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addPatternImage>>, TError,{id: number;data: BodyType<QuiltingAddImageInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof addPatternImage>>, TError,{id: number;data: BodyType<QuiltingAddImageInput>}, TContext> => {
 
@@ -5304,12 +5304,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type AddPatternImageMutationResult = NonNullable<Awaited<ReturnType<typeof addPatternImage>>>
     export type AddPatternImageMutationBody = BodyType<QuiltingAddImageInput>
-    export type AddPatternImageMutationError = ErrorType<unknown>
+    export type AddPatternImageMutationError = ErrorType<Error>
 
     /**
  * @summary Add a supplemental image to a pattern
  */
-export const useAddPatternImage = <TError = ErrorType<unknown>,
+export const useAddPatternImage = <TError = ErrorType<Error>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addPatternImage>>, TError,{id: number;data: BodyType<QuiltingAddImageInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof addPatternImage>>,
@@ -5685,7 +5685,7 @@ if(quiltingCreateQuiltInput.linkedPatternIds !== undefined) {
 
 
 
-export const getCreateQuiltMutationOptions = <TError = ErrorType<unknown>,
+export const getCreateQuiltMutationOptions = <TError = ErrorType<Error>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createQuilt>>, TError,{data: BodyType<QuiltingCreateQuiltInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof createQuilt>>, TError,{data: BodyType<QuiltingCreateQuiltInput>}, TContext> => {
 
@@ -5714,12 +5714,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type CreateQuiltMutationResult = NonNullable<Awaited<ReturnType<typeof createQuilt>>>
     export type CreateQuiltMutationBody = BodyType<QuiltingCreateQuiltInput>
-    export type CreateQuiltMutationError = ErrorType<unknown>
+    export type CreateQuiltMutationError = ErrorType<Error>
 
     /**
  * @summary Add a finished quilt
  */
-export const useCreateQuilt = <TError = ErrorType<unknown>,
+export const useCreateQuilt = <TError = ErrorType<Error>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createQuilt>>, TError,{data: BodyType<QuiltingCreateQuiltInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof createQuilt>>,
@@ -6199,7 +6199,7 @@ if(quiltingAddImageInput.label !== undefined) {
 
 
 
-export const getAddQuiltImageMutationOptions = <TError = ErrorType<unknown>,
+export const getAddQuiltImageMutationOptions = <TError = ErrorType<Error>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addQuiltImage>>, TError,{id: number;data: BodyType<QuiltingAddImageInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof addQuiltImage>>, TError,{id: number;data: BodyType<QuiltingAddImageInput>}, TContext> => {
 
@@ -6228,12 +6228,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type AddQuiltImageMutationResult = NonNullable<Awaited<ReturnType<typeof addQuiltImage>>>
     export type AddQuiltImageMutationBody = BodyType<QuiltingAddImageInput>
-    export type AddQuiltImageMutationError = ErrorType<unknown>
+    export type AddQuiltImageMutationError = ErrorType<Error>
 
     /**
  * @summary Add a supplemental image to a quilt
  */
-export const useAddQuiltImage = <TError = ErrorType<unknown>,
+export const useAddQuiltImage = <TError = ErrorType<Error>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addQuiltImage>>, TError,{id: number;data: BodyType<QuiltingAddImageInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof addQuiltImage>>,
@@ -18224,7 +18224,7 @@ formData.append(`file`, uploadAttachmentBody.file);
 
 
 
-export const getUploadAttachmentMutationOptions = <TError = ErrorType<unknown>,
+export const getUploadAttachmentMutationOptions = <TError = ErrorType<Error>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadAttachment>>, TError,{data: BodyType<UploadAttachmentBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof uploadAttachment>>, TError,{data: BodyType<UploadAttachmentBody>}, TContext> => {
 
@@ -18253,12 +18253,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type UploadAttachmentMutationResult = NonNullable<Awaited<ReturnType<typeof uploadAttachment>>>
     export type UploadAttachmentMutationBody = BodyType<UploadAttachmentBody>
-    export type UploadAttachmentMutationError = ErrorType<unknown>
+    export type UploadAttachmentMutationError = ErrorType<Error>
 
     /**
  * @summary Upload a file attachment
  */
-export const useUploadAttachment = <TError = ErrorType<unknown>,
+export const useUploadAttachment = <TError = ErrorType<Error>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadAttachment>>, TError,{data: BodyType<UploadAttachmentBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof uploadAttachment>>,

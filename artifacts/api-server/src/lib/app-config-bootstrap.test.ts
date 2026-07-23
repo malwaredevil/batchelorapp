@@ -186,6 +186,9 @@ beforeEach(() => {
 // ── rowNeedsLabelSync() — pure predicate ─────────────────────────────────────
 
 describe("rowNeedsLabelSync() — drift predicate", () => {
+  // Generous timeout: vi.resetModules() in beforeEach causes a cold module
+  // compile on the first test in the suite (transform + execute). Subsequent
+  // tests only re-execute the already-compiled module, which is much faster.
   it("returns true when the row's label differs from the default", async () => {
     const { rowNeedsLabelSync, APP_CONFIG_DEFAULTS } =
       await import("./app-config");
@@ -195,7 +198,7 @@ describe("rowNeedsLabelSync() — drift predicate", () => {
       label: "Old stale label",
     });
     expect(rowNeedsLabelSync(staleRow, d)).toBe(true);
-  });
+  }, 30_000);
 
   it("returns false when both label and description already match the default", async () => {
     const { rowNeedsLabelSync, APP_CONFIG_DEFAULTS } =

@@ -8,6 +8,7 @@ export {
   getScreenshotToken,
   appendScreenshotToken,
   installScreenshotImageAutoAuth,
+  getUploadErrorMessage,
 } from "./custom-fetch";
 export type { AuthTokenGetter, CustomFetchOptions } from "./custom-fetch";
 export * from "./travels";

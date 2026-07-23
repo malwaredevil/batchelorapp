@@ -1,0 +1,647 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cat Notification Icon Concepts</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #f4f4f8;
+        padding: 28px 20px 20px;
+        min-height: 100vh;
+      }
+      h2 {
+        font-size: 15px;
+        font-weight: 700;
+        color: #111;
+        margin-bottom: 3px;
+      }
+      .subtitle {
+        font-size: 12px;
+        color: #666;
+        margin-bottom: 24px;
+      }
+      .grid {
+        display: flex;
+        gap: 16px;
+      }
+      .card {
+        flex: 1;
+        background: #fff;
+        border-radius: 16px;
+        box-shadow: 0 2px 14px rgba(0, 0, 0, 0.07);
+        padding: 20px 14px 16px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-width: 0;
+        border: 2.5px solid transparent;
+        cursor: pointer;
+        transition:
+          border-color 0.15s,
+          transform 0.1s;
+      }
+      .card:hover {
+        border-color: #7c3aed;
+        transform: translateY(-2px);
+      }
+      .icon-label {
+        font-size: 11px;
+        font-weight: 800;
+        color: #111;
+        text-align: center;
+        margin-bottom: 14px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .row-label {
+        font-size: 10px;
+        color: #aaa;
+        text-align: center;
+        margin-bottom: 6px;
+        margin-top: 10px;
+        width: 100%;
+      }
+      .row-label:first-of-type {
+        margin-top: 0;
+      }
+
+      .preview-light {
+        width: 88px;
+        height: 88px;
+        background: #f1f0f7;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .preview-dark {
+        width: 88px;
+        height: 88px;
+        background: #1e1044;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .preview-light svg,
+      .preview-dark svg {
+        width: 60px;
+        height: 60px;
+      }
+
+      .status-bar {
+        width: 100%;
+        background: #111;
+        border-radius: 8px;
+        padding: 5px 10px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        margin-top: 4px;
+      }
+      .status-bar svg {
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+      }
+      .status-bar-text {
+        font-size: 10px;
+        color: #777;
+        flex: 1;
+      }
+      .dots {
+        display: flex;
+        gap: 3px;
+      }
+      .dots span {
+        width: 4px;
+        height: 4px;
+        background: #444;
+        border-radius: 50%;
+        display: block;
+      }
+
+      .note {
+        font-size: 10px;
+        color: #777;
+        text-align: center;
+        margin-top: 10px;
+        line-height: 1.45;
+        flex: 1;
+      }
+      .rec {
+        display: inline-block;
+        background: #7c3aed;
+        color: #fff;
+        font-size: 9px;
+        font-weight: 700;
+        padding: 2px 7px;
+        border-radius: 99px;
+        margin-top: 6px;
+        letter-spacing: 0.05em;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Cat Notification Icon Concepts</h2>
+    <p class="subtitle">
+      All show light bg · dark bg · Android status bar (16 dp). Each cat has a
+      distinct fur pattern.
+    </p>
+
+    <div class="grid">
+      <!-- ─── 1. CLASSIC ─────────────────────────────── -->
+      <div class="card">
+        <div class="icon-label">1 · Classic</div>
+        <div class="row-label">Light background</div>
+        <div class="preview-light">
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+            <!-- head + ears: navy -->
+            <circle cx="32" cy="35" r="22" fill="#2d1f6e" />
+            <polygon points="10,23 16,4 27,18" fill="#2d1f6e" />
+            <polygon points="54,23 48,4 37,18" fill="#2d1f6e" />
+            <!-- inner ears: light -->
+            <polygon points="13,20 17,8 24,16" fill="#e0ddf5" />
+            <polygon points="51,20 47,8 40,16" fill="#e0ddf5" />
+            <!-- eyes -->
+            <circle cx="24" cy="31" r="4" fill="#e0ddf5" />
+            <circle cx="40" cy="31" r="4" fill="#e0ddf5" />
+            <!-- pupils -->
+            <ellipse cx="24" cy="31" rx="1.8" ry="3" fill="#2d1f6e" />
+            <ellipse cx="40" cy="31" rx="1.8" ry="3" fill="#2d1f6e" />
+            <!-- nose -->
+            <path d="M 29.5 38 L 34.5 38 L 32 41.5 Z" fill="#e0ddf5" />
+            <!-- mouth -->
+            <path
+              d="M 29 42 Q 32 45 35 42"
+              fill="none"
+              stroke="#e0ddf5"
+              stroke-width="1.2"
+              stroke-linecap="round"
+            />
+          </svg>
+        </div>
+        <div class="row-label">Dark background</div>
+        <div class="preview-dark">
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="32" cy="35" r="22" fill="white" />
+            <polygon points="10,23 16,4 27,18" fill="white" />
+            <polygon points="54,23 48,4 37,18" fill="white" />
+            <polygon points="13,20 17,8 24,16" fill="#1e1044" />
+            <polygon points="51,20 47,8 40,16" fill="#1e1044" />
+            <circle cx="24" cy="31" r="4" fill="#1e1044" />
+            <circle cx="40" cy="31" r="4" fill="#1e1044" />
+            <ellipse cx="24" cy="31" rx="1.8" ry="3" fill="white" />
+            <ellipse cx="40" cy="31" rx="1.8" ry="3" fill="white" />
+            <path d="M 29.5 38 L 34.5 38 L 32 41.5 Z" fill="#1e1044" />
+            <path
+              d="M 29 42 Q 32 45 35 42"
+              fill="none"
+              stroke="#1e1044"
+              stroke-width="1.2"
+              stroke-linecap="round"
+            />
+          </svg>
+        </div>
+        <div class="row-label">Android status bar</div>
+        <div class="status-bar">
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="32" cy="35" r="22" fill="white" />
+            <polygon points="10,23 16,4 27,18" fill="white" />
+            <polygon points="54,23 48,4 37,18" fill="white" />
+            <polygon points="13,20 17,8 24,16" fill="#111" />
+            <polygon points="51,20 47,8 40,16" fill="#111" />
+            <circle cx="24" cy="31" r="4" fill="#111" />
+            <circle cx="40" cy="31" r="4" fill="#111" />
+          </svg>
+          <span class="status-bar-text">Batchelor</span>
+          <div class="dots"><span></span><span></span><span></span></div>
+        </div>
+        <p class="note">Clean minimal cat face — simple &amp; timeless</p>
+      </div>
+
+      <!-- ─── 2. EYE PATCH ───────────────────────────── -->
+      <div class="card">
+        <div class="icon-label">2 · Eye Patch 🏴‍☠️</div>
+        <div class="row-label">Light background</div>
+        <div class="preview-light">
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="32" cy="35" r="22" fill="#2d1f6e" />
+            <polygon points="10,23 16,4 27,18" fill="#2d1f6e" />
+            <polygon points="54,23 48,4 37,18" fill="#2d1f6e" />
+            <polygon points="13,20 17,8 24,16" fill="#e0ddf5" />
+            <polygon points="51,20 47,8 40,16" fill="#e0ddf5" />
+            <!-- left eye (normal) -->
+            <circle cx="24" cy="31" r="4" fill="#e0ddf5" />
+            <ellipse cx="24" cy="31" rx="1.8" ry="3" fill="#2d1f6e" />
+            <!-- eye PATCH over right eye (big rounded oval) -->
+            <ellipse cx="41" cy="29" rx="11" ry="9" fill="#e0ddf5" />
+            <!-- small eye visible within patch -->
+            <circle cx="40" cy="30" r="3" fill="#2d1f6e" />
+            <ellipse cx="40" cy="30" rx="1.4" ry="2.4" fill="#e0ddf5" />
+            <!-- nose + mouth -->
+            <path d="M 29.5 38 L 34.5 38 L 32 41.5 Z" fill="#e0ddf5" />
+            <path
+              d="M 29 42 Q 32 45 35 42"
+              fill="none"
+              stroke="#e0ddf5"
+              stroke-width="1.2"
+              stroke-linecap="round"
+            />
+          </svg>
+        </div>
+        <div class="row-label">Dark background</div>
+        <div class="preview-dark">
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="32" cy="35" r="22" fill="white" />
+            <polygon points="10,23 16,4 27,18" fill="white" />
+            <polygon points="54,23 48,4 37,18" fill="white" />
+            <polygon points="13,20 17,8 24,16" fill="#1e1044" />
+            <polygon points="51,20 47,8 40,16" fill="#1e1044" />
+            <circle cx="24" cy="31" r="4" fill="#1e1044" />
+            <ellipse cx="24" cy="31" rx="1.8" ry="3" fill="white" />
+            <ellipse cx="41" cy="29" rx="11" ry="9" fill="#1e1044" />
+            <circle cx="40" cy="30" r="3" fill="white" />
+            <ellipse cx="40" cy="30" rx="1.4" ry="2.4" fill="#1e1044" />
+            <path d="M 29.5 38 L 34.5 38 L 32 41.5 Z" fill="#1e1044" />
+            <path
+              d="M 29 42 Q 32 45 35 42"
+              fill="none"
+              stroke="#1e1044"
+              stroke-width="1.2"
+              stroke-linecap="round"
+            />
+          </svg>
+        </div>
+        <div class="row-label">Android status bar</div>
+        <div class="status-bar">
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="32" cy="35" r="22" fill="white" />
+            <polygon points="10,23 16,4 27,18" fill="white" />
+            <polygon points="54,23 48,4 37,18" fill="white" />
+            <polygon points="13,20 17,8 24,16" fill="#111" />
+            <polygon points="51,20 47,8 40,16" fill="#111" />
+            <circle cx="24" cy="31" r="4" fill="#111" />
+            <ellipse cx="41" cy="29" rx="11" ry="9" fill="#111" />
+          </svg>
+          <span class="status-bar-text">Batchelor</span>
+          <div class="dots"><span></span><span></span><span></span></div>
+        </div>
+        <p class="note">Fur patch over one eye — pirate cat energy ☠️</p>
+        <span class="rec">★ FUN PICK</span>
+      </div>
+
+      <!-- ─── 3. TABBY ────────────────────────────────── -->
+      <div class="card">
+        <div class="icon-label">3 · Tabby</div>
+        <div class="row-label">Light background</div>
+        <div class="preview-light">
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="32" cy="35" r="22" fill="#2d1f6e" />
+            <polygon points="10,23 16,4 27,18" fill="#2d1f6e" />
+            <polygon points="54,23 48,4 37,18" fill="#2d1f6e" />
+            <polygon points="13,20 17,8 24,16" fill="#e0ddf5" />
+            <polygon points="51,20 47,8 40,16" fill="#e0ddf5" />
+            <!-- forehead stripes -->
+            <rect
+              x="27"
+              y="14"
+              width="10"
+              height="2.5"
+              rx="1.25"
+              fill="#e0ddf5"
+            />
+            <rect
+              x="24"
+              y="18.5"
+              width="16"
+              height="2.5"
+              rx="1.25"
+              fill="#e0ddf5"
+            />
+            <rect
+              x="27"
+              y="23"
+              width="10"
+              height="2.5"
+              rx="1.25"
+              fill="#e0ddf5"
+            />
+            <!-- cheek stripes -->
+            <rect
+              x="10"
+              y="33"
+              width="8"
+              height="2"
+              rx="1"
+              transform="rotate(-10,14,34)"
+              fill="#e0ddf5"
+            />
+            <rect
+              x="46"
+              y="33"
+              width="8"
+              height="2"
+              rx="1"
+              transform="rotate(10,50,34)"
+              fill="#e0ddf5"
+            />
+            <!-- eyes -->
+            <circle cx="24" cy="31" r="4" fill="#e0ddf5" />
+            <circle cx="40" cy="31" r="4" fill="#e0ddf5" />
+            <ellipse cx="24" cy="31" rx="1.8" ry="3" fill="#2d1f6e" />
+            <ellipse cx="40" cy="31" rx="1.8" ry="3" fill="#2d1f6e" />
+            <path d="M 29.5 38 L 34.5 38 L 32 41.5 Z" fill="#e0ddf5" />
+            <path
+              d="M 29 42 Q 32 45 35 42"
+              fill="none"
+              stroke="#e0ddf5"
+              stroke-width="1.2"
+              stroke-linecap="round"
+            />
+          </svg>
+        </div>
+        <div class="row-label">Dark background</div>
+        <div class="preview-dark">
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="32" cy="35" r="22" fill="white" />
+            <polygon points="10,23 16,4 27,18" fill="white" />
+            <polygon points="54,23 48,4 37,18" fill="white" />
+            <polygon points="13,20 17,8 24,16" fill="#1e1044" />
+            <polygon points="51,20 47,8 40,16" fill="#1e1044" />
+            <rect
+              x="27"
+              y="14"
+              width="10"
+              height="2.5"
+              rx="1.25"
+              fill="#1e1044"
+            />
+            <rect
+              x="24"
+              y="18.5"
+              width="16"
+              height="2.5"
+              rx="1.25"
+              fill="#1e1044"
+            />
+            <rect
+              x="27"
+              y="23"
+              width="10"
+              height="2.5"
+              rx="1.25"
+              fill="#1e1044"
+            />
+            <rect
+              x="10"
+              y="33"
+              width="8"
+              height="2"
+              rx="1"
+              transform="rotate(-10,14,34)"
+              fill="#1e1044"
+            />
+            <rect
+              x="46"
+              y="33"
+              width="8"
+              height="2"
+              rx="1"
+              transform="rotate(10,50,34)"
+              fill="#1e1044"
+            />
+            <circle cx="24" cy="31" r="4" fill="#1e1044" />
+            <circle cx="40" cy="31" r="4" fill="#1e1044" />
+            <ellipse cx="24" cy="31" rx="1.8" ry="3" fill="white" />
+            <ellipse cx="40" cy="31" rx="1.8" ry="3" fill="white" />
+            <path d="M 29.5 38 L 34.5 38 L 32 41.5 Z" fill="#1e1044" />
+            <path
+              d="M 29 42 Q 32 45 35 42"
+              fill="none"
+              stroke="#1e1044"
+              stroke-width="1.2"
+              stroke-linecap="round"
+            />
+          </svg>
+        </div>
+        <div class="row-label">Android status bar</div>
+        <div class="status-bar">
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="32" cy="35" r="22" fill="white" />
+            <polygon points="10,23 16,4 27,18" fill="white" />
+            <polygon points="54,23 48,4 37,18" fill="white" />
+            <polygon points="13,20 17,8 24,16" fill="#111" />
+            <polygon points="51,20 47,8 40,16" fill="#111" />
+            <rect x="27" y="14" width="10" height="2.5" rx="1.25" fill="#111" />
+            <rect
+              x="24"
+              y="18.5"
+              width="16"
+              height="2.5"
+              rx="1.25"
+              fill="#111"
+            />
+            <rect x="27" y="23" width="10" height="2.5" rx="1.25" fill="#111" />
+            <circle cx="24" cy="31" r="4" fill="#111" />
+            <circle cx="40" cy="31" r="4" fill="#111" />
+          </svg>
+          <span class="status-bar-text">Batchelor</span>
+          <div class="dots"><span></span><span></span><span></span></div>
+        </div>
+        <p class="note">Classic tabby forehead stripes + cheek marks</p>
+      </div>
+
+      <!-- ─── 4. SPOTTED ──────────────────────────────── -->
+      <div class="card">
+        <div class="icon-label">4 · Spotted</div>
+        <div class="row-label">Light background</div>
+        <div class="preview-light">
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="32" cy="35" r="22" fill="#2d1f6e" />
+            <polygon points="10,23 16,4 27,18" fill="#2d1f6e" />
+            <polygon points="54,23 48,4 37,18" fill="#2d1f6e" />
+            <polygon points="13,20 17,8 24,16" fill="#e0ddf5" />
+            <polygon points="51,20 47,8 40,16" fill="#e0ddf5" />
+            <!-- large irregular spot upper-right -->
+            <ellipse
+              cx="44"
+              cy="22"
+              rx="10"
+              ry="8"
+              transform="rotate(-15,44,22)"
+              fill="#e0ddf5"
+            />
+            <!-- medium spot lower-left cheek -->
+            <ellipse
+              cx="18"
+              cy="39"
+              rx="8"
+              ry="6"
+              transform="rotate(20,18,39)"
+              fill="#e0ddf5"
+            />
+            <!-- tiny spot on chin -->
+            <circle cx="36" cy="46" r="3" fill="#e0ddf5" />
+            <!-- eyes -->
+            <circle cx="24" cy="31" r="4" fill="#e0ddf5" />
+            <circle cx="40" cy="31" r="4" fill="#e0ddf5" />
+            <ellipse cx="24" cy="31" rx="1.8" ry="3" fill="#2d1f6e" />
+            <ellipse cx="40" cy="31" rx="1.8" ry="3" fill="#2d1f6e" />
+            <path d="M 29.5 38 L 34.5 38 L 32 41.5 Z" fill="#e0ddf5" />
+          </svg>
+        </div>
+        <div class="row-label">Dark background</div>
+        <div class="preview-dark">
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="32" cy="35" r="22" fill="white" />
+            <polygon points="10,23 16,4 27,18" fill="white" />
+            <polygon points="54,23 48,4 37,18" fill="white" />
+            <polygon points="13,20 17,8 24,16" fill="#1e1044" />
+            <polygon points="51,20 47,8 40,16" fill="#1e1044" />
+            <ellipse
+              cx="44"
+              cy="22"
+              rx="10"
+              ry="8"
+              transform="rotate(-15,44,22)"
+              fill="#1e1044"
+            />
+            <ellipse
+              cx="18"
+              cy="39"
+              rx="8"
+              ry="6"
+              transform="rotate(20,18,39)"
+              fill="#1e1044"
+            />
+            <circle cx="36" cy="46" r="3" fill="#1e1044" />
+            <circle cx="24" cy="31" r="4" fill="#1e1044" />
+            <circle cx="40" cy="31" r="4" fill="#1e1044" />
+            <ellipse cx="24" cy="31" rx="1.8" ry="3" fill="white" />
+            <ellipse cx="40" cy="31" rx="1.8" ry="3" fill="white" />
+            <path d="M 29.5 38 L 34.5 38 L 32 41.5 Z" fill="#1e1044" />
+          </svg>
+        </div>
+        <div class="row-label">Android status bar</div>
+        <div class="status-bar">
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="32" cy="35" r="22" fill="white" />
+            <polygon points="10,23 16,4 27,18" fill="white" />
+            <polygon points="54,23 48,4 37,18" fill="white" />
+            <polygon points="13,20 17,8 24,16" fill="#111" />
+            <polygon points="51,20 47,8 40,16" fill="#111" />
+            <ellipse
+              cx="44"
+              cy="22"
+              rx="10"
+              ry="8"
+              transform="rotate(-15,44,22)"
+              fill="#111"
+            />
+            <ellipse
+              cx="18"
+              cy="39"
+              rx="8"
+              ry="6"
+              transform="rotate(20,18,39)"
+              fill="#111"
+            />
+            <circle cx="24" cy="31" r="4" fill="#111" />
+            <circle cx="40" cy="31" r="4" fill="#111" />
+          </svg>
+          <span class="status-bar-text">Batchelor</span>
+          <div class="dots"><span></span><span></span><span></span></div>
+        </div>
+        <p class="note">Cow-spotted pattern — asymmetric &amp; playful</p>
+      </div>
+
+      <!-- ─── 5. HALF-FACE (CALICO) ─────────────────── -->
+      <div class="card">
+        <div class="icon-label">5 · Calico</div>
+        <div class="row-label">Light background</div>
+        <div class="preview-light">
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="32" cy="35" r="22" fill="#2d1f6e" />
+            <polygon points="10,23 16,4 27,18" fill="#2d1f6e" />
+            <polygon points="54,23 48,4 37,18" fill="#2d1f6e" />
+            <!-- left half of face is a different color patch -->
+            <path
+              d="M 32 13 C 22 13 12 22 10 32 C 9 38 10 45 14 50 C 18 54 24 57 32 57 Z"
+              fill="#e0ddf5"
+            />
+            <!-- left inner ear -->
+            <polygon points="13,20 17,8 24,16" fill="#2d1f6e" />
+            <!-- right inner ear -->
+            <polygon points="51,20 47,8 40,16" fill="#e0ddf5" />
+            <!-- eyes -->
+            <circle cx="24" cy="31" r="4" fill="#2d1f6e" />
+            <ellipse cx="24" cy="31" rx="1.8" ry="3" fill="#e0ddf5" />
+            <circle cx="40" cy="31" r="4" fill="#e0ddf5" />
+            <ellipse cx="40" cy="31" rx="1.8" ry="3" fill="#2d1f6e" />
+            <!-- nose -->
+            <path d="M 29.5 38 L 34.5 38 L 32 41.5 Z" fill="#e0ddf5" />
+            <path
+              d="M 29 42 Q 32 45 35 42"
+              fill="none"
+              stroke="#e0ddf5"
+              stroke-width="1.2"
+              stroke-linecap="round"
+            />
+          </svg>
+        </div>
+        <div class="row-label">Dark background</div>
+        <div class="preview-dark">
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="32" cy="35" r="22" fill="white" />
+            <polygon points="10,23 16,4 27,18" fill="white" />
+            <polygon points="54,23 48,4 37,18" fill="white" />
+            <path
+              d="M 32 13 C 22 13 12 22 10 32 C 9 38 10 45 14 50 C 18 54 24 57 32 57 Z"
+              fill="#1e1044"
+            />
+            <polygon points="13,20 17,8 24,16" fill="white" />
+            <polygon points="51,20 47,8 40,16" fill="#1e1044" />
+            <circle cx="24" cy="31" r="4" fill="white" />
+            <ellipse cx="24" cy="31" rx="1.8" ry="3" fill="#1e1044" />
+            <circle cx="40" cy="31" r="4" fill="#1e1044" />
+            <ellipse cx="40" cy="31" rx="1.8" ry="3" fill="white" />
+            <path d="M 29.5 38 L 34.5 38 L 32 41.5 Z" fill="#1e1044" />
+            <path
+              d="M 29 42 Q 32 45 35 42"
+              fill="none"
+              stroke="#1e1044"
+              stroke-width="1.2"
+              stroke-linecap="round"
+            />
+          </svg>
+        </div>
+        <div class="row-label">Android status bar</div>
+        <div class="status-bar">
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="32" cy="35" r="22" fill="white" />
+            <polygon points="10,23 16,4 27,18" fill="white" />
+            <polygon points="54,23 48,4 37,18" fill="white" />
+            <path
+              d="M 32 13 C 22 13 12 22 10 32 C 9 38 10 45 14 50 C 18 54 24 57 32 57 Z"
+              fill="#111"
+            />
+            <circle cx="24" cy="31" r="4" fill="white" />
+            <circle cx="40" cy="31" r="4" fill="#111" />
+          </svg>
+          <span class="status-bar-text">Batchelor</span>
+          <div class="dots"><span></span><span></span><span></span></div>
+        </div>
+        <p class="note">Split half-face calico — very distinctive silhouette</p>
+      </div>
+    </div>
+    <!-- .grid -->
+  </body>
+</html>

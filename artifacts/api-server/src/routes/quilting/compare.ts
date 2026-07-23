@@ -1,11 +1,18 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
+import { DEFAULT_MULTER_FILE_BYTES } from "../../middleware/uploadSizeGuard";
 import { getTableColumns, inArray, sql } from "drizzle-orm";
 import { db, fabrics, quiltingImages } from "@workspace/db";
 import { CompareFabricResponse } from "@workspace/api-zod";
 import { requireAuth } from "../../middleware/auth";
 import { compareLimiter } from "../../middleware/rateLimit";
-import { sniffImageType, toAiDataUrl } from "../../lib/image";
+import { toAiDataUrl } from "../../lib/image";
+import {
+  createImageFileFilter,
+  sniffAndValidateMime,
+  isImageMimeType,
+  stripMetadata,
+} from "@workspace/upload-validation";
 import {
   analyzeImage,
   buildEmbeddingText,
@@ -22,9 +29,17 @@ import {
 import { downloadImageAsDataUrl } from "../../lib/storage";
 import { serializeFabrics } from "../../lib/serialize";
 
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 2, fieldSize: 8192 },
+  limits: {
+    fileSize: DEFAULT_MULTER_FILE_BYTES,
+    files: 1,
+    fields: 2,
+    fieldSize: 8192,
+  },
+  fileFilter: createImageFileFilter(ALLOWED_IMAGE_TYPES),
 });
 
 // How many top candidates (after reranking) go to the GPT vision call.
@@ -57,21 +72,31 @@ router.post(
       res.status(400).json({ error: "An image file is required." });
       return;
     }
-    const contentType = sniffImageType(file.buffer);
-    if (!contentType) {
+    let sniffedType: ReturnType<typeof sniffAndValidateMime>;
+    try {
+      sniffedType = sniffAndValidateMime(file.buffer, file.mimetype);
+    } catch {
       res.status(400).json({
         error: "Unsupported image. Please upload a JPEG, PNG, or WEBP photo.",
       });
       return;
     }
+    if (!isImageMimeType(sniffedType)) {
+      res.status(400).json({
+        error: "Unsupported image. Please upload a JPEG, PNG, or WEBP photo.",
+      });
+      return;
+    }
+    const contentType = sniffedType;
+    const cleanBuffer = await stripMetadata(file.buffer, contentType);
 
-    const dataUrl = await toAiDataUrl(file.buffer, contentType);
+    const dataUrl = await toAiDataUrl(cleanBuffer, contentType);
 
     // Analyse text + generate visual embedding in parallel.
     // Visual embedding gracefully returns null when JINA_API_KEY is absent.
     const [analysis, visualEmb] = await Promise.all([
       analyzeImage([dataUrl]),
-      generateVisualEmbedding(file.buffer),
+      generateVisualEmbedding(cleanBuffer),
     ]);
     const embedding = await embedText(buildEmbeddingText(analysis));
 

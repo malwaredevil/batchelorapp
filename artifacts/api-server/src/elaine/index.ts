@@ -126,6 +126,7 @@ import {
 } from "./ornaments-actions";
 import multer from "multer";
 import { createClient } from "@supabase/supabase-js";
+import { multerLimitForPrefix } from "../lib/upload-limits";
 import {
   randomUUID,
   randomBytes,
@@ -135,6 +136,10 @@ import {
 } from "node:crypto";
 import { env } from "../lib/env";
 import { withRetry } from "../lib/retry";
+import {
+  ensureBucketWithPolicy,
+  ELAINE_ATTACHMENTS_BUCKET_POLICY,
+} from "../lib/storage-core";
 import pdfParse from "pdf-parse";
 
 const router: IRouter = Router();
@@ -3993,22 +3998,14 @@ const attachmentStorage = createClient(
 let attachmentBucketReady: Promise<void> | null = null;
 async function ensureAttachmentBucket(): Promise<void> {
   if (!attachmentBucketReady) {
-    attachmentBucketReady = (async () => {
-      const { data } =
-        await attachmentStorage.storage.getBucket(ATTACHMENT_BUCKET);
-      if (!data) {
-        const { error } = await attachmentStorage.storage.createBucket(
-          ATTACHMENT_BUCKET,
-          {
-            public: false,
-          },
-        );
-        if (error && !/already exists/i.test(error.message)) {
-          attachmentBucketReady = null;
-          throw error;
-        }
-      }
-    })();
+    attachmentBucketReady = ensureBucketWithPolicy(
+      attachmentStorage.storage,
+      ATTACHMENT_BUCKET,
+      ELAINE_ATTACHMENTS_BUCKET_POLICY,
+    ).catch((err) => {
+      attachmentBucketReady = null;
+      throw err;
+    });
   }
   return attachmentBucketReady;
 }
@@ -4022,7 +4019,7 @@ const ACCEPTED_ATTACHMENT_TYPES = [
 
 const attachmentUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 },
+  limits: { fileSize: multerLimitForPrefix("/api/elaine/attachments") },
   fileFilter(_req, file, cb) {
     const ok = (ACCEPTED_ATTACHMENT_TYPES as readonly string[]).includes(
       file.mimetype,

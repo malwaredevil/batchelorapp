@@ -63,6 +63,7 @@ export const appJobs = pgTable(
     lastErrorMessage: text("last_error_message"),
     providerRequestId: text("provider_request_id"),
     parentJobId: integer("parent_job_id"),
+    result: jsonb("result"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

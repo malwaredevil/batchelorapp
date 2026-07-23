@@ -136,6 +136,9 @@ beforeEach(() => {
 // not merely `warn`.
 
 describe("bootstrapDefaults — step coverage and error classification", () => {
+  // Generous timeout: vi.resetModules() in beforeEach causes a cold module
+  // compile on the first test in the suite (transform + execute). Subsequent
+  // tests only re-execute the already-compiled module, which is much faster.
   it("calls db.delete, db.insert, and db.update during bootstrap", async () => {
     // Prime the select queue so getAllRows() gets the result it needs after
     // bootstrapDefaults() runs.  bootstrapDefaults itself does not need a
@@ -153,7 +156,7 @@ describe("bootstrapDefaults — step coverage and error classification", () => {
     expect(dbMock.insert).toHaveBeenCalledTimes(1);
     // Step 3 — UPDATE stale labels (one call per APP_CONFIG_DEFAULTS entry)
     expect(dbMock.update).toHaveBeenCalled();
-  });
+  }, 30_000);
 
   it("logs at warn level (not error) for a DB connectivity error", async () => {
     // Make db.delete throw a Node-style network error (code = ECONNREFUSED)

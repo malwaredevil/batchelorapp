@@ -1,21 +1,27 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
+import { DEFAULT_MULTER_FILE_BYTES } from "../../middleware/uploadSizeGuard";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db, travelsTripPhotos, travelsTrips } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { supplementalUploadLimiter } from "../../middleware/rateLimit";
 import { generateVisualEmbedding } from "../../lib/visual-embed";
 import { downloadTripPhoto } from "../../lib/travels/storage";
+import {
+  createImageFileFilter,
+  sniffAndValidateMime,
+  isImageMimeType,
+} from "@workspace/upload-validation";
 
 const router: IRouter = Router();
 router.use(requireAuth);
 
+const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
-  fileFilter: (_req, file, cb) => {
-    cb(null, ["image/jpeg", "image/png", "image/webp"].includes(file.mimetype));
-  },
+  limits: { fileSize: DEFAULT_MULTER_FILE_BYTES, files: 1 },
+  fileFilter: createImageFileFilter(ALLOWED_TYPES),
 });
 
 // Backfill limit — how many un-embedded magnets we'll compute embeddings for
@@ -35,6 +41,18 @@ router.post(
   async (req, res) => {
     if (!req.file) {
       res.status(400).json({ error: "A photo is required." });
+      return;
+    }
+
+    let sniffedMime: ReturnType<typeof sniffAndValidateMime>;
+    try {
+      sniffedMime = sniffAndValidateMime(req.file.buffer, req.file.mimetype);
+    } catch {
+      res.status(400).json({ error: "Unsupported image format." });
+      return;
+    }
+    if (!isImageMimeType(sniffedMime)) {
+      res.status(400).json({ error: "Unsupported image format." });
       return;
     }
 

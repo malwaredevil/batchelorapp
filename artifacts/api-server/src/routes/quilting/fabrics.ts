@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
+import { DEFAULT_MULTER_FILE_BYTES } from "../../middleware/uploadSizeGuard";
 import {
   and,
   count,
@@ -42,8 +43,6 @@ import { requireAuth } from "../../middleware/auth";
 import { env } from "../../lib/env";
 import { aiLimiter, bulkAiLimiter } from "../../middleware/rateLimit";
 import {
-  sniffImageType,
-  stripImageMetadata,
   toDataUrl,
   generateFlatFabricTile,
   generateFlatFabricTileV2,
@@ -58,6 +57,13 @@ import {
   DIRECTION_A_ULTRA_SMOOTH_TUNING,
   DIRECTION_A_MAX_DETAIL_TUNING,
 } from "../../lib/image";
+import {
+  createImageFileFilter,
+  sniffImageType,
+  sniffAndValidateMime,
+  isImageMimeType,
+  stripMetadata,
+} from "@workspace/upload-validation";
 import {
   uploadImage,
   deleteImage,
@@ -91,9 +97,17 @@ const MAX_LABEL = 100;
 const MAX_SUPPLEMENTAL_IMAGES = 10;
 const MAX_REANALYZE_IMAGES = 5;
 
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 12, fieldSize: 8192 },
+  limits: {
+    fileSize: DEFAULT_MULTER_FILE_BYTES,
+    files: 1,
+    fields: 12,
+    fieldSize: 8192,
+  },
+  fileFilter: createImageFileFilter(ALLOWED_IMAGE_TYPES),
 });
 
 function clamp(v: unknown, max: number): string | null {
@@ -616,15 +630,23 @@ router.post("/fabrics", aiLimiter, upload.single("image"), async (req, res) => {
     res.status(400).json({ error: "An image file is required." });
     return;
   }
-  const contentType = sniffImageType(file.buffer);
-  if (!contentType) {
+  let sniffedType: ReturnType<typeof sniffAndValidateMime>;
+  try {
+    sniffedType = sniffAndValidateMime(file.buffer, file.mimetype);
+  } catch {
     res.status(400).json({
       error: "Unsupported image. Please upload a JPEG, PNG, or WEBP photo.",
     });
     return;
   }
-
-  const cleanBuffer = await stripImageMetadata(file.buffer, contentType);
+  if (!isImageMimeType(sniffedType)) {
+    res.status(400).json({
+      error: "Unsupported image. Please upload a JPEG, PNG, or WEBP photo.",
+    });
+    return;
+  }
+  const contentType = sniffedType;
+  const cleanBuffer = await stripMetadata(file.buffer, contentType);
   const dataUrl = toDataUrl(cleanBuffer, contentType);
 
   const context: AnalysisContext | undefined = (() => {
@@ -1183,11 +1205,19 @@ router.post("/fabrics/:id/images", upload.single("image"), async (req, res) => {
     res.status(400).json({ error: "An image file is required." });
     return;
   }
-  const contentType = sniffImageType(file.buffer);
-  if (!contentType) {
+  let sniffedType: ReturnType<typeof sniffAndValidateMime>;
+  try {
+    sniffedType = sniffAndValidateMime(file.buffer, file.mimetype);
+  } catch {
     res.status(400).json({ error: "Unsupported image type." });
     return;
   }
+  if (!isImageMimeType(sniffedType)) {
+    res.status(400).json({ error: "Unsupported image type." });
+    return;
+  }
+  const contentType = sniffedType;
+  const cleanBuffer = await stripMetadata(file.buffer, contentType);
   const existing = await db
     .select({ position: quiltingImages.position })
     .from(quiltingImages)
@@ -1201,7 +1231,6 @@ router.post("/fabrics/:id/images", upload.single("image"), async (req, res) => {
   }
   const nextPosition = (existing[existing.length - 1]?.position ?? 0) + 1;
 
-  const cleanBuffer = await stripImageMetadata(file.buffer, contentType);
   const storagePath = await uploadImage(cleanBuffer, contentType);
 
   const [image] = await db

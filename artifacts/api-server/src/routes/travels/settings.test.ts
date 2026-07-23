@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
 import { createDbMockWithBootstrap } from "../../test-helpers/db-mock";
@@ -39,8 +39,18 @@ vi.mock("../../middleware/auth", () => ({
 
 const TEST_USER_ID = 42;
 
-async function buildApp(): Promise<Express> {
-  const { default: router } = await import("./settings");
+// Pre-warmed in beforeAll so the first dynamic import completes before any
+// test's per-test timeout starts ticking. Without this, the module load
+// itself exhausts the default 5 s per-test timeout before the assertion runs.
+import type { IRouter } from "express";
+let settingsRouter: IRouter;
+
+beforeAll(async () => {
+  const mod = await import("./settings");
+  settingsRouter = mod.default;
+}, 30_000);
+
+function buildApp(): Express {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
@@ -49,7 +59,7 @@ async function buildApp(): Promise<Express> {
     };
     next();
   });
-  app.use("/api/travels", router);
+  app.use("/api/travels", settingsRouter);
   app.use(
     (
       err: unknown,
@@ -74,7 +84,6 @@ async function buildApp(): Promise<Express> {
 beforeEach(() => {
   selectQueue.length = 0;
   vi.clearAllMocks();
-  vi.resetModules();
 });
 
 describe("GET /api/travels/users", () => {

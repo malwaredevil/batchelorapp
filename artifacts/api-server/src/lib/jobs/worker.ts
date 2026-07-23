@@ -13,7 +13,6 @@ type ClaimedJob = {
 };
 
 type ActiveWorker = {
-  interval: NodeJS.Timeout;
   controller: AbortController;
 };
 
@@ -128,6 +127,30 @@ async function processOne(
   }
 }
 
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener("abort", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
+// Async poll loop — awaits each processOne before sleeping, so only one
+// query per worker is in-flight at a time. This prevents setInterval
+// tick pile-up which exhausted the Supabase session-mode connection pool.
+async function pollLoop(
+  workerId: string,
+  signal: AbortSignal,
+  queue?: string,
+): Promise<void> {
+  while (!signal.aborted) {
+    await processOne(workerId, signal, queue);
+    await sleep(5_000, signal);
+  }
+}
+
 // Starts a polling worker for the given queue (or all queues when omitted).
 // Multiple independent workers can be started for different queues.
 // Calling startJobWorker with the same queue argument a second time is a no-op.
@@ -136,11 +159,8 @@ export function startJobWorker(queue?: string): void {
   if (activeWorkers.has(key)) return;
   const workerId = `api-${process.pid}-${queue ?? "all"}-${randomUUID()}`;
   const controller = new AbortController();
-  const interval = setInterval(() => {
-    void processOne(workerId, controller.signal, queue);
-  }, 5_000);
-  interval.unref();
-  activeWorkers.set(key, { interval, controller });
+  void pollLoop(workerId, controller.signal, queue);
+  activeWorkers.set(key, { controller });
   logger.info({ workerId, queue: queue ?? "(all)" }, "job-worker: started");
 }
 
@@ -149,7 +169,6 @@ export async function stopJobWorker(queue?: string): Promise<void> {
   const key = queue ?? "__all__";
   const worker = activeWorkers.get(key);
   if (!worker) return;
-  clearInterval(worker.interval);
   worker.controller.abort();
   activeWorkers.delete(key);
   logger.info({ queue: queue ?? "(all)" }, "job-worker: stopped");
@@ -158,7 +177,6 @@ export async function stopJobWorker(queue?: string): Promise<void> {
 // Stops all active workers (used during graceful shutdown).
 export async function stopAllJobWorkers(): Promise<void> {
   for (const [key, worker] of activeWorkers) {
-    clearInterval(worker.interval);
     worker.controller.abort();
     activeWorkers.delete(key);
   }

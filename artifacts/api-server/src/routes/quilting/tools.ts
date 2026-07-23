@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
+import { DEFAULT_MULTER_FILE_BYTES } from "../../middleware/uploadSizeGuard";
 import { desc, getTableColumns } from "drizzle-orm";
 import {
   db,
@@ -12,7 +13,13 @@ import {
 } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { aiLimiter } from "../../middleware/rateLimit";
-import { sniffImageType, stripImageMetadata, toDataUrl } from "../../lib/image";
+import { toDataUrl } from "../../lib/image";
+import {
+  createImageFileFilter,
+  sniffAndValidateMime,
+  isImageMimeType,
+  stripMetadata,
+} from "@workspace/upload-validation";
 import { getConfig } from "../../lib/app-config";
 import { callModel, MODELS } from "../../lib/ai-client";
 import {
@@ -65,9 +72,12 @@ const {
   ...fabricColumns
 } = getTableColumns(fabrics);
 
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  limits: { fileSize: DEFAULT_MULTER_FILE_BYTES, files: 1 },
+  fileFilter: createImageFileFilter(ALLOWED_IMAGE_TYPES),
 });
 
 const router: IRouter = Router();
@@ -81,15 +91,24 @@ router.use(requireAuth);
 async function extractPaletteFromUpload(
   file: Express.Multer.File,
 ): Promise<{ error: string; status: number } | { extractedColors: string[] }> {
-  const contentType = sniffImageType(file.buffer);
-  if (!contentType) {
+  let sniffedType: ReturnType<typeof sniffAndValidateMime>;
+  try {
+    sniffedType = sniffAndValidateMime(file.buffer, file.mimetype);
+  } catch {
     return {
       error: "Unsupported image. Please upload a JPEG, PNG or WEBP.",
       status: 400,
     };
   }
+  if (!isImageMimeType(sniffedType)) {
+    return {
+      error: "Unsupported image. Please upload a JPEG, PNG or WEBP.",
+      status: 400,
+    };
+  }
+  const contentType = sniffedType;
 
-  const cleanBuffer = await stripImageMetadata(file.buffer, contentType);
+  const cleanBuffer = await stripMetadata(file.buffer, contentType);
   const dataUrl = toDataUrl(cleanBuffer, contentType);
 
   const completion = await callModel(

@@ -13,10 +13,14 @@ import {
   useCreateQuilt,
   getListQuiltsQueryKey,
   useListQuiltingCategories,
+  getUploadErrorMessage,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { TagSelector } from "@/quilting/components/tag-selector";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
+
+// Must match MAX_UPLOAD_BYTES in lib/upload-validation/src/index.ts
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
 
 const AddQuiltSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -59,13 +63,21 @@ export default function AddQuilt() {
         toast.success("Quilt added!");
         navigate(`/quilting/quilts/${quilt.id}`);
       },
-      onError: () => toast.error("Failed to add quilt. Please try again."),
+      onError: (err) =>
+        toast.error(
+          getUploadErrorMessage(err, "Failed to add quilt. Please try again."),
+        ),
     },
   });
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
+    e.target.value = "";
     if (!f) return;
+    if (f.size > MAX_UPLOAD_BYTES) {
+      toast.error(`${f.name} — skipped (max 10 MB per file)`);
+      return;
+    }
     setFile(f);
     setPreview(URL.createObjectURL(f));
   }

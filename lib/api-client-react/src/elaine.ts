@@ -9,7 +9,7 @@ import {
   type UseQueryOptions,
   type UseQueryResult,
 } from "@tanstack/react-query";
-import { customFetch } from "./custom-fetch";
+import { customFetch, ApiError } from "./custom-fetch";
 
 // ---------------------------------------------------------------------------
 // Elaine — shared AI assistant, used identically across travels, pottery,
@@ -852,15 +852,14 @@ export interface ElaineAttachmentUploadResult {
 export async function uploadElaineAttachment(
   file: File,
 ): Promise<ElaineAttachmentUploadResult> {
+  const url = "/api/elaine/attachments";
   const formData = new FormData();
   formData.append("file", file);
-  const res = await fetch("/api/elaine/attachments", {
-    method: "POST",
-    body: formData,
-  });
+  const res = await fetch(url, { method: "POST", body: formData });
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(text || `Upload failed with status ${res.status}`);
+    let data: unknown = null;
+    try { data = await res.json(); } catch { /* ignore */ }
+    throw new ApiError(res, data, { method: "POST", url });
   }
   return res.json() as Promise<ElaineAttachmentUploadResult>;
 }

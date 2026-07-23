@@ -1,6 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import { env } from "../env";
+import {
+  ensureBucketWithPolicy,
+  MESSENGER_BUCKET_POLICY,
+} from "../storage-core";
 
 const BUCKET = "messenger";
 const SIGNED_URL_EXPIRES_SECS = 3600;
@@ -10,16 +14,11 @@ function getClient() {
 }
 
 export async function ensureBucket(): Promise<void> {
-  const supabase = getClient();
-  const { data: existing } = await supabase.storage.getBucket(BUCKET);
-  if (existing) return;
-  const { error } = await supabase.storage.createBucket(BUCKET, {
-    public: false,
-    fileSizeLimit: 20 * 1024 * 1024,
-  });
-  if (error && !error.message.includes("already exists")) {
-    throw new Error(`Failed to create messenger bucket: ${error.message}`);
-  }
+  await ensureBucketWithPolicy(
+    getClient().storage,
+    BUCKET,
+    MESSENGER_BUCKET_POLICY,
+  );
 }
 
 export async function uploadFile(

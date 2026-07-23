@@ -1,6 +1,10 @@
 import { useState, useRef, useEffect } from "react";
+import { toast } from "sonner";
 import { UploadCloud, X, Image as ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// Must match MAX_UPLOAD_BYTES in lib/upload-validation/src/index.ts
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
 
 interface ImagePickerProps {
   value?: Blob | string | null;
@@ -33,6 +37,10 @@ export function ImagePicker({ value, onChange, className }: ImagePickerProps) {
   const handleFile = (file: File | null) => {
     if (!file) {
       onChange(null);
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      toast.error("Photo is too large. Please choose an image under 10 MB.");
       return;
     }
     onChange(file);

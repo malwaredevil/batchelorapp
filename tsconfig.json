@@ -35,6 +35,9 @@
     },
     {
       "path": "./lib/vite-config"
+    },
+    {
+      "path": "./lib/upload-validation"
     }
   ]
 }

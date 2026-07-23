@@ -152,6 +152,21 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @workspace/api-server run test
 
+  test-api-client:
+    name: API client tests (getUploadErrorMessage)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          version: 10
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/api-client-react run test
+
   pii-scan:
     name: PII email scan
     runs-on: ubuntu-latest
@@ -165,6 +180,31 @@ jobs:
           node-version: 24
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
+      - name: Check for forbidden provisioning-script filenames
+        run: |
+          # Block one-off provisioning scripts (add-users, seed-users, create-accounts,
+          # etc.) — these commonly contain hardcoded household emails / passwords and
+          # must never appear in the public repo.
+          FORBIDDEN=$(find . \
+            -not -path './.git/*' \
+            -not -path './node_modules/*' \
+            -not -path './**/node_modules/*' \
+            \( \
+              -name 'add-users.*'       -o -name 'add-user.*'       \
+              -o -name 'seed-users.*'   -o -name 'seed-user.*'       \
+              -o -name 'create-accounts.*' -o -name 'create-account.*' \
+              -o -name 'provision-users.*' -o -name 'provision-user.*' \
+              -o -name 'bootstrap-users.*' -o -name 'bootstrap-user.*' \
+            \) \
+            2>/dev/null || true)
+          if [ -n "$FORBIDDEN" ]; then
+            echo "🚫 Forbidden provisioning-script filenames found:"
+            echo "$FORBIDDEN"
+            echo "These files often contain hardcoded household emails/passwords."
+            echo "Delete or rename them before merging."
+            exit 1
+          fi
+          echo "✓ No forbidden provisioning-script filenames"
       - run: pnpm --filter @workspace/scripts run pii-scan
 
   codegen-drift:

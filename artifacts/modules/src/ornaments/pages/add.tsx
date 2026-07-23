@@ -15,6 +15,7 @@ import {
   useCreateOrnament,
   getListOrnamentsQueryKey,
   getGetOrnamentStatsQueryKey,
+  getUploadErrorMessage,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -34,10 +35,6 @@ import { ImagePicker } from "@/ornaments/components/image-picker";
 import { CategorySelector } from "@/ornaments/components/category-selector";
 import { usePageAssistantContext } from "@/ornaments/lib/assistant-context";
 import { useAppConfigSummary } from "@workspace/elaine-ui";
-
-// Note: createOrnament hook actually expects FormData for multipart/form-data.
-// We must build FormData manually since the generated hook signature uses `{ data: any }` but sends it via customFetch.
-// Wait, orval generated hooks usually take FormData if the schema specifies it. Let's assume it accepts FormData as `data`.
 
 const addSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -148,8 +145,8 @@ export default function AddOrnament() {
 
       toast.success("Ornament added!");
       setLocation(`/ornaments/ornament/${result.id}`);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to add ornament");
+    } catch (err) {
+      toast.error(getUploadErrorMessage(err, "Failed to add ornament"));
     }
   };
 
@@ -202,7 +199,15 @@ export default function AddOrnament() {
                     <FormControl>
                       <ImagePicker
                         value={field.value}
-                        onChange={field.onChange}
+                        onChange={(file) => {
+                          if (file && file.size > 10 * 1024 * 1024) {
+                            toast.error(
+                              `${(file as File).name ?? "File"} — skipped (max 10 MB per file)`,
+                            );
+                            return;
+                          }
+                          field.onChange(file);
+                        }}
                         className="w-full max-w-[240px] mx-auto md:mx-0"
                       />
                     </FormControl>

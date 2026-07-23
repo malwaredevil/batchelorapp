@@ -56,6 +56,7 @@ import {
   type Reminder,
   type TravelsAppUser,
   type CustomDocumentType,
+  getUploadErrorMessage,
 } from "@workspace/api-client-react";
 import { OneThingInput } from "@/travels/components/OneThingInput";
 import { MagnetCheckDialog } from "@/travels/components/MagnetCheckDialog";
@@ -2229,7 +2230,8 @@ function PhotoGridSection({
           `${photoType === "magnet" ? "Magnet" : "Photo"} uploaded`,
         );
       },
-      onError: () => toast.error("Upload failed"),
+      onError: (err) =>
+        toast.error(getUploadErrorMessage(err, "Upload failed")),
     },
   });
   const deletePhoto = useDeleteTripPhoto({
@@ -2251,40 +2253,87 @@ function PhotoGridSection({
     total: number;
   } | null>(null);
 
+  // Must match MAX_LARGE_UPLOAD_BYTES in lib/upload-validation/src/index.ts
+  const MAX_LARGE_UPLOAD_BYTES = 21 * 1024 * 1024; // 21 MB
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
+    const MAX_PHOTO_BYTES = 20 * 1024 * 1024; // 20 MB — matches server multer limit for /api/travels/trips/
+    const MAX_PHOTO_MB = 20;
+    const allFiles = Array.from(e.target.files ?? []);
     e.target.value = "";
+    if (allFiles.length === 0) return;
+
+    const oversized = allFiles.filter((f) => f.size > MAX_PHOTO_BYTES);
+    if (oversized.length > 0) {
+      const names = oversized.map((f) => f.name).join(", ");
+      toast.error(`${names} — skipped (max ${MAX_PHOTO_MB} MB per file)`);
+    }
+    const files = allFiles.filter((f) => f.size <= MAX_PHOTO_BYTES);
     if (files.length === 0) return;
 
-    if (files.length === 1) {
+    const tooLarge = files.filter((f) => f.size > MAX_LARGE_UPLOAD_BYTES);
+    if (tooLarge.length > 0) {
+      if (tooLarge.length === files.length) {
+        toast.error(
+          tooLarge.length === 1
+            ? "Photo is too large. Please choose an image under 21 MB."
+            : `All selected photos are too large. Please choose images under 21 MB.`,
+        );
+        return;
+      }
+      toast.error(
+        `${tooLarge.length} photo${tooLarge.length > 1 ? "s" : ""} skipped — over the 21 MB limit.`,
+      );
+    }
+    const accepted = files.filter((f) => f.size <= MAX_LARGE_UPLOAD_BYTES);
+    if (accepted.length === 0) return;
+
+    if (accepted.length === 1) {
       const formData = new FormData();
-      formData.append("photo", files[0]);
+      formData.append("photo", accepted[0]);
       formData.append("type", photoType);
       uploadPhoto.mutate({ tripId, formData });
       return;
     }
 
-    setBulkUploading({ done: 0, total: files.length });
-    let failures = 0;
-    for (const file of files) {
-      const formData = new FormData();
-      formData.append("photo", file);
-      formData.append("type", photoType);
-      try {
-        await uploadPhoto.mutateAsync({ tripId, formData });
-      } catch {
-        failures++;
-      }
-      setBulkUploading((prev) =>
-        prev ? { ...prev, done: prev.done + 1 } : prev,
-      );
-    }
+    setBulkUploading({ done: 0, total: accepted.length });
+    const results = await Promise.allSettled(
+      accepted.map(async (file) => {
+        const formData = new FormData();
+        formData.append("photo", file);
+        formData.append("type", photoType);
+        try {
+          await uploadPhoto.mutateAsync({ tripId, formData });
+        } finally {
+          setBulkUploading((prev) =>
+            prev ? { ...prev, done: prev.done + 1 } : prev,
+          );
+        }
+      }),
+    );
     setBulkUploading(null);
-    if (failures > 0) {
-      toast.error(`${failures} of ${files.length} uploads failed`);
+    const failedFiles = results
+      .map((result, i) => ({ name: accepted[i].name, result }))
+      .filter(({ result }) => result.status === "rejected")
+      .map(({ name, result }) => ({
+        name,
+        err: (result as PromiseRejectedResult).reason as unknown,
+      }));
+    if (failedFiles.length > 0) {
+      const byReason = new Map<string, string[]>();
+      for (const { name, err } of failedFiles) {
+        const reason = getUploadErrorMessage(err, "Upload failed");
+        const group = byReason.get(reason) ?? [];
+        group.push(name);
+        byReason.set(reason, group);
+      }
+      const msg = Array.from(byReason.entries())
+        .map(([reason, names]) => `${names.join(", ")} — ${reason}`)
+        .join("; ");
+      toast.error(msg);
     } else {
       toast.success(
-        `${files.length} ${photoType === "magnet" ? "magnets" : "photos"} uploaded`,
+        `${accepted.length} ${photoType === "magnet" ? "magnets" : "photos"} uploaded`,
       );
     }
   };
@@ -3072,8 +3121,9 @@ export default function TripDetail({ id }: { id: number }) {
       invalidate();
       toast.success("Document uploaded");
       setPendingFile(null);
-    } catch {
-      toast.error("Failed to upload document");
+    } catch (err) {
+      const reason = getUploadErrorMessage(err, "Failed to upload document");
+      toast.error(`${pendingFile.name}: ${reason}`);
     } finally {
       setUploadingDoc(false);
     }

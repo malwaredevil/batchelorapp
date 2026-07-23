@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
 import cookieParser from "cookie-parser";
@@ -84,8 +84,18 @@ const silentLog = {
   debug: () => {},
 };
 
-async function buildApp(): Promise<Express> {
-  const { default: router } = await import("./documents");
+// Pre-warmed in beforeAll so the first dynamic import completes before any
+// test's per-test timeout starts ticking. Without this, the module load
+// itself exhausts the default 5 s per-test timeout before the assertion runs.
+import type { IRouter } from "express";
+let documentsRouter: IRouter;
+
+beforeAll(async () => {
+  const mod = await import("./documents");
+  documentsRouter = mod.default;
+}, 30_000);
+
+function buildApp(): Express {
   const app = express();
   app.use(express.json());
   app.use(cookieParser("test-session-secret"));
@@ -96,7 +106,7 @@ async function buildApp(): Promise<Express> {
     (req as unknown as { log: typeof silentLog }).log = silentLog;
     next();
   });
-  app.use("/api/travels", router);
+  app.use("/api/travels", documentsRouter);
   app.use(
     (
       err: unknown,
@@ -118,8 +128,7 @@ async function buildApp(): Promise<Express> {
   return app;
 }
 
-async function buildUnauthApp(): Promise<Express> {
-  const { default: router } = await import("./documents");
+function buildUnauthApp(): Express {
   const app = express();
   app.use(express.json());
   app.use(cookieParser("test-session-secret"));
@@ -128,7 +137,7 @@ async function buildUnauthApp(): Promise<Express> {
     (req as unknown as { log: typeof silentLog }).log = silentLog;
     next();
   });
-  app.use("/api/travels", router);
+  app.use("/api/travels", documentsRouter);
   return app;
 }
 

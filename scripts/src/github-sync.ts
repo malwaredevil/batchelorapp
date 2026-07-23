@@ -123,6 +123,11 @@ const EXCLUDED_PREFIXES = [
 const EXCLUDED_EXACT = [
   // Security: threat model contains internal architecture details
   "threat_model.md",
+  // Private operational runbook — contains Sentry workflow, screenshot-bypass
+  // paths, backup commands, release checklists, and other internal procedures.
+  // Normally lives in .local/ (already blocked by EXCLUDED_PREFIXES), but
+  // also listed here to catch any copy accidentally placed at the repo root.
+  "RUNBOOK.md",
   // Replit-specific config files — may contain plaintext env vars or
   // Replit-internal state that must never appear in the public repo.
   ".replit",
@@ -187,6 +192,13 @@ function isExcluded(filePath: string): boolean {
   // "deleted locally" (they were never managed by this script to begin with).
   const segments = filePath.split("/");
   if (segments.some((seg) => EXCLUDED_DOT_DIRS.has(seg))) return true;
+  // Exclude any file whose basename starts with "RUNBOOK" (case-sensitive).
+  // The canonical location .local/RUNBOOK.md is already blocked by the
+  // .local/ prefix, but this covers variants at any depth (RUNBOOK-v2.md,
+  // RUNBOOK.secrets.md, nested/RUNBOOK.md, etc.) in case one is ever placed
+  // outside .local/ by accident.
+  const basename = path.basename(filePath);
+  if (basename.startsWith("RUNBOOK")) return true;
   const ext = path.extname(filePath).toLowerCase();
   return EXCLUDED_EXTENSIONS.has(ext);
 }
@@ -327,23 +339,38 @@ async function main() {
     process.exit(1);
   }
 
-  // Hard abort: refuse to push any file that could carry live session cookies
-  // or other credentials. This is a defence-in-depth check — these files should
-  // already be excluded by EXCLUDED_EXACT/EXCLUDED_PREFIXES, but an explicit
-  // abort here catches any future path that accidentally bypasses those lists.
+  // Hard abort: refuse to push any file that could carry live session cookies,
+  // credentials, household PII, or private operational runbooks. This is a
+  // defence-in-depth check — these files should already be excluded by
+  // EXCLUDED_EXACT, EXCLUDED_PREFIXES, and the RUNBOOK* basename guard in
+  // isExcluded(), but an explicit abort here catches any future path that
+  // accidentally bypasses those lists.
   const FORBIDDEN_PATTERNS = [
+    // Playwright session state — may contain live browser session cookies
     /smoke-auth\.json$/i,
     /storageState\.json$/i,
     /playwright-auth/i,
+    // One-off provisioning scripts — commonly contain hardcoded household
+    // email addresses, passwords, or other PII. These scripts are fine to keep
+    // locally for ops use but must never appear in the public repo.
+    /(?:^|[/\\])add-users?\./i,
+    /(?:^|[/\\])seed-users?\./i,
+    /(?:^|[/\\])create-accounts?\./i,
+    /(?:^|[/\\])provision-users?\./i,
+    /(?:^|[/\\])bootstrap-users?\./i,
+    // Private operational runbook — must live in .local/, never in the public repo.
+    // Catches RUNBOOK.md, RUNBOOK-v2.md, RUNBOOK.secrets.md, etc. at any depth.
+    /(?:^|\/)RUNBOOK/,
   ];
   const forbidden = changedFiles.filter((f) =>
     FORBIDDEN_PATTERNS.some((re) => re.test(f)),
   );
   if (forbidden.length > 0) {
     console.error(
-      `\n🚫 ABORTED: refusing to push credential-bearing files:\n` +
+      `\n🚫 ABORTED: refusing to push credential-bearing or PII-risk files:\n` +
         forbidden.map((f) => `  ${f}`).join("\n") +
-        `\nAdd them to EXCLUDED_EXACT in github-sync.ts and re-run.`,
+        `\nFor session files: add to EXCLUDED_EXACT in github-sync.ts and re-run.` +
+        `\nFor provisioning scripts (add-users, seed-users, etc.): delete or rename the file.`,
     );
     process.exit(1);
   }

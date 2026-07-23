@@ -218,6 +218,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "413":
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /pottery/stragglers:
     get:
       operationId: getStragglers
@@ -333,6 +339,12 @@ paths:
                 $ref: "#/components/schemas/Error"
         "404":
           description: Piece not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: File too large
           content:
             application/json:
               schema:
@@ -873,6 +885,12 @@ paths:
                 $ref: "#/components/schemas/CompareResult"
         "400":
           description: Invalid upload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: File too large
           content:
             application/json:
               schema:

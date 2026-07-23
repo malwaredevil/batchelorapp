@@ -14,6 +14,7 @@ import {
   getGetElaineSettingsQueryKey,
   getGetElaineNudgesUnseenCountQueryKey,
   getListElaineConversationsQueryKey,
+  getUploadErrorMessage,
   type AssistantMessage,
   type AssistantAction,
   type ExecutedAssistantAction,
@@ -246,6 +247,15 @@ export function useElaineChat({
   // Attachment management -------------------------------------------------------
 
   async function handleAddAttachment(file: File) {
+    // Must match MAX_LARGE_UPLOAD_BYTES in lib/upload-validation/src/index.ts
+    const MAX_LARGE_UPLOAD_BYTES = 21 * 1024 * 1024; // 21 MB
+    if (file.size > MAX_LARGE_UPLOAD_BYTES) {
+      toast.error(
+        "File is too large. Please choose an attachment under 21 MB.",
+      );
+      return;
+    }
+
     const previewUrl = URL.createObjectURL(file);
     const fileType: "image" | "pdf" =
       file.type === "application/pdf" ? "pdf" : "image";
@@ -279,7 +289,7 @@ export function useElaineChat({
             : a,
         ),
       );
-    } catch {
+    } catch (err) {
       setPendingAttachments((prev) =>
         prev.map((a) =>
           a.previewUrl === previewUrl
@@ -287,7 +297,12 @@ export function useElaineChat({
             : a,
         ),
       );
-      toast.error("Couldn't upload the attachment. Please try again.");
+      toast.error(
+        getUploadErrorMessage(
+          err,
+          "Couldn't upload the attachment. Please try again.",
+        ),
+      );
     }
   }
 

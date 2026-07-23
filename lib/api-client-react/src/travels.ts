@@ -9,7 +9,7 @@ import {
   type UseQueryOptions,
   type UseQueryResult,
 } from "@tanstack/react-query";
-import { customFetch, resolveApiUrl } from "./custom-fetch";
+import { customFetch, resolveApiUrl, ApiError } from "./custom-fetch";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -774,12 +774,16 @@ export function useSetTripIcon<TError = unknown, TContext = unknown>(
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
-export const uploadTripPhoto = (tripId: number, formData: FormData): Promise<TripPhoto> =>
-  fetch(`/api/travels/trips/${tripId}/photos`, { method: "POST", body: formData, credentials: "include" })
-    .then((res) => {
-      if (!res.ok) throw new Error("Upload failed");
-      return res.json() as Promise<TripPhoto>;
-    });
+export const uploadTripPhoto = async (tripId: number, formData: FormData): Promise<TripPhoto> => {
+  const url = `/api/travels/trips/${tripId}/photos`;
+  const res = await fetch(url, { method: "POST", body: formData, credentials: "include" });
+  if (!res.ok) {
+    let data: unknown = null;
+    try { data = await res.json(); } catch { /* ignore */ }
+    throw new ApiError(res, data, { method: "POST", url });
+  }
+  return res.json() as Promise<TripPhoto>;
+};
 
 export function useUploadTripPhoto<TError = unknown, TContext = unknown>(
   options?: { mutation?: UseMutationOptions<TripPhoto, TError, { tripId: number; formData: FormData }, TContext> },

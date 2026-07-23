@@ -11,7 +11,7 @@
  *     app-wide AI tuning constants.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
 import {
@@ -255,15 +255,25 @@ vi.mock("pdf-parse", () => ({
 const OWNER_USER_ID = 1;
 const NON_OWNER_USER_ID = 2;
 
-async function buildApp(userId: number): Promise<Express> {
-  const { default: router } = await import("./index");
+// Pre-warmed in beforeAll so the first dynamic import completes before any
+// test's per-test timeout starts ticking. Without this, the module load
+// itself exhausts the default 5 s per-test timeout before the assertion runs.
+import type { IRouter } from "express";
+let elaineRouter: IRouter;
+
+beforeAll(async () => {
+  const mod = await import("./index");
+  elaineRouter = mod.default;
+}, 30_000);
+
+function buildApp(userId: number): Express {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
     (req as unknown as { session: { userId: number } }).session = { userId };
     next();
   });
-  app.use("/elaine", router);
+  app.use("/elaine", elaineRouter);
   app.use(
     (
       err: unknown,
@@ -305,7 +315,6 @@ beforeEach(() => {
   selectQueue.length = 0;
   _updateConfigValueReturn = null;
   vi.clearAllMocks();
-  vi.resetModules();
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

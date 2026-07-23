@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
 import { createHmac } from "node:crypto";
@@ -147,8 +147,18 @@ function buildHeaders(
 // App under test
 // ---------------------------------------------------------------------------
 
-async function buildApp(): Promise<Express> {
-  const { default: router } = await import("./agentphone");
+// Pre-warmed in beforeAll so the first dynamic import completes before any
+// test's per-test timeout starts ticking. Without this, the module load
+// itself exhausts the default 5 s per-test timeout before the assertion runs.
+import type { IRouter } from "express";
+let agentphoneRouter: IRouter;
+
+beforeAll(async () => {
+  const mod = await import("./agentphone");
+  agentphoneRouter = mod.default;
+}, 30_000);
+
+function buildApp(): Express {
   const app = express();
 
   // Mirrors the real app's path-scoped body-parser that captures rawBody.
@@ -160,7 +170,7 @@ async function buildApp(): Promise<Express> {
     }),
   );
 
-  app.use("/api/agentphone", router);
+  app.use("/api/agentphone", agentphoneRouter);
   return app;
 }
 

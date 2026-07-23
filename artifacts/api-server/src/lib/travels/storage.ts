@@ -1,6 +1,6 @@
-import { ImageStorageService } from "../storage-core";
+import { ImageStorageService, TRAVELS_BUCKET_POLICY } from "../storage-core";
 
-const storage = new ImageStorageService("travels");
+const storage = new ImageStorageService("travels", TRAVELS_BUCKET_POLICY);
 
 export async function uploadTripPhoto(
   buffer: Buffer,

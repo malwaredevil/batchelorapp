@@ -1,6 +1,13 @@
 import { Router, type IRouter } from "express";
 import { and, eq, asc } from "drizzle-orm";
 import multer from "multer";
+import { multerLimitForPrefix } from "../../lib/upload-limits";
+import {
+  createImageFileFilter,
+  sniffAndValidateMime,
+  isImageMimeType,
+  stripMetadata,
+} from "@workspace/upload-validation";
 import {
   db,
   travelsTrips,
@@ -65,7 +72,10 @@ router.use(requireAuth);
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 },
+  limits: { fileSize: multerLimitForPrefix("/api/travels/trips/") },
+  fileFilter: createImageFileFilter(
+    (mime) => mime.startsWith("image/") || mime === "application/pdf",
+  ),
 });
 
 type ItineraryActivity = {
@@ -509,16 +519,33 @@ router.post("/trips/:id/documents", upload.single("file"), async (req, res) => {
     return;
   }
 
-  const { buffer, mimetype, originalname } = req.file;
-  const isPdf = mimetype === "application/pdf";
-  const isImage = mimetype.startsWith("image/");
+  const { buffer, originalname } = req.file;
 
-  if (!isPdf && !isImage) {
+  let sniffedMime: ReturnType<typeof sniffAndValidateMime>;
+  try {
+    sniffedMime = sniffAndValidateMime(buffer, req.file.mimetype);
+  } catch {
     res.status(400).json({ error: "Only PDF and image files are supported" });
     return;
   }
 
-  const storagePath = await uploadDocument(buffer, mimetype, originalname);
+  const isPdf = !isImageMimeType(sniffedMime);
+
+  let uploadBuffer = buffer;
+  if (isImageMimeType(sniffedMime)) {
+    try {
+      uploadBuffer = await stripMetadata(buffer, sniffedMime);
+    } catch {
+      res.status(400).json({ error: "Could not process image file" });
+      return;
+    }
+  }
+
+  const storagePath = await uploadDocument(
+    uploadBuffer,
+    sniffedMime,
+    originalname,
+  );
 
   let extractedData: Record<string, unknown> = {};
   let docSourceSpans: unknown = null;
@@ -536,7 +563,7 @@ router.post("/trips/:id/documents", upload.single("file"), async (req, res) => {
       extractedData = result.data;
       docSourceSpans = result.sourceSpans;
     } else {
-      const result = await extractFromImage(buffer, mimetype);
+      const result = await extractFromImage(uploadBuffer, sniffedMime);
       extractedData = result.data;
       docSourceSpans = result.sourceSpans;
       // For images, synthesize a text blob from the extracted structured data

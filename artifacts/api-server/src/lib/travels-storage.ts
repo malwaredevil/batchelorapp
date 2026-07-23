@@ -1,7 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import { env } from "./env";
-import { withCachedDownload, invalidateCachedDownload } from "./storage-core";
+import {
+  withCachedDownload,
+  invalidateCachedDownload,
+  ensureBucketWithPolicy,
+  TRAVELS_BUCKET_POLICY,
+} from "./storage-core";
 
 const BUCKET = "travels";
 
@@ -15,18 +20,14 @@ let bucketReady: Promise<void> | null = null;
 
 function ensureBucket(): Promise<void> {
   if (!bucketReady) {
-    bucketReady = (async () => {
-      const supabase = getSupabase();
-      const { data } = await supabase.storage.getBucket(BUCKET);
-      if (!data) {
-        const { error } = await supabase.storage.createBucket(BUCKET, {
-          public: false,
-        });
-        if (error && !/already exists/i.test(error.message)) {
-          throw error;
-        }
-      }
-    })();
+    bucketReady = ensureBucketWithPolicy(
+      getSupabase().storage,
+      BUCKET,
+      TRAVELS_BUCKET_POLICY,
+    ).catch((err) => {
+      bucketReady = null;
+      throw err;
+    });
   }
   return bucketReady;
 }

@@ -387,6 +387,37 @@ export class ApiError<T = unknown> extends Error {
   }
 }
 
+/**
+ * Returns a user-friendly error message for file upload failures.
+ *
+ * When the server responds with HTTP 413 (payload too large) it includes the
+ * exact size limit in the JSON body. This function surfaces that message
+ * directly so users see something like "Upload too large. Maximum file size is
+ * 10 MB." rather than a generic "Something went wrong." The message
+ * automatically stays accurate if the server-side limit is later adjusted.
+ *
+ * For any other error the function returns the error's own message, falling
+ * back to `fallback` when no message is available.
+ *
+ * @param err      The caught error (any type — safe to pass `unknown`).
+ * @param fallback Message to show when the error carries no usable text.
+ */
+export function getUploadErrorMessage(
+  err: unknown,
+  fallback = "Upload failed. Please try again.",
+): string {
+  if (err instanceof ApiError && err.status === 413) {
+    const data = err.data as Record<string, unknown> | null;
+    const serverMessage =
+      (typeof data?.["error"] === "string" ? data["error"] : null) ??
+      (typeof data?.["message"] === "string" ? data["message"] : null);
+    if (serverMessage?.trim()) return serverMessage.trim();
+    return "File too large — please upload a smaller file.";
+  }
+  if (err instanceof Error && err.message) return err.message;
+  return fallback;
+}
+
 export class ResponseParseError extends Error {
   readonly name = "ResponseParseError";
   readonly status: number;

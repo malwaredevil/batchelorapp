@@ -354,6 +354,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "413":
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /fabrics/{id}:
     get:
@@ -515,6 +521,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EntityImage"
+        "413":
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /fabrics/{id}/images/{imageId}:
     get:
@@ -615,6 +627,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/QuiltPattern"
+        "413":
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /patterns/{id}:
     get:
@@ -786,6 +804,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EntityImage"
+        "413":
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /patterns/{id}/images/{imageId}:
     get:
@@ -886,6 +910,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FinishedQuilt"
+        "413":
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /quilts/{id}:
     get:
@@ -1009,6 +1039,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EntityImage"
+        "413":
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /quilts/{id}/images/{imageId}:
     get:

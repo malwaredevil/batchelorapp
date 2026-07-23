@@ -26,6 +26,29 @@ import { db } from "@workspace/db";
 import { logger } from "./logger";
 
 /**
+ * Records that a scheduled task completed successfully.
+ * Call this after the task's work finishes without error so that
+ * scheduler_runs.last_success_at is kept up to date for observability.
+ * Non-fatal: a recording failure logs a warning but does not throw.
+ */
+export async function recordScheduledTaskSuccess(
+  taskName: string,
+): Promise<void> {
+  try {
+    await db.execute(sql`
+      UPDATE scheduler_runs
+      SET last_success_at = now()
+      WHERE name = ${taskName}
+    `);
+  } catch (err) {
+    logger.warn(
+      { err, taskName },
+      "scheduler-guard: failed to record task success — continuing",
+    );
+  }
+}
+
+/**
  * Returns true if at least `minIntervalMs` has elapsed since the last
  * successful claim for `taskName` (or if this task has never run before).
  * Claiming updates the persisted timestamp immediately, before the caller's

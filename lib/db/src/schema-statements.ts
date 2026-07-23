@@ -72,9 +72,11 @@ export const STATEMENTS: string[] = [
   // workflow restart — see schema/users.ts for the full rationale.
   `CREATE TABLE IF NOT EXISTS scheduler_runs (
     name text PRIMARY KEY,
-    last_run_at timestamptz NOT NULL
+    last_run_at timestamptz NOT NULL,
+    last_success_at timestamptz
   )`,
   `ALTER TABLE scheduler_runs ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE scheduler_runs ADD COLUMN IF NOT EXISTS last_success_at timestamptz`,
 
   // ── Session stores (owned by connect-pg-simple, never altered by drizzle) ──
   `CREATE TABLE IF NOT EXISTS pottery_sessions (
@@ -679,10 +681,10 @@ export const STATEMENTS: string[] = [
   // scripts/src/migrate-to-elaine.ts. Do not recreate them here.
 
   // --- Multi-Calendar Travel Rework ---------------------------------------
-  // is_owner: the single app owner (batchelorjc@gmail.com) is the only
-  // account allowed to assign/reassign the shared "Travel" calendar.
+  // is_owner: the single app owner is the only account allowed to
+  // assign/reassign the shared "Travel" calendar. Set via OWNER_EMAIL env var.
   `ALTER TABLE app_users ADD COLUMN IF NOT EXISTS is_owner BOOLEAN NOT NULL DEFAULT false`,
-  `UPDATE app_users SET is_owner = true WHERE email = 'batchelorjc@gmail.com' AND is_owner = false`,
+  `UPDATE app_users SET is_owner = true WHERE email = '${process.env.OWNER_EMAIL ?? ""}' AND is_owner = false`,
 
   // travels_connected_calendars: unlimited per-user connected Google
   // calendars, each with its own chosen primary color. Exactly one row
@@ -966,7 +968,6 @@ export const STATEMENTS: string[] = [
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
   `ALTER TABLE travels_packing_lists ENABLE ROW LEVEL SECURITY`,
-  `CREATE INDEX IF NOT EXISTS travels_packing_lists_trip_id_idx ON travels_packing_lists (trip_id)`,
 
   `CREATE TABLE IF NOT EXISTS travels_packing_items (
     id                SERIAL PRIMARY KEY,
@@ -1110,10 +1111,14 @@ export const STATEMENTS: string[] = [
   )`,
   `ALTER TABLE agentphone_conversations ENABLE ROW LEVEL SECURITY`,
   `CREATE TABLE IF NOT EXISTS agentphone_webhook_deliveries (
-    id          TEXT PRIMARY KEY,
-    received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id           TEXT PRIMARY KEY,
+    received_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    status       TEXT NOT NULL DEFAULT 'processing',
+    processed_at TIMESTAMPTZ
   )`,
   `ALTER TABLE agentphone_webhook_deliveries ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE agentphone_webhook_deliveries ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'processing'`,
+  `ALTER TABLE agentphone_webhook_deliveries ADD COLUMN IF NOT EXISTS processed_at TIMESTAMPTZ`,
   `CREATE INDEX IF NOT EXISTS agentphone_webhook_deliveries_received_at_idx
      ON agentphone_webhook_deliveries (received_at)`,
 
@@ -1127,10 +1132,14 @@ export const STATEMENTS: string[] = [
   )`,
   `ALTER TABLE elaine_email_conversations ENABLE ROW LEVEL SECURITY`,
   `CREATE TABLE IF NOT EXISTS elaine_email_webhook_deliveries (
-    id          TEXT PRIMARY KEY,
-    received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id           TEXT PRIMARY KEY,
+    received_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    status       TEXT NOT NULL DEFAULT 'processing',
+    processed_at TIMESTAMPTZ
   )`,
   `ALTER TABLE elaine_email_webhook_deliveries ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE elaine_email_webhook_deliveries ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'processing'`,
+  `ALTER TABLE elaine_email_webhook_deliveries ADD COLUMN IF NOT EXISTS processed_at TIMESTAMPTZ`,
   `CREATE INDEX IF NOT EXISTS elaine_email_webhook_deliveries_received_at_idx
      ON elaine_email_webhook_deliveries (received_at)`,
 
@@ -1957,7 +1966,6 @@ export const STATEMENTS: string[] = [
     updated_at                          TIMESTAMPTZ NOT NULL DEFAULT now()
   )`,
   `ALTER TABLE travels_monitoring_preferences ENABLE ROW LEVEL SECURITY`,
-  `CREATE INDEX IF NOT EXISTS travels_monitoring_prefs_user_idx ON travels_monitoring_preferences (user_id)`,
 
   // ── Phase 2: Search feedback + similarity evaluations (#233) ─────────────
 
@@ -2590,7 +2598,6 @@ export const STATEMENTS: string[] = [
     updated_at        timestamptz NOT NULL DEFAULT now()
   )`,
   `ALTER TABLE hallmark_catalog ENABLE ROW LEVEL SECURITY`,
-  `CREATE INDEX IF NOT EXISTS hallmark_catalog_sku_idx ON hallmark_catalog (hallmark_sku)`,
   `CREATE INDEX IF NOT EXISTS hallmark_catalog_year_idx ON hallmark_catalog (year)`,
   `CREATE INDEX IF NOT EXISTS hallmark_catalog_series_idx ON hallmark_catalog (series_name)`,
 
@@ -2615,7 +2622,6 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS hallmark_hist_sku_idx ON hallmark_historical_catalog (hallmark_sku)`,
   `CREATE INDEX IF NOT EXISTS hallmark_hist_year_idx ON hallmark_historical_catalog (year)`,
   `CREATE INDEX IF NOT EXISTS hallmark_hist_series_idx ON hallmark_historical_catalog (series_name)`,
-  `CREATE INDEX IF NOT EXISTS hallmark_hist_url_idx ON hallmark_historical_catalog (product_url)`,
 
   // ── Hallmark HookedOnHallmark catalog (hookedonhallmark.com, 1973-present) ──
   // Retail/collector prices, availability, and series from the world's largest
@@ -2642,7 +2648,6 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS hallmark_hooh_sku_idx ON hallmark_hooh_catalog (hallmark_sku)`,
   `CREATE INDEX IF NOT EXISTS hallmark_hooh_year_idx ON hallmark_hooh_catalog (year)`,
   `CREATE INDEX IF NOT EXISTS hallmark_hooh_series_idx ON hallmark_hooh_catalog (series_name)`,
-  `CREATE INDEX IF NOT EXISTS hallmark_hooh_url_idx ON hallmark_hooh_catalog (product_url)`,
 
   // ── Hallmark ornaments — merged single-table view ─────────────────────────
   // Populated by the merge-hallmark-catalogs script. Keyed by hallmark_sku.
@@ -2673,7 +2678,6 @@ export const STATEMENTS: string[] = [
     updated_at             timestamptz NOT NULL DEFAULT now()
   )`,
   `ALTER TABLE hallmark_ornaments ENABLE ROW LEVEL SECURITY`,
-  `CREATE INDEX IF NOT EXISTS hallmark_ornaments_sku_idx    ON hallmark_ornaments (hallmark_sku)`,
   `CREATE INDEX IF NOT EXISTS hallmark_ornaments_year_idx   ON hallmark_ornaments (year)`,
   `CREATE INDEX IF NOT EXISTS hallmark_ornaments_series_idx ON hallmark_ornaments (series_name)`,
 
@@ -2796,4 +2800,17 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS travels_reminder_alert_deliveries_status_next_attempt_idx
      ON travels_reminder_alert_deliveries (status, next_attempt_at)
      WHERE status IN ('pending', 'retryable')`,
+
+  // ── #328: Drop redundant non-unique indexes superseded by unique constraints ──
+  // Each table below has a .unique() column that PostgreSQL automatically backs
+  // with a unique B-tree index. The corresponding non-unique indexes listed here
+  // are structural duplicates: same table, same column, same operator class.
+  // They waste storage, slow every write/upsert, and add unnecessary WAL/vacuum
+  // work. DROP INDEX IF EXISTS is idempotent so re-running bootstrap is safe.
+  `DROP INDEX IF EXISTS hallmark_catalog_sku_idx`,
+  `DROP INDEX IF EXISTS hallmark_hist_url_idx`,
+  `DROP INDEX IF EXISTS hallmark_hooh_url_idx`,
+  `DROP INDEX IF EXISTS hallmark_ornaments_sku_idx`,
+  `DROP INDEX IF EXISTS travels_packing_lists_trip_id_idx`,
+  `DROP INDEX IF EXISTS travels_monitoring_prefs_user_idx`,
 ];

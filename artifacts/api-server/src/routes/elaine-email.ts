@@ -1,12 +1,11 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { webhookLimiter } from "../middleware/rateLimit";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   db,
   appUsers,
   elaineEmailConversations,
-  elaineEmailWebhookDeliveries,
   type ElaineEmailConversationRow,
 } from "@workspace/db";
 import { Resend } from "resend";
@@ -89,40 +88,34 @@ function verifySignature(req: Request): boolean {
   return false;
 }
 
-// Returns true when `err` looks like a PostgreSQL unique-constraint violation
-// (SQLSTATE 23505) or an equivalent ORM-level duplicate-key error. Any other
-// error is assumed to be a transient infrastructure problem (DB unreachable,
-// timeout, etc.) and must NOT be silently swallowed.
-function isDuplicateKeyError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
-  const pgErr = err as Error & { code?: string; cause?: unknown };
-  if (pgErr.code === "23505") return true;
-  // DrizzleQueryError wraps the pg error in .cause — check there too
-  const cause = pgErr.cause as { code?: string; message?: string } | undefined;
-  if (cause?.code === "23505") return true;
-  const msg = err.message.toLowerCase();
-  const causeMsg = (
-    typeof cause?.message === "string" ? cause.message : ""
-  ).toLowerCase();
-  return (
-    msg.includes("unique") ||
-    msg.includes("duplicate key") ||
-    causeMsg.includes("unique") ||
-    causeMsg.includes("duplicate key")
-  );
+// Records the delivery id with status='processing' before any side effect runs.
+// Uses ON CONFLICT DO UPDATE so a crashed-and-redelivered webhook
+// (status='processing' AND received_at older than 5 minutes) can be retried;
+// a recently-seen or already-processed id is rejected (returns false).
+async function claimDelivery(id: string): Promise<boolean> {
+  const result = await db.execute<{ id: string }>(sql`
+    INSERT INTO elaine_email_webhook_deliveries (id, status)
+    VALUES (${id}, 'processing')
+    ON CONFLICT (id) DO UPDATE
+      SET status = 'processing', received_at = NOW()
+      WHERE elaine_email_webhook_deliveries.status = 'processing'
+        AND elaine_email_webhook_deliveries.received_at < NOW() - INTERVAL '5 minutes'
+    RETURNING id
+  `);
+  return result.rows.length > 0;
 }
 
-// Records the delivery id before any side effect runs so a redelivered
-// webhook is a no-op. Returns false when the id was already claimed
-// (duplicate delivery). Throws for any other DB error so the caller can
-// fail closed (503) rather than silently treating the event as a duplicate.
-async function claimDelivery(id: string): Promise<boolean> {
+// Marks a claimed delivery as fully processed. Fire-and-forget: a failure
+// here is logged but never affects the response already sent to Resend.
+async function markDeliveryProcessed(id: string): Promise<void> {
   try {
-    await db.insert(elaineEmailWebhookDeliveries).values({ id });
-    return true;
+    await db.execute(sql`
+      UPDATE elaine_email_webhook_deliveries
+      SET status = 'processed', processed_at = NOW()
+      WHERE id = ${id}
+    `);
   } catch (err) {
-    if (isDuplicateKeyError(err)) return false;
-    throw err;
+    logger.warn({ err, id }, "elaine-email: failed to mark delivery processed");
   }
 }
 
@@ -257,6 +250,7 @@ router.post(
     // Only inbound-email events carry a message to act on; other Resend
     // webhook event types (delivery/bounce/etc. on outbound sends) are no-ops.
     if (eventType !== "email.received" && eventType !== "inbound.email") {
+      void markDeliveryProcessed(deliveryId);
       res.status(200).json({ ok: true });
       return;
     }
@@ -458,6 +452,7 @@ router.post(
       })
       .where(eq(elaineEmailConversations.id, conversation.id));
 
+    void markDeliveryProcessed(deliveryId);
     res.status(200).json({ ok: true });
   },
 );

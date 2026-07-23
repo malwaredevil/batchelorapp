@@ -132,7 +132,7 @@ export class ImageStorageService {
         if (!data) {
           const { error } = await this.supabase.storage.createBucket(
             this.bucket,
-            { public: false },
+            { public: false, fileSizeLimit: 20 * 1024 * 1024 },
           );
           if (error && !/already exists/i.test(error.message)) {
             throw error;

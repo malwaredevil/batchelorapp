@@ -51,6 +51,8 @@ export const agentphoneWebhookDeliveries = pgTable(
     receivedAt: timestamp("received_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
+    status: text("status").notNull().default("processing"),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
   },
   (table) => [
     index("agentphone_webhook_deliveries_received_at_idx").on(table.receivedAt),

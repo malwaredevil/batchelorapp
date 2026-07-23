@@ -26,8 +26,6 @@ const app: Express = express();
 app.set("trust proxy", 1);
 
 // Security response headers (#331).
-// contentSecurityPolicy is deferred: requires explicit allowlists for
-// Supabase Storage, Google Maps, Sentry, and service-worker script origins.
 // crossOriginEmbedderPolicy is off: COEP blocks Supabase Storage / Maps loads.
 // crossOriginOpenerPolicy allows popups for the Google OAuth callback window.
 // All other helmet defaults are enabled:
@@ -39,7 +37,48 @@ app.set("trust proxy", 1);
 app.disable("x-powered-by");
 app.use(
   helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          // Google Maps JavaScript API
+          "https://maps.googleapis.com",
+          "https://maps.gstatic.com",
+        ],
+        styleSrc: [
+          "'self'",
+          // Tailwind CSS-in-JS and inline style attributes used throughout
+          "'unsafe-inline'",
+          "https://fonts.googleapis.com",
+        ],
+        fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+        imgSrc: [
+          "'self'",
+          "data:",
+          "blob:",
+          // Google Maps tiles and Street View imagery
+          "https://maps.googleapis.com",
+          "https://maps.gstatic.com",
+          "https://*.ggpht.com",
+        ],
+        connectSrc: [
+          "'self'",
+          // Sentry browser SDK DSN endpoint (*.ingest.sentry.io/<project>)
+          "https://*.ingest.sentry.io",
+          "https://*.sentry.io",
+          // Google Maps Places/Directions/Geocoding API calls from the browser
+          "https://maps.googleapis.com",
+        ],
+        workerSrc: ["'self'", "blob:"],
+        frameSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        objectSrc: ["'none'"],
+        upgradeInsecureRequests: [],
+      },
+    },
     crossOriginEmbedderPolicy: false,
     crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
   }),

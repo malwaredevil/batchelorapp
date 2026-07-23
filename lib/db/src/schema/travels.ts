@@ -689,7 +689,7 @@ export const travelsPackingLists = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (table) => [index("travels_packing_lists_trip_id_idx").on(table.tripId)],
+  () => [],
 ).enableRLS();
 
 export type TravelsPackingListRow = typeof travelsPackingLists.$inferSelect;
@@ -1034,7 +1034,7 @@ export const travelsMonitoringPreferences = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (table) => [index("travels_monitoring_prefs_user_idx").on(table.userId)],
+  () => [],
 ).enableRLS();
 
 export type TravelsMonitoringPreferencesRow =

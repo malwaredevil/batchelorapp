@@ -53,6 +53,8 @@ export const elaineEmailWebhookDeliveries = pgTable(
     receivedAt: timestamp("received_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
+    status: text("status").notNull().default("processing"),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
   },
   (table) => [
     index("elaine_email_webhook_deliveries_received_at_idx").on(

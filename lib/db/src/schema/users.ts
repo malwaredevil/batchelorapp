@@ -27,7 +27,7 @@ export const appUsers = pgTable("app_users", {
   // extracted from scanned Gmail travel documents and elsewhere in Travels.
   // Nullable — falls back to UTC display until the user sets it.
   timezone: text("timezone"),
-  // True for the single app owner (batchelorjc@gmail.com) — the only account
+  // True for the single app owner — the only account
   // allowed to assign/reassign which connected calendar is the shared
   // "Travel" calendar in the Travels app.
   isOwner: boolean("is_owner").notNull().default(false),

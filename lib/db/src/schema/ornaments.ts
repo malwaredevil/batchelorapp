@@ -351,7 +351,6 @@ export const hallmarkCatalog = pgTable(
       .notNull(),
   },
   (table) => [
-    index("hallmark_catalog_sku_idx").on(table.hallmarkSku),
     index("hallmark_catalog_year_idx").on(table.year),
     index("hallmark_catalog_series_idx").on(table.seriesName),
   ],
@@ -389,7 +388,6 @@ export const hallmarkHistoricalCatalog = pgTable(
     index("hallmark_hist_sku_idx").on(table.hallmarkSku),
     index("hallmark_hist_year_idx").on(table.year),
     index("hallmark_hist_series_idx").on(table.seriesName),
-    index("hallmark_hist_url_idx").on(table.productUrl),
   ],
 ).enableRLS();
 
@@ -433,7 +431,6 @@ export const hallmarkHoohCatalog = pgTable(
     index("hallmark_hooh_sku_idx").on(table.hallmarkSku),
     index("hallmark_hooh_year_idx").on(table.year),
     index("hallmark_hooh_series_idx").on(table.seriesName),
-    index("hallmark_hooh_url_idx").on(table.productUrl),
   ],
 ).enableRLS();
 
@@ -489,7 +486,6 @@ export const hallmarkOrnaments = pgTable(
       .notNull(),
   },
   (table) => [
-    index("hallmark_ornaments_sku_idx").on(table.hallmarkSku),
     index("hallmark_ornaments_year_idx").on(table.year),
     index("hallmark_ornaments_series_idx").on(table.seriesName),
   ],

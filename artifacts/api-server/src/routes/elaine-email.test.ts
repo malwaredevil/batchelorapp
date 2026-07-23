@@ -38,24 +38,34 @@ vi.mock("../lib/env", () => ({
 }));
 
 // ── DB mock ──────────────────────────────────────────────────────────────────
-// nextInsertThrows: simulates a unique-constraint violation (duplicate delivery)
+// nextInsertThrows: simulates a duplicate delivery (claimDelivery returns false)
 // nextInsertThrowsDbError: simulates a real DB error (connection refused, etc.)
 // These are mutually exclusive; dbError takes priority when both are set.
+// claimDelivery now uses db.execute() with ON CONFLICT SQL, so the flags are
+// consumed by executeImpl rather than makeInsertBuilder.
 let nextInsertThrows = false;
 let nextInsertThrowsDbError = false;
 const insertCalls: { values: unknown }[] = [];
 const selectQueue: unknown[][] = [];
 
-function makeInsertBuilder() {
+// executeImpl: backs db.execute() — handles claimDelivery and markDeliveryProcessed.
+// The first call per request is claimDelivery; subsequent calls are fire-and-forget
+// markDeliveryProcessed which always succeed.
+function executeImpl() {
   const shouldThrowDbError = nextInsertThrowsDbError;
-  const shouldThrowDuplicate = nextInsertThrows;
+  const shouldReturnEmpty = nextInsertThrows;
   nextInsertThrowsDbError = false;
   nextInsertThrows = false;
+  if (shouldThrowDbError) throw new Error("ECONNREFUSED");
+  if (shouldReturnEmpty) return Promise.resolve({ rows: [] });
+  return Promise.resolve({ rows: [{ id: "claimed" }] });
+}
+
+function makeInsertBuilder() {
+  // Insert is used for conversation inserts, not dedup.
   return {
     values(values: unknown) {
       insertCalls.push({ values });
-      if (shouldThrowDbError) throw new Error("ECONNREFUSED");
-      if (shouldThrowDuplicate) throw new Error("unique_violation");
       return {
         onConflictDoNothing: () => ({ returning: () => Promise.resolve([]) }),
         returning: () => Promise.resolve([]),
@@ -80,6 +90,7 @@ const dbMock = {
   insert: vi.fn(() => makeInsertBuilder()),
   select: vi.fn(() => makeEagerSelectBuilder(selectQueue)),
   update: vi.fn(() => makeUpdateBuilder()),
+  execute: vi.fn(executeImpl),
 };
 
 vi.mock("@workspace/db", async (importOriginal) => {
@@ -189,6 +200,7 @@ beforeEach(() => {
   dbMock.insert.mockImplementation(() => makeInsertBuilder());
   dbMock.select.mockImplementation(() => makeEagerSelectBuilder(selectQueue));
   dbMock.update.mockImplementation(() => makeUpdateBuilder());
+  dbMock.execute.mockImplementation(executeImpl);
   runElaineEmailTurn.mockResolvedValue({
     replyText: "Mock reply",
     history: [],

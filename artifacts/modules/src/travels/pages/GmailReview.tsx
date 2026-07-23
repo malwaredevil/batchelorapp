@@ -1153,6 +1153,38 @@ export default function GmailReview() {
     );
   }
 
+  if (status.tokenExpired) {
+    return (
+      <div className="space-y-6 max-w-lg">
+        <div>
+          <h1 className="font-serif text-3xl text-foreground">Gmail</h1>
+          <p className="text-muted-foreground mt-1">
+            Connected as {status.googleEmail}
+          </p>
+        </div>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-900/20 p-6 space-y-3">
+          <div className="flex items-start gap-3">
+            <Mail className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                Gmail connection expired
+              </p>
+              <p className="text-sm text-amber-800 dark:text-amber-300">
+                Google has revoked access to{" "}
+                <span className="font-medium">{status.googleEmail}</span>. This
+                happens periodically for security. Disconnect and reconnect your
+                account from Settings to restore Gmail scanning.
+              </p>
+            </div>
+          </div>
+          <Button asChild className="w-full sm:w-auto">
+            <a href="/account">Go to Settings to reconnect</a>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-2xl">
       <div className="flex flex-wrap items-start justify-between gap-3">

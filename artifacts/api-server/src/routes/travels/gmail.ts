@@ -100,10 +100,22 @@ router.get("/gmail/status", async (req, res) => {
     .from(travelsGmailConnections)
     .where(eq(travelsGmailConnections.userId, userId))
     .limit(1);
+
+  if (!connection) {
+    res.json({ connected: false, googleEmail: null, lastScanAt: null });
+    return;
+  }
+
+  // Attempt a token refresh so clients learn immediately when a token has been
+  // revoked (invalid_grant) rather than discovering it via a 409 on the inbox.
+  const token = await getValidGmailAccessToken(userId);
   res.json({
-    connected: Boolean(connection),
-    googleEmail: connection?.googleEmail ?? null,
-    lastScanAt: connection?.lastScanAt ?? null,
+    connected: true,
+    // tokenExpired: true lets the UI show a "reconnect" prompt without
+    // waiting for a downstream call to fail with a 409.
+    tokenExpired: !token,
+    googleEmail: connection.googleEmail,
+    lastScanAt: connection.lastScanAt ?? null,
   });
 });
 

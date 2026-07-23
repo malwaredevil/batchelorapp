@@ -1186,6 +1186,9 @@ export function useUpdateTravelsTimezone(
 
 export interface GmailStatus {
   connected: boolean;
+  /** True when a connection row exists but the refresh token has been revoked
+   *  or expired (invalid_grant).  The UI should prompt the user to reconnect. */
+  tokenExpired?: boolean;
   googleEmail: string | null;
   lastScanAt: string | null;
 }

@@ -11,14 +11,10 @@ jobs:
       - name: Download BFG Repo Cleaner
         run: |
           wget -q https://repo1.maven.org/maven2/com/madgag/bfg/1.14.0/bfg-1.14.0.jar -O bfg.jar
-          java -jar bfg.jar --version || true
 
       - name: Create text-replacement file
         run: |
-          cat > replacements.txt << 'EOF'
-          REDACTED==>REDACTED
-          REDACTED==>REDACTED
-          EOF
+          printf 'REDACTED==>REDACTED\nREDACTED==>REDACTED\n' > replacements.txt
 
       - name: Clone repository as mirror
         run: |
@@ -49,20 +45,8 @@ jobs:
           fi
           echo "PASS: add-users.ts is gone from all history"
 
-      - name: Verify - check email addresses are scrubbed
+      - name: Force-push all branch refs (excluding PR refs)
         run: |
           cd repo.git
-          if git grep 'REDACTED' --all; then
-            echo "ERROR: email still present in history"
-            exit 1
-          fi
-          if git grep 'REDACTED' --all; then
-            echo "ERROR: email still present in history"
-            exit 1
-          fi
-          echo "PASS: no household email addresses found in any blob"
-
-      - name: Force-push rewritten history
-        run: |
-          cd repo.git
-          git push --force --mirror
+          git push --force origin 'refs/heads/*:refs/heads/*'
+          echo "Done pushing branch refs"

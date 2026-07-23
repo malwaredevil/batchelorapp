@@ -571,11 +571,9 @@ export function CalendarSyncCard({
       (connectedList
         ? `Connected calendars: ${connectedList}.`
         : "No calendars connected yet — add one from the list of Google calendars.") +
-      (travelStatus?.isOwner
-        ? " This user is the app owner and can assign any of their connected calendars as the shared Travel calendar."
-        : " This user is not the app owner and cannot change which calendar is the shared Travel calendar.")
+      " Any household member can assign one of their connected calendars as the shared Travel calendar."
     );
-  }, [statusLoading, status, connectedCalendars, travelStatus]);
+  }, [statusLoading, status, connectedCalendars]);
   usePageContext("settings-calendar", calendarContext);
 
   function handleConnect() {
@@ -712,10 +710,8 @@ export function CalendarSyncCard({
           <p className="text-sm text-muted-foreground">
             Connect your Google account, then add as many of your calendars as
             you like. Each gets its own overlay color on the Travel Calendar
-            page.{" "}
-            {travelStatus?.isOwner
-              ? "As the app owner, you can also assign one connected calendar as the shared Travel calendar."
-              : "Only the app owner can assign the shared Travel calendar."}
+            page. You can also assign one connected calendar as the shared
+            Travel calendar for everyone.
           </p>
         </div>
       </div>
@@ -799,7 +795,7 @@ export function CalendarSyncCard({
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      {travelStatus?.isOwner && !cal.isTravelCalendar && (
+                      {!cal.isTravelCalendar && (
                         <Button
                           variant="outline"
                           size="sm"

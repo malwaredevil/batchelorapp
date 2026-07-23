@@ -2,8 +2,8 @@
 // Each app_user can connect an unlimited number of their own Google
 // calendars, each with a user-chosen primary color for the Outlook-style
 // overlay UI. Exactly one row across the whole table may be the shared
-// "Travel" calendar (isTravelCalendar) — only the app owner (app_users.is_owner)
-// may assign/reassign that flag.
+// "Travel" calendar (isTravelCalendar) — any authenticated household member
+// may assign/reassign that flag (household-shared resource).
 import { Router, type IRouter } from "express";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -152,17 +152,9 @@ router.delete("/connected-calendars/:id", requireAuth, async (req, res) => {
 
 // PUT /connected-calendars/:id/travel — assign this calendar as the shared
 // "Travel" calendar (unassigning whichever one previously held the flag).
-// Owner-only (app_users.is_owner), since this affects every user's app.
+// Any authenticated household member may assign it (household-shared resource).
 router.put("/connected-calendars/:id/travel", requireAuth, async (req, res) => {
-  const userId = req.session.userId!;
   const id = Number(req.params["id"]);
-
-  if (!(await isOwnerUser(userId))) {
-    res
-      .status(403)
-      .json({ error: "Only the app owner can assign the Travel calendar." });
-    return;
-  }
 
   const [target] = await db
     .select()

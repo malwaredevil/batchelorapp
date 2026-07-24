@@ -76,6 +76,11 @@ export const env = {
   ebayAppId: optional("EBAY_APP_ID"),
   ebayCertId: optional("EBAY_CERT_ID"),
   ebayDevId: optional("EBAY_DEV_ID"),
+  // AES-256-GCM key for encrypting stored Google OAuth tokens (refresh +
+  // access). Required in production — the server will refuse to start if this
+  // is missing. Generate with:
+  //   node -e "require('crypto').randomBytes(32).toString('base64')"
+  oauthTokenEncryptionKey: required("OAUTH_TOKEN_ENCRYPTION_KEY"),
   sentryDsn: optional("SENTRY_DSN"),
   // Canonical public URL of this deployment (e.g. "https://app.batchelor.app").
   // Used as a safe fallback for constructing OAuth redirect URIs and

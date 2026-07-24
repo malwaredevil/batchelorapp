@@ -121,6 +121,7 @@ Names only — values must be re-entered manually in the new environment's Secre
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_POOLER_HOST`
 - `SESSION_SECRET`
 - `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `JINA_API_KEY`, `VOYAGE_API_KEY` (all required, not optional — see below)
+- `OAUTH_TOKEN_ENCRYPTION_KEY` — AES-256-GCM key for stored Google OAuth tokens; generate with `node -e "require('crypto').randomBytes(32).toString('base64')"` and run `pnpm --filter @workspace/scripts run encrypt-oauth-tokens` after setting it to migrate any plaintext rows
 - `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_REMINDER_FROM_EMAIL`
 - `SENTRY_DSN`
 - `GH_PAT`

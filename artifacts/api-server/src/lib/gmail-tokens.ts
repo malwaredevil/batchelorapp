@@ -6,6 +6,7 @@ import { db, travelsGmailConnections } from "@workspace/db";
 import { createGmailOAuthClient } from "./gmail-oauth";
 import { OAUTH_EXPIRY_BUFFER_MS, refreshGoogleToken } from "./google-oauth";
 import { logger } from "./logger";
+import { encryptToken, decryptToken } from "./token-encryption";
 
 export interface GmailConnection {
   id: number;
@@ -61,18 +62,18 @@ export async function getValidGmailAccessToken(
     row.accessToken &&
     row.accessTokenExpiresAt &&
     row.accessTokenExpiresAt.getTime() - OAUTH_EXPIRY_BUFFER_MS > Date.now();
-  if (notExpired) return row.accessToken;
+  if (notExpired) return decryptToken(row.accessToken!);
 
   try {
     const client = createGmailOAuthClient("");
-    client.setCredentials({ refresh_token: row.refreshToken });
+    client.setCredentials({ refresh_token: decryptToken(row.refreshToken) });
     const refreshed = await refreshGoogleToken(client);
     if (!refreshed) return null;
 
     await db
       .update(travelsGmailConnections)
       .set({
-        accessToken: refreshed.accessToken,
+        accessToken: encryptToken(refreshed.accessToken),
         accessTokenExpiresAt: refreshed.expiresAt,
         updatedAt: new Date(),
       })

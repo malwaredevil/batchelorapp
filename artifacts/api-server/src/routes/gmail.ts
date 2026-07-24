@@ -10,6 +10,7 @@ import {
   APP_GMAIL_SCOPES,
 } from "../lib/app-gmail-oauth";
 import { getValidAppGmailAccessToken } from "../lib/app-gmail-tokens";
+import { encryptToken } from "../lib/token-encryption";
 import {
   getUserProfile,
   listLabels,
@@ -223,8 +224,8 @@ router.get("/callback", async (req, res) => {
       .values({
         userId,
         googleEmail,
-        refreshToken: tokens.refresh_token,
-        accessToken: tokens.access_token,
+        refreshToken: encryptToken(tokens.refresh_token),
+        accessToken: encryptToken(tokens.access_token),
         accessTokenExpiresAt: tokens.expiry_date
           ? new Date(tokens.expiry_date)
           : null,
@@ -233,8 +234,8 @@ router.get("/callback", async (req, res) => {
         target: appGmailConnections.userId,
         set: {
           googleEmail,
-          refreshToken: tokens.refresh_token,
-          accessToken: tokens.access_token,
+          refreshToken: encryptToken(tokens.refresh_token),
+          accessToken: encryptToken(tokens.access_token),
           accessTokenExpiresAt: tokens.expiry_date
             ? new Date(tokens.expiry_date)
             : null,

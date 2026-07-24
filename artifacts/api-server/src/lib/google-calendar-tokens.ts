@@ -12,6 +12,7 @@ import {
 import { createGoogleCalendarClient } from "./google-calendar-oauth";
 import { OAUTH_EXPIRY_BUFFER_MS, refreshGoogleToken } from "./google-oauth";
 import { logger } from "./logger";
+import { encryptToken, decryptToken } from "./token-encryption";
 
 export interface ConnectedCalendar {
   id: number;
@@ -157,18 +158,18 @@ export async function getValidAccessToken(
     row.accessToken &&
     row.accessTokenExpiresAt &&
     row.accessTokenExpiresAt.getTime() - OAUTH_EXPIRY_BUFFER_MS > Date.now();
-  if (notExpired) return row.accessToken;
+  if (notExpired) return decryptToken(row.accessToken!);
 
   try {
     const client = createGoogleCalendarClient("");
-    client.setCredentials({ refresh_token: row.refreshToken });
+    client.setCredentials({ refresh_token: decryptToken(row.refreshToken) });
     const refreshed = await refreshGoogleToken(client);
     if (!refreshed) return null;
 
     await db
       .update(travelsGoogleCalendarConnections)
       .set({
-        accessToken: refreshed.accessToken,
+        accessToken: encryptToken(refreshed.accessToken),
         accessTokenExpiresAt: refreshed.expiresAt,
         updatedAt: new Date(),
       })

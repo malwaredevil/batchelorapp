@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "backup-to-replit": "tsx ./src/backup-to-replit.ts",
+    "encrypt-oauth-tokens": "tsx ./src/encrypt-oauth-tokens.ts",
     "ingest-hooh-now": "tsx ./src/ingest-hooh-now.ts",
     "merge-hallmark-catalogs": "tsx ./src/merge-hallmark-catalogs.ts",
     "restore-from-replit": "tsx ./src/restore-from-replit.ts",
@@ -32,6 +33,7 @@
   "dependencies": {
     "@workspace/db": "workspace:*",
     "bcryptjs": "^3.0.3",
+    "drizzle-orm": "catalog:",
     "pg": "^8.20.0",
     "yaml": "2.8.4"
   },

@@ -13,6 +13,7 @@ import {
   GOOGLE_CALENDAR_SCOPES,
 } from "../../lib/google-calendar-oauth";
 import { getValidAccessToken } from "../../lib/google-calendar-tokens";
+import { encryptToken } from "../../lib/token-encryption";
 import { listGoogleCalendars } from "../../lib/google-calendar";
 import { logger } from "../../lib/logger";
 
@@ -165,8 +166,8 @@ router.get("/google-calendar/callback", requireAuth, async (req, res) => {
       .values({
         userId,
         googleEmail,
-        refreshToken: tokens.refresh_token,
-        accessToken: tokens.access_token,
+        refreshToken: encryptToken(tokens.refresh_token),
+        accessToken: encryptToken(tokens.access_token),
         accessTokenExpiresAt: tokens.expiry_date
           ? new Date(tokens.expiry_date)
           : null,
@@ -175,8 +176,8 @@ router.get("/google-calendar/callback", requireAuth, async (req, res) => {
         target: travelsGoogleCalendarConnections.userId,
         set: {
           googleEmail,
-          refreshToken: tokens.refresh_token,
-          accessToken: tokens.access_token,
+          refreshToken: encryptToken(tokens.refresh_token),
+          accessToken: encryptToken(tokens.access_token),
           accessTokenExpiresAt: tokens.expiry_date
             ? new Date(tokens.expiry_date)
             : null,

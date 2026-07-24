@@ -7593,6 +7593,39 @@ const RESTRICTED_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   RESTRICTED_NAVIGATE_TOOL,
 ];
 
+// Email channel gets a read-only subset of the restricted soft tools.
+// Action tools (write/delete/send) are excluded entirely — From-address
+// identity is weaker than session-cookie or phone-HMAC identity and cannot
+// be reliably authenticated, so the email channel is intentionally limited
+// to answering factual questions and providing links to the app.
+// Excluded: all ACTION_TOOLS, remember_household_fact (DB write),
+// show_* widget tools (no screen), consult_experts (expensive subagent),
+// ebay_search (low value for email replies).
+const EMAIL_SAFE_TOOL_NAMES = new Set<string>([
+  SEARCH_HOUSEHOLD_TOOL_NAME,
+  QUERY_HOUSEHOLD_TOOL_NAME,
+  SEARCH_TRIP_DOCUMENTS_TOOL_NAME,
+  WEB_SEARCH_TOOL_NAME,
+  FETCH_PAGE_TOOL_NAME,
+  SEARCH_FLIGHTS_TOOL_NAME,
+  GET_EXCHANGE_RATE_TOOL_NAME,
+  GET_WEATHER_TOOL_NAME,
+  FIND_NEARBY_PLACES_TOOL_NAME,
+  GET_ROUTE_INFO_TOOL_NAME,
+  GET_AIR_QUALITY_TOOL_NAME,
+  GET_POLLEN_FORECAST_TOOL_NAME,
+  SEARCH_HALLMARK_TOOL_NAME,
+  LOOKUP_BARCODE_TOOL_NAME,
+  CALCULATE_YARDAGE_TOOL_NAME,
+]);
+
+const EMAIL_SAFE_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  ...RESTRICTED_SOFT_TOOLS.filter(
+    (t) => t.type === "function" && EMAIL_SAFE_TOOL_NAMES.has(t.function.name),
+  ),
+  RESTRICTED_NAVIGATE_TOOL,
+];
+
 // Executes one of the read/utility "soft" tools for a restricted channel
 // turn and returns the text to feed back to the model. Mirrors the logic in
 // the main streaming chat handler above, minus any sendEvent/widget calls
@@ -8424,6 +8457,7 @@ async function runRestrictedElaineTurn(params: {
   channelAddendum?: string;
   formattingNote?: string;
   onWidget?: (w: Record<string, unknown>) => void;
+  overrideTools?: OpenAI.Chat.Completions.ChatCompletionTool[];
 }): Promise<{
   replyText: string;
   history: Array<{ role: "user" | "assistant"; content: string }>;
@@ -8437,6 +8471,7 @@ async function runRestrictedElaineTurn(params: {
     channelAddendum,
     formattingNote,
     onWidget,
+    overrideTools,
   } = params;
   // Group all model calls in this restricted turn under one Sentry AI
   // Conversation keyed by channel + user so threads stay stable over time.
@@ -8481,7 +8516,7 @@ async function runRestrictedElaineTurn(params: {
         model,
         max_tokens: maxTokens,
         messages,
-        tools: RESTRICTED_TOOLS,
+        tools: overrideTools ?? RESTRICTED_TOOLS,
       }),
     );
     const message = completion.choices[0]?.message;
@@ -8885,7 +8920,7 @@ export interface ElaineEmailChatMessage {
 }
 
 const ELAINE_EMAIL_CHANNEL_ADDENDUM =
-  "CHANNEL: You are replying by email. Use share_app_link to give the user a direct URL whenever a request needs an actual screen (e.g. connecting a calendar, uploading a photo). Actions run immediately — always briefly confirm what you did (or that it failed). Sign off naturally as Elaine; do not repeat a greeting like 'Hi' if the message is a quick reply.";
+  "CHANNEL: You are replying by email. You can look up household data, check the weather, search for flights, and answer factual questions. You CANNOT create, edit, or delete any records over email — if someone asks you to make a change, politely explain they need to do that in the app and give them a link with share_app_link. Use share_app_link whenever a request needs an actual screen. Sign off naturally as Elaine; do not repeat a greeting like 'Hi' if the message is a quick reply.";
 
 // Runs one restricted, non-streaming Elaine turn for an inbound email from a
 // known household member. Mirrors runAgentphoneTurn's shape/behavior exactly
@@ -8904,6 +8939,7 @@ export async function runElaineEmailTurn(params: {
     channelAddendum: ELAINE_EMAIL_CHANNEL_ADDENDUM,
     formattingNote:
       "Your replies will be sent as plain-text email. Use NO markdown syntax (no **, no #, no - lists). A short paragraph or two is usually enough.",
+    overrideTools: EMAIL_SAFE_TOOLS,
   });
 }
 

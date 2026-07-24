@@ -1364,32 +1364,37 @@ router.post("/fabrics/:id/images/:imageId/set-default", async (req, res) => {
   const { id } = DeleteFabricParams.parse(req.params);
   const { imageId } = DeleteFabricImageParams.parse(req.params);
 
-  const [fabric] = await db
-    .select({ id: fabrics.id, imagePath: fabrics.imagePath })
-    .from(fabrics)
-    .where(eq(fabrics.id, id))
-    .limit(1);
-  if (!fabric) {
-    res.status(404).json({ error: "Fabric not found." });
-    return;
-  }
-
-  const [img] = await db
-    .select({ id: quiltingImages.id, storagePath: quiltingImages.storagePath })
-    .from(quiltingImages)
-    .where(
-      sql`${quiltingImages.id} = ${imageId} AND entity_type = 'fabric' AND entity_id = ${id}`,
-    )
-    .limit(1);
-  if (!img) {
-    res.status(404).json({ error: "Image not found." });
-    return;
-  }
-
-  const oldImagePath = fabric.imagePath;
-  const newImagePath = img.storagePath;
-
+  let swapped = false;
   await db.transaction(async (tx) => {
+    const [fabric] = await tx
+      .select({ id: fabrics.id, imagePath: fabrics.imagePath })
+      .from(fabrics)
+      .where(eq(fabrics.id, id))
+      .for("update")
+      .limit(1);
+    if (!fabric) return;
+
+    const [img] = await tx
+      .select({
+        id: quiltingImages.id,
+        storagePath: quiltingImages.storagePath,
+      })
+      .from(quiltingImages)
+      .where(
+        sql`${quiltingImages.id} = ${imageId} AND entity_type = 'fabric' AND entity_id = ${id}`,
+      )
+      .for("update")
+      .limit(1);
+    if (!img) return;
+
+    const oldImagePath = fabric.imagePath;
+    const newImagePath = img.storagePath;
+
+    if (newImagePath === oldImagePath) {
+      swapped = true;
+      return;
+    }
+
     await tx
       .update(fabrics)
       .set({ imagePath: newImagePath })
@@ -1398,14 +1403,19 @@ router.post("/fabrics/:id/images/:imageId/set-default", async (req, res) => {
       .update(quiltingImages)
       .set({ storagePath: oldImagePath })
       .where(eq(quiltingImages.id, imageId));
+
+    swapped = true;
+
+    for (const key of [..._pngCache.keys()]) {
+      if (key.startsWith(`${oldImagePath}:`)) {
+        _pngCache.delete(key);
+      }
+    }
   });
 
-  // Evict the old imagePath from the server-side PNG tile cache so the
-  // next request regenerates the tile from the new default photo.
-  for (const key of [..._pngCache.keys()]) {
-    if (key.startsWith(`${oldImagePath}:`)) {
-      _pngCache.delete(key);
-    }
+  if (!swapped) {
+    res.status(404).json({ error: "Fabric or image not found." });
+    return;
   }
 
   const [updatedRow] = await db

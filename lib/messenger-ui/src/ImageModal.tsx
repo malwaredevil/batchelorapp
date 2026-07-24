@@ -7,6 +7,16 @@ interface ImageModalProps {
   onClose: () => void;
 }
 
+function touchDist(t1: Touch, t2: Touch): number {
+  const dx = t2.clientX - t1.clientX;
+  const dy = t2.clientY - t1.clientY;
+  return Math.hypot(dx, dy);
+}
+
+function touchMid(t1: Touch, t2: Touch): { x: number; y: number } {
+  return { x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 };
+}
+
 export function ImageModal({ url, alt, onClose }: ImageModalProps) {
   const scaleRef = useRef(1);
   const offsetRef = useRef({ x: 0, y: 0 });
@@ -17,6 +27,22 @@ export function ImageModal({ url, alt, onClose }: ImageModalProps) {
     oy: number;
   } | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  const lastTapRef = useRef<number>(0);
+  const touchRef = useRef<
+    | { type: "pan"; sx: number; sy: number; ox: number; oy: number }
+    | {
+        type: "pinch";
+        initDist: number;
+        initScale: number;
+        midX: number;
+        midY: number;
+        ox: number;
+        oy: number;
+      }
+    | null
+  >(null);
 
   const applyTransform = useCallback(() => {
     const img = imgRef.current;
@@ -40,6 +66,109 @@ export function ImageModal({ url, alt, onClose }: ImageModalProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  useEffect(() => {
+    const img = imgRef.current;
+    if (!img) return;
+
+    function onTouchStart(e: TouchEvent) {
+      if (e.touches.length === 1) {
+        const now = Date.now();
+        if (now - lastTapRef.current < 300) {
+          if (scaleRef.current > 1.5) {
+            scaleRef.current = 1;
+            offsetRef.current = { x: 0, y: 0 };
+          } else {
+            scaleRef.current = 2.5;
+          }
+          applyTransform();
+          touchRef.current = null;
+          lastTapRef.current = 0;
+          return;
+        }
+        lastTapRef.current = now;
+        touchRef.current = {
+          type: "pan",
+          sx: e.touches[0]!.clientX,
+          sy: e.touches[0]!.clientY,
+          ox: offsetRef.current.x,
+          oy: offsetRef.current.y,
+        };
+      } else if (e.touches.length === 2) {
+        const t1 = e.touches[0]!;
+        const t2 = e.touches[1]!;
+        const mid = touchMid(t1, t2);
+        touchRef.current = {
+          type: "pinch",
+          initDist: touchDist(t1, t2),
+          initScale: scaleRef.current,
+          midX: mid.x,
+          midY: mid.y,
+          ox: offsetRef.current.x,
+          oy: offsetRef.current.y,
+        };
+      }
+    }
+
+    function onTouchMove(e: TouchEvent) {
+      e.preventDefault();
+      const state = touchRef.current;
+      if (!state) return;
+
+      if (state.type === "pan" && e.touches.length === 1) {
+        offsetRef.current = {
+          x: state.ox + (e.touches[0]!.clientX - state.sx),
+          y: state.oy + (e.touches[0]!.clientY - state.sy),
+        };
+        applyTransform();
+      } else if (state.type === "pinch" && e.touches.length === 2) {
+        const t1 = e.touches[0]!;
+        const t2 = e.touches[1]!;
+        const dist = touchDist(t1, t2);
+        const ratio = dist / state.initDist;
+        const newScale = Math.min(12, Math.max(0.15, state.initScale * ratio));
+
+        const overlay = overlayRef.current;
+        if (overlay) {
+          const rect = overlay.getBoundingClientRect();
+          const cx = state.midX - rect.width / 2;
+          const cy = state.midY - rect.height / 2;
+          const imgX = (cx - state.ox) / state.initScale;
+          const imgY = (cy - state.oy) / state.initScale;
+          offsetRef.current = {
+            x: cx - imgX * newScale,
+            y: cy - imgY * newScale,
+          };
+        }
+
+        scaleRef.current = newScale;
+        applyTransform();
+      }
+    }
+
+    function onTouchEnd(e: TouchEvent) {
+      if (e.touches.length === 0) {
+        touchRef.current = null;
+      } else if (e.touches.length === 1 && touchRef.current?.type === "pinch") {
+        touchRef.current = {
+          type: "pan",
+          sx: e.touches[0]!.clientX,
+          sy: e.touches[0]!.clientY,
+          ox: offsetRef.current.x,
+          oy: offsetRef.current.y,
+        };
+      }
+    }
+
+    img.addEventListener("touchstart", onTouchStart, { passive: false });
+    img.addEventListener("touchmove", onTouchMove, { passive: false });
+    img.addEventListener("touchend", onTouchEnd, { passive: true });
+    return () => {
+      img.removeEventListener("touchstart", onTouchStart);
+      img.removeEventListener("touchmove", onTouchMove);
+      img.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [applyTransform]);
+
   const iconBtnStyle: React.CSSProperties = {
     width: 28,
     height: 28,
@@ -56,6 +185,7 @@ export function ImageModal({ url, alt, onClose }: ImageModalProps) {
 
   return (
     <div
+      ref={overlayRef}
       role="dialog"
       aria-label="Image preview"
       onClick={onClose}
@@ -67,6 +197,7 @@ export function ImageModal({ url, alt, onClose }: ImageModalProps) {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
+        touchAction: "none",
       }}
     >
       <button
@@ -106,7 +237,7 @@ export function ImageModal({ url, alt, onClose }: ImageModalProps) {
           zIndex: 1,
         }}
       >
-        Scroll to zoom · drag to pan · click outside to close
+        Scroll or pinch to zoom · drag to pan · double-tap to reset
       </p>
 
       <div
@@ -169,6 +300,7 @@ export function ImageModal({ url, alt, onClose }: ImageModalProps) {
           userSelect: "none",
           transition: "none",
           willChange: "transform",
+          touchAction: "none",
         }}
         onWheel={(e) => {
           e.stopPropagation();

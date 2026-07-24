@@ -95,12 +95,13 @@ export function FullChatPanel({
           />
           <Button
             size="icon"
-            variant="outline"
+            variant="ghost"
+            className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground hover:text-foreground"
             onClick={() => magnetFileRef.current?.click()}
             disabled={isStreaming || checkMagnet.isPending}
             title="Check if you already have this magnet"
           >
-            <Camera className="h-4 w-4" />
+            <Camera className="h-3.5 w-3.5" />
           </Button>
         </>
       }

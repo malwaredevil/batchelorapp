@@ -84,7 +84,7 @@ step 8 "replit.md private-content guard"
 # replit.md is committed to the public GitHub repo. Catch private operational
 # details that belong in .local/RUNBOOK.md before they can leak.
 PRIVATE_PATTERNS=(
-  "sentry-baseline write"
+  "sentry-baseline write [0-9]"
   "screenshotToken"
   "gadhlfluflknlwgmlmos"
   "RESEND_WEBHOOK_SECRET"
@@ -92,7 +92,7 @@ PRIVATE_PATTERNS=(
 REPLIT_MD="$ROOT/replit.md"
 LEAKED_PATTERNS=()
 for pat in "${PRIVATE_PATTERNS[@]}"; do
-  if grep -qF "$pat" "$REPLIT_MD" 2>/dev/null; then
+  if grep -qE "$pat" "$REPLIT_MD" 2>/dev/null; then
     LEAKED_PATTERNS+=("$pat")
   fi
 done

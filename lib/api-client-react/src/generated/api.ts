@@ -4482,6 +4482,79 @@ export const useDeleteFabricImage = <TError = ErrorType<unknown>,
       return useMutation(getDeleteFabricImageMutationOptions(options));
     }
 
+export const getSetFabricImageDefaultUrl = (id: number,
+    imageId: number,) => {
+
+
+
+
+  return `/api/quilting/fabrics/${id}/images/${imageId}/set-default`
+}
+
+/**
+ * Swaps the supplemental image with the current primary photo so all imageUrl / tileImageUrl calls immediately serve the new default. The old primary photo becomes a supplemental image and retains its position in the gallery.
+ * @summary Set a supplemental image as the fabric's default photo
+ */
+export const setFabricImageDefault = async (id: number,
+    imageId: number, options?: RequestInit): Promise<QuiltingFabric> => {
+
+  return customFetch<QuiltingFabric>(getSetFabricImageDefaultUrl(id,imageId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getSetFabricImageDefaultMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setFabricImageDefault>>, TError,{id: number;imageId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setFabricImageDefault>>, TError,{id: number;imageId: number}, TContext> => {
+
+const mutationKey = ['setFabricImageDefault'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setFabricImageDefault>>, {id: number;imageId: number}> = (props) => {
+          const {id,imageId} = props ?? {};
+
+          return  setFabricImageDefault(id,imageId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetFabricImageDefaultMutationResult = NonNullable<Awaited<ReturnType<typeof setFabricImageDefault>>>
+
+    export type SetFabricImageDefaultMutationError = ErrorType<Error>
+
+    /**
+ * @summary Set a supplemental image as the fabric's default photo
+ */
+export const useSetFabricImageDefault = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setFabricImageDefault>>, TError,{id: number;imageId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setFabricImageDefault>>,
+        TError,
+        {id: number;imageId: number},
+        TContext
+      > => {
+      return useMutation(getSetFabricImageDefaultMutationOptions(options));
+    }
+
 export const getListPatternsUrl = (params?: ListPatternsParams,) => {
   const normalizedParams = new URLSearchParams();
 

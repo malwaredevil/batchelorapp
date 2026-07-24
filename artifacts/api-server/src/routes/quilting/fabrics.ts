@@ -1353,4 +1353,74 @@ router.delete("/fabrics/:id/images/:imageId", async (req, res) => {
   res.status(204).end();
 });
 
+// ---------------------------------------------------------------------------
+// Set supplemental image as the fabric's default photo
+// ---------------------------------------------------------------------------
+// Atomically swaps the supplemental image's storage path with the fabric's
+// current image_path, so /image and /tile-image routes immediately serve the
+// new default without any URL change on the client.
+
+router.post("/fabrics/:id/images/:imageId/set-default", async (req, res) => {
+  const { id } = DeleteFabricParams.parse(req.params);
+  const { imageId } = DeleteFabricImageParams.parse(req.params);
+
+  const [fabric] = await db
+    .select({ id: fabrics.id, imagePath: fabrics.imagePath })
+    .from(fabrics)
+    .where(eq(fabrics.id, id))
+    .limit(1);
+  if (!fabric) {
+    res.status(404).json({ error: "Fabric not found." });
+    return;
+  }
+
+  const [img] = await db
+    .select({ id: quiltingImages.id, storagePath: quiltingImages.storagePath })
+    .from(quiltingImages)
+    .where(
+      sql`${quiltingImages.id} = ${imageId} AND entity_type = 'fabric' AND entity_id = ${id}`,
+    )
+    .limit(1);
+  if (!img) {
+    res.status(404).json({ error: "Image not found." });
+    return;
+  }
+
+  const oldImagePath = fabric.imagePath;
+  const newImagePath = img.storagePath;
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(fabrics)
+      .set({ imagePath: newImagePath })
+      .where(eq(fabrics.id, id));
+    await tx
+      .update(quiltingImages)
+      .set({ storagePath: oldImagePath })
+      .where(eq(quiltingImages.id, imageId));
+  });
+
+  // Evict the old imagePath from the server-side PNG tile cache so the
+  // next request regenerates the tile from the new default photo.
+  for (const key of [..._pngCache.keys()]) {
+    if (key.startsWith(`${oldImagePath}:`)) {
+      _pngCache.delete(key);
+    }
+  }
+
+  const [updatedRow] = await db
+    .select(fabricColumns)
+    .from(fabrics)
+    .where(eq(fabrics.id, id))
+    .limit(1);
+
+  res.json(
+    GetFabricResponse.parse(
+      await serializeFabric(
+        updatedRow as Omit<FabricRow, "embedding" | "visualEmbedding">,
+      ),
+    ),
+  );
+});
+
 export default router;

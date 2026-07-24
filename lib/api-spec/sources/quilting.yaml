@@ -572,6 +572,33 @@ paths:
         "204":
           description: Deleted
 
+  /fabrics/{id}/images/{imageId}/set-default:
+    post:
+      operationId: setFabricImageDefault
+      tags: [fabrics]
+      summary: Set a supplemental image as the fabric's default photo
+      description: >-
+        Swaps the supplemental image with the current primary photo so all
+        imageUrl / tileImageUrl calls immediately serve the new default.
+        The old primary photo becomes a supplemental image and retains its
+        position in the gallery.
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - $ref: "#/components/parameters/ImageIdParam"
+      responses:
+        "200":
+          description: Updated fabric with new default photo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fabric"
+        "404":
+          description: Fabric or image not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   # ---------------------------------------------------------------------------
   # Quilt Patterns
   # ---------------------------------------------------------------------------

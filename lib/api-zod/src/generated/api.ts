@@ -1245,6 +1245,54 @@ export const DeleteFabricImageParams = zod.object({
 
 
 /**
+ * Swaps the supplemental image with the current primary photo so all imageUrl / tileImageUrl calls immediately serve the new default. The old primary photo becomes a supplemental image and retains its position in the gallery.
+ * @summary Set a supplemental image as the fabric's default photo
+ */
+export const SetFabricImageDefaultParams = zod.object({
+  "id": zod.coerce.number(),
+  "imageId": zod.coerce.number()
+})
+
+export const SetFabricImageDefaultResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "lineName": zod.string().nullish(),
+  "designer": zod.string().nullish(),
+  "manufacturer": zod.string().nullish(),
+  "colorway": zod.string().nullish(),
+  "printType": zod.string().nullish(),
+  "fiberContent": zod.string().nullish(),
+  "widthInches": zod.number().nullish(),
+  "quantity": zod.number(),
+  "quantityUnit": zod.string(),
+  "sku": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "aiDescription": zod.string().nullish(),
+  "dominantColors": zod.array(zod.string()),
+  "motifs": zod.array(zod.string()),
+  "styleDescriptors": zod.array(zod.string()),
+  "acquiredAt": zod.string().nullish(),
+  "lockedFields": zod.array(zod.string()),
+  "categories": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "bgColor": zod.string().nullish(),
+  "textColor": zod.string().nullish()
+})),
+  "images": zod.array(zod.object({
+  "id": zod.number(),
+  "url": zod.string(),
+  "label": zod.string().nullish(),
+  "position": zod.number()
+})),
+  "imageUrl": zod.string(),
+  "tileImageUrl": zod.string().describe('Flat-field-corrected, tileable crop of the fabric photo. Use this (not imageUrl) for SVG pattern-fill rendering — it removes the source photo\'s natural lighting\/vignette falloff so tiled squares don\'t show a \"puffy\" embossed grid.'),
+  "hasEmbedding": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
  * @summary List all quilt patterns
  */
 export const listPatternsQueryPageDefault = 1;

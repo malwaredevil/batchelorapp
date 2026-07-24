@@ -12,6 +12,8 @@ import {
   X as XIcon,
   Download,
   ZoomIn,
+  Crown,
+  Plus,
 } from "lucide-react";
 import { LockButton } from "@/quilting/components/LockButton";
 import { Button } from "@/components/ui/button";
@@ -28,6 +30,9 @@ import {
   useReanalyzeFabric,
   useListQuiltingCategories,
   useGetFabricPairings,
+  useAddFabricImage,
+  useDeleteFabricImage,
+  useSetFabricImageDefault,
   getListFabricsQueryKey,
   getGetFabricQueryKey,
   type QuiltingCategory,
@@ -67,6 +72,12 @@ type Fabric = {
     textColor: string | null;
   }>;
   imageUrl: string;
+  images: Array<{
+    id: number;
+    url: string;
+    label: string | null;
+    position: number;
+  }>;
 };
 
 const AI_FIELDS: (keyof Fabric)[] = [
@@ -234,6 +245,49 @@ export default function FabricDetail() {
     },
   });
 
+  const addFabricImage = useAddFabricImage({
+    mutation: {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({
+          queryKey: getGetFabricQueryKey(fabricId),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: getListFabricsQueryKey(),
+        });
+        toast.success("Photo added");
+      },
+      onError: () => toast.error("Failed to add photo."),
+    },
+  });
+
+  const deleteFabricImageMutation = useDeleteFabricImage({
+    mutation: {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({
+          queryKey: getGetFabricQueryKey(fabricId),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: getListFabricsQueryKey(),
+        });
+        toast.success("Photo deleted");
+      },
+      onError: () => toast.error("Failed to delete photo."),
+    },
+  });
+
+  const setDefaultMutation = useSetFabricImageDefault({
+    mutation: {
+      onSuccess: (data) => {
+        queryClient.setQueryData(getGetFabricQueryKey(fabricId), data);
+        void queryClient.invalidateQueries({
+          queryKey: getListFabricsQueryKey(),
+        });
+        toast.success("Default photo updated");
+      },
+      onError: () => toast.error("Failed to update default photo."),
+    },
+  });
+
   function enterEdit() {
     if (!fabric) return;
     const f = fabric as unknown as Fabric;
@@ -358,6 +412,22 @@ export default function FabricDetail() {
     );
   }
 
+  function handleAddPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    addFabricImage.mutate({ id: fabricId, data: { image: file } });
+    e.target.value = "";
+  }
+
+  function handleDeletePhoto(imageId: number) {
+    if (!confirm("Delete this photo? This cannot be undone.")) return;
+    deleteFabricImageMutation.mutate({ id: fabricId, imageId });
+  }
+
+  function handleSetDefault(imageId: number) {
+    setDefaultMutation.mutate({ id: fabricId, imageId });
+  }
+
   if (isLoading) {
     return (
       <div>
@@ -412,31 +482,111 @@ export default function FabricDetail() {
       </Button>
 
       <div className="grid gap-6 md:grid-cols-2">
-        <div
-          className="relative overflow-hidden rounded-2xl border border-card-border bg-muted cursor-zoom-in group"
-          onClick={() => setLightboxOpen(true)}
-        >
-          <img
-            src={f.imageUrl}
-            alt={f.name}
-            className="h-full w-full object-contain"
-          />
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/20 group-hover:opacity-100">
-            <ZoomIn className="h-10 w-10 text-white drop-shadow-lg" />
+        {/* Col 1: main photo + gallery strip */}
+        <div className="flex flex-col gap-3">
+          <div
+            className="relative overflow-hidden rounded-2xl border border-card-border bg-muted cursor-zoom-in group"
+            onClick={() => setLightboxOpen(true)}
+          >
+            <img
+              src={f.imageUrl}
+              alt={f.name}
+              className="h-full w-full object-contain"
+            />
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/20 group-hover:opacity-100">
+              <ZoomIn className="h-10 w-10 text-white drop-shadow-lg" />
+            </div>
+          </div>
+          <PreviewZoomModal
+            open={lightboxOpen}
+            onClose={() => setLightboxOpen(false)}
+            title={f.name}
+          >
+            <img
+              src={f.imageUrl}
+              alt={f.name}
+              className="max-h-[75vh] max-w-[75vw] rounded object-contain"
+              draggable={false}
+            />
+          </PreviewZoomModal>
+
+          {/* Photo gallery strip */}
+          <div className="flex flex-wrap gap-2">
+            {/* Default photo thumb */}
+            <div className="flex flex-col items-center gap-1">
+              <div className="relative h-20 w-20 overflow-hidden rounded-lg ring-2 ring-primary">
+                <img
+                  src={f.imageUrl}
+                  alt="Default"
+                  className="h-full w-full object-cover"
+                />
+              </div>
+              <span className="text-[10px] font-medium text-primary">
+                Default
+              </span>
+            </div>
+
+            {/* Supplemental photos */}
+            {f.images.map((img) => (
+              <div key={img.id} className="flex flex-col items-center gap-1">
+                <div className="relative h-20 w-20 overflow-hidden rounded-lg border border-card-border bg-muted">
+                  <img
+                    src={img.url}
+                    alt={img.label ?? "Photo"}
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+                <div className="flex gap-0.5">
+                  <button
+                    title="Set as default photo"
+                    onClick={() => handleSetDefault(img.id)}
+                    disabled={
+                      setDefaultMutation.isPending ||
+                      deleteFabricImageMutation.isPending
+                    }
+                    className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted disabled:opacity-50"
+                  >
+                    <Crown className="h-3.5 w-3.5 text-muted-foreground" />
+                  </button>
+                  <button
+                    title="Delete photo"
+                    onClick={() => handleDeletePhoto(img.id)}
+                    disabled={
+                      deleteFabricImageMutation.isPending ||
+                      setDefaultMutation.isPending
+                    }
+                    className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted disabled:opacity-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {/* Add photo */}
+            {f.images.length < 10 && (
+              <div className="flex flex-col items-center gap-1">
+                <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-card-border bg-muted/30 transition-colors hover:bg-muted/60">
+                  <input
+                    type="file"
+                    className="sr-only"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={handleAddPhoto}
+                    disabled={addFabricImage.isPending}
+                  />
+                  {addFabricImage.isPending ? (
+                    <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
+                  ) : (
+                    <Plus className="h-5 w-5 text-muted-foreground" />
+                  )}
+                </label>
+                <span className="text-[10px] text-muted-foreground">
+                  Add photo
+                </span>
+              </div>
+            )}
           </div>
         </div>
-        <PreviewZoomModal
-          open={lightboxOpen}
-          onClose={() => setLightboxOpen(false)}
-          title={f.name}
-        >
-          <img
-            src={f.imageUrl}
-            alt={f.name}
-            className="max-h-[75vh] max-w-[75vw] rounded object-contain"
-            draggable={false}
-          />
-        </PreviewZoomModal>
 
         <div className="flex flex-col gap-4">
           {/* Title row */}

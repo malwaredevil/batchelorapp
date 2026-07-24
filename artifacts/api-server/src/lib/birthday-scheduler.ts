@@ -55,7 +55,8 @@ export async function runBirthdayEmails(): Promise<void> {
   }
 }
 
-export function startBirthdayScheduler(): void {
+export function startBirthdayScheduler(): () => void {
+  let stopped = false;
   async function tick() {
     try {
       const ok = await shouldRunScheduledTask(TASK_NAME, ONE_DAY_MS);
@@ -65,8 +66,11 @@ export function startBirthdayScheduler(): void {
     } catch (err) {
       logger.error({ err }, "birthday-scheduler: tick error");
     }
-    setTimeout(tick, ONE_DAY_MS).unref();
+    if (!stopped) setTimeout(tick, ONE_DAY_MS).unref();
   }
 
   void tick();
+  return () => {
+    stopped = true;
+  };
 }

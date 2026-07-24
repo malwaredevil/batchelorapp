@@ -167,7 +167,7 @@ const IN_PROCESS_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
  * web server instance happens to be awake. The unique nudge-key index makes
  * both paths safely idempotent together.
  */
-export function startNudgeScheduler(): void {
+export function startNudgeScheduler(): () => void {
   const run = async (): Promise<void> => {
     if (
       !(await shouldRunScheduledTask("travels-nudges", IN_PROCESS_INTERVAL_MS))
@@ -197,4 +197,5 @@ export function startNudgeScheduler(): void {
   interval.unref();
 
   logger.info("travels-nudges: started (in-process fallback, runs hourly)");
+  return () => clearInterval(interval);
 }

@@ -9,7 +9,7 @@ import { startGmailScanScheduler } from "./lib/gmail-scan";
 import { startErrorRateSummary } from "./lib/error-tracker";
 import { startBirthdayScheduler } from "./lib/birthday-scheduler";
 import { startMonitoringScheduler } from "./lib/monitoring-scheduler";
-import { startJobWorker } from "./lib/jobs/worker";
+import { startJobWorker, stopAllJobWorkers } from "./lib/jobs/worker";
 
 const rawPort = process.env["PORT"];
 
@@ -33,13 +33,15 @@ function startListening(): void {
     }
 
     logger.info({ port }, "Server listening");
-    startReminderScheduler();
-    startNudgeScheduler();
-    startCalendarTripScanScheduler();
-    startGmailScanScheduler();
-    startErrorRateSummary();
-    startBirthdayScheduler();
-    startMonitoringScheduler();
+    const stopSchedulers = [
+      startReminderScheduler(),
+      startNudgeScheduler(),
+      startCalendarTripScanScheduler(),
+      startGmailScanScheduler(),
+      startErrorRateSummary(),
+      startBirthdayScheduler(),
+      startMonitoringScheduler(),
+    ];
     // Dedicated worker for Slack AI turns — keeps Slack processing isolated
     // from other job queues so a burst of DMs cannot starve other work.
     startJobWorker("slack");
@@ -47,25 +49,30 @@ function startListening(): void {
     // retention aggregation, etc.) — separate from Slack so bulk scans don't
     // starve chat responses.
     startJobWorker("maintenance");
-  });
 
-  function shutdown(signal: string): void {
-    logger.info({ signal }, "shutdown: draining open connections...");
-    server.close(() => {
-      logger.info("shutdown: server closed, exiting cleanly");
-      process.exit(0);
-    });
-    // Force exit if connections don't drain within 15 s.
-    setTimeout(() => {
-      logger.warn(
-        "shutdown: force-exit after 15 s drain timeout (connections still open)",
+    function shutdown(signal: string): void {
+      logger.info({ signal }, "shutdown: stopping schedulers and workers...");
+      for (const stop of stopSchedulers) stop();
+      void stopAllJobWorkers().catch((err) =>
+        logger.warn({ err }, "shutdown: error stopping job workers"),
       );
-      process.exit(0);
-    }, 15_000).unref();
-  }
+      logger.info({ signal }, "shutdown: draining open connections...");
+      server.close(() => {
+        logger.info("shutdown: server closed, exiting cleanly");
+        process.exit(0);
+      });
+      // Force exit if connections don't drain within 15 s.
+      setTimeout(() => {
+        logger.warn(
+          "shutdown: force-exit after 15 s drain timeout (connections still open)",
+        );
+        process.exit(0);
+      }, 15_000).unref();
+    }
 
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
-  process.on("SIGINT", () => shutdown("SIGINT"));
+    process.on("SIGTERM", () => shutdown("SIGTERM"));
+    process.on("SIGINT", () => shutdown("SIGINT"));
+  });
 }
 
 // Run DB migration and bucket provisioning in parallel — they are independent.

@@ -373,7 +373,7 @@ const SCAN_INTERVAL_MS = 6 * 60 * 60 * 1000; // every 6 hours
  * delivery guarantee. The per-message unique index + decision ledger keep
  * this safely idempotent alongside the manual "Scan now" button.
  */
-export function startGmailScanScheduler(): void {
+export function startGmailScanScheduler(): () => void {
   const run = async (): Promise<void> => {
     if (!(await shouldRunScheduledTask("gmail-scan", SCAN_INTERVAL_MS))) {
       logger.info("gmail-scan: skipped (ran within the last 6 hours)");
@@ -398,4 +398,5 @@ export function startGmailScanScheduler(): void {
   interval.unref();
 
   logger.info("gmail-scan: started (in-process fallback, runs every 6h)");
+  return () => clearInterval(interval);
 }

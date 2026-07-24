@@ -175,7 +175,7 @@ function Routes() {
 
   useEffect(() => {
     if (user) {
-      Sentry.setUser({ id: String(user.id), email: user.email });
+      Sentry.setUser({ id: String(user.id) });
     } else {
       Sentry.setUser(null);
     }

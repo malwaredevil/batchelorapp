@@ -250,7 +250,7 @@ const SCAN_INTERVAL_MS = 24 * 60 * 60 * 1000; // 1 day
  * The dedupeKey unique index keeps this safely idempotent alongside the
  * manual "Scan now" button.
  */
-export function startCalendarTripScanScheduler(): void {
+export function startCalendarTripScanScheduler(): () => void {
   const run = async (): Promise<void> => {
     if (
       !(await shouldRunScheduledTask("travels-calendar-scan", SCAN_INTERVAL_MS))
@@ -282,4 +282,5 @@ export function startCalendarTripScanScheduler(): void {
   logger.info(
     "travels-calendar-scan: started (in-process fallback, runs daily)",
   );
+  return () => clearInterval(interval);
 }

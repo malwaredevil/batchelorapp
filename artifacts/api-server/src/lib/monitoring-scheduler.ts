@@ -498,7 +498,7 @@ async function checkCheckInWindow(
 
 const INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
-export function startMonitoringScheduler(): void {
+export function startMonitoringScheduler(): () => void {
   // eslint-disable-next-line @typescript-eslint/no-misused-promises
   const run = async (): Promise<void> => {
     if (!(await shouldRunScheduledTask("monitoring-scheduler", INTERVAL_MS)))
@@ -511,8 +511,12 @@ export function startMonitoringScheduler(): void {
   };
 
   // Initial run after 2 min startup grace period, then every hour
-  setTimeout(run, 2 * 60 * 1000);
-  setInterval(run, INTERVAL_MS);
+  const initialTimer = setTimeout(run, 2 * 60 * 1000);
+  const interval = setInterval(run, INTERVAL_MS);
 
   logger.info("monitoring-scheduler: started");
+  return () => {
+    clearTimeout(initialTimer);
+    clearInterval(interval);
+  };
 }

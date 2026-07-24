@@ -17,7 +17,7 @@ export function recordResponseStatus(statusCode: number): void {
   else if (statusCode >= 400) count4xx++;
 }
 
-export function startErrorRateSummary(): void {
+export function startErrorRateSummary(): () => void {
   const interval = setInterval(
     () => {
       const durationMs = Date.now() - windowStart;
@@ -45,4 +45,5 @@ export function startErrorRateSummary(): void {
 
   interval.unref();
   logger.info("error-rate-summary: started (logs hourly)");
+  return () => clearInterval(interval);
 }

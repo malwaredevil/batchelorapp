@@ -578,7 +578,7 @@ const IN_PROCESS_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
  * whether the web server instance is awake. The alert log table makes both
  * paths safely idempotent, so running them alongside each other is safe.
  */
-export function startReminderScheduler(): void {
+export function startReminderScheduler(): () => void {
   const run = async (): Promise<void> => {
     if (
       !(await shouldRunScheduledTask(
@@ -611,4 +611,5 @@ export function startReminderScheduler(): void {
   interval.unref();
 
   logger.info("reminder-scheduler: started (in-process fallback, runs hourly)");
+  return () => clearInterval(interval);
 }

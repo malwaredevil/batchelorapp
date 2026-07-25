@@ -43,6 +43,7 @@ export const travelsTrips = pgTable(
     todoList: jsonb("todo_list"),
     iconPhotoId: integer("icon_photo_id"),
     shareToken: text("share_token"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -80,6 +81,7 @@ export const travelsTripDocuments = pgTable(
     sourceEmailSubject: text("source_email_subject"),
     sourceReceivedAt: timestamp("source_received_at", { withTimezone: true }),
     sourceSpans: jsonb("source_spans"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -133,6 +135,7 @@ export const travelsTripPhotos = pgTable(
     // Jina CLIP v2 visual embedding — only populated for photoType = 'magnet',
     // used to check whether a magnet spotted in a store is already owned.
     visualEmbedding: vector("visual_embedding", { dimensions: 1024 }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -197,6 +200,7 @@ export const travelsReminders = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::integer[]`),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

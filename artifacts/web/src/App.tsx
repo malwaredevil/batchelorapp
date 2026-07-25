@@ -23,6 +23,7 @@ import OwnerPanel from "@/pages/owner-panel";
 import ControlPanel from "@/pages/control-panel";
 import GoogleApisDemo from "@/pages/google-apis-demo";
 import NotFound from "@/pages/not-found";
+import RecycleBin from "@/pages/recycle-bin";
 import { BirthdayBanner } from "@/components/BirthdayBanner";
 
 const queryClient = new QueryClient({
@@ -90,6 +91,7 @@ function Routes() {
         <Route path="/owner-panel" component={OwnerPanel} />
         <Route path="/control-panel" component={ControlPanel} />
         <Route path="/google-apis-demo" component={GoogleApisDemo} />
+        <Route path="/recycle-bin" component={RecycleBin} />
         <Route path="/login">
           <Redirect to="/" />
         </Route>

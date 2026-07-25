@@ -19,6 +19,7 @@ import {
   promoteOrnamentImageToPrimary,
 } from "../routes/ornaments/ornaments";
 import { deleteImage } from "../lib/ornaments/storage";
+import { logActivity } from "../lib/soft-delete";
 
 // Elaine's write-actions for the Ornaments app. Creating a brand-new item
 // isn't offered here since every ornament requires an uploaded photo
@@ -226,26 +227,36 @@ export const ornamentActionExecutors: Record<
 
   delete_ornament_item: (async (
     payload: z.infer<typeof DeleteOrnamentItemActionPayload>,
+    userId: number,
   ) => {
     const [item] = await db
-      .select({ imagePath: ornamentsItems.imagePath })
+      .select({ id: ornamentsItems.id })
       .from(ornamentsItems)
-      .where(eq(ornamentsItems.id, payload.itemId));
+      .where(
+        and(
+          eq(ornamentsItems.id, payload.itemId),
+          isNull(ornamentsItems.deletedAt),
+        ),
+      );
     if (!item) return { status: 404, body: { error: "Item not found" } };
 
-    const suppImages = await db
-      .select({ storagePath: ornamentsImages.storagePath })
-      .from(ornamentsImages)
-      .where(eq(ornamentsImages.itemId, payload.itemId));
-
+    const now = new Date();
     await db
-      .delete(ornamentsItems)
+      .update(ornamentsImages)
+      .set({ deletedAt: now })
+      .where(eq(ornamentsImages.itemId, payload.itemId));
+    await db
+      .update(ornamentsItems)
+      .set({ deletedAt: now })
       .where(eq(ornamentsItems.id, payload.itemId));
-
-    await Promise.all([
-      deleteImage(item.imagePath),
-      ...suppImages.map((img) => deleteImage(img.storagePath)),
-    ]);
+    void logActivity({
+      actorUserId: userId,
+      actorChannel: "elaine",
+      actionType: "delete_ornament_item",
+      entityType: "ornament",
+      entityId: payload.itemId,
+      reversible: true,
+    });
     return {
       status: 200,
       body: { type: "delete_ornament_item", result: { id: payload.itemId } },

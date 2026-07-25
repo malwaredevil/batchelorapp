@@ -16,6 +16,7 @@ import {
   sql,
   type SQL,
 } from "drizzle-orm";
+import { logActivity } from "../../lib/soft-delete";
 import {
   db,
   potteryItems,
@@ -261,17 +262,22 @@ router.get("/items", async (req, res) => {
       ? and(...(conditions as [SQL<unknown>, ...SQL<unknown>[]]))
       : undefined;
 
+  // Always exclude soft-deleted items.
+  const finalWhere = where
+    ? and(where, isNull(potteryItems.deletedAt))
+    : isNull(potteryItems.deletedAt);
+
   // Total count for pagination metadata.
   const [{ value: total }] = await db
     .select({ value: count() })
     .from(potteryItems)
-    .where(where);
+    .where(finalWhere);
 
   const offset = (page - 1) * pageSize;
   const rows = await db
     .select(itemColumns)
     .from(potteryItems)
-    .where(where)
+    .where(finalWhere)
     .orderBy(desc(potteryItems.createdAt))
     .limit(pageSize)
     .offset(offset);
@@ -293,12 +299,15 @@ router.get("/items/stragglers", async (_req, res) => {
     })
     .from(potteryItems)
     .where(
-      or(
-        isNull(potteryItems.embedding),
-        and(
-          isNull(potteryItems.patternDescription),
-          isNull(potteryItems.style),
-          isNull(potteryItems.shape),
+      and(
+        isNull(potteryItems.deletedAt),
+        or(
+          isNull(potteryItems.embedding),
+          and(
+            isNull(potteryItems.patternDescription),
+            isNull(potteryItems.style),
+            isNull(potteryItems.shape),
+          ),
         ),
       ),
     )
@@ -319,7 +328,7 @@ router.get("/items/:id", async (req, res) => {
   const [row] = await db
     .select(itemColumns)
     .from(potteryItems)
-    .where(eq(potteryItems.id, id))
+    .where(and(eq(potteryItems.id, id), isNull(potteryItems.deletedAt)))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Pottery piece not found." });
@@ -613,21 +622,28 @@ router.delete("/items/:id", async (req, res) => {
     res.status(404).json({ error: "Pottery piece not found." });
     return;
   }
-  const suppImages = await db
-    .select({ storagePath: potteryImages.storagePath })
-    .from(potteryImages)
+  const now = new Date();
+  // Cascade soft-delete supplemental images before the parent row.
+  // Storage cleanup (primary image + supplemental) deferred to purge job
+  // so the item remains recoverable from the recycle bin for 30 days.
+  await db
+    .update(potteryImages)
+    .set({ deletedAt: now })
     .where(eq(potteryImages.itemId, id));
-
-  await db.delete(potteryItems).where(eq(potteryItems.id, id));
-
-  await Promise.all([
-    deleteImage(item.imagePath),
-    item.patternCropPath
-      ? deleteImage(item.patternCropPath)
-      : Promise.resolve(),
-    ...suppImages.map((img) => deleteImage(img.storagePath)),
-  ]);
-  res.status(204).end();
+  await db
+    .update(potteryItems)
+    .set({ deletedAt: now })
+    .where(eq(potteryItems.id, id));
+  res.status(200).json({ ok: true });
+  void logActivity({
+    actorUserId: req.session.userId!,
+    actorChannel: "web",
+    actionType: "delete_pottery_item",
+    entityType: "pottery_item",
+    entityId: id,
+    entityLabel: item.imagePath,
+    reversible: true,
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -850,9 +866,11 @@ router.delete("/items/:id/images/:imageId", async (req, res) => {
     return;
   }
 
-  await db.delete(potteryImages).where(eq(potteryImages.id, imageId));
-  await deleteImage(imageRow.storagePath).catch(() => {});
-  res.status(204).end();
+  await db
+    .update(potteryImages)
+    .set({ deletedAt: new Date() })
+    .where(eq(potteryImages.id, imageId));
+  res.status(200).json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------

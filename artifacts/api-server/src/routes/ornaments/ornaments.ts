@@ -16,6 +16,7 @@ import {
   sql,
   type SQL,
 } from "drizzle-orm";
+import { logActivity } from "../../lib/soft-delete";
 import {
   db,
   ornamentsItems,
@@ -288,8 +289,9 @@ router.get("/items", async (req, res) => {
     conditions.push(inArray(ornamentsItems.id, itemIdsForCategory));
   }
 
-  const where =
-    conditions.length > 0 ? and(...(conditions as [SQL, ...SQL[]])) : undefined;
+  // Always exclude soft-deleted items.
+  conditions.push(isNull(ornamentsItems.deletedAt));
+  const where = and(...(conditions as [SQL, ...SQL[]]));
 
   const [{ value: total }] = await db
     .select({ value: count() })
@@ -328,11 +330,14 @@ router.get("/items/stragglers", async (_req, res) => {
     })
     .from(ornamentsItems)
     .where(
-      or(
-        isNull(ornamentsItems.embedding),
-        and(
-          isNull(ornamentsItems.seriesOrCollection),
-          isNull(ornamentsItems.year),
+      and(
+        isNull(ornamentsItems.deletedAt),
+        or(
+          isNull(ornamentsItems.embedding),
+          and(
+            isNull(ornamentsItems.seriesOrCollection),
+            isNull(ornamentsItems.year),
+          ),
         ),
       ),
     )
@@ -413,7 +418,7 @@ router.get("/items/:id", async (req, res) => {
   const [row] = await db
     .select(itemColumns)
     .from(ornamentsItems)
-    .where(eq(ornamentsItems.id, id))
+    .where(and(eq(ornamentsItems.id, id), isNull(ornamentsItems.deletedAt)))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Ornament not found." });
@@ -730,18 +735,26 @@ router.delete("/items/:id", async (req, res) => {
     res.status(404).json({ error: "Ornament not found." });
     return;
   }
-  const suppImages = await db
-    .select({ storagePath: ornamentsImages.storagePath })
-    .from(ornamentsImages)
+  const now = new Date();
+  // Cascade soft-delete supplemental images, then the ornament row itself.
+  // Storage cleanup deferred to purge job — item stays in recycle bin 30 days.
+  await db
+    .update(ornamentsImages)
+    .set({ deletedAt: now })
     .where(eq(ornamentsImages.itemId, id));
-
-  await db.delete(ornamentsItems).where(eq(ornamentsItems.id, id));
-
-  await Promise.all([
-    deleteImage(item.imagePath),
-    ...suppImages.map((img) => deleteImage(img.storagePath)),
-  ]);
-  res.status(204).end();
+  await db
+    .update(ornamentsItems)
+    .set({ deletedAt: now })
+    .where(eq(ornamentsItems.id, id));
+  res.status(200).json({ ok: true });
+  void logActivity({
+    actorUserId: req.session.userId!,
+    actorChannel: "web",
+    actionType: "delete_ornament",
+    entityType: "ornament",
+    entityId: id,
+    reversible: true,
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -956,9 +969,11 @@ router.delete("/items/:id/images/:imageId", async (req, res) => {
     return;
   }
 
-  await db.delete(ornamentsImages).where(eq(ornamentsImages.id, imageId));
-  await deleteImage(imageRow.storagePath).catch(() => {});
-  res.status(204).end();
+  await db
+    .update(ornamentsImages)
+    .set({ deletedAt: new Date() })
+    .where(eq(ornamentsImages.id, imageId));
+  res.status(200).json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------

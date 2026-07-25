@@ -60,6 +60,7 @@ import {
 } from "../lib/app-config";
 import { listOpenRouterModels } from "../lib/openrouter-models";
 import { deleteTripPhoto } from "../lib/travels/storage";
+import { logActivity } from "../lib/soft-delete";
 import { deleteDocument } from "../lib/travels-storage";
 import { getValidAccessToken } from "../lib/google-calendar-tokens";
 import { rescanTripDocument } from "../routes/travels/documents";
@@ -1412,17 +1413,31 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
     userId: number,
   ) => {
     const [existing] = await db
-      .select()
+      .select({ id: travelsReminders.id, tripId: travelsReminders.tripId })
       .from(travelsReminders)
-      .where(eq(travelsReminders.id, payload.reminderId));
+      .where(
+        and(
+          eq(travelsReminders.id, payload.reminderId),
+          isNull(travelsReminders.deletedAt),
+        ),
+      );
     if (!existing || existing.tripId !== payload.tripId) {
       return { status: 404, body: { error: "Reminder not found" } };
     }
 
     await deleteAllReminderCalendarEvents(payload.reminderId);
     await db
-      .delete(travelsReminders)
+      .update(travelsReminders)
+      .set({ deletedAt: new Date() })
       .where(eq(travelsReminders.id, payload.reminderId));
+    void logActivity({
+      actorUserId: userId,
+      actorChannel: "elaine",
+      actionType: "delete_reminder",
+      entityType: "reminder",
+      entityId: payload.reminderId,
+      reversible: true,
+    });
 
     return {
       status: 200,
@@ -2031,21 +2046,26 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
 
   delete_trip_photo: (async (
     payload: z.infer<typeof DeleteTripPhotoActionPayload>,
+    userId: number,
   ) => {
     const [row] = await db
-      .select()
+      .select({
+        id: travelsTripPhotos.id,
+        storagePath: travelsTripPhotos.storagePath,
+      })
       .from(travelsTripPhotos)
       .where(
         and(
           eq(travelsTripPhotos.id, payload.photoId),
           eq(travelsTripPhotos.tripId, payload.tripId),
+          isNull(travelsTripPhotos.deletedAt),
         ),
       );
     if (!row) return { status: 404, body: { error: "Photo not found" } };
 
-    await deleteTripPhoto(row.storagePath).catch(() => {});
     await db
-      .delete(travelsTripPhotos)
+      .update(travelsTripPhotos)
+      .set({ deletedAt: new Date() })
       .where(eq(travelsTripPhotos.id, payload.photoId));
 
     const [trip] = await db
@@ -2058,6 +2078,15 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
         .set({ iconPhotoId: null })
         .where(eq(travelsTrips.id, payload.tripId));
     }
+
+    void logActivity({
+      actorUserId: userId,
+      actorChannel: "elaine",
+      actionType: "delete_trip_photo",
+      entityType: "trip_photo",
+      entityId: payload.photoId,
+      reversible: true,
+    });
 
     return {
       status: 200,

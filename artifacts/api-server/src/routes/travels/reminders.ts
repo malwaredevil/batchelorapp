@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { and, eq, inArray, asc } from "drizzle-orm";
+import { and, eq, inArray, asc, isNull } from "drizzle-orm";
+import { logActivity } from "../../lib/soft-delete";
 import { z } from "zod/v4";
 import {
   db,
@@ -251,7 +252,14 @@ router.get("/reminders", async (req, res) => {
   const rows = await db
     .select()
     .from(travelsReminders)
-    .where(pending ? eq(travelsReminders.done, false) : undefined)
+    .where(
+      pending
+        ? and(
+            eq(travelsReminders.done, false),
+            isNull(travelsReminders.deletedAt),
+          )
+        : isNull(travelsReminders.deletedAt),
+    )
     .orderBy(asc(travelsReminders.dueDate), asc(travelsReminders.createdAt));
 
   res.json(rows);
@@ -272,7 +280,12 @@ router.get("/trips/:id/reminders", async (req, res) => {
   const rows = await db
     .select()
     .from(travelsReminders)
-    .where(eq(travelsReminders.tripId, tripId))
+    .where(
+      and(
+        eq(travelsReminders.tripId, tripId),
+        isNull(travelsReminders.deletedAt),
+      ),
+    )
     .orderBy(asc(travelsReminders.dueDate), asc(travelsReminders.createdAt));
 
   res.json(rows);
@@ -415,7 +428,7 @@ router.delete("/trips/:id/reminders/:reminderId", async (req, res) => {
   }
 
   const [existing] = await db
-    .select({ id: travelsReminders.id })
+    .select({ id: travelsReminders.id, title: travelsReminders.title })
     .from(travelsReminders)
     .where(
       and(
@@ -432,14 +445,24 @@ router.delete("/trips/:id/reminders/:reminderId", async (req, res) => {
   await deleteAllReminderCalendarEvents(existing.id);
 
   await db
-    .delete(travelsReminders)
+    .update(travelsReminders)
+    .set({ deletedAt: new Date() })
     .where(
       and(
         eq(travelsReminders.id, reminderId),
         eq(travelsReminders.tripId, tripId),
       ),
     );
-  res.status(204).send();
+  res.status(200).json({ ok: true });
+  void logActivity({
+    actorUserId: req.session.userId!,
+    actorChannel: "web",
+    actionType: "delete_reminder",
+    entityType: "reminder",
+    entityId: reminderId,
+    entityLabel: existing.title,
+    reversible: true,
+  });
 });
 
 export default router;

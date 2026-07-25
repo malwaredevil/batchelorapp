@@ -172,4 +172,12 @@ router.get("/export", async (_req, res) => {
     );
 });
 
+// POST /operations/purge-deleted — hard-delete items soft-deleted >30 days ago
+// (owner-only; also triggered automatically by scheduled deployment)
+router.post("/purge-deleted", async (_req, res) => {
+  const { purgeDeletedItems } = await import("../lib/purge-deleted");
+  const result = await purgeDeletedItems();
+  res.json(result);
+});
+
 export default router;

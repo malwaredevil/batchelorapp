@@ -1538,6 +1538,40 @@ CREATE TABLE IF NOT EXISTS knowledge_relationships (
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- #341: Soft-delete columns on 12 collection tables
+ALTER TABLE pottery_items           ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE pottery_images          ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE quilting_fabrics        ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE quilting_patterns       ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE quilting_finished_quilts ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE quilting_images         ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE travels_trips           ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE travels_trip_photos     ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE travels_trip_documents  ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE travels_reminders       ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE ornaments_items         ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE ornaments_images        ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+-- #341: household_activity_log
+CREATE TABLE IF NOT EXISTS household_activity_log (
+  id            BIGSERIAL    PRIMARY KEY,
+  occurred_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  actor_user_id INTEGER      REFERENCES app_users(id) ON DELETE SET NULL,
+  actor_channel TEXT         NOT NULL,
+  action_type   TEXT         NOT NULL,
+  entity_type   TEXT         NOT NULL,
+  entity_id     INTEGER,
+  entity_label  TEXT,
+  payload       JSONB,
+  reversible    BOOLEAN      NOT NULL DEFAULT false,
+  reversed_at   TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS household_activity_log_occurred_at_idx
+  ON household_activity_log (occurred_at DESC);
+CREATE INDEX IF NOT EXISTS household_activity_log_entity_idx
+  ON household_activity_log (entity_type, entity_id);
 `;
 
 async function copyTable(
@@ -1712,6 +1746,7 @@ async function main() {
       "ai_description",
       "locked_fields",
       "created_at",
+      "deleted_at",
     ],
     orderBy: "id",
   });
@@ -1726,6 +1761,7 @@ async function main() {
       "label",
       "position",
       "created_at",
+      "deleted_at",
     ],
     orderBy: "id",
   });
@@ -1806,6 +1842,7 @@ async function main() {
       "book_value_source",
       "book_value_updated_at",
       "created_at",
+      "deleted_at",
     ],
     orderBy: "id",
   });
@@ -1820,6 +1857,7 @@ async function main() {
       "label",
       "position",
       "created_at",
+      "deleted_at",
     ],
     orderBy: "id",
   });
@@ -2026,6 +2064,7 @@ async function main() {
       "acquired_at",
       "locked_fields",
       "created_at",
+      "deleted_at",
     ],
     orderBy: "id",
   });
@@ -2050,6 +2089,7 @@ async function main() {
       "publication_name",
       "publication_year",
       "created_at",
+      "deleted_at",
     ],
     orderBy: "id",
   });
@@ -2068,6 +2108,7 @@ async function main() {
       "image_path",
       "locked_fields",
       "created_at",
+      "deleted_at",
     ],
     orderBy: "id",
   });
@@ -2098,6 +2139,7 @@ async function main() {
       "label",
       "position",
       "created_at",
+      "deleted_at",
     ],
     orderBy: "id",
   });
@@ -2306,6 +2348,7 @@ async function main() {
       "todo_list",
       "icon_photo_id",
       "created_at",
+      "deleted_at",
     ],
     orderBy: "id",
     jsonbColumns: [
@@ -2334,6 +2377,7 @@ async function main() {
       "gmail_message_id",
       "icon_override",
       "created_at",
+      "deleted_at",
     ],
     orderBy: "id",
     jsonbColumns: ["extracted_data"],
@@ -2351,6 +2395,7 @@ async function main() {
       "photo_type",
       "sort_order",
       "created_at",
+      "deleted_at",
     ],
     orderBy: "id",
   });
@@ -2385,6 +2430,7 @@ async function main() {
       "done",
       "recipient_emails",
       "created_at",
+      "deleted_at",
     ],
     orderBy: "id",
   });
@@ -3478,6 +3524,26 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "knowledge_relationships", "id");
+
+  summary["household_activity_log"] = await copyTable(source, dest, {
+    table: "household_activity_log",
+    columns: [
+      "id",
+      "occurred_at",
+      "actor_user_id",
+      "actor_channel",
+      "action_type",
+      "entity_type",
+      "entity_id",
+      "entity_label",
+      "payload",
+      "reversible",
+      "reversed_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["payload"],
+  });
+  await resetSequence(dest, "household_activity_log", "id");
 
   // ── Record backup history ─────────────────────────────────────────────────
   const note = Object.entries(summary)

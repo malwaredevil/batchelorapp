@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, asc, inArray } from "drizzle-orm";
+import { eq, asc, inArray, isNull, and } from "drizzle-orm";
+import { logActivity } from "../../lib/soft-delete";
 import { z } from "zod/v4";
 import {
   db,
@@ -88,7 +89,8 @@ const UpdateTripBody = CreateTripBody.partial().extend({
 router.get("/highlights", async (_req, res) => {
   const rows = await db
     .select({ theOneThing: travelsTrips.theOneThing })
-    .from(travelsTrips);
+    .from(travelsTrips)
+    .where(isNull(travelsTrips.deletedAt));
 
   const values = new Set<string>();
   for (const row of rows) {
@@ -102,6 +104,7 @@ router.get("/trips", async (_req, res) => {
   const rows = await db
     .select()
     .from(travelsTrips)
+    .where(isNull(travelsTrips.deletedAt))
     .orderBy(asc(travelsTrips.createdAt));
   res.json(rows);
 });
@@ -148,7 +151,7 @@ router.get("/trips/:id", async (req, res) => {
   const [trip] = await db
     .select()
     .from(travelsTrips)
-    .where(eq(travelsTrips.id, id));
+    .where(and(eq(travelsTrips.id, id), isNull(travelsTrips.deletedAt)));
 
   if (!trip) {
     res.status(404).json({ error: "Not found" });
@@ -158,7 +161,12 @@ router.get("/trips/:id", async (req, res) => {
   const documents = await db
     .select()
     .from(travelsTripDocuments)
-    .where(eq(travelsTripDocuments.tripId, id))
+    .where(
+      and(
+        eq(travelsTripDocuments.tripId, id),
+        isNull(travelsTripDocuments.deletedAt),
+      ),
+    )
     .orderBy(asc(travelsTripDocuments.createdAt));
 
   res.json({ ...trip, documents });
@@ -177,7 +185,7 @@ router.patch("/trips/:id", async (req, res) => {
   const [existing] = await db
     .select({ id: travelsTrips.id, destination: travelsTrips.destination })
     .from(travelsTrips)
-    .where(eq(travelsTrips.id, id));
+    .where(and(eq(travelsTrips.id, id), isNull(travelsTrips.deletedAt)));
 
   if (!existing) {
     res.status(404).json({ error: "Not found" });
@@ -237,38 +245,26 @@ router.delete("/trips/:id", async (req, res) => {
   }
 
   const [existing] = await db
-    .select({ id: travelsTrips.id })
+    .select({ id: travelsTrips.id, destination: travelsTrips.destination })
     .from(travelsTrips)
-    .where(eq(travelsTrips.id, id));
+    .where(and(eq(travelsTrips.id, id), isNull(travelsTrips.deletedAt)));
 
   if (!existing) {
     res.status(404).json({ error: "Not found" });
     return;
   }
 
-  // Clean up photos and documents from Supabase Storage before deleting DB rows
-  const photos = await db
-    .select({ storagePath: travelsTripPhotos.storagePath })
-    .from(travelsTripPhotos)
-    .where(eq(travelsTripPhotos.tripId, id));
-
-  const docs = await db
-    .select({ storagePath: travelsTripDocuments.storagePath })
-    .from(travelsTripDocuments)
-    .where(eq(travelsTripDocuments.tripId, id));
-
-  await Promise.allSettled([
-    ...photos.map((p) => deleteTripPhoto(p.storagePath)),
-    ...docs.map((d) => deleteDocument(d.storagePath)),
-  ]);
-
-  // Delete all child rows in a transaction so a mid-delete failure can't
-  // leave orphaned photos, documents, chunks, reminders, or packing rows.
-  // Storage deletes (above) stay outside the transaction — they're not
-  // atomic and the allSettled handling already accepts individual failures.
+  const now = new Date();
+  // Soft-delete parent + cascade-soft-delete direct children in one transaction.
+  // Storage cleanup (photos, documents) is deferred to the purge job so
+  // deleted trips remain recoverable from the recycle bin for 30 days.
+  // Doc chunks and packing-list rows have no deleted_at — hard-delete them now.
   await db.transaction(async (tx) => {
-    await tx.delete(travelsTripPhotos).where(eq(travelsTripPhotos.tripId, id));
-    // Doc chunks have no FK cascade — delete before documents.
+    await tx
+      .update(travelsTripPhotos)
+      .set({ deletedAt: now })
+      .where(eq(travelsTripPhotos.tripId, id));
+    // Doc chunks have no FK cascade and no deleted_at — delete before documents.
     await tx
       .delete(travelsDocChunks)
       .where(
@@ -281,18 +277,34 @@ router.delete("/trips/:id", async (req, res) => {
         ),
       );
     await tx
-      .delete(travelsTripDocuments)
+      .update(travelsTripDocuments)
+      .set({ deletedAt: now })
       .where(eq(travelsTripDocuments.tripId, id));
-    await tx.delete(travelsReminders).where(eq(travelsReminders.tripId, id));
-    // Packing list items cascade via FK; delete the list row directly.
+    await tx
+      .update(travelsReminders)
+      .set({ deletedAt: now })
+      .where(eq(travelsReminders.tripId, id));
+    // Packing list rows have no deleted_at — hard-delete them now.
     await tx
       .delete(travelsPackingLists)
       .where(eq(travelsPackingLists.tripId, id));
-    await tx.delete(travelsTrips).where(eq(travelsTrips.id, id));
+    await tx
+      .update(travelsTrips)
+      .set({ deletedAt: now })
+      .where(eq(travelsTrips.id, id));
   });
 
-  res.status(204).send();
+  res.status(200).json({ ok: true });
   void deleteTripCalendarEvents(id);
+  void logActivity({
+    actorUserId: req.session.userId!,
+    actorChannel: "web",
+    actionType: "delete_trip",
+    entityType: "trip",
+    entityId: id,
+    entityLabel: existing.destination,
+    reversible: true,
+  });
 });
 
 export default router;

@@ -9,8 +9,10 @@ import {
   getTableColumns,
   ilike,
   inArray,
+  isNull,
   sql,
 } from "drizzle-orm";
+import { logActivity } from "../../lib/soft-delete";
 import {
   db,
   fabrics,
@@ -468,7 +470,10 @@ router.get("/fabrics", async (req, res) => {
     }
   }
 
-  const where = q ? ilike(fabrics.name, `%${q}%`) : undefined;
+  const baseWhere = q ? ilike(fabrics.name, `%${q}%`) : undefined;
+  const where = baseWhere
+    ? and(baseWhere, isNull(fabrics.deletedAt))
+    : isNull(fabrics.deletedAt);
 
   const [{ value: total }] = await db
     .select({ value: count() })
@@ -604,7 +609,7 @@ router.get("/fabrics/:id", async (req, res) => {
   const [row] = await db
     .select(fabricColumns)
     .from(fabrics)
-    .where(eq(fabrics.id, id))
+    .where(and(eq(fabrics.id, id), isNull(fabrics.deletedAt)))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Fabric not found." });
@@ -817,17 +822,23 @@ router.delete("/fabrics/:id", async (req, res) => {
     return;
   }
 
-  const supplementalImages = await db
-    .select({ storagePath: quiltingImages.storagePath })
-    .from(quiltingImages)
+  const now = new Date();
+  // Cascade soft-delete supplemental images, then the fabric row itself.
+  // Storage cleanup deferred to purge job — fabric stays in the recycle bin.
+  await db
+    .update(quiltingImages)
+    .set({ deletedAt: now })
     .where(sql`entity_type = 'fabric' AND entity_id = ${id}`);
-
-  await db.delete(fabrics).where(eq(fabrics.id, id));
-  await Promise.allSettled([
-    deleteImage(row.imagePath),
-    ...supplementalImages.map((img) => deleteImage(img.storagePath)),
-  ]);
-  res.status(204).end();
+  await db.update(fabrics).set({ deletedAt: now }).where(eq(fabrics.id, id));
+  res.status(200).json({ ok: true });
+  void logActivity({
+    actorUserId: req.session.userId!,
+    actorChannel: "web",
+    actionType: "delete_fabric",
+    entityType: "fabric",
+    entityId: id,
+    reversible: true,
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1340,17 +1351,17 @@ router.delete("/fabrics/:id/images/:imageId", async (req, res) => {
   }
 
   const [image] = await db
-    .delete(quiltingImages)
+    .update(quiltingImages)
+    .set({ deletedAt: new Date() })
     .where(
       sql`${quiltingImages.id} = ${imageId} AND entity_type = 'fabric' AND entity_id = ${id}`,
     )
-    .returning({ storagePath: quiltingImages.storagePath });
+    .returning({ id: quiltingImages.id });
   if (!image) {
     res.status(404).json({ error: "Image not found." });
     return;
   }
-  await deleteImage(image.storagePath);
-  res.status(204).end();
+  res.status(200).json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------

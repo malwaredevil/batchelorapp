@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
 import { DEFAULT_MULTER_FILE_BYTES } from "../../middleware/uploadSizeGuard";
-import { and, count, desc, eq, ilike, inArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, ilike, inArray, isNull, sql } from "drizzle-orm";
+import { logActivity } from "../../lib/soft-delete";
 import {
   db,
   quiltPatterns,
@@ -162,7 +163,10 @@ router.get("/patterns", async (req, res) => {
   );
   const offset = (page - 1) * pageSize;
 
-  const where = q ? ilike(quiltPatterns.name, `%${q}%`) : undefined;
+  const baseWhere = q ? ilike(quiltPatterns.name, `%${q}%`) : undefined;
+  const where = baseWhere
+    ? and(baseWhere, isNull(quiltPatterns.deletedAt))
+    : isNull(quiltPatterns.deletedAt);
 
   const [{ value: total }] = await db
     .select({ value: count() })
@@ -190,7 +194,7 @@ router.get("/patterns/:id", async (req, res) => {
   const [row] = await db
     .select()
     .from(quiltPatterns)
-    .where(eq(quiltPatterns.id, id))
+    .where(and(eq(quiltPatterns.id, id), isNull(quiltPatterns.deletedAt)))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Pattern not found." });
@@ -344,17 +348,26 @@ router.delete("/patterns/:id", async (req, res) => {
     return;
   }
 
-  const supplementalImages = await db
-    .select({ storagePath: quiltingImages.storagePath })
-    .from(quiltingImages)
+  const now = new Date();
+  // Cascade soft-delete supplemental images, then the pattern row itself.
+  // Storage cleanup deferred to purge job.
+  await db
+    .update(quiltingImages)
+    .set({ deletedAt: now })
     .where(sql`entity_type = 'pattern' AND entity_id = ${id}`);
-
-  await db.delete(quiltPatterns).where(eq(quiltPatterns.id, id));
-  await Promise.allSettled([
-    ...(row.imagePath ? [deleteImage(row.imagePath)] : []),
-    ...supplementalImages.map((img) => deleteImage(img.storagePath)),
-  ]);
-  res.status(204).end();
+  await db
+    .update(quiltPatterns)
+    .set({ deletedAt: now })
+    .where(eq(quiltPatterns.id, id));
+  res.status(200).json({ ok: true });
+  void logActivity({
+    actorUserId: req.session.userId!,
+    actorChannel: "web",
+    actionType: "delete_pattern",
+    entityType: "pattern",
+    entityId: id,
+    reversible: true,
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -709,17 +722,17 @@ router.delete("/patterns/:id/images/:imageId", async (req, res) => {
   }
 
   const [image] = await db
-    .delete(quiltingImages)
+    .update(quiltingImages)
+    .set({ deletedAt: new Date() })
     .where(
       sql`${quiltingImages.id} = ${imageId} AND entity_type = 'pattern' AND entity_id = ${id}`,
     )
-    .returning({ storagePath: quiltingImages.storagePath });
+    .returning({ id: quiltingImages.id });
   if (!image) {
     res.status(404).json({ error: "Image not found." });
     return;
   }
-  await deleteImage(image.storagePath);
-  res.status(204).end();
+  res.status(200).json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------

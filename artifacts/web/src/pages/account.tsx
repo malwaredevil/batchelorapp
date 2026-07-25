@@ -783,6 +783,21 @@ export default function Account() {
           <ElaineSettingsCard subtitle="Your household's AI assistant across every app" />
         </div>
 
+        <div className="mx-auto w-full max-w-xl">
+          <Link
+            href="/recycle-bin"
+            className="flex w-full items-center justify-between rounded-xl border border-card-border bg-card px-5 py-4 text-sm font-medium transition-colors hover:bg-muted/60"
+          >
+            <div>
+              <p className="font-semibold">Recycle Bin &amp; Activity</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Restore deleted items and view household activity log
+              </p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </Link>
+        </div>
+
         {user?.isOwner && (
           <div className="mx-auto w-full max-w-xl">
             <Link

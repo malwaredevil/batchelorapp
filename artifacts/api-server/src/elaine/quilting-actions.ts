@@ -1,10 +1,11 @@
 import { z } from "zod/v4";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import type OpenAI from "openai";
 import {
   db,
   fabrics,
   quiltPatterns,
+  quiltingImages,
   shoppingItems,
   quiltingCategories,
   finishedQuilts,
@@ -12,6 +13,7 @@ import {
   layouts,
   entityCategories,
 } from "@workspace/db";
+import { logActivity } from "../lib/soft-delete";
 import { bulkReanalyzeFabrics } from "../routes/quilting/fabrics";
 import { bulkReanalyzePatterns } from "../routes/quilting/patterns";
 import {
@@ -423,9 +425,25 @@ export const quiltingActionExecutors: Record<
     const [existing] = await db
       .select({ id: fabrics.id })
       .from(fabrics)
-      .where(and(eq(fabrics.id, payload.fabricId), eq(fabrics.userId, userId)));
+      .where(and(eq(fabrics.id, payload.fabricId), isNull(fabrics.deletedAt)));
     if (!existing) return { status: 404, body: { error: "Fabric not found" } };
-    await db.delete(fabrics).where(eq(fabrics.id, payload.fabricId));
+    const now = new Date();
+    await db
+      .update(quiltingImages)
+      .set({ deletedAt: now })
+      .where(sql`entity_type = 'fabric' AND entity_id = ${payload.fabricId}`);
+    await db
+      .update(fabrics)
+      .set({ deletedAt: now })
+      .where(eq(fabrics.id, payload.fabricId));
+    void logActivity({
+      actorUserId: userId,
+      actorChannel: "elaine",
+      actionType: "delete_fabric",
+      entityType: "fabric",
+      entityId: payload.fabricId,
+      reversible: true,
+    });
     return {
       status: 200,
       body: { type: "delete_fabric", result: { id: payload.fabricId } },
@@ -470,13 +488,27 @@ export const quiltingActionExecutors: Record<
       .where(
         and(
           eq(quiltPatterns.id, payload.patternId),
-          eq(quiltPatterns.userId, userId),
+          isNull(quiltPatterns.deletedAt),
         ),
       );
     if (!existing) return { status: 404, body: { error: "Pattern not found" } };
+    const now = new Date();
     await db
-      .delete(quiltPatterns)
+      .update(quiltingImages)
+      .set({ deletedAt: now })
+      .where(sql`entity_type = 'pattern' AND entity_id = ${payload.patternId}`);
+    await db
+      .update(quiltPatterns)
+      .set({ deletedAt: now })
       .where(eq(quiltPatterns.id, payload.patternId));
+    void logActivity({
+      actorUserId: userId,
+      actorChannel: "elaine",
+      actionType: "delete_pattern",
+      entityType: "pattern",
+      entityId: payload.patternId,
+      reversible: true,
+    });
     return {
       status: 200,
       body: { type: "delete_pattern", result: { id: payload.patternId } },
@@ -640,9 +672,20 @@ export const quiltingActionExecutors: Record<
     return { status: 201, body: { type: "create_pattern", result: row } };
   }) as ActionExecutor,
 
-  delete_quilt: (async (payload: z.infer<typeof DeleteQuiltActionPayload>) => {
+  delete_quilt: (async (
+    payload: z.infer<typeof DeleteQuiltActionPayload>,
+    userId: number,
+  ) => {
     const deleted = await deleteQuiltById(payload.quiltId);
     if (!deleted) return { status: 404, body: { error: "Quilt not found" } };
+    void logActivity({
+      actorUserId: userId,
+      actorChannel: "elaine",
+      actionType: "delete_quilt",
+      entityType: "quilt",
+      entityId: payload.quiltId,
+      reversible: true,
+    });
     return {
       status: 200,
       body: { type: "delete_quilt", result: { id: payload.quiltId } },

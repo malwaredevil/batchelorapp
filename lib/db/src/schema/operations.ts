@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  bigserial,
   boolean,
   index,
   integer,
@@ -223,3 +224,33 @@ export type AppJob = typeof appJobs.$inferSelect;
 export type InsertAppJob = typeof appJobs.$inferInsert;
 export type ExternalOperationEvent =
   typeof externalOperationEvents.$inferSelect;
+
+export const householdActivityLog = pgTable(
+  "household_activity_log",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    actorUserId: integer("actor_user_id").references(() => appUsers.id),
+    actorChannel: text("actor_channel").notNull(),
+    actionType: text("action_type").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id"),
+    entityLabel: text("entity_label"),
+    payload: jsonb("payload"),
+    reversible: boolean("reversible").notNull().default(false),
+    reversedAt: timestamp("reversed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("household_activity_log_occurred_at_idx").on(table.occurredAt),
+    index("household_activity_log_entity_idx").on(
+      table.entityType,
+      table.entityId,
+    ),
+  ],
+).enableRLS();
+
+export type HouseholdActivityLogRow = typeof householdActivityLog.$inferSelect;
+export type InsertHouseholdActivityLog =
+  typeof householdActivityLog.$inferInsert;

@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { and, eq, asc } from "drizzle-orm";
+import { and, eq, asc, isNull } from "drizzle-orm";
+import { logActivity } from "../../lib/soft-delete";
 import multer from "multer";
 import { multerLimitForPrefix } from "../../lib/upload-limits";
 import {
@@ -495,7 +496,12 @@ router.get("/trips/:id/documents", async (req, res) => {
   const docs = await db
     .select()
     .from(travelsTripDocuments)
-    .where(eq(travelsTripDocuments.tripId, tripId))
+    .where(
+      and(
+        eq(travelsTripDocuments.tripId, tripId),
+        isNull(travelsTripDocuments.deletedAt),
+      ),
+    )
     .orderBy(asc(travelsTripDocuments.createdAt));
 
   res.json(docs);
@@ -845,20 +851,17 @@ router.delete("/trips/:id/documents/:docId", async (req, res) => {
     return;
   }
 
-  try {
-    await deleteDocument(doc.storagePath);
-  } catch (err) {
-    req.log.warn({ err }, "Storage delete failed — removing DB record anyway");
-  }
-
-  // Delete embedding chunks first — they have no FK cascade so they would
-  // otherwise accumulate as orphans and pollute semantic search results.
+  // Delete embedding chunks first — they have no deleted_at column and must
+  // be hard-deleted now to avoid polluting semantic search results.
   await db
     .delete(travelsDocChunks)
     .where(eq(travelsDocChunks.tripDocumentId, docId));
 
+  // Soft-delete the document — storage cleanup deferred to purge job so the
+  // document remains recoverable from the recycle bin for 30 days.
   await db
-    .delete(travelsTripDocuments)
+    .update(travelsTripDocuments)
+    .set({ deletedAt: new Date() })
     .where(
       and(
         eq(travelsTripDocuments.id, docId),
@@ -919,7 +922,16 @@ router.delete("/trips/:id/documents/:docId", async (req, res) => {
     );
   }
 
-  res.status(204).send();
+  res.status(200).json({ ok: true });
+  void logActivity({
+    actorUserId: req.session.userId!,
+    actorChannel: "web",
+    actionType: "delete_trip_document",
+    entityType: "trip_document",
+    entityId: docId,
+    entityLabel: doc.originalFilename ?? undefined,
+    reversible: true,
+  });
 });
 
 router.get("/trips/:id/documents/:docId/download", async (req, res) => {
@@ -1040,17 +1052,22 @@ router.delete("/documents/:docId", async (req, res) => {
     return;
   }
 
-  try {
-    await deleteDocument(doc.storagePath);
-  } catch (err) {
-    req.log.warn({ err }, "Storage delete failed — removing DB record anyway");
-  }
-
+  // Soft-delete the document — storage cleanup deferred to purge job.
   await db
-    .delete(travelsTripDocuments)
+    .update(travelsTripDocuments)
+    .set({ deletedAt: new Date() })
     .where(eq(travelsTripDocuments.id, docId));
 
-  res.status(204).send();
+  res.status(200).json({ ok: true });
+  void logActivity({
+    actorUserId: req.session.userId!,
+    actorChannel: "web",
+    actionType: "delete_trip_document",
+    entityType: "trip_document",
+    entityId: docId,
+    entityLabel: doc.originalFilename ?? undefined,
+    reversible: true,
+  });
 });
 
 export default router;

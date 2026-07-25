@@ -21,6 +21,7 @@ import {
 } from "../routes/pottery/pottery";
 import { mergePotteryCategories } from "../routes/pottery/categories";
 import { deleteImage } from "../lib/pottery/storage";
+import { logActivity } from "../lib/soft-delete";
 
 // Elaine's write-actions for the Pottery app. Creating a brand-new item isn't
 // offered here since every pottery item requires an uploaded photo
@@ -229,30 +230,36 @@ export const potteryActionExecutors: Record<PotteryActionType, ActionExecutor> =
 
     delete_pottery_item: (async (
       payload: z.infer<typeof DeletePotteryItemActionPayload>,
+      userId: number,
     ) => {
       const [item] = await db
-        .select({
-          imagePath: potteryItems.imagePath,
-          patternCropPath: potteryItems.patternCropPath,
-        })
+        .select({ id: potteryItems.id })
         .from(potteryItems)
-        .where(eq(potteryItems.id, payload.itemId));
+        .where(
+          and(
+            eq(potteryItems.id, payload.itemId),
+            isNull(potteryItems.deletedAt),
+          ),
+        );
       if (!item) return { status: 404, body: { error: "Item not found" } };
 
-      const suppImages = await db
-        .select({ storagePath: potteryImages.storagePath })
-        .from(potteryImages)
+      const now = new Date();
+      await db
+        .update(potteryImages)
+        .set({ deletedAt: now })
         .where(eq(potteryImages.itemId, payload.itemId));
-
-      await db.delete(potteryItems).where(eq(potteryItems.id, payload.itemId));
-
-      await Promise.all([
-        deleteImage(item.imagePath),
-        item.patternCropPath
-          ? deleteImage(item.patternCropPath)
-          : Promise.resolve(),
-        ...suppImages.map((img) => deleteImage(img.storagePath)),
-      ]);
+      await db
+        .update(potteryItems)
+        .set({ deletedAt: now })
+        .where(eq(potteryItems.id, payload.itemId));
+      void logActivity({
+        actorUserId: userId,
+        actorChannel: "elaine",
+        actionType: "delete_pottery_item",
+        entityType: "pottery_item",
+        entityId: payload.itemId,
+        reversible: true,
+      });
       return {
         status: 200,
         body: { type: "delete_pottery_item", result: { id: payload.itemId } },

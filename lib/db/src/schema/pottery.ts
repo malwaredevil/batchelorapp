@@ -63,6 +63,7 @@ export const potteryItems = pgTable(
       withTimezone: true,
     }),
     ebayPriceListings: jsonb("ebay_price_listings"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -128,6 +129,7 @@ export const potteryImages = pgTable(
     storagePath: text("storage_path").notNull(),
     label: text("label"),
     position: integer("position").notNull().default(0),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

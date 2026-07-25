@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { and, eq, asc } from "drizzle-orm";
+import { and, eq, asc, isNull } from "drizzle-orm";
+import { logActivity } from "../../lib/soft-delete";
 import multer from "multer";
 import { multerLimitForPrefix } from "../../lib/upload-limits";
 import { db, travelsTrips, travelsTripPhotos } from "@workspace/db";
@@ -59,8 +60,12 @@ router.get("/trips/:id/photos", async (req, res) => {
         ? and(
             eq(travelsTripPhotos.tripId, tripId),
             eq(travelsTripPhotos.photoType, typeFilter),
+            isNull(travelsTripPhotos.deletedAt),
           )
-        : eq(travelsTripPhotos.tripId, tripId),
+        : and(
+            eq(travelsTripPhotos.tripId, tripId),
+            isNull(travelsTripPhotos.deletedAt),
+          ),
     )
     .orderBy(
       asc(travelsTripPhotos.sortOrder),
@@ -208,8 +213,12 @@ router.delete("/trips/:id/photos/:photoId", async (req, res) => {
     return;
   }
 
-  await deleteTripPhoto(row.storagePath).catch(() => {});
-  await db.delete(travelsTripPhotos).where(eq(travelsTripPhotos.id, photoId));
+  // Storage cleanup deferred to purge job — photo is soft-deleted so it
+  // remains recoverable from the recycle bin for 30 days.
+  await db
+    .update(travelsTripPhotos)
+    .set({ deletedAt: new Date() })
+    .where(eq(travelsTripPhotos.id, photoId));
 
   const [trip] = await db
     .select({ iconPhotoId: travelsTrips.iconPhotoId })
@@ -222,7 +231,15 @@ router.delete("/trips/:id/photos/:photoId", async (req, res) => {
       .where(eq(travelsTrips.id, tripId));
   }
 
-  res.status(204).send();
+  res.status(200).json({ ok: true });
+  void logActivity({
+    actorUserId: req.session.userId!,
+    actorChannel: "web",
+    actionType: "delete_trip_photo",
+    entityType: "trip_photo",
+    entityId: photoId,
+    reversible: true,
+  });
 });
 
 // PUT /trips/:id/icon  (set or clear the trip's default/cover picture; can be any photo — memory or magnet — on this trip)

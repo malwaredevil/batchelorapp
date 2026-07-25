@@ -75,6 +75,7 @@ export const fabrics = pgTable(
       .default(sql`'{}'::text[]`),
     embedding: vector("embedding", { dimensions: 1536 }),
     visualEmbedding: vector("visual_embedding", { dimensions: 1024 }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -127,6 +128,7 @@ export const quiltPatterns = pgTable(
     designerWebsite: text("designer_website"),
     publicationName: text("publication_name"),
     publicationYear: text("publication_year"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -170,6 +172,7 @@ export const finishedQuilts = pgTable("quilting_finished_quilts", {
     .notNull()
     .default(sql`'{}'::text[]`),
   completionPercentage: smallint("completion_percentage").default(0),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -265,6 +268,7 @@ export const quiltingImages = pgTable(
     storagePath: text("storage_path").notNull(),
     label: text("label"),
     position: integer("position").notNull().default(0),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

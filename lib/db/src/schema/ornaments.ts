@@ -61,6 +61,7 @@ export const ornamentsItems = pgTable(
     ebayPriceListings: jsonb("ebay_price_listings"),
     embedding: vector("embedding", { dimensions: 1536 }),
     visualEmbedding: vector("visual_embedding", { dimensions: 1024 }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -123,6 +124,7 @@ export const ornamentsImages = pgTable(
     storagePath: text("storage_path").notNull(),
     label: text("label"),
     position: integer("position").notNull().default(0),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

@@ -2832,4 +2832,43 @@ export const STATEMENTS: string[] = [
   `DROP INDEX IF EXISTS hallmark_ornaments_sku_idx`,
   `DROP INDEX IF EXISTS travels_packing_lists_trip_id_idx`,
   `DROP INDEX IF EXISTS travels_monitoring_prefs_user_idx`,
+
+  // ── #341: Soft-delete support (deleted_at on 12 collection tables) ────────
+  `ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
+  `ALTER TABLE pottery_images ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
+  `ALTER TABLE quilting_fabrics ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
+  `ALTER TABLE quilting_patterns ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
+  `ALTER TABLE quilting_finished_quilts ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
+  `ALTER TABLE quilting_images ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
+  `ALTER TABLE travels_trips ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
+  `ALTER TABLE travels_trip_photos ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
+  `ALTER TABLE travels_trip_documents ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
+  `ALTER TABLE travels_reminders ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
+  `ALTER TABLE ornaments_items ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
+  `ALTER TABLE ornaments_images ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
+
+  `CREATE INDEX IF NOT EXISTS pottery_items_live_idx ON pottery_items (id) WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS quilting_fabrics_live_idx ON quilting_fabrics (id) WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS travels_trips_live_idx ON travels_trips (id) WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS ornaments_items_live_idx ON ornaments_items (id) WHERE deleted_at IS NULL`,
+
+  // ── #341: household_activity_log ─────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS household_activity_log (
+    id            BIGSERIAL    PRIMARY KEY,
+    occurred_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    actor_user_id INTEGER      REFERENCES app_users(id) ON DELETE SET NULL,
+    actor_channel TEXT         NOT NULL,
+    action_type   TEXT         NOT NULL,
+    entity_type   TEXT         NOT NULL,
+    entity_id     INTEGER,
+    entity_label  TEXT,
+    payload       JSONB,
+    reversible    BOOLEAN      NOT NULL DEFAULT false,
+    reversed_at   TIMESTAMPTZ
+  )`,
+  `ALTER TABLE household_activity_log ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS household_activity_log_occurred_at_idx
+     ON household_activity_log (occurred_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS household_activity_log_entity_idx
+     ON household_activity_log (entity_type, entity_id)`,
 ];

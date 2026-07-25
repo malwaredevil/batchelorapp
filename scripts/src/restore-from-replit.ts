@@ -1869,6 +1869,26 @@ async function main() {
   });
   await resetSequence(dest, "knowledge_relationships", "id");
 
+  await copyTable(source, dest, {
+    table: "household_activity_log",
+    columns: [
+      "id",
+      "occurred_at",
+      "actor_user_id",
+      "actor_channel",
+      "action_type",
+      "entity_type",
+      "entity_id",
+      "entity_label",
+      "payload",
+      "reversible",
+      "reversed_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["payload"],
+  });
+  await resetSequence(dest, "household_activity_log", "id");
+
   await dest.query("SET session_replication_role = DEFAULT");
   await dest.query("COMMIT");
 

@@ -1,0 +1,1035 @@
+═══════════════════════════════════════════════════════════════════════════════
+BATCHELOR APP — FULL UI/UX NAVIGATION TEST PLAN
+Version 1.0 | Desktop Browser Only | Read-Only (No Data Created or Edited)
+Base URL: https://app.batchelor.app
+Assumptions: Tester is already logged in. No logout required.
+═══════════════════════════════════════════════════════════════════════════════
+
+TOOL RECOMMENDATION: Use Perplexity Comet Browser (not Perplexity Computer).
+Comet Browser is purpose-built for navigating websites in a real browser
+session. It will click links, read page content, scroll, and take screenshots
+exactly as a human tester would. Perplexity Computer controls the full OS
+desktop — far more scope than needed for a web UI navigation test.
+
+───────────────────────────────────────────────────────────────────────────────
+INSTRUCTIONS FOR THE TESTER
+───────────────────────────────────────────────────────────────────────────────
+1. Follow every numbered step exactly as written.
+2. After each step, record PASS, FAIL, or SKIP and any notes in the scoring
+   card at the end of this document.
+3. "Page loads successfully" means: the browser navigates to the URL, no
+   full-page error screen appears, no spinner runs indefinitely (more than
+   10 seconds), and the main content of the page is visible.
+4. "Element is visible" means you can see it without scrolling unless the
+   step explicitly says "scroll down."
+5. Do NOT click any button that says "Add," "Save," "Delete," "Upload,"
+   "Remove," "Submit," "Confirm," "Reset," or "Send" — this test is
+   read-only navigation only.
+6. If a page shows an empty state (e.g., "No items yet"), that is a PASS as
+   long as the page itself loaded without an error.
+7. If any page shows a blank white screen, a "Something went wrong" error, a
+   404, or an infinite spinner, mark it FAIL and note what you see.
+8. Score each test case: PASS = 1 point, FAIL = 0 points.
+9. SKIP = not applicable (no data to test). Skips do not count against score.
+10. Calculate the final score at the end using the formula in the Scoring Card.
+
+───────────────────────────────────────────────────────────────────────────────
+SECTION 1: HUB DASHBOARD
+URL: https://app.batchelor.app/
+───────────────────────────────────────────────────────────────────────────────
+
+TC-001 — Hub Dashboard Loads
+1. Navigate to https://app.batchelor.app/
+2. Wait up to 10 seconds for the page to finish loading.
+Expected: The Hub dashboard is displayed. You should see a grid of large
+app cards (Pottery, Quilting, Travels, Ornaments, Elaine, and possibly
+Office). Each card has a hero image/banner at the top, stat numbers in the
+middle, and a footer link.
+Score: PASS if the dashboard renders with at least one app card visible.
+
+TC-002 — User Avatar / Account Menu Visible
+1. On the Hub dashboard, look in the top-right area of the page.
+Expected: A circular avatar or user icon is visible, typically showing the
+user's initials (e.g., "JB"). There may also be icons for notifications and
+messenger nearby.
+Score: PASS if the avatar/icon is visible.
+
+TC-003 — Pottery App Card Visible
+1. On the Hub dashboard, locate the "Pottery" app card.
+Expected: A card labeled "Pottery" is visible with a hero banner image, at
+least one stat number (e.g., number of pieces), and a footer that says
+"Open collection" or similar.
+Score: PASS if the card is present and the stat number is a number (not an
+error or "—").
+
+TC-004 — Quilting App Card Visible
+1. On the Hub dashboard, locate the "Quilting" app card.
+Expected: A card labeled "Quilting" is visible with a hero banner image, at
+least one stat number (e.g., number of fabrics), and a footer link.
+Score: PASS if the card is present and readable.
+
+TC-005 — Travels App Card Visible
+1. On the Hub dashboard, locate the "Travels" app card.
+Expected: A card labeled "Travels" is visible with a hero image and at least
+one stat (e.g., upcoming trips count).
+Score: PASS if the card is present and readable.
+
+TC-006 — Ornaments App Card Visible
+1. On the Hub dashboard, locate the "Ornaments" app card.
+Expected: A card labeled "Ornaments" is visible. Look for a Hallmark event
+countdown tile in the stats row — it may show a number of days until the
+next Hallmark event, or "Live Now" in red.
+Score: PASS if the card is present and readable.
+
+TC-007 — Elaine App Card Visible
+1. On the Hub dashboard, locate the "Elaine" or "AI Assistant" card.
+Expected: A card labeled "Elaine" is visible. It may show a "Chat" quick
+link.
+Score: PASS if the card is present.
+
+TC-008 — Pottery Card Quick Links Accordion
+1. On the Pottery app card, find and click the button at the bottom of the
+   card that says "Quick links →" (it may show a small chevron/arrow icon).
+Expected: The card expands to reveal three quick-link buttons: "Collection,"
+"Compare," and "Maintenance." These are small icon+label buttons in a row.
+2. Verify all three buttons are visible.
+3. Click the same button again (now labeled "Hide quick links") to collapse
+   the accordion.
+Expected: The quick links disappear and the card returns to its collapsed
+state.
+Score: PASS if the accordion opens, shows all three links, and closes.
+
+TC-009 — Widget Library Button
+1. On the Hub dashboard, scroll the page if needed and look for a button
+   labeled "Widgets" or a "+" icon near the widgets section, or a small
+   grid/gear icon somewhere in the header or dashboard area. It may be
+   labeled "Add widgets" or show a grid icon.
+Expected: The widget library control is visible somewhere on the dashboard.
+2. Click the button to open the Widget Library modal.
+Expected: A modal/overlay appears with a title "Widget library," a search
+box, category filter tabs (All, Collections, Tools, Media, Inspiration), and
+a grid of widget cards.
+3. Verify the modal is scrollable — scroll down in the modal to confirm more
+   widgets exist below the fold.
+4. Close the modal by clicking the "×" button in the top-right corner of the
+   modal, or by clicking outside it.
+Expected: The modal closes and you are back on the dashboard.
+Score: PASS if the modal opens, shows widgets, and closes cleanly.
+
+TC-010 — Elaine Chat Widget Visible
+1. On the Hub dashboard, look in the bottom-right corner of the screen.
+Expected: A floating chat button or bubble labeled "Elaine" or showing a
+chat/sparkle icon is visible. It may be a circular button.
+Score: PASS if the chat widget button is visible.
+
+TC-011 — Notification Bell / Messenger Icon
+1. Look in the top-right area of the Hub dashboard for notification or
+   messenger icons.
+Expected: At least one icon (bell, message bubble, or envelope) is visible.
+It may show a badge with a number if there are unread items.
+Score: PASS if at least one such icon is present.
+
+TC-012 — App Switcher
+1. Look for an "App Switcher" button — it is typically a grid icon (3×3
+   dots) or a button in the top navigation bar that allows switching between
+   Pottery, Quilting, Travels, Ornaments, Office, and Elaine.
+Expected: An app switcher control is visible.
+2. Click it to open the switcher.
+Expected: A menu or dropdown appears listing the available sub-apps.
+3. Close it without navigating (press Escape or click elsewhere).
+Score: PASS if the switcher opens and shows multiple app options.
+
+TC-013 — Hub Dashboard Widgets Display
+1. On the Hub dashboard (https://app.batchelor.app/), scroll down past all
+   the app cards.
+Expected: One or more dashboard widgets are displayed below the app cards.
+Widgets may include a Studio Weather card, an RSS feed widget, or an AI
+search widget. Each visible widget should have a title and some content.
+Score: PASS if at least one widget is visible below the app cards.
+
+TC-014 — Hallmark Event Countdown on Ornaments Card
+1. On the Hub dashboard, locate the Ornaments app card.
+2. Look inside the stats row of the Ornaments card for a colored tile
+   showing either: a countdown ("14 days," "3 days," etc.), a date range,
+   or "Live Now" in red with a pulsing dot.
+Expected: A Hallmark event countdown tile is visible in the Ornaments stat
+row. The tile background should be amber/yellow (upcoming event) or red
+(live event).
+Score: PASS if the tile is visible with countdown or live status.
+
+───────────────────────────────────────────────────────────────────────────────
+SECTION 2: ACCOUNT & SETTINGS PAGES
+───────────────────────────────────────────────────────────────────────────────
+
+TC-015 — Account Page Loads
+1. Navigate to https://app.batchelor.app/account
+Expected: The Account page loads with a header showing "← Back" or a back
+link, the Batchelor logo, and multiple sections below including profile
+information.
+Score: PASS if the page loads without error.
+
+TC-016 — Profile Section Visible
+1. On the Account page, look for a section labeled "Profile" or showing the
+   user's name and email address.
+Expected: The user's display name and email address are visible. There may
+be input fields showing the current values.
+Score: PASS if name and email are visible.
+
+TC-017 — Theme Toggle Visible
+1. On the Account page, scroll down to find a section related to Appearance
+   or Theme.
+Expected: A theme selector is visible. It should offer Light mode and Dark
+mode options (toggle buttons or radio buttons).
+Score: PASS if the theme control is visible.
+
+TC-018 — Phone / SMS Section Visible
+1. On the Account page, scroll to find a section related to Phone or SMS
+   verification.
+Expected: A section shows the current phone number (or a prompt to add one)
+and a status indicator (verified / unverified).
+Score: PASS if the phone section is visible.
+
+TC-019 — Owner Panel Link Visible and Navigates
+1. On the Account page, scroll down to find an "Owner Panel" link or button.
+Expected: A link labeled "Owner Panel" or "Settings" is visible.
+2. Click the link.
+Expected: The browser navigates to https://app.batchelor.app/owner-panel
+Score: PASS if the link is visible and navigates correctly.
+
+TC-020 — Elaine Settings Card on Account Page
+1. Navigate to https://app.batchelor.app/account
+2. Scroll down looking for an "Elaine" or "AI Assistant" settings section.
+Expected: A card or section related to Elaine/AI memory settings is visible.
+Score: PASS if the section is present.
+
+TC-021 — Back Navigation from Account to Hub
+1. On the Account page, click the back arrow or "← Back" link in the header.
+Expected: The browser navigates back to the Hub dashboard
+   (https://app.batchelor.app/).
+Score: PASS if navigation succeeds.
+
+───────────────────────────────────────────────────────────────────────────────
+SECTION 3: OWNER PANEL
+───────────────────────────────────────────────────────────────────────────────
+
+TC-022 — Owner Panel Loads
+1. Navigate to https://app.batchelor.app/owner-panel
+Expected: The Owner Panel page loads with a header showing "← Back to
+account," the Batchelor logo, an "Owner Panel" title, and a row of tab
+buttons.
+Score: PASS if the page loads without error.
+
+TC-023 — Owner Panel Tabs Visible
+1. On the Owner Panel page, locate the tab row below the title.
+Expected: At minimum a "Travels" tab is visible. As an owner, additional
+tabs should appear: "Global Config," "Control Panel," "Google APIs,"
+"Services," and "AI Evidence."
+Score: PASS if at least two tabs are visible.
+
+TC-024 — Travels Tab Content
+1. Click the "Travels" tab (it should be selected by default).
+Expected: The tab content area shows cards for Travels settings, including
+at minimum: Reminder Emails, Timezone, Gmail Sync, and Calendar Sync
+sections.
+Score: PASS if at least two settings cards are visible.
+
+TC-025 — Global Config Tab
+1. Click the "Global Config" tab.
+Expected: The tab content area changes to show a Global Configuration card
+with AI model settings, timeout sliders, or feature toggles.
+Score: PASS if content changes and configuration settings are shown.
+
+TC-026 — Control Panel Tab
+1. Click the "Control Panel" tab.
+Expected: The tab content area shows the Control Panel with a heading
+"Control Panel," a description about tuning AI settings, and a list of
+configuration modules grouped by category (e.g., OpenRouter, Travels,
+Ornaments, Web Search).
+2. Verify that configuration rows are visible, each showing a label, a type
+   badge, and a current value.
+Score: PASS if configuration rows are visible.
+
+TC-027 — Services Tab
+1. Click the "Services" tab.
+Expected: The tab content area shows a Services Catalog listing all external
+integrations (e.g., OpenAI, Supabase, Resend, Google OAuth). Each service
+entry should show its name and purpose.
+Score: PASS if a list of external service entries is visible.
+
+TC-028 — AI Evidence Tab
+1. Click the "AI Evidence" tab.
+Expected: The tab content area shows either a table of AI generation run
+statistics (columns: Module, Feature, Model, Runs, Success %, Avg ms,
+Candidates, Accepted, Rejected) or a message saying "No generation runs
+recorded yet."
+Score: PASS if the tab loads without error (either a table or empty state).
+
+TC-029 — Back Navigation from Owner Panel to Account
+1. Click the "← Back to account" link in the Owner Panel header.
+Expected: The browser navigates back to https://app.batchelor.app/account
+Score: PASS if navigation succeeds.
+
+───────────────────────────────────────────────────────────────────────────────
+SECTION 4: RECYCLE BIN
+───────────────────────────────────────────────────────────────────────────────
+
+TC-030 — Recycle Bin Page Loads
+1. Navigate to https://app.batchelor.app/recycle-bin
+Expected: The Recycle Bin page loads. It will either show a list of
+recently deleted items, or an empty state message such as "Nothing in the
+recycle bin" or similar.
+Score: PASS if the page loads without an error screen.
+
+TC-031 — Recycle Bin Back Navigation
+1. Look for a back arrow or link on the Recycle Bin page.
+2. Click it.
+Expected: The browser navigates back to the Hub or a prior page.
+Score: PASS if navigation succeeds.
+
+───────────────────────────────────────────────────────────────────────────────
+SECTION 5: POTTERY MODULE
+Base path: https://app.batchelor.app/modules/pottery
+───────────────────────────────────────────────────────────────────────────────
+
+TC-032 — Pottery Collection Loads
+1. Navigate to https://app.batchelor.app/modules/pottery
+Expected: The Pottery module loads. A sidebar or top navigation is visible
+with the Batchelor/Pottery branding. The main area shows either a grid or
+list of pottery pieces, or an empty state if no pieces exist. Each piece
+card should show a thumbnail image, a name/title, and possibly a category
+badge.
+Score: PASS if the page loads and shows either items or an empty state
+(not an error).
+
+TC-033 — Pottery Left Sidebar Navigation
+1. On the Pottery Collection page, look at the left sidebar (or top nav
+   if sidebar is collapsed).
+Expected: Navigation links are visible for the Pottery section. Look for
+items such as: Collection, Compare, Stats, Categories, Maintenance,
+Watchlist, and possibly Scan.
+2. Verify at least four navigation items are visible.
+Score: PASS if at least four nav items appear.
+
+TC-034 — Pottery Search / Filter Bar
+1. On the Pottery Collection page, look for a search bar or filter controls
+   near the top of the main content area.
+Expected: A search input field is visible, and/or filter/sort dropdowns.
+Score: PASS if a search or filter control is visible.
+
+TC-035 — Pottery Item Detail Page
+1. On the Pottery Collection page, if any pottery pieces are displayed,
+   click on any one piece (click the card/image/name).
+Expected: The browser navigates to a detail page for that piece (URL will
+be something like /modules/pottery/piece/123). The detail page shows the
+piece's name, one or more photos, and metadata fields such as category,
+glaze type, size, date acquired, and possibly AI-generated notes.
+2. Verify the page title or piece name is displayed at the top.
+3. Verify at least one photo is shown (not a broken image — it should be a
+   real photograph, not just an icon with alt text).
+4. Verify metadata fields are visible.
+5. Navigate back using the browser Back button or an in-page back link.
+Expected: You return to the Pottery Collection page.
+Score: PASS if detail page loads, shows an image and metadata, and back
+navigation works. Mark SKIP if no pottery pieces exist.
+
+TC-036 — Pottery Compare Page
+1. Navigate to https://app.batchelor.app/modules/pottery/compare
+Expected: The Pottery Compare page loads. It likely shows a search interface
+or two comparison panels where you can select pottery pieces to compare
+side-by-side, possibly with an AI visual search option.
+Score: PASS if the page loads without error (empty state or interface
+visible).
+
+TC-037 — Pottery Stats Page
+1. Navigate to https://app.batchelor.app/modules/pottery/stats
+Expected: The Pottery Stats page loads with statistical charts or summaries
+about the pottery collection (e.g., count by category, acquisition timeline,
+color breakdown).
+Score: PASS if the page loads without error.
+
+TC-038 — Pottery Categories Page
+1. Navigate to https://app.batchelor.app/modules/pottery/categories
+Expected: The Categories page loads showing a list of pottery categories
+(e.g., "Mugs," "Bowls," "Vases"). Each category may show a name, color
+dot, and item count.
+Score: PASS if the page loads and shows either categories or an empty state.
+
+TC-039 — Pottery Maintenance Page
+1. Navigate to https://app.batchelor.app/modules/pottery/maintenance
+Expected: The Maintenance page loads. It likely provides tools for bulk
+operations, re-analysis triggers, or data integrity checks.
+Score: PASS if the page loads without error.
+
+TC-040 — Pottery Watchlist Page
+1. Navigate to https://app.batchelor.app/modules/pottery/watchlist
+Expected: The Watchlist page loads, showing either a list of pottery pieces
+being tracked (wish list or eBay-linked items) or an empty state.
+Score: PASS if the page loads without error.
+
+TC-041 — Pottery Elaine Widget Present
+1. Navigate to https://app.batchelor.app/modules/pottery
+2. Look in the bottom-right corner for the Elaine floating chat button.
+Expected: The Elaine chat widget button is visible in the Pottery module.
+Score: PASS if the widget button is visible.
+
+───────────────────────────────────────────────────────────────────────────────
+SECTION 6: QUILTING MODULE
+Base path: https://app.batchelor.app/modules/quilting
+───────────────────────────────────────────────────────────────────────────────
+
+TC-042 — Quilting Fabrics Page Loads
+1. Navigate to https://app.batchelor.app/modules/quilting/fabrics
+Expected: The Quilting module loads. The main content shows either a grid
+or list of fabric swatches/entries, or an empty state. Each fabric entry
+may show a swatch color preview, fabric name, yardage, and category.
+Score: PASS if the page loads without error.
+
+TC-043 — Quilting Sidebar Navigation
+1. On the Quilting Fabrics page, look at the sidebar navigation.
+Expected: Navigation links visible for Quilting should include at minimum:
+Fabrics, Patterns, Quilts, Blocks, Layouts, Shopping, Yardage Calculator,
+and Categories.
+Score: PASS if at least five navigation items are visible.
+
+TC-044 — Fabric Detail Page
+1. On the Quilting Fabrics page, if any fabrics are displayed, click on any
+   fabric entry.
+Expected: A detail page for that fabric loads. It should show the fabric's
+name, an image or swatch, yardage, color information, and possibly
+AI-generated metadata like pattern type or dominant colors.
+2. Navigate back using the browser Back button.
+Expected: You return to the Quilting Fabrics page.
+Score: PASS if the detail page loads with content. Mark SKIP if no fabrics
+exist.
+
+TC-045 — Quilting Patterns Page
+1. Navigate to https://app.batchelor.app/modules/quilting/patterns
+Expected: The Patterns page loads showing either a list/grid of quilt
+patterns, or an empty state.
+Score: PASS if the page loads without error.
+
+TC-046 — Pattern Detail Page
+1. On the Patterns page, if any patterns are listed, click on one.
+Expected: A detail page loads showing the pattern name, image, description,
+and associated metadata.
+2. Navigate back.
+Score: PASS if the detail page loads. Mark SKIP if no patterns exist.
+
+TC-047 — Quilting Quilts Page
+1. Navigate to https://app.batchelor.app/modules/quilting/quilts
+Expected: The Quilts page loads showing either finished quilt projects or
+an empty state.
+Score: PASS if the page loads without error.
+
+TC-048 — Quilt Detail Page
+1. On the Quilts page, if any quilts are listed, click on one.
+Expected: A detail page for the quilt loads, showing the quilt name, photos,
+and associated fabrics or layout information.
+2. Navigate back.
+Score: PASS if the detail page loads. Mark SKIP if no quilts exist.
+
+TC-049 — Quilting Blocks Page
+1. Navigate to https://app.batchelor.app/modules/quilting/blocks
+Expected: The Blocks page loads. It may show a list of saved quilt block
+designs or an interface to manage blocks.
+Score: PASS if the page loads without error.
+
+TC-050 — Quilting Block Library Page
+1. Navigate to https://app.batchelor.app/modules/quilting/library/blocks
+Expected: The Block Library page loads, showing a library of pre-designed
+quilt block templates.
+Score: PASS if the page loads without error.
+
+TC-051 — Quilting Layouts Page
+1. Navigate to https://app.batchelor.app/modules/quilting/layouts
+Expected: The Layouts page loads. It should show saved quilt layout plans
+or an empty state.
+Score: PASS if the page loads without error.
+
+TC-052 — Quilting Shopping Page
+1. Navigate to https://app.batchelor.app/modules/quilting/shopping
+Expected: The Shopping page loads. It shows the quilting shopping list with
+fabric needs, quantities, and possibly links to purchase.
+Score: PASS if the page loads without error.
+
+TC-053 — Quilting Yardage Calculator
+1. Navigate to https://app.batchelor.app/modules/quilting/tools/yardage
+Expected: The Yardage Calculator page loads with form fields for entering
+block sizes, quilt dimensions, and calculating fabric requirements. The
+calculator interface (inputs, labels, possibly a results area) should be
+visible.
+Score: PASS if the page loads and the calculator interface is visible.
+
+TC-054 — Quilting Categories Page
+1. Navigate to https://app.batchelor.app/modules/quilting/categories
+Expected: The Categories page loads showing quilting categories (e.g.,
+"Cotton," "Batik," "Flannel") or an empty state.
+Score: PASS if the page loads without error.
+
+TC-055 — Quilting Compare Page
+1. Navigate to https://app.batchelor.app/modules/quilting/compare
+Expected: The Compare page loads with a visual comparison interface for
+fabrics or blocks.
+Score: PASS if the page loads without error.
+
+TC-056 — Quilting Maintenance Page
+1. Navigate to https://app.batchelor.app/modules/quilting/maintenance
+Expected: The Maintenance page loads, similar to the Pottery maintenance
+page.
+Score: PASS if the page loads without error.
+
+TC-057 — Quilting Whole Quilt List
+1. Navigate to https://app.batchelor.app/modules/quilting/whole-quilt
+Expected: The Whole Quilt list page loads, showing a list of whole-quilt
+design plans or an empty state.
+Score: PASS if the page loads without error.
+
+───────────────────────────────────────────────────────────────────────────────
+SECTION 7: TRAVELS MODULE
+Base path: https://app.batchelor.app/modules/travels
+───────────────────────────────────────────────────────────────────────────────
+
+TC-058 — Travels Dashboard Loads
+1. Navigate to https://app.batchelor.app/modules/travels
+Expected: The Travels dashboard loads inside a dedicated Travels layout
+(which may have its own sidebar or top navigation separate from the other
+modules). The main content shows an overview such as upcoming trips,
+recent activity, or key stats.
+Score: PASS if the page loads without error.
+
+TC-059 — Travels Sidebar Navigation
+1. On the Travels dashboard, locate the navigation (sidebar or top nav
+   specific to Travels).
+Expected: Navigation links visible for Travels should include at minimum:
+Dashboard/Home, Trips, Map, Explore, Wishlist, Destinations,
+Travel Calendar, Gmail (travel email scanning), and Documents.
+Score: PASS if at least five navigation items are visible.
+
+TC-060 — Travels Trips List
+1. Navigate to https://app.batchelor.app/modules/travels/trips
+Expected: The Trips page loads showing a list of trips (past, upcoming,
+or in-progress) or an empty state. Each trip entry should show a name,
+dates, and destination.
+Score: PASS if the page loads without error.
+
+TC-061 — Trip Detail Page
+1. On the Travels Trips page, if any trips are listed, click on one trip.
+Expected: The Trip Detail page loads. It should show the trip name,
+destination, dates, an itinerary section, a packing list section, and
+possibly a documents section and reservation monitoring panel.
+2. Verify the trip name appears as a heading.
+3. Look for tab labels such as "Itinerary," "Packing List," "Documents,"
+   and "Reservations."
+4. Click on the "Itinerary" tab (or whatever the first content tab is
+   labeled).
+Expected: Itinerary content is shown (or an empty state).
+5. Click on the "Packing List" tab.
+Expected: Packing list content is shown (or empty state).
+6. Navigate back to the Trips list.
+Score: PASS if detail page loads with tabs functional. Mark SKIP if no
+trips exist.
+
+TC-062 — Travels World Map
+1. Navigate to https://app.batchelor.app/modules/travels/map
+Expected: The World Map page loads, showing an interactive map. The map
+should render with geographic features visible (continents, oceans). Any
+visited or planned destinations may be highlighted with markers.
+Score: PASS if the map renders without error (a blank placeholder or empty
+map with no markers is acceptable if no destinations are set).
+
+TC-063 — Travels Explore Page
+1. Navigate to https://app.batchelor.app/modules/travels/explore
+Expected: The Explore page loads showing destination inspiration content —
+this may include RSS-fed travel articles, destination cards, or a search
+interface.
+Score: PASS if the page loads without error.
+
+TC-064 — Travels Wishlist Page
+1. Navigate to https://app.batchelor.app/modules/travels/wishlist
+Expected: The Wishlist page loads showing a list of dream destinations or
+travel wish-list items, or an empty state.
+Score: PASS if the page loads without error.
+
+TC-065 — Travels Destinations Page
+1. Navigate to https://app.batchelor.app/modules/travels/destinations
+Expected: The Destinations page loads showing a database of visited or
+planned places, or an empty state.
+Score: PASS if the page loads without error.
+
+TC-066 — Travels Travel Calendar
+1. Navigate to https://app.batchelor.app/modules/travels/travel-calendar
+Expected: The Travel Calendar page loads showing a calendar view of trips
+and travel events. The calendar may be in month, week, or list view.
+Score: PASS if the calendar renders without error.
+
+TC-067 — Travels Gmail Review
+1. Navigate to https://app.batchelor.app/modules/travels/gmail
+Expected: The Travels Gmail Review page loads. This page is for reviewing
+travel-confirmation emails pulled from Gmail. It may show email entries
+with subject, sender, and a suggested trip linkage, or an empty state if
+Gmail is not connected or no travel emails are found.
+Score: PASS if the page loads without error (including "Gmail not connected"
+or "No travel emails found" states).
+
+TC-068 — Travels Documents Page
+1. Navigate to https://app.batchelor.app/modules/travels/documents
+Expected: The Documents page loads showing travel documents (booking
+confirmations, vouchers, boarding passes) attached to trips, or an empty
+state.
+Score: PASS if the page loads without error.
+
+───────────────────────────────────────────────────────────────────────────────
+SECTION 8: ORNAMENTS MODULE
+Base path: https://app.batchelor.app/modules/ornaments
+───────────────────────────────────────────────────────────────────────────────
+
+TC-069 — Ornaments Collection Loads
+1. Navigate to https://app.batchelor.app/modules/ornaments
+Expected: The Ornaments module loads. The main area shows either a grid
+of Hallmark Keepsake ornament cards or an empty state. Each ornament card
+should show a photo thumbnail, ornament name, year, and possibly a
+series/collection label.
+Score: PASS if the page loads without error.
+
+TC-070 — Ornaments Sidebar Navigation
+1. On the Ornaments Collection page, locate the sidebar navigation.
+Expected: Navigation items visible for Ornaments should include: Collection,
+Hallmark Events, Stats, Categories, and Maintenance. (Scan may also appear
+but is mobile-oriented.)
+Score: PASS if at least four navigation items are visible.
+
+TC-071 — Ornament Detail Page
+1. On the Ornaments Collection page, if any ornaments are displayed, click
+   on any one ornament card.
+Expected: The Ornament Detail page loads. It should show the ornament's
+name, year, series/collection, a primary photo, possibly additional
+supplemental photos, AI-generated description, and metadata fields such as
+dominant colors and motifs.
+2. Verify the ornament name appears as a heading.
+3. Verify at least one photo is shown (not a broken image).
+4. Navigate back using the browser Back button.
+Score: PASS if the detail page loads with an image and heading. Mark SKIP
+if no ornaments exist.
+
+TC-072 — Ornaments Hallmark Events Page
+1. Navigate to https://app.batchelor.app/modules/ornaments/hallmark-events
+Expected: The Hallmark Events page loads. It should show a calendar or
+list view of Hallmark ornament release events, including the annual
+Keepsake Ornament Premiere (Open House) event dates. The view may have
+toggle buttons for "Month" and "List" views.
+2. If "Month" and "List" buttons are present, click "List" view.
+Expected: The view switches to a list format.
+3. Click "Month" view.
+Expected: The view switches to a calendar month grid.
+Score: PASS if the page loads and view toggles work.
+
+TC-073 — Ornaments Stats Page
+1. Navigate to https://app.batchelor.app/modules/ornaments/stats
+Expected: The Stats page loads showing statistics about the ornament
+collection (e.g., total count, count by year, count by series, color
+distribution).
+Score: PASS if the page loads without error.
+
+TC-074 — Ornaments Categories Page
+1. Navigate to https://app.batchelor.app/modules/ornaments/categories
+Expected: The Categories page loads showing ornament categories or an
+empty state.
+Score: PASS if the page loads without error.
+
+TC-075 — Ornaments Maintenance Page
+1. Navigate to https://app.batchelor.app/modules/ornaments/maintenance
+Expected: The Maintenance page loads for the Ornaments module.
+Score: PASS if the page loads without error.
+
+───────────────────────────────────────────────────────────────────────────────
+SECTION 9: OFFICE MODULE
+Base path: https://app.batchelor.app/modules/office
+───────────────────────────────────────────────────────────────────────────────
+
+TC-076 — Office Gmail Page Loads
+1. Navigate to https://app.batchelor.app/modules/office/gmail
+Expected: The Office Gmail page loads. This is a full Gmail inbox view
+(not the travel-specific Gmail review). It should show either an inbox
+with emails listed (sender, subject, date), or a "Gmail not connected"
+message if no Gmail account is linked.
+Score: PASS if the page loads without error.
+
+TC-077 — Office Sidebar Navigation
+1. On the Office Gmail page, locate the Office sidebar or navigation.
+Expected: Navigation items for the Office module should include: Gmail
+(Inbox), Calendar, Notes, and Messenger.
+Score: PASS if at least three navigation items are visible.
+
+TC-078 — Office Calendar Page
+1. Navigate to https://app.batchelor.app/modules/office/calendar
+Expected: The Office Calendar page loads showing a unified calendar view
+of all connected Google Calendars. The calendar may be in month, week, or
+day view. Event entries (if any) should be visible as colored blocks or
+list items.
+Score: PASS if the calendar renders without error.
+
+TC-079 — Office Notes Page
+1. Navigate to https://app.batchelor.app/modules/office/notes
+Expected: The Notes page loads showing a shared household scratchpad with
+existing notes, or an empty state.
+Score: PASS if the page loads without error.
+
+TC-080 — Office Messenger Page
+1. Navigate to https://app.batchelor.app/modules/office/messenger
+Expected: The Messenger page loads showing the household chat/messaging
+interface with message threads, or an empty state.
+Score: PASS if the page loads without error.
+
+───────────────────────────────────────────────────────────────────────────────
+SECTION 10: ELAINE AI ASSISTANT APP
+Base path: https://app.batchelor.app/elaine
+───────────────────────────────────────────────────────────────────────────────
+
+TC-081 — Elaine Chat Page Loads
+1. Navigate to https://app.batchelor.app/elaine/
+Expected: The Elaine AI assistant app loads. The main view is a chat
+interface with a text input at the bottom and a conversation area in the
+center. Previous messages (if any) may be visible as chat bubbles.
+Score: PASS if the page loads and a text input field is visible.
+
+TC-082 — Elaine Chat Input Box Visible
+1. On the Elaine Chat page, locate the text input area at the bottom.
+Expected: A text input field or text area is visible, likely with placeholder
+text such as "Ask Elaine…" or "Message Elaine."
+Score: PASS if the input field is present (you can click into it — just
+do not type or send anything).
+
+TC-083 — Elaine Memory Page
+1. Navigate to https://app.batchelor.app/elaine/memory
+Expected: The Elaine Memory page loads. It shows what Elaine "remembers"
+about the household — stored facts, preferences, and context that Elaine
+uses to personalize responses. This may appear as a list of memory entries
+or an empty state if no memories are stored.
+Score: PASS if the page loads without error.
+
+TC-084 — Elaine Navigation Between Chat and Memory
+1. On the Elaine Memory page, look for a navigation link back to Chat.
+Expected: A link or button labeled "Chat" or a nav item is visible.
+2. Click it.
+Expected: The browser navigates to the Elaine Chat page
+   (https://app.batchelor.app/elaine/).
+Score: PASS if navigation between Chat and Memory works.
+
+───────────────────────────────────────────────────────────────────────────────
+SECTION 11: CROSS-APP NAVIGATION
+───────────────────────────────────────────────────────────────────────────────
+
+TC-085 — Hub → Pottery via App Card
+1. Navigate to https://app.batchelor.app/
+2. Click anywhere on the Pottery app card body (not the "Quick links →"
+   button, but the card itself — the image banner area or the footer
+   "Open collection" link).
+Expected: The browser navigates to the Pottery Collection page
+   (https://app.batchelor.app/modules/pottery).
+Score: PASS if navigation succeeds.
+
+TC-086 — Pottery → Hub via Sidebar/Logo
+1. While on the Pottery Collection page, look for a way to return to the
+   Hub. This could be a home icon, the Batchelor logo, or an App Switcher
+   button in the sidebar or header.
+2. Click the element that appears to navigate to the Hub or home.
+Expected: The browser navigates to https://app.batchelor.app/
+Score: PASS if navigation to the Hub succeeds.
+
+TC-087 — Hub → Travels via App Card
+1. Navigate to https://app.batchelor.app/
+2. Click the Travels app card body.
+Expected: The browser navigates to the Travels module
+   (https://app.batchelor.app/modules/travels).
+Score: PASS if navigation succeeds.
+
+TC-088 — Hub → Quilting via App Card
+1. Navigate to https://app.batchelor.app/
+2. Click the Quilting app card body.
+Expected: The browser navigates to the Quilting module
+   (https://app.batchelor.app/modules/quilting or /modules/quilting/fabrics).
+Score: PASS if navigation succeeds.
+
+TC-089 — Hub → Ornaments via App Card
+1. Navigate to https://app.batchelor.app/
+2. Click the Ornaments app card body.
+Expected: The browser navigates to the Ornaments module
+   (https://app.batchelor.app/modules/ornaments).
+Score: PASS if navigation succeeds.
+
+TC-090 — Hub → Elaine via App Card
+1. Navigate to https://app.batchelor.app/
+2. Click the Elaine app card or an "Open Elaine" / "Chat" link.
+Expected: The browser navigates to the Elaine app
+   (https://app.batchelor.app/elaine/).
+Score: PASS if navigation succeeds.
+
+TC-091 — Modules App Switcher Between Pottery and Quilting
+1. Navigate to https://app.batchelor.app/modules/pottery
+2. Locate the App Switcher in the sidebar or header within the modules
+   shell (this may be a grid icon, a list of module names, or a dropdown).
+3. Click the switcher to open it.
+Expected: A list of module options appears: Pottery, Quilting, Travels,
+Ornaments, Office.
+4. Click "Quilting" from the switcher.
+Expected: The browser navigates to the Quilting module without reloading
+the entire page shell (the sidebar stays, only the main content changes).
+Score: PASS if the switcher is present and Quilting navigation works.
+
+TC-092 — Pottery to Travels via Sidebar Switcher
+1. While on any Pottery page, use the sidebar app switcher to switch to
+   the Travels module.
+Expected: The browser navigates to the Travels dashboard
+   (https://app.batchelor.app/modules/travels).
+Score: PASS if navigation succeeds.
+
+───────────────────────────────────────────────────────────────────────────────
+SECTION 12: UI ELEMENTS AND GLOBAL FEATURES
+───────────────────────────────────────────────────────────────────────────────
+
+TC-093 — Theme Toggle (Light/Dark Mode)
+1. On the Hub dashboard, find the Light/Dark mode toggle. Look in the
+   top-right area for a sun (☀) or moon (🌙) icon.
+2. Click the toggle to switch themes.
+Expected: The page immediately switches from light to dark mode (or vice
+versa) — background becomes dark and text becomes light, or vice versa.
+3. Click the toggle again to restore the original theme.
+Expected: The page switches back.
+Score: PASS if the theme toggle switches the page appearance in both
+directions.
+
+TC-094 — Command Palette (Keyboard Shortcut)
+1. Navigate to any page within the modules app
+   (e.g., https://app.batchelor.app/modules/pottery).
+2. Press the keyboard shortcut Ctrl+K (or Cmd+K on Mac).
+Expected: A command palette overlay appears — a modal with a search
+box and a list of commands or page shortcuts.
+3. Press Escape to close it.
+Expected: The command palette closes.
+Score: PASS if the palette opens and closes.
+
+TC-095 — Notification Bell Interaction
+1. Navigate to https://app.batchelor.app/modules/pottery (or any module
+   page).
+2. Look for a bell icon in the header or sidebar.
+3. Click the bell icon.
+Expected: A dropdown or panel appears showing notifications or a "No new
+notifications" message.
+4. Click elsewhere or press Escape to close it.
+Score: PASS if the bell icon is clickable and shows some content.
+
+TC-096 — 404 Not Found Page
+1. Navigate to https://app.batchelor.app/this-page-does-not-exist-xyz
+Expected: A "Not Found" or "404" page appears — the app's custom error
+page, not the browser's default error page. It should have the Batchelor
+branding and a link to go back home.
+Score: PASS if the custom 404 page renders.
+
+TC-097 — Elaine Widget Opens and Closes from Module Page
+1. Navigate to https://app.batchelor.app/modules/travels
+2. Click the Elaine floating chat button in the bottom-right corner.
+Expected: An Elaine chat panel or drawer slides open (or expands) in the
+corner of the page, showing a text input and possibly a greeting message.
+3. Close the panel by clicking the X button or clicking outside it.
+Expected: The panel closes.
+Score: PASS if the widget opens and closes from within a module page.
+
+TC-098 — Elaine Widget Opens and Closes from Hub
+1. Navigate to https://app.batchelor.app/
+2. Click the Elaine floating chat button in the bottom-right corner.
+Expected: An Elaine chat panel or drawer opens, showing a text input and
+Elaine branding.
+3. Close the panel.
+Expected: The panel closes and you are back on the Hub dashboard.
+Score: PASS if the widget opens and closes from the Hub.
+
+TC-099 — Images Load Correctly (No Broken Images)
+1. Navigate to https://app.batchelor.app/modules/pottery (if pottery items
+   exist with photos).
+2. Scroll through the collection grid.
+Expected: All item thumbnail images display as actual photographs — not
+a broken image icon (a small box with a torn-corner icon) or a box showing
+the image's alt text label instead of the image itself.
+3. Repeat for https://app.batchelor.app/modules/ornaments if ornament items
+   exist.
+Score: PASS if no broken images are visible. Mark SKIP if no items with
+photos exist in either collection.
+
+TC-100 — Responsive Sidebar Collapse and Expand
+1. On any module page
+   (e.g., https://app.batchelor.app/modules/pottery), locate a button that
+   collapses or expands the left sidebar. It may be a hamburger (≡) icon, a
+   chevron (‹), or a sidebar toggle button.
+2. Click it to collapse the sidebar.
+Expected: The sidebar collapses (icons only, or fully hidden) and the main
+content area expands.
+3. Click it again to expand the sidebar.
+Expected: The sidebar returns to its full width with labels visible.
+Score: PASS if the sidebar toggles correctly in both directions.
+
+TC-101 — Barcode Lookup Page Loads
+1. Navigate to https://app.batchelor.app/modules/barcode-lookup
+Expected: A Barcode Lookup page loads. It should show a form or input
+field for entering a UPC/barcode number (not a camera scan — a text input).
+Score: PASS if the page loads with an input field visible.
+
+───────────────────────────────────────────────────────────────────────────────
+═══════════════════════════════════════════════════════════════════════════════
+SCORING CARD
+═══════════════════════════════════════════════════════════════════════════════
+
+INSTRUCTIONS: For each test case, write PASS, FAIL, or SKIP in the [ ] box.
+SKIP = not applicable (no data existed to test with). Skips do not count
+against the score and do not reduce the denominator.
+
+  Final Score = (# PASS) / (101 − # SKIP) × 100  [as a percentage]
+
+─────────────────────────────────────────────────────────────────────────────
+SECTION 1: HUB DASHBOARD
+  TC-001  Hub Dashboard Loads ............................................. [ ]
+  TC-002  User Avatar / Account Menu Visible .............................. [ ]
+  TC-003  Pottery App Card Visible ........................................ [ ]
+  TC-004  Quilting App Card Visible ....................................... [ ]
+  TC-005  Travels App Card Visible ........................................ [ ]
+  TC-006  Ornaments App Card Visible ...................................... [ ]
+  TC-007  Elaine App Card Visible ......................................... [ ]
+  TC-008  Pottery Card Quick Links Accordion .............................. [ ]
+  TC-009  Widget Library Button and Modal ................................. [ ]
+  TC-010  Elaine Chat Widget Visible (Hub bottom-right) ................... [ ]
+  TC-011  Notification Bell / Messenger Icon .............................. [ ]
+  TC-012  App Switcher .................................................... [ ]
+  TC-013  Hub Dashboard Widgets Display ................................... [ ]
+  TC-014  Hallmark Event Countdown on Ornaments Card ...................... [ ]
+
+SECTION 2: ACCOUNT & SETTINGS
+  TC-015  Account Page Loads .............................................. [ ]
+  TC-016  Profile Section Visible ......................................... [ ]
+  TC-017  Theme Toggle Visible (Account Page) ............................. [ ]
+  TC-018  Phone / SMS Section Visible ..................................... [ ]
+  TC-019  Owner Panel Link Visible and Navigates .......................... [ ]
+  TC-020  Elaine Settings Card on Account Page ............................ [ ]
+  TC-021  Back Navigation from Account to Hub ............................. [ ]
+
+SECTION 3: OWNER PANEL
+  TC-022  Owner Panel Loads ............................................... [ ]
+  TC-023  Owner Panel Tabs Visible ........................................ [ ]
+  TC-024  Travels Tab Content ............................................. [ ]
+  TC-025  Global Config Tab ............................................... [ ]
+  TC-026  Control Panel Tab ............................................... [ ]
+  TC-027  Services Tab .................................................... [ ]
+  TC-028  AI Evidence Tab ................................................. [ ]
+  TC-029  Back Navigation from Owner Panel to Account ..................... [ ]
+
+SECTION 4: RECYCLE BIN
+  TC-030  Recycle Bin Page Loads .......................................... [ ]
+  TC-031  Recycle Bin Back Navigation ..................................... [ ]
+
+SECTION 5: POTTERY MODULE
+  TC-032  Pottery Collection Loads ........................................ [ ]
+  TC-033  Pottery Left Sidebar Navigation ................................. [ ]
+  TC-034  Pottery Search / Filter Bar ..................................... [ ]
+  TC-035  Pottery Item Detail Page ........................................ [ ]
+  TC-036  Pottery Compare Page ............................................ [ ]
+  TC-037  Pottery Stats Page .............................................. [ ]
+  TC-038  Pottery Categories Page ......................................... [ ]
+  TC-039  Pottery Maintenance Page ........................................ [ ]
+  TC-040  Pottery Watchlist Page .......................................... [ ]
+  TC-041  Pottery Elaine Widget Present ................................... [ ]
+
+SECTION 6: QUILTING MODULE
+  TC-042  Quilting Fabrics Page Loads ..................................... [ ]
+  TC-043  Quilting Sidebar Navigation ..................................... [ ]
+  TC-044  Fabric Detail Page .............................................. [ ]
+  TC-045  Quilting Patterns Page .......................................... [ ]
+  TC-046  Pattern Detail Page ............................................. [ ]
+  TC-047  Quilting Quilts Page ............................................ [ ]
+  TC-048  Quilt Detail Page ............................................... [ ]
+  TC-049  Quilting Blocks Page ............................................ [ ]
+  TC-050  Quilting Block Library Page ..................................... [ ]
+  TC-051  Quilting Layouts Page ........................................... [ ]
+  TC-052  Quilting Shopping Page .......................................... [ ]
+  TC-053  Quilting Yardage Calculator ..................................... [ ]
+  TC-054  Quilting Categories Page ........................................ [ ]
+  TC-055  Quilting Compare Page ........................................... [ ]
+  TC-056  Quilting Maintenance Page ....................................... [ ]
+  TC-057  Quilting Whole Quilt List ....................................... [ ]
+
+SECTION 7: TRAVELS MODULE
+  TC-058  Travels Dashboard Loads ......................................... [ ]
+  TC-059  Travels Sidebar Navigation ...................................... [ ]
+  TC-060  Travels Trips List .............................................. [ ]
+  TC-061  Trip Detail Page (with tabs) .................................... [ ]
+  TC-062  Travels World Map ............................................... [ ]
+  TC-063  Travels Explore Page ............................................ [ ]
+  TC-064  Travels Wishlist Page ........................................... [ ]
+  TC-065  Travels Destinations Page ....................................... [ ]
+  TC-066  Travels Travel Calendar ......................................... [ ]
+  TC-067  Travels Gmail Review ............................................ [ ]
+  TC-068  Travels Documents Page .......................................... [ ]
+
+SECTION 8: ORNAMENTS MODULE
+  TC-069  Ornaments Collection Loads ...................................... [ ]
+  TC-070  Ornaments Sidebar Navigation .................................... [ ]
+  TC-071  Ornament Detail Page ............................................ [ ]
+  TC-072  Ornaments Hallmark Events Page (with view toggle) ............... [ ]
+  TC-073  Ornaments Stats Page ............................................ [ ]
+  TC-074  Ornaments Categories Page ....................................... [ ]
+  TC-075  Ornaments Maintenance Page ...................................... [ ]
+
+SECTION 9: OFFICE MODULE
+  TC-076  Office Gmail Page Loads ......................................... [ ]
+  TC-077  Office Sidebar Navigation ....................................... [ ]
+  TC-078  Office Calendar Page ............................................ [ ]
+  TC-079  Office Notes Page ............................................... [ ]
+  TC-080  Office Messenger Page ........................................... [ ]
+
+SECTION 10: ELAINE APP
+  TC-081  Elaine Chat Page Loads .......................................... [ ]
+  TC-082  Elaine Chat Input Box Visible ................................... [ ]
+  TC-083  Elaine Memory Page .............................................. [ ]
+  TC-084  Elaine Navigation Between Chat and Memory ....................... [ ]
+
+SECTION 11: CROSS-APP NAVIGATION
+  TC-085  Hub → Pottery via App Card ...................................... [ ]
+  TC-086  Pottery → Hub via Sidebar/Logo ................................. [ ]
+  TC-087  Hub → Travels via App Card ...................................... [ ]
+  TC-088  Hub → Quilting via App Card ..................................... [ ]
+  TC-089  Hub → Ornaments via App Card .................................... [ ]
+  TC-090  Hub → Elaine via App Card ....................................... [ ]
+  TC-091  Modules App Switcher: Pottery → Quilting ........................ [ ]
+  TC-092  Modules App Switcher: Pottery → Travels ......................... [ ]
+
+SECTION 12: UI ELEMENTS AND GLOBAL FEATURES
+  TC-093  Theme Toggle Light/Dark Mode .................................... [ ]
+  TC-094  Command Palette (Ctrl+K / Cmd+K) ................................ [ ]
+  TC-095  Notification Bell Interaction ................................... [ ]
+  TC-096  404 Not Found Custom Page ....................................... [ ]
+  TC-097  Elaine Widget Opens/Closes from Module Page ..................... [ ]
+  TC-098  Elaine Widget Opens/Closes from Hub ............................. [ ]
+  TC-099  Images Load Correctly (No Broken Images) ........................ [ ]
+  TC-100  Responsive Sidebar Collapse and Expand .......................... [ ]
+  TC-101  Barcode Lookup Page Loads ....................................... [ ]
+
+─────────────────────────────────────────────────────────────────────────────
+
+TOTALS SUMMARY
+  Total test cases:              101
+  Passed:                        ___
+  Failed:                        ___
+  Skipped (no data):             ___
+  Adjusted denominator:          ___ (101 minus # Skipped)
+  Final Score:                   ___% (Passed ÷ Adjusted denominator × 100)
+
+FAILURE LOG (describe each FAIL briefly)
+  TC-___: ______________________________________________________________
+  TC-___: ______________________________________________________________
+  TC-___: ______________________________________________________________
+  TC-___: ______________________________________________________________
+  TC-___: ______________________________________________________________
+  TC-___: ______________________________________________________________
+  TC-___: ______________________________________________________________
+  TC-___: ______________________________________________________________
+
+═══════════════════════════════════════════════════════════════════════════════
+END OF TEST PLAN — BATCHELOR APP UI/UX NAVIGATION TEST v1.0
+═══════════════════════════════════════════════════════════════════════════════

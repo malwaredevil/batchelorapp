@@ -520,6 +520,8 @@ export function CalendarSyncCard({
     useListCalendars<CalendarListItem[]>({
       query: {
         enabled: !!status?.connected,
+        retry: false,
+        throwOnError: false,
         queryKey: getListCalendarsQueryKey(),
       },
     });

@@ -197,7 +197,7 @@ router.get("/google-calendar/calendars", requireAuth, async (req, res) => {
   const userId = req.session.userId!;
   const accessToken = await getValidAccessToken(userId);
   if (!accessToken) {
-    res.status(409).json({ error: "Google Calendar is not connected." });
+    res.status(404).json({ error: "Google Calendar is not connected." });
     return;
   }
   try {

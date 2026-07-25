@@ -50,12 +50,31 @@ const BLOCKED_HOSTNAMES = new Set([
   "169.254.169.254",
 ]);
 
+type LookupAddress = { address: string; family: number };
+
 type LookupCallback = (
   err: NodeJS.ErrnoException | null,
   address: string,
   family: number,
 ) => void;
 
+type LookupAllCallback = (
+  err: NodeJS.ErrnoException | null,
+  addresses: LookupAddress[],
+) => void;
+
+/**
+ * Custom DNS lookup that checks all resolved addresses against the SSRF
+ * block-list before allowing the connection to proceed.
+ *
+ * Node.js passes options.all = true when it calls a custom lookup function so
+ * that it can try each resolved address in sequence (connection-fallback). In
+ * that case the callback must be called with the array form
+ * (null, [{address, family}]).  When options.all is falsy, it expects the
+ * single-address form (null, address, family).  Mixing the two forms causes
+ * Node.js to silently receive `undefined` as the IP, producing an
+ * ERR_INVALID_IP_ADDRESS error.
+ */
 function safeLookup(
   hostname: string,
   options: {
@@ -73,8 +92,8 @@ function safeLookup(
     }
 
     const list = Array.isArray(addresses)
-      ? (addresses as { address: string; family: number }[])
-      : ([addresses] as unknown as { address: string; family: number }[]);
+      ? (addresses as LookupAddress[])
+      : ([addresses] as unknown as LookupAddress[]);
 
     for (const { address, family } of list) {
       if (isPrivateAddress(address, family as 4 | 6)) {
@@ -87,9 +106,104 @@ function safeLookup(
       }
     }
 
-    const first = list[0];
-    callback(null, first.address, first.family);
+    if (options.all) {
+      // Node.js expects the array form when it passed all:true
+      (callback as unknown as LookupAllCallback)(null, list);
+    } else {
+      const first = list[0];
+      callback(null, first.address, first.family);
+    }
   });
+}
+
+/** Validate a URL's hostname/IP against SSRF rules. Throws on block. */
+export function assertSsrfSafe(url: URL): void {
+  const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+
+  if (BLOCKED_HOSTNAMES.has(hostname) || hostname.endsWith(".local")) {
+    throw new Error("URL hostname is not allowed");
+  }
+
+  const ipVersion = isIP(hostname);
+  if (ipVersion === 4 && isPrivateAddress(hostname, 4)) {
+    throw new Error("URL resolves to a private address");
+  }
+  if (ipVersion === 6 && isPrivateAddress(hostname, 6)) {
+    throw new Error("URL resolves to a private address");
+  }
+}
+
+/**
+ * Full DNS-resolving SSRF validation for a hostname.
+ *
+ * `assertSsrfSafe` only blocks literal private IPs and a fixed hostname
+ * blocklist. This function additionally resolves the hostname via DNS and
+ * verifies that every returned address falls outside all private/reserved
+ * ranges — preventing SSRF via a hostname that ultimately points inward.
+ *
+ * Use this before forwarding a user-supplied URL to any third-party proxy,
+ * so the proxy cannot be used as an amplifier to probe internal services.
+ *
+ * Throws if the hostname is blocked by the static rules, if DNS resolution
+ * fails (fail-closed), or if any resolved address is private/reserved.
+ */
+export async function assertSsrfSafeDns(hostname: string): Promise<void> {
+  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+
+  if (BLOCKED_HOSTNAMES.has(normalized) || normalized.endsWith(".local")) {
+    throw new Error("URL hostname is not allowed");
+  }
+
+  const ipVersion = isIP(normalized);
+  if (ipVersion === 4) {
+    if (isPrivateAddress(normalized, 4))
+      throw new Error("URL resolves to a private address");
+    return;
+  }
+  if (ipVersion === 6) {
+    if (isPrivateAddress(normalized, 6))
+      throw new Error("URL resolves to a private address");
+    return;
+  }
+
+  const DNS_TIMEOUT_MS = 2000;
+
+  const dnsPromise = new Promise<void>((resolve, reject) => {
+    dnsLookup(normalized, { all: true }, (err, addresses) => {
+      if (err) {
+        reject(
+          new Error(
+            `DNS lookup failed for ${normalized}: ${err.message} — blocked`,
+          ),
+        );
+        return;
+      }
+      const list: LookupAddress[] = Array.isArray(addresses)
+        ? (addresses as LookupAddress[])
+        : [];
+      for (const { address, family } of list) {
+        if (isPrivateAddress(address, family as 4 | 6)) {
+          reject(
+            new Error(
+              `Blocked: ${normalized} resolves to ${address} (private/reserved range)`,
+            ),
+          );
+          return;
+        }
+      }
+      resolve();
+    });
+  });
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(
+      () =>
+        reject(new Error(`DNS lookup timed out for ${normalized} — blocked`)),
+      DNS_TIMEOUT_MS,
+    );
+  });
+
+  await Promise.race([dnsPromise, timeoutPromise]);
 }
 
 const FETCH_ABSOLUTE_TIMEOUT_MS = 12_000;
@@ -112,19 +226,7 @@ export async function fetchPageText(
   options: SafeFetchOptions = {},
 ): Promise<string> {
   const parsed = new URL(url);
-  const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-
-  if (BLOCKED_HOSTNAMES.has(hostname) || hostname.endsWith(".local")) {
-    throw new Error("URL hostname is not allowed");
-  }
-
-  const ipVersion = isIP(hostname);
-  if (ipVersion === 4 && isPrivateAddress(hostname, 4)) {
-    throw new Error("URL resolves to a private address");
-  }
-  if (ipVersion === 6 && isPrivateAddress(hostname, 6)) {
-    throw new Error("URL resolves to a private address");
-  }
+  assertSsrfSafe(parsed);
 
   let destroyReq: (() => void) | null = null;
 
@@ -223,19 +325,7 @@ export async function fetchJsonSafe<T = unknown>(
   } = {},
 ): Promise<T> {
   const parsed = new URL(url);
-  const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-
-  if (BLOCKED_HOSTNAMES.has(hostname) || hostname.endsWith(".local")) {
-    throw new Error("URL hostname is not allowed");
-  }
-
-  const ipVersion = isIP(hostname);
-  if (ipVersion === 4 && isPrivateAddress(hostname, 4)) {
-    throw new Error("URL resolves to a private address");
-  }
-  if (ipVersion === 6 && isPrivateAddress(hostname, 6)) {
-    throw new Error("URL resolves to a private address");
-  }
+  assertSsrfSafe(parsed);
 
   let destroyReq: (() => void) | null = null;
   const absoluteTimeoutMs = options.timeoutMs ?? FETCH_ABSOLUTE_TIMEOUT_MS;
@@ -326,37 +416,27 @@ export function isSafeFetchBlockedError(err: unknown): boolean {
 }
 
 /**
- * Fetches a URL and returns the raw HTML body — suitable for og:meta tag
- * extraction. Uses the same SSRF-safe DNS resolver and IP-block-list as
- * fetchPageText so no private/reserved destinations can be reached.
- * Unlike the native fetch() API this function blocks all 3xx redirects.
- *
- * Returns an empty string if the response Content-Type is not text/html or
- * if the request fails for any reason (caller handles null/empty gracefully).
+ * Makes a single SSRF-safe HTTP/HTTPS request and returns the response
+ * metadata (statusCode, location header, content-type) and body. Used
+ * internally by fetchHtmlSafe to support redirect following.
  */
-export async function fetchHtmlSafe(
-  url: string,
-  timeoutMs?: number,
-): Promise<string> {
-  const parsed = new URL(url);
-  const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-
-  if (BLOCKED_HOSTNAMES.has(hostname) || hostname.endsWith(".local")) {
-    throw new Error("URL hostname is not allowed");
-  }
-
-  const ipVersion = isIP(hostname);
-  if (ipVersion === 4 && isPrivateAddress(hostname, 4)) {
-    throw new Error("URL resolves to a private address");
-  }
-  if (ipVersion === 6 && isPrivateAddress(hostname, 6)) {
-    throw new Error("URL resolves to a private address");
-  }
-
-  const absoluteTimeoutMs = timeoutMs ?? FETCH_ABSOLUTE_TIMEOUT_MS;
+async function fetchHtmlOnce(
+  parsed: URL,
+  timeoutMs: number,
+): Promise<{
+  statusCode: number;
+  location: string | null;
+  ct: string;
+  body: string;
+}> {
   let destroyReq: (() => void) | null = null;
 
-  const fetchPromise = new Promise<string>((resolve, reject) => {
+  const fetchPromise = new Promise<{
+    statusCode: number;
+    location: string | null;
+    ct: string;
+    body: string;
+  }>((resolve, reject) => {
     const mod = parsed.protocol === "https:" ? https : http;
     const port = parsed.port
       ? Number(parsed.port)
@@ -379,26 +459,26 @@ export async function fetchHtmlSafe(
     };
 
     const req = mod.request(reqOptions, (res) => {
-      if (
-        res.statusCode !== undefined &&
-        res.statusCode >= 300 &&
-        res.statusCode < 400
-      ) {
-        res.destroy();
-        reject(new Error(`Redirect not followed (${res.statusCode})`));
-        return;
-      }
-
-      if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
-        res.destroy();
-        resolve("");
-        return;
-      }
-
+      const statusCode = res.statusCode ?? 0;
+      const location =
+        typeof res.headers.location === "string" ? res.headers.location : null;
       const ct = res.headers["content-type"] ?? "";
+
+      if (statusCode >= 300 && statusCode < 400) {
+        res.destroy();
+        resolve({ statusCode, location, ct, body: "" });
+        return;
+      }
+
+      if (statusCode < 200 || statusCode >= 300) {
+        res.destroy();
+        resolve({ statusCode, location, ct, body: "" });
+        return;
+      }
+
       if (!ct.includes("text/html")) {
         res.destroy();
-        resolve("");
+        resolve({ statusCode, location, ct, body: "" });
         return;
       }
 
@@ -408,7 +488,7 @@ export async function fetchHtmlSafe(
         body += chunk;
         if (body.length > MAX_BODY_BYTES) res.destroy();
       });
-      res.on("end", () => resolve(body));
+      res.on("end", () => resolve({ statusCode, location, ct, body }));
       res.on("error", reject);
     });
 
@@ -426,10 +506,73 @@ export async function fetchHtmlSafe(
     setTimeout(() => {
       destroyReq?.();
       reject(new Error("Request timed out"));
-    }, absoluteTimeoutMs);
+    }, timeoutMs);
   });
 
   return Promise.race([fetchPromise, deadlinePromise]);
+}
+
+/**
+ * Fetches a URL and returns the raw HTML body — suitable for og:meta tag
+ * extraction. Uses the same SSRF-safe DNS resolver and IP-block-list as
+ * fetchPageText so no private/reserved destinations can be reached.
+ *
+ * Follows up to MAX_REDIRECTS redirects, re-validating each destination URL
+ * through the SSRF block-list before connecting. Only http: and https: redirect
+ * targets are followed; anything else is treated as an error.
+ *
+ * Returns an empty string if the response Content-Type is not text/html or
+ * if the request fails for any reason (caller handles null/empty gracefully).
+ */
+const MAX_REDIRECTS = 5;
+
+export async function fetchHtmlSafe(
+  url: string,
+  timeoutMs?: number,
+): Promise<string> {
+  const totalMs = timeoutMs ?? FETCH_ABSOLUTE_TIMEOUT_MS;
+  const deadlineTs = Date.now() + totalMs;
+
+  let currentUrl = url;
+  let redirectsFollowed = 0;
+
+  while (true) {
+    const parsed = new URL(currentUrl);
+
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      throw new Error("URL protocol is not allowed");
+    }
+
+    assertSsrfSafe(parsed);
+
+    const remainingMs = deadlineTs - Date.now();
+    if (remainingMs <= 0) return "";
+
+    const result = await fetchHtmlOnce(parsed, remainingMs);
+
+    if (result.statusCode >= 300 && result.statusCode < 400) {
+      if (!result.location) {
+        return "";
+      }
+      if (redirectsFollowed >= MAX_REDIRECTS) {
+        return "";
+      }
+      let nextUrl: URL;
+      try {
+        nextUrl = new URL(result.location, currentUrl);
+      } catch {
+        return "";
+      }
+      if (!["http:", "https:"].includes(nextUrl.protocol)) {
+        return "";
+      }
+      redirectsFollowed++;
+      currentUrl = nextUrl.toString();
+      continue;
+    }
+
+    return result.body;
+  }
 }
 
 /** True if an error thrown by fetchHtmlSafe represents an SSRF/policy block. */

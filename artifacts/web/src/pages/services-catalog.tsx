@@ -239,6 +239,17 @@ const SERVICES: ServiceEntry[] = [
     modules: ["Office", "Elaine"],
     env: [],
   },
+  {
+    name: "Microlink.io API",
+    purpose: "Link preview fallback for sites that block cloud/datacenter IPs",
+    usedFor:
+      "Called as a last-resort fallback when direct HTML scraping fails for a fixed allowlist of major news and booking sites (BBC, NYTimes, Wikipedia, booking.com, etc.) that block server-side fetches. Free tier is used by default; set MICROLINK_API_KEY to switch to the paid tier and remove per-IP rate limits. Arbitrary user-supplied domains are never proxied — only the hardcoded allowlist is eligible.",
+    implementedIn: [
+      "artifacts/api-server/src/routes/messenger/link-preview.ts",
+    ],
+    modules: ["Office", "Elaine"],
+    env: ["MICROLINK_API_KEY"],
+  },
 ];
 
 const MODULE_COLORS: Record<Module, string> = {

@@ -99,6 +99,8 @@ overrides:
   esbuild>@esbuild/win32-x64: "-"
   "brace-expansion@^2": "^2.1.2"
   "brace-expansion@^5": "^5.0.8"
+  filelist: ">=2.0.2 <3" # GHSA-mh99: transitively pulls minimatch@^10 which has no brace-expansion dep
+  jake: ">=12.10.1 <13" # required by ejs; v12 uses filelist@^2, eliminating brace-expansion@^2 chain
   body-parser: ">=2.3.0"
   js-yaml: 4.3.0
   lightningcss>lightningcss-android-arm64: "-"

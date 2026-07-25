@@ -691,7 +691,10 @@ describe("POST /api/agentphone/webhook — 10DLC keyword handling", () => {
 });
 
 describe("POST /api/agentphone/webhook — missing required headers", () => {
-  it("returns 400 when X-Webhook-ID is absent (but signature is otherwise valid)", async () => {
+  it("accepts a request with no X-Webhook-ID (dedup now uses content hash, not delivery ID)", async () => {
+    // X-Webhook-ID is now logging-only; the dedup key is the SHA-256 of the
+    // HMAC-signed material (timestamp + body). A missing ID is acceptable and
+    // must not cause a 400 — the request is processed normally.
     const body = JSON.stringify({ event: "other.event" });
     const ts = freshTimestamp();
     const sig = signPayload(ts, body);
@@ -702,11 +705,11 @@ describe("POST /api/agentphone/webhook — missing required headers", () => {
       .set({
         "x-webhook-timestamp": ts,
         "x-webhook-signature": sig,
-        // Deliberately omitting x-webhook-id
+        // Deliberately omitting x-webhook-id — should still succeed
       })
       .set("Content-Type", "application/json")
       .send(body);
 
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(200);
   });
 });

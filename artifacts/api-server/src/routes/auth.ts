@@ -689,44 +689,26 @@ router.post("/auth/forgot-password", loginLimiter, async (req, res) => {
 
       const expiresAt = new Date(Date.now() + THIRTY_MINUTES_MS);
 
-      // Atomically revoke any outstanding tokens and issue a fresh one inside
-      // a single transaction. The partial unique index on
-      // (user_id) WHERE NOT used means only one active token per user can
-      // exist — if two simultaneous forgot-password requests both reach this
-      // point, the second INSERT hits a unique constraint violation. We catch
-      // that and return without sending a second email: the first request's
-      // token is already on its way, so the user gets exactly one valid link.
-      try {
-        await db.transaction(async (tx) => {
-          await tx
-            .update(passwordResetTokens)
-            .set({ used: true, usedAt: new Date() })
-            .where(
-              and(
-                eq(passwordResetTokens.userId, user.id),
-                eq(passwordResetTokens.used, false),
-              ),
-            );
-          await tx.insert(passwordResetTokens).values({
-            userId: user.id,
-            tokenHash,
-            expiresAt,
-          });
-        });
-      } catch (err: unknown) {
-        // A parallel request already inserted an active token for this user
-        // (unique constraint on (user_id) WHERE NOT used). One valid reset
-        // link is already in flight — swallow this and skip the email send.
-        const pg = err as { code?: string };
-        if (pg.code === "23505") {
-          req.log.info(
-            { userId: user.id },
-            "forgot-password: parallel request already issued a token, skipping duplicate",
-          );
-          return;
-        }
-        throw err;
-      }
+      // Atomically issue a fresh token, replacing any existing active token
+      // for this user in a single SQL statement. The partial unique index
+      // (password_reset_tokens_user_active_idx ON (user_id) WHERE NOT used)
+      // means at most one active token exists per user. An ON CONFLICT DO
+      // UPDATE atomically overwrites the old token hash with the new one —
+      // closing the race window that a separate UPDATE + INSERT has at
+      // READ COMMITTED isolation: by the time the conflict is evaluated the
+      // old token is already replaced, so a parallel request cannot hold a
+      // simultaneously-valid token.
+      await db.execute(sql`
+        INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, used, created_at)
+        VALUES (${user.id}, ${tokenHash}, ${expiresAt}, false, now())
+        ON CONFLICT (user_id) WHERE NOT used
+        DO UPDATE SET
+          token_hash = EXCLUDED.token_hash,
+          expires_at = EXCLUDED.expires_at,
+          used       = false,
+          used_at    = NULL,
+          created_at = now()
+      `);
 
       // Build the reset URL from the incoming request host (validated against
       // REPLIT_DOMAINS like the Google OAuth flow).

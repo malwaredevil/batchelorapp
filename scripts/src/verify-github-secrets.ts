@@ -57,12 +57,26 @@ const REQUIRED_GITHUB_SECRETS: Array<{ name: string; purpose: string }> = [
   },
   { name: "SENTRY_DSN", purpose: "Sentry error tracking DSN" },
   { name: "GH_PAT", purpose: "GitHub Personal Access Token" },
+  {
+    name: "OAUTH_TOKEN_ENCRYPTION_KEY",
+    purpose: "AES-256-GCM key for stored Google OAuth tokens",
+  },
   { name: "AGENTPHONE_API_KEY", purpose: "AgentPhone SMS/voice API key" },
   {
     name: "AGENTPHONE_WEBHOOK_SECRET",
     purpose: "AgentPhone webhook HMAC secret",
   },
-  { name: "APIFY_API_TOKEN", purpose: "Apify Actors (Campaign 3+ features)" },
+  {
+    name: "APIFY_API_TOKEN",
+    purpose: "Apify Actors (Hallmark HooH crawler, etc.)",
+  },
+  {
+    name: "APIFY_WEBHOOK_SECRET",
+    purpose: "Apify webhook HMAC signing secret",
+  },
+  { name: "EBAY_APP_ID", purpose: "eBay Finding API application ID" },
+  { name: "EBAY_CERT_ID", purpose: "eBay Finding API certificate ID" },
+  { name: "EBAY_DEV_ID", purpose: "eBay developer ID" },
 ];
 
 // ── Local .env required keys ──────────────────────────────────────────────────

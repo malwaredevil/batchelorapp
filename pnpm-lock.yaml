@@ -1515,6 +1515,9 @@ importers:
 
   scripts:
     dependencies:
+      '@types/libsodium-wrappers':
+        specifier: ^0.8.2
+        version: 0.8.2
       '@workspace/db':
         specifier: workspace:*
         version: link:../lib/db
@@ -1524,6 +1527,9 @@ importers:
       drizzle-orm:
         specifier: 0.45.2
         version: 0.45.2(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(pg@8.20.0)
+      libsodium-wrappers:
+        specifier: ^0.8.4
+        version: 0.8.4
       pg:
         specifier: ^8.20.0
         version: 8.20.0
@@ -3894,6 +3900,10 @@ packages:
   '@types/http-errors@2.0.5':
     resolution: {integrity: sha512-r8Tayk8HJnX0FztbZN7oVqGccWgw98T/0neJphO91KkmOzug1KkofZURD4UaD5uH8AqcFLfdPErnBod0u71/qg==}
 
+  '@types/libsodium-wrappers@0.8.2':
+    resolution: {integrity: sha512-+2IDfSULPUskSjIYfZl9suIUsIE5PXwoKZiE/j0MZWd+M9nEGvJDsk/ztMZKNhL1lBL+1CaypW0dQSjqPW2dMg==}
+    deprecated: This is a stub types definition. libsodium-wrappers provides its own type definitions, so you do not need this installed.
+
   '@types/linkify-it@5.0.0':
     resolution: {integrity: sha512-sVDA58zAw4eWAffKOaQH5/5j3XeayukzDk+ewSsnv3p4yJEZHCCzMDiZM8e0OUrRvmpGZ85jf4yDHkHsgBNr9Q==}
 
@@ -5398,6 +5408,12 @@ packages:
   leven@4.1.0:
     resolution: {integrity: sha512-KZ9W9nWDT7rF7Dazg8xyLHGLrmpgq2nVNFUckhqdW3szVP6YhCpp/RAnpmVExA9JvrMynjwSLVrEj3AepHR6ew==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
+
+  libsodium-wrappers@0.8.4:
+    resolution: {integrity: sha512-mu8aAWucZjTB5O/BtGXtW4e1agy7uHxNYG7zPthmmD1jU43LCDmSWZLN4JhflbdPXj3yDO4lxM1O9hLDgIOXDw==}
+
+  libsodium@0.8.4:
+    resolution: {integrity: sha512-lMcYaRi0zcs7tarATsQUYC7rstliIXZuoq0c6zXSgNtSNtdvBgkSegjWhpMJAXzKX3SUSwIp7+zEsob+j3LuRw==}
 
   lightningcss-linux-x64-gnu@1.32.0:
     resolution: {integrity: sha512-V7Qr52IhZmdKPVr+Vtw8o+WLsQJYCTd8loIfpDaMRWGUZfBOYEJeyJIkqGIDMZPwPx24pUMfwSxxI8phr/MbOA==}
@@ -9610,6 +9626,10 @@ snapshots:
 
   '@types/http-errors@2.0.5': {}
 
+  '@types/libsodium-wrappers@0.8.2':
+    dependencies:
+      libsodium-wrappers: 0.8.4
+
   '@types/linkify-it@5.0.0': {}
 
   '@types/markdown-it@14.1.2':
@@ -11129,6 +11149,12 @@ snapshots:
   leven@3.1.0: {}
 
   leven@4.1.0: {}
+
+  libsodium-wrappers@0.8.4:
+    dependencies:
+      libsodium: 0.8.4
+
+  libsodium@0.8.4: {}
 
   lightningcss-linux-x64-gnu@1.32.0:
     optional: true

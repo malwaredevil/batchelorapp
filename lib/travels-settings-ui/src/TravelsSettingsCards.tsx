@@ -328,7 +328,10 @@ export function TimezoneCard() {
               }
             />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent
+            position="popper"
+            className="max-h-[min(40vh,_280px)] overflow-y-auto"
+          >
             {timezoneOptions.map((tz) => (
               <SelectItem key={tz} value={tz}>
                 {tz}

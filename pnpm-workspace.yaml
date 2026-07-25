@@ -98,7 +98,7 @@ overrides:
   esbuild>@esbuild/win32-ia32: "-"
   esbuild>@esbuild/win32-x64: "-"
   "brace-expansion@^2": "^2.1.2"
-  "brace-expansion@^5": "^5.0.7"
+  "brace-expansion@^5": "^5.0.8"
   body-parser: ">=2.3.0"
   js-yaml: 4.3.0
   lightningcss>lightningcss-android-arm64: "-"
@@ -117,6 +117,7 @@ overrides:
   fast-uri: ">=3.1.4 <4" # GHSA: URI confusion; patched 3.1.4; parent expects ^3
   linkify-it: ">=5.0.2 <6" # GHSA: ReDoS; patched 5.0.2; parent expects ^5
   markdown-it: ">=14.2.0 <15" # GHSA: HTML injection; patched 14.2.0; parent expects ^14
+  postcss: ">=8.5.18 <9" # GHSA: path traversal in sourceMappingURL; patched 8.5.18; parent expects ^8
   qs: ">=6.15.2 <7" # CVE: prototype pollution; patched 6.15.2; parent expects ^6
   rollup>@rollup/rollup-android-arm-eabi: "-"
   rollup>@rollup/rollup-android-arm64: "-"

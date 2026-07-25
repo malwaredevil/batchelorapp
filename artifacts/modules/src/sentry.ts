@@ -11,6 +11,7 @@ if (dsn && import.meta.env.PROD) {
     integrations: [
       Sentry.browserTracingIntegration(),
       Sentry.replayIntegration(),
+      Sentry.replayCanvasIntegration(),
       // Captures failed HTTP requests (4xx/5xx) as Sentry events.
       // 401 excluded: always unauthenticated page load / expired session;
       //   useAuth handles the redirect to login before the user notices.

@@ -39,11 +39,14 @@ export type AgentphoneConversationRow =
 export type InsertAgentphoneConversation =
   typeof agentphoneConversations.$inferInsert;
 
-// Webhook delivery dedup log, keyed by AgentPhone's `X-Webhook-ID` header.
-// AgentPhone (like most webhook senders) may redeliver on a slow/ambiguous
-// response, so every delivery id is recorded before any side effect runs;
-// a repeat id is a no-op 200. Rows are pruned on insert (best-effort) since
-// only a short dedup window is ever needed.
+// Webhook delivery dedup log, keyed by the SHA-256 of the HMAC-signed
+// material (timestamp + "." + rawBody) — NOT the unsigned X-Webhook-ID header.
+// Using the content hash means a replayer cannot bypass dedup by swapping in
+// a fresh delivery ID; the same authenticated body+timestamp always produces
+// the same hash and hits the primary-key conflict. AgentPhone may redeliver
+// on a slow/ambiguous response; a retry of the exact same message collides on
+// the content hash and is a no-op 200. Rows are pruned on insert (best-effort)
+// since only a short dedup window is ever needed.
 export const agentphoneWebhookDeliveries = pgTable(
   "agentphone_webhook_deliveries",
   {

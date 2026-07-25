@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { webhookLimiter } from "../middleware/rateLimit";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import {
   db,
@@ -50,7 +50,12 @@ function normalizeKeyword(text: string): string {
     .replace(/[^A-Z]/g, "");
 }
 
-function verifySignature(req: Request): boolean {
+// Returns the hex SHA-256 of the signed material on success, or false on
+// failure. Using the content hash (rather than the unsigned X-Webhook-ID
+// header) as the dedup key means a replay with a fresh delivery ID but the
+// same authenticated body+timestamp still collides in the deliveries table
+// and is rejected — closing the bypass the unsigned ID created.
+function verifySignature(req: Request): string | false {
   if (!env.agentphoneWebhookSecret) return false;
 
   const signatureHeader = req.get("x-webhook-signature");
@@ -77,7 +82,12 @@ function verifySignature(req: Request): boolean {
   const expectedBuf = Buffer.from(expectedHex, "hex");
   const providedBuf = Buffer.from(match[1].toLowerCase(), "hex");
   if (expectedBuf.length !== providedBuf.length) return false;
-  return timingSafeEqual(expectedBuf, providedBuf);
+  if (!timingSafeEqual(expectedBuf, providedBuf)) return false;
+
+  // The dedup key is a hash of the signed material — not the unsigned
+  // X-Webhook-ID. This makes replay impossible: same body+timestamp always
+  // produces the same hash, regardless of what ID the replayer supplies.
+  return createHash("sha256").update(signedString).digest("hex");
 }
 
 // Records the delivery id with status='processing' before any side effect runs.
@@ -354,28 +364,29 @@ async function handleVoice(req: Request, res: Response): Promise<void> {
 }
 
 router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
-  if (!verifySignature(req)) {
+  // verifySignature returns the content hash (SHA-256 of signed material) on
+  // success, or false on failure. We use the hash — not the unsigned
+  // X-Webhook-ID — as the dedup key so replay-with-fresh-ID is blocked.
+  const contentHash = verifySignature(req);
+  if (!contentHash) {
     logger.warn("agentphone: webhook signature verification failed");
     res.status(401).json({ error: "Invalid signature" });
     return;
   }
 
-  const deliveryId = req.get("x-webhook-id");
-  if (!deliveryId) {
-    res.status(400).json({ error: "Missing X-Webhook-ID" });
-    return;
-  }
+  // Keep the original delivery ID for logging/debugging only.
+  const deliveryId = req.get("x-webhook-id") ?? "(missing)";
 
   const event = typeof req.body?.event === "string" ? req.body.event : "";
   const channel = typeof req.body?.channel === "string" ? req.body.channel : "";
   logger.info(
-    { deliveryId, event, channel },
+    { deliveryId, contentHash: contentHash.slice(0, 12), event, channel },
     "agentphone: webhook delivery received",
   );
 
   let claimed: boolean;
   try {
-    claimed = await claimDelivery(deliveryId);
+    claimed = await claimDelivery(contentHash);
   } catch (err) {
     logger.error(
       { err, deliveryId },
@@ -394,7 +405,7 @@ router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
   }
 
   if (event !== "agent.message") {
-    void markDeliveryProcessed(deliveryId);
+    void markDeliveryProcessed(contentHash);
     res.status(200).json({ ok: true });
     return;
   }
@@ -402,12 +413,12 @@ router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
   try {
     if (channel === "sms") {
       await handleSms(req, res);
-      void markDeliveryProcessed(deliveryId);
+      void markDeliveryProcessed(contentHash);
       return;
     }
     if (channel === "voice") {
       await handleVoice(req, res);
-      void markDeliveryProcessed(deliveryId);
+      void markDeliveryProcessed(contentHash);
       return;
     }
   } catch (err) {
@@ -424,7 +435,7 @@ router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
     return;
   }
 
-  void markDeliveryProcessed(deliveryId);
+  void markDeliveryProcessed(contentHash);
   res.status(200).json({ ok: true });
 });
 

@@ -2871,4 +2871,41 @@ export const STATEMENTS: string[] = [
      ON household_activity_log (occurred_at DESC)`,
   `CREATE INDEX IF NOT EXISTS household_activity_log_entity_idx
      ON household_activity_log (entity_type, entity_id)`,
+
+  // ── RLS deny-all policies for the anon role ───────────────────────────────
+  // The server connects exclusively via service_role, which has the PostgreSQL
+  // BYPASSRLS privilege and is unaffected by any policy. These policies are
+  // purely declarative: they document that direct Supabase-client access (via
+  // anon or authenticated keys) is intentionally prohibited and silence the
+  // Supabase "RLS enabled, no policy set" dashboard alert.
+  // The DO block is self-maintaining: it covers all current tables and any
+  // future table added with ENABLE ROW LEVEL SECURITY but no explicit policy.
+  // It is idempotent: tables that already have a policy are skipped.
+  `DO $$
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN
+    SELECT c.relname
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relkind = 'r'
+      AND c.relrowsecurity = true
+      AND NOT EXISTS (
+        SELECT 1 FROM pg_policies p
+        WHERE p.schemaname = 'public'
+          AND p.tablename = c.relname
+      )
+  LOOP
+    BEGIN
+      EXECUTE format(
+        $q$CREATE POLICY deny_direct_client_access ON public.%I
+           FOR ALL TO anon USING (false) WITH CHECK (false)$q$,
+        r.relname
+      );
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
+  END LOOP;
+END $$`,
 ];

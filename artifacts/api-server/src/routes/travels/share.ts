@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import crypto from "crypto";
 import { z } from "zod/v4";
 import { db, travelsTrips } from "@workspace/db";
@@ -93,7 +93,9 @@ router.get("/trips/:id/share", async (req, res) => {
   const [trip] = await db
     .select()
     .from(travelsTrips)
-    .where(eq(travelsTrips.shareToken, token));
+    .where(
+      and(eq(travelsTrips.shareToken, token), isNull(travelsTrips.deletedAt)),
+    );
 
   if (!trip) {
     res.status(404).json({ error: "Not found" });

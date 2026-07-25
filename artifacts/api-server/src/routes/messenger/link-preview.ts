@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, messengerLinkPreviews } from "@workspace/db";
 import { logger } from "../../lib/logger";
+import { fetchHtmlSafe } from "../../lib/ssrf-safe-fetch";
 
 const router: IRouter = Router();
 
@@ -77,19 +78,9 @@ async function fetchPreview(url: string): Promise<{
   const oEmbed = await tryOEmbed(url);
   if (oEmbed) return oEmbed;
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), PREVIEW_TIMEOUT_MS);
   try {
-    const resp = await fetch(url, {
-      signal: controller.signal,
-      headers: { "User-Agent": "Batchelor/1.0 (link preview bot)" },
-    });
-    clearTimeout(timeout);
-    if (!resp.ok) return { title: null, description: null, imageUrl: null };
-    const ct = resp.headers.get("content-type") ?? "";
-    if (!ct.includes("text/html"))
-      return { title: null, description: null, imageUrl: null };
-    const html = await resp.text();
+    const html = await fetchHtmlSafe(url, PREVIEW_TIMEOUT_MS);
+    if (!html) return { title: null, description: null, imageUrl: null };
     const title =
       extractMeta(html, "og:title") ??
       extractMeta(html, "twitter:title") ??
@@ -101,7 +92,6 @@ async function fetchPreview(url: string): Promise<{
       extractMeta(html, "og:image") ?? extractMeta(html, "twitter:image");
     return { title, description, imageUrl };
   } catch (err) {
-    clearTimeout(timeout);
     logger.warn({ url, err }, "messenger: link preview fetch failed");
     return { title: null, description: null, imageUrl: null };
   }

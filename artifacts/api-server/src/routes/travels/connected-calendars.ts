@@ -3,7 +3,8 @@
 // calendars, each with a user-chosen primary color for the Outlook-style
 // overlay UI. Exactly one row across the whole table may be the shared
 // "Travel" calendar (isTravelCalendar) — any authenticated household member
-// may assign/reassign that flag (household-shared resource).
+// may assign one of their OWN connected calendars to that flag; they cannot
+// designate another household member's connected calendar row.
 import { Router, type IRouter } from "express";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -152,14 +153,21 @@ router.delete("/connected-calendars/:id", requireAuth, async (req, res) => {
 
 // PUT /connected-calendars/:id/travel — assign this calendar as the shared
 // "Travel" calendar (unassigning whichever one previously held the flag).
-// Any authenticated household member may assign it (household-shared resource).
+// A household member may only assign one of their OWN connected calendar rows
+// (scoped by userId); brute-forcing another member's calendar ID returns 404.
 router.put("/connected-calendars/:id/travel", requireAuth, async (req, res) => {
   const id = Number(req.params["id"]);
+  const userId = req.session.userId!;
 
   const [target] = await db
     .select()
     .from(travelsConnectedCalendars)
-    .where(eq(travelsConnectedCalendars.id, id))
+    .where(
+      and(
+        eq(travelsConnectedCalendars.id, id),
+        eq(travelsConnectedCalendars.userId, userId),
+      ),
+    )
     .limit(1);
   if (!target) {
     res.status(404).json({ error: "Connected calendar not found." });

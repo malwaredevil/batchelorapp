@@ -1058,7 +1058,7 @@ router.delete("/documents/:docId", async (req, res) => {
     .set({ deletedAt: new Date() })
     .where(eq(travelsTripDocuments.id, docId));
 
-  res.status(200).json({ ok: true });
+  res.status(204).send();
   void logActivity({
     actorUserId: req.session.userId!,
     actorChannel: "web",

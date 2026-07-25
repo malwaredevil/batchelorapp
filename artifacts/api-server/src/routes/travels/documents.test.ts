@@ -394,7 +394,7 @@ describe("DELETE /api/travels/documents/:docId", () => {
     expect(res.body.error).toMatch(/Not found/);
   });
 
-  it("deletes the document and returns 204", async () => {
+  it("soft-deletes the document and returns 204", async () => {
     const doc = {
       id: 10,
       tripId: null,
@@ -403,19 +403,16 @@ describe("DELETE /api/travels/documents/:docId", () => {
       userId: TEST_USER_ID,
     };
     selectQueue.push([doc]); // document lookup → found
-    // itinerary cleanup: trip lookup → not found (skips update)
-    selectQueue.push([]);
     const app = await buildApp();
 
     const res = await request(app).delete("/api/travels/documents/10");
 
     expect(res.status).toBe(204);
-    expect(deleteDocument).toHaveBeenCalledWith("travels/forward-attach.pdf");
-    const dbDeletes = deleteCalls.filter(Boolean);
-    expect(dbDeletes.length).toBeGreaterThan(0);
+    // Storage cleanup is deferred to the purge job; only a DB update happens.
+    expect(updateCalls.length).toBeGreaterThan(0);
   });
 
-  it("still deletes the DB record when storage deletion throws (non-fatal)", async () => {
+  it("soft-deletes the DB record regardless of storage path (storage deferred to purge)", async () => {
     const doc = {
       id: 11,
       tripId: null,
@@ -424,19 +421,15 @@ describe("DELETE /api/travels/documents/:docId", () => {
       userId: TEST_USER_ID,
     };
     selectQueue.push([doc]); // document lookup → found
-    // itinerary cleanup: trip lookup → not found
-    selectQueue.push([]);
-    deleteDocument.mockRejectedValueOnce(new Error("storage error"));
     const app = await buildApp();
 
     const res = await request(app).delete("/api/travels/documents/11");
 
     expect(res.status).toBe(204);
-    const dbDeletes = deleteCalls.filter(Boolean);
-    expect(dbDeletes.length).toBeGreaterThan(0);
+    expect(updateCalls.length).toBeGreaterThan(0);
   });
 
-  it("calls db.delete exactly once (only the document row; no itinerary or decision side-effects)", async () => {
+  it("soft-deletes only (no hard db.delete calls; storage and Gmail cleanup deferred)", async () => {
     const doc = {
       id: 12,
       tripId: null,
@@ -450,9 +443,9 @@ describe("DELETE /api/travels/documents/:docId", () => {
     const res = await request(app).delete("/api/travels/documents/12");
 
     expect(res.status).toBe(204);
-    // Exactly one DB delete: the document row itself.
-    // The Gmail scan-decision cleanup and itinerary detach are only wired
-    // into the trip-scoped DELETE /trips/:id/documents/:docId route, not here.
-    expect(deleteCalls.length).toBe(1);
+    // Standalone route soft-deletes only — no hard DB deletes.
+    // Gmail scan-decision cleanup runs only in the trip-scoped route.
+    expect(deleteCalls.length).toBe(0);
+    expect(updateCalls.length).toBeGreaterThan(0);
   });
 });

@@ -370,15 +370,19 @@ export default function HallmarkEvents() {
   const allNormalized = useMemo<GCalHallmarkEvent[]>(() => {
     if (!hallmarkCal) return [];
     return gcalEvents.map((e) => {
-      const startDate = e.start.slice(0, 10);
-      const endDate = gcalEventEndKey(e);
+      const rawStart = e.start.slice(0, 10);
+      const rawEnd = gcalEventEndKey(e);
+      // Always present the earlier date as startDate.
+      // GCal exclusive-end subtraction can produce rawEnd < rawStart when the
+      // event was entered backwards or spans exactly one day with an unusual
+      // exclusive-end value — swap rather than clamp so the range is correct.
+      const startDate = rawStart <= rawEnd ? rawStart : rawEnd;
+      const endDate = rawStart <= rawEnd ? rawEnd : rawStart;
       return {
         gcalId: e.id,
         title: e.title,
         startDate,
-        // Guard against 0-duration GCal events (end = start, exclusive).
-        // After subtracting 1 day the end would be before the start — clamp.
-        endDate: endDate < startDate ? startDate : endDate,
+        endDate,
         description: e.description,
       };
     });

@@ -41,7 +41,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { TagSelector } from "@/quilting/components/tag-selector";
-import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
+import { ImageLightbox } from "@/quilting/components/image-lightbox";
 import { ImageEditor } from "@/quilting/components/image-editor";
 import { downloadCollectionImage } from "@/quilting/lib/svg-export";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
@@ -161,11 +161,7 @@ export default function FabricDetail() {
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
   const [catEditing, setCatEditing] = useState(false);
   const [localNewCats, setLocalNewCats] = useState<QuiltingCategory[]>([]);
-  const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [lightboxSupplemental, setLightboxSupplemental] = useState<{
-    url: string;
-    label: string;
-  } | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [cropTarget, setCropTarget] = useState<
     { type: "primary" } | { type: "supplemental"; imageId: number } | null
@@ -424,11 +420,18 @@ export default function FabricDetail() {
     );
   }
 
+  const [pendingAddFile, setPendingAddFile] = useState<File | null>(null);
+
   function handleAddPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    addFabricImage.mutate({ id: fabricId, data: { image: file } });
     e.target.value = "";
+    setPendingAddFile(file);
+  }
+
+  function handleAddPhotoEditorSave(edited: File) {
+    setPendingAddFile(null);
+    addFabricImage.mutate({ id: fabricId, data: { image: edited } });
   }
 
   function handleDeletePhoto(imageId: number) {
@@ -537,6 +540,15 @@ export default function FabricDetail() {
 
   return (
     <>
+      {pendingAddFile && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-black">
+          <ImageEditor
+            file={pendingAddFile}
+            onSave={handleAddPhotoEditorSave}
+            onCancel={() => setPendingAddFile(null)}
+          />
+        </div>
+      )}
       {cropFile && (
         <div className="fixed inset-0 z-50 flex flex-col bg-black">
           <ImageEditor
@@ -570,7 +582,7 @@ export default function FabricDetail() {
           <div className="flex flex-col gap-3">
             <div
               className="relative aspect-square overflow-hidden rounded-2xl border border-card-border bg-muted cursor-zoom-in group md:aspect-auto"
-              onClick={() => setLightboxOpen(true)}
+              onClick={() => setLightboxIndex(0)}
             >
               <img
                 src={f.imageUrl}
@@ -581,32 +593,29 @@ export default function FabricDetail() {
                 <ZoomIn className="h-10 w-10 text-white drop-shadow-lg" />
               </div>
             </div>
-            <PreviewZoomModal
-              open={lightboxOpen}
-              onClose={() => setLightboxOpen(false)}
-              title={f.name}
-            >
-              <img
-                src={f.imageUrl}
-                alt={f.name}
-                className="max-h-[75vh] max-w-[75vw] rounded object-contain"
-                draggable={false}
-              />
-            </PreviewZoomModal>
-            <PreviewZoomModal
-              open={lightboxSupplemental !== null}
-              onClose={() => setLightboxSupplemental(null)}
-              title={lightboxSupplemental?.label}
-            >
-              {lightboxSupplemental && (
-                <img
-                  src={lightboxSupplemental.url}
-                  alt={lightboxSupplemental.label}
-                  className="max-h-[75vh] max-w-[75vw] rounded object-contain"
-                  draggable={false}
+            {(() => {
+              const allLightboxImages = [
+                f.imageUrl,
+                ...f.images
+                  .slice()
+                  .sort((a, b) => a.position - b.position)
+                  .map((img) => img.url),
+              ];
+              return (
+                <ImageLightbox
+                  src={
+                    lightboxIndex !== null
+                      ? (allLightboxImages[lightboxIndex] ?? "")
+                      : ""
+                  }
+                  open={lightboxIndex !== null}
+                  onClose={() => setLightboxIndex(null)}
+                  images={allLightboxImages}
+                  currentIndex={lightboxIndex ?? 0}
+                  onNavigate={setLightboxIndex}
                 />
-              )}
-            </PreviewZoomModal>
+              );
+            })()}
 
             {/* Photo gallery strip */}
             <div className="flex flex-wrap gap-2">
@@ -638,71 +647,75 @@ export default function FabricDetail() {
               </div>
 
               {/* Supplemental photos */}
-              {f.images.map((img) => (
-                <div key={img.id} className="flex flex-col items-center gap-1">
+              {f.images
+                .slice()
+                .sort((a, b) => a.position - b.position)
+                .map((img, idx) => (
                   <div
-                    className="relative h-20 w-20 overflow-hidden rounded-lg border border-card-border bg-muted cursor-zoom-in group"
-                    onClick={() =>
-                      setLightboxSupplemental({
-                        url: img.url,
-                        label: img.label ?? f.name,
-                      })
-                    }
+                    key={img.id}
+                    className="flex flex-col items-center gap-1"
                   >
-                    <img
-                      src={img.url}
-                      alt={img.label ?? "Photo"}
-                      className="h-full w-full object-cover"
-                    />
-                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/20 group-hover:opacity-100">
-                      <ZoomIn className="h-5 w-5 text-white drop-shadow" />
+                    <div
+                      className="relative h-20 w-20 overflow-hidden rounded-lg border border-card-border bg-muted cursor-zoom-in group"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setLightboxIndex(idx + 1);
+                      }}
+                    >
+                      <img
+                        src={img.url}
+                        alt={img.label ?? "Photo"}
+                        className="h-full w-full object-cover"
+                      />
+                      <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/20 group-hover:opacity-100">
+                        <ZoomIn className="h-5 w-5 text-white drop-shadow" />
+                      </div>
+                    </div>
+                    <div className="flex gap-0.5">
+                      <button
+                        title="Edit photo"
+                        onClick={() =>
+                          handleEditImage(
+                            { type: "supplemental", imageId: img.id },
+                            img.url,
+                          )
+                        }
+                        disabled={isFetchingCropImage}
+                        className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted disabled:opacity-50"
+                      >
+                        {isFetchingCropImage &&
+                        cropTarget?.type === "supplemental" &&
+                        cropTarget.imageId === img.id ? (
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                        ) : (
+                          <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                        )}
+                      </button>
+                      <button
+                        title="Set as default photo"
+                        onClick={() => handleSetDefault(img.id)}
+                        disabled={
+                          setDefaultMutation.isPending ||
+                          deleteFabricImageMutation.isPending
+                        }
+                        className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted disabled:opacity-50"
+                      >
+                        <Crown className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
+                      <button
+                        title="Delete photo"
+                        onClick={() => handleDeletePhoto(img.id)}
+                        disabled={
+                          deleteFabricImageMutation.isPending ||
+                          setDefaultMutation.isPending
+                        }
+                        className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted disabled:opacity-50"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
                     </div>
                   </div>
-                  <div className="flex gap-0.5">
-                    <button
-                      title="Edit photo"
-                      onClick={() =>
-                        handleEditImage(
-                          { type: "supplemental", imageId: img.id },
-                          img.url,
-                        )
-                      }
-                      disabled={isFetchingCropImage}
-                      className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted disabled:opacity-50"
-                    >
-                      {isFetchingCropImage &&
-                      cropTarget?.type === "supplemental" &&
-                      cropTarget.imageId === img.id ? (
-                        <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                      ) : (
-                        <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                      )}
-                    </button>
-                    <button
-                      title="Set as default photo"
-                      onClick={() => handleSetDefault(img.id)}
-                      disabled={
-                        setDefaultMutation.isPending ||
-                        deleteFabricImageMutation.isPending
-                      }
-                      className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted disabled:opacity-50"
-                    >
-                      <Crown className="h-3.5 w-3.5 text-muted-foreground" />
-                    </button>
-                    <button
-                      title="Delete photo"
-                      onClick={() => handleDeletePhoto(img.id)}
-                      disabled={
-                        deleteFabricImageMutation.isPending ||
-                        setDefaultMutation.isPending
-                      }
-                      className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted disabled:opacity-50"
-                    >
-                      <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                ))}
 
               {/* Add photo */}
               {f.images.length < 10 && (

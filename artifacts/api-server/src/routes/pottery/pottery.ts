@@ -874,6 +874,140 @@ router.delete("/items/:id/images/:imageId", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Image replacement (primary + supplemental)
+// ---------------------------------------------------------------------------
+
+router.put(
+  "/items/:id/image",
+  supplementalUploadLimiter,
+  upload.single("image"),
+  async (req, res) => {
+    const { id } = GetPotteryParams.parse(req.params);
+
+    const [item] = await db
+      .select({ id: potteryItems.id, imagePath: potteryItems.imagePath })
+      .from(potteryItems)
+      .where(eq(potteryItems.id, id))
+      .limit(1);
+    if (!item) {
+      res.status(404).json({ error: "Pottery piece not found." });
+      return;
+    }
+
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: "An image file is required." });
+      return;
+    }
+    let sniffedType: ReturnType<typeof sniffAndValidateMime>;
+    try {
+      sniffedType = sniffAndValidateMime(file.buffer, file.mimetype);
+    } catch {
+      res.status(400).json({ error: "Unsupported image format." });
+      return;
+    }
+    if (!isImageMimeType(sniffedType)) {
+      res.status(400).json({ error: "Unsupported image format." });
+      return;
+    }
+    const contentType = sniffedType;
+    const cleanBuffer = await stripMetadata(file.buffer, contentType);
+    const newPath = await uploadImage(cleanBuffer, contentType);
+    const oldPath = item.imagePath;
+    try {
+      await db
+        .update(potteryItems)
+        .set({ imagePath: newPath })
+        .where(eq(potteryItems.id, id));
+      if (oldPath) await deleteImage(oldPath).catch(() => {});
+      const [updated] = await db
+        .select()
+        .from(potteryItems)
+        .where(eq(potteryItems.id, id))
+        .limit(1);
+      res.json(GetPotteryResponse.parse(await serializeItem(updated)));
+    } catch (err) {
+      await deleteImage(newPath).catch(() => {});
+      throw err;
+    }
+  },
+);
+
+router.put(
+  "/items/:id/images/:imageId",
+  supplementalUploadLimiter,
+  upload.single("image"),
+  async (req, res) => {
+    const { id } = GetPotteryParams.parse(req.params);
+    const imageId = Number(req.params.imageId);
+    if (!Number.isFinite(imageId)) {
+      res.status(400).json({ error: "Invalid image ID." });
+      return;
+    }
+
+    const [item] = await db
+      .select({ id: potteryItems.id })
+      .from(potteryItems)
+      .where(eq(potteryItems.id, id))
+      .limit(1);
+    if (!item) {
+      res.status(404).json({ error: "Pottery piece not found." });
+      return;
+    }
+
+    const [imageRow] = await db
+      .select({
+        storagePath: potteryImages.storagePath,
+        itemId: potteryImages.itemId,
+      })
+      .from(potteryImages)
+      .where(eq(potteryImages.id, imageId))
+      .limit(1);
+    if (!imageRow || imageRow.itemId !== id) {
+      res.status(404).json({ error: "Image not found." });
+      return;
+    }
+
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: "An image file is required." });
+      return;
+    }
+    let sniffedType: ReturnType<typeof sniffAndValidateMime>;
+    try {
+      sniffedType = sniffAndValidateMime(file.buffer, file.mimetype);
+    } catch {
+      res.status(400).json({ error: "Unsupported image format." });
+      return;
+    }
+    if (!isImageMimeType(sniffedType)) {
+      res.status(400).json({ error: "Unsupported image format." });
+      return;
+    }
+    const contentType = sniffedType;
+    const cleanBuffer = await stripMetadata(file.buffer, contentType);
+    const newPath = await uploadImage(cleanBuffer, contentType);
+    const oldPath = imageRow.storagePath;
+    try {
+      await db
+        .update(potteryImages)
+        .set({ storagePath: newPath })
+        .where(eq(potteryImages.id, imageId));
+      await deleteImage(oldPath).catch(() => {});
+      const [updated] = await db
+        .select()
+        .from(potteryItems)
+        .where(eq(potteryItems.id, id))
+        .limit(1);
+      res.json(GetPotteryResponse.parse(await serializeItem(updated)));
+    } catch (err) {
+      await deleteImage(newPath).catch(() => {});
+      throw err;
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
 // Duplicate-category sync — purely data-driven, no AI needed
 // ---------------------------------------------------------------------------
 

@@ -23,7 +23,7 @@ registerFeature({
   id: "ornaments-add",
   nav: {
     group: "add",
-    href: "/ornaments/add",
+    href: "/ornaments/camera-add",
     label: "Add Ornament",
     icon: PlusCircle,
     order: 31,

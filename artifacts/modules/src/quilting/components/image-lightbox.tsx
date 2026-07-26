@@ -1,11 +1,21 @@
 import { useEffect, useRef, useCallback } from "react";
-import { X, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
+import {
+  X,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 
 interface ImageLightboxProps {
   src: string;
   alt?: string;
   open: boolean;
   onClose: () => void;
+  images?: string[];
+  currentIndex?: number;
+  onNavigate?: (index: number) => void;
 }
 
 export function ImageLightbox({
@@ -13,6 +23,9 @@ export function ImageLightbox({
   alt = "",
   open,
   onClose,
+  images,
+  currentIndex,
+  onNavigate,
 }: ImageLightboxProps) {
   const scaleRef = useRef(1);
   const offsetRef = useRef({ x: 0, y: 0 });
@@ -23,6 +36,12 @@ export function ImageLightbox({
     oy: number;
   } | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+
+  const isMulti =
+    images &&
+    images.length > 1 &&
+    onNavigate !== undefined &&
+    currentIndex !== undefined;
 
   const applyTransform = useCallback(() => {
     const img = imgRef.current;
@@ -44,10 +63,32 @@ export function ImageLightbox({
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
+      if (isMulti && onNavigate && currentIndex !== undefined) {
+        if (e.key === "ArrowLeft" && currentIndex > 0) {
+          resetTransform();
+          onNavigate(currentIndex - 1);
+        }
+        if (e.key === "ArrowRight" && currentIndex < images!.length - 1) {
+          resetTransform();
+          onNavigate(currentIndex + 1);
+        }
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [
+    open,
+    onClose,
+    isMulti,
+    onNavigate,
+    currentIndex,
+    images,
+    resetTransform,
+  ]);
+
+  useEffect(() => {
+    resetTransform();
+  }, [src, resetTransform]);
 
   if (!open) return null;
 
@@ -65,8 +106,39 @@ export function ImageLightbox({
       </button>
 
       <p className="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-xs text-white/50 pointer-events-none select-none">
-        Scroll to zoom · drag to pan · click outside to close
+        {isMulti
+          ? `${(currentIndex ?? 0) + 1} / ${images!.length} · scroll to zoom · drag to pan`
+          : "Scroll to zoom · drag to pan · click outside to close"}
       </p>
+
+      {isMulti && onNavigate && currentIndex !== undefined && (
+        <>
+          <button
+            className="absolute left-3 top-1/2 -translate-y-1/2 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm hover:bg-white/30 transition-colors disabled:opacity-20 disabled:pointer-events-none"
+            onClick={(e) => {
+              e.stopPropagation();
+              resetTransform();
+              onNavigate(currentIndex - 1);
+            }}
+            disabled={currentIndex === 0}
+            title="Previous (←)"
+          >
+            <ChevronLeft className="h-6 w-6" />
+          </button>
+          <button
+            className="absolute right-3 top-1/2 -translate-y-1/2 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm hover:bg-white/30 transition-colors disabled:opacity-20 disabled:pointer-events-none"
+            onClick={(e) => {
+              e.stopPropagation();
+              resetTransform();
+              onNavigate(currentIndex + 1);
+            }}
+            disabled={currentIndex === images!.length - 1}
+            title="Next (→)"
+          >
+            <ChevronRight className="h-6 w-6" />
+          </button>
+        </>
+      )}
 
       <div className="absolute bottom-5 left-1/2 z-10 -translate-x-1/2 flex items-center gap-1 rounded-full bg-white/12 px-2 py-1.5 backdrop-blur-sm">
         <button

@@ -66,6 +66,7 @@ import {
   useDeletePotteryImage,
 } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/pottery/lib/assistant-context";
+import { ImageLightbox as SharedImageLightbox } from "@/quilting/components/image-lightbox";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -183,8 +184,7 @@ function ImageGallery({
   itemId,
 }: GalleryProps) {
   const [activeIdx, setActiveIdx] = useState(0);
-  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
-  const [lightboxAlt, setLightboxAlt] = useState("");
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const queryClient = useQueryClient();
@@ -197,6 +197,15 @@ function ImageGallery({
   const [showLabelInput, setShowLabelInput] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [editingFile, setEditingFile] = useState<File | null>(null);
+  const [editingExistingFile, setEditingExistingFile] = useState<File | null>(
+    null,
+  );
+  const [editingExistingTarget, setEditingExistingTarget] = useState<{
+    id: number;
+    isPrimary: boolean;
+  } | null>(null);
+  const [isFetchingExisting, setIsFetchingExisting] = useState(false);
+  const [isSavingExisting, setIsSavingExisting] = useState(false);
 
   // All images: index 0 = primary
   const allImages = [{ url: primaryUrl, label: null, id: -1 }, ...supplemental];
@@ -317,6 +326,61 @@ function ImageGallery({
     setShowLabelInput(true);
   }
 
+  async function handleEditExistingImage(
+    imgId: number,
+    url: string,
+    isPrimary: boolean,
+  ) {
+    if (isFetchingExisting || isSavingExisting) return;
+    setIsFetchingExisting(true);
+    setEditingExistingTarget({ id: imgId, isPrimary });
+    try {
+      const resp = await fetch(url, { credentials: "include" });
+      if (!resp.ok) throw new Error("fetch failed");
+      const blob = await resp.blob();
+      setEditingExistingFile(
+        new File([blob], "photo.jpg", {
+          type: blob.type || "image/jpeg",
+        }),
+      );
+    } catch {
+      toast.error("Couldn't load photo for editing.");
+      setEditingExistingTarget(null);
+    } finally {
+      setIsFetchingExisting(false);
+    }
+  }
+
+  async function handleExistingEditorSave(edited: File) {
+    if (!editingExistingTarget) return;
+    setEditingExistingFile(null);
+    setIsSavingExisting(true);
+    try {
+      const { id: imgId, isPrimary } = editingExistingTarget;
+      const endpoint = isPrimary
+        ? `/api/pottery/items/${itemId}/image`
+        : `/api/pottery/items/${itemId}/images/${imgId}`;
+      const form = new FormData();
+      form.append("image", edited, "photo.jpg");
+      const resp = await fetch(endpoint, {
+        method: "PUT",
+        body: form,
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error("Failed to save");
+      queryClient.invalidateQueries({
+        queryKey: getGetPotteryQueryKey(itemId),
+      });
+      queryClient.invalidateQueries({ queryKey: getListPotteryQueryKey() });
+      toast.success("Photo updated.");
+    } catch {
+      toast.error("Failed to save edited photo.");
+    } finally {
+      setIsSavingExisting(false);
+      setEditingExistingTarget(null);
+    }
+  }
+
   return (
     <div className="space-y-3">
       {showCamera && (
@@ -332,28 +396,64 @@ function ImageGallery({
           onCancel={() => setEditingFile(null)}
         />
       )}
-
-      {lightboxSrc && (
-        <ImageLightbox
-          src={lightboxSrc}
-          alt={lightboxAlt}
-          onClose={() => setLightboxSrc(null)}
+      {editingExistingFile && editingExistingTarget && (
+        <ImageEditor
+          file={editingExistingFile}
+          onSave={handleExistingEditorSave}
+          onCancel={() => {
+            setEditingExistingFile(null);
+            setEditingExistingTarget(null);
+          }}
         />
       )}
+
+      <SharedImageLightbox
+        src={
+          lightboxIndex !== null ? (allImages[lightboxIndex]?.url ?? "") : ""
+        }
+        alt={
+          lightboxIndex !== null
+            ? (allImages[lightboxIndex]?.label ?? primaryAlt)
+            : ""
+        }
+        open={lightboxIndex !== null}
+        onClose={() => setLightboxIndex(null)}
+        images={allImages.map((img) => img.url)}
+        currentIndex={lightboxIndex ?? 0}
+        onNavigate={setLightboxIndex}
+      />
 
       {/* Main image display */}
       <div
         className="relative overflow-hidden rounded-2xl border border-card-border bg-muted cursor-zoom-in"
-        onClick={() => {
-          setLightboxSrc(selected.url);
-          setLightboxAlt(
-            isSupplemental
-              ? (selectedSupplemental?.label ?? "Photo")
-              : primaryAlt,
-          );
-        }}
+        onClick={() => setLightboxIndex(activeIdx)}
         title="Click to zoom"
       >
+        {/* Edit-this-photo pencil */}
+        <button
+          type="button"
+          className="absolute left-3 top-3 z-10 rounded-full bg-black/50 p-1.5 text-white transition hover:bg-primary/80 disabled:opacity-40"
+          onClick={(e) => {
+            e.stopPropagation();
+            void handleEditExistingImage(
+              isSupplemental && selectedSupplemental
+                ? selectedSupplemental.id
+                : -1,
+              selected.url,
+              !isSupplemental,
+            );
+          }}
+          disabled={
+            isFetchingExisting || isSavingExisting || uploadImage.isPending
+          }
+          title="Edit photo"
+        >
+          {isFetchingExisting ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Pencil className="h-4 w-4" />
+          )}
+        </button>
         <img
           src={selected.url}
           alt={
@@ -574,181 +674,6 @@ function ImageGallery({
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Image lightbox (fullscreen zoom + pan)
-// ---------------------------------------------------------------------------
-
-function ImageLightbox({
-  src,
-  alt,
-  onClose,
-}: {
-  src: string;
-  alt: string;
-  onClose: () => void;
-}) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const live = useRef({
-    scale: 1,
-    tx: 0,
-    ty: 0,
-    pointers: new Map<number, { x: number; y: number }>(),
-    pinchStartDist: 0,
-    pinchStartScale: 1,
-    dragStartX: 0,
-    dragStartY: 0,
-    dragStartTx: 0,
-    dragStartTy: 0,
-  });
-  const [display, setDisplay] = useState({ scale: 1, tx: 0, ty: 0 });
-
-  function applyTransform(scale: number, tx: number, ty: number) {
-    const maxPan = Math.max(0, (scale - 1) * 600);
-    const cx = Math.max(-maxPan, Math.min(maxPan, tx));
-    const cy = Math.max(-maxPan, Math.min(maxPan, ty));
-    live.current.scale = scale;
-    live.current.tx = cx;
-    live.current.ty = cy;
-    setDisplay({ scale, tx: cx, ty: cy });
-  }
-
-  function resetZoom() {
-    applyTransform(1, 0, 0);
-  }
-
-  useEffect(() => {
-    function onWheel(e: WheelEvent) {
-      e.preventDefault();
-      const factor = e.deltaY < 0 ? 1.12 : 0.88;
-      const newScale = Math.max(1, Math.min(10, live.current.scale * factor));
-      applyTransform(newScale, live.current.tx, live.current.ty);
-    }
-    const el = containerRef.current;
-    if (el) el.addEventListener("wheel", onWheel, { passive: false });
-    return () => {
-      if (el) el.removeEventListener("wheel", onWheel);
-    };
-  }, []);
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  function onPointerDown(e: React.PointerEvent) {
-    live.current.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    if (live.current.pointers.size === 1) {
-      live.current.dragStartX = e.clientX;
-      live.current.dragStartY = e.clientY;
-      live.current.dragStartTx = live.current.tx;
-      live.current.dragStartTy = live.current.ty;
-    } else if (live.current.pointers.size === 2) {
-      const pts = Array.from(live.current.pointers.values());
-      const dx = pts[0].x - pts[1].x;
-      const dy = pts[0].y - pts[1].y;
-      live.current.pinchStartDist = Math.sqrt(dx * dx + dy * dy);
-      live.current.pinchStartScale = live.current.scale;
-    }
-  }
-
-  function onPointerMove(e: React.PointerEvent) {
-    live.current.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (live.current.pointers.size === 2) {
-      const pts = Array.from(live.current.pointers.values());
-      const dx = pts[0].x - pts[1].x;
-      const dy = pts[0].y - pts[1].y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const newScale = Math.max(
-        1,
-        Math.min(
-          10,
-          live.current.pinchStartScale * (dist / live.current.pinchStartDist),
-        ),
-      );
-      applyTransform(newScale, live.current.tx, live.current.ty);
-    } else if (live.current.pointers.size === 1 && live.current.scale > 1) {
-      const tx =
-        live.current.dragStartTx + (e.clientX - live.current.dragStartX);
-      const ty =
-        live.current.dragStartTy + (e.clientY - live.current.dragStartY);
-      applyTransform(live.current.scale, tx, ty);
-    }
-  }
-
-  function onPointerUp(e: React.PointerEvent) {
-    live.current.pointers.delete(e.pointerId);
-    if (live.current.pointers.size === 1) {
-      const pt = live.current.pointers.values().next().value!;
-      live.current.dragStartX = pt.x;
-      live.current.dragStartY = pt.y;
-      live.current.dragStartTx = live.current.tx;
-      live.current.dragStartTy = live.current.ty;
-    }
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/95"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          resetZoom();
-          onClose();
-        }
-      }}
-    >
-      <button
-        type="button"
-        onClick={() => {
-          resetZoom();
-          onClose();
-        }}
-        className="absolute right-4 top-4 z-10 rounded-full bg-white/10 p-2 text-white transition hover:bg-white/25"
-      >
-        <X className="h-6 w-6" />
-      </button>
-      {display.scale > 1 && (
-        <button
-          type="button"
-          onClick={resetZoom}
-          className="absolute bottom-6 left-1/2 z-10 -translate-x-1/2 rounded-full bg-white/15 px-4 py-2 text-sm text-white transition hover:bg-white/30"
-        >
-          Reset zoom
-        </button>
-      )}
-      <div
-        ref={containerRef}
-        className="touch-none select-none"
-        style={{ cursor: display.scale > 1 ? "grab" : "zoom-in" }}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-        onDoubleClick={() => {
-          if (live.current.scale > 1) resetZoom();
-          else applyTransform(2.5, 0, 0);
-        }}
-      >
-        <img
-          src={src}
-          alt={alt}
-          draggable={false}
-          className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain"
-          style={{
-            transform: `translate(${display.tx}px, ${display.ty}px) scale(${display.scale})`,
-            transformOrigin: "center",
-            transition:
-              display.scale === 1 ? "transform 0.15s ease-out" : "none",
-          }}
-        />
-      </div>
     </div>
   );
 }

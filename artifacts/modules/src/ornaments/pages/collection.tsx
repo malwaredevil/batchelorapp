@@ -1,8 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useListOrnaments,
   useListOrnamentCategories,
+  useReanalyzeOrnament,
+  getListOrnamentsQueryKey,
   useListConnectedCalendars,
   useListConnectedCalendarEvents,
   getListConnectedCalendarEventsQueryKey,
@@ -18,7 +21,12 @@ import {
   SlidersHorizontal,
   Image as ImageIcon,
   CalendarHeart,
+  ZoomIn,
+  MoreVertical,
+  ExternalLink,
+  RefreshCw,
 } from "lucide-react";
+import { ImageLightbox } from "@/quilting/components/image-lightbox";
 import { usePageAssistantContext } from "@/ornaments/lib/assistant-context";
 import { useAppConfigSummary } from "@workspace/elaine-ui";
 import { Button } from "@/components/ui/button";
@@ -70,8 +78,8 @@ function NextHallmarkEventCard() {
 
   const upcoming = gcalEvents
     .map((e: TravelCalendarEvent) => {
-      const startDate = e.start.slice(0, 10);
-      const endDate = (() => {
+      const rawStart = e.start.slice(0, 10);
+      const rawEnd = (() => {
         if (e.allDay) {
           const d = new Date(e.end + "T00:00:00");
           d.setDate(d.getDate() - 1);
@@ -79,6 +87,10 @@ function NextHallmarkEventCard() {
         }
         return e.end.slice(0, 10);
       })();
+      // Always display the earlier date first — GCal exclusive-end subtraction
+      // can produce rawEnd < rawStart when an event was entered backwards.
+      const startDate = rawStart <= rawEnd ? rawStart : rawEnd;
+      const endDate = rawStart <= rawEnd ? rawEnd : rawStart;
       return {
         title: e.title,
         startDate,
@@ -142,6 +154,9 @@ export default function Collection() {
   const [sort, setSort] = useState("newest");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [selectedCat, setSelectedCat] = useState<number | null>(null);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const reanalyze = useReanalyzeOrnament();
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -217,7 +232,7 @@ export default function Collection() {
             asChild
             className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 shadow-md"
           >
-            <Link href="/ornaments/add">
+            <Link href="/ornaments/camera-add">
               <Plus className="mr-2 h-4 w-4" /> Add Ornament
             </Link>
           </Button>
@@ -353,46 +368,101 @@ export default function Collection() {
       {viewMode === "grid" && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
           {sortedItems.map((item) => (
-            <Link
-              key={item.id}
-              href={`/ornaments/ornament/${item.id}`}
-              className="group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl"
-            >
-              <div className="relative aspect-square overflow-hidden rounded-xl bg-muted border border-border group-hover:border-primary/50 transition-colors shadow-sm mb-3">
-                {item.imageUrl ? (
-                  <img
-                    src={item.imageUrl}
-                    alt={item.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
-                  />
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground bg-secondary/30">
-                    <ImageIcon className="h-8 w-8 mb-2 opacity-20" />
-                  </div>
-                )}
-                {item.quantity > 1 && (
-                  <div className="absolute top-2 right-2 bg-black/60 text-white backdrop-blur-md px-2 py-0.5 rounded-full text-xs font-medium">
-                    x{item.quantity}
-                  </div>
-                )}
+            <div key={item.id} className="relative group">
+              {/* Zoom button — top-left */}
+              {item.imageUrl && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setLightboxSrc(item.imageUrl!);
+                  }}
+                  className="absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/70"
+                  title="Zoom preview"
+                >
+                  <ZoomIn className="h-3.5 w-3.5" />
+                </button>
+              )}
+
+              {/* Actions menu — top-right */}
+              <div className="absolute right-2 top-2 z-10 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="grid h-8 w-8 place-items-center rounded-full bg-background/85 text-foreground shadow-sm backdrop-blur"
+                      aria-label="Options"
+                    >
+                      <MoreVertical className="h-3.5 w-3.5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem asChild>
+                      <Link href={`/ornaments/ornament/${item.id}`}>
+                        <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                        Open
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() =>
+                        void reanalyze.mutateAsync({ id: item.id }).then(() =>
+                          queryClient.invalidateQueries({
+                            queryKey: getListOrnamentsQueryKey(),
+                          }),
+                        )
+                      }
+                    >
+                      <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                      Refresh AI
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
-              <div>
-                <h3 className="font-serif font-bold text-foreground leading-tight line-clamp-1 group-hover:text-primary transition-colors">
-                  {item.name}
-                </h3>
-                <div className="flex items-center text-xs text-muted-foreground mt-1 gap-2">
-                  <span className="font-medium text-foreground/70">
-                    {item.brand}
-                  </span>
-                  {item.year && <span>• {item.year}</span>}
+
+              <Link
+                href={`/ornaments/ornament/${item.id}`}
+                className="block overflow-hidden rounded-xl border border-card-border bg-card shadow-sm transition hover:shadow-md"
+              >
+                <div className="aspect-square overflow-hidden bg-muted">
+                  {item.imageUrl ? (
+                    <img
+                      src={item.imageUrl}
+                      alt={item.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground bg-secondary/30">
+                      <ImageIcon className="h-8 w-8 mb-2 opacity-20" />
+                    </div>
+                  )}
                 </div>
-                {item.seriesOrCollection && (
-                  <p className="text-xs text-muted-foreground mt-0.5 italic line-clamp-1">
-                    {item.seriesOrCollection}
-                  </p>
-                )}
-              </div>
-            </Link>
+                <div className="p-3">
+                  <h3 className="font-serif font-bold text-foreground leading-tight line-clamp-1">
+                    {item.name}
+                  </h3>
+                  <div className="flex items-center text-xs text-muted-foreground mt-1 gap-2">
+                    <span className="font-medium text-foreground/70">
+                      {item.brand}
+                    </span>
+                    {item.year && <span>• {item.year}</span>}
+                  </div>
+                  {item.seriesOrCollection && (
+                    <p className="text-xs text-muted-foreground mt-0.5 italic line-clamp-1">
+                      {item.seriesOrCollection}
+                    </p>
+                  )}
+                  {item.quantity > 1 && (
+                    <div className="mt-1.5">
+                      <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                        ×{item.quantity}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </Link>
+            </div>
           ))}
         </div>
       )}
@@ -401,12 +471,14 @@ export default function Collection() {
       {viewMode === "list" && (
         <div className="flex flex-col gap-3">
           {sortedItems.map((item) => (
-            <Link
+            <div
               key={item.id}
-              href={`/ornaments/ornament/${item.id}`}
               className="group flex gap-4 p-3 bg-card border border-card-border rounded-xl hover:border-primary/50 transition-colors shadow-sm items-center"
             >
-              <div className="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 overflow-hidden rounded-lg bg-muted border border-border">
+              <div
+                className="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 overflow-hidden rounded-lg bg-muted border border-border cursor-zoom-in"
+                onClick={() => item.imageUrl && setLightboxSrc(item.imageUrl)}
+              >
                 {item.imageUrl ? (
                   <img
                     src={item.imageUrl}
@@ -418,39 +490,55 @@ export default function Collection() {
                     <ImageIcon className="h-5 w-5 opacity-30" />
                   </div>
                 )}
+                {item.imageUrl && (
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    <ZoomIn className="h-4 w-4 text-white drop-shadow" />
+                  </div>
+                )}
               </div>
-              <div className="flex-1 min-w-0 py-1">
-                <h3 className="font-serif font-bold text-foreground text-lg leading-tight truncate group-hover:text-primary transition-colors">
-                  {item.name}
-                </h3>
-                <div className="flex flex-wrap items-center text-sm text-muted-foreground mt-1 gap-x-3 gap-y-1">
-                  <span className="font-medium text-foreground/80">
-                    {item.brand}
-                  </span>
-                  {item.year && <span>{item.year}</span>}
-                  {item.seriesOrCollection && (
-                    <span className="italic truncate max-w-[200px]">
-                      {item.seriesOrCollection}
+              <Link
+                href={`/ornaments/ornament/${item.id}`}
+                className="flex-1 min-w-0 py-1 flex gap-4 items-center"
+              >
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-serif font-bold text-foreground text-lg leading-tight truncate group-hover:text-primary transition-colors">
+                    {item.name}
+                  </h3>
+                  <div className="flex flex-wrap items-center text-sm text-muted-foreground mt-1 gap-x-3 gap-y-1">
+                    <span className="font-medium text-foreground/80">
+                      {item.brand}
                     </span>
-                  )}
-                  {item.quantity > 1 && (
-                    <span className="bg-muted px-1.5 rounded text-xs">
-                      Qty: {item.quantity}
+                    {item.year && <span>{item.year}</span>}
+                    {item.seriesOrCollection && (
+                      <span className="italic truncate max-w-[200px]">
+                        {item.seriesOrCollection}
+                      </span>
+                    )}
+                    {item.quantity > 1 && (
+                      <span className="bg-muted px-1.5 rounded text-xs">
+                        Qty: {item.quantity}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="hidden sm:flex flex-col items-end shrink-0 pl-4">
+                  {item.bookValue != null && (
+                    <span className="font-medium text-primary/80">
+                      ${item.bookValue.toFixed(0)}
                     </span>
                   )}
                 </div>
-              </div>
-              <div className="hidden sm:flex flex-col items-end shrink-0 pl-4">
-                {item.bookValue != null && (
-                  <span className="font-medium text-primary/80">
-                    ${item.bookValue.toFixed(0)}
-                  </span>
-                )}
-              </div>
-            </Link>
+              </Link>
+            </div>
           ))}
         </div>
       )}
+
+      <ImageLightbox
+        src={lightboxSrc ?? ""}
+        open={!!lightboxSrc}
+        onClose={() => setLightboxSrc(null)}
+      />
 
       {isError && (
         <CollectionErrorState
@@ -474,7 +562,7 @@ export default function Collection() {
           </p>
           {!search && !selectedCat && (
             <Button asChild className="mt-6 bg-primary text-primary-foreground">
-              <Link href="/ornaments/add">
+              <Link href="/ornaments/camera-add">
                 <Plus className="mr-2 h-4 w-4" /> Add Ornament
               </Link>
             </Button>

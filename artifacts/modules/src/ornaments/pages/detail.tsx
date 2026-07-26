@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRoute, useLocation } from "wouter";
 import {
   Loader2,
@@ -14,7 +14,10 @@ import {
   Image as ImageIcon,
   X,
   Star,
+  ZoomIn,
 } from "lucide-react";
+import { ImageLightbox } from "@/quilting/components/image-lightbox";
+import { ItemImageGallery } from "@workspace/image-capture";
 import {
   useGetOrnament,
   useUpdateOrnament,
@@ -77,6 +80,7 @@ export default function OrnamentDetail() {
 
   const [isDeleting, setIsDeleting] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [ebayResult, setEbayResult] = useState<{
     priceMinUsd: number;
     priceMaxUsd: number;
@@ -342,7 +346,42 @@ export default function OrnamentDetail() {
       toast.dismiss("analyze");
       toast.success("Analysis complete");
       queryClient.setQueryData(getGetOrnamentQueryKey(id), result);
-      if (result.aiDescription) setAiDesc(result.aiDescription);
+
+      // Push all returned fields into form state — server already skipped locked fields,
+      // so the result values are exactly what should be displayed.
+      const newTitle = result.name || "";
+      const newBrand = result.brand || "Hallmark";
+      const newSeries = result.seriesOrCollection || "";
+      const newYear = result.year ? String(result.year) : "";
+      const newAiDesc = result.aiDescription || "";
+      const newDimensions = result.dimensions || "";
+      const newCondition = result.condition || "";
+      const newCats = result.categories?.map((c) => c.id) ?? [];
+      const newLocked = result.lockedFields ?? [];
+
+      setTitle(newTitle);
+      setBrand(newBrand);
+      setSeries(newSeries);
+      setYear(newYear);
+      setAiDesc(newAiDesc);
+      setDimensions(newDimensions);
+      setCondition(newCondition);
+      setCategories(newCats);
+      setLockedFields(newLocked);
+
+      // Sync lastSaved so the debounced auto-save doesn't see a spurious diff
+      lastSaved.current = {
+        title: newTitle,
+        brand: newBrand,
+        series: newSeries,
+        year: newYear,
+        notes: lastSaved.current.notes,
+        categories: newCats.join(","),
+        lockedFields: newLocked.join(","),
+        aiDesc: newAiDesc,
+        dimensions: newDimensions,
+        condition: newCondition,
+      };
     } catch (err) {
       toast.dismiss("analyze");
       toast.error("Analysis failed");
@@ -407,6 +446,40 @@ export default function OrnamentDetail() {
       toast.error("Failed to remove image");
     }
   };
+
+  const handleReplaceImage = async (
+    imageId: number,
+    isPrimary: boolean,
+    file: File,
+  ) => {
+    const endpoint = isPrimary
+      ? `/api/ornaments/items/${id}/image`
+      : `/api/ornaments/items/${id}/images/${imageId}`;
+    const form = new FormData();
+    form.append("image", file, "photo.jpg");
+    const resp = await fetch(endpoint, {
+      method: "PUT",
+      body: form,
+      credentials: "include",
+    });
+    if (!resp.ok) {
+      const err = (await resp.json().catch(() => ({}))) as { error?: string };
+      throw new Error(err.error ?? "Failed to save photo");
+    }
+    queryClient.invalidateQueries({ queryKey: getGetOrnamentQueryKey(id) });
+    queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() });
+    toast.success("Photo updated");
+  };
+
+  // Must be before any early return — hooks cannot be called after conditional returns
+  const lightboxImages = useMemo(
+    () =>
+      (ornament?.images ?? [])
+        .slice()
+        .sort((a, b) => a.position - b.position)
+        .map((img) => img.url),
+    [ornament?.images],
+  );
 
   if (isLoading) {
     return (
@@ -481,102 +554,40 @@ export default function OrnamentDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-8 items-start">
         {/* Left Column - Image & Actions */}
         <div className="space-y-4">
-          <div className="relative aspect-square w-full rounded-2xl overflow-hidden bg-card border border-card-border shadow-md group">
-            {ornament.imageUrl ? (
-              <img
-                src={ornament.imageUrl}
-                alt={title}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-muted-foreground bg-secondary/30">
-                <ImageIcon className="h-12 w-12 opacity-20" />
-              </div>
-            )}
-
-            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
-              <Button
-                variant="secondary"
-                className="rounded-full shadow-xl"
-                asChild
-                disabled={addImage.isPending}
-              >
-                <label className="cursor-pointer">
-                  {addImage.isPending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Camera className="mr-2 h-4 w-4" />
-                  )}
-                  Add Photo
-                  <input
-                    type="file"
-                    className="hidden"
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                  />
-                </label>
-              </Button>
-            </div>
-          </div>
-
-          {ornament.images && ornament.images.length > 1 && (
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground px-0.5">
-                Tap <Star className="inline h-3 w-3 text-primary" /> on any
-                photo to set it as the main display image
-              </p>
-              <div className="flex gap-2 overflow-x-auto pb-2 snap-x">
-                {ornament.images.map((img) => (
-                  <div
-                    key={img.id}
-                    className="relative w-20 h-20 shrink-0 rounded-lg overflow-hidden border border-border group snap-start"
-                  >
-                    <img
-                      src={img.url}
-                      alt=""
-                      className="w-full h-full object-cover"
-                    />
-                    {img.position === 0 ? (
-                      <div
-                        className="absolute top-1 left-1 bg-primary text-white rounded-full p-0.5"
-                        title="Current main image"
-                      >
-                        <Star className="h-3 w-3 fill-current" />
-                      </div>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => handleSetPrimary(img.id)}
-                          disabled={setPrimaryImage.isPending}
-                          className="absolute top-1 left-1 bg-black/50 text-white/80 rounded-full p-0.5 hover:bg-primary hover:text-white transition-colors"
-                          title="Set as main image"
-                        >
-                          <Star className="h-3 w-3" />
-                        </button>
-                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 backdrop-blur-sm">
-                          <button
-                            onClick={() => handleSetPrimary(img.id)}
-                            disabled={setPrimaryImage.isPending}
-                            className="p-1 text-white hover:text-primary transition-colors"
-                            title="Set as main image"
-                          >
-                            <Star className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteImage(img.id)}
-                            className="p-1 text-white hover:text-destructive transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <ItemImageGallery
+            images={(ornament.images ?? [])
+              .slice()
+              .sort((a, b) => a.position - b.position)
+              .map((img) => ({
+                id: img.id,
+                url: img.url,
+                label: null,
+                isPrimary: img.position === 0,
+              }))}
+            onAddImage={async (file) => {
+              const formData = new FormData();
+              formData.append("image", file);
+              await addImage.mutateAsync(formData);
+              queryClient.invalidateQueries({
+                queryKey: getGetOrnamentQueryKey(id),
+              });
+              toast.success("Photo added");
+            }}
+            onReplaceImage={handleReplaceImage}
+            onDeleteImage={(imageId, isPrimary) => {
+              if (!isPrimary) void handleDeleteImage(imageId);
+            }}
+            onSetPrimary={(imageId) => void handleSetPrimary(imageId)}
+            onZoom={(url) => {
+              const sorted = (ornament.images ?? [])
+                .slice()
+                .sort((a, b) => a.position - b.position);
+              const idx = sorted.findIndex((img) => img.url === url);
+              if (idx >= 0) setLightboxIndex(idx);
+            }}
+            isUploading={addImage.isPending}
+            maxImages={10}
+          />
 
           <div className="grid grid-cols-3 gap-2">
             <Button
@@ -822,6 +833,17 @@ export default function OrnamentDetail() {
           </div>
         </div>
       </div>
+
+      <ImageLightbox
+        src={
+          lightboxIndex !== null ? (lightboxImages[lightboxIndex] ?? "") : ""
+        }
+        open={lightboxIndex !== null}
+        onClose={() => setLightboxIndex(null)}
+        images={lightboxImages}
+        currentIndex={lightboxIndex ?? 0}
+        onNavigate={setLightboxIndex}
+      />
     </div>
   );
 }

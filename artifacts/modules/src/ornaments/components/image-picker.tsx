@@ -64,7 +64,8 @@ export function ImagePicker({ value, onChange, className }: ImagePickerProps) {
       <input
         type="file"
         ref={fileInputRef}
-        accept="image/jpeg,image/png,image/webp,image/heic"
+        accept="image/*"
+        capture="environment"
         className="hidden"
         onChange={(e) => {
           if (e.target.files && e.target.files.length > 0) {

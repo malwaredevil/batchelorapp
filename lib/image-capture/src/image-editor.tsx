@@ -835,168 +835,174 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
         </button>
       </div>
 
-      {/* Canvas — flex-1 fills remaining height */}
-      <canvas
-        ref={canvasRef}
-        className="flex-1 touch-none select-none"
-        style={{ cursor: cropMode ? "crosshair" : "default" }}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-      />
-
-      {/* Contextual hint */}
-      <div className="pointer-events-none flex justify-center py-1">
-        <span className="rounded-full bg-black/60 px-3 py-1 text-xs text-white/70">
-          {cropMode
-            ? "Drag handles to resize · drag inside box to move · Done to save"
-            : zoom > 1
-              ? "Pinch to zoom · drag to pan · tap Crop to select a region"
-              : "Pinch to zoom · tap Crop to select a region · use slider below to adjust"}
-        </span>
-      </div>
-
-      {/* Controls */}
-      <div className="space-y-3 border-t border-white/10 bg-black/90 px-4 py-4">
-        {/* Zoom */}
-        <div className="space-y-1">
-          <Label className="text-xs text-white/60">
-            Zoom {zoom.toFixed(1)}×
-          </Label>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => changeZoom(Math.max(1, zoom - 0.5))}
-              className="text-white/50 hover:text-white transition"
-            >
-              <Minus className="h-4 w-4" />
-            </button>
-            <Slider
-              min={1}
-              max={5}
-              step={0.1}
-              value={[zoom]}
-              onValueChange={([v]) => changeZoom(v)}
-              className="flex-1 [&_[role=slider]]:bg-white"
-            />
-            <button
-              type="button"
-              onClick={() => changeZoom(Math.min(5, zoom + 0.5))}
-              className="text-white/50 hover:text-white transition"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-          </div>
+      {/* Body: canvas left, controls sidebar right on md+ */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+        {/* Canvas wrapper — flex-1 with min-w-0/min-h-0 so it never overflows its flex slot */}
+        <div className="relative min-h-0 min-w-0 flex-1">
+          <canvas
+            ref={canvasRef}
+            className="absolute inset-0 h-full w-full touch-none select-none"
+            style={{ cursor: cropMode ? "crosshair" : "default" }}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerUp}
+          />
         </div>
 
-        {/* Transform + Crop */}
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          <button
-            type="button"
-            onClick={() => setRotation((r) => r - 1)}
-            className="flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-2 text-xs text-white/80 hover:bg-white/20 transition"
-          >
-            <RotateCcw className="h-4 w-4" /> ↺ Left
-          </button>
-          <button
-            type="button"
-            onClick={() => setRotation((r) => r + 1)}
-            className="flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-2 text-xs text-white/80 hover:bg-white/20 transition"
-          >
-            <RotateCw className="h-4 w-4" /> ↻ Right
-          </button>
-          <button
-            type="button"
-            onClick={() => setFlipH((f) => !f)}
-            className={cn(
-              "flex items-center gap-1.5 rounded-full px-3 py-2 text-xs transition",
-              flipH
-                ? "bg-primary/30 text-primary"
-                : "bg-white/10 text-white/80 hover:bg-white/20",
-            )}
-          >
-            <FlipHorizontal className="h-4 w-4" /> Flip
-          </button>
+        {/* Controls — bottom strip on mobile, right sidebar on desktop */}
+        <div className="shrink-0 space-y-3 overflow-y-auto border-t border-white/10 bg-black/90 px-4 py-4 md:w-72 md:border-l md:border-t-0">
+          {/* Contextual hint — lives inside the controls panel */}
+          <div className="pointer-events-none flex justify-center">
+            <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/70">
+              {cropMode
+                ? "Drag handles to resize · drag inside box to move · Done to save"
+                : zoom > 1
+                  ? "Pinch to zoom · drag to pan · tap Crop to select a region"
+                  : "Pinch to zoom · tap Crop to select a region · use slider below to adjust"}
+            </span>
+          </div>
+          {/* Zoom */}
+          <div className="space-y-1">
+            <Label className="text-xs text-white/60">
+              Zoom {zoom.toFixed(1)}×
+            </Label>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => changeZoom(Math.max(1, zoom - 0.5))}
+                className="text-white/50 hover:text-white transition"
+              >
+                <Minus className="h-4 w-4" />
+              </button>
+              <Slider
+                min={1}
+                max={5}
+                step={0.1}
+                value={[zoom]}
+                onValueChange={([v]) => changeZoom(v)}
+                className="flex-1 [&_[role=slider]]:bg-white"
+              />
+              <button
+                type="button"
+                onClick={() => changeZoom(Math.min(5, zoom + 0.5))}
+                className="text-white/50 hover:text-white transition"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
 
-          {cropMode ? (
+          {/* Transform + Crop */}
+          <div className="flex flex-wrap items-center justify-center gap-2">
             <button
               type="button"
-              onClick={cancelCrop}
-              className="flex items-center gap-1.5 rounded-full bg-red-500/20 px-3 py-2 text-xs text-red-300 hover:bg-red-500/30 transition"
-            >
-              <X className="h-4 w-4" /> Cancel crop
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={enterCropMode}
+              onClick={() => setRotation((r) => r - 1)}
               className="flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-2 text-xs text-white/80 hover:bg-white/20 transition"
             >
-              <Crop className="h-4 w-4" /> Crop
+              <RotateCcw className="h-4 w-4" /> ↺ Left
             </button>
-          )}
-        </div>
+            <button
+              type="button"
+              onClick={() => setRotation((r) => r + 1)}
+              className="flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-2 text-xs text-white/80 hover:bg-white/20 transition"
+            >
+              <RotateCw className="h-4 w-4" /> ↻ Right
+            </button>
+            <button
+              type="button"
+              onClick={() => setFlipH((f) => !f)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full px-3 py-2 text-xs transition",
+                flipH
+                  ? "bg-primary/30 text-primary"
+                  : "bg-white/10 text-white/80 hover:bg-white/20",
+              )}
+            >
+              <FlipHorizontal className="h-4 w-4" /> Flip
+            </button>
 
-        {/* Brightness / Contrast / Sharpness */}
-        <div className="grid grid-cols-3 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs text-white/60">
-              Brightness {brightness}%
-            </Label>
-            <Slider
-              min={20}
-              max={200}
-              step={1}
-              value={[brightness]}
-              onValueChange={([v]) => setBrightness(v)}
-              className="[&_[role=slider]]:bg-white"
-            />
+            {cropMode ? (
+              <button
+                type="button"
+                onClick={cancelCrop}
+                className="flex items-center gap-1.5 rounded-full bg-red-500/20 px-3 py-2 text-xs text-red-300 hover:bg-red-500/30 transition"
+              >
+                <X className="h-4 w-4" /> Cancel crop
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={enterCropMode}
+                className="flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-2 text-xs text-white/80 hover:bg-white/20 transition"
+              >
+                <Crop className="h-4 w-4" /> Crop
+              </button>
+            )}
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs text-white/60">
-              Contrast {contrast}%
-            </Label>
-            <Slider
-              min={20}
-              max={200}
-              step={1}
-              value={[contrast]}
-              onValueChange={([v]) => setContrast(v)}
-              className="[&_[role=slider]]:bg-white"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs text-white/60">Sharpen {sharpness}</Label>
-            <Slider
-              min={0}
-              max={100}
-              step={1}
-              value={[sharpness]}
-              onValueChange={([v]) => setSharpness(v)}
-              className="[&_[role=slider]]:bg-white"
-            />
-          </div>
-        </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setZoom(1);
-            setPanX(0.5);
-            setPanY(0.5);
-            setRotation(0);
-            setFlipH(false);
-            setBrightness(100);
-            setContrast(100);
-            setSharpness(25);
-            setCrop(FULL);
-            setCropMode(false);
-          }}
-          className="w-full text-center text-xs text-white/30 hover:text-white/60 transition"
-        >
-          Reset all
-        </button>
+          {/* Brightness / Contrast / Sharpness */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs text-white/60">
+                Brightness {brightness}%
+              </Label>
+              <Slider
+                min={20}
+                max={200}
+                step={1}
+                value={[brightness]}
+                onValueChange={([v]) => setBrightness(v)}
+                className="[&_[role=slider]]:bg-white"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/60">
+                Contrast {contrast}%
+              </Label>
+              <Slider
+                min={20}
+                max={200}
+                step={1}
+                value={[contrast]}
+                onValueChange={([v]) => setContrast(v)}
+                className="[&_[role=slider]]:bg-white"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/60">
+                Sharpen {sharpness}
+              </Label>
+              <Slider
+                min={0}
+                max={100}
+                step={1}
+                value={[sharpness]}
+                onValueChange={([v]) => setSharpness(v)}
+                className="[&_[role=slider]]:bg-white"
+              />
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              setZoom(1);
+              setPanX(0.5);
+              setPanY(0.5);
+              setRotation(0);
+              setFlipH(false);
+              setBrightness(100);
+              setContrast(100);
+              setSharpness(25);
+              setCrop(FULL);
+              setCropMode(false);
+            }}
+            className="w-full text-center text-xs text-white/30 hover:text-white/60 transition"
+          >
+            Reset all
+          </button>
+        </div>
       </div>
     </div>
   );

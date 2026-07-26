@@ -102,6 +102,7 @@ const BarcodeLookupPage = lazy(() => import("@/pages/barcode-lookup"));
 // Ornaments
 const OrnamentsCollection = lazy(() => import("@/ornaments/pages/collection"));
 const OrnamentsAdd = lazy(() => import("@/ornaments/pages/add"));
+const OrnamentsCameraAdd = lazy(() => import("@/ornaments/pages/camera-add"));
 const OrnamentsScan = lazy(() => import("@/ornaments/pages/scan"));
 const OrnamentsStats = lazy(() => import("@/ornaments/pages/stats"));
 const OrnamentsDetail = lazy(() => import("@/ornaments/pages/detail"));
@@ -357,6 +358,10 @@ function Routes() {
                 </Route>
                 <Route path="/ornaments" component={OrnamentsCollection} />
                 <Route path="/ornaments/add" component={OrnamentsAdd} />
+                <Route
+                  path="/ornaments/camera-add"
+                  component={OrnamentsCameraAdd}
+                />
                 <Route path="/ornaments/scan" component={OrnamentsScan} />
                 <Route path="/ornaments/stats" component={OrnamentsStats} />
                 <Route

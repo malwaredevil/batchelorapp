@@ -2014,6 +2014,7 @@ async function main() {
       "updated_at",
     ],
     orderBy: "id",
+    jsonbColumns: ["candidates"],
   });
   await resetSequence(dest, "ornament_identity_research", "id");
 

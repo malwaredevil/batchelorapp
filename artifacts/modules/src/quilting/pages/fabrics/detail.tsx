@@ -682,7 +682,7 @@ export default function FabricDetail() {
                     <input
                       type="file"
                       className="sr-only"
-                      accept="image/jpeg,image/png,image/webp"
+                      accept="image/*"
                       onChange={handleAddPhoto}
                       disabled={addFabricImage.isPending}
                     />

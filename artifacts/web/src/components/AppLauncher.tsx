@@ -1471,62 +1471,6 @@ export function AppLauncher() {
             </>
           )}
         </section>
-
-        {/* Recent Activity */}
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-foreground font-semibold">
-              <Activity className="w-5 h-5 text-primary" />
-              <h3 className="text-lg">Recent Activity</h3>
-            </div>
-            <Button variant="ghost" size="sm" className="text-muted-foreground">
-              View all
-            </Button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              {
-                title: "Added 'Speckled Mug'",
-                cat: "Pottery",
-                time: "2 hours ago",
-              },
-              {
-                title: "Updated Fabric Stash",
-                cat: "Quilting",
-                time: "Yesterday",
-              },
-              {
-                title: "Added 'Large Serving Bowl'",
-                cat: "Pottery",
-                time: "2 days ago",
-              },
-              {
-                title: "Completed 'Star Pattern'",
-                cat: "Quilting",
-                time: "Last week",
-              },
-            ].map((item, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-4 p-3 rounded-xl border border-border bg-card hover:bg-muted/50 cursor-pointer transition-colors"
-              >
-                <div className="w-12 h-12 rounded-lg flex items-center justify-center font-bold text-lg bg-secondary text-primary flex-shrink-0">
-                  {item.cat.charAt(0)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">
-                    {item.title}
-                  </p>
-                  <p className="text-xs text-muted-foreground">{item.cat}</p>
-                </div>
-                <span className="text-xs text-muted-foreground whitespace-nowrap">
-                  {item.time}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
       </main>
 
       {/* Widget library modal */}

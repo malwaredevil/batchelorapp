@@ -33,7 +33,7 @@ import { usePageAssistantContext } from "@/pottery/lib/assistant-context";
 import { useAppConfigSummary } from "@workspace/elaine-ui";
 
 // Must match MAX_UPLOAD_BYTES in lib/upload-validation/src/index.ts
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_UPLOAD_BYTES = 100 * 1024 * 1024; // 100 MB
 
 const LABEL_SUGGESTIONS = [
   "Front",

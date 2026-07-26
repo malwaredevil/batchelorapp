@@ -366,9 +366,9 @@ export default function OrnamentDetail() {
     if (!e.target.files?.length) return;
     const file = e.target.files[0];
     e.target.value = "";
-    const MAX_FILE_BYTES = 10 * 1024 * 1024;
+    const MAX_FILE_BYTES = 100 * 1024 * 1024;
     if (file.size > MAX_FILE_BYTES) {
-      toast.error(`${file.name} — skipped (max 10 MB per file)`);
+      toast.error(`${file.name} — skipped (max 100 MB per file)`);
       return;
     }
     try {

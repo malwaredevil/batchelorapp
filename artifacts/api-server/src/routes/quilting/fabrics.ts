@@ -862,6 +862,75 @@ router.get("/fabrics/:id/image", async (req, res) => {
   res.end(buffer);
 });
 
+// ---------------------------------------------------------------------------
+// PUT /fabrics/:id/image — replace the primary image with new bytes
+// The existing storage object is deleted after the new one is uploaded.
+// Visual embedding is regenerated asynchronously.
+// ---------------------------------------------------------------------------
+router.put("/fabrics/:id/image", upload.single("image"), async (req, res) => {
+  const { id } = GetFabricImageParams.parse(req.params);
+  const [existing] = await db
+    .select({ id: fabrics.id, imagePath: fabrics.imagePath })
+    .from(fabrics)
+    .where(eq(fabrics.id, id))
+    .limit(1);
+  if (!existing) {
+    res.status(404).json({ error: "Fabric not found." });
+    return;
+  }
+  const file = req.file;
+  if (!file) {
+    res.status(400).json({ error: "An image file is required." });
+    return;
+  }
+  let sniffedType: ReturnType<typeof sniffAndValidateMime>;
+  try {
+    sniffedType = sniffAndValidateMime(file.buffer, file.mimetype);
+  } catch {
+    res.status(400).json({ error: "Unsupported image type." });
+    return;
+  }
+  if (!isImageMimeType(sniffedType)) {
+    res.status(400).json({ error: "Unsupported image type." });
+    return;
+  }
+  const contentType = sniffedType;
+  const cleanBuffer = await stripMetadata(file.buffer, contentType);
+  const oldPath = existing.imagePath;
+  const newPath = await uploadImage(cleanBuffer, contentType);
+
+  await db
+    .update(fabrics)
+    .set({ imagePath: newPath })
+    .where(eq(fabrics.id, id));
+
+  void deleteImage(oldPath).catch(() => null);
+  void generateVisualEmbedding(cleanBuffer)
+    .then(async (emb) => {
+      if (!emb) return;
+      await db
+        .update(fabrics)
+        .set({ visualEmbedding: sql`${`[${emb.join(",")}]`}::vector` })
+        .where(eq(fabrics.id, id));
+    })
+    .catch(() => null);
+
+  for (const key of [..._pngCache.keys()]) {
+    if (key.startsWith(`${oldPath}:`)) _pngCache.delete(key);
+  }
+
+  const [row] = await db
+    .select(fabricColumns)
+    .from(fabrics)
+    .where(eq(fabrics.id, id))
+    .limit(1);
+  res.json(
+    await serializeFabric(
+      row as Omit<FabricRow, "embedding" | "visualEmbedding">,
+    ),
+  );
+});
+
 router.get("/fabrics/:id/tile-image", async (req, res) => {
   const { id } = GetFabricImageParams.parse(req.params);
   const [row] = await db
@@ -1334,6 +1403,59 @@ router.patch("/fabrics/:id/images/:imageId", async (req, res) => {
     position: image.position,
   });
 });
+
+// PUT /fabrics/:id/images/:imageId — replace a supplemental image's bytes in-place
+router.put(
+  "/fabrics/:id/images/:imageId",
+  upload.single("image"),
+  async (req, res) => {
+    const { id } = GetFabricImageParams.parse(req.params);
+    const { imageId } = UpdateFabricImageParams.parse(req.params);
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: "An image file is required." });
+      return;
+    }
+    const [img] = await db
+      .select({ storagePath: quiltingImages.storagePath })
+      .from(quiltingImages)
+      .where(
+        sql`${quiltingImages.id} = ${imageId} AND entity_type = 'fabric' AND entity_id = ${id}`,
+      )
+      .limit(1);
+    if (!img) {
+      res.status(404).json({ error: "Image not found." });
+      return;
+    }
+    let sniffedType: ReturnType<typeof sniffAndValidateMime>;
+    try {
+      sniffedType = sniffAndValidateMime(file.buffer, file.mimetype);
+    } catch {
+      res.status(400).json({ error: "Unsupported image type." });
+      return;
+    }
+    if (!isImageMimeType(sniffedType)) {
+      res.status(400).json({ error: "Unsupported image type." });
+      return;
+    }
+    const contentType = sniffedType;
+    const cleanBuffer = await stripMetadata(file.buffer, contentType);
+    const oldPath = img.storagePath;
+    const newPath = await uploadImage(cleanBuffer, contentType);
+
+    await db
+      .update(quiltingImages)
+      .set({ storagePath: newPath })
+      .where(eq(quiltingImages.id, imageId));
+
+    void deleteImage(oldPath).catch(() => null);
+
+    res.json({
+      id: imageId,
+      url: `/api/quilting/fabrics/${id}/images/${imageId}`,
+    });
+  },
+);
 
 router.delete("/fabrics/:id/images/:imageId", async (req, res) => {
   const { imageId } = DeleteFabricImageParams.parse(req.params);

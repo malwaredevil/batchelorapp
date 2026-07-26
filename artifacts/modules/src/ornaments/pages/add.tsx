@@ -200,9 +200,9 @@ export default function AddOrnament() {
                       <ImagePicker
                         value={field.value}
                         onChange={(file) => {
-                          if (file && file.size > 10 * 1024 * 1024) {
+                          if (file && file.size > 100 * 1024 * 1024) {
                             toast.error(
-                              `${(file as File).name ?? "File"} — skipped (max 10 MB per file)`,
+                              `${(file as File).name ?? "File"} — skipped (max 100 MB per file)`,
                             );
                             return;
                           }

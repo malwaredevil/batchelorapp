@@ -28,7 +28,7 @@ import { TagSelector } from "@/quilting/components/tag-selector";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
 
 // Must match MAX_UPLOAD_BYTES in lib/upload-validation/src/index.ts
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_UPLOAD_BYTES = 100 * 1024 * 1024; // 100 MB
 
 const AddPatternSchema = z.object({
   name: z.string().min(1, "Name is required"),

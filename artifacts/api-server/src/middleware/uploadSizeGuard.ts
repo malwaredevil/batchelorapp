@@ -44,10 +44,10 @@ export {
 import { HIGH_UPLOAD_PREFIXES } from "../lib/upload-limits";
 
 /** Guard threshold for standard routes — 1 MB above DEFAULT_MULTER_FILE_BYTES. */
-export const DEFAULT_UPLOAD_BYTES = 11 * 1024 * 1024; // 11 MB
+export const DEFAULT_UPLOAD_BYTES = 101 * 1024 * 1024; // 101 MB
 
 /** Guard threshold for high-cap routes — 1 MB above HIGH_MULTER_FILE_BYTES. */
-export const HIGH_UPLOAD_BYTES = 21 * 1024 * 1024; // 21 MB
+export const HIGH_UPLOAD_BYTES = 101 * 1024 * 1024; // 101 MB
 
 export function uploadSizeGuard(
   req: Request,

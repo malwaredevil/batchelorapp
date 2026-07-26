@@ -4,7 +4,7 @@ import { UploadCloud, X, Image as ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Must match MAX_UPLOAD_BYTES in lib/upload-validation/src/index.ts
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_UPLOAD_BYTES = 100 * 1024 * 1024; // 100 MB
 
 interface ImagePickerProps {
   value?: Blob | string | null;

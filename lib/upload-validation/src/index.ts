@@ -8,27 +8,27 @@ export type SupportedDocMimeType = SupportedMimeType | "application/pdf";
  * Must match the server's multer `limits.fileSize` on those routes.
  * Client-side forms mirror this value to warn users immediately on selection.
  */
-export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
+export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024; // 100 MB
 
 /**
  * Maximum file size for large uploads (travels photos and Elaine attachments).
  * Must match the server's multer `limits.fileSize` on those routes.
  * Client-side forms mirror this value to warn users immediately on selection.
  */
-export const MAX_LARGE_UPLOAD_BYTES = 21 * 1024 * 1024; // 21 MB
+export const MAX_LARGE_UPLOAD_BYTES = 100 * 1024 * 1024; // 100 MB
 
 /**
  * Hard ceiling on the number of pixels Sharp will decode from any input. Rejects
- * decompression-bomb uploads before they can exhaust CPU or memory. 50 MP covers
- * any real phone/camera photo while blocking pathological inputs.
+ * decompression-bomb uploads before they can exhaust CPU or memory. 200 MP covers
+ * high-resolution camera photos while blocking pathological inputs.
  */
-const MAX_INPUT_PIXELS = 50_000_000;
+const MAX_INPUT_PIXELS = 200_000_000;
 
 /**
- * Longest-edge cap for images persisted to storage. Keeps uploads at a sane size
- * without letting a single file balloon storage or downstream AI payloads.
+ * Longest-edge cap for images persisted to storage. Set high enough to preserve
+ * full-resolution uploads from modern cameras and scanners.
  */
-const MAX_STORAGE_DIMENSION = 2048;
+const MAX_STORAGE_DIMENSION = 16000;
 
 /**
  * Structured error thrown when an uploaded file fails format validation.

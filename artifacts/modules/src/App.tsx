@@ -1,6 +1,12 @@
 import { lazy, Suspense, useEffect } from "react";
 import * as Sentry from "@sentry/react";
-import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
+import {
+  Switch,
+  Route,
+  Router as WouterRouter,
+  Redirect,
+  useLocation,
+} from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
@@ -16,7 +22,9 @@ import {
   ThemeProvider,
   ElainePageContextProvider,
   CommandPalette,
+  ElaineWidget,
 } from "@workspace/elaine-ui";
+import { type ElaineAppId } from "@workspace/api-client-react";
 import "@/features";
 import "@/pottery/features";
 import "@/quilting/features";
@@ -165,6 +173,25 @@ function Home() {
     window.location.href = "/";
   }, []);
   return <Splash />;
+}
+
+function deriveAppId(path: string): ElaineAppId {
+  if (path.startsWith("/pottery")) return "pottery";
+  if (path.startsWith("/quilting")) return "quilting";
+  if (path.startsWith("/ornaments")) return "ornaments";
+  if (path.startsWith("/travels")) return "travels";
+  return "hub";
+}
+
+function GlobalElaineWidget() {
+  const [path] = useLocation();
+  return (
+    <ElaineWidget
+      appId={deriveAppId(path)}
+      fullScreenPath="/elaine/"
+      currentPath={path}
+    />
+  );
 }
 
 function Routes() {
@@ -406,6 +433,7 @@ function Routes() {
         </ModuleShell>
       </BackgroundTaskProvider>
       <MessengerNotification />
+      <GlobalElaineWidget />
     </>
   );
 }

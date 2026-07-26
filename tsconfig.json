@@ -34,6 +34,9 @@
       "path": "./lib/image-capture"
     },
     {
+      "path": "./lib/collection-ui"
+    },
+    {
       "path": "./lib/vite-config"
     },
     {

@@ -5,7 +5,10 @@ import {
   useListPotteryCategories as useListCategories,
   useBulkReanalyzePottery,
   useReanalyzePottery,
+  useUpdatePottery,
+  useDeletePottery,
   getListPotteryQueryKey,
+  getGetPotteryQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { PotteryPotteryItem as PotteryItem } from "@workspace/api-client-react";
@@ -27,6 +30,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ZoomIn,
+  Tag,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,8 +46,21 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { QuickEditSheet } from "@/pottery/components/quick-edit-sheet";
+import { CategoryEditDialog } from "@/quilting/components/CategoryEditDialog";
+import type { QuiltingCategory } from "@workspace/api-client-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { colorToHex } from "@/pottery/lib/colors";
 import { usePageAssistantContext } from "@/pottery/lib/assistant-context";
+import { toast } from "sonner";
 import { useAppConfigSummary } from "@workspace/elaine-ui";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { DominantColorDots } from "@/components/collection/DominantColorDots";
@@ -203,6 +221,8 @@ function PieceCard({
   onReanalyze,
   onColorFilter,
   activeColor,
+  onSetCategories,
+  onDelete,
 }: {
   item: PotteryItem;
   selecting: boolean;
@@ -212,6 +232,8 @@ function PieceCard({
   onReanalyze: (id: number) => void;
   onColorFilter: (color: string) => void;
   activeColor: string | null;
+  onSetCategories: (item: PotteryItem) => void;
+  onDelete: (item: PotteryItem) => void;
 }) {
   const [imgLoaded, setImgLoaded] = useState(false);
   const [zoomOpen, setZoomOpen] = useState(false);
@@ -280,10 +302,30 @@ function PieceCard({
                 <Pencil className="mr-2 h-3.5 w-3.5" />
                 Quick edit
               </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.preventDefault();
+                  onSetCategories(item);
+                }}
+              >
+                <Tag className="mr-2 h-3.5 w-3.5" />
+                Set categories
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => onReanalyze(item.id)}>
                 <RefreshCw className="mr-2 h-3.5 w-3.5" />
                 Refresh AI
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={(e) => {
+                  e.preventDefault();
+                  onDelete(item);
+                }}
+              >
+                <Trash2 className="mr-2 h-3.5 w-3.5" />
+                Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -730,6 +772,14 @@ export default function Collection() {
   // Quick edit
   const [quickEditItem, setQuickEditItem] = useState<PotteryItem | null>(null);
 
+  // Set categories
+  const [categoryEditItem, setCategoryEditItem] = useState<PotteryItem | null>(
+    null,
+  );
+
+  // Delete confirm
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+
   // Compare mode
   const [compareMode, setCompareMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -771,6 +821,28 @@ export default function Collection() {
   function handleReanalyze(id: number) {
     reanalyzeItem({ id });
   }
+
+  const deletePotteryItem = useDeletePottery({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListPotteryQueryKey() });
+        setDeleteConfirmId(null);
+        toast.success("Item deleted");
+      },
+      onError: () => toast.error("Failed to delete item."),
+    },
+  });
+
+  const updatePotteryCategories = useUpdatePottery({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListPotteryQueryKey() });
+        setCategoryEditItem(null);
+        toast.success("Categories saved");
+      },
+      onError: () => toast.error("Failed to save categories"),
+    },
+  });
 
   function toggleBulkSelect(id: number) {
     setBulkSelectedIds((prev) => {
@@ -1276,6 +1348,8 @@ export default function Collection() {
                           setFilterColor(filterColor === c ? null : c)
                         }
                         activeColor={filterColor}
+                        onSetCategories={setCategoryEditItem}
+                        onDelete={(item) => setDeleteConfirmId(item.id)}
                       />
                     ))}
                   </div>
@@ -1301,6 +1375,8 @@ export default function Collection() {
                     setFilterColor(filterColor === c ? null : c)
                   }
                   activeColor={filterColor}
+                  onSetCategories={setCategoryEditItem}
+                  onDelete={(item) => setDeleteConfirmId(item.id)}
                 />
               ))}
             </div>
@@ -1393,6 +1469,57 @@ export default function Collection() {
           onDeleted={() => setQuickEditItem(null)}
         />
       )}
+
+      {/* Set categories dialog */}
+      <CategoryEditDialog
+        open={categoryEditItem !== null}
+        onClose={() => setCategoryEditItem(null)}
+        title={categoryEditItem?.name ?? ""}
+        currentCategories={
+          (categoryEditItem?.categories ?? []) as unknown as QuiltingCategory[]
+        }
+        allCategories={allCategories}
+        onSave={(names) => {
+          if (categoryEditItem) {
+            const cats = names
+              .map((n) => allCategories.find((c) => c.name === n)?.id)
+              .filter((id): id is number => id !== undefined);
+            updatePotteryCategories.mutate({
+              id: categoryEditItem.id,
+              data: { categoryIds: cats },
+            });
+          }
+        }}
+        isSaving={updatePotteryCategories.isPending}
+      />
+
+      {/* Delete confirm dialog */}
+      <AlertDialog
+        open={deleteConfirmId !== null}
+        onOpenChange={(o) => !o && setDeleteConfirmId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this piece?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes this piece from your collection. This
+              cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() =>
+                deleteConfirmId !== null &&
+                deletePotteryItem.mutate({ id: deleteConfirmId })
+              }
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Collection compare modal */}
       {showCompareModal && (

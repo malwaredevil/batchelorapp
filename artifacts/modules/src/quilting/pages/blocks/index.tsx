@@ -59,6 +59,16 @@ import type { QuiltingCategory } from "@workspace/api-client-react";
 import { parseCell, fmtInch } from "@/quilting/lib/cell-parser";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
 import { CategoryEditDialog } from "@/quilting/components/CategoryEditDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 
@@ -729,6 +739,7 @@ export default function Blocks() {
         }. You have create_block / delete_block action tools — but they only create/remove a blank grid template with metadata, they cannot design the block's actual pattern; direct the user to the designer here for that.`,
   );
 
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [categoryEditItem, setCategoryEditItem] = useState<BlockSummary | null>(
     null,
   );
@@ -758,6 +769,7 @@ export default function Blocks() {
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListBlocksQueryKey() });
+        setDeleteConfirmId(null);
         toast.success("Block design deleted");
       },
       onError: () => toast.error("Failed to delete block design."),
@@ -786,8 +798,7 @@ export default function Blocks() {
   });
 
   function handleDelete(id: number) {
-    if (!confirm("Delete this block design? This cannot be undone.")) return;
-    deleteBlock.mutate({ id });
+    setDeleteConfirmId(id);
   }
 
   function handleDuplicate(block: BlockSummary) {
@@ -1233,6 +1244,31 @@ export default function Blocks() {
           ))}
         </div>
       )}
+      <AlertDialog
+        open={deleteConfirmId !== null}
+        onOpenChange={(o) => !o && setDeleteConfirmId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this block design?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes this block design. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() =>
+                deleteConfirmId !== null &&
+                deleteBlock.mutate({ id: deleteConfirmId })
+              }
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <CategoryEditDialog
         open={categoryEditItem !== null}
         onClose={() => setCategoryEditItem(null)}

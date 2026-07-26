@@ -703,16 +703,69 @@ export async function lookupBarcode(
   // authoritative for the collectibles market.
   const isHallmarkBarcode = barcode.startsWith("661127");
 
-  // ── 2. UPCitemdb → Open Food Facts fallback chain (non-Hallmark only) ────
+  // ── 2. AI lookup — ask the LLM first (fastest for Hallmark SKUs & titles) ─
+  // AI has broad training-data coverage of Hallmark collectibles and can often
+  // identify an ornament from its UPC digits alone, without any external API
+  // call. Running it before eBay/UPCite avoids a round-trip to slower services
+  // for the common case.
   let upcResult: UpcFetchResult | null = null;
-  if (!isHallmarkBarcode) {
+  try {
+    const r = await fetchFromAI(barcode);
+    if (r.found) {
+      logger.info({ barcode }, "AI barcode lookup: identified product");
+      upcResult = r;
+    } else {
+      logger.info({ barcode }, "AI barcode lookup: not found — trying eBay");
+    }
+  } catch (aiErr) {
+    logger.warn({ err: aiErr, barcode }, "AI barcode lookup failed");
+  }
+
+  // ── 3. eBay GTIN search fallback ──────────────────────────────────────────
+  if (!upcResult) {
     try {
-      const r = await fetchFromUpcItemDb(barcode);
-      if (r.found) upcResult = r;
-      else {
+      const r = await fetchFromEbay(barcode);
+      if (r.found) {
+        logger.info({ barcode }, "eBay GTIN lookup: identified product");
+        upcResult = r;
+      } else {
         logger.info(
           { barcode },
-          "UPCitemdb: not found — trying Open Food Facts",
+          "eBay GTIN lookup: not found — trying UPCitemdb/OPF",
+        );
+      }
+    } catch (ebayErr) {
+      logger.warn({ err: ebayErr, barcode }, "eBay GTIN lookup failed");
+    }
+  }
+
+  // ── 4. UPCitemdb → Open Food Facts fallback chain (non-Hallmark only) ────
+  // Hallmark UPCs (661127 prefix) frequently return incorrect data from these
+  // generic product databases; skip them for Hallmark barcodes.
+  if (!upcResult) {
+    if (!isHallmarkBarcode) {
+      try {
+        const r = await fetchFromUpcItemDb(barcode);
+        if (r.found) upcResult = r;
+        else {
+          logger.info(
+            { barcode },
+            "UPCitemdb: not found — trying Open Food Facts",
+          );
+          try {
+            const r2 = await fetchFromOpenFoodFacts(barcode);
+            if (r2.found) upcResult = r2;
+          } catch (offErr) {
+            logger.warn(
+              { err: offErr, barcode },
+              "Open Food Facts fallback failed",
+            );
+          }
+        }
+      } catch (primaryErr) {
+        logger.warn(
+          { err: primaryErr, barcode },
+          "UPCitemdb lookup failed — trying Open Food Facts fallback",
         );
         try {
           const r2 = await fetchFromOpenFoodFacts(barcode);
@@ -724,55 +777,11 @@ export async function lookupBarcode(
           );
         }
       }
-    } catch (primaryErr) {
-      logger.warn(
-        { err: primaryErr, barcode },
-        "UPCitemdb lookup failed — trying Open Food Facts fallback",
+    } else {
+      logger.info(
+        { barcode },
+        "Hallmark UPC prefix: skipping UPCitemdb/OPF (unreliable for Hallmark barcodes)",
       );
-      try {
-        const r2 = await fetchFromOpenFoodFacts(barcode);
-        if (r2.found) upcResult = r2;
-      } catch (offErr) {
-        logger.warn(
-          { err: offErr, barcode },
-          "Open Food Facts fallback failed",
-        );
-      }
-    }
-  } else {
-    logger.info(
-      { barcode },
-      "Hallmark UPC prefix: skipping UPCitemdb/OPF, going to eBay+AI",
-    );
-  }
-
-  // ── 3. eBay GTIN search fallback ──────────────────────────────────────────
-  if (!upcResult) {
-    try {
-      const r = await fetchFromEbay(barcode);
-      if (r.found) {
-        logger.info({ barcode }, "eBay GTIN lookup: identified product");
-        upcResult = r;
-      } else {
-        logger.info({ barcode }, "eBay GTIN lookup: not found — trying AI");
-      }
-    } catch (ebayErr) {
-      logger.warn({ err: ebayErr, barcode }, "eBay GTIN lookup failed");
-    }
-  }
-
-  // ── 4. AI fallback — ask the LLM to identify the UPC ────────────────────
-  if (!upcResult) {
-    try {
-      const r = await fetchFromAI(barcode);
-      if (r.found) {
-        logger.info({ barcode }, "AI barcode lookup: identified product");
-        upcResult = r;
-      } else {
-        logger.info({ barcode }, "AI barcode lookup: not found");
-      }
-    } catch (aiErr) {
-      logger.warn({ err: aiErr, barcode }, "AI barcode lookup failed");
     }
   }
 

@@ -21,6 +21,9 @@
       "path": "../../lib/api-client-react"
     },
     {
+      "path": "../../lib/collection-ui"
+    },
+    {
       "path": "../../lib/elaine-ui"
     },
     {

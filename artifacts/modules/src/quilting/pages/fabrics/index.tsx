@@ -47,12 +47,26 @@ import {
   useListQuiltingCategories,
   useGetUsedFabricIds,
 } from "@workspace/api-client-react";
-import type { QuiltingCategory } from "@workspace/api-client-react";
+import type {
+  QuiltingCategory,
+  QuiltingFabric,
+} from "@workspace/api-client-react";
 import { downloadCollectionImage } from "@/quilting/lib/svg-export";
 import { colorToHex, getCategoryPalette } from "@workspace/web-core";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { CategoryEditDialog } from "@/quilting/components/CategoryEditDialog";
 import { PaletteMatchModal } from "@/quilting/components/PaletteMatchModal";
+import { QuickEditFabricSheet } from "@/quilting/components/quick-edit-fabric-sheet";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
 import { useAppConfigSummary } from "@workspace/elaine-ui";
 
@@ -96,6 +110,7 @@ function FabricCard({
   onFilterByColor,
   activeColor,
   onEditCategories,
+  onQuickEdit,
 }: {
   fabric: FabricSummary;
   onDelete: (id: number) => void;
@@ -108,6 +123,7 @@ function FabricCard({
   onFilterByColor?: (c: string) => void;
   activeColor?: string[];
   onEditCategories?: () => void;
+  onQuickEdit?: () => void;
 }) {
   const [, navigate] = useLocation();
   const [zoomOpen, setZoomOpen] = useState(false);
@@ -260,6 +276,10 @@ function FabricCard({
                   <Pencil className="mr-2 h-3.5 w-3.5" />
                   Edit
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onQuickEdit?.()}>
+                  <Pencil className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+                  Quick edit
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onReanalyze(fabric.id)}>
                   <RefreshCw className="mr-2 h-3.5 w-3.5" />
                   Refresh AI
@@ -338,6 +358,10 @@ export default function Fabrics() {
   const [categoryEditItem, setCategoryEditItem] =
     useState<FabricSummary | null>(null);
   const [paletteMatchOpen, setPaletteMatchOpen] = useState(false);
+  const [quickEditItem, setQuickEditItem] = useState<FabricSummary | null>(
+    null,
+  );
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const { data: categoryApiList } = useListQuiltingCategories();
 
   const updateFabricCategories = useUpdateFabric({
@@ -355,6 +379,8 @@ export default function Fabrics() {
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListFabricsQueryKey() });
+        setDeleteConfirmId(null);
+        setQuickEditItem(null);
         toast.success("Fabric deleted");
       },
       onError: () => toast.error("Failed to delete fabric."),
@@ -393,8 +419,7 @@ export default function Fabrics() {
   });
 
   function handleDelete(id: number) {
-    if (!confirm("Delete this fabric? This cannot be undone.")) return;
-    deleteFabric.mutate({ id });
+    setDeleteConfirmId(id);
   }
 
   function handleReanalyze(id: number) {
@@ -961,6 +986,7 @@ export default function Fabrics() {
                 onEditCategories={() =>
                   setCategoryEditItem(fabric as FabricSummary)
                 }
+                onQuickEdit={() => setQuickEditItem(fabric as FabricSummary)}
               />
             ))}
         </div>
@@ -1008,6 +1034,39 @@ export default function Fabrics() {
         }}
         isSaving={updateFabricCategories.isPending}
       />
+      {quickEditItem && (
+        <QuickEditFabricSheet
+          fabric={quickEditItem as unknown as QuiltingFabric}
+          onClose={() => setQuickEditItem(null)}
+          onDeleted={() => setQuickEditItem(null)}
+        />
+      )}
+      <AlertDialog
+        open={deleteConfirmId !== null}
+        onOpenChange={(o) => !o && setDeleteConfirmId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this fabric?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes this fabric from your collection. This
+              cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() =>
+                deleteConfirmId !== null &&
+                deleteFabric.mutate({ id: deleteConfirmId })
+              }
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <PaletteMatchModal
         open={paletteMatchOpen}
         onClose={() => setPaletteMatchOpen(false)}

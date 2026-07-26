@@ -193,50 +193,49 @@ export function ItemImageGallery({
         <>
           <div
             className={cn(
-              "group relative aspect-square w-full overflow-hidden rounded-2xl border border-card-border bg-muted",
+              "relative overflow-hidden rounded-2xl border border-card-border bg-muted",
               onZoom && "cursor-zoom-in",
             )}
             onClick={() => onZoom?.(active.url, active.label ?? undefined)}
+            title={onZoom ? "Click to zoom" : undefined}
           >
+            {/* Edit-this-photo — small icon, top-left */}
+            <button
+              type="button"
+              className="absolute left-3 top-3 z-10 rounded-full bg-black/50 p-1.5 text-white transition hover:bg-primary/80 disabled:opacity-40"
+              onClick={(e) => {
+                e.stopPropagation();
+                void handleEditImage(active);
+              }}
+              disabled={isBusy}
+              title="Edit photo"
+            >
+              {isFetchingEdit && editTarget?.id === active.id ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Pencil className="h-4 w-4" />
+              )}
+            </button>
+
             <img
               src={active.url}
               alt={active.label ?? "Photo"}
-              className="h-full w-full object-cover"
+              className="aspect-square w-full object-cover"
             />
 
-            {/* Desktop hover overlay — purely decorative on touch devices.
-                All buttons use pointer-events-none + group-hover:pointer-events-auto
-                so they cannot swallow taps on mobile when invisible. */}
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-3 bg-black/50 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100">
-              {onZoom && (
-                <button
-                  type="button"
-                  className="pointer-events-none flex items-center gap-1.5 rounded-full bg-white/20 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/30 group-hover:pointer-events-auto"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onZoom(active.url, active.label ?? undefined);
-                  }}
-                >
-                  <ZoomIn className="h-4 w-4" /> View
-                </button>
-              )}
-              <button
-                type="button"
-                className="pointer-events-none flex items-center gap-1.5 rounded-full bg-white/20 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/30 disabled:opacity-40 group-hover:pointer-events-auto"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void handleEditImage(active);
-                }}
-                disabled={isBusy}
-              >
-                {isFetchingEdit && editTarget?.id === active.id ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Pencil className="h-4 w-4" />
-                )}
-                Edit
-              </button>
-            </div>
+            {/* Label badge on selected supplemental image */}
+            {active.label && !active.isPrimary && (
+              <span className="absolute bottom-3 left-3 rounded-full bg-black/60 px-3 py-1 text-xs font-medium text-white backdrop-blur">
+                {active.label}
+              </span>
+            )}
+
+            {/* Zoom hint — top-right, purely visual */}
+            {onZoom && (
+              <span className="absolute right-3 top-3 rounded-full bg-black/40 p-1.5 text-white backdrop-blur pointer-events-none">
+                <ZoomIn className="h-4 w-4" />
+              </span>
+            )}
 
             {/* Full-image saving spinner */}
             {isSavingEdit && editTarget?.id === active.id && (
@@ -246,55 +245,33 @@ export function ItemImageGallery({
             )}
           </div>
 
-          {/* ── Persistent action bar — visible on all screen sizes ──────── */}
-          <div className="flex items-center justify-center gap-2">
-            {onZoom && (
-              <button
-                type="button"
-                onClick={() => onZoom(active.url, active.label ?? undefined)}
-                className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm transition hover:bg-muted hover:text-foreground disabled:opacity-40"
-                disabled={isBusy}
-              >
-                <ZoomIn className="h-3.5 w-3.5" />
-                View
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => void handleEditImage(active)}
-              className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm transition hover:bg-muted hover:text-foreground disabled:opacity-40"
-              disabled={isBusy}
-            >
-              {isFetchingEdit && editTarget?.id === active.id ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Pencil className="h-3.5 w-3.5" />
+          {/* Action bar — Set Primary + Delete (Edit is now on the image icon) */}
+          {((!active.isPrimary && onSetPrimary) || onDeleteImage) && (
+            <div className="flex items-center justify-center gap-2">
+              {!active.isPrimary && onSetPrimary && (
+                <button
+                  type="button"
+                  onClick={() => onSetPrimary(active.id)}
+                  className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm transition hover:bg-primary/10 hover:text-primary disabled:opacity-40"
+                  disabled={isBusy}
+                >
+                  <Star className="h-3.5 w-3.5" />
+                  Set primary
+                </button>
               )}
-              Edit
-            </button>
-            {!active.isPrimary && onSetPrimary && (
-              <button
-                type="button"
-                onClick={() => onSetPrimary(active.id)}
-                className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm transition hover:bg-primary/10 hover:text-primary disabled:opacity-40"
-                disabled={isBusy}
-              >
-                <Star className="h-3.5 w-3.5" />
-                Set primary
-              </button>
-            )}
-            {onDeleteImage && (
-              <button
-                type="button"
-                onClick={() => onDeleteImage(active.id, active.isPrimary)}
-                className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 disabled:opacity-40"
-                disabled={isBusy}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Delete
-              </button>
-            )}
-          </div>
+              {onDeleteImage && (
+                <button
+                  type="button"
+                  onClick={() => onDeleteImage(active.id, active.isPrimary)}
+                  className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 disabled:opacity-40"
+                  disabled={isBusy}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete
+                </button>
+              )}
+            </div>
+          )}
         </>
       ) : (
         /* ── Empty state — no images yet ─────────────────────────────────── */

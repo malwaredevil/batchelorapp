@@ -61,3 +61,11 @@ test("modules: ornaments route responds without crash", async ({ page }) => {
   expect(res?.status()).not.toBe(500);
   await noError(page);
 });
+
+test("modules: office route responds without crash", async ({ page }) => {
+  const res = await page.goto(`${BASE}/office`, {
+    waitUntil: "domcontentloaded",
+  });
+  expect(res?.status()).not.toBe(500);
+  await noError(page);
+});

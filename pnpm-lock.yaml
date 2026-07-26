@@ -749,6 +749,9 @@ importers:
       '@workspace/api-client-react':
         specifier: workspace:*
         version: link:../../lib/api-client-react
+      '@workspace/collection-ui':
+        specifier: workspace:*
+        version: link:../../lib/collection-ui
       '@workspace/elaine-ui':
         specifier: workspace:*
         version: link:../../lib/elaine-ui
@@ -1113,6 +1116,25 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 3.25.76
+
+  lib/collection-ui:
+    dependencies:
+      '@workspace/ui':
+        specifier: workspace:*
+        version: link:../ui
+      '@workspace/web-core':
+        specifier: workspace:*
+        version: link:../web-core
+      lucide-react:
+        specifier: 'catalog:'
+        version: 0.545.0(react@19.1.0)
+    devDependencies:
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.2.3(@types/react@19.2.14)
 
   lib/db:
     dependencies:

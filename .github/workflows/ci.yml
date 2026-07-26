@@ -260,6 +260,30 @@ jobs:
           path: artifacts/e2e/playwright-report/
           retention-days: 7
 
+  guard-elaine-widget:
+    name: Guard — Elaine widget globally mounted in modules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Verify GlobalElaineWidget is in modules App.tsx
+        run: |
+          if ! grep -q "GlobalElaineWidget" artifacts/modules/src/App.tsx; then
+            echo "❌ GlobalElaineWidget is missing from artifacts/modules/src/App.tsx"
+            echo "   The Elaine chat widget will not appear on Pottery, Quilting, Ornaments, or Office pages."
+            echo "   Add <GlobalElaineWidget /> to the Routes() return in App.tsx."
+            exit 1
+          fi
+          echo "✓ GlobalElaineWidget present in modules/App.tsx"
+      - name: Verify AssistantWidget not duplicated in TravelsLayout
+        run: |
+          if grep -q "AssistantWidget" artifacts/modules/src/travels/components/Layout.tsx; then
+            echo "❌ AssistantWidget still present in TravelsLayout"
+            echo "   This would render two Elaine widgets on Travels pages."
+            echo "   Remove AssistantWidget from Layout.tsx — GlobalElaineWidget covers Travels too."
+            exit 1
+          fi
+          echo "✓ TravelsLayout does not contain a duplicate AssistantWidget"
+
   e2e-modules:
     name: E2E smoke (modules)
     needs: [typecheck]

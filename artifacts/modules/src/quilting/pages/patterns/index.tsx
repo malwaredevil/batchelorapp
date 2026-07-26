@@ -42,6 +42,18 @@ import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
 import { useCollectionPage } from "@/quilting/hooks/useCollectionPage";
 import { CollectionPageShell } from "@/quilting/components/CollectionPageShell";
+import { QuickEditPatternSheet } from "@/quilting/components/quick-edit-pattern-sheet";
+import type { QuiltingQuiltPattern } from "@workspace/api-client-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type PatternSummary = {
   id: number;
@@ -73,6 +85,7 @@ function PatternCard({
   onFilterByCategory,
   onFilterByColor,
   onEditCategories,
+  onQuickEdit,
 }: {
   pattern: PatternSummary;
   onDelete: (id: number) => void;
@@ -85,6 +98,7 @@ function PatternCard({
   onFilterByCategory?: (id: number) => void;
   onFilterByColor?: (hex: string) => void;
   onEditCategories?: () => void;
+  onQuickEdit?: () => void;
 }) {
   const [, navigate] = useLocation();
   const [zoomOpen, setZoomOpen] = useState(false);
@@ -247,6 +261,10 @@ function PatternCard({
                   <Pencil className="mr-2 h-3.5 w-3.5" />
                   Edit
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onQuickEdit?.()}>
+                  <Pencil className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+                  Quick edit
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onReanalyze(pattern.id)}>
                   <RefreshCw className="mr-2 h-3.5 w-3.5" />
                   Refresh AI
@@ -299,6 +317,10 @@ function PatternCard({
 export default function Patterns() {
   const [difficultyFilter, setDifficultyFilter] = useState<string | null>(null);
   const [sourceTypeFilter, setSourceTypeFilter] = useState<string | null>(null);
+  const [quickEditItem, setQuickEditItem] = useState<PatternSummary | null>(
+    null,
+  );
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [categoryEditItem, setCategoryEditItem] =
     useState<PatternSummary | null>(null);
   const queryClient = useQueryClient();
@@ -357,6 +379,8 @@ export default function Patterns() {
   const deletePattern = useDeletePattern({
     mutation: {
       onSuccess: () => {
+        setDeleteConfirmId(null);
+        setQuickEditItem(null);
         queryClient.invalidateQueries({ queryKey: getListPatternsQueryKey() });
         toast.success("Pattern deleted");
       },
@@ -396,8 +420,7 @@ export default function Patterns() {
   });
 
   function handleDelete(id: number) {
-    if (!confirm("Delete this pattern? This cannot be undone.")) return;
-    deletePattern.mutate({ id });
+    setDeleteConfirmId(id);
   }
 
   function handleReanalyze(id: number) {
@@ -468,64 +491,100 @@ export default function Patterns() {
     ) : undefined;
 
   return (
-    <CollectionPageShell
-      items={patterns}
-      isLoading={isLoading}
-      isError={isError}
-      {...pageState}
-      title="Patterns"
-      singularNoun="pattern"
-      pluralNoun="patterns"
-      addHref="/quilting/patterns/add"
-      searchPlaceholder="Search by name or designer…"
-      emptyIcon={<BookOpen className="h-10 w-10 text-muted-foreground/40" />}
-      emptyDescription="Add quilt patterns to your library"
-      localStorageKey="quilting-patterns-page-size"
-      onBulkReanalyze={(ids) => bulkReanalyze.mutate({ data: { ids } })}
-      isBulkReanalyzePending={bulkReanalyze.isPending}
-      renderCard={(pattern) => (
-        <PatternCard
-          key={pattern.id}
-          pattern={pattern}
-          onDelete={handleDelete}
-          onReanalyze={handleReanalyze}
-          isBulkMode={pageState.isBulkMode}
-          isSelected={pageState.selectedIds.has(pattern.id)}
-          onToggleSelect={pageState.toggleSelect}
-          onFilterByDifficulty={(d) =>
-            setDifficultyFilter((prev) => (prev === d ? null : d))
+    <>
+      <CollectionPageShell
+        items={patterns}
+        isLoading={isLoading}
+        isError={isError}
+        {...pageState}
+        title="Patterns"
+        singularNoun="pattern"
+        pluralNoun="patterns"
+        addHref="/quilting/patterns/add"
+        searchPlaceholder="Search by name or designer…"
+        emptyIcon={<BookOpen className="h-10 w-10 text-muted-foreground/40" />}
+        emptyDescription="Add quilt patterns to your library"
+        localStorageKey="quilting-patterns-page-size"
+        onBulkReanalyze={(ids) => bulkReanalyze.mutate({ data: { ids } })}
+        isBulkReanalyzePending={bulkReanalyze.isPending}
+        renderCard={(pattern) => (
+          <PatternCard
+            key={pattern.id}
+            pattern={pattern}
+            onDelete={handleDelete}
+            onReanalyze={handleReanalyze}
+            isBulkMode={pageState.isBulkMode}
+            isSelected={pageState.selectedIds.has(pattern.id)}
+            onToggleSelect={pageState.toggleSelect}
+            onFilterByDifficulty={(d) =>
+              setDifficultyFilter((prev) => (prev === d ? null : d))
+            }
+            onFilterBySourceType={(st) =>
+              setSourceTypeFilter((prev) => (prev === st ? null : st))
+            }
+            onFilterByCategory={(id) =>
+              pageState.setCategoryFilter((prev) => (prev === id ? null : id))
+            }
+            onFilterByColor={(hex) =>
+              pageState.setColorFilter((prev) =>
+                prev.includes(hex)
+                  ? prev.filter((c) => c !== hex)
+                  : [...prev, hex],
+              )
+            }
+            onEditCategories={() => setCategoryEditItem(pattern)}
+            onQuickEdit={() => setQuickEditItem(pattern)}
+          />
+        )}
+        domainFilterPills={domainFilterPills}
+        categoryEditItem={categoryEditItem}
+        onCloseCategoryEdit={() => setCategoryEditItem(null)}
+        allCategoryApiList={categoryApiList ?? []}
+        onSaveCategories={(names) => {
+          if (categoryEditItem) {
+            updatePatternCategories.mutate({
+              id: categoryEditItem.id,
+              data: { categories: names },
+            });
           }
-          onFilterBySourceType={(st) =>
-            setSourceTypeFilter((prev) => (prev === st ? null : st))
-          }
-          onFilterByCategory={(id) =>
-            pageState.setCategoryFilter((prev) => (prev === id ? null : id))
-          }
-          onFilterByColor={(hex) =>
-            pageState.setColorFilter((prev) =>
-              prev.includes(hex)
-                ? prev.filter((c) => c !== hex)
-                : [...prev, hex],
-            )
-          }
-          onEditCategories={() => setCategoryEditItem(pattern)}
+        }}
+        isSavingCategories={updatePatternCategories.isPending}
+        paletteMatchEntity="pattern"
+        stats={stats}
+      />
+      {quickEditItem && (
+        <QuickEditPatternSheet
+          pattern={quickEditItem as unknown as QuiltingQuiltPattern}
+          onClose={() => setQuickEditItem(null)}
+          onDeleted={() => setQuickEditItem(null)}
         />
       )}
-      domainFilterPills={domainFilterPills}
-      categoryEditItem={categoryEditItem}
-      onCloseCategoryEdit={() => setCategoryEditItem(null)}
-      allCategoryApiList={categoryApiList ?? []}
-      onSaveCategories={(names) => {
-        if (categoryEditItem) {
-          updatePatternCategories.mutate({
-            id: categoryEditItem.id,
-            data: { categories: names },
-          });
-        }
-      }}
-      isSavingCategories={updatePatternCategories.isPending}
-      paletteMatchEntity="pattern"
-      stats={stats}
-    />
+      <AlertDialog
+        open={deleteConfirmId !== null}
+        onOpenChange={(o) => !o && setDeleteConfirmId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this pattern?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes this pattern from your collection. This
+              cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() =>
+                deleteConfirmId !== null &&
+                deletePattern.mutate({ id: deleteConfirmId })
+              }
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

@@ -41,6 +41,18 @@ import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
 import { useCollectionPage } from "@/quilting/hooks/useCollectionPage";
 import { CollectionPageShell } from "@/quilting/components/CollectionPageShell";
+import { QuickEditQuiltSheet } from "@/quilting/components/quick-edit-quilt-sheet";
+import type { QuiltingFinishedQuilt } from "@workspace/api-client-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type QuiltSummary = {
   id: number;
@@ -72,6 +84,7 @@ function QuiltCard({
   onFilterByCategory,
   onFilterByColor,
   onEditCategories,
+  onQuickEdit,
 }: {
   quilt: QuiltSummary;
   onDelete: (id: number) => void;
@@ -83,6 +96,7 @@ function QuiltCard({
   onFilterByCategory?: (id: number) => void;
   onFilterByColor?: (hex: string) => void;
   onEditCategories?: () => void;
+  onQuickEdit?: () => void;
 }) {
   const [, navigate] = useLocation();
   const [zoomOpen, setZoomOpen] = useState(false);
@@ -248,6 +262,10 @@ function QuiltCard({
                   <Pencil className="mr-2 h-3.5 w-3.5" />
                   Edit
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onQuickEdit?.()}>
+                  <Pencil className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+                  Quick edit
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onReanalyze(quilt.id)}>
                   <RefreshCw className="mr-2 h-3.5 w-3.5" />
                   Refresh AI
@@ -298,6 +316,8 @@ export default function Quilts() {
   const [categoryEditItem, setCategoryEditItem] = useState<QuiltSummary | null>(
     null,
   );
+  const [quickEditItem, setQuickEditItem] = useState<QuiltSummary | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const queryClient = useQueryClient();
 
   const {
@@ -346,6 +366,8 @@ export default function Quilts() {
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListQuiltsQueryKey() });
+        setDeleteConfirmId(null);
+        setQuickEditItem(null);
         toast.success("Quilt deleted");
       },
       onError: () => toast.error("Failed to delete quilt."),
@@ -384,8 +406,7 @@ export default function Quilts() {
   });
 
   function handleDelete(id: number) {
-    if (!confirm("Delete this quilt? This cannot be undone.")) return;
-    deleteQuilt.mutate({ id });
+    setDeleteConfirmId(id);
   }
 
   function handleReanalyze(id: number) {
@@ -429,61 +450,97 @@ export default function Quilts() {
     ) : undefined;
 
   return (
-    <CollectionPageShell
-      items={quilts}
-      isLoading={isLoading}
-      isError={isError}
-      {...pageState}
-      title="Finished Quilts"
-      singularNoun="quilt"
-      pluralNoun="quilts"
-      addHref="/quilting/quilts/add"
-      searchPlaceholder="Search by name or recipient…"
-      emptyIcon={<Layers className="h-10 w-10 text-muted-foreground/40" />}
-      emptyDescription="Record your completed quilts here"
-      localStorageKey="quilting-quilts-page-size"
-      onBulkReanalyze={(ids) => bulkReanalyze.mutate({ data: { ids } })}
-      isBulkReanalyzePending={bulkReanalyze.isPending}
-      renderCard={(quilt) => (
-        <QuiltCard
-          key={quilt.id}
-          quilt={quilt}
-          onDelete={handleDelete}
-          onReanalyze={handleReanalyze}
-          isBulkMode={pageState.isBulkMode}
-          isSelected={pageState.selectedIds.has(quilt.id)}
-          onToggleSelect={pageState.toggleSelect}
-          onFilterByRecipient={(r) =>
-            setRecipientFilter((prev) => (prev === r ? null : r))
+    <>
+      <CollectionPageShell
+        items={quilts}
+        isLoading={isLoading}
+        isError={isError}
+        {...pageState}
+        title="Finished Quilts"
+        singularNoun="quilt"
+        pluralNoun="quilts"
+        addHref="/quilting/quilts/add"
+        searchPlaceholder="Search by name or recipient…"
+        emptyIcon={<Layers className="h-10 w-10 text-muted-foreground/40" />}
+        emptyDescription="Record your completed quilts here"
+        localStorageKey="quilting-quilts-page-size"
+        onBulkReanalyze={(ids) => bulkReanalyze.mutate({ data: { ids } })}
+        isBulkReanalyzePending={bulkReanalyze.isPending}
+        renderCard={(quilt) => (
+          <QuiltCard
+            key={quilt.id}
+            quilt={quilt}
+            onDelete={handleDelete}
+            onReanalyze={handleReanalyze}
+            isBulkMode={pageState.isBulkMode}
+            isSelected={pageState.selectedIds.has(quilt.id)}
+            onToggleSelect={pageState.toggleSelect}
+            onFilterByRecipient={(r) =>
+              setRecipientFilter((prev) => (prev === r ? null : r))
+            }
+            onFilterByCategory={(id) =>
+              pageState.setCategoryFilter((prev) => (prev === id ? null : id))
+            }
+            onFilterByColor={(hex) =>
+              pageState.setColorFilter((prev) =>
+                prev.includes(hex)
+                  ? prev.filter((c) => c !== hex)
+                  : [...prev, hex],
+              )
+            }
+            onEditCategories={() => setCategoryEditItem(quilt)}
+            onQuickEdit={() => setQuickEditItem(quilt)}
+          />
+        )}
+        domainFilterPills={domainFilterPills}
+        categoryEditItem={categoryEditItem}
+        onCloseCategoryEdit={() => setCategoryEditItem(null)}
+        allCategoryApiList={categoryApiList ?? []}
+        onSaveCategories={(names) => {
+          if (categoryEditItem) {
+            updateQuiltCategories.mutate({
+              id: categoryEditItem.id,
+              data: { categories: names },
+            });
           }
-          onFilterByCategory={(id) =>
-            pageState.setCategoryFilter((prev) => (prev === id ? null : id))
-          }
-          onFilterByColor={(hex) =>
-            pageState.setColorFilter((prev) =>
-              prev.includes(hex)
-                ? prev.filter((c) => c !== hex)
-                : [...prev, hex],
-            )
-          }
-          onEditCategories={() => setCategoryEditItem(quilt)}
+        }}
+        isSavingCategories={updateQuiltCategories.isPending}
+        paletteMatchEntity="quilt"
+        stats={stats}
+      />
+      {quickEditItem && (
+        <QuickEditQuiltSheet
+          quilt={quickEditItem as unknown as QuiltingFinishedQuilt}
+          onClose={() => setQuickEditItem(null)}
+          onDeleted={() => setQuickEditItem(null)}
         />
       )}
-      domainFilterPills={domainFilterPills}
-      categoryEditItem={categoryEditItem}
-      onCloseCategoryEdit={() => setCategoryEditItem(null)}
-      allCategoryApiList={categoryApiList ?? []}
-      onSaveCategories={(names) => {
-        if (categoryEditItem) {
-          updateQuiltCategories.mutate({
-            id: categoryEditItem.id,
-            data: { categories: names },
-          });
-        }
-      }}
-      isSavingCategories={updateQuiltCategories.isPending}
-      paletteMatchEntity="quilt"
-      stats={stats}
-    />
+      <AlertDialog
+        open={deleteConfirmId !== null}
+        onOpenChange={(o) => !o && setDeleteConfirmId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this quilt?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes this quilt from your collection. This
+              cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() =>
+                deleteConfirmId !== null &&
+                deleteQuilt.mutate({ id: deleteConfirmId })
+              }
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

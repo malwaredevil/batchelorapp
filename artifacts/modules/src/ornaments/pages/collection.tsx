@@ -5,45 +5,72 @@ import {
   useListOrnaments,
   useListOrnamentCategories,
   useReanalyzeOrnament,
+  useDeleteOrnament,
+  useUpdateOrnament,
   getListOrnamentsQueryKey,
   useListConnectedCalendars,
   useListConnectedCalendarEvents,
   getListConnectedCalendarEventsQueryKey,
   type TravelCalendarEvent,
+  type OrnamentsOrnamentItem,
 } from "@workspace/api-client-react";
+import { CategoryEditDialog } from "@/quilting/components/CategoryEditDialog";
+import type { QuiltingCategory } from "@workspace/api-client-react";
+import { QuickEditOrnamentSheet } from "@/ornaments/components/quick-edit-ornament-sheet";
 import {
-  Search,
-  Plus,
-  Filter,
-  LayoutGrid,
-  List as ListIcon,
-  X,
-  SlidersHorizontal,
-  Image as ImageIcon,
-  CalendarHeart,
-  ZoomIn,
-  MoreVertical,
-  ExternalLink,
-  RefreshCw,
-} from "lucide-react";
-import { ImageLightbox } from "@/quilting/components/image-lightbox";
-import { usePageAssistantContext } from "@/ornaments/lib/assistant-context";
-import { useAppConfigSummary } from "@workspace/elaine-ui";
-import { Button } from "@/components/ui/button";
-import { CollectionErrorState } from "@/components/CollectionErrorState";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
+import { Plus, Image as ImageIcon, CalendarHeart, Check } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { usePageAssistantContext } from "@/ornaments/lib/assistant-context";
+import { useAppConfigSummary } from "@workspace/elaine-ui";
+import { Button } from "@/components/ui/button";
+import { CollectionErrorState } from "@/components/CollectionErrorState";
+import { DominantColorDots } from "@/components/collection/DominantColorDots";
+import { colorToHex } from "@workspace/web-core/colors";
+import {
+  CollectionCard,
+  CollectionGrid,
+  CollectionListRow,
+  CollectionList,
+  CollectionSearchBar,
+  type SortOption,
+} from "@workspace/collection-ui";
+import { cn } from "@/lib/utils";
+
+type OrnamentSortKey =
+  | "newest"
+  | "oldest"
+  | "year-desc"
+  | "year-asc"
+  | "name-asc"
+  | "name-desc"
+  | "value-desc";
+
+const SORT_OPTIONS: SortOption<OrnamentSortKey>[] = [
+  { key: "newest", label: "Recently added" },
+  { key: "oldest", label: "Oldest first" },
+  { key: "year-desc", label: "Release year (new → old)" },
+  { key: "year-asc", label: "Release year (old → new)" },
+  { key: "name-asc", label: "Name A → Z" },
+  { key: "name-desc", label: "Name Z → A" },
+  { key: "value-desc", label: "Highest value" },
+];
 
 function NextHallmarkEventCard() {
   const { data: connectedCalendars = [] } = useListConnectedCalendars();
@@ -87,8 +114,6 @@ function NextHallmarkEventCard() {
         }
         return e.end.slice(0, 10);
       })();
-      // Always display the earlier date first — GCal exclusive-end subtraction
-      // can produce rawEnd < rawStart when an event was entered backwards.
       const startDate = rawStart <= rawEnd ? rawStart : rawEnd;
       const endDate = rawStart <= rawEnd ? rawEnd : rawStart;
       return {
@@ -151,34 +176,74 @@ function NextHallmarkEventCard() {
 export default function Collection() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [sort, setSort] = useState("newest");
+  const [sort, setSort] = useState<OrnamentSortKey>("newest");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [selectedCat, setSelectedCat] = useState<number | null>(null);
-  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [filterCategoryIds, setFilterCategoryIds] = useState<
+    Set<number | "none">
+  >(new Set());
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const [cachedYears, setCachedYears] = useState<number[]>([]);
+  const [quickEditItem, setQuickEditItem] =
+    useState<OrnamentsOrnamentItem | null>(null);
+  const [categoryEditItem, setCategoryEditItem] = useState<
+    (typeof items)[number] | null
+  >(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const queryClient = useQueryClient();
   const reanalyze = useReanalyzeOrnament();
+
+  const deleteOrnament = useDeleteOrnament({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() });
+        setDeleteConfirmId(null);
+        setQuickEditItem(null);
+        toast.success("Ornament deleted");
+      },
+      onError: () => toast.error("Failed to delete ornament."),
+    },
+  });
+
+  const updateOrnamentCategories = useUpdateOrnament({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() });
+        setCategoryEditItem(null);
+        toast.success("Categories saved");
+      },
+      onError: () => toast.error("Failed to save categories"),
+    },
+  });
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Use the React Query hook
-  // The hook accepts params for pagination/filtering. Adjust to what api actually accepts.
-  // Assuming it accepts q, categoryId, etc or we do local filtering.
-  // We'll fetch a large page and do local filtering for instant feel,
-  // or just pass params to hook.
-  // Let's pass params to hook to be safe, assuming Orval typings for ListOrnamentsParams.
-  const queryParams: any = { pageSize: 200 };
+  // Fetch with search + year filter; category filtering is done client-side
+  const queryParams: Record<string, unknown> = { pageSize: 200 };
   if (debouncedSearch) queryParams.q = debouncedSearch;
-  if (selectedCat) queryParams.categoryId = selectedCat;
+  if (selectedYear) queryParams.year = selectedYear;
 
   const { data, isLoading, isError, refetch } = useListOrnaments(queryParams);
   const items = data?.items || [];
 
   const { data: categories } = useListOrnamentCategories();
 
-  // Local sorting
+  // Cache available years from the first full (unfiltered) load so the year
+  // dropdown stays populated even when a year filter is active.
+  useEffect(() => {
+    if (!selectedYear && !debouncedSearch && data?.items) {
+      const years = [
+        ...new Set(
+          data.items.map((i) => i.year).filter((y): y is number => y != null),
+        ),
+      ].sort((a, b) => b - a);
+      if (years.length > 0) setCachedYears(years);
+    }
+  }, [data?.items, selectedYear, debouncedSearch]);
+
+  // Local sort
   const sortedItems = useMemo(() => {
     const copy = [...items];
     switch (sort) {
@@ -207,15 +272,90 @@ export default function Collection() {
     }
   }, [items, sort]);
 
+  // Client-side category filter (matches pottery pattern)
+  const filteredItems = useMemo(() => {
+    if (filterCategoryIds.size === 0) return sortedItems;
+    return sortedItems.filter((item) => {
+      if (filterCategoryIds.has("none") && item.categories.length === 0)
+        return true;
+      return item.categories.some((c) => filterCategoryIds.has(c.id));
+    });
+  }, [sortedItems, filterCategoryIds]);
+
+  function handleCategoryToggle(id: number | "none") {
+    setFilterCategoryIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   const configSummary = useAppConfigSummary();
 
   usePageAssistantContext(
     "ornaments-collection",
-    `Main collection page showing ${items.length} ornaments. Search: "${debouncedSearch}". Category filter: ${selectedCat || "none"}.${configSummary ? `\n\n${configSummary}` : ""}`,
+    `Main collection page showing ${items.length} ornaments. Search: "${debouncedSearch}". Category filter: ${filterCategoryIds.size > 0 ? [...filterCategoryIds].join(", ") : "none"}.${configSummary ? `\n\n${configSummary}` : ""}`,
+  );
+
+  // Year filter dropdown (passed as extraControls to the search bar)
+  const yearFilter = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "flex h-9 items-center gap-1.5 rounded-md border border-input bg-background px-3 text-sm shadow-sm transition-colors hover:bg-accent relative",
+            selectedYear && "border-primary text-primary",
+          )}
+        >
+          <CalendarHeart className="h-4 w-4 shrink-0" />
+          <span className="hidden sm:inline">
+            {selectedYear ? String(selectedYear) : "Year"}
+          </span>
+          {selectedYear && (
+            <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5 rounded-full bg-primary" />
+          )}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        className="w-36 max-h-[300px] overflow-y-auto"
+      >
+        <DropdownMenuLabel>Filter by year</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => setSelectedYear(null)}
+          className={cn(
+            "gap-2",
+            selectedYear === null && "font-medium text-primary",
+          )}
+        >
+          {selectedYear === null && <Check className="h-3.5 w-3.5 shrink-0" />}
+          {selectedYear !== null && <span className="w-3.5 shrink-0" />}
+          All Years
+        </DropdownMenuItem>
+        {cachedYears.map((y) => (
+          <DropdownMenuItem
+            key={y}
+            onClick={() => setSelectedYear(y)}
+            className={cn(
+              "gap-2",
+              selectedYear === y && "font-medium text-primary",
+            )}
+          >
+            {selectedYear === y && <Check className="h-3.5 w-3.5 shrink-0" />}
+            {selectedYear !== y && <span className="w-3.5 shrink-0" />}
+            {y}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
           <h1 className="text-4xl font-serif font-bold tracking-tight text-foreground">
@@ -241,304 +381,227 @@ export default function Collection() {
 
       <NextHallmarkEventCard />
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by name, series, or brand..."
-            className="pl-9 bg-card border-card-border shadow-sm h-10"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          {search && (
-            <button
-              onClick={() => setSearch("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-
-        <div className="flex gap-2 items-center">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                className="h-10 bg-card border-card-border shadow-sm gap-2"
-              >
-                <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
-                <span className="hidden sm:inline">Sort</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuLabel>Sort by</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuRadioGroup value={sort} onValueChange={setSort}>
-                <DropdownMenuRadioItem value="newest">
-                  Recently Added
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="oldest">
-                  Oldest First
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="year-desc">
-                  Release Year (New to Old)
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="year-asc">
-                  Release Year (Old to New)
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="name-asc">
-                  Name (A-Z)
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="value-desc">
-                  Highest Value
-                </DropdownMenuRadioItem>
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                className="h-10 bg-card border-card-border shadow-sm gap-2 relative"
-              >
-                <Filter className="h-4 w-4 text-muted-foreground" />
-                <span className="hidden sm:inline">Category</span>
-                {selectedCat && (
-                  <span className="absolute -top-1 -right-1 flex h-3 w-3 rounded-full bg-primary" />
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              className="w-48 max-h-[300px] overflow-y-auto"
-            >
-              <DropdownMenuLabel>Filter by category</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => setSelectedCat(null)}
-                className={selectedCat === null ? "bg-muted" : ""}
-              >
-                All Categories
-              </DropdownMenuItem>
-              {categories?.map((cat) => (
-                <DropdownMenuItem
-                  key={cat.id}
-                  onClick={() => setSelectedCat(cat.id)}
-                  className={
-                    selectedCat === cat.id ? "bg-muted font-medium" : ""
-                  }
-                >
-                  <div
-                    className="w-2 h-2 rounded-full mr-2"
-                    style={{ backgroundColor: cat.bgColor || "#ccc" }}
-                  />
-                  {cat.name}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <ToggleGroup
-            type="single"
-            value={viewMode}
-            onValueChange={(v) => v && setViewMode(v as any)}
-            className="bg-card border border-card-border rounded-md p-1 shadow-sm shrink-0"
-          >
-            <ToggleGroupItem
-              value="grid"
-              aria-label="Grid view"
-              className="h-8 px-2"
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </ToggleGroupItem>
-            <ToggleGroupItem
-              value="list"
-              aria-label="List view"
-              className="h-8 px-2"
-            >
-              <ListIcon className="h-4 w-4" />
-            </ToggleGroupItem>
-          </ToggleGroup>
-        </div>
-      </div>
+      {/* Unified search/sort/filter bar */}
+      <CollectionSearchBar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search by name, series, or brand…"
+        sort={sort}
+        onSortChange={(v) => setSort(v as OrnamentSortKey)}
+        sortOptions={SORT_OPTIONS}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        categories={(categories ?? []).map((c) => ({
+          id: c.id,
+          name: c.name,
+          bgColor: c.bgColor ?? null,
+          textColor: c.textColor ?? null,
+        }))}
+        activeCategoryIds={filterCategoryIds}
+        onCategoryToggle={handleCategoryToggle}
+        extraControls={yearFilter}
+      />
 
       {/* Grid View */}
       {viewMode === "grid" && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-          {sortedItems.map((item) => (
-            <div key={item.id} className="relative group">
-              {/* Zoom button — top-left */}
-              {item.imageUrl && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setLightboxSrc(item.imageUrl!);
-                  }}
-                  className="absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/70"
-                  title="Zoom preview"
-                >
-                  <ZoomIn className="h-3.5 w-3.5" />
-                </button>
-              )}
-
-              {/* Actions menu — top-right */}
-              <div className="absolute right-2 top-2 z-10 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className="grid h-8 w-8 place-items-center rounded-full bg-background/85 text-foreground shadow-sm backdrop-blur"
-                      aria-label="Options"
-                    >
-                      <MoreVertical className="h-3.5 w-3.5" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem asChild>
-                      <Link href={`/ornaments/ornament/${item.id}`}>
-                        <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                        Open
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() =>
-                        void reanalyze.mutateAsync({ id: item.id }).then(() =>
-                          queryClient.invalidateQueries({
-                            queryKey: getListOrnamentsQueryKey(),
-                          }),
-                        )
-                      }
-                    >
-                      <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                      Refresh AI
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-
-              <Link
-                href={`/ornaments/ornament/${item.id}`}
-                className="block overflow-hidden rounded-xl border border-card-border bg-card shadow-sm transition hover:shadow-md"
-              >
-                <div className="aspect-square overflow-hidden bg-muted">
-                  {item.imageUrl ? (
-                    <img
-                      src={item.imageUrl}
-                      alt={item.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground bg-secondary/30">
-                      <ImageIcon className="h-8 w-8 mb-2 opacity-20" />
-                    </div>
-                  )}
-                </div>
-                <div className="p-3">
-                  <h3 className="font-serif font-bold text-foreground leading-tight line-clamp-1">
-                    {item.name}
-                  </h3>
-                  <div className="flex items-center text-xs text-muted-foreground mt-1 gap-2">
-                    <span className="font-medium text-foreground/70">
-                      {item.brand}
-                    </span>
-                    {item.year && <span>• {item.year}</span>}
-                  </div>
-                  {item.seriesOrCollection && (
-                    <p className="text-xs text-muted-foreground mt-0.5 italic line-clamp-1">
-                      {item.seriesOrCollection}
-                    </p>
-                  )}
-                  {item.quantity > 1 && (
-                    <div className="mt-1.5">
-                      <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                        ×{item.quantity}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </Link>
-            </div>
+        <CollectionGrid>
+          {filteredItems.map((item) => (
+            <CollectionCard
+              key={item.id}
+              id={item.id}
+              name={item.name}
+              imageUrl={item.imageUrl}
+              href={`/ornaments/ornament/${item.id}`}
+              subtitle={[
+                item.brand,
+                item.year ? String(item.year) : null,
+                item.seriesOrCollection,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+              categories={(item.categories ?? []).map((c) => ({
+                id: c.id,
+                name: c.name,
+                bgColor: c.bgColor ?? null,
+                textColor: c.textColor ?? null,
+              }))}
+              colorDots={
+                (item.dominantColors ?? []).length > 0 ? (
+                  <DominantColorDots
+                    colors={item.dominantColors ?? []}
+                    toHex={colorToHex}
+                    className="mt-1.5"
+                  />
+                ) : undefined
+              }
+              quantityBadge={
+                item.quantity > 1 ? (
+                  <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                    ×{item.quantity}
+                  </span>
+                ) : undefined
+              }
+              onQuickEdit={() =>
+                setQuickEditItem(item as unknown as OrnamentsOrnamentItem)
+              }
+              onSetCategories={() => setCategoryEditItem(item)}
+              onReanalyze={() =>
+                void reanalyze.mutateAsync({ id: item.id }).then(() =>
+                  queryClient.invalidateQueries({
+                    queryKey: getListOrnamentsQueryKey(),
+                  }),
+                )
+              }
+              onDelete={() => setDeleteConfirmId(item.id)}
+              LinkComponent={Link}
+            />
           ))}
-        </div>
+        </CollectionGrid>
       )}
 
       {/* List View */}
       {viewMode === "list" && (
-        <div className="flex flex-col gap-3">
-          {sortedItems.map((item) => (
-            <div
+        <CollectionList>
+          {filteredItems.map((item) => (
+            <CollectionListRow
               key={item.id}
-              className="group flex gap-4 p-3 bg-card border border-card-border rounded-xl hover:border-primary/50 transition-colors shadow-sm items-center"
-            >
-              <div
-                className="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 overflow-hidden rounded-lg bg-muted border border-border cursor-zoom-in"
-                onClick={() => item.imageUrl && setLightboxSrc(item.imageUrl)}
-              >
-                {item.imageUrl ? (
-                  <img
-                    src={item.imageUrl}
-                    alt={item.name}
-                    className="w-full h-full object-cover"
+              id={item.id}
+              name={item.name}
+              imageUrl={item.imageUrl}
+              href={`/ornaments/ornament/${item.id}`}
+              subtitle={
+                <span>
+                  {item.brand}
+                  {item.year ? ` · ${item.year}` : ""}
+                </span>
+              }
+              detail={
+                item.seriesOrCollection ? (
+                  <span className="italic">{item.seriesOrCollection}</span>
+                ) : undefined
+              }
+              categoryBadges={
+                item.categories.length > 0 ? (
+                  <>
+                    {[...item.categories]
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((cat) => (
+                        <span
+                          key={cat.id}
+                          className={cn(
+                            "inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-semibold",
+                            !cat.bgColor &&
+                              "border-border text-muted-foreground",
+                          )}
+                          style={
+                            cat.bgColor
+                              ? {
+                                  backgroundColor: cat.bgColor,
+                                  color: cat.textColor ?? "#fff",
+                                  borderColor: "transparent",
+                                }
+                              : undefined
+                          }
+                        >
+                          {cat.name}
+                        </span>
+                      ))}
+                  </>
+                ) : undefined
+              }
+              colorDots={
+                (item.dominantColors ?? []).length > 0 ? (
+                  <DominantColorDots
+                    colors={item.dominantColors ?? []}
+                    toHex={colorToHex}
+                    className="mt-1"
                   />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-muted-foreground bg-secondary/30">
-                    <ImageIcon className="h-5 w-5 opacity-30" />
-                  </div>
-                )}
-                {item.imageUrl && (
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    <ZoomIn className="h-4 w-4 text-white drop-shadow" />
-                  </div>
-                )}
-              </div>
-              <Link
-                href={`/ornaments/ornament/${item.id}`}
-                className="flex-1 min-w-0 py-1 flex gap-4 items-center"
-              >
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-serif font-bold text-foreground text-lg leading-tight truncate group-hover:text-primary transition-colors">
-                    {item.name}
-                  </h3>
-                  <div className="flex flex-wrap items-center text-sm text-muted-foreground mt-1 gap-x-3 gap-y-1">
-                    <span className="font-medium text-foreground/80">
-                      {item.brand}
-                    </span>
-                    {item.year && <span>{item.year}</span>}
-                    {item.seriesOrCollection && (
-                      <span className="italic truncate max-w-[200px]">
-                        {item.seriesOrCollection}
-                      </span>
-                    )}
-                    {item.quantity > 1 && (
-                      <span className="bg-muted px-1.5 rounded text-xs">
-                        Qty: {item.quantity}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="hidden sm:flex flex-col items-end shrink-0 pl-4">
-                  {item.bookValue != null && (
-                    <span className="font-medium text-primary/80">
-                      ${item.bookValue.toFixed(0)}
-                    </span>
-                  )}
-                </div>
-              </Link>
-            </div>
+                ) : undefined
+              }
+              valueDisplay={
+                item.bookValue != null ? (
+                  <span className="font-medium text-primary/80">
+                    ${item.bookValue.toFixed(0)}
+                  </span>
+                ) : undefined
+              }
+              onQuickEdit={() =>
+                setQuickEditItem(item as unknown as OrnamentsOrnamentItem)
+              }
+              onSetCategories={() => setCategoryEditItem(item)}
+              onReanalyze={() =>
+                void reanalyze.mutateAsync({ id: item.id }).then(() =>
+                  queryClient.invalidateQueries({
+                    queryKey: getListOrnamentsQueryKey(),
+                  }),
+                )
+              }
+              onDelete={() => setDeleteConfirmId(item.id)}
+              LinkComponent={Link}
+            />
           ))}
-        </div>
+        </CollectionList>
       )}
 
-      <ImageLightbox
-        src={lightboxSrc ?? ""}
-        open={!!lightboxSrc}
-        onClose={() => setLightboxSrc(null)}
+      {/* Quick edit sheet */}
+      {quickEditItem && (
+        <QuickEditOrnamentSheet
+          ornament={quickEditItem}
+          onClose={() => setQuickEditItem(null)}
+          onDeleted={() => setQuickEditItem(null)}
+        />
+      )}
+
+      {/* Set categories dialog */}
+      <CategoryEditDialog
+        open={categoryEditItem !== null}
+        onClose={() => setCategoryEditItem(null)}
+        title={categoryEditItem?.name ?? ""}
+        currentCategories={
+          (categoryEditItem?.categories ?? []) as unknown as QuiltingCategory[]
+        }
+        allCategories={(categories ?? []) as unknown as QuiltingCategory[]}
+        onSave={(names) => {
+          if (categoryEditItem) {
+            const cats = (categories ?? [])
+              .filter((c) => names.includes(c.name))
+              .map((c) => c.id);
+            updateOrnamentCategories.mutate({
+              id: categoryEditItem.id,
+              data: { categoryIds: cats },
+            });
+          }
+        }}
+        isSaving={updateOrnamentCategories.isPending}
       />
+
+      {/* Delete confirm dialog */}
+      <AlertDialog
+        open={deleteConfirmId !== null}
+        onOpenChange={(o) => !o && setDeleteConfirmId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this ornament?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes this ornament from your collection. This
+              cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() =>
+                deleteConfirmId !== null &&
+                deleteOrnament.mutate({ id: deleteConfirmId })
+              }
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {isError && (
         <CollectionErrorState
@@ -547,7 +610,7 @@ export default function Collection() {
         />
       )}
 
-      {!isLoading && !isError && sortedItems.length === 0 && (
+      {!isLoading && !isError && filteredItems.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 px-4 text-center border border-dashed border-border rounded-2xl bg-card shadow-sm">
           <div className="h-16 w-16 bg-muted rounded-full flex items-center justify-center mb-4">
             <ImageIcon className="h-8 w-8 text-muted-foreground opacity-50" />
@@ -556,11 +619,11 @@ export default function Collection() {
             No ornaments found
           </h2>
           <p className="text-muted-foreground mt-2 max-w-md">
-            {search || selectedCat
+            {search || filterCategoryIds.size > 0
               ? "Try adjusting your search or filters to find what you're looking for."
               : "Your collection is empty. Start by adding your first hallmark keepsake."}
           </p>
-          {!search && !selectedCat && (
+          {!search && filterCategoryIds.size === 0 && (
             <Button asChild className="mt-6 bg-primary text-primary-foreground">
               <Link href="/ornaments/camera-add">
                 <Plus className="mr-2 h-4 w-4" /> Add Ornament

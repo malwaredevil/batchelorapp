@@ -50,6 +50,7 @@
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "@workspace/api-client-react": "workspace:*",
+    "@workspace/collection-ui": "workspace:*",
     "@workspace/elaine-ui": "workspace:*",
     "@workspace/gmail-ui": "workspace:*",
     "@workspace/image-capture": "workspace:*",

@@ -60,6 +60,16 @@ import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
 import { buildFabricUrlMap } from "@/quilting/components/FabricPicker";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { CategoryEditDialog } from "@/quilting/components/CategoryEditDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 
 /** URL for the server-rasterised PNG preview of a block. */
@@ -858,6 +868,7 @@ export default function Layouts() {
     [fabricsList],
   );
 
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [categoryEditItem, setCategoryEditItem] =
     useState<LayoutSummary | null>(null);
 
@@ -881,6 +892,7 @@ export default function Layouts() {
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListLayoutsQueryKey() });
+        setDeleteConfirmId(null);
         toast.success("Layout deleted");
       },
       onError: () => toast.error("Failed to delete layout."),
@@ -898,8 +910,7 @@ export default function Layouts() {
   });
 
   function handleDelete(id: number) {
-    if (!confirm("Delete this layout? This cannot be undone.")) return;
-    deleteLayout.mutate({ id });
+    setDeleteConfirmId(id);
   }
 
   function handleDuplicate(layout: LayoutSummary) {
@@ -1302,6 +1313,31 @@ export default function Layouts() {
           ))}
         </div>
       )}
+      <AlertDialog
+        open={deleteConfirmId !== null}
+        onOpenChange={(o) => !o && setDeleteConfirmId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this layout?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes this layout. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() =>
+                deleteConfirmId !== null &&
+                deleteLayout.mutate({ id: deleteConfirmId })
+              }
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <CategoryEditDialog
         open={categoryEditItem !== null}
         onClose={() => setCategoryEditItem(null)}

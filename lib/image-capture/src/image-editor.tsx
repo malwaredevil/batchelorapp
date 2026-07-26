@@ -851,7 +851,13 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
         </div>
 
         {/* Controls — bottom strip on mobile, right sidebar on desktop */}
-        <div className="shrink-0 space-y-3 overflow-y-auto border-t border-white/10 bg-black/90 px-4 py-4 md:w-72 md:border-l md:border-t-0">
+        {/* --primary is overridden to light grey here so shadcn Slider track/range
+            are visible against the dark panel (the app's default --primary is deep navy,
+            which is near-invisible on bg-black/90). */}
+        <div
+          className="shrink-0 space-y-3 overflow-y-auto border-t border-white/10 bg-black/90 px-4 py-4 md:w-72 md:border-l md:border-t-0"
+          style={{ "--primary": "0 0% 80%" } as React.CSSProperties}
+        >
           {/* Contextual hint — lives inside the controls panel */}
           <div className="pointer-events-none flex justify-center">
             <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/70">
@@ -864,7 +870,7 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
           </div>
           {/* Zoom */}
           <div className="space-y-1">
-            <Label className="text-xs text-white/60">
+            <Label className="text-xs text-white/80">
               Zoom {zoom.toFixed(1)}×
             </Label>
             <div className="flex items-center gap-2">
@@ -944,7 +950,7 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
           {/* Brightness / Contrast / Sharpness */}
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1">
-              <Label className="text-xs text-white/60">
+              <Label className="text-xs text-white/80">
                 Brightness {brightness}%
               </Label>
               <Slider
@@ -957,7 +963,7 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs text-white/60">
+              <Label className="text-xs text-white/80">
                 Contrast {contrast}%
               </Label>
               <Slider
@@ -970,7 +976,7 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs text-white/60">
+              <Label className="text-xs text-white/80">
                 Sharpen {sharpness}
               </Label>
               <Slider

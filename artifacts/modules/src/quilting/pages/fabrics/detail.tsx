@@ -46,6 +46,7 @@ import { ImageEditor } from "@/quilting/components/image-editor";
 import { downloadCollectionImage } from "@/quilting/lib/svg-export";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
 import { FabricIdentityResearchPanel } from "@/quilting/components/FabricIdentityResearchPanel";
+import { CollectionDetailSection } from "@workspace/collection-ui";
 
 type Fabric = {
   id: number;
@@ -874,10 +875,7 @@ export default function FabricDetail() {
               </div>
             )}
             {/* Inventory */}
-            <section className="rounded-xl border border-card-border bg-card p-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Inventory
-              </p>
+            <CollectionDetailSection title="Inventory">
               {isEditing ? (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -966,13 +964,10 @@ export default function FabricDetail() {
                   )}
                 </div>
               )}
-            </section>
+            </CollectionDetailSection>
 
             {/* Fabric details */}
-            <section className="rounded-xl border border-card-border bg-card p-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Fabric details
-              </p>
+            <CollectionDetailSection title="Fabric details">
               {isEditing ? (
                 <div className="space-y-2">
                   {(
@@ -1048,13 +1043,10 @@ export default function FabricDetail() {
                     ))}
                 </div>
               )}
-            </section>
+            </CollectionDetailSection>
 
             {/* Colors / Motifs */}
-            <section className="rounded-xl border border-card-border bg-card p-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Characteristics
-              </p>
+            <CollectionDetailSection title="Characteristics">
               {isEditing ? (
                 <div className="space-y-2">
                   <div>
@@ -1145,15 +1137,13 @@ export default function FabricDetail() {
                   )}
                 </>
               )}
-            </section>
+            </CollectionDetailSection>
 
             {/* Categories */}
-            <section className="rounded-xl border border-card-border bg-card p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  <Tag className="h-3 w-3" /> Categories
-                </p>
-                {!catEditing && !isEditing && (
+            <CollectionDetailSection
+              title="Categories"
+              action={
+                !catEditing && !isEditing ? (
                   <button
                     onClick={enterCatEdit}
                     className="rounded p-0.5 text-muted-foreground/40 transition-colors hover:text-muted-foreground"
@@ -1161,8 +1151,9 @@ export default function FabricDetail() {
                   >
                     <Pencil className="h-3 w-3" />
                   </button>
-                )}
-              </div>
+                ) : undefined
+              }
+            >
               {isEditing ? (
                 <TagSelector
                   allCategories={allCategories ?? []}
@@ -1251,18 +1242,15 @@ export default function FabricDetail() {
                   <Pencil className="inline h-2.5 w-2.5" /> to add
                 </p>
               )}
-            </section>
+            </CollectionDetailSection>
 
             {/* AI description */}
             {f.aiDescription && (
-              <section className="rounded-xl border border-card-border bg-card p-4">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  AI description
-                </p>
+              <CollectionDetailSection title="AI description">
                 <p className="text-sm leading-relaxed text-muted-foreground">
                   {f.aiDescription}
                 </p>
-              </section>
+              </CollectionDetailSection>
             )}
 
             {/* Pairings — fabrics that pair well */}
@@ -1272,10 +1260,7 @@ export default function FabricDetail() {
             <FabricIdentityResearchPanel fabricId={f.id} />
 
             {/* Notes */}
-            <section className="rounded-xl border border-card-border bg-card p-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Notes
-              </p>
+            <CollectionDetailSection title="Notes">
               {isEditing ? (
                 <Textarea
                   value={field("notes")}
@@ -1289,7 +1274,7 @@ export default function FabricDetail() {
               ) : (
                 <p className="text-xs text-muted-foreground italic">No notes</p>
               )}
-            </section>
+            </CollectionDetailSection>
 
             {/* Lock hint */}
             {!isEditing && (

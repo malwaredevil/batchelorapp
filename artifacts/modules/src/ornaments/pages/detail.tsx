@@ -1,20 +1,15 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useRoute, useLocation } from "wouter";
 import {
   Loader2,
-  ArrowLeft,
   Trash2,
-  Camera,
-  Lock,
-  Unlock,
   Search,
   ShoppingBag,
-  Wand2,
+  RefreshCcw,
   Download,
-  Image as ImageIcon,
+  Pencil,
+  Save,
   X,
-  Star,
-  ZoomIn,
 } from "lucide-react";
 import { ImageLightbox } from "@/quilting/components/image-lightbox";
 import { ItemImageGallery } from "@workspace/image-capture";
@@ -43,9 +38,25 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { CategorySelector } from "@/ornaments/components/category-selector";
 import { generateInsurancePdf } from "@/ornaments/lib/pdf-export";
-import { cn } from "@/lib/utils";
 import { IdentityResearchPanel } from "@/ornaments/components/IdentityResearchPanel";
 import { SeriesLinkPanel } from "@/ornaments/components/SeriesLinkPanel";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
+  CollectionDetailLayout,
+  CollectionDetailSkeleton,
+  CollectionDetailField,
+  CollectionDetailSection,
+} from "@workspace/collection-ui";
 
 function formatCurrency(amount: number | null | undefined): string {
   if (amount == null) return "—";
@@ -56,9 +67,9 @@ function formatCurrency(amount: number | null | undefined): string {
 }
 
 export default function OrnamentDetail() {
-  const [match, params] = useRoute("/ornaments/ornament/:id");
+  const [, params] = useRoute("/ornaments/ornament/:id");
   const id = Number(params?.id);
-  const [_, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
 
   const {
@@ -68,17 +79,19 @@ export default function OrnamentDetail() {
   } = useGetOrnament(id, {
     query: { enabled: !!id, queryKey: getGetOrnamentQueryKey(id) },
   });
-  const updateOrnament = useUpdateOrnament();
-  const deleteOrnament = useDeleteOrnament();
-  const lookupBookValue = useLookupOrnamentBookValue();
-  const lookupEbay = useLookupOrnamentEbayPrice();
-  const reanalyze = useReanalyzeOrnament();
 
-  const addImage = useUploadOrnamentImage(id);
-  const setPrimaryImage = useSetOrnamentPrimaryImage();
-  const deleteImage = useDeleteOrnamentImage();
-
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState({
+    name: "",
+    brand: "",
+    series: "",
+    year: "",
+    notes: "",
+    aiDesc: "",
+    dimensions: "",
+    condition: "",
+  });
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [ebayResult, setEbayResult] = useState<{
@@ -88,34 +101,6 @@ export default function OrnamentDetail() {
     listingCount: number;
     searchQuery?: string;
   } | null>(null);
-
-  // Auto-save state
-  const [title, setTitle] = useState("");
-  const [brand, setBrand] = useState("");
-  const [series, setSeries] = useState("");
-  const [year, setYear] = useState("");
-  const [notes, setNotes] = useState("");
-  const [categories, setCategories] = useState<number[]>([]);
-  const [lockedFields, setLockedFields] = useState<string[]>([]);
-  const [aiDesc, setAiDesc] = useState("");
-  const [dimensions, setDimensions] = useState("");
-  const [condition, setCondition] = useState("");
-
-  const initializedForId = useRef<number | null>(null);
-  const lastSaved = useRef({
-    title: "",
-    brand: "",
-    series: "",
-    year: "",
-    notes: "",
-    categories: "",
-    lockedFields: "",
-    aiDesc: "",
-    dimensions: "",
-    condition: "",
-  });
-  const mutateFnRef = useRef(updateOrnament.mutate);
-  mutateFnRef.current = updateOrnament.mutate;
 
   const configSummary = useAppConfigSummary();
 
@@ -147,157 +132,85 @@ export default function OrnamentDetail() {
       : `Loading ornament ${id}...`,
   );
 
-  useEffect(() => {
-    if (ornament && initializedForId.current !== id) {
-      initializedForId.current = id;
-      setTitle(ornament.name || "");
-      setBrand(ornament.brand || "Hallmark");
-      setSeries(ornament.seriesOrCollection || "");
-      setYear(ornament.year ? String(ornament.year) : "");
-      setNotes(ornament.notes || "");
-      setAiDesc(ornament.aiDescription || "");
-      setDimensions(ornament.dimensions || "");
-      setCondition(ornament.condition || "");
-      const catIds = ornament.categories?.map((c) => c.id) || [];
-      setCategories(catIds);
-      const locked = ornament.lockedFields || [];
-      setLockedFields(locked);
+  const updateOrnament = useUpdateOrnament({
+    mutation: {
+      onSuccess: (data) => {
+        queryClient.setQueryData(getGetOrnamentQueryKey(id), data);
+        queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() });
+        setIsEditing(false);
+        toast.success("Saved.");
+      },
+      onError: () => toast.error("Could not save changes."),
+    },
+  });
 
-      lastSaved.current = {
-        title: ornament.name || "",
-        brand: ornament.brand || "Hallmark",
-        series: ornament.seriesOrCollection || "",
-        year: ornament.year ? String(ornament.year) : "",
-        notes: ornament.notes || "",
-        categories: catIds.join(","),
-        lockedFields: locked.join(","),
-        aiDesc: ornament.aiDescription || "",
-        dimensions: ornament.dimensions || "",
-        condition: ornament.condition || "",
-      };
-    }
-  }, [ornament, id]);
+  const deleteOrnament = useDeleteOrnament({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() });
+        toast.success("Ornament deleted");
+        setLocation("/ornaments/");
+      },
+      onError: () => toast.error("Failed to delete ornament"),
+    },
+  });
 
-  // Debounced auto-save
-  useEffect(() => {
-    if (initializedForId.current !== id) return;
+  const lookupBookValue = useLookupOrnamentBookValue();
+  const lookupEbay = useLookupOrnamentEbayPrice();
+  const reanalyze = useReanalyzeOrnament();
+  const addImage = useUploadOrnamentImage(id);
+  const setPrimaryImage = useSetOrnamentPrimaryImage();
+  const deleteImage = useDeleteOrnamentImage();
 
-    const catsStr = categories.join(",");
-    const lockedStr = lockedFields.join(",");
+  function enterEdit() {
+    if (!ornament) return;
+    setDraft({
+      name: ornament.name || "",
+      brand: ornament.brand || "Hallmark",
+      series: ornament.seriesOrCollection || "",
+      year: ornament.year ? String(ornament.year) : "",
+      notes: ornament.notes || "",
+      aiDesc: ornament.aiDescription || "",
+      dimensions: ornament.dimensions || "",
+      condition: ornament.condition || "",
+    });
+    setSelectedCategoryIds(ornament.categories?.map((c) => c.id) || []);
+    setIsEditing(true);
+  }
 
-    const changed =
-      title !== lastSaved.current.title ||
-      brand !== lastSaved.current.brand ||
-      series !== lastSaved.current.series ||
-      year !== lastSaved.current.year ||
-      notes !== lastSaved.current.notes ||
-      catsStr !== lastSaved.current.categories ||
-      lockedStr !== lastSaved.current.lockedFields ||
-      aiDesc !== lastSaved.current.aiDesc ||
-      dimensions !== lastSaved.current.dimensions ||
-      condition !== lastSaved.current.condition;
+  function cancelEdit() {
+    setIsEditing(false);
+  }
 
-    if (!changed) return;
-
-    const timer = setTimeout(() => {
-      mutateFnRef.current(
-        {
-          id,
-          data: {
-            name: title,
-            brand,
-            seriesOrCollection: series || null,
-            year: year ? parseInt(year, 10) : null,
-            notes: notes || null,
-            categoryIds: categories,
-            lockedFields: lockedFields,
-            aiDescription: aiDesc || null,
-            dimensions: dimensions || null,
-            condition: condition || null,
-          },
-        },
-        {
-          onSuccess: (data) => {
-            lastSaved.current = {
-              title: data.name,
-              brand: data.brand || "",
-              series: data.seriesOrCollection || "",
-              year: data.year ? String(data.year) : "",
-              notes: data.notes || "",
-              categories: data.categories?.map((c) => c.id).join(",") || "",
-              lockedFields: data.lockedFields?.join(",") || "",
-              aiDesc: data.aiDescription || "",
-              dimensions: data.dimensions || "",
-              condition: data.condition || "",
-            };
-            queryClient.setQueryData(getGetOrnamentQueryKey(id), data);
-          },
-          onError: () => toast.error("Auto-save failed"),
-        },
-      );
-    }, 1000);
-
-    return () => clearTimeout(timer);
-  }, [
-    title,
-    brand,
-    series,
-    year,
-    notes,
-    categories,
-    lockedFields,
-    aiDesc,
-    dimensions,
-    condition,
-    id,
-    queryClient,
-  ]);
-
-  const toggleLock = (field: string) => {
-    setLockedFields((prev) =>
-      prev.includes(field) ? prev.filter((f) => f !== field) : [...prev, field],
-    );
-  };
-
-  const LockIcon = ({ field }: { field: string }) => {
-    const isLocked = lockedFields.includes(field);
-    return (
-      <button
-        onClick={() => toggleLock(field)}
-        className={`ml-2 p-1 rounded transition-colors ${isLocked ? "text-primary bg-primary/10" : "text-muted-foreground hover:bg-muted opacity-50 hover:opacity-100"}`}
-        title={
-          isLocked
-            ? "Field locked from AI updates"
-            : "Lock field to prevent AI overwrites"
-        }
-      >
-        {isLocked ? (
-          <Lock className="h-3 w-3" />
-        ) : (
-          <Unlock className="h-3 w-3" />
-        )}
-      </button>
-    );
-  };
-
-  const handleDelete = async () => {
-    if (
-      !confirm(
-        "Are you sure you want to delete this ornament? This cannot be undone.",
-      )
-    )
+  function save() {
+    if (!draft.name.trim()) {
+      toast.error("Name cannot be empty.");
       return;
-    setIsDeleting(true);
-    try {
-      await deleteOrnament.mutateAsync({ id });
-      toast.success("Ornament deleted");
-      queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() });
-      setLocation("/ornaments/");
-    } catch (err) {
-      toast.error("Failed to delete ornament");
-      setIsDeleting(false);
     }
-  };
+    updateOrnament.mutate({
+      id,
+      data: {
+        name: draft.name.trim(),
+        brand: draft.brand.trim() || undefined,
+        seriesOrCollection: draft.series.trim() || undefined,
+        year: draft.year ? parseInt(draft.year, 10) : undefined,
+        notes: draft.notes.trim() || undefined,
+        aiDescription: draft.aiDesc.trim() || undefined,
+        dimensions: draft.dimensions.trim() || undefined,
+        condition: draft.condition.trim() || undefined,
+        categoryIds: selectedCategoryIds,
+      },
+    });
+  }
+
+  function toggleFieldLock(field: string) {
+    if (!ornament) return;
+    const current = ornament.lockedFields ?? [];
+    const next = current.includes(field)
+      ? current.filter((f) => f !== field)
+      : [...current, field];
+    updateOrnament.mutate({ id, data: { lockedFields: next } });
+  }
 
   const handleLookupPrice = async () => {
     if (!ornament?.name) return;
@@ -305,14 +218,13 @@ export default function OrnamentDetail() {
       toast.loading("Scraping for book value...", { id: "price" });
       const result = await lookupBookValue.mutateAsync({ id });
       toast.dismiss("price");
-
       if (result.bookValue) {
         toast.success(`Found estimate: ${formatCurrency(result.bookValue)}`);
         queryClient.invalidateQueries({ queryKey: getGetOrnamentQueryKey(id) });
       } else {
         toast.error("No reliable price data found on Hallmark value sites.");
       }
-    } catch (err) {
+    } catch {
       toast.dismiss("price");
       toast.error("Failed to lookup book value");
     }
@@ -346,43 +258,8 @@ export default function OrnamentDetail() {
       toast.dismiss("analyze");
       toast.success("Analysis complete");
       queryClient.setQueryData(getGetOrnamentQueryKey(id), result);
-
-      // Push all returned fields into form state — server already skipped locked fields,
-      // so the result values are exactly what should be displayed.
-      const newTitle = result.name || "";
-      const newBrand = result.brand || "Hallmark";
-      const newSeries = result.seriesOrCollection || "";
-      const newYear = result.year ? String(result.year) : "";
-      const newAiDesc = result.aiDescription || "";
-      const newDimensions = result.dimensions || "";
-      const newCondition = result.condition || "";
-      const newCats = result.categories?.map((c) => c.id) ?? [];
-      const newLocked = result.lockedFields ?? [];
-
-      setTitle(newTitle);
-      setBrand(newBrand);
-      setSeries(newSeries);
-      setYear(newYear);
-      setAiDesc(newAiDesc);
-      setDimensions(newDimensions);
-      setCondition(newCondition);
-      setCategories(newCats);
-      setLockedFields(newLocked);
-
-      // Sync lastSaved so the debounced auto-save doesn't see a spurious diff
-      lastSaved.current = {
-        title: newTitle,
-        brand: newBrand,
-        series: newSeries,
-        year: newYear,
-        notes: lastSaved.current.notes,
-        categories: newCats.join(","),
-        lockedFields: newLocked.join(","),
-        aiDesc: newAiDesc,
-        dimensions: newDimensions,
-        condition: newCondition,
-      };
-    } catch (err) {
+      queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() });
+    } catch {
       toast.dismiss("analyze");
       toast.error("Analysis failed");
     }
@@ -394,56 +271,10 @@ export default function OrnamentDetail() {
     try {
       await generateInsurancePdf([ornament], () => {});
       toast.success("PDF generated");
-    } catch (err) {
+    } catch {
       toast.error("PDF export failed");
     } finally {
       setExportingPdf(false);
-    }
-  };
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files?.length) return;
-    const file = e.target.files[0];
-    e.target.value = "";
-    const MAX_FILE_BYTES = 100 * 1024 * 1024;
-    if (file.size > MAX_FILE_BYTES) {
-      toast.error(`${file.name} — skipped (max 100 MB per file)`);
-      return;
-    }
-    try {
-      const formData = new FormData();
-      formData.append("image", file);
-
-      toast.loading("Uploading image...", { id: "upload" });
-      await addImage.mutateAsync(formData);
-      toast.dismiss("upload");
-      toast.success("Image added");
-      queryClient.invalidateQueries({ queryKey: getGetOrnamentQueryKey(id) });
-    } catch (err) {
-      toast.dismiss("upload");
-      toast.error(getUploadErrorMessage(err, "Failed to upload image"));
-    }
-  };
-
-  const handleSetPrimary = async (imageId: number) => {
-    try {
-      await setPrimaryImage.mutateAsync({ id, data: { imageId } });
-      toast.success("Primary image updated");
-      queryClient.invalidateQueries({ queryKey: getGetOrnamentQueryKey(id) });
-      queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() });
-    } catch (err) {
-      toast.error("Failed to set primary image");
-    }
-  };
-
-  const handleDeleteImage = async (imageId: number) => {
-    if (!confirm("Remove this image?")) return;
-    try {
-      await deleteImage.mutateAsync({ id, imageId });
-      toast.success("Image removed");
-      queryClient.invalidateQueries({ queryKey: getGetOrnamentQueryKey(id) });
-    } catch (err) {
-      toast.error("Failed to remove image");
     }
   };
 
@@ -471,7 +302,6 @@ export default function OrnamentDetail() {
     toast.success("Photo updated");
   };
 
-  // Must be before any early return — hooks cannot be called after conditional returns
   const lightboxImages = useMemo(() => {
     const supplemental = (ornament?.images ?? [])
       .slice()
@@ -482,13 +312,7 @@ export default function OrnamentDetail() {
       : supplemental;
   }, [ornament?.images, ornament?.imageUrl]);
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  if (isLoading) return <CollectionDetailSkeleton />;
 
   if (isError || !ornament) {
     return (
@@ -501,344 +325,527 @@ export default function OrnamentDetail() {
     );
   }
 
-  const primaryImage = ornament.images?.find((img) => img.position === 0);
-  const otherImages = ornament.images?.filter((img) => img.position > 0) || [];
+  const lockedFields = ornament.lockedFields ?? [];
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 pb-20">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setLocation("/ornaments/")}
-            className="-ml-2 shrink-0"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div className="hidden sm:block">
-            <p className="text-sm text-muted-foreground font-medium uppercase tracking-wider">
-              {brand} • {year}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExportPdf}
-            disabled={exportingPdf}
-          >
-            {exportingPdf ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4 mr-2" />
-            )}
-            PDF
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={handleDelete}
-            disabled={isDeleting}
-            className="bg-destructive/10 text-destructive hover:bg-destructive hover:text-white border-transparent"
-          >
-            {isDeleting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Trash2 className="h-4 w-4" />
-            )}
-          </Button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-8 items-start">
-        {/* Left Column - Image & Actions */}
-        <div className="space-y-4">
-          <ItemImageGallery
-            images={[
-              {
-                id: -1,
-                url: ornament.imageUrl,
-                label: null,
-                isPrimary: true,
-              },
-              ...(ornament.images ?? [])
-                .slice()
-                .sort((a, b) => a.position - b.position)
-                .map((img) => ({
-                  id: img.id,
-                  url: img.url,
+    <>
+      <CollectionDetailLayout
+        backLabel="Collection"
+        onBack={() => setLocation("/ornaments/")}
+        gallery={
+          <div className="space-y-4">
+            <ItemImageGallery
+              images={[
+                {
+                  id: -1,
+                  url: ornament.imageUrl,
                   label: null,
-                  isPrimary: false,
-                })),
-            ]}
-            onAddImage={async (file) => {
-              const formData = new FormData();
-              formData.append("image", file);
-              await addImage.mutateAsync(formData);
-              queryClient.invalidateQueries({
-                queryKey: getGetOrnamentQueryKey(id),
-              });
-              toast.success("Photo added");
-            }}
-            onReplaceImage={handleReplaceImage}
-            onDeleteImage={(imageId, isPrimary) => {
-              if (!isPrimary) void handleDeleteImage(imageId);
-            }}
-            onSetPrimary={(imageId) => void handleSetPrimary(imageId)}
-            onZoom={(url) => {
-              const idx = lightboxImages.indexOf(url);
-              if (idx >= 0) setLightboxIndex(idx);
-            }}
-            isUploading={addImage.isPending}
-            maxImages={10}
-          />
+                  isPrimary: true,
+                },
+                ...(ornament.images ?? [])
+                  .slice()
+                  .sort((a, b) => a.position - b.position)
+                  .map((img) => ({
+                    id: img.id,
+                    url: img.url,
+                    label: null,
+                    isPrimary: false,
+                  })),
+              ]}
+              onAddImage={async (file) => {
+                const formData = new FormData();
+                formData.append("image", file);
+                await addImage.mutateAsync(formData).catch((err) => {
+                  toast.error(
+                    getUploadErrorMessage(err, "Failed to upload image"),
+                  );
+                  throw err;
+                });
+                queryClient.invalidateQueries({
+                  queryKey: getGetOrnamentQueryKey(id),
+                });
+                toast.success("Photo added");
+              }}
+              onReplaceImage={handleReplaceImage}
+              onDeleteImage={(imageId, isPrimary) => {
+                if (!isPrimary)
+                  void deleteImage
+                    .mutateAsync({ id, imageId })
+                    .then(() => {
+                      queryClient.invalidateQueries({
+                        queryKey: getGetOrnamentQueryKey(id),
+                      });
+                      toast.success("Image removed");
+                    })
+                    .catch(() => toast.error("Failed to remove image"));
+              }}
+              onSetPrimary={(imageId) =>
+                void setPrimaryImage
+                  .mutateAsync({ id, data: { imageId } })
+                  .then(() => {
+                    queryClient.invalidateQueries({
+                      queryKey: getGetOrnamentQueryKey(id),
+                    });
+                    queryClient.invalidateQueries({
+                      queryKey: getListOrnamentsQueryKey(),
+                    });
+                    toast.success("Primary image updated");
+                  })
+                  .catch(() => toast.error("Failed to set primary image"))
+              }
+              onZoom={(url) => {
+                const idx = lightboxImages.indexOf(url);
+                if (idx >= 0) setLightboxIndex(idx);
+              }}
+              isUploading={addImage.isPending}
+              maxImages={10}
+            />
 
-          <div className="grid grid-cols-3 gap-2">
-            <Button
-              variant="outline"
-              className="h-auto py-3 flex flex-col gap-1 items-center justify-center bg-card shadow-sm"
-              onClick={handleLookupPrice}
-              disabled={lookupBookValue.isPending}
-            >
-              {lookupBookValue.isPending ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <Search className="h-5 w-5 text-primary" />
-              )}
-              <span className="text-xs">Book Value</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-auto py-3 flex flex-col gap-1 items-center justify-center bg-card shadow-sm"
-              onClick={handleLookupEbayPrice}
-              disabled={lookupEbay.isPending}
-            >
-              {lookupEbay.isPending ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <ShoppingBag className="h-5 w-5 text-primary" />
-              )}
-              <span className="text-xs">eBay Price</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-auto py-3 flex flex-col gap-1 items-center justify-center bg-card shadow-sm"
-              onClick={handleReanalyze}
-              disabled={reanalyze.isPending}
-            >
-              {reanalyze.isPending ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <Wand2 className="h-5 w-5 text-primary" />
-              )}
-              <span className="text-xs">AI Analysis</span>
-            </Button>
-          </div>
-
-          {ornament.bookValue != null && (
-            <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-center">
-              <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                Estimated Value
-              </p>
-              <p className="text-3xl font-serif font-bold text-primary">
-                {formatCurrency(ornament.bookValue)}
-              </p>
-              <p className="text-[10px] text-muted-foreground mt-2">
-                Source: {ornament.bookValueSource} <br />
-                Updated:{" "}
-                {new Date(ornament.bookValueUpdatedAt!).toLocaleDateString()}
-              </p>
-            </div>
-          )}
-
-          {ebayResult && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-medium text-amber-900 uppercase tracking-wider">
-                  eBay Sold Listings
-                </p>
-                <button
-                  onClick={() => setEbayResult(null)}
-                  className="text-amber-500 hover:text-amber-700 text-xs"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div>
-                  <p className="text-lg font-bold text-amber-800">
-                    ${ebayResult.priceMinUsd.toFixed(0)}
-                  </p>
-                  <p className="text-[10px] text-amber-600">Low</p>
-                </div>
-                <div>
-                  <p className="text-lg font-bold text-amber-800">
-                    ${ebayResult.priceMedianUsd.toFixed(0)}
-                  </p>
-                  <p className="text-[10px] text-amber-600">Median</p>
-                </div>
-                <div>
-                  <p className="text-lg font-bold text-amber-800">
-                    ${ebayResult.priceMaxUsd.toFixed(0)}
-                  </p>
-                  <p className="text-[10px] text-amber-600">High</p>
-                </div>
-              </div>
-              <p className="text-[10px] text-amber-600 mt-2 text-center">
-                {ebayResult.listingCount} sold listing
-                {ebayResult.listingCount !== 1 ? "s" : ""} · "
-                {ebayResult.searchQuery}"
-              </p>
-            </div>
-          )}
-
-          <IdentityResearchPanel itemId={ornament.id} />
-          <SeriesLinkPanel itemId={ornament.id} />
-
-          <div className="flex flex-wrap gap-2">
-            {ornament.motifs?.map((m) => (
-              <Badge
-                key={m}
-                variant="secondary"
-                className="bg-secondary/50 font-normal"
-              >
-                {m}
-              </Badge>
-            ))}
-            {ornament.dominantColors?.map((c) => (
-              <Badge
-                key={c}
+            {/* Valuation action buttons */}
+            <div className="grid grid-cols-3 gap-2">
+              <Button
                 variant="outline"
-                className="font-normal flex items-center gap-1"
+                className="h-auto py-3 flex flex-col gap-1 items-center justify-center bg-card shadow-sm"
+                onClick={handleLookupPrice}
+                disabled={lookupBookValue.isPending}
               >
-                <span
-                  className="w-2 h-2 rounded-full inline-block"
-                  style={{ backgroundColor: c }}
-                ></span>{" "}
-                {c}
-              </Badge>
-            ))}
-          </div>
-        </div>
-
-        {/* Right Column - Form */}
-        <div className="space-y-6">
-          <div className="bg-card border border-card-border p-6 rounded-2xl shadow-sm space-y-5">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center">
-                  Name <LockIcon field="name" />
-                </Label>
-              </div>
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="text-2xl font-serif font-bold h-auto py-2 px-3 border-transparent hover:border-input focus:border-input bg-transparent hover:bg-background focus:bg-background transition-colors -ml-3 w-[calc(100%+24px)]"
-              />
+                {lookupBookValue.isPending ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Search className="h-5 w-5 text-primary" />
+                )}
+                <span className="text-xs">Book Value</span>
+              </Button>
+              <Button
+                variant="outline"
+                className="h-auto py-3 flex flex-col gap-1 items-center justify-center bg-card shadow-sm"
+                onClick={handleLookupEbayPrice}
+                disabled={lookupEbay.isPending}
+              >
+                {lookupEbay.isPending ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <ShoppingBag className="h-5 w-5 text-primary" />
+                )}
+                <span className="text-xs">eBay Price</span>
+              </Button>
+              <Button
+                variant="outline"
+                className="h-auto py-3 flex flex-col gap-1 items-center justify-center bg-card shadow-sm"
+                onClick={handleReanalyze}
+                disabled={reanalyze.isPending}
+              >
+                {reanalyze.isPending ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <RefreshCcw className="h-5 w-5 text-primary" />
+                )}
+                <span className="text-xs">AI Analysis</span>
+              </Button>
             </div>
 
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center mb-1">
-                  Brand <LockIcon field="brand" />
-                </Label>
-                <Input
-                  value={brand}
-                  onChange={(e) => setBrand(e.target.value)}
-                  className="bg-background"
-                />
+            {/* Book value card */}
+            {ornament.bookValue != null && (
+              <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-center">
+                <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                  Estimated Value
+                </p>
+                <p className="text-3xl font-serif font-bold text-primary">
+                  {formatCurrency(ornament.bookValue)}
+                </p>
+                <p className="text-[10px] text-muted-foreground mt-2">
+                  Source: {ornament.bookValueSource} <br />
+                  Updated:{" "}
+                  {new Date(ornament.bookValueUpdatedAt!).toLocaleDateString()}
+                </p>
               </div>
-              <div>
-                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center mb-1">
-                  Year <LockIcon field="year" />
-                </Label>
+            )}
+
+            {/* eBay results */}
+            {ebayResult && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium text-amber-900 uppercase tracking-wider">
+                    eBay Sold Listings
+                  </p>
+                  <button
+                    onClick={() => setEbayResult(null)}
+                    className="text-amber-500 hover:text-amber-700 text-xs"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <p className="text-lg font-bold text-amber-800">
+                      ${ebayResult.priceMinUsd.toFixed(0)}
+                    </p>
+                    <p className="text-[10px] text-amber-600">Low</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold text-amber-800">
+                      ${ebayResult.priceMedianUsd.toFixed(0)}
+                    </p>
+                    <p className="text-[10px] text-amber-600">Median</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold text-amber-800">
+                      ${ebayResult.priceMaxUsd.toFixed(0)}
+                    </p>
+                    <p className="text-[10px] text-amber-600">High</p>
+                  </div>
+                </div>
+                <p className="text-[10px] text-amber-600 mt-2 text-center">
+                  {ebayResult.listingCount} sold listing
+                  {ebayResult.listingCount !== 1 ? "s" : ""} ·{" "}
+                  {ebayResult.searchQuery && `"${ebayResult.searchQuery}"`}
+                </p>
+              </div>
+            )}
+          </div>
+        }
+        titleSlot={
+          isEditing ? (
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Name</Label>
+              <Input
+                value={draft.name}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...d, name: e.target.value }))
+                }
+                className="text-lg font-bold"
+                autoFocus
+                data-testid="input-edit-name"
+              />
+            </div>
+          ) : (
+            <div>
+              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-0.5">
+                {ornament.brand || "Hallmark"}
+                {ornament.year ? ` · ${ornament.year}` : ""}
+              </p>
+              <h1
+                className="text-2xl font-bold tracking-tight leading-tight"
+                data-testid="text-detail-name"
+              >
+                {ornament.name}
+              </h1>
+            </div>
+          )
+        }
+        actions={
+          isEditing ? (
+            <>
+              <Button
+                size="sm"
+                onClick={save}
+                disabled={updateOrnament.isPending}
+                data-testid="button-save"
+              >
+                {updateOrnament.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                Save
+              </Button>
+              <Button variant="ghost" size="sm" onClick={cancelEdit}>
+                <X className="h-4 w-4" />
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleExportPdf}
+                disabled={exportingPdf}
+                title="Export PDF"
+              >
+                {exportingPdf ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={enterEdit}
+                title="Edit"
+                data-testid="button-edit"
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    data-testid="button-delete"
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Remove this ornament?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This permanently removes "{ornament.name}" and all its
+                      photos. This cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => deleteOrnament.mutate({ id })}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      data-testid="button-confirm-delete"
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </>
+          )
+        }
+        fields={
+          <>
+            <CollectionDetailField
+              label="Brand"
+              value={ornament.brand || "—"}
+              locked={lockedFields.includes("brand")}
+              onToggleLock={
+                !isEditing ? () => toggleFieldLock("brand") : undefined
+              }
+              editing={isEditing}
+              editSlot={
                 <Input
-                  value={year}
-                  onChange={(e) => setYear(e.target.value)}
+                  value={draft.brand}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, brand: e.target.value }))
+                  }
+                  placeholder="e.g. Hallmark"
+                  className="h-8 text-sm"
+                />
+              }
+              empty={!ornament.brand}
+            />
+            <CollectionDetailField
+              label="Year"
+              value={ornament.year?.toString() ?? "—"}
+              locked={lockedFields.includes("year")}
+              onToggleLock={
+                !isEditing ? () => toggleFieldLock("year") : undefined
+              }
+              editing={isEditing}
+              editSlot={
+                <Input
                   type="number"
-                  className="bg-background"
+                  value={draft.year}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, year: e.target.value }))
+                  }
+                  placeholder="e.g. 2023"
+                  className="h-8 text-sm"
                 />
-              </div>
-            </div>
-
-            <div>
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center mb-1">
-                Series / Collection <LockIcon field="seriesOrCollection" />
-              </Label>
-              <Input
-                value={series}
-                onChange={(e) => setSeries(e.target.value)}
-                className="bg-background"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center mb-1">
-                  Condition <LockIcon field="condition" />
-                </Label>
+              }
+              empty={!ornament.year}
+            />
+            <CollectionDetailField
+              label="Series / Collection"
+              value={ornament.seriesOrCollection || "—"}
+              locked={lockedFields.includes("seriesOrCollection")}
+              onToggleLock={
+                !isEditing
+                  ? () => toggleFieldLock("seriesOrCollection")
+                  : undefined
+              }
+              editing={isEditing}
+              editSlot={
                 <Input
-                  value={condition}
-                  onChange={(e) => setCondition(e.target.value)}
-                  className="bg-background"
+                  value={draft.series}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, series: e.target.value }))
+                  }
+                  className="h-8 text-sm"
+                />
+              }
+              empty={!ornament.seriesOrCollection}
+            />
+            <CollectionDetailField
+              label="Condition"
+              value={ornament.condition || "—"}
+              locked={lockedFields.includes("condition")}
+              onToggleLock={
+                !isEditing ? () => toggleFieldLock("condition") : undefined
+              }
+              editing={isEditing}
+              editSlot={
+                <Input
+                  value={draft.condition}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, condition: e.target.value }))
+                  }
                   placeholder="e.g. Mint in Box"
+                  className="h-8 text-sm"
                 />
-              </div>
-              <div>
-                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center mb-1">
-                  Dimensions <LockIcon field="dimensions" />
-                </Label>
+              }
+              empty={!ornament.condition}
+            />
+            <CollectionDetailField
+              label="Dimensions"
+              value={ornament.dimensions || "—"}
+              locked={lockedFields.includes("dimensions")}
+              onToggleLock={
+                !isEditing ? () => toggleFieldLock("dimensions") : undefined
+              }
+              editing={isEditing}
+              editSlot={
                 <Input
-                  value={dimensions}
-                  onChange={(e) => setDimensions(e.target.value)}
-                  className="bg-background"
-                  placeholder="e.g. 4x3x2 in"
+                  value={draft.dimensions}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, dimensions: e.target.value }))
+                  }
+                  placeholder="e.g. 4×3×2 in"
+                  className="h-8 text-sm"
+                />
+              }
+              empty={!ornament.dimensions}
+            />
+            {(isEditing || ornament.notes) && (
+              <CollectionDetailField
+                label="Notes"
+                value={ornament.notes || "—"}
+                editing={isEditing}
+                editSlot={
+                  <Textarea
+                    value={draft.notes}
+                    onChange={(e) =>
+                      setDraft((d) => ({ ...d, notes: e.target.value }))
+                    }
+                    placeholder="Memories, condition notes, where it was bought..."
+                    className="text-sm min-h-[80px]"
+                  />
+                }
+                empty={!ornament.notes}
+              />
+            )}
+
+            {/* Categories */}
+            {isEditing ? (
+              <div className="py-1.5 border-b border-border/60 last:border-0">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
+                  Categories
+                </p>
+                <CategorySelector
+                  value={selectedCategoryIds}
+                  onChange={setSelectedCategoryIds}
                 />
               </div>
-            </div>
+            ) : ornament.categories?.length ? (
+              <div className="py-1.5 border-b border-border/60 last:border-0">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1.5">
+                  Categories
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {ornament.categories.map((cat) => (
+                    <Badge
+                      key={cat.id}
+                      variant="secondary"
+                      className="bg-secondary/50 font-normal"
+                    >
+                      {cat.name}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </>
+        }
+        panels={
+          <>
+            {/* AI Description */}
+            {(isEditing || ornament.aiDescription) && (
+              <CollectionDetailSection
+                title="AI Description"
+                action={
+                  !isEditing && ornament.aiDescription ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleFieldLock("aiDescription")}
+                      title={
+                        lockedFields.includes("aiDescription")
+                          ? "Locked — AI won't overwrite. Click to unlock."
+                          : "Click to lock — AI won't overwrite."
+                      }
+                      className={
+                        lockedFields.includes("aiDescription")
+                          ? "text-primary"
+                          : "text-muted-foreground/40 hover:text-muted-foreground"
+                      }
+                    >
+                      {lockedFields.includes("aiDescription") ? (
+                        <span className="text-xs">🔒</span>
+                      ) : (
+                        <span className="text-xs">🔓</span>
+                      )}
+                    </button>
+                  ) : undefined
+                }
+              >
+                {isEditing ? (
+                  <Textarea
+                    value={draft.aiDesc}
+                    onChange={(e) =>
+                      setDraft((d) => ({ ...d, aiDesc: e.target.value }))
+                    }
+                    className="text-sm min-h-[100px] leading-relaxed"
+                  />
+                ) : (
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    {ornament.aiDescription}
+                  </p>
+                )}
+              </CollectionDetailSection>
+            )}
 
-            <div>
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center mb-2">
-                Categories
-              </Label>
-              <CategorySelector value={categories} onChange={setCategories} />
-            </div>
-          </div>
+            {/* Colors + Motifs (view only) */}
+            {!isEditing &&
+              (ornament.dominantColors?.length || ornament.motifs?.length) && (
+                <div className="flex flex-wrap gap-2">
+                  {ornament.dominantColors?.map((c) => (
+                    <Badge
+                      key={c}
+                      variant="outline"
+                      className="font-normal flex items-center gap-1"
+                    >
+                      <span
+                        className="w-2 h-2 rounded-full inline-block"
+                        style={{ backgroundColor: c }}
+                      />
+                      {c}
+                    </Badge>
+                  ))}
+                  {ornament.motifs?.map((m) => (
+                    <Badge
+                      key={m}
+                      variant="secondary"
+                      className="bg-secondary/50 font-normal"
+                    >
+                      {m}
+                    </Badge>
+                  ))}
+                </div>
+              )}
 
-          <div className="bg-card border border-card-border p-6 rounded-2xl shadow-sm space-y-5">
-            <div>
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center mb-1">
-                AI Description <LockIcon field="aiDescription" />
-              </Label>
-              <Textarea
-                value={aiDesc}
-                onChange={(e) => setAiDesc(e.target.value)}
-                className="bg-background min-h-[100px] leading-relaxed text-sm"
-              />
-            </div>
-            <div>
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center mb-1">
-                Personal Notes <LockIcon field="notes" />
-              </Label>
-              <Textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="bg-background min-h-[80px]"
-                placeholder="Memories, condition issues, where it was bought..."
-              />
-            </div>
-          </div>
-
-          <div className="text-center">
-            <p className="text-xs text-muted-foreground flex items-center justify-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-green-500 inline-block mr-1 animate-pulse"></span>
-              Changes saved automatically
-            </p>
-          </div>
-        </div>
-      </div>
+            <IdentityResearchPanel itemId={ornament.id} />
+            <SeriesLinkPanel itemId={ornament.id} />
+          </>
+        }
+      />
 
       <ImageLightbox
         src={
@@ -850,6 +857,6 @@ export default function OrnamentDetail() {
         currentIndex={lightboxIndex ?? 0}
         onNavigate={setLightboxIndex}
       />
-    </div>
+    </>
   );
 }

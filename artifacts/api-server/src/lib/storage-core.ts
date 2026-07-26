@@ -3,11 +3,7 @@ import { randomUUID } from "node:crypto";
 import { LRUCache } from "lru-cache";
 import { env } from "./env";
 import type { SupportedImageType } from "./image";
-import {
-  DEFAULT_MULTER_FILE_BYTES,
-  HIGH_MULTER_FILE_BYTES,
-  ELAINE_ATTACHMENT_FILE_BYTES,
-} from "./upload-limits";
+import { SUPABASE_BUCKET_FILE_BYTES } from "./upload-limits";
 
 const EXT_BY_TYPE: Record<SupportedImageType, string> = {
   "image/jpeg": "jpg",
@@ -188,16 +184,16 @@ export async function ensureBucketWithPolicy(
 // ---------------------------------------------------------------------------
 
 export const IMAGE_ONLY_POLICY: BucketPolicy = {
-  // Matches DEFAULT_MULTER_FILE_BYTES — shared constant prevents silent drift
-  // above the upload guard threshold.
-  fileSizeLimit: DEFAULT_MULTER_FILE_BYTES,
+  // Capped at SUPABASE_BUCKET_FILE_BYTES (50 MB) — Supabase enforces a
+  // plan-level ceiling on the bucket fileSizeLimit parameter.  Express/multer
+  // enforces its own (larger) 100 MB cap independently.
+  fileSizeLimit: SUPABASE_BUCKET_FILE_BYTES,
   allowedMimeTypes: ["image/jpeg", "image/png", "image/webp"],
 };
 
 export const TRAVELS_BUCKET_POLICY: BucketPolicy = {
-  // Matches HIGH_MULTER_FILE_BYTES — shared constant prevents silent drift
-  // above the upload guard threshold.
-  fileSizeLimit: HIGH_MULTER_FILE_BYTES,
+  // Same 50 MB Supabase-side cap as above; travels also accepts PDFs.
+  fileSizeLimit: SUPABASE_BUCKET_FILE_BYTES,
   allowedMimeTypes: [
     "image/jpeg",
     "image/png",
@@ -207,9 +203,8 @@ export const TRAVELS_BUCKET_POLICY: BucketPolicy = {
 };
 
 export const MESSENGER_BUCKET_POLICY: BucketPolicy = {
-  // Matches HIGH_MULTER_FILE_BYTES — shared constant prevents silent drift
-  // above the upload guard threshold.
-  fileSizeLimit: HIGH_MULTER_FILE_BYTES,
+  // Same 50 MB Supabase-side cap; messenger accepts plain text too.
+  fileSizeLimit: SUPABASE_BUCKET_FILE_BYTES,
   allowedMimeTypes: [
     "image/jpeg",
     "image/png",
@@ -220,12 +215,8 @@ export const MESSENGER_BUCKET_POLICY: BucketPolicy = {
 };
 
 export const ELAINE_ATTACHMENTS_BUCKET_POLICY: BucketPolicy = {
-  // Intentionally smaller than DEFAULT_MULTER_FILE_BYTES — Elaine attachments
-  // are images/PDFs only and aren't expected to be large.  The value is
-  // imported from upload-limits.ts so the invariant tests in
-  // uploadSizeGuard.test.ts can reference it without importing this module
-  // (which pulls in env).
-  fileSizeLimit: ELAINE_ATTACHMENT_FILE_BYTES,
+  // Same 50 MB Supabase-side cap; Elaine attachments are images/PDFs only.
+  fileSizeLimit: SUPABASE_BUCKET_FILE_BYTES,
   allowedMimeTypes: [
     "image/jpeg",
     "image/png",

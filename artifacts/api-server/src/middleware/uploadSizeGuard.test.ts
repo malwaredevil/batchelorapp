@@ -45,6 +45,7 @@ import {
 } from "./uploadSizeGuard";
 import {
   ELAINE_ATTACHMENT_FILE_BYTES,
+  SUPABASE_BUCKET_FILE_BYTES,
   HIGH_UPLOAD_PREFIXES,
   multerLimitForPrefix,
 } from "../lib/upload-limits";
@@ -496,37 +497,36 @@ describe("uploadSizeGuard constants", () => {
 // for each policy, making it obvious which bucket is out of range.
 
 describe("Supabase Storage bucket policy limits are within upload guard thresholds", () => {
-  it("IMAGE_ONLY_POLICY (pottery / quilting / ornaments) stays within the default 101 MB guard", () => {
-    // IMAGE_ONLY_POLICY.fileSizeLimit = DEFAULT_MULTER_FILE_BYTES (100 MB)
-    expect(DEFAULT_MULTER_FILE_BYTES).toBeLessThanOrEqual(DEFAULT_UPLOAD_BYTES);
-  });
+  // All four bucket policies (IMAGE_ONLY, TRAVELS, MESSENGER, ELAINE_ATTACHMENTS)
+  // now use SUPABASE_BUCKET_FILE_BYTES (50 MB) as their fileSizeLimit.  This is
+  // separate from the Express/multer limits (DEFAULT_MULTER_FILE_BYTES = 100 MB,
+  // HIGH_MULTER_FILE_BYTES = 100 MB) because Supabase enforces a plan-level
+  // ceiling on the bucket fileSizeLimit parameter (free plan: 50 MB).  Setting it
+  // higher causes updateBucket to return "The object exceeded the maximum allowed
+  // size", leaving bucket policies stale on every server restart.
 
-  it("TRAVELS_BUCKET_POLICY stays within the high 101 MB guard", () => {
-    // TRAVELS_BUCKET_POLICY.fileSizeLimit = HIGH_MULTER_FILE_BYTES (100 MB)
-    expect(HIGH_MULTER_FILE_BYTES).toBeLessThanOrEqual(HIGH_UPLOAD_BYTES);
-  });
-
-  it("MESSENGER_BUCKET_POLICY stays within the high 101 MB guard", () => {
-    // MESSENGER_BUCKET_POLICY.fileSizeLimit = HIGH_MULTER_FILE_BYTES (100 MB)
-    expect(HIGH_MULTER_FILE_BYTES).toBeLessThanOrEqual(HIGH_UPLOAD_BYTES);
-  });
-
-  it("ELAINE_ATTACHMENTS_BUCKET_POLICY stays within the default 101 MB guard", () => {
-    // ELAINE_ATTACHMENTS_BUCKET_POLICY.fileSizeLimit = ELAINE_ATTACHMENT_FILE_BYTES (100 MB)
-    // All upload caps were raised to 100 MB; Elaine is now at parity with DEFAULT.
-    expect(ELAINE_ATTACHMENT_FILE_BYTES).toBeLessThanOrEqual(
+  it("SUPABASE_BUCKET_FILE_BYTES (50 MB) is within the default Express guard", () => {
+    expect(SUPABASE_BUCKET_FILE_BYTES).toBeLessThanOrEqual(
       DEFAULT_MULTER_FILE_BYTES,
     );
-    expect(ELAINE_ATTACHMENT_FILE_BYTES).toBeLessThanOrEqual(
+    expect(SUPABASE_BUCKET_FILE_BYTES).toBeLessThanOrEqual(
       DEFAULT_UPLOAD_BYTES,
     );
   });
 
-  it("all bucket policy limits are positive integers (sanity check)", () => {
+  it("SUPABASE_BUCKET_FILE_BYTES (50 MB) is within the high Express guard", () => {
+    expect(SUPABASE_BUCKET_FILE_BYTES).toBeLessThanOrEqual(
+      HIGH_MULTER_FILE_BYTES,
+    );
+    expect(SUPABASE_BUCKET_FILE_BYTES).toBeLessThanOrEqual(HIGH_UPLOAD_BYTES);
+  });
+
+  it("all upload limit constants are positive integers (sanity check)", () => {
     for (const limit of [
       DEFAULT_MULTER_FILE_BYTES,
       HIGH_MULTER_FILE_BYTES,
       ELAINE_ATTACHMENT_FILE_BYTES,
+      SUPABASE_BUCKET_FILE_BYTES,
     ]) {
       expect(limit).toBeGreaterThan(0);
       expect(Number.isInteger(limit)).toBe(true);

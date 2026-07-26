@@ -38,6 +38,23 @@
 export const DEFAULT_MULTER_FILE_BYTES = 100 * 1024 * 1024; // 100 MB
 
 /**
+ * Maximum fileSizeLimit that can be set on a Supabase Storage bucket policy.
+ *
+ * This is separate from DEFAULT_MULTER_FILE_BYTES / HIGH_MULTER_FILE_BYTES
+ * because Supabase enforces a plan-level ceiling on the bucket fileSizeLimit
+ * parameter (free plan: 50 MB).  Setting the bucket policy above this cap
+ * causes updateBucket to return an error ("The object exceeded the maximum
+ * allowed size"), which logs as a startup warning and leaves the bucket with
+ * stale policies.
+ *
+ * Express + multer still enforces its own (larger) per-route cap — the bucket
+ * policy here is an independent Supabase-side guard that kicks in after the
+ * file reaches Supabase Storage.  In practice, any file that passes multer
+ * and is within this limit will be stored successfully.
+ */
+export const SUPABASE_BUCKET_FILE_BYTES = 50 * 1024 * 1024; // 50 MB (Supabase free-plan ceiling)
+
+/**
  * Per-route multer fileSize limit for high-cap upload routes (travels
  * photos/docs, elaine attachments, messenger). Must stay at least 1 MB below
  * HIGH_UPLOAD_BYTES (101 MB) so the global guard is always the primary

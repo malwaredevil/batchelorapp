@@ -472,14 +472,15 @@ export default function OrnamentDetail() {
   };
 
   // Must be before any early return — hooks cannot be called after conditional returns
-  const lightboxImages = useMemo(
-    () =>
-      (ornament?.images ?? [])
-        .slice()
-        .sort((a, b) => a.position - b.position)
-        .map((img) => img.url),
-    [ornament?.images],
-  );
+  const lightboxImages = useMemo(() => {
+    const supplemental = (ornament?.images ?? [])
+      .slice()
+      .sort((a, b) => a.position - b.position)
+      .map((img) => img.url);
+    return ornament?.imageUrl
+      ? [ornament.imageUrl, ...supplemental]
+      : supplemental;
+  }, [ornament?.images, ornament?.imageUrl]);
 
   if (isLoading) {
     return (
@@ -555,15 +556,23 @@ export default function OrnamentDetail() {
         {/* Left Column - Image & Actions */}
         <div className="space-y-4">
           <ItemImageGallery
-            images={(ornament.images ?? [])
-              .slice()
-              .sort((a, b) => a.position - b.position)
-              .map((img) => ({
-                id: img.id,
-                url: img.url,
+            images={[
+              {
+                id: -1,
+                url: ornament.imageUrl,
                 label: null,
-                isPrimary: img.position === 0,
-              }))}
+                isPrimary: true,
+              },
+              ...(ornament.images ?? [])
+                .slice()
+                .sort((a, b) => a.position - b.position)
+                .map((img) => ({
+                  id: img.id,
+                  url: img.url,
+                  label: null,
+                  isPrimary: false,
+                })),
+            ]}
             onAddImage={async (file) => {
               const formData = new FormData();
               formData.append("image", file);
@@ -579,10 +588,7 @@ export default function OrnamentDetail() {
             }}
             onSetPrimary={(imageId) => void handleSetPrimary(imageId)}
             onZoom={(url) => {
-              const sorted = (ornament.images ?? [])
-                .slice()
-                .sort((a, b) => a.position - b.position);
-              const idx = sorted.findIndex((img) => img.url === url);
+              const idx = lightboxImages.indexOf(url);
               if (idx >= 0) setLightboxIndex(idx);
             }}
             isUploading={addImage.isPending}

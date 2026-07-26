@@ -553,7 +553,12 @@ describe("Pottery POST /api/pottery/items/:id/images — upload rejection", () =
     expect(res.status).toBe(400);
   });
 
-  it("rejects a file exceeding the 10 MB size limit", async () => {
+  it("rejects a non-JPEG buffer (all-0xff bytes) via magic-byte check", async () => {
+    // Upload limit is now 100 MB; 11 MB passes the guard and multer.
+    // The all-0xff buffer fails sniffImageType (JPEG needs 0xff 0xd8 0xff at bytes 0-2)
+    // so the route rejects with 400 via the MIME magic-byte layer.
+    // Item existence must succeed first so the route reaches the MIME check.
+    selectQueue.push([{ id: 1 }]);
     const oversized = Buffer.alloc(11 * 1024 * 1024, 0xff);
     const res = await request(potteryApp)
       .post("/api/pottery/items/1/images")
@@ -665,7 +670,10 @@ describe("Ornaments POST /api/ornaments/items/:id/images — upload rejection", 
     expect(res.status).toBe(400);
   });
 
-  it("rejects a file exceeding the 10 MB size limit", async () => {
+  it("rejects a non-JPEG buffer (all-0xff bytes) via magic-byte check", async () => {
+    // Upload limit is now 100 MB; 11 MB passes the guard and multer.
+    // Item existence must succeed first so the route reaches the MIME check.
+    selectQueue.push([{ id: 1 }]);
     const oversized = Buffer.alloc(11 * 1024 * 1024, 0xff);
     const res = await request(ornamentsApp)
       .post("/api/ornaments/items/1/images")

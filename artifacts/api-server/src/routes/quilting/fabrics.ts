@@ -858,7 +858,7 @@ router.get("/fabrics/:id/image", async (req, res) => {
   }
   const { buffer, contentType } = await downloadImageBuffer(row.imagePath);
   res.set("Content-Type", contentType);
-  res.set("Cache-Control", "private, max-age=3600");
+  res.set("Cache-Control", "no-cache");
   res.end(buffer);
 });
 
@@ -1267,7 +1267,7 @@ router.post("/fabrics/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
 
 router.post("/fabrics/:id/images", upload.single("image"), async (req, res) => {
   const { id } = AddFabricImageParams.parse(req.params);
-  const body = AddFabricImageBody.parse(req.body);
+  const body = AddFabricImageBody.omit({ image: true }).parse(req.body);
 
   // Verify the fabric exists before adding a supplemental image
   const [fabric] = await db

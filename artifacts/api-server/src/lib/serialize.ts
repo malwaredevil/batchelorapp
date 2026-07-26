@@ -1,4 +1,4 @@
-import { eq, inArray, and, isNotNull } from "drizzle-orm";
+import { eq, inArray, and, isNotNull, isNull } from "drizzle-orm";
 import type {
   FabricRow,
   QuiltPatternRow,
@@ -201,6 +201,7 @@ async function fetchImagesForEntities(
       and(
         eq(quiltingImages.entityType, entityType),
         inArray(quiltingImages.entityId, entityIds),
+        isNull(quiltingImages.deletedAt),
       ),
     );
 

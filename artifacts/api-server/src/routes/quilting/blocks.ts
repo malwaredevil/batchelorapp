@@ -274,8 +274,10 @@ router.post("/blocks/detect-seams", aiLimiter, async (req, res) => {
 
 // GET /blocks/:id/preview.png — server-rasterised PNG at a controlled resolution.
 // size: 50–800px wide (default 300). Height is derived from the block's
-// aspect ratio. ETag is based on block createdAt so the browser caches
-// aggressively while still revalidating after the server has replaced it.
+// aspect ratio. ETag encodes block createdAt + fabric imagePath signature so
+// the browser revalidates correctly when a fabric's default image changes.
+// Cache-Control: no-cache ensures the browser always sends a conditional GET;
+// the ETag check is fast (no image download) when nothing has changed.
 router.get("/blocks/:id/preview.png", async (req, res) => {
   const blockId = parseInt(String(req.params["id"]), 10);
   if (!Number.isFinite(blockId)) {
@@ -301,7 +303,7 @@ router.get("/blocks/:id/preview.png", async (req, res) => {
 
   res.set("Content-Type", "image/png");
   res.set("ETag", result.etag);
-  res.set("Cache-Control", "private, max-age=3600");
+  res.set("Cache-Control", "no-cache");
   res.end(result.png);
 });
 

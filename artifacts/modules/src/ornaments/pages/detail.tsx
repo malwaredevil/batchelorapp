@@ -520,43 +520,61 @@ export default function OrnamentDetail() {
           </div>
 
           {ornament.images && ornament.images.length > 1 && (
-            <div className="flex gap-2 overflow-x-auto pb-2 snap-x">
-              {ornament.images.map((img) => (
-                <div
-                  key={img.id}
-                  className="relative w-20 h-20 shrink-0 rounded-lg overflow-hidden border border-border group snap-start"
-                >
-                  <img
-                    src={img.url}
-                    className={cn(
-                      "w-full h-full object-cover",
-                      img.position === 0 && "opacity-50",
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground px-0.5">
+                Tap <Star className="inline h-3 w-3 text-primary" /> on any
+                photo to set it as the main display image
+              </p>
+              <div className="flex gap-2 overflow-x-auto pb-2 snap-x">
+                {ornament.images.map((img) => (
+                  <div
+                    key={img.id}
+                    className="relative w-20 h-20 shrink-0 rounded-lg overflow-hidden border border-border group snap-start"
+                  >
+                    <img
+                      src={img.url}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
+                    {img.position === 0 ? (
+                      <div
+                        className="absolute top-1 left-1 bg-primary text-white rounded-full p-0.5"
+                        title="Current main image"
+                      >
+                        <Star className="h-3 w-3 fill-current" />
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleSetPrimary(img.id)}
+                          disabled={setPrimaryImage.isPending}
+                          className="absolute top-1 left-1 bg-black/50 text-white/80 rounded-full p-0.5 hover:bg-primary hover:text-white transition-colors"
+                          title="Set as main image"
+                        >
+                          <Star className="h-3 w-3" />
+                        </button>
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 backdrop-blur-sm">
+                          <button
+                            onClick={() => handleSetPrimary(img.id)}
+                            disabled={setPrimaryImage.isPending}
+                            className="p-1 text-white hover:text-primary transition-colors"
+                            title="Set as main image"
+                          >
+                            <Star className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteImage(img.id)}
+                            className="p-1 text-white hover:text-destructive transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </>
                     )}
-                  />
-                  {img.position === 0 ? (
-                    <div className="absolute top-1 left-1 bg-primary text-white rounded-full p-0.5">
-                      <Star className="h-3 w-3 fill-current" />
-                    </div>
-                  ) : (
-                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 backdrop-blur-sm">
-                      <button
-                        onClick={() => handleSetPrimary(img.id)}
-                        className="p-1 text-white hover:text-primary transition-colors"
-                        title="Make primary"
-                      >
-                        <Star className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteImage(img.id)}
-                        className="p-1 text-white hover:text-destructive transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

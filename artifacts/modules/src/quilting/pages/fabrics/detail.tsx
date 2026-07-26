@@ -162,6 +162,10 @@ export default function FabricDetail() {
   const [catEditing, setCatEditing] = useState(false);
   const [localNewCats, setLocalNewCats] = useState<QuiltingCategory[]>([]);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxSupplemental, setLightboxSupplemental] = useState<{
+    url: string;
+    label: string;
+  } | null>(null);
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [cropTarget, setCropTarget] = useState<
     { type: "primary" } | { type: "supplemental"; imageId: number } | null
@@ -565,13 +569,13 @@ export default function FabricDetail() {
           {/* Col 1: main photo + gallery strip */}
           <div className="flex flex-col gap-3">
             <div
-              className="relative overflow-hidden rounded-2xl border border-card-border bg-muted cursor-zoom-in group"
+              className="relative aspect-square overflow-hidden rounded-2xl border border-card-border bg-muted cursor-zoom-in group md:aspect-auto"
               onClick={() => setLightboxOpen(true)}
             >
               <img
                 src={f.imageUrl}
                 alt={f.name}
-                className="h-full w-full object-contain"
+                className="h-full w-full object-cover md:object-contain"
               />
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/20 group-hover:opacity-100">
                 <ZoomIn className="h-10 w-10 text-white drop-shadow-lg" />
@@ -588,6 +592,20 @@ export default function FabricDetail() {
                 className="max-h-[75vh] max-w-[75vw] rounded object-contain"
                 draggable={false}
               />
+            </PreviewZoomModal>
+            <PreviewZoomModal
+              open={lightboxSupplemental !== null}
+              onClose={() => setLightboxSupplemental(null)}
+              title={lightboxSupplemental?.label}
+            >
+              {lightboxSupplemental && (
+                <img
+                  src={lightboxSupplemental.url}
+                  alt={lightboxSupplemental.label}
+                  className="max-h-[75vh] max-w-[75vw] rounded object-contain"
+                  draggable={false}
+                />
+              )}
             </PreviewZoomModal>
 
             {/* Photo gallery strip */}
@@ -613,7 +631,7 @@ export default function FabricDetail() {
                     {isFetchingCropImage && cropTarget?.type === "primary" ? (
                       <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
                     ) : (
-                      <Crop className="h-3.5 w-3.5 text-muted-foreground" />
+                      <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                     )}
                   </button>
                 </div>
@@ -622,12 +640,23 @@ export default function FabricDetail() {
               {/* Supplemental photos */}
               {f.images.map((img) => (
                 <div key={img.id} className="flex flex-col items-center gap-1">
-                  <div className="relative h-20 w-20 overflow-hidden rounded-lg border border-card-border bg-muted">
+                  <div
+                    className="relative h-20 w-20 overflow-hidden rounded-lg border border-card-border bg-muted cursor-zoom-in group"
+                    onClick={() =>
+                      setLightboxSupplemental({
+                        url: img.url,
+                        label: img.label ?? f.name,
+                      })
+                    }
+                  >
                     <img
                       src={img.url}
                       alt={img.label ?? "Photo"}
                       className="h-full w-full object-cover"
                     />
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/20 group-hover:opacity-100">
+                      <ZoomIn className="h-5 w-5 text-white drop-shadow" />
+                    </div>
                   </div>
                   <div className="flex gap-0.5">
                     <button
@@ -646,7 +675,7 @@ export default function FabricDetail() {
                       cropTarget.imageId === img.id ? (
                         <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
                       ) : (
-                        <Crop className="h-3.5 w-3.5 text-muted-foreground" />
+                        <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                       )}
                     </button>
                     <button

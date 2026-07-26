@@ -16,11 +16,20 @@ import { downloadImageBuffer } from "./storage";
 import { logger } from "./logger";
 
 // ─── In-memory PNG cache ────────────────────────────────────────────────────
-// Keyed by ETag string (encodes blockId + createdAt + sizePx).
-// Avoids re-fetching Supabase fabric images + re-rasterising on every request
-// once a block has been rendered at a given size.
+// Keyed by cache key string (encodes blockId + createdAt + sizePx + fabric
+// imagePath signature). Avoids re-fetching Supabase fabric images + re-
+// rasterising on every request once a block has been rendered at a given size.
 // Max 500 entries; evicts oldest (Map insertion order) when full.
 const PNG_CACHE = new Map<string, Buffer>();
+
+/** djb2 hash — fast, non-cryptographic, good enough for cache key discrimination. */
+function djb2(s: string): number {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+  }
+  return h;
+}
 const PNG_CACHE_MAX = 500;
 
 function pngCacheSet(key: string, buf: Buffer): void {
@@ -372,39 +381,54 @@ export async function renderBlockPreviewPng(
     .limit(1);
   if (!row) return null;
 
-  // 1a. Check in-memory cache — keyed by (blockId, createdAt, size).
-  // This avoids re-fetching fabric images from Supabase + re-rasterising on
-  // every request after the first render at each size.
-  const cacheKey = `blk-${blockId}-${row.createdAt?.getTime() ?? 0}-${clampedSize}`;
-  const cached = PNG_CACHE.get(cacheKey);
-  if (cached) {
-    const etag = `"${cacheKey}"`;
-    const gridH = Math.max(
-      1,
-      Math.ceil(((row.cells as string[]) ?? []).length / row.gridSize),
-    );
-    const cellPx = clampedSize / row.gridSize;
-    const heightPx = Math.round(gridH * cellPx);
-    return { png: cached, etag, heightPx };
-  }
-
   const cells = (row.cells as string[]) ?? [];
   const gridSize = row.gridSize;
   const seams = (row.seams ?? []) as SeamLine[];
 
-  // 2. Collect fabric IDs and load their storage paths
+  // 2. Collect fabric IDs and load their storage paths.
+  // We fetch fabric rows BEFORE checking the in-memory cache so we can
+  // include the current imagePath values in the cache key. This ensures
+  // the ETag (and therefore the browser's conditional-GET) correctly
+  // detects when a fabric's default image has changed.
   const fabIds = Array.from(collectFabIds(cells));
   const fabUriMap: Record<number, string> = {};
+  let fabRows: { id: number; imagePath: string | null }[] = [];
 
   if (fabIds.length > 0) {
-    const fabRows = await db
+    fabRows = await db
       .select({ id: fabrics.id, imagePath: fabrics.imagePath })
       .from(fabrics)
       .where(inArray(fabrics.id, fabIds));
+  }
 
+  // 2a. Build cache key — include fabric imagePath values so the ETag changes
+  // whenever a fabric's default image changes, not just when the block itself
+  // is edited.  djb2 over the sorted "id:path" tuples gives a compact,
+  // deterministic discriminator.
+  const fabricSig = djb2(
+    fabRows
+      .map((f) => `${f.id}:${f.imagePath ?? ""}`)
+      .sort()
+      .join("|"),
+  );
+  const cacheKey = `blk-${blockId}-${row.createdAt?.getTime() ?? 0}-${clampedSize}-f${fabricSig}`;
+
+  // 2b. Check in-memory cache — avoids re-downloading Supabase fabric images
+  // and re-rasterising as long as the block and its fabric images are unchanged.
+  const cached = PNG_CACHE.get(cacheKey);
+  if (cached) {
+    const etag = `"${cacheKey}"`;
+    const gridH = Math.max(1, Math.ceil(cells.length / gridSize));
+    const cellPx = clampedSize / gridSize;
+    const heightPx = Math.round(gridH * cellPx);
+    return { png: cached, etag, heightPx };
+  }
+
+  if (fabIds.length > 0) {
     // 3. Download each fabric image and base64-encode as a data URI (parallel)
     await Promise.all(
       fabRows.map(async (fab) => {
+        if (!fab.imagePath) return;
         try {
           const { buffer, contentType } = await downloadImageBuffer(
             fab.imagePath,

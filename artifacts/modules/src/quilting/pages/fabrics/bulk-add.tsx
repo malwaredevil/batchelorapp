@@ -180,7 +180,7 @@ export default function BulkAddFabric() {
             </p>
           </div>
           <div className="space-y-2">
-            {items.map((item) => (
+            {[...items].reverse().map((item) => (
               <div
                 key={item.clientId}
                 className="flex items-center gap-3 rounded-xl border border-border/50 bg-card px-3 py-2.5"

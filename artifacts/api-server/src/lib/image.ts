@@ -93,24 +93,37 @@ async function processImage(
 
   switch (contentType) {
     case "image/jpeg":
-      return pipeline.jpeg().toBuffer();
+      return pipeline.jpeg({ quality: 90 }).toBuffer();
     case "image/png":
       return pipeline.png().toBuffer();
     case "image/webp":
-      return pipeline.webp().toBuffer();
+      return pipeline.webp({ quality: 90 }).toBuffer();
   }
 }
 
 /**
- * Normalise an uploaded image for persistence: metadata stripped and bounded to
- * {@link MAX_STORAGE_DIMENSION}. Output uses the same container format as the
- * input so callers can keep using the original `contentType`.
+ * Normalise an uploaded image for persistence: strip EXIF/metadata and
+ * auto-rotate by orientation tag, but preserve the original pixel dimensions.
+ * Resizing is intentionally omitted — downscaling fine regular patterns (weaves,
+ * mesh fabrics) via Lanczos resampling introduces moiré interference lines that
+ * are baked into the stored bytes and are visible at every display size.
+ * The decompression-bomb guard ({@link MAX_INPUT_PIXELS}) still applies.
  */
 export async function stripImageMetadata(
   buffer: Buffer,
   contentType: SupportedImageType,
 ): Promise<Buffer> {
-  return processImage(buffer, contentType, MAX_STORAGE_DIMENSION);
+  const pipeline = sharp(buffer, {
+    limitInputPixels: MAX_INPUT_PIXELS,
+  }).rotate();
+  switch (contentType) {
+    case "image/jpeg":
+      return pipeline.jpeg({ quality: 90 }).toBuffer();
+    case "image/png":
+      return pipeline.png().toBuffer();
+    case "image/webp":
+      return pipeline.webp({ quality: 90 }).toBuffer();
+  }
 }
 
 /**

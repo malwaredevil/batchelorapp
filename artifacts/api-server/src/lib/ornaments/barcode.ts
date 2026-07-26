@@ -11,6 +11,8 @@ import { getConfig } from "../app-config";
 import { env } from "../env";
 import { lookupHoohBySku } from "./hooh-single-lookup";
 import { searchHallmark } from "./hallmark-search";
+import { getEbayAppToken } from "../ebay/oauth";
+import { callModel, MODELS } from "../ai-client";
 
 /**
  * UPCitemdb barcode lookup, cached per-UPC in ornaments_barcode_cache so
@@ -232,6 +234,200 @@ async function fetchFromOpenFoodFacts(
     year: null,
     description: null,
     imageUrl: product.image_url?.trim() || null,
+  };
+}
+
+/**
+ * eBay Browse API — GTIN/UPC lookup.
+ * Searches active listings by the exact barcode and extracts product identity
+ * from the top listing title + aspect refinements (Year, Artist, Series, Theme).
+ * Used as a fallback when UPCitemdb and Open Food Facts both miss.
+ */
+async function fetchFromEbay(barcode: string): Promise<UpcFetchResult> {
+  if (!env.ebayAppId || !env.ebayCertId) {
+    return {
+      found: false,
+      name: null,
+      brand: null,
+      seriesOrCollection: null,
+      year: null,
+      description: null,
+      imageUrl: null,
+    };
+  }
+
+  const token = await getEbayAppToken();
+
+  const params = new URLSearchParams({
+    gtin: barcode,
+    limit: "3",
+    fieldgroups: "ASPECT_REFINEMENTS",
+  });
+
+  const resp = await fetch(
+    `https://api.ebay.com/buy/browse/v1/item_summary/search?${params.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+      },
+      signal: AbortSignal.timeout(12_000),
+    },
+  );
+
+  if (!resp.ok) {
+    throw new Error(`eBay Browse API HTTP ${resp.status}`);
+  }
+
+  const data = (await resp.json()) as {
+    total?: number;
+    itemSummaries?: Array<{
+      title?: string;
+      image?: { imageUrl?: string };
+      price?: { value?: string };
+    }>;
+    refinement?: {
+      aspectDistributions?: Array<{
+        localizedAspectName: string;
+        aspectValueDistributions: Array<{
+          localizedAspectValue: string;
+          matchCount: number;
+        }>;
+      }>;
+    };
+  };
+
+  const total = data.total ?? 0;
+  if (total === 0 || !data.itemSummaries?.length) {
+    return {
+      found: false,
+      name: null,
+      brand: null,
+      seriesOrCollection: null,
+      year: null,
+      description: null,
+      imageUrl: null,
+    };
+  }
+
+  // Pull the top-listed item's title and image
+  const topItem = data.itemSummaries[0];
+  const title = topItem?.title?.trim() ?? "";
+  const imageUrl = topItem?.image?.imageUrl ?? null;
+
+  // Extract structured attributes from aspect refinements
+  const aspects: Record<string, string> = {};
+  for (const dist of data.refinement?.aspectDistributions ?? []) {
+    const topVal = dist.aspectValueDistributions?.sort(
+      (a, b) => b.matchCount - a.matchCount,
+    )[0];
+    if (topVal)
+      aspects[dist.localizedAspectName.toLowerCase()] =
+        topVal.localizedAspectValue;
+  }
+
+  const year =
+    aspects["year"] != null
+      ? parseInt(aspects["year"], 10)
+      : guessYearFromTitle(title);
+  const seriesOrCollection =
+    aspects["series"] ??
+    aspects["series name"] ??
+    guessSeriesFromTitle(title) ??
+    null;
+
+  logger.info(
+    { barcode, title, total, year, seriesOrCollection },
+    "eBay GTIN lookup: found product",
+  );
+
+  return {
+    found: true,
+    name: title || null,
+    brand: "Hallmark",
+    seriesOrCollection,
+    year: Number.isFinite(year) ? year : null,
+    description: null,
+    imageUrl,
+    model: aspects["sku"] ?? aspects["model"] ?? undefined,
+  };
+}
+
+/**
+ * AI fallback — ask an LLM to identify the ornament by UPC.
+ * Models have training-data knowledge of many common Hallmark ornaments and can
+ * correctly identify products that UPCitemdb and eBay GTIN search may miss.
+ */
+async function fetchFromAI(barcode: string): Promise<UpcFetchResult> {
+  const prompt = [
+    `A user is scanning a product barcode: ${barcode}.`,
+    `It is very likely a Hallmark Keepsake Ornament (Hallmark barcodes start with 661127).`,
+    `Using your training knowledge, identify this exact product.`,
+    `Reply ONLY with a valid JSON object — no markdown, no explanation.`,
+    `If you can identify it with high confidence:`,
+    `{"found":true,"name":"<full product name>","brand":"Hallmark","seriesOrCollection":"<series/collection name or null>","year":<4-digit year as integer or null>,"description":"<one sentence or null>"}`,
+    `If you cannot identify it: {"found":false}`,
+    `Do not guess — only set found:true if you are confident.`,
+  ].join(" ");
+
+  const raw = await callModel(MODELS.FAST_VISION, async (client, model) => {
+    const completion = await client.chat.completions.create({
+      model,
+      messages: [{ role: "user", content: prompt }],
+      response_format: { type: "json_object" },
+      temperature: 0,
+    });
+    return completion.choices[0]?.message?.content?.trim() ?? "";
+  });
+
+  let parsed: {
+    found?: boolean;
+    name?: string;
+    brand?: string;
+    seriesOrCollection?: string | null;
+    year?: number | null;
+    description?: string | null;
+  };
+  try {
+    parsed = JSON.parse(raw) as typeof parsed;
+  } catch {
+    logger.warn({ barcode, raw }, "AI barcode lookup: could not parse JSON");
+    return {
+      found: false,
+      name: null,
+      brand: null,
+      seriesOrCollection: null,
+      year: null,
+      description: null,
+      imageUrl: null,
+    };
+  }
+
+  if (!parsed.found) {
+    return {
+      found: false,
+      name: null,
+      brand: null,
+      seriesOrCollection: null,
+      year: null,
+      description: null,
+      imageUrl: null,
+    };
+  }
+
+  logger.info(
+    { barcode, name: parsed.name, year: parsed.year, source: "ai" },
+    "AI barcode lookup: identified product",
+  );
+
+  return {
+    found: true,
+    name: parsed.name?.trim() || null,
+    brand: parsed.brand?.trim() || "Hallmark",
+    seriesOrCollection: parsed.seriesOrCollection?.trim() || null,
+    year: parsed.year ?? null,
+    description: parsed.description?.trim() || null,
+    imageUrl: null,
   };
 }
 
@@ -468,16 +664,19 @@ export async function lookupBarcode(
   const barcode = rawBarcode.trim();
 
   // ── 1. Return from cache if available ────────────────────────────────────
+  // NOTE: a cached found=0 entry does NOT short-circuit here — we continue
+  // through the fallback chain so eBay/AI can discover a match that the
+  // original lookup missed.  Only a found=1 cache hit is authoritative.
   const [cached] = await db
     .select()
     .from(ornamentsBarcodeCache)
     .where(eq(ornamentsBarcodeCache.barcode, barcode))
     .limit(1);
 
-  if (cached) {
+  if (cached?.found === 1) {
     return {
       barcode,
-      found: cached.found === 1,
+      found: true,
       name: cached.name,
       brand: cached.brand,
       seriesOrCollection: cached.seriesOrCollection,
@@ -497,38 +696,110 @@ export async function lookupBarcode(
     };
   }
 
-  // ── 2. Fetch from external API ────────────────────────────────────────────
-  let upcResult: UpcFetchResult;
-  try {
-    upcResult = await fetchFromUpcItemDb(barcode);
-  } catch (primaryErr) {
-    logger.warn(
-      { err: primaryErr, barcode },
-      "UPCitemdb lookup failed — trying Open Food Facts fallback",
-    );
+  // Hallmark registers UPCs under the 661127 prefix. UPCitemdb and Open Food
+  // Facts often contain incorrect / conflated data for these codes (e.g. they
+  // return a bathroom cleaner for a Hallmark ornament UPC). Skip those sources
+  // for Hallmark barcodes and go straight to eBay GTIN search + AI, which are
+  // authoritative for the collectibles market.
+  const isHallmarkBarcode = barcode.startsWith("661127");
+
+  // ── 2. UPCitemdb → Open Food Facts fallback chain (non-Hallmark only) ────
+  let upcResult: UpcFetchResult | null = null;
+  if (!isHallmarkBarcode) {
     try {
-      upcResult = await fetchFromOpenFoodFacts(barcode);
-    } catch (fallbackErr) {
+      const r = await fetchFromUpcItemDb(barcode);
+      if (r.found) upcResult = r;
+      else {
+        logger.info(
+          { barcode },
+          "UPCitemdb: not found — trying Open Food Facts",
+        );
+        try {
+          const r2 = await fetchFromOpenFoodFacts(barcode);
+          if (r2.found) upcResult = r2;
+        } catch (offErr) {
+          logger.warn(
+            { err: offErr, barcode },
+            "Open Food Facts fallback failed",
+          );
+        }
+      }
+    } catch (primaryErr) {
       logger.warn(
-        { err: fallbackErr, barcode },
-        "Open Food Facts fallback also failed",
+        { err: primaryErr, barcode },
+        "UPCitemdb lookup failed — trying Open Food Facts fallback",
       );
-      return {
-        barcode,
-        found: false,
-        name: null,
-        brand: null,
-        seriesOrCollection: null,
-        year: null,
-        description: null,
-        imageUrl: null,
-        fromCache: false,
-        ...NULL_HALLMARK,
-      };
+      try {
+        const r2 = await fetchFromOpenFoodFacts(barcode);
+        if (r2.found) upcResult = r2;
+      } catch (offErr) {
+        logger.warn(
+          { err: offErr, barcode },
+          "Open Food Facts fallback failed",
+        );
+      }
+    }
+  } else {
+    logger.info(
+      { barcode },
+      "Hallmark UPC prefix: skipping UPCitemdb/OPF, going to eBay+AI",
+    );
+  }
+
+  // ── 3. eBay GTIN search fallback ──────────────────────────────────────────
+  if (!upcResult) {
+    try {
+      const r = await fetchFromEbay(barcode);
+      if (r.found) {
+        logger.info({ barcode }, "eBay GTIN lookup: identified product");
+        upcResult = r;
+      } else {
+        logger.info({ barcode }, "eBay GTIN lookup: not found — trying AI");
+      }
+    } catch (ebayErr) {
+      logger.warn({ err: ebayErr, barcode }, "eBay GTIN lookup failed");
     }
   }
 
-  // ── 3. Enrich from hallmark_ornaments if a SKU is available ──────────────
+  // ── 4. AI fallback — ask the LLM to identify the UPC ────────────────────
+  if (!upcResult) {
+    try {
+      const r = await fetchFromAI(barcode);
+      if (r.found) {
+        logger.info({ barcode }, "AI barcode lookup: identified product");
+        upcResult = r;
+      } else {
+        logger.info({ barcode }, "AI barcode lookup: not found");
+      }
+    } catch (aiErr) {
+      logger.warn({ err: aiErr, barcode }, "AI barcode lookup failed");
+    }
+  }
+
+  // If every source failed, write a not-found cache entry and return early
+  if (!upcResult) {
+    if (!cached) {
+      // Only write a not-found entry when there is no prior cache row at all
+      await db
+        .insert(ornamentsBarcodeCache)
+        .values({ barcode, found: 0 })
+        .onConflictDoNothing();
+    }
+    return {
+      barcode,
+      found: false,
+      name: null,
+      brand: null,
+      seriesOrCollection: null,
+      year: null,
+      description: null,
+      imageUrl: null,
+      fromCache: false,
+      ...NULL_HALLMARK,
+    };
+  }
+
+  // ── 5. Enrich from hallmark_ornaments if a SKU is available ──────────────
   const sku = extractHallmarkSku(upcResult.model);
   let hallmark: Awaited<ReturnType<typeof enrichFromHallmarkCatalog>> = null;
   if (sku) {
@@ -544,13 +815,11 @@ export async function lookupBarcode(
           { barcode, sku },
           "Hallmark SKU extracted but not in catalog — trying HooH single-lookup",
         );
-        // ── 3b. Direct HooH scrape (static HTML, fast, no Apify needed) ──────
         try {
           hallmark = await enrichViaHooh(sku, barcode);
         } catch (hoohErr) {
           logger.warn({ err: hoohErr, sku }, "HooH single-lookup threw");
         }
-        // ── 3c. HooH miss → background Apify Playwright fallback ─────────────
         if (!hallmark && env.apifyApiToken) {
           void enrichCatalogViaApify(sku, barcode);
           logger.info(
@@ -564,46 +833,56 @@ export async function lookupBarcode(
     }
   }
 
-  // Upgrade core result fields with authoritative Hallmark data where the
-  // UPCitemdb title-parse heuristics would be weaker.
-  const name = upcResult.name ?? hallmark?.name ?? null;
+  // Merge: authoritative Hallmark data wins over heuristic title parsing
+  const name = hallmark?.name ?? upcResult.name ?? null;
   const seriesOrCollection =
-    hallmark?.seriesName ?? upcResult.seriesOrCollection;
-  const year = hallmark?.year ?? upcResult.year;
-  // Use official Hallmark image if UPCitemdb returned none
+    hallmark?.seriesName ?? upcResult.seriesOrCollection ?? null;
+  const year = hallmark?.year ?? upcResult.year ?? null;
   const imageUrl = upcResult.imageUrl ?? hallmark?.images?.[0] ?? null;
+  const brand = upcResult.brand ?? "Hallmark";
 
-  // ── 4. Write to cache ─────────────────────────────────────────────────────
+  // ── 6. Write / update cache ───────────────────────────────────────────────
+  // Use onConflictDoUpdate so a successful fallback overwrites a prior
+  // found=0 row — the cache should always reflect the best known result.
+  const cacheValues = {
+    barcode,
+    found: 1 as const,
+    name,
+    brand,
+    seriesOrCollection,
+    year,
+    description: upcResult.description,
+    imageUrl,
+    hallmarkSku: hallmark?.sku ?? null,
+    hallmarkSeriesName: hallmark?.seriesName ?? null,
+    hallmarkSequenceNumber: hallmark?.sequenceNumber ?? null,
+    hallmarkArtist: hallmark?.artist ?? null,
+    hallmarkOriginalRetailPrice: hallmark?.retailPriceUsd ?? null,
+    hallmarkCollectorPriceUsd: hallmark?.collectorPriceUsd ?? null,
+    hallmarkInStock: hallmark?.inStock ?? null,
+    hallmarkImages: hallmark?.images ?? null,
+    hallmarkProductUrl: hallmark?.productUrl ?? null,
+    hallmarkConfidence: hallmark ? "1.000" : null,
+    hallmarkEnrichedAt: hallmark ? new Date() : null,
+  };
   await db
     .insert(ornamentsBarcodeCache)
-    .values({
-      barcode,
-      found: upcResult.found ? 1 : 0,
-      name,
-      brand: upcResult.brand,
-      seriesOrCollection,
-      year,
-      description: upcResult.description,
-      imageUrl,
-      hallmarkSku: hallmark?.sku ?? null,
-      hallmarkSeriesName: hallmark?.seriesName ?? null,
-      hallmarkSequenceNumber: hallmark?.sequenceNumber ?? null,
-      hallmarkArtist: hallmark?.artist ?? null,
-      hallmarkOriginalRetailPrice: hallmark?.retailPriceUsd ?? null,
-      hallmarkCollectorPriceUsd: hallmark?.collectorPriceUsd ?? null,
-      hallmarkInStock: hallmark?.inStock ?? null,
-      hallmarkImages: hallmark?.images ?? null,
-      hallmarkProductUrl: hallmark?.productUrl ?? null,
-      hallmarkConfidence: hallmark ? "1.000" : null,
-      hallmarkEnrichedAt: hallmark ? new Date() : null,
-    })
-    .onConflictDoNothing();
+    .values(cacheValues)
+    .onConflictDoUpdate({
+      target: ornamentsBarcodeCache.barcode,
+      set: cacheValues,
+    });
+
+  // Also back-patch any ornament items saved before enrichment arrived
+  if (hallmark) {
+    void patchOrnamentsFromEnrichment(barcode, hallmark);
+  }
 
   return {
     barcode,
-    found: upcResult.found,
+    found: true,
     name,
-    brand: upcResult.brand,
+    brand,
     seriesOrCollection,
     year,
     description: upcResult.description,

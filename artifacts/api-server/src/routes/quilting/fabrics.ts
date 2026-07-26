@@ -672,7 +672,7 @@ router.post("/fabrics", aiLimiter, upload.single("image"), async (req, res) => {
   ]);
 
   const quantity = parseFloat(req.body.quantity ?? "1") || 1;
-  const quantityUnit = clamp(req.body.quantityUnit, 20) ?? "yards";
+  const quantityUnit = clamp(req.body.quantityUnit, 20) ?? "fat quarter";
   const widthInches = req.body.widthInches
     ? parseFloat(req.body.widthInches) || null
     : null;

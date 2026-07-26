@@ -26,7 +26,7 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
 const AddFabricSchema = z.object({
   name: z.string().optional(),
   quantity: z.coerce.number().min(0).default(1),
-  quantityUnit: z.string().default("yards"),
+  quantityUnit: z.string().default("fat quarter"),
   notes: z.string().optional(),
 });
 type AddFabricFields = z.infer<typeof AddFabricSchema>;

@@ -571,6 +571,7 @@ export default function FabricDetail() {
                     type="file"
                     className="sr-only"
                     accept="image/jpeg,image/png,image/webp"
+                    capture="environment"
                     onChange={handleAddPhoto}
                     disabled={addFabricImage.isPending}
                   />

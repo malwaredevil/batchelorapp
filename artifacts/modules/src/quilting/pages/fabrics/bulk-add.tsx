@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { toast } from "sonner";
 import {
   Camera,
   CheckCircle2,
@@ -72,6 +73,9 @@ export default function BulkAddFabric() {
           i.clientId === item.clientId ? { ...i, status: "error" } : i,
         ),
       );
+      toast.error("Upload failed — tap to retry or re-shoot this fabric.", {
+        duration: 6000,
+      });
     } finally {
       semaphoreRef.current--;
       const next = waitlistRef.current.shift();

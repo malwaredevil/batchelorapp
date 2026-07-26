@@ -812,19 +812,21 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
   // ---------------------------------------------------------------------------
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-black"
+      className="fixed inset-0 z-50 flex flex-col bg-white"
       style={{ overscrollBehavior: "none" }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+      <div className="flex items-center justify-between border-b border-border bg-white px-4 py-3">
         <button
           type="button"
           onClick={onCancel}
-          className="grid h-9 w-9 place-items-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+          className="grid h-9 w-9 place-items-center rounded-full bg-muted text-foreground transition hover:bg-muted/70"
         >
           <X className="h-5 w-5" />
         </button>
-        <span className="text-sm font-semibold text-white">Edit photo</span>
+        <span className="text-sm font-semibold text-foreground">
+          Edit photo
+        </span>
         <button
           type="button"
           onClick={handleSave}
@@ -837,8 +839,8 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
 
       {/* Body: canvas left, controls sidebar right on md+ */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
-        {/* Canvas wrapper — flex-1 with min-w-0/min-h-0 so it never overflows its flex slot */}
-        <div className="relative min-h-0 min-w-0 flex-1">
+        {/* Canvas wrapper — bg-black so letterbox bars stay dark */}
+        <div className="relative min-h-0 min-w-0 flex-1 bg-black">
           <canvas
             ref={canvasRef}
             className="absolute inset-0 h-full w-full touch-none select-none"
@@ -851,16 +853,10 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
         </div>
 
         {/* Controls — bottom strip on mobile, right sidebar on desktop */}
-        {/* --primary is overridden to light grey here so shadcn Slider track/range
-            are visible against the dark panel (the app's default --primary is deep navy,
-            which is near-invisible on bg-black/90). */}
-        <div
-          className="shrink-0 space-y-3 overflow-y-auto border-t border-white/10 bg-black/90 px-4 py-4 md:w-72 md:border-l md:border-t-0"
-          style={{ "--primary": "0 0% 80%" } as React.CSSProperties}
-        >
-          {/* Contextual hint — lives inside the controls panel */}
+        <div className="shrink-0 space-y-3 overflow-y-auto border-t border-border bg-background px-4 py-4 md:w-72 md:border-l md:border-t-0">
+          {/* Contextual hint */}
           <div className="pointer-events-none flex justify-center">
-            <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/70">
+            <span className="rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
               {cropMode
                 ? "Drag handles to resize · drag inside box to move · Done to save"
                 : zoom > 1
@@ -870,14 +866,14 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
           </div>
           {/* Zoom */}
           <div className="space-y-1">
-            <Label className="text-xs text-white/80">
+            <Label className="text-xs text-muted-foreground">
               Zoom {zoom.toFixed(1)}×
             </Label>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => changeZoom(Math.max(1, zoom - 0.5))}
-                className="text-white/50 hover:text-white transition"
+                className="text-muted-foreground transition hover:text-foreground"
               >
                 <Minus className="h-4 w-4" />
               </button>
@@ -887,12 +883,12 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
                 step={0.1}
                 value={[zoom]}
                 onValueChange={([v]) => changeZoom(v)}
-                className="flex-1 [&_[role=slider]]:bg-white"
+                className="flex-1"
               />
               <button
                 type="button"
                 onClick={() => changeZoom(Math.min(5, zoom + 0.5))}
-                className="text-white/50 hover:text-white transition"
+                className="text-muted-foreground transition hover:text-foreground"
               >
                 <Plus className="h-4 w-4" />
               </button>
@@ -904,14 +900,14 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
             <button
               type="button"
               onClick={() => setRotation((r) => r - 1)}
-              className="flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-2 text-xs text-white/80 hover:bg-white/20 transition"
+              className="flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-2 text-xs text-foreground transition hover:bg-muted/70"
             >
               <RotateCcw className="h-4 w-4" /> ↺ Left
             </button>
             <button
               type="button"
               onClick={() => setRotation((r) => r + 1)}
-              className="flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-2 text-xs text-white/80 hover:bg-white/20 transition"
+              className="flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-2 text-xs text-foreground transition hover:bg-muted/70"
             >
               <RotateCw className="h-4 w-4" /> ↻ Right
             </button>
@@ -919,10 +915,10 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
               type="button"
               onClick={() => setFlipH((f) => !f)}
               className={cn(
-                "flex items-center gap-1.5 rounded-full px-3 py-2 text-xs transition",
+                "flex items-center gap-1.5 rounded-full border px-3 py-2 text-xs transition",
                 flipH
-                  ? "bg-primary/30 text-primary"
-                  : "bg-white/10 text-white/80 hover:bg-white/20",
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-border bg-muted text-foreground hover:bg-muted/70",
               )}
             >
               <FlipHorizontal className="h-4 w-4" /> Flip
@@ -932,7 +928,7 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
               <button
                 type="button"
                 onClick={cancelCrop}
-                className="flex items-center gap-1.5 rounded-full bg-red-500/20 px-3 py-2 text-xs text-red-300 hover:bg-red-500/30 transition"
+                className="flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 transition hover:bg-red-100"
               >
                 <X className="h-4 w-4" /> Cancel crop
               </button>
@@ -940,7 +936,7 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
               <button
                 type="button"
                 onClick={enterCropMode}
-                className="flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-2 text-xs text-white/80 hover:bg-white/20 transition"
+                className="flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-2 text-xs text-foreground transition hover:bg-muted/70"
               >
                 <Crop className="h-4 w-4" /> Crop
               </button>
@@ -950,7 +946,7 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
           {/* Brightness / Contrast / Sharpness */}
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1">
-              <Label className="text-xs text-white/80">
+              <Label className="text-xs text-muted-foreground">
                 Brightness {brightness}%
               </Label>
               <Slider
@@ -959,11 +955,10 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
                 step={1}
                 value={[brightness]}
                 onValueChange={([v]) => setBrightness(v)}
-                className="[&_[role=slider]]:bg-white"
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs text-white/80">
+              <Label className="text-xs text-muted-foreground">
                 Contrast {contrast}%
               </Label>
               <Slider
@@ -972,11 +967,10 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
                 step={1}
                 value={[contrast]}
                 onValueChange={([v]) => setContrast(v)}
-                className="[&_[role=slider]]:bg-white"
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs text-white/80">
+              <Label className="text-xs text-muted-foreground">
                 Sharpen {sharpness}
               </Label>
               <Slider
@@ -985,7 +979,6 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
                 step={1}
                 value={[sharpness]}
                 onValueChange={([v]) => setSharpness(v)}
-                className="[&_[role=slider]]:bg-white"
               />
             </div>
           </div>
@@ -1004,7 +997,7 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
               setCrop(FULL);
               setCropMode(false);
             }}
-            className="w-full text-center text-xs text-white/30 hover:text-white/60 transition"
+            className="w-full text-center text-xs text-muted-foreground/50 transition hover:text-muted-foreground"
           >
             Reset all
           </button>

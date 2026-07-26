@@ -28,8 +28,12 @@ export interface ItemImageGalleryProps {
   images: GalleryImage[];
   /** Called after the user finishes editing a new photo. Parent handles the upload. */
   onAddImage: (file: File) => Promise<void>;
-  /** Called after the user finishes editing an existing image. Parent does the PUT. */
-  onReplaceImage: (
+  /**
+   * @deprecated No longer called — editing an existing image now adds it as a
+   * new image so the original is preserved. Pass a no-op if required by the
+   * call site; this prop will be removed in a future cleanup.
+   */
+  onReplaceImage?: (
     imageId: number,
     isPrimary: boolean,
     file: File,
@@ -136,11 +140,12 @@ export function ItemImageGallery({
   }
 
   async function handleEditSave(edited: File) {
-    if (!editTarget) return;
     setEditFile(null);
     setIsSavingEdit(true);
     try {
-      await onReplaceImage(editTarget.id, editTarget.isPrimary, edited);
+      // Add as a new image — original is preserved so the user can set the
+      // new one as primary and delete the old one if desired.
+      await onAddImage(edited);
     } finally {
       setIsSavingEdit(false);
       setEditTarget(null);

@@ -298,7 +298,7 @@ async function runOpenAIEdit(
     throw new Error("OPENAI_API_KEY is not configured.");
   }
   const client = new OpenAI({
-    // openai-direct-ok — images.edit endpoint is not available through OpenRouter
+    // openai-direct-ok — images.edit not available via OpenRouter
     apiKey: env.openaiApiKey,
     timeout: 90_000,
     maxRetries: 0,

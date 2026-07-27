@@ -4,12 +4,12 @@ import {
   Eraser,
   Trash2,
   Loader2,
-  Brush,
+  CheckCircle,
+  Crown,
   ChevronDown,
   ChevronUp,
   AlertCircle,
-  CheckCircle2,
-  ImagePlus,
+  Brush,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -57,9 +57,6 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
     status: "idle",
   });
   const [savingFor, setSavingFor] = useState<"openai" | "replicate" | null>(
-    null,
-  );
-  const [saveConfirm, setSaveConfirm] = useState<"openai" | "replicate" | null>(
     null,
   );
 
@@ -187,18 +184,18 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
         onSuccess: (data) => {
           setDetectDesc(data.description ?? null);
           if (data.maskDataUrl) loadMaskFromDataUrl(data.maskDataUrl);
-          if ((data.creasesFound ?? 0) === 0) {
+          if ((data.creasesFound ?? 0) === 0)
             toast.info(
-              "No creases found automatically — try painting them manually.",
+              "No creases detected — you can paint the mask manually.",
             );
-          } else {
+          else
             toast.success(
-              `Found ${data.creasesFound} crease${data.creasesFound === 1 ? "" : "s"} — purple areas are highlighted. Adjust by painting before running.`,
+              `${data.creasesFound} crease${data.creasesFound === 1 ? "" : "s"} detected.`,
             );
-          }
         },
-        onError: () => {
-          toast.error("Auto-detect failed. Try painting the creases manually.");
+        onError: (err) => {
+          toast.error("Detection failed. Try painting the mask manually.");
+          console.error(err);
         },
       },
     );
@@ -210,7 +207,6 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
 
     setOpenaiResult({ status: "loading" });
     setReplResult({ status: "loading" });
-    setSaveConfirm(null);
 
     openaiMutation.mutate(
       { data: { fabricId, maskDataUrl } },
@@ -223,7 +219,7 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
         },
         onError: (err) => {
           const msg =
-            err instanceof Error ? err.message : "This AI couldn't run";
+            err instanceof Error ? err.message : "OpenAI inpainting failed";
           setOpenaiResult({ status: "error", message: msg });
         },
       },
@@ -239,7 +235,7 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
         },
         onError: (err) => {
           const msg =
-            err instanceof Error ? err.message : "This AI couldn't run";
+            err instanceof Error ? err.message : "Replicate inpainting failed";
           setReplResult({ status: "error", message: msg });
         },
       },
@@ -254,7 +250,6 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
 
     if (!dataUrl) return;
     setSavingFor(provider);
-    setSaveConfirm(null);
 
     try {
       const resp = await fetch(dataUrl);
@@ -279,9 +274,10 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
         }),
         queryClient.invalidateQueries({ queryKey: getListFabricsQueryKey() }),
       ]);
-      toast.success("Photo replaced successfully.");
-    } catch {
-      toast.error("Failed to save — please try again.");
+      toast.success("Primary photo updated.");
+    } catch (err) {
+      toast.error("Failed to save photo. Try again.");
+      console.error(err);
     } finally {
       setSavingFor(null);
     }
@@ -289,8 +285,6 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
 
   const isRunning =
     openaiResult.status === "loading" || replResult.status === "loading";
-  const hasResults =
-    openaiResult.status !== "idle" || replResult.status !== "idle";
 
   return (
     <div className="rounded-xl border border-card-border bg-card overflow-hidden">
@@ -301,7 +295,7 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
         <div className="flex items-center gap-2">
           <Wand2 className="h-4 w-4 text-primary" />
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            AI Crease Removal — Experimental
+            AI Lab — Crease Removal
           </span>
         </div>
         {open ? (
@@ -312,180 +306,147 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
       </button>
 
       {open && (
-        <div className="border-t border-card-border p-4 space-y-5">
-          {/* ── Step 1 ── */}
-          <section className="space-y-3">
-            <StepHeading number={1} label="Highlight the creases" />
-            <p className="text-xs text-muted-foreground">
-              Paint over any folds or wrinkles in purple. Use{" "}
-              <strong>Auto-detect</strong> to let AI take a first pass — then
-              touch up manually if needed. Auto-detect works best on
-              plain-coloured fabrics; busy patterns may need manual painting.
-            </p>
+        <div className="border-t border-card-border p-4 space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Paint over creases on the fabric photo, or let AI detect them
+            automatically. Then run crease removal to generate two AI-inpainted
+            versions.
+          </p>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleAutoDetect}
-                disabled={detectMutation.isPending || isRunning}
-              >
-                {detectMutation.isPending ? (
-                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Wand2 className="mr-1.5 h-3.5 w-3.5" />
-                )}
-                Auto-detect
-              </Button>
-
-              {/* Paint / Erase toggle */}
-              <div className="flex items-center gap-1 rounded-lg border border-card-border p-0.5">
-                <button
-                  title="Paint — mark creases"
-                  onClick={() => setEraseMode(false)}
-                  className={`flex h-7 items-center gap-1.5 rounded px-2 text-xs transition-colors ${!eraseMode ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted/60"}`}
-                >
-                  <Brush className="h-3.5 w-3.5" />
-                  Paint
-                </button>
-                <button
-                  title="Erase — unmark areas"
-                  onClick={() => setEraseMode(true)}
-                  className={`flex h-7 items-center gap-1.5 rounded px-2 text-xs transition-colors ${eraseMode ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted/60"}`}
-                >
-                  <Eraser className="h-3.5 w-3.5" />
-                  Erase
-                </button>
-              </div>
-
-              {/* Brush size */}
-              <div className="flex items-center gap-1">
-                {BRUSH_SIZES.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => setBrushSize(s)}
-                    title={`Brush size ${s}`}
-                    className={`flex h-8 w-8 items-center justify-center rounded border transition-colors ${brushSize === s ? "border-primary bg-primary/10" : "border-card-border hover:bg-muted/60"}`}
-                  >
-                    <span
-                      className="rounded-full bg-foreground"
-                      style={{
-                        width: Math.max(3, s / 4),
-                        height: Math.max(3, s / 4),
-                      }}
-                    />
-                  </button>
-                ))}
-              </div>
-
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={clearMask}
-                disabled={!hasMask || isRunning}
-                className="text-destructive hover:bg-destructive/10"
-              >
-                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                Clear
-              </Button>
-            </div>
-
-            {/* Canvas */}
-            <div
-              ref={containerRef}
-              className="relative w-full overflow-hidden rounded-xl border border-card-border bg-muted select-none"
-              style={{ touchAction: "none" }}
-            >
-              <img
-                ref={imgRef}
-                src={imageUrl}
-                alt="Fabric"
-                className="w-full object-contain"
-                draggable={false}
-              />
-              <canvas
-                ref={canvasRef}
-                className="absolute inset-0"
-                style={{
-                  cursor: eraseMode ? "cell" : "crosshair",
-                  touchAction: "none",
-                }}
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                onPointerLeave={handlePointerUp}
-              />
-            </div>
-
-            {detectDesc && (
-              <p className="rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground italic">
-                AI detected: {detectDesc}
-              </p>
-            )}
-          </section>
-
-          {/* ── Step 2 ── */}
-          <section className="space-y-2">
-            <StepHeading number={2} label="Generate fixes" />
-            <p className="text-xs text-muted-foreground">
-              Two different AIs will each try to smooth the purple-marked areas
-              while preserving the rest of the fabric. Both run at the same time
-              — takes about a minute.
-            </p>
+          {/* ── Controls ── */}
+          <div className="flex flex-wrap items-center gap-2">
             <Button
-              className="w-full"
-              onClick={handleRemoveCreases}
-              disabled={!hasMask || isRunning}
+              size="sm"
+              variant="outline"
+              onClick={handleAutoDetect}
+              disabled={detectMutation.isPending || isRunning}
             >
-              {isRunning ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {detectMutation.isPending ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
               ) : (
-                <Wand2 className="mr-2 h-4 w-4" />
+                <Wand2 className="mr-1.5 h-3.5 w-3.5" />
               )}
-              {isRunning ? "Working — please wait…" : "Generate fixes"}
+              Auto-detect creases
             </Button>
-          </section>
 
-          {/* ── Step 3 — Results ── */}
-          {hasResults && (
-            <section className="space-y-3">
-              <StepHeading number={3} label="Pick the best result" />
-              <p className="text-xs text-muted-foreground">
-                Compare the two AI versions side-by-side with the original.
-                Click <strong>Use this photo</strong> on the one you prefer — it
-                will replace the current fabric photo. The AI versions are only
-                saved if you choose one.
-              </p>
+            <div className="flex items-center gap-1">
+              <button
+                title="Paint mode"
+                onClick={() => setEraseMode(false)}
+                className={`flex h-8 w-8 items-center justify-center rounded border transition-colors ${!eraseMode ? "border-primary bg-primary/10 text-primary" : "border-card-border text-muted-foreground hover:bg-muted/60"}`}
+              >
+                <Brush className="h-4 w-4" />
+              </button>
+              <button
+                title="Erase mode"
+                onClick={() => setEraseMode(true)}
+                className={`flex h-8 w-8 items-center justify-center rounded border transition-colors ${eraseMode ? "border-primary bg-primary/10 text-primary" : "border-card-border text-muted-foreground hover:bg-muted/60"}`}
+              >
+                <Eraser className="h-4 w-4" />
+              </button>
+            </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <ResultPanel
-                  title="Original"
-                  subtitle="Unchanged"
-                  imageUrl={imageUrl}
-                  isOriginal
-                />
-                <ResultPanel
-                  title="Version A"
-                  subtitle="OpenAI GPT-Image"
-                  result={openaiResult}
-                  onSaveRequest={() => setSaveConfirm("openai")}
-                  onSaveConfirm={() => handleSave("openai")}
-                  saveConfirmPending={saveConfirm === "openai"}
-                  isSaving={savingFor === "openai"}
-                  onSaveCancel={() => setSaveConfirm(null)}
-                />
-                <ResultPanel
-                  title="Version B"
-                  subtitle="FLUX Fill (Replicate)"
-                  result={replResult}
-                  onSaveRequest={() => setSaveConfirm("replicate")}
-                  onSaveConfirm={() => handleSave("replicate")}
-                  saveConfirmPending={saveConfirm === "replicate"}
-                  isSaving={savingFor === "replicate"}
-                  onSaveCancel={() => setSaveConfirm(null)}
-                />
-              </div>
-            </section>
+            <div className="flex items-center gap-1">
+              {BRUSH_SIZES.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setBrushSize(s)}
+                  title={`Brush size ${s}px`}
+                  className={`flex h-8 w-8 items-center justify-center rounded border transition-colors ${brushSize === s ? "border-primary bg-primary/10" : "border-card-border hover:bg-muted/60"}`}
+                >
+                  <span
+                    className="rounded-full bg-foreground"
+                    style={{
+                      width: Math.max(4, s / 4),
+                      height: Math.max(4, s / 4),
+                    }}
+                  />
+                </button>
+              ))}
+            </div>
+
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={clearMask}
+              disabled={!hasMask || isRunning}
+              className="text-destructive hover:bg-destructive/10"
+            >
+              <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+              Clear
+            </Button>
+          </div>
+
+          {/* ── Canvas ── */}
+          <div
+            ref={containerRef}
+            className="relative w-full overflow-hidden rounded-xl border border-card-border bg-muted select-none"
+            style={{ touchAction: "none" }}
+          >
+            <img
+              ref={imgRef}
+              src={imageUrl}
+              alt="Fabric"
+              className="w-full object-contain"
+              draggable={false}
+            />
+            <canvas
+              ref={canvasRef}
+              className="absolute inset-0"
+              style={{
+                cursor: eraseMode ? "cell" : "crosshair",
+                touchAction: "none",
+              }}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerLeave={handlePointerUp}
+            />
+          </div>
+
+          {detectDesc && (
+            <p className="rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground italic">
+              {detectDesc}
+            </p>
+          )}
+
+          {/* ── Run button ── */}
+          <Button
+            className="w-full"
+            onClick={handleRemoveCreases}
+            disabled={!hasMask || isRunning}
+          >
+            {isRunning ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Wand2 className="mr-2 h-4 w-4" />
+            )}
+            {isRunning ? "Removing creases…" : "Remove creases"}
+          </Button>
+
+          {/* ── Results ── */}
+          {(openaiResult.status !== "idle" || replResult.status !== "idle") && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <ResultPanel
+                title="Original"
+                imageUrl={imageUrl}
+                status="success"
+                onSave={null}
+                savingFor={null}
+              />
+              <ResultPanel
+                title="GPT Image (OpenAI)"
+                result={openaiResult}
+                onSave={() => handleSave("openai")}
+                savingFor={savingFor === "openai"}
+              />
+              <ResultPanel
+                title="FLUX Fill (Replicate)"
+                result={replResult}
+                onSave={() => handleSave("replicate")}
+                savingFor={savingFor === "replicate"}
+              />
+            </div>
           )}
         </div>
       )}
@@ -493,49 +454,36 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
   );
 }
 
-// ── Supporting components ──────────────────────────────────────────────────
-
-function StepHeading({ number, label }: { number: number; label: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-        {number}
-      </span>
-      <span className="text-sm font-semibold">{label}</span>
-    </div>
-  );
-}
-
 type OriginalPanelProps = {
   title: string;
-  subtitle: string;
   imageUrl: string;
-  isOriginal: true;
+  status: "success";
+  onSave: null;
+  savingFor: null;
 };
 
 type AiPanelProps = {
   title: string;
-  subtitle: string;
   result: ProviderResult;
-  onSaveRequest: () => void;
-  onSaveConfirm: () => void;
-  onSaveCancel: () => void;
-  saveConfirmPending: boolean;
-  isSaving: boolean;
+  onSave: () => void;
+  savingFor: boolean;
 };
 
 function ResultPanel(props: OriginalPanelProps | AiPanelProps) {
-  if ("isOriginal" in props) {
+  const isOriginal =
+    "imageUrl" in props &&
+    props.imageUrl !== undefined &&
+    props.onSave === null;
+
+  if (isOriginal) {
+    const p = props as OriginalPanelProps;
     return (
       <div className="flex flex-col gap-2">
-        <div>
-          <p className="text-sm font-medium">{props.title}</p>
-          <p className="text-xs text-muted-foreground">{props.subtitle}</p>
-        </div>
+        <p className="text-xs font-medium text-muted-foreground">{p.title}</p>
         <div className="aspect-square w-full overflow-hidden rounded-xl border border-card-border bg-muted">
           <img
-            src={props.imageUrl}
-            alt={props.title}
+            src={p.imageUrl}
+            alt={p.title}
             className="h-full w-full object-cover"
           />
         </div>
@@ -543,90 +491,56 @@ function ResultPanel(props: OriginalPanelProps | AiPanelProps) {
     );
   }
 
-  const {
-    title,
-    subtitle,
-    result,
-    onSaveRequest,
-    onSaveConfirm,
-    onSaveCancel,
-    saveConfirmPending,
-    isSaving,
-  } = props;
-
+  const p = props as AiPanelProps;
   return (
     <div className="flex flex-col gap-2">
-      <div>
-        <p className="text-sm font-medium">{title}</p>
-        <p className="text-xs text-muted-foreground">{subtitle}</p>
-      </div>
+      <p className="text-xs font-medium text-muted-foreground">{p.title}</p>
       <div className="aspect-square w-full overflow-hidden rounded-xl border border-card-border bg-muted flex items-center justify-center">
-        {result.status === "loading" && (
-          <div className="flex flex-col items-center gap-2 text-muted-foreground/60">
-            <Loader2 className="h-8 w-8 animate-spin" />
-            <p className="text-xs">Working…</p>
-          </div>
+        {p.result.status === "loading" && (
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/60" />
         )}
-        {result.status === "success" && (
+        {p.result.status === "success" && (
           <img
-            src={result.dataUrl}
-            alt={title}
+            src={p.result.dataUrl}
+            alt={p.title}
             className="h-full w-full object-cover"
           />
         )}
-        {result.status === "error" && (
+        {p.result.status === "error" && (
           <div className="flex flex-col items-center gap-2 p-4 text-center">
             <AlertCircle className="h-6 w-6 text-destructive/70" />
-            <p className="text-xs text-destructive/70">
-              This AI couldn't complete the job.
-            </p>
+            <p className="text-xs text-destructive/70">{p.result.message}</p>
           </div>
         )}
+        {p.result.status === "idle" && null}
       </div>
-
-      {result.status === "success" && !saveConfirmPending && (
+      {p.result.status === "success" && (
         <Button
           size="sm"
           variant="outline"
           className="w-full"
-          onClick={onSaveRequest}
-          disabled={isSaving}
+          onClick={p.onSave}
+          disabled={p.savingFor}
         >
-          {isSaving ? (
+          {p.savingFor ? (
             <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
           ) : (
-            <ImagePlus className="mr-1.5 h-3.5 w-3.5" />
+            <Crown className="mr-1.5 h-3.5 w-3.5" />
           )}
-          {isSaving ? "Saving…" : "Use this photo"}
+          {p.savingFor ? "Saving…" : "Save as primary photo"}
         </Button>
       )}
-
-      {result.status === "success" && saveConfirmPending && (
-        <div className="space-y-1.5">
-          <p className="text-xs text-muted-foreground text-center">
-            This replaces the current photo permanently.
-          </p>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              className="flex-1 text-muted-foreground"
-              onClick={onSaveCancel}
-            >
-              Cancel
-            </Button>
-            <Button size="sm" className="flex-1" onClick={onSaveConfirm}>
-              <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-              Confirm
-            </Button>
-          </div>
+      {p.result.status === "error" && (
+        <div className="flex items-center gap-1 text-xs text-destructive/70">
+          <AlertCircle className="h-3 w-3 shrink-0" />
+          Failed
         </div>
       )}
-
-      {result.status === "loading" && (
-        <p className="text-center text-xs text-muted-foreground">
-          Up to a minute…
-        </p>
+      {p.result.status === "loading" && (
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Running — this may take up to a minute…
+        </div>
       )}
     </div>
   );

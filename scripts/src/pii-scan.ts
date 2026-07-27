@@ -60,6 +60,17 @@ const SAFE_DOMAINS = new Set([
   "actions.github.com",
   // Monitoring / observability
   "sentry.io",
+  // Supabase infrastructure — PostgreSQL connection strings in test fixtures
+  // (e.g. vitest.config.ts) contain "username:password@host" where the host
+  // is a Supabase subdomain. The scanner treats "username@host" as an email;
+  // these are not real email addresses.
+  "supabase.co",
+  "supabase.com",
+  // Synthetic test-fixture Supabase host used in lib/db/vitest.config.ts
+  "db.testref.supabase.co",
+  // Transaction-mode pooler hosts that appear in resolved connection strings
+  "aws-0-eu-west-1.pooler.supabase.com",
+  "aws-0-us-east-1.pooler.supabase.com",
   // Auth providers
   "googleapis.com",
   "google.com",

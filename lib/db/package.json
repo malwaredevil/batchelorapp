@@ -10,6 +10,7 @@
   },
   "scripts": {
     "bootstrap": "tsx src/bootstrap.ts",
+    "test": "vitest run",
     "migrate:status": "tsx src/migrations/cli.ts status",
     "migrate:plan": "tsx src/migrations/cli.ts plan",
     "migrate:apply": "tsx src/migrations/cli.ts apply",
@@ -27,6 +28,7 @@
     "@types/node": "catalog:",
     "@types/pg": "^8.20.0",
     "drizzle-kit": "^0.31.10",
-    "tsx": "catalog:"
+    "tsx": "catalog:",
+    "vitest": "^3.2.6"
   }
 }

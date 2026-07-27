@@ -33,8 +33,16 @@ export function resolveDatabaseUrl(): string {
     return raw;
   }
 
-  // Already a pooler URL: leave host/user as-is.
+  // Already a pooler URL. Ensure transaction mode (port 6543), not session
+  // mode (port 5432). Session mode keeps a real Supabase connection open for
+  // the entire lifetime of each pg.Pool slot, which exhausts Supabase's
+  // 15-connection session-mode limit under normal household usage. Transaction
+  // mode releases the Supabase connection as soon as each query/tx completes,
+  // so idle slots in our local pool don't consume Supabase connections.
   if (url.hostname.includes("pooler.supabase.com")) {
+    if (url.port === "5432" || url.port === "") {
+      url.port = "6543";
+    }
     return url.toString();
   }
 
@@ -48,7 +56,10 @@ export function resolveDatabaseUrl(): string {
   const region = process.env.SUPABASE_POOLER_REGION ?? DEFAULT_POOLER_REGION;
   const poolerHost =
     process.env.SUPABASE_POOLER_HOST ?? `aws-0-${region}.pooler.supabase.com`;
-  const poolerPort = process.env.SUPABASE_POOLER_PORT ?? "5432";
+  // Default to transaction-mode port (6543). Session mode (5432) keeps a real
+  // Supabase connection open for the lifetime of each local pool slot, which
+  // exhausts Supabase's 15-connection session limit under normal usage.
+  const poolerPort = process.env.SUPABASE_POOLER_PORT ?? "6543";
 
   url.hostname = poolerHost;
   url.port = poolerPort;

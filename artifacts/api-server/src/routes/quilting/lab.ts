@@ -230,26 +230,28 @@ router.post("/lab/detect-creases", async (req, res) => {
               { type: "image_url", image_url: { url: imageDataUrl } },
               {
                 type: "text",
-                text: `Examine this fabric photo carefully. Identify every visible fold line, crease, or wrinkle.
+                text: `Examine this fabric photo carefully. Your task is to find physical fold lines, creases, and wrinkles in the fabric — NOT the printed pattern.
+
+A crease is a physical deformation of the fabric: a raised ridge, a shadow line caused by folding, a wrinkle that distorts the surface. Do NOT mark printed lines, design elements, seams, colour boundaries in the pattern, or regular repeating grid-like details that are part of the fabric's design.
 
 Return ONLY valid JSON (no markdown, no explanation):
 {
-  "description": "One sentence describing the creases you found, or 'No creases detected' if the fabric is flat.",
+  "description": "One sentence describing the physical creases/wrinkles found, or 'No creases detected' if the fabric is flat.",
   "creases": [
     {
       "x1Pct": <number 0-100>,
       "y1Pct": <number 0-100>,
       "x2Pct": <number 0-100>,
       "y2Pct": <number 0-100>,
-      "widthPct": <number 2-20>
+      "widthPct": <number 2-15>
     }
   ]
 }
 
-x1Pct/y1Pct is one end of the crease line as % of image width/height.
-x2Pct/y2Pct is the other end as % of image width/height.
-widthPct is the crease's thickness as % of the shorter image dimension.
-Include all visible creases, including faint ones.`,
+x1Pct/y1Pct: one end of the crease line as % of image width/height.
+x2Pct/y2Pct: the other end as % of image width/height.
+widthPct: the crease's thickness as % of the shorter image dimension.
+If you are not confident a line is a physical crease (as opposed to a printed pattern element), omit it. Return an empty creases array if the fabric is flat or you cannot distinguish creases from pattern.`,
               },
             ],
           },

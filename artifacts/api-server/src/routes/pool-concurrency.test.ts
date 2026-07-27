@@ -50,6 +50,15 @@ const dbMock = {
     from: vi.fn().mockReturnValue({
       where: vi.fn().mockReturnValue({
         limit: vi.fn(() => Promise.resolve(selectQueue.shift() ?? [])),
+        // Support direct `await db.select({...}).from(table).where(cond)` pattern
+        then: <T>(
+          onfulfilled: ((v: unknown[]) => T) | null | undefined,
+          onrejected?: ((r: unknown) => T) | null | undefined,
+        ) =>
+          Promise.resolve(selectQueue.shift() ?? []).then(
+            onfulfilled ?? undefined,
+            onrejected ?? undefined,
+          ),
       }),
       limit: vi.fn(() => Promise.resolve(selectQueue.shift() ?? [])),
       // Support direct `await db.select({...}).from(table)` pattern

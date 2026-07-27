@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/node";
 import { execSync } from "child_process";
 import { ZodError } from "zod";
+import OpenAI from "openai";
 
 // This file is loaded via `node --import ./dist/instrument.mjs` before the
 // main bundle executes, so Sentry can hook into Express before it is evaluated.
@@ -74,7 +75,11 @@ if (process.env.SENTRY_DSN) {
       Sentry.openAIIntegration(),
     ],
     beforeSend(event, hint) {
+      // ZodError = request validation failure (already returned 400) — not a crash.
       if (hint.originalException instanceof ZodError) return null;
+      // RateLimitError (429) = external rate limit from OpenRouter — not a bug in
+      // our code. Callers post a friendly fallback reply to the user instead.
+      if (hint.originalException instanceof OpenAI.RateLimitError) return null;
       return scrubSensitiveData(event);
     },
   });

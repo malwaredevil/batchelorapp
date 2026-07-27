@@ -19,7 +19,10 @@ if (dsn && import.meta.env.PROD) {
       Sentry.httpClientIntegration({
         failedRequestStatusCodes: [
           [400, 400],
-          [402, 501],
+          [402, 428],
+          // 429 excluded: OpenRouter rate limits — external quota, not a bug in
+          // our code. The server posts a friendly fallback reply to the user.
+          [430, 501],
           [504, 599],
         ],
       }),

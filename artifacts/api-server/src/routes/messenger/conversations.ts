@@ -26,6 +26,7 @@ import {
   CreateConversationBody,
   UpdateConversationBody,
 } from "@workspace/api-zod";
+import OpenAI from "openai";
 import { runMessengerElaineTurn } from "../../elaine";
 import { getSignedUrls } from "../../lib/messenger/storage";
 import { logger } from "../../lib/logger";
@@ -721,12 +722,32 @@ async function generateElaineReply(
   userId: number,
 ): Promise<void> {
   const cleanMsg = userMessage.replace(/@elaine\b/gi, "").trim();
-  const { replyText, widgets } = await runMessengerElaineTurn({
-    userId,
-    conversationId,
-    inputText: cleanMsg || "Hello!",
-    senderName,
-  });
+
+  let replyText: string;
+  let widgets: Record<string, unknown>[] = [];
+  try {
+    const result = await runMessengerElaineTurn({
+      userId,
+      conversationId,
+      inputText: cleanMsg || "Hello!",
+      senderName,
+    });
+    replyText = result.replyText;
+    widgets = result.widgets;
+  } catch (err) {
+    if (err instanceof OpenAI.RateLimitError) {
+      // OpenRouter rate limit — not a bug in our code. Post a friendly reply
+      // rather than dropping the message silently or logging an error to Sentry.
+      logger.warn(
+        { conversationId },
+        "messenger: @elaine rate-limited by OpenRouter — posting friendly fallback",
+      );
+      replyText =
+        "I'm a bit overloaded right now — please try again in a moment!";
+    } else {
+      throw err;
+    }
+  }
 
   if (!replyText) return;
 

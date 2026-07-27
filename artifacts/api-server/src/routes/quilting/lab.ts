@@ -44,15 +44,37 @@ const InpaintBody = z
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Resolve the source image buffer from either a fabricId (DB lookup) or an
- *  inline base64 data URL (owner-uploaded test photo). */
+/** Max accepted sourceDataUrl payload: 10 MB decoded (matches JSON body limit). */
+const MAX_SOURCE_DATA_URL_BYTES = 10 * 1024 * 1024;
+
+function validateSourceDataUrl(dataUrl: string): Buffer {
+  if (!/^data:image\/(jpeg|jpg|png|webp|gif);base64,/i.test(dataUrl)) {
+    throw Object.assign(
+      new Error(
+        "sourceDataUrl must be a base64-encoded image (jpeg/png/webp/gif).",
+      ),
+      { status: 400 },
+    );
+  }
+  const b64 = dataUrl.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
+  const buf = Buffer.from(b64, "base64");
+  if (buf.byteLength > MAX_SOURCE_DATA_URL_BYTES) {
+    throw Object.assign(
+      new Error(
+        `sourceDataUrl exceeds the 10 MB limit (got ${Math.round(buf.byteLength / 1024 / 1024)}MB).`,
+      ),
+      { status: 400 },
+    );
+  }
+  return buf;
+}
+
 async function getSourceBuffer(
   fabricId?: number,
   sourceDataUrl?: string,
 ): Promise<Buffer> {
   if (sourceDataUrl) {
-    const b64 = sourceDataUrl.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
-    return Buffer.from(b64, "base64");
+    return validateSourceDataUrl(sourceDataUrl);
   }
   if (fabricId !== undefined) {
     const [row] = await db

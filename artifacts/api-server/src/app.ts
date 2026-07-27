@@ -131,6 +131,10 @@ app.use("/api/quilting/blocks/detect-seams", express.json({ limit: "5mb" }));
 // Barcode photo extraction endpoint accepts a base64 data URL JSON payload
 // which can reach ~4MB for a typical phone JPEG → base64-encoded image.
 app.use("/api/ornaments/barcode-photo-lookup", express.json({ limit: "5mb" }));
+// AI Lab endpoints accept base64 data URLs for detect-creases and both
+// inpaint routes — a typical fabric photo JPEG encodes to ~5–8MB in base64.
+app.use("/api/quilting/lab/detect-creases", express.json({ limit: "10mb" }));
+app.use("/api/quilting/lab/remove-creases", express.json({ limit: "10mb" }));
 // Slack Events API (JSON) and slash commands (form-encoded) both require the
 // raw request body for HMAC-SHA256 signature verification. Two separate paths
 // are used so each can have the correct body parser (json vs urlencoded) with

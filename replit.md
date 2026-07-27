@@ -128,6 +128,8 @@ Names only — values must be re-entered manually in the new environment's Secre
 - `GH_PAT`
 - `AGENTPHONE_API_KEY`, `AGENTPHONE_WEBHOOK_SECRET`
 - `APIFY_WEBHOOK_SECRET`
+- `REPLICATE_API_TOKEN` — Replicate account API key (used by AI Lab crease removal via FLUX Fill Dev)
+- `REPLICATE_WEBHOOK_SIGNING_SECRET` — Replicate webhook signing key (`whsec_…` from replicate.com/account); not used by the current synchronous lab implementation but store now so dev→prod is a copy-paste when webhook-based async predictions are wired up
 - `EBAY_APP_ID`, `EBAY_CERT_ID`, `EBAY_DEV_ID` — eBay product catalog lookup (UPC/barcode for ornaments)
 - `MICROLINK_API_KEY` — optional; Microlink.io paid-tier key for link preview fallback; free tier works without it
 - `DEV_SCREENSHOT_TOKEN` (dev-only cookie-free login bypass — must be a plain env var, never a Replit secret, so the agent can read its literal value)

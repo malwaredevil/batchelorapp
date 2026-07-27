@@ -24,6 +24,7 @@ import {
   Sparkles,
   MessageCircle,
   SlidersHorizontal,
+  ShieldCheck,
   Mail,
   CalendarDays,
   Gift,
@@ -1049,6 +1050,14 @@ export function AppLauncher() {
                   <Settings className="w-4 h-4 mr-2" />
                   Account settings
                 </DropdownMenuItem>
+                {user?.isOwner && (
+                  <DropdownMenuItem
+                    onSelect={() => navigate(`${base}owner-panel`)}
+                  >
+                    <ShieldCheck className="w-4 h-4 mr-2" />
+                    Owner Panel
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onSelect={signOut}

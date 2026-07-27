@@ -13,9 +13,11 @@ import toolsRouter from "./tools";
 import blockTemplatesRouter from "./block-templates";
 import analysesRouter from "./analyses";
 import fabricIdentityRouter from "./fabric-identity";
+import labRouter from "./lab";
 
 const router: IRouter = Router();
 
+router.use(labRouter);
 router.use(fabricsRouter);
 router.use(patternsRouter);
 router.use(quiltsRouter);

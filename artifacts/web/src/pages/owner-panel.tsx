@@ -339,25 +339,11 @@ interface InpaintResult {
   error?: string;
 }
 
-interface BatchFabricResult {
-  fabric: LabFabric;
-  status: "queued" | "detecting" | "running" | "done" | "skipped" | "error";
-  detectMsg?: string;
-  openaiResult: InpaintResult | null;
-  replicateResult: InpaintResult | null;
-  sourceImageUrl: string;
-  saveStatus: Record<string, string>;
-  error?: string;
-}
-
 const CANVAS_MAX_PX = 520;
 
 function AiLabContent() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-
-  // ── Mode toggle ────────────────────────────────────────────────────────
-  const [batchMode, setBatchMode] = useState(false);
 
   // ── Fabric picker ──────────────────────────────────────────────────────
   const [query, setQuery] = useState("");
@@ -687,682 +673,230 @@ function AiLabContent() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">
-            AI Lab — Crease Removal
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {batchMode
-              ? "Select multiple fabrics and run crease removal on all in sequence. Review side-by-side results for each."
-              : "Pick a fabric, auto-detect or paint over creases, then run both AI models in parallel. Save whichever result you prefer as the fabric's primary photo."}
-          </p>
+      <div>
+        <h2 className="text-lg font-semibold tracking-tight">
+          AI Lab — Crease Removal
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Pick a fabric, auto-detect or paint over creases, then run both AI
+          models in parallel. Save whichever result you prefer as the fabric's
+          primary photo.
+        </p>
+      </div>
+
+      {/* Fabric picker + optional test photo upload */}
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <label className="text-sm font-medium">
+            Fabric (from collection)
+          </label>
+          <input
+            type="search"
+            placeholder="Search fabrics…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+          <div className="max-h-40 overflow-y-auto rounded-md border border-border bg-background">
+            {fabricList.length === 0 && (
+              <p className="px-3 py-2 text-sm text-muted-foreground">
+                No fabrics found.
+              </p>
+            )}
+            {fabricList.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => {
+                  setSelectedFabric(f);
+                  setTestPhotoDataUrl(null);
+                  setTestPhotoName(null);
+                  setOpenaiResult(null);
+                  setReplicateResult(null);
+                  setDetectMsg(null);
+                  setSaveStatus({});
+                }}
+                className={`w-full px-3 py-2 text-left text-sm transition-colors hover:bg-muted ${
+                  selectedFabric?.id === f.id && !testPhotoDataUrl
+                    ? "bg-primary/10 font-medium"
+                    : ""
+                }`}
+              >
+                {f.name || `Fabric #${f.id}`}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 p-1">
-          <button
-            type="button"
-            onClick={() => setBatchMode(false)}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              !batchMode
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Single
-          </button>
-          <button
-            type="button"
-            onClick={() => setBatchMode(true)}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              batchMode
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Batch
-          </button>
+
+        {/* OR: upload a fresh test photo that isn't yet in the collection */}
+        <div className="space-y-1">
+          <label className="text-sm font-medium">
+            Or upload a test photo{" "}
+            <span className="font-normal text-muted-foreground">
+              (not saved to collection)
+            </span>
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted">
+            <input
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              onChange={handleTestPhotoUpload}
+            />
+            {testPhotoName ? (
+              <span className="truncate text-foreground">{testPhotoName}</span>
+            ) : (
+              <span>Choose image…</span>
+            )}
+          </label>
+          {testPhotoDataUrl && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              Using uploaded test photo. Detect/Remove will use this image.{" "}
+              {!selectedFabric && (
+                <span>Select a fabric above to enable Save.</span>
+              )}
+            </p>
+          )}
         </div>
       </div>
 
-      {batchMode ? (
-        <BatchLabContent />
-      ) : (
+      {(selectedFabric || testPhotoDataUrl) && sourceImageUrl && (
         <>
-          {/* Fabric picker + optional test photo upload */}
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Fabric (from collection)
-              </label>
-              <input
-                type="search"
-                placeholder="Search fabrics…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-              <div className="max-h-40 overflow-y-auto rounded-md border border-border bg-background">
-                {fabricList.length === 0 && (
-                  <p className="px-3 py-2 text-sm text-muted-foreground">
-                    No fabrics found.
-                  </p>
-                )}
-                {fabricList.map((f) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedFabric(f);
-                      setTestPhotoDataUrl(null);
-                      setTestPhotoName(null);
-                      setOpenaiResult(null);
-                      setReplicateResult(null);
-                      setDetectMsg(null);
-                      setSaveStatus({});
-                    }}
-                    className={`w-full px-3 py-2 text-left text-sm transition-colors hover:bg-muted ${
-                      selectedFabric?.id === f.id && !testPhotoDataUrl
-                        ? "bg-primary/10 font-medium"
-                        : ""
-                    }`}
-                  >
-                    {f.name || `Fabric #${f.id}`}
-                  </button>
-                ))}
+          {/* Canvas editor */}
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm font-medium">
+                {selectedFabric
+                  ? selectedFabric.name || `Fabric #${selectedFabric.id}`
+                  : (testPhotoName ?? "Test photo")}
+              </span>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                  Brush
+                  <input
+                    type="range"
+                    min={8}
+                    max={80}
+                    value={brushSize}
+                    onChange={(e) => setBrushSize(Number(e.target.value))}
+                    className="w-20"
+                  />
+                  <span className="tabular-nums">{brushSize}px</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={clearCanvas}
+                  className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
+                >
+                  Clear
+                </button>
               </div>
             </div>
-
-            {/* OR: upload a fresh test photo that isn't yet in the collection */}
-            <div className="space-y-1">
-              <label className="text-sm font-medium">
-                Or upload a test photo{" "}
-                <span className="font-normal text-muted-foreground">
-                  (not saved to collection)
-                </span>
-              </label>
-              <label className="flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted">
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="sr-only"
-                  onChange={handleTestPhotoUpload}
-                />
-                {testPhotoName ? (
-                  <span className="truncate text-foreground">
-                    {testPhotoName}
-                  </span>
-                ) : (
-                  <span>Choose image…</span>
-                )}
-              </label>
-              {testPhotoDataUrl && (
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  Using uploaded test photo. Detect/Remove will use this image.{" "}
-                  {!selectedFabric && (
-                    <span>Select a fabric above to enable Save.</span>
-                  )}
-                </p>
-              )}
+            <div
+              className="relative select-none overflow-hidden rounded-md border border-border bg-muted"
+              style={{ width: canvasW, height: canvasH, maxWidth: "100%" }}
+            >
+              <img
+                ref={imgRef}
+                src={sourceImageUrl}
+                alt={selectedFabric?.name ?? "Test photo"}
+                onLoad={handleImageLoad}
+                className="absolute inset-0 h-full w-full object-contain"
+                draggable={false}
+              />
+              <canvas
+                ref={canvasRef}
+                width={canvasW}
+                height={canvasH}
+                className="absolute inset-0 cursor-crosshair"
+                onMouseDown={onMouseDown}
+                onMouseMove={onMouseMove}
+                onMouseUp={onMouseUp}
+                onMouseLeave={onMouseUp}
+              />
             </div>
+            <p className="text-xs text-muted-foreground">
+              Purple highlights = areas to inpaint. Paint over creases, or use{" "}
+              <strong>Auto-detect</strong> first.
+            </p>
+            {detectMsg && (
+              <p className="rounded-md bg-muted px-3 py-2 text-sm">
+                {detectMsg}
+              </p>
+            )}
           </div>
 
-          {(selectedFabric || testPhotoDataUrl) && sourceImageUrl && (
-            <>
-              {/* Canvas editor */}
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-sm font-medium">
-                    {selectedFabric
-                      ? selectedFabric.name || `Fabric #${selectedFabric.id}`
-                      : (testPhotoName ?? "Test photo")}
-                  </span>
-                  <div className="flex items-center gap-3">
-                    <label className="flex items-center gap-1 text-xs text-muted-foreground">
-                      Brush
-                      <input
-                        type="range"
-                        min={8}
-                        max={80}
-                        value={brushSize}
-                        onChange={(e) => setBrushSize(Number(e.target.value))}
-                        className="w-20"
-                      />
-                      <span className="tabular-nums">{brushSize}px</span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={clearCanvas}
-                      className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                </div>
-                <div
-                  className="relative select-none overflow-hidden rounded-md border border-border bg-muted"
-                  style={{ width: canvasW, height: canvasH, maxWidth: "100%" }}
-                >
-                  <img
-                    ref={imgRef}
-                    src={sourceImageUrl}
-                    alt={selectedFabric?.name ?? "Test photo"}
-                    onLoad={handleImageLoad}
-                    className="absolute inset-0 h-full w-full object-contain"
-                    draggable={false}
-                  />
-                  <canvas
-                    ref={canvasRef}
-                    width={canvasW}
-                    height={canvasH}
-                    className="absolute inset-0 cursor-crosshair"
-                    onMouseDown={onMouseDown}
-                    onMouseMove={onMouseMove}
-                    onMouseUp={onMouseUp}
-                    onMouseLeave={onMouseUp}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Purple highlights = areas to inpaint. Paint over creases, or
-                  use <strong>Auto-detect</strong> first.
-                </p>
-                {detectMsg && (
-                  <p className="rounded-md bg-muted px-3 py-2 text-sm">
-                    {detectMsg}
+          {/* Actions */}
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={detectCreases}
+              disabled={detecting || openaiRemoving || replicateRemoving}
+              className="rounded-md border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
+            >
+              {detecting ? "Detecting…" : "Auto-detect creases"}
+            </button>
+            <button
+              type="button"
+              onClick={removeCreases}
+              disabled={openaiRemoving || replicateRemoving || detecting}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              {openaiRemoving || replicateRemoving
+                ? "Running AI (30–60 s)…"
+                : "Remove creases"}
+            </button>
+          </div>
+
+          {/* Results */}
+          {(openaiRemoving ||
+            replicateRemoving ||
+            openaiResult ||
+            replicateResult) && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold">Side-by-side comparison</h3>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                {/* Original */}
+                <div className="space-y-1">
+                  <p className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Original
                   </p>
-                )}
-              </div>
-
-              {/* Actions */}
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={detectCreases}
-                  disabled={detecting || openaiRemoving || replicateRemoving}
-                  className="rounded-md border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
-                >
-                  {detecting ? "Detecting…" : "Auto-detect creases"}
-                </button>
-                <button
-                  type="button"
-                  onClick={removeCreases}
-                  disabled={openaiRemoving || replicateRemoving || detecting}
-                  className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-                >
-                  {openaiRemoving || replicateRemoving
-                    ? "Running AI (30–60 s)…"
-                    : "Remove creases"}
-                </button>
-              </div>
-
-              {/* Results */}
-              {(openaiRemoving ||
-                replicateRemoving ||
-                openaiResult ||
-                replicateResult) && (
-                <div className="space-y-3">
-                  <h3 className="text-sm font-semibold">
-                    Side-by-side comparison
-                  </h3>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    {/* Original */}
-                    <div className="space-y-1">
-                      <p className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Original
-                      </p>
-                      <img
-                        src={sourceImageUrl}
-                        alt="Original"
-                        className="w-full rounded-md border border-border object-cover"
-                      />
-                    </div>
-
-                    <LabResultPanel
-                      label="OpenAI gpt-image-1"
-                      loading={openaiRemoving}
-                      result={openaiResult}
-                      saveDisabled={!selectedFabric}
-                      saveStatus={saveStatus["openai"]}
-                      onSave={() => {
-                        if (openaiResult?.dataUrl)
-                          saveResult(openaiResult.dataUrl, "openai");
-                      }}
-                    />
-
-                    <LabResultPanel
-                      label="Replicate FLUX Fill"
-                      loading={replicateRemoving}
-                      result={replicateResult}
-                      saveDisabled={!selectedFabric}
-                      saveStatus={saveStatus["replicate"]}
-                      onSave={() => {
-                        if (replicateResult?.dataUrl)
-                          saveResult(replicateResult.dataUrl, "replicate");
-                      }}
-                    />
-                  </div>
+                  <img
+                    src={sourceImageUrl}
+                    alt="Original"
+                    className="w-full rounded-md border border-border object-cover"
+                  />
                 </div>
-              )}
-            </>
+
+                <LabResultPanel
+                  label="OpenAI gpt-image-1"
+                  loading={openaiRemoving}
+                  result={openaiResult}
+                  saveDisabled={!selectedFabric}
+                  saveStatus={saveStatus["openai"]}
+                  onSave={() => {
+                    if (openaiResult?.dataUrl)
+                      saveResult(openaiResult.dataUrl, "openai");
+                  }}
+                />
+
+                <LabResultPanel
+                  label="Replicate FLUX Fill"
+                  loading={replicateRemoving}
+                  result={replicateResult}
+                  saveDisabled={!selectedFabric}
+                  saveStatus={saveStatus["replicate"]}
+                  onSave={() => {
+                    if (replicateResult?.dataUrl)
+                      saveResult(replicateResult.dataUrl, "replicate");
+                  }}
+                />
+              </div>
+            </div>
           )}
         </>
       )}
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// BatchLabContent — multi-select fabric batch crease removal.
-// Processes each fabric sequentially (detect → OpenAI + Replicate in parallel)
-// so the owner can compare both outputs across the whole queue.
-// ---------------------------------------------------------------------------
-
-function BatchLabContent() {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-
-  const [query, setQuery] = useState("");
-  const [fabricList, setFabricList] = useState<LabFabric[]>([]);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [running, setRunning] = useState(false);
-  const [progress, setProgress] = useState<{
-    done: number;
-    total: number;
-  } | null>(null);
-  const [results, setResults] = useState<BatchFabricResult[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const url = `/api/quilting/fabrics?pageSize=100${query ? `&q=${encodeURIComponent(query)}` : ""}`;
-    fetch(url)
-      .then((r) => r.json())
-      .then((d: { items?: LabFabric[] }) => {
-        if (!cancelled) setFabricList(d.items ?? []);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [query]);
-
-  const toggleFabric = (id: number) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const selectAll = () => setSelected(new Set(fabricList.map((f) => f.id)));
-  const clearAll = () => setSelected(new Set());
-
-  const updateResult = (
-    fabricId: number,
-    patch: Partial<BatchFabricResult>,
-  ) => {
-    setResults((prev) =>
-      prev.map((r) => (r.fabric.id === fabricId ? { ...r, ...patch } : r)),
-    );
-  };
-
-  const runBatch = async () => {
-    const queue = fabricList.filter((f) => selected.has(f.id));
-    if (queue.length === 0) return;
-
-    setRunning(true);
-    setProgress({ done: 0, total: queue.length });
-    setResults(
-      queue.map((f) => ({
-        fabric: f,
-        status: "queued" as const,
-        openaiResult: null,
-        replicateResult: null,
-        sourceImageUrl: `/api/quilting/fabrics/${f.id}/image`,
-        saveStatus: {},
-      })),
-    );
-
-    for (let i = 0; i < queue.length; i++) {
-      const fabric = queue[i]!;
-
-      // ── 1. Auto-detect creases ──────────────────────────────────────────
-      updateResult(fabric.id, { status: "detecting" });
-
-      let maskDataUrl: string | null = null;
-      let detectMsg = "";
-      try {
-        // raw-fetch-ok — owner-only AI lab; no generated hook
-        const resp = await fetch("/api/quilting/lab/detect-creases", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fabricId: fabric.id }),
-        });
-        const data = (await resp.json()) as {
-          description?: string;
-          maskDataUrl?: string;
-          creasesFound?: number;
-          error?: string;
-        };
-
-        if (!resp.ok || data.error) {
-          updateResult(fabric.id, {
-            status: "error",
-            error: data.error ?? "Detection failed",
-          });
-          setProgress((prev) =>
-            prev ? { ...prev, done: prev.done + 1 } : null,
-          );
-          continue;
-        }
-
-        const found = data.creasesFound ?? 0;
-        detectMsg =
-          found === 0
-            ? "No creases detected — skipping AI removal."
-            : `Detected ${found} crease${found === 1 ? "" : "s"}: ${data.description ?? ""}`;
-
-        if (found === 0 || !data.maskDataUrl) {
-          updateResult(fabric.id, { status: "skipped", detectMsg });
-          setProgress((prev) =>
-            prev ? { ...prev, done: prev.done + 1 } : null,
-          );
-          continue;
-        }
-
-        maskDataUrl = data.maskDataUrl;
-      } catch {
-        updateResult(fabric.id, {
-          status: "error",
-          error: "Detection request failed — check server logs.",
-        });
-        setProgress((prev) => (prev ? { ...prev, done: prev.done + 1 } : null));
-        continue;
-      }
-
-      // ── 2. Run both providers in parallel ──────────────────────────────
-      updateResult(fabric.id, { status: "running", detectMsg });
-
-      const callProvider = async (provider: "openai" | "replicate") => {
-        // raw-fetch-ok — owner-only AI lab; no generated hook
-        const r = await fetch(`/api/quilting/lab/remove-creases/${provider}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fabricId: fabric.id, maskDataUrl }),
-        });
-        const d = (await r.json()) as { dataUrl?: string; error?: string };
-        if (!r.ok || d.error)
-          return { error: d.error ?? `${provider} returned no result.` };
-        return { dataUrl: d.dataUrl };
-      };
-
-      const [openaiSettled, replicateSettled] = await Promise.allSettled([
-        callProvider("openai"),
-        callProvider("replicate"),
-      ]);
-
-      updateResult(fabric.id, {
-        status: "done",
-        openaiResult:
-          openaiSettled.status === "fulfilled"
-            ? openaiSettled.value
-            : { error: "OpenAI request failed." },
-        replicateResult:
-          replicateSettled.status === "fulfilled"
-            ? replicateSettled.value
-            : { error: "Replicate request failed." },
-      });
-      setProgress((prev) => (prev ? { ...prev, done: prev.done + 1 } : null));
-    }
-
-    setRunning(false);
-  };
-
-  const saveResult = async (
-    fabric: LabFabric,
-    dataUrl: string,
-    key: string,
-  ) => {
-    updateResult(fabric.id, {
-      saveStatus: { [key]: "saving" },
-    });
-    try {
-      const blob = await fetch(dataUrl).then((r) => r.blob());
-      const form = new FormData();
-      form.append("image", blob, "inpainted.png");
-      // raw-fetch-ok — owner-only AI lab; no generated hook
-      const resp = await fetch(`/api/quilting/fabrics/${fabric.id}/image`, {
-        method: "PUT",
-        body: form,
-      });
-      if (!resp.ok) throw new Error(`${resp.status}`);
-      updateResult(fabric.id, { saveStatus: { [key]: "saved" } });
-      await queryClient.invalidateQueries({
-        queryKey: ["quilting", "fabrics", fabric.id],
-      });
-      toast({
-        title: "Photo saved",
-        description: `${fabric.name || `Fabric #${fabric.id}`} primary photo updated.`,
-      });
-    } catch {
-      updateResult(fabric.id, { saveStatus: { [key]: "error" } });
-      toast({
-        title: "Save failed",
-        description: "Could not update the fabric photo. Check server logs.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const selectedCount = selected.size;
-
-  return (
-    <div className="space-y-5">
-      {/* Fabric multi-select */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <label className="text-sm font-medium">
-            Select fabrics to process
-          </label>
-          <div className="flex gap-2 text-xs">
-            <button
-              type="button"
-              onClick={selectAll}
-              disabled={running}
-              className="text-primary underline-offset-2 hover:underline disabled:opacity-50"
-            >
-              All
-            </button>
-            <button
-              type="button"
-              onClick={clearAll}
-              disabled={running}
-              className="text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50"
-            >
-              None
-            </button>
-          </div>
-        </div>
-        <input
-          type="search"
-          placeholder="Search fabrics…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          disabled={running}
-          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-        />
-        <div className="max-h-48 overflow-y-auto rounded-md border border-border bg-background">
-          {fabricList.length === 0 && (
-            <p className="px-3 py-2 text-sm text-muted-foreground">
-              No fabrics found.
-            </p>
-          )}
-          {fabricList.map((f) => {
-            const checked = selected.has(f.id);
-            return (
-              <label
-                key={f.id}
-                className={`flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-muted ${
-                  checked ? "bg-primary/8 font-medium" : ""
-                } ${running ? "pointer-events-none opacity-60" : ""}`}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => toggleFabric(f.id)}
-                  className="h-4 w-4 accent-primary"
-                />
-                {f.name || `Fabric #${f.id}`}
-              </label>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Run button + progress */}
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={runBatch}
-          disabled={running || selectedCount === 0}
-          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-        >
-          {running
-            ? "Running…"
-            : selectedCount === 0
-              ? "Select fabrics above"
-              : `Run on ${selectedCount} fabric${selectedCount === 1 ? "" : "s"}`}
-        </button>
-        {progress && (
-          <div className="flex items-center gap-2">
-            <div className="h-2 w-32 overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full bg-primary transition-all"
-                style={{
-                  width: `${Math.round((progress.done / progress.total) * 100)}%`,
-                }}
-              />
-            </div>
-            <span className="text-sm tabular-nums text-muted-foreground">
-              {progress.done} of {progress.total} done
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Results */}
-      {results.length > 0 && (
-        <div className="space-y-6">
-          <h3 className="text-sm font-semibold">Batch results</h3>
-          {results.map((r) => (
-            <div
-              key={r.fabric.id}
-              className="rounded-lg border border-border bg-muted/20 p-4 space-y-3"
-            >
-              {/* Card header */}
-              <div className="flex items-center gap-2">
-                <span className="font-medium text-sm">
-                  {r.fabric.name || `Fabric #${r.fabric.id}`}
-                </span>
-                <BatchStatusBadge status={r.status} />
-              </div>
-
-              {r.detectMsg && (
-                <p className="text-xs text-muted-foreground">{r.detectMsg}</p>
-              )}
-              {r.error && <p className="text-xs text-destructive">{r.error}</p>}
-
-              {/* Side-by-side comparison (when running or done) */}
-              {(r.status === "running" || r.status === "done") && (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  {/* Original */}
-                  <div className="space-y-1">
-                    <p className="text-center text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      Original
-                    </p>
-                    <img
-                      src={r.sourceImageUrl}
-                      alt={r.fabric.name || `Fabric #${r.fabric.id}`}
-                      className="w-full rounded-md border border-border object-cover"
-                    />
-                  </div>
-
-                  {/* OpenAI */}
-                  <LabResultPanel
-                    label="OpenAI gpt-image-1"
-                    loading={r.status === "running" && !r.openaiResult}
-                    result={r.openaiResult}
-                    saveStatus={r.saveStatus["openai"]}
-                    onSave={() => {
-                      if (r.openaiResult?.dataUrl)
-                        saveResult(r.fabric, r.openaiResult.dataUrl, "openai");
-                    }}
-                  />
-
-                  {/* Replicate */}
-                  <LabResultPanel
-                    label="Replicate FLUX Fill"
-                    loading={r.status === "running" && !r.replicateResult}
-                    result={r.replicateResult}
-                    saveStatus={r.saveStatus["replicate"]}
-                    onSave={() => {
-                      if (r.replicateResult?.dataUrl)
-                        saveResult(
-                          r.fabric,
-                          r.replicateResult.dataUrl,
-                          "replicate",
-                        );
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function BatchStatusBadge({ status }: { status: BatchFabricResult["status"] }) {
-  const map: Record<
-    BatchFabricResult["status"],
-    { label: string; className: string }
-  > = {
-    queued: {
-      label: "Queued",
-      className: "bg-muted text-muted-foreground",
-    },
-    detecting: {
-      label: "Detecting…",
-      className:
-        "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
-    },
-    running: {
-      label: "Running…",
-      className:
-        "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
-    },
-    done: {
-      label: "Done",
-      className:
-        "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-    },
-    skipped: {
-      label: "No creases",
-      className: "bg-muted text-muted-foreground",
-    },
-    error: {
-      label: "Error",
-      className: "bg-destructive/10 text-destructive",
-    },
-  };
-  const { label, className } = map[status];
-  return (
-    <span
-      className={`rounded-full px-2 py-0.5 text-xs font-medium ${className}`}
-    >
-      {label}
-    </span>
   );
 }
 

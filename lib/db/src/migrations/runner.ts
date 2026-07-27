@@ -1,5 +1,5 @@
 import type pg from "pg";
-import { pool } from "../connection";
+import { pool } from "../index";
 import { getMigrations, type Migration } from "./manifest";
 
 const MIGRATION_LOCK_ID = 7_437_319_003;

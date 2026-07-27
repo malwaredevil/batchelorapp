@@ -11,7 +11,7 @@ cd "$ROOT"
 
 PASS="\033[0;32m✓\033[0m"
 
-step() { echo -e "\n\033[1m[$1/9]\033[0m $2"; }
+step() { echo -e "\n\033[1m[$1/10]\033[0m $2"; }
 
 step 1 "Typecheck (pnpm run typecheck)"
 pnpm run typecheck
@@ -109,6 +109,10 @@ echo -e "$PASS replit.md: no private content detected"
 step 9 "Upload-limit guard (no direct HIGH_MULTER_FILE_BYTES imports in route/elaine files)"
 pnpm --filter @workspace/scripts run check-upload-limits
 echo -e "$PASS Upload-limit guard: all route/elaine files use multerLimitForPrefix()"
+
+step 10 "pg Pool/Client singleton guard (no rogue pool constructors outside lib/db/src/index.ts)"
+pnpm --filter @workspace/scripts run check-pg-singleton
+echo -e "$PASS pg singleton guard: all pool construction flows through the shared singleton"
 
 echo -e "\n\033[0;32m✓ All automated pre-publish checks passed.\033[0m"
 echo "  Proceed to: Stage 2 (DB safety) → Stage 3 (backup + GitHub sync) → publish."

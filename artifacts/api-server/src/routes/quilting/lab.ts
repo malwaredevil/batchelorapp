@@ -98,6 +98,10 @@ async function preprocessForInpaint(
   const maskB64 = maskDataUrl.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
   const maskBuffer = Buffer.from(maskB64, "base64");
 
+  // Both image and mask MUST use the same fit strategy so pixel coordinates
+  // stay aligned. "contain" letterboxes both to 1024×1024 with padding.
+  // Image padding = white (neutral); mask padding = black (= "keep" for both
+  // OpenAI transparent-means-inpaint and Replicate white-means-inpaint).
   const [resizedImg, rawMask] = await Promise.all([
     sharp(imgBuffer)
       .resize(1024, 1024, {
@@ -108,7 +112,10 @@ async function preprocessForInpaint(
       .png()
       .toBuffer(),
     sharp(maskBuffer)
-      .resize(1024, 1024, { fit: "fill" })
+      .resize(1024, 1024, {
+        fit: "contain",
+        background: { r: 0, g: 0, b: 0, alpha: 0 }, // black transparent → "keep" in both APIs
+      })
       .ensureAlpha()
       .raw()
       .toBuffer({ resolveWithObject: true }),
@@ -230,26 +237,28 @@ router.post("/lab/detect-creases", async (req, res) => {
               { type: "image_url", image_url: { url: imageDataUrl } },
               {
                 type: "text",
-                text: `Examine this fabric photo carefully. Identify every visible fold line, crease, or wrinkle.
+                text: `Examine this fabric photo carefully. Your task is to find physical fold lines, creases, and wrinkles in the fabric — NOT the printed pattern.
+
+A crease is a physical deformation of the fabric: a raised ridge, a shadow line caused by folding, a wrinkle that distorts the surface. Do NOT mark printed lines, design elements, seams, colour boundaries in the pattern, or regular repeating grid-like details that are part of the fabric's design.
 
 Return ONLY valid JSON (no markdown, no explanation):
 {
-  "description": "One sentence describing the creases you found, or 'No creases detected' if the fabric is flat.",
+  "description": "One sentence describing the physical creases/wrinkles found, or 'No creases detected' if the fabric is flat.",
   "creases": [
     {
       "x1Pct": <number 0-100>,
       "y1Pct": <number 0-100>,
       "x2Pct": <number 0-100>,
       "y2Pct": <number 0-100>,
-      "widthPct": <number 2-20>
+      "widthPct": <number 2-15>
     }
   ]
 }
 
-x1Pct/y1Pct is one end of the crease line as % of image width/height.
-x2Pct/y2Pct is the other end as % of image width/height.
-widthPct is the crease's thickness as % of the shorter image dimension.
-Include all visible creases, including faint ones.`,
+x1Pct/y1Pct: one end of the crease line as % of image width/height.
+x2Pct/y2Pct: the other end as % of image width/height.
+widthPct: the crease's thickness as % of the shorter image dimension.
+If you are not confident a line is a physical crease (as opposed to a printed pattern element), omit it. Return an empty creases array if the fabric is flat or you cannot distinguish creases from pattern.`,
               },
             ],
           },
@@ -519,7 +528,7 @@ async function runReplicateFluxFill(
           num_outputs: 1,
           output_format: "png",
           num_inference_steps: 28,
-          guidance_scale: 60,
+          guidance_scale: 30, // FLUX Fill sweet-spot; 60 over-constrains and blocks visible edits
         },
       }),
       signal: AbortSignal.timeout(90_000),

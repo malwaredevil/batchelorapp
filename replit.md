@@ -102,7 +102,7 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
     - **Human/bot PRs that this session's changes already fixed:** close with a comment explaining why.
     - **Human/bot PRs that surface an unfixed issue:** fix it now before publishing.
       (Note: Sentry is on the Free plan — Seer auto-draft PRs are a Business-tier feature and no longer active.)
-  - 3b3. **GitHub secrets sync (always run — no exceptions):** Run `pnpm --filter @workspace/scripts run sync-github-secrets` every pre-publish, regardless of whether secrets visibly changed this session. This upserts every Replit secret to GitHub Actions secrets, keeping GitHub as an encrypted backup in sync with Replit at all times. Review the output: any `⊘ skipped` entries are optional secrets not yet configured in Replit and should be set there + re-synced when the value becomes available.
+  - 3b3. **GitHub secrets sync (when secrets changed):** If any secret was added, removed, rotated, or newly configured this session, run `pnpm --filter @workspace/scripts run sync-github-secrets`. This encrypts each Replit secret value with the repo's libsodium public key and PUTs it to GitHub Actions secrets — keeping GitHub as an encrypted backup of all application secrets (the same way the code repo backs up the codebase). Review the output: any `⊘ skipped` entries are optional secrets not yet configured in Replit and should be set there + re-synced when the value becomes available. On routine sessions where no secrets changed, this step is a quick no-op skip.
   - 3c. Batch-sync all changed files to GitHub in a **single commit** using `pnpm --filter @workspace/scripts run github-sync "commit message"`. This script: runs prettier --write on every changed file, creates one Git tree with all changes, pushes one commit, and triggers exactly one CI run. **Never** use the GitHub Contents API per-file (each file triggers its own CI run) or loop `git push` per file. The excluded paths (.local/, .agents/, threat_model.md, .replit, .replitignore, replit.nix, .upm/) are enforced by the script — Replit-specific files must never reach the public repo.
   - 3d. Wait for GitHub CI to go fully green (all checks including CodeQL): `pnpm --filter @workspace/scripts run check-ci-status`. This is a hard stop — do not publish until this passes.
 
@@ -128,8 +128,6 @@ Names only — values must be re-entered manually in the new environment's Secre
 - `GH_PAT`
 - `AGENTPHONE_API_KEY`, `AGENTPHONE_WEBHOOK_SECRET`
 - `APIFY_WEBHOOK_SECRET`
-- `REPLICATE_API_TOKEN` — Replicate account API key (used by AI Lab crease removal via FLUX Fill Dev)
-- `REPLICATE_WEBHOOK_SIGNING_SECRET` — Replicate webhook signing key (`whsec_…` from replicate.com/account); not used by the current synchronous lab implementation but store now so dev→prod is a copy-paste when webhook-based async predictions are wired up
 - `EBAY_APP_ID`, `EBAY_CERT_ID`, `EBAY_DEV_ID` — eBay product catalog lookup (UPC/barcode for ornaments)
 - `MICROLINK_API_KEY` — optional; Microlink.io paid-tier key for link preview fallback; free tier works without it
 - `DEV_SCREENSHOT_TOKEN` (dev-only cookie-free login bypass — must be a plain env var, never a Replit secret, so the agent can read its literal value)

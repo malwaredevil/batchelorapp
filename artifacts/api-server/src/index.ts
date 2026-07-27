@@ -75,20 +75,26 @@ function startListening(): void {
   });
 }
 
-// Run DB migration and bucket provisioning in parallel — they are independent.
-// Bucket provisioning failing is non-fatal: uploads may fail at runtime but
-// the server still starts so that existing read paths are unaffected.
-Promise.all([
-  runStartupMigration().catch((err) => {
-    logger.error(
-      { err },
-      "Startup migration threw unexpectedly — starting server anyway",
-    );
-  }),
-  provisionAllBuckets().catch((err) => {
-    logger.error(
-      { err },
-      "Bucket provisioning threw unexpectedly — server starting without guaranteed bucket policies",
-    );
-  }),
-]).then(startListening);
+// Open the port immediately so Replit's port-open watchdog does not kill the
+// process while startup work is in flight.  Both operations are explicitly
+// non-fatal: startup-migrate is idempotent (IF NOT EXISTS DDL) and tables
+// already exist after bootstrap; bucket provisioning only affects storage
+// write paths.  Running them after listen means a request arriving in the
+// first few seconds might hit a missing table, but in practice the scheduler
+// guard and job worker already handle that gracefully (they log and skip).
+// Waiting for them before listen caused ~30 s delays when connecting to a
+// remote Supabase (EU) over a high-latency Replit→EU pooler path, consistently
+// exceeding Replit's 60 s port-open watchdog timeout.
+startListening();
+runStartupMigration().catch((err) => {
+  logger.error(
+    { err },
+    "Startup migration threw unexpectedly — server already listening",
+  );
+});
+provisionAllBuckets().catch((err) => {
+  logger.error(
+    { err },
+    "Bucket provisioning threw unexpectedly — server already listening without guaranteed bucket policies",
+  );
+});

@@ -6,32 +6,79 @@
  * is unreachable (ENOTFOUND). The Supavisor connection pooler, however, is
  * reachable over IPv4.
  *
- * `resolveDatabaseUrl()` takes the `DATABASE_URL` secret (which points at the
- * direct host) and rewrites it to the pooler host/username when needed. The
- * password is preserved untouched and never logged.
+ * `resolveDatabaseUrl()` selects between the prod (DATABASE_URL) and dev
+ * (DEV_DATABASE_URL) connection strings based on REPLIT_DEPLOYMENT, then
+ * rewrites whichever is selected from the IPv6-only direct host to the pooler
+ * host when needed. The password is preserved untouched and never logged.
+ *
+ * Dev/prod split:
+ *   - Deployed (REPLIT_DEPLOYMENT=1): always uses DATABASE_URL (production).
+ *   - Editor (not deployed): prefers DEV_DATABASE_URL when set so that local
+ *     work never touches the production database. Falls back to DATABASE_URL
+ *     if DEV_DATABASE_URL is absent.
+ *
+ * Dev project pooler: the dev project (gdjrjnscygdmyaenrour) is hosted in
+ * eu-central-1 (Frankfurt). Its direct host is IPv6-only like prod, so the
+ * same pooler rewrite applies. Override via DEV_SUPABASE_POOLER_REGION.
  */
 
 const DIRECT_HOST_RE = /^db\.([a-z0-9]+)\.supabase\.co$/;
 
-// Region of the Supabase project's pooler. Not a secret. Overridable via env in
-// case the project is moved to a different region.
+// Region of the prod Supabase project's pooler.
 const DEFAULT_POOLER_REGION = "eu-west-1";
+// Region of the dev Supabase project's pooler (eu-central-1 / Frankfurt).
+const DEV_POOLER_REGION = "eu-central-1";
 
-export function resolveDatabaseUrl(): string {
-  const raw = process.env.DATABASE_URL;
-  if (!raw) {
-    throw new Error(
-      "DATABASE_URL must be set. Did you forget to provision a database?",
-    );
-  }
-
-  let url: URL;
+/**
+ * Rewrite a raw Postgres URL to the Supavisor pooler host/port/username when
+ * the URL targets the IPv6-only direct host (`db.<ref>.supabase.co:5432`).
+ * If the URL is already a pooler URL, only the port is normalised (5432→6543).
+ * Non-Supabase URLs are returned untouched.
+ *
+ * `poolerHost` and `poolerPort` are passed in explicitly so each call site can
+ * supply the correct project-specific pooler values (prod vs dev) without the
+ * function accidentally reading the wrong environment variable.
+ */
+/**
+ * Attempt to parse `raw` as a URL, auto-encoding common unencoded characters
+ * in the password field (#, $, ?, @, space) that Supabase passwords sometimes
+ * contain.  Supabase's own docs say to percent-encode the password — this is a
+ * best-effort recovery so a missing encode gives a clear error rather than
+ * a cryptic "Invalid URL" deep inside pg-connection-string.
+ */
+function safeParse(raw: string): URL {
   try {
-    url = new URL(raw);
+    return new URL(raw);
   } catch {
-    // Not a parseable URL — hand it back untouched and let pg report the error.
-    return raw;
+    // Try to auto-encode the password section.  The pattern covers the common
+    // postgresql://user:password@host form; passwords containing literal @ are
+    // still unsupported (the URL is fundamentally ambiguous in that case).
+    const fixed = raw.replace(
+      /^(postgresql(?:ql)?:\/\/[^:]*:)([^@]*)(@)/,
+      (_m, prefix, pass, at) =>
+        prefix +
+        pass.replace(/[#$?%[\] ]/g, (c: string) => encodeURIComponent(c)) +
+        at,
+    );
+    try {
+      return new URL(fixed);
+    } catch {
+      throw new Error(
+        `Cannot parse database URL — the password likely contains special ` +
+          `characters (#, $, @, ?) that must be percent-encoded. ` +
+          `Replace # with %23, $ with %24, @ with %40, ? with %3F in the ` +
+          `password portion of the connection string.`,
+      );
+    }
   }
+}
+
+function rewriteToPooler(
+  raw: string,
+  poolerHost: string,
+  poolerPort: string,
+): string {
+  const url = safeParse(raw);
 
   // Already a pooler URL. Ensure transaction mode (port 6543), not session
   // mode (port 5432). Session mode keeps a real Supabase connection open for
@@ -41,7 +88,7 @@ export function resolveDatabaseUrl(): string {
   // so idle slots in our local pool don't consume Supabase connections.
   if (url.hostname.includes("pooler.supabase.com")) {
     if (url.port === "5432" || url.port === "") {
-      url.port = "6543";
+      url.port = poolerPort;
     }
     return url.toString();
   }
@@ -53,20 +100,91 @@ export function resolveDatabaseUrl(): string {
   }
 
   const projectRef = match[1];
-  const region = process.env.SUPABASE_POOLER_REGION ?? DEFAULT_POOLER_REGION;
-  const poolerHost =
-    process.env.SUPABASE_POOLER_HOST ?? `aws-0-${region}.pooler.supabase.com`;
-  // Default to transaction-mode port (6543). Session mode (5432) keeps a real
-  // Supabase connection open for the lifetime of each local pool slot, which
-  // exhausts Supabase's 15-connection session limit under normal usage.
-  const poolerPort = process.env.SUPABASE_POOLER_PORT ?? "6543";
-
   url.hostname = poolerHost;
   url.port = poolerPort;
   // Supavisor requires the username to carry the project ref: postgres.<ref>.
   url.username = `postgres.${projectRef}`;
 
   return url.toString();
+}
+
+/** Resolve pooler host/port from env overrides with a per-project fallback. */
+function poolerParams(
+  regionEnvVar: string,
+  hostEnvVar: string,
+  portEnvVar: string,
+  defaultRegion: string,
+): { host: string; port: string } {
+  const region = process.env[regionEnvVar] ?? defaultRegion;
+  const host = process.env[hostEnvVar] ?? `aws-0-${region}.pooler.supabase.com`;
+  // Default to transaction-mode port (6543). Session mode (5432) keeps a real
+  // Supabase connection open for the lifetime of each local pool slot, which
+  // exhausts Supabase's 15-connection session limit under normal usage.
+  const port = process.env[portEnvVar] ?? "6543";
+  return { host, port };
+}
+
+/**
+ * Always resolves to the production Supabase pooler URL, regardless of the
+ * current environment. Use this in scripts (backup-to-replit, restore-from-replit)
+ * that explicitly operate on the production database and must never be accidentally
+ * routed to the dev Supabase by the dev/prod routing logic in resolveDatabaseUrl().
+ */
+export function resolveProductionDatabaseUrl(): string {
+  const raw = process.env.DATABASE_URL;
+  if (!raw) {
+    throw new Error(
+      "DATABASE_URL must be set. Did you forget to provision a database?",
+    );
+  }
+  const { host, port } = poolerParams(
+    "SUPABASE_POOLER_REGION",
+    "SUPABASE_POOLER_HOST",
+    "SUPABASE_POOLER_PORT",
+    DEFAULT_POOLER_REGION,
+  );
+  return rewriteToPooler(raw, host, port);
+}
+
+export function resolveDatabaseUrl(): string {
+  const isDeployed = process.env.REPLIT_DEPLOYMENT === "1";
+
+  // In editor (non-deployed) environments, prefer DEV_DATABASE_URL so the pg
+  // pool targets the dev Supabase project rather than production. This mirrors
+  // the devOrRequired() logic in artifacts/api-server/src/lib/env.ts, which
+  // applies the same dev/prod split to the Supabase REST credentials.
+  //
+  // The dev project (gdjrjnscygdmyaenrour) is hosted in eu-central-1 and uses
+  // its own set of DEV_SUPABASE_POOLER_* env vars so the prod project's
+  // SUPABASE_POOLER_REGION (eu-west-1) does not accidentally override the
+  // dev pooler host (they are in different AWS regions).
+  if (!isDeployed) {
+    const devRaw = process.env.DEV_DATABASE_URL?.trim();
+    if (devRaw) {
+      const { host, port } = poolerParams(
+        "DEV_SUPABASE_POOLER_REGION",
+        "DEV_SUPABASE_POOLER_HOST",
+        "DEV_SUPABASE_POOLER_PORT",
+        DEV_POOLER_REGION,
+      );
+      return rewriteToPooler(devRaw, host, port);
+    }
+  }
+
+  const raw = process.env.DATABASE_URL;
+  if (!raw) {
+    throw new Error(
+      "DATABASE_URL must be set. Did you forget to provision a database?",
+    );
+  }
+
+  const { host, port } = poolerParams(
+    "SUPABASE_POOLER_REGION",
+    "SUPABASE_POOLER_HOST",
+    "SUPABASE_POOLER_PORT",
+    DEFAULT_POOLER_REGION,
+  );
+  return rewriteToPooler(raw, host, port);
 }
 
 /**

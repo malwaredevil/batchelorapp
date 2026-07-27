@@ -24,6 +24,7 @@ import {
 } from "@workspace/db";
 import { createClient } from "@supabase/supabase-js";
 import { logger } from "./logger";
+import { env } from "./env";
 
 const PURGE_DAYS = 30;
 
@@ -33,11 +34,11 @@ function purgeThreshold(): Date {
   return d;
 }
 
+// Uses env.supabaseUrl / env.supabaseServiceRoleKey so the dev/prod split in
+// env.ts (devOrRequired) applies here too — in editor mode with DEV_SUPABASE_*
+// set, storage deletions target the dev project, matching the pg pool target.
 function supabase() {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error("Supabase credentials not configured");
-  return createClient(url, key);
+  return createClient(env.supabaseUrl, env.supabaseServiceRoleKey);
 }
 
 async function removeStoragePaths(

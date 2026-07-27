@@ -618,22 +618,18 @@ router.get("/hub/db-status", requireAuth, requireOwner, async (_req, res) => {
   const devUrl = process.env.DEV_SUPABASE_URL ?? null;
   const devKey = process.env.DEV_SUPABASE_SERVICE_ROLE_KEY ?? null;
 
-  // Active tier: determine which Supabase project DATABASE_URL resolves to by
-  // extracting its project ref and comparing against the known prod/dev refs.
-  // This reflects reality — DATABASE_URL may point at either project depending
-  // on how Replit secrets are configured, and the UI should show which one the
-  // server is actually using for all queries.
-  function supabaseRef(url: string | null): string | null {
-    if (!url) return null;
-    const m = url.match(/[/.]([a-z0-9]{20})\.supabase\./);
-    return m ? m[1] : null;
-  }
-  const dbUrl = process.env.DATABASE_URL ?? null;
-  const dbRef = supabaseRef(dbUrl);
-  const prodRef = supabaseRef(prodUrl);
-  const devRef = supabaseRef(devUrl);
+  // Active tier: mirrors the combined dev/prod logic of both:
+  //   - lib/db/src/resolve-url.ts  → pg pool targets dev when DEV_DATABASE_URL is set
+  //   - artifacts/api-server/src/lib/env.ts devOrRequired() → REST/storage clients
+  //     target dev when DEV_SUPABASE_URL + DEV_SUPABASE_SERVICE_ROLE_KEY are set
+  // All three must be present for the environment to be truly "dev" end-to-end.
   const activeTier: "prod" | "dev" =
-    dbRef && devRef && dbRef === devRef ? "dev" : "prod";
+    !isDeployed &&
+    !!process.env.DEV_DATABASE_URL?.trim() &&
+    !!devUrl &&
+    !!devKey
+      ? "dev"
+      : "prod";
   const activeSupabaseUrl = activeTier === "dev" ? devUrl : prodUrl;
 
   const [prodReachable, devReachable] = await Promise.all([

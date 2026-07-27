@@ -22,11 +22,11 @@
  *     must reset their passwords and reconnect Google Calendar / Gmail.
  *
  * Source:      Replit DB — PGHOST / PGPORT / PGUSER / PGPASSWORD / PGDATABASE
- * Destination: Supabase  — DATABASE_URL (rewritten to pooler by resolveDatabaseUrl)
+ * Destination: Supabase  — DATABASE_URL (always production; read directly, bypasses dev routing)
  */
 
 import pg from "pg";
-import { resolveDatabaseUrl, sslConfig } from "@workspace/db";
+import { resolveProductionDatabaseUrl, sslConfig } from "@workspace/db";
 
 const { Client } = pg;
 
@@ -95,7 +95,7 @@ async function main() {
     ssl: false,
   });
   const dest = new Client({
-    connectionString: resolveDatabaseUrl(),
+    connectionString: resolveProductionDatabaseUrl(),
     ssl: sslConfig,
   });
 

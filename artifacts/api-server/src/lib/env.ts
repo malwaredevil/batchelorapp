@@ -10,10 +10,36 @@ function optional(name: string): string | undefined {
   return process.env[name]?.trim() || undefined;
 }
 
+/**
+ * Returns the dev-environment value of `devName` when not deployed and the
+ * dev value is configured; otherwise falls back to the prod `required(prodName)`.
+ *
+ * This is the single source of truth for the dev/prod credential split.
+ * It mirrors the logic in `lib/db/src/resolve-url.ts` (which applies the same
+ * pattern to DATABASE_URL vs DEV_DATABASE_URL for the pg pool).
+ */
+function devOrRequired(devName: string, prodName: string): string {
+  const isDeployed = process.env.REPLIT_DEPLOYMENT === "1";
+  if (!isDeployed) {
+    const dev = process.env[devName]?.trim();
+    if (dev) return dev;
+  }
+  return required(prodName);
+}
+
 export const env = {
   sessionSecret: required("SESSION_SECRET"),
-  supabaseUrl: required("SUPABASE_URL"),
-  supabaseServiceRoleKey: required("SUPABASE_SERVICE_ROLE_KEY"),
+  // In non-deployed (dev) environments, prefer the DEV_SUPABASE_* credentials
+  // so storage operations target the dev Supabase project rather than prod.
+  // This mirrors lib/db/src/resolve-url.ts, which applies the same dev/prod
+  // split to DEV_DATABASE_URL for the pg pool — both always target the same
+  // Supabase project (either dev or prod) so schema and storage never split
+  // across environments.
+  supabaseUrl: devOrRequired("DEV_SUPABASE_URL", "SUPABASE_URL"),
+  supabaseServiceRoleKey: devOrRequired(
+    "DEV_SUPABASE_SERVICE_ROLE_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY",
+  ),
   openrouterApiKey: required("OPENROUTER_API_KEY"),
   jinaApiKey: optional("JINA_API_KEY"),
   voyageApiKey: optional("VOYAGE_API_KEY"),

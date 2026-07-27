@@ -17,6 +17,8 @@ import {
   Wifi,
   WifiOff,
   TriangleAlert,
+  ShieldAlert,
+  Server,
 } from "lucide-react";
 import { GlobalConfigCard } from "@workspace/elaine-ui";
 import {
@@ -67,6 +69,68 @@ function useFromParam() {
   return { from, label };
 }
 
+// ---------------------------------------------------------------------------
+// Environment status — fetched once at OwnerPanel mount and shared with all
+// tabs so we never double-fetch and the banner renders immediately.
+// ---------------------------------------------------------------------------
+
+interface DbTierStatus {
+  url: string | null;
+  reachable: boolean;
+  configured?: boolean;
+}
+interface DbStatus {
+  isDeployed: boolean;
+  activeTier: "prod" | "dev";
+  activeSupabaseUrl: string | null;
+  prod: DbTierStatus;
+  dev: DbTierStatus & { configured: boolean };
+}
+
+function EnvironmentBanner({
+  status,
+  loading,
+}: {
+  status: DbStatus | null;
+  loading: boolean;
+}) {
+  if (loading || !status) return null;
+
+  const { isDeployed, activeTier } = status;
+
+  if (isDeployed || activeTier === "prod") {
+    return (
+      <div className="flex items-center gap-3 rounded-lg border border-red-500/40 bg-red-500/8 px-4 py-3">
+        <ShieldAlert className="h-5 w-5 shrink-0 text-red-500" />
+        <div className="min-w-0">
+          <p className="text-sm font-bold uppercase tracking-wide text-red-700 dark:text-red-400">
+            Production Environment
+          </p>
+          <p className="text-xs text-red-600/80 dark:text-red-400/70">
+            You are viewing the live app. All changes take effect immediately
+            and affect real data.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-blue-500/40 bg-blue-500/8 px-4 py-3">
+      <Server className="h-5 w-5 shrink-0 text-blue-500" />
+      <div className="min-w-0">
+        <p className="text-sm font-bold uppercase tracking-wide text-blue-700 dark:text-blue-400">
+          Development Environment
+        </p>
+        <p className="text-xs text-blue-600/80 dark:text-blue-400/70">
+          Running in the Replit editor. Changes here do not affect the live
+          production site.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function OwnerPanel() {
   const { user } = useAuth();
   const isOwner = !!user?.isOwner;
@@ -74,9 +138,29 @@ export default function OwnerPanel() {
   const search = useSearch();
   const [, navigate] = useLocation();
 
+  const [envStatus, setEnvStatus] = useState<DbStatus | null>(null);
+  const [envLoading, setEnvLoading] = useState(true);
+
+  const reloadEnvStatus = useCallback(() => {
+    setEnvLoading(true);
+    // raw-fetch-ok — owner-only admin endpoint, no Orval hook
+    fetch("/api/hub/db-status")
+      .then((r) => (r.ok ? (r.json() as Promise<DbStatus>) : null))
+      .then((d) => {
+        setEnvStatus(d);
+        setEnvLoading(false);
+      })
+      .catch(() => setEnvLoading(false));
+  }, []);
+
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
+
+  useEffect(() => {
+    if (isOwner) reloadEnvStatus();
+    else setEnvLoading(false);
+  }, [isOwner, reloadEnvStatus]);
 
   const visibleTabs = isOwner
     ? ALL_TABS
@@ -126,6 +210,10 @@ export default function OwnerPanel() {
               : "App settings for the Travels module."}
           </p>
         </div>
+
+        {isOwner && (
+          <EnvironmentBanner status={envStatus} loading={envLoading} />
+        )}
 
         <div className="relative">
           <div className="overflow-x-auto scrollbar-none border-b border-border">
@@ -197,7 +285,13 @@ export default function OwnerPanel() {
         {safeTab === "ai-evidence" && isOwner && <AiEvidenceContent />}
 
         {safeTab === "ai-lab" && isOwner && <AiLabContent />}
-        {safeTab === "infrastructure" && isOwner && <InfrastructureContent />}
+        {safeTab === "infrastructure" && isOwner && (
+          <InfrastructureContent
+            status={envStatus}
+            loading={envLoading}
+            onReload={reloadEnvStatus}
+          />
+        )}
       </main>
     </div>
   );
@@ -1585,19 +1679,6 @@ function LabResultPanel({
 // Infrastructure tab — owner-only view of DB connections and schema tools.
 // ---------------------------------------------------------------------------
 
-interface DbTierStatus {
-  url: string | null;
-  reachable: boolean;
-  configured?: boolean;
-}
-interface DbStatus {
-  isDeployed: boolean;
-  activeTier: "prod" | "dev";
-  activeSupabaseUrl: string | null;
-  prod: DbTierStatus;
-  dev: DbTierStatus & { configured: boolean };
-}
-
 function DbRow({
   label,
   url,
@@ -1673,9 +1754,15 @@ function DbRow({
   );
 }
 
-function InfrastructureContent() {
-  const [status, setStatus] = useState<DbStatus | null>(null);
-  const [loading, setLoading] = useState(true);
+function InfrastructureContent({
+  status,
+  loading,
+  onReload,
+}: {
+  status: DbStatus | null;
+  loading: boolean;
+  onReload: () => void;
+}) {
   const [bootstrapping, setBootstrapping] = useState(false);
   const [bootstrapResult, setBootstrapResult] = useState<{
     ok: boolean;
@@ -1683,25 +1770,6 @@ function InfrastructureContent() {
   } | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const { toast } = useToast();
-
-  function reload() {
-    setLoading(true);
-    // raw-fetch-ok — no Orval hook for owner-only admin endpoints
-    fetch("/api/hub/db-status")
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json() as Promise<DbStatus>;
-      })
-      .then((d) => {
-        setStatus(d);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }
-
-  useEffect(() => {
-    reload();
-  }, []);
 
   async function handleBootstrap() {
     setShowConfirm(false);
@@ -1758,7 +1826,7 @@ function InfrastructureContent() {
           </div>
           <button
             type="button"
-            onClick={reload}
+            onClick={onReload}
             disabled={loading}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
           >

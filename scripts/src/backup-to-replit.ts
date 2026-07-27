@@ -48,12 +48,12 @@
  *     be reconnected after a restore; tokens are too sensitive for a backup DB
  *   - Actual image files (stored in Supabase Storage, unaffected by DB disasters)
  *
- * Source:      Supabase  — DATABASE_URL (rewritten to pooler by resolveDatabaseUrl)
+ * Source:      Supabase  — DATABASE_URL (always production; read directly, bypasses dev routing)
  * Destination: Replit DB — PGHOST / PGPORT / PGUSER / PGPASSWORD / PGDATABASE
  */
 
 import pg from "pg";
-import { resolveDatabaseUrl, sslConfig } from "@workspace/db";
+import { resolveProductionDatabaseUrl, sslConfig } from "@workspace/db";
 
 const { Client } = pg;
 
@@ -1636,7 +1636,7 @@ async function resetSequence(dest: pg.Client, table: string, col: string) {
 
 async function main() {
   const source = new Client({
-    connectionString: resolveDatabaseUrl(),
+    connectionString: resolveProductionDatabaseUrl(),
     ssl: sslConfig,
   });
   const dest = new Client({

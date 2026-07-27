@@ -2531,6 +2531,115 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/QuiltingStaleCount"
+  /quilting/lab/detect-creases:
+    post:
+      operationId: labDetectCreases
+      tags:
+        - lab
+      summary: Detect fabric creases via AI vision (owner only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fabricId:
+                  type: integer
+                  description: ID of the fabric to analyse (mutually exclusive with sourceDataUrl)
+                sourceDataUrl:
+                  type: string
+                  description: Base64 data URL of a fresh test photo (mutually exclusive with fabricId)
+      responses:
+        "200":
+          description: Detected creases and mask PNG
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - description
+                  - maskDataUrl
+                  - imageWidth
+                  - imageHeight
+                  - creasesFound
+                properties:
+                  description:
+                    type: string
+                  maskDataUrl:
+                    type: string
+                  imageWidth:
+                    type: integer
+                  imageHeight:
+                    type: integer
+                  creasesFound:
+                    type: integer
+  /quilting/lab/remove-creases/openai:
+    post:
+      operationId: labRemoveCreasesOpenai
+      tags:
+        - lab
+      summary: Inpaint crease areas with OpenAI gpt-image-1 (owner only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - maskDataUrl
+              properties:
+                fabricId:
+                  type: integer
+                sourceDataUrl:
+                  type: string
+                maskDataUrl:
+                  type: string
+      responses:
+        "200":
+          description: Inpainted image as base64 data URL
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - dataUrl
+                properties:
+                  dataUrl:
+                    type: string
+  /quilting/lab/remove-creases/replicate:
+    post:
+      operationId: labRemoveCreasesReplicate
+      tags:
+        - lab
+      summary: Inpaint crease areas with Replicate FLUX Fill Dev (owner only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - maskDataUrl
+              properties:
+                fabricId:
+                  type: integer
+                sourceDataUrl:
+                  type: string
+                maskDataUrl:
+                  type: string
+      responses:
+        "200":
+          description: Inpainted image as base64 data URL
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - dataUrl
+                properties:
+                  dataUrl:
+                    type: string
   /quilting/block-templates:
     get:
       tags:

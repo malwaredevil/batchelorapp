@@ -2894,6 +2894,51 @@ export const GetStaleCountResponse = zod.object({
 
 
 /**
+ * @summary Detect fabric creases via AI vision (owner only)
+ */
+export const LabDetectCreasesBody = zod.object({
+  "fabricId": zod.number().optional().describe('ID of the fabric to analyse (mutually exclusive with sourceDataUrl)'),
+  "sourceDataUrl": zod.string().optional().describe('Base64 data URL of a fresh test photo (mutually exclusive with fabricId)')
+})
+
+export const LabDetectCreasesResponse = zod.object({
+  "description": zod.string(),
+  "maskDataUrl": zod.string(),
+  "imageWidth": zod.number(),
+  "imageHeight": zod.number(),
+  "creasesFound": zod.number()
+})
+
+
+/**
+ * @summary Inpaint crease areas with OpenAI gpt-image-1 (owner only)
+ */
+export const LabRemoveCreasesOpenaiBody = zod.object({
+  "fabricId": zod.number().optional(),
+  "sourceDataUrl": zod.string().optional(),
+  "maskDataUrl": zod.string()
+})
+
+export const LabRemoveCreasesOpenaiResponse = zod.object({
+  "dataUrl": zod.string()
+})
+
+
+/**
+ * @summary Inpaint crease areas with Replicate FLUX Fill Dev (owner only)
+ */
+export const LabRemoveCreasesReplicateBody = zod.object({
+  "fabricId": zod.number().optional(),
+  "sourceDataUrl": zod.string().optional(),
+  "maskDataUrl": zod.string()
+})
+
+export const LabRemoveCreasesReplicateResponse = zod.object({
+  "dataUrl": zod.string()
+})
+
+
+/**
  * @summary List all saved block templates (household-shared)
  */
 export const ListBlockTemplatesResponseItem = zod.object({

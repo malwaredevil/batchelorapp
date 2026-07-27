@@ -19,45 +19,159 @@ router.use(requireAuth, requireOwner);
 // Schemas
 // ---------------------------------------------------------------------------
 
-const DetectCreasesBody = z.object({
-  fabricId: z.number().int().positive(),
-});
+const DetectCreasesBody = z
+  .object({
+    fabricId: z.number().int().positive().optional(),
+    sourceDataUrl: z.string().min(1).optional(),
+  })
+  .refine((d) => d.fabricId !== undefined || d.sourceDataUrl !== undefined, {
+    message: "Either fabricId or sourceDataUrl is required.",
+  });
 
-const RemoveCreasesBody = z.object({
-  fabricId: z.number().int().positive(),
-  maskDataUrl: z.string().min(1),
-});
+const InpaintBody = z
+  .object({
+    fabricId: z.number().int().positive().optional(),
+    sourceDataUrl: z.string().min(1).optional(),
+    maskDataUrl: z.string().min(1),
+  })
+  .refine((d) => d.fabricId !== undefined || d.sourceDataUrl !== undefined, {
+    message: "Either fabricId or sourceDataUrl is required.",
+  });
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Resolve the source image buffer from either a fabricId (DB lookup) or an
+ *  inline base64 data URL (owner-uploaded test photo). */
+async function getSourceBuffer(
+  fabricId?: number,
+  sourceDataUrl?: string,
+): Promise<Buffer> {
+  if (sourceDataUrl) {
+    const b64 = sourceDataUrl.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
+    return Buffer.from(b64, "base64");
+  }
+  if (fabricId !== undefined) {
+    const [row] = await db
+      .select({ imagePath: fabrics.imagePath })
+      .from(fabrics)
+      .where(eq(fabrics.id, fabricId))
+      .limit(1);
+    if (!row)
+      throw Object.assign(new Error("Fabric not found."), { status: 404 });
+    const { buffer } = await downloadImageBuffer(row.imagePath);
+    return buffer;
+  }
+  throw new Error("Either fabricId or sourceDataUrl is required.");
+}
+
+/** Preprocess source + mask into the two format variants required by each API. */
+async function preprocessForInpaint(
+  imgBuffer: Buffer,
+  maskDataUrl: string,
+): Promise<{ resizedImg: Buffer; openaiMask: Buffer; replMask: Buffer }> {
+  const maskB64 = maskDataUrl.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
+  const maskBuffer = Buffer.from(maskB64, "base64");
+
+  const [resizedImg, rawMask] = await Promise.all([
+    sharp(imgBuffer)
+      .resize(1024, 1024, {
+        fit: "contain",
+        background: { r: 255, g: 255, b: 255, alpha: 255 },
+      })
+      .ensureAlpha()
+      .png()
+      .toBuffer(),
+    sharp(maskBuffer)
+      .resize(1024, 1024, { fit: "fill" })
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true }),
+  ]);
+
+  // OpenAI mask: transparent = inpaint area, opaque white = keep.
+  // User painted opaque purple where creases are → invert alpha.
+  const openaiMaskData = Buffer.from(rawMask.data);
+  for (let i = 3; i < openaiMaskData.length; i += 4) {
+    const wasOpaque = openaiMaskData[i] > 10;
+    openaiMaskData[i] = wasOpaque ? 0 : 255;
+    if (!wasOpaque) {
+      openaiMaskData[i - 3] = 255;
+      openaiMaskData[i - 2] = 255;
+      openaiMaskData[i - 1] = 255;
+    }
+  }
+  const openaiMask = await sharp(openaiMaskData, {
+    raw: {
+      width: rawMask.info.width,
+      height: rawMask.info.height,
+      channels: 4,
+    },
+  })
+    .png()
+    .toBuffer();
+
+  // Replicate mask: white = inpaint, black = keep (no alpha).
+  const replMaskData = Buffer.from(rawMask.data);
+  for (let i = 0; i < replMaskData.length; i += 4) {
+    const alpha = replMaskData[i + 3];
+    const painted = alpha > 10;
+    replMaskData[i] = painted ? 255 : 0;
+    replMaskData[i + 1] = painted ? 255 : 0;
+    replMaskData[i + 2] = painted ? 255 : 0;
+    replMaskData[i + 3] = 255;
+  }
+  const replMask = await sharp(replMaskData, {
+    raw: {
+      width: rawMask.info.width,
+      height: rawMask.info.height,
+      channels: 4,
+    },
+  })
+    .removeAlpha()
+    .png()
+    .toBuffer();
+
+  return { resizedImg, openaiMask, replMask };
+}
+
+const INPAINT_PROMPT =
+  "flat, smooth fabric with no creases or folds, uniform surface texture, original print pattern preserved exactly";
 
 // ---------------------------------------------------------------------------
 // POST /lab/detect-creases
-// Downloads the fabric image, sends it to the vision model, and returns a
-// mask PNG (white-on-transparent) covering the detected crease locations.
+// Downloads the fabric image (or uses a supplied sourceDataUrl), sends it to
+// the vision model, and returns a mask PNG (white-on-transparent) covering the
+// detected crease locations.
 // ---------------------------------------------------------------------------
 
 router.post("/lab/detect-creases", async (req, res) => {
   const parsed = DetectCreasesBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "fabricId (integer) is required." });
+    res
+      .status(400)
+      .json({ error: "Either fabricId or sourceDataUrl is required." });
     return;
   }
 
-  const [row] = await db
-    .select({ imagePath: fabrics.imagePath })
-    .from(fabrics)
-    .where(eq(fabrics.id, parsed.data.fabricId))
-    .limit(1);
-
-  if (!row) {
-    res.status(404).json({ error: "Fabric not found." });
+  let imgBuffer: Buffer;
+  try {
+    imgBuffer = await getSourceBuffer(
+      parsed.data.fabricId,
+      parsed.data.sourceDataUrl,
+    );
+  } catch (err: unknown) {
+    const status = (err as { status?: number }).status ?? 500;
+    res.status(status).json({ error: (err as Error).message });
     return;
   }
 
-  const { buffer, contentType } = await downloadImageBuffer(row.imagePath);
-  const imageDataUrl = `data:${contentType};base64,${buffer.toString("base64")}`;
-
-  const meta = await sharp(buffer).metadata();
+  const meta = await sharp(imgBuffer).metadata();
   const w = meta.width ?? 1024;
   const h = meta.height ?? 1024;
+
+  const imageDataUrl = `data:image/png;base64,${imgBuffer.toString("base64")}`;
 
   let description = "Could not analyse the image.";
   let creases: Array<{
@@ -129,7 +243,6 @@ Include all visible creases, including faint ones.`,
     description = "Detection failed — you can paint the mask manually.";
   }
 
-  // Build mask PNG from crease line coordinates
   const minDim = Math.min(w, h);
   const svgLines = creases
     .map((c) => {
@@ -162,131 +275,95 @@ Include all visible creases, including faint ones.`,
 });
 
 // ---------------------------------------------------------------------------
-// POST /lab/remove-creases
-// Accepts the fabric ID and a user-painted mask (white strokes on transparent
-// background). Runs OpenAI gpt-image-1 edit and Replicate FLUX Fill in
-// parallel, returns both results independently.
+// POST /lab/remove-creases/openai
+// Runs OpenAI gpt-image-1 edit on the source image + mask. Returns a single
+// inpainted result so the frontend can resolve this panel independently of the
+// Replicate call.
 // ---------------------------------------------------------------------------
 
-router.post("/lab/remove-creases", async (req, res) => {
-  const parsed = RemoveCreasesBody.safeParse(req.body);
+router.post("/lab/remove-creases/openai", async (req, res) => {
+  const parsed = InpaintBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "fabricId and maskDataUrl are required." });
+    res.status(400).json({
+      error: "fabricId (or sourceDataUrl) and maskDataUrl are required.",
+    });
     return;
   }
 
-  const [row] = await db
-    .select({ imagePath: fabrics.imagePath })
-    .from(fabrics)
-    .where(eq(fabrics.id, parsed.data.fabricId))
-    .limit(1);
-
-  if (!row) {
-    res.status(404).json({ error: "Fabric not found." });
+  let imgBuffer: Buffer;
+  try {
+    imgBuffer = await getSourceBuffer(
+      parsed.data.fabricId,
+      parsed.data.sourceDataUrl,
+    );
+  } catch (err: unknown) {
+    const status = (err as { status?: number }).status ?? 500;
+    res.status(status).json({ error: (err as Error).message });
     return;
   }
 
-  const { buffer: imgBuffer } = await downloadImageBuffer(row.imagePath);
-
-  // Parse mask — strip data URL prefix, accept both png and generic
-  const maskB64 = parsed.data.maskDataUrl.replace(
-    /^data:image\/[a-z]+;base64,/,
-    "",
-  );
-  const maskBuffer = Buffer.from(maskB64, "base64");
-
-  // Resize both to 1024×1024 (DALL-E requires square; FLUX works best at it)
-  const [resizedImg, rawMask] = await Promise.all([
-    sharp(imgBuffer)
-      .resize(1024, 1024, {
-        fit: "contain",
-        background: { r: 255, g: 255, b: 255, alpha: 255 },
-      })
-      .ensureAlpha()
-      .png()
-      .toBuffer(),
-    sharp(maskBuffer)
-      .resize(1024, 1024, { fit: "fill" })
-      .ensureAlpha()
-      .raw()
-      .toBuffer({ resolveWithObject: true }),
-  ]);
-
-  // Build OpenAI mask: transparent = inpaint, opaque = keep.
-  // User painted white (opaque) where creases are → invert alpha.
-  const openaiMaskData = Buffer.from(rawMask.data);
-  for (let i = 3; i < openaiMaskData.length; i += 4) {
-    const wasOpaque = openaiMaskData[i] > 10;
-    openaiMaskData[i] = wasOpaque ? 0 : 255;
-    if (!wasOpaque) {
-      openaiMaskData[i - 3] = 255;
-      openaiMaskData[i - 2] = 255;
-      openaiMaskData[i - 1] = 255;
-    }
+  try {
+    const { resizedImg, openaiMask } = await preprocessForInpaint(
+      imgBuffer,
+      parsed.data.maskDataUrl,
+    );
+    const dataUrl = await runOpenAIEdit(resizedImg, openaiMask, INPAINT_PROMPT);
+    res.json({ dataUrl });
+  } catch (err) {
+    const msg =
+      err instanceof Error ? err.message : "OpenAI inpainting failed.";
+    res.status(500).json({ error: msg });
   }
-  const openaiMask = await sharp(openaiMaskData, {
-    raw: {
-      width: rawMask.info.width,
-      height: rawMask.info.height,
-      channels: 4,
-    },
-  })
-    .png()
-    .toBuffer();
-
-  // Build Replicate mask: white = inpaint, black = keep (no alpha).
-  const replMaskData = Buffer.from(rawMask.data);
-  for (let i = 0; i < replMaskData.length; i += 4) {
-    const alpha = replMaskData[i + 3];
-    const painted = alpha > 10;
-    replMaskData[i] = painted ? 255 : 0;
-    replMaskData[i + 1] = painted ? 255 : 0;
-    replMaskData[i + 2] = painted ? 255 : 0;
-    replMaskData[i + 3] = 255;
-  }
-  const replMask = await sharp(replMaskData, {
-    raw: {
-      width: rawMask.info.width,
-      height: rawMask.info.height,
-      channels: 4,
-    },
-  })
-    .removeAlpha()
-    .png()
-    .toBuffer();
-
-  const prompt =
-    "flat, smooth fabric with no creases or folds, uniform surface texture, original print pattern preserved exactly";
-
-  const [openaiResult, replicateResult] = await Promise.allSettled([
-    runOpenAIEdit(resizedImg, openaiMask, prompt),
-    runReplicateFluxFill(resizedImg, replMask, prompt),
-  ]);
-
-  res.json({
-    openai:
-      openaiResult.status === "fulfilled"
-        ? { dataUrl: openaiResult.value }
-        : {
-            error:
-              openaiResult.reason instanceof Error
-                ? openaiResult.reason.message
-                : "OpenAI inpainting failed",
-          },
-    replicate:
-      replicateResult.status === "fulfilled"
-        ? { dataUrl: replicateResult.value }
-        : {
-            error:
-              replicateResult.reason instanceof Error
-                ? replicateResult.reason.message
-                : "Replicate inpainting failed",
-          },
-  });
 });
 
 // ---------------------------------------------------------------------------
-// Helpers
+// POST /lab/remove-creases/replicate
+// Runs Replicate FLUX Fill Dev on the source image + mask. Returns a single
+// inpainted result so the frontend can resolve this panel independently of the
+// OpenAI call.
+// ---------------------------------------------------------------------------
+
+router.post("/lab/remove-creases/replicate", async (req, res) => {
+  const parsed = InpaintBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({
+      error: "fabricId (or sourceDataUrl) and maskDataUrl are required.",
+    });
+    return;
+  }
+
+  let imgBuffer: Buffer;
+  try {
+    imgBuffer = await getSourceBuffer(
+      parsed.data.fabricId,
+      parsed.data.sourceDataUrl,
+    );
+  } catch (err: unknown) {
+    const status = (err as { status?: number }).status ?? 500;
+    res.status(status).json({ error: (err as Error).message });
+    return;
+  }
+
+  try {
+    const { resizedImg, replMask } = await preprocessForInpaint(
+      imgBuffer,
+      parsed.data.maskDataUrl,
+    );
+    const dataUrl = await runReplicateFluxFill(
+      resizedImg,
+      replMask,
+      INPAINT_PROMPT,
+    );
+    res.json({ dataUrl });
+  } catch (err) {
+    const msg =
+      err instanceof Error ? err.message : "Replicate inpainting failed.";
+    res.status(500).json({ error: msg });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// API helpers
 // ---------------------------------------------------------------------------
 
 async function runOpenAIEdit(
@@ -298,8 +375,7 @@ async function runOpenAIEdit(
     throw new Error("OPENAI_API_KEY is not configured.");
   }
   const client = new OpenAI({
-    // openai-direct-ok — images.edit not available via OpenRouter
-    apiKey: env.openaiApiKey,
+    apiKey: env.openaiApiKey, // openai-direct-ok — images.edit not available via OpenRouter
     timeout: 90_000,
     maxRetries: 0,
   });
@@ -370,7 +446,6 @@ async function runReplicateFluxFill(
 
   if (prediction.error) throw new Error(prediction.error);
 
-  // Prefer: wait might return immediately if still processing → poll
   let output = prediction.output;
   if (prediction.status !== "succeeded" && prediction.urls?.get) {
     const pollUrl = prediction.urls.get;

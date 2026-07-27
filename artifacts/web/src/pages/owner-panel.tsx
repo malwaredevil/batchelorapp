@@ -1,4 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import {
   ArrowLeft,
@@ -340,10 +342,17 @@ interface InpaintResult {
 const CANVAS_MAX_PX = 520;
 
 function AiLabContent() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
   // ── Fabric picker ──────────────────────────────────────────────────────
   const [query, setQuery] = useState("");
   const [fabricList, setFabricList] = useState<LabFabric[]>([]);
   const [selectedFabric, setSelectedFabric] = useState<LabFabric | null>(null);
+
+  // ── Test photo (optional override for the source image) ────────────────
+  const [testPhotoDataUrl, setTestPhotoDataUrl] = useState<string | null>(null);
+  const [testPhotoName, setTestPhotoName] = useState<string | null>(null);
 
   // ── Canvas state ───────────────────────────────────────────────────────
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -356,7 +365,9 @@ function AiLabContent() {
   // ── Detection / removal ────────────────────────────────────────────────
   const [detecting, setDetecting] = useState(false);
   const [detectMsg, setDetectMsg] = useState<string | null>(null);
-  const [removing, setRemoving] = useState(false);
+  // Per-panel loading states so each resolves independently
+  const [openaiRemoving, setOpenaiRemoving] = useState(false);
+  const [replicateRemoving, setReplicateRemoving] = useState(false);
   const [openaiResult, setOpenaiResult] = useState<InpaintResult | null>(null);
   const [replicateResult, setReplicateResult] = useState<InpaintResult | null>(
     null,
@@ -377,6 +388,23 @@ function AiLabContent() {
       cancelled = true;
     };
   }, [query]);
+
+  // ── Handle fresh test photo upload ────────────────────────────────────
+  const handleTestPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      setTestPhotoDataUrl(dataUrl);
+      setTestPhotoName(file.name);
+      setOpenaiResult(null);
+      setReplicateResult(null);
+      setDetectMsg(null);
+      setSaveStatus({});
+    };
+    reader.readAsDataURL(file);
+  };
 
   // ── Resize canvas when image loads ────────────────────────────────────
   const handleImageLoad = useCallback(() => {
@@ -469,15 +497,18 @@ function AiLabContent() {
 
   // ── Detect creases ────────────────────────────────────────────────────
   const detectCreases = async () => {
-    if (!selectedFabric) return;
+    if (!selectedFabric && !testPhotoDataUrl) return;
     setDetecting(true);
     setDetectMsg(null);
     try {
+      const body = testPhotoDataUrl
+        ? { sourceDataUrl: testPhotoDataUrl }
+        : { fabricId: selectedFabric!.id };
       // raw-fetch-ok — owner-only AI lab; no generated hook for this endpoint
       const resp = await fetch("/api/quilting/lab/detect-creases", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fabricId: selectedFabric.id }),
+        body: JSON.stringify(body),
       });
       const data = (await resp.json()) as {
         description?: string;
@@ -529,41 +560,72 @@ function AiLabContent() {
     }
   };
 
-  // ── Remove creases ────────────────────────────────────────────────────
-  const removeCreases = async () => {
-    if (!selectedFabric) return;
+  // ── Remove creases — calls both provider endpoints in parallel so each
+  //    result panel resolves independently as soon as its model finishes. ──
+  const removeCreases = () => {
+    if (!selectedFabric && !testPhotoDataUrl) return;
     const maskDataUrl = getMaskDataUrl();
     if (!maskDataUrl) return;
-    setRemoving(true);
+
     setOpenaiResult(null);
     setReplicateResult(null);
     setSaveStatus({});
-    try {
-      // raw-fetch-ok — owner-only AI lab; no generated hook for this endpoint
-      const resp = await fetch("/api/quilting/lab/remove-creases", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fabricId: selectedFabric.id, maskDataUrl }),
-      });
-      const data = (await resp.json()) as {
-        openai?: InpaintResult;
-        replicate?: InpaintResult;
-        error?: string;
-      };
-      if (!resp.ok || data.error) {
-        const msg = data.error ?? "Request failed";
-        setOpenaiResult({ error: msg });
-        setReplicateResult({ error: msg });
-        return;
-      }
-      setOpenaiResult(data.openai ?? { error: "No result returned" });
-      setReplicateResult(data.replicate ?? { error: "No result returned" });
-    } catch {
-      setOpenaiResult({ error: "Request failed — check server logs." });
-      setReplicateResult({ error: "Request failed — check server logs." });
-    } finally {
-      setRemoving(false);
-    }
+
+    const sourceBody = testPhotoDataUrl
+      ? { sourceDataUrl: testPhotoDataUrl }
+      : { fabricId: selectedFabric!.id };
+
+    // OpenAI — resolves independently
+    setOpenaiRemoving(true);
+    // raw-fetch-ok — owner-only AI lab; no generated hook for this endpoint
+    fetch("/api/quilting/lab/remove-creases/openai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...sourceBody, maskDataUrl }),
+    })
+      .then(async (resp) => {
+        const data = (await resp.json()) as {
+          dataUrl?: string;
+          error?: string;
+        };
+        setOpenaiResult(
+          resp.ok && data.dataUrl
+            ? { dataUrl: data.dataUrl }
+            : { error: data.error ?? "OpenAI returned no result." },
+        );
+      })
+      .catch(() =>
+        setOpenaiResult({
+          error: "OpenAI request failed — check server logs.",
+        }),
+      )
+      .finally(() => setOpenaiRemoving(false));
+
+    // Replicate — resolves independently
+    setReplicateRemoving(true);
+    // raw-fetch-ok — owner-only AI lab; no generated hook for this endpoint
+    fetch("/api/quilting/lab/remove-creases/replicate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...sourceBody, maskDataUrl }),
+    })
+      .then(async (resp) => {
+        const data = (await resp.json()) as {
+          dataUrl?: string;
+          error?: string;
+        };
+        setReplicateResult(
+          resp.ok && data.dataUrl
+            ? { dataUrl: data.dataUrl }
+            : { error: data.error ?? "Replicate returned no result." },
+        );
+      })
+      .catch(() =>
+        setReplicateResult({
+          error: "Replicate request failed — check server logs.",
+        }),
+      )
+      .finally(() => setReplicateRemoving(false));
   };
 
   // ── Save result as fabric primary photo ───────────────────────────────
@@ -584,14 +646,30 @@ function AiLabContent() {
       );
       if (!resp.ok) throw new Error(`${resp.status}`);
       setSaveStatus((s) => ({ ...s, [key]: "saved" }));
+      // Invalidate the fabric cache so detail pages pick up the new image
+      await queryClient.invalidateQueries({
+        queryKey: ["quilting", "fabrics", selectedFabric.id],
+      });
+      toast({
+        title: "Photo saved",
+        description: `${selectedFabric.name || `Fabric #${selectedFabric.id}`} primary photo updated.`,
+      });
     } catch {
       setSaveStatus((s) => ({ ...s, [key]: "error" }));
+      toast({
+        title: "Save failed",
+        description: "Could not update the fabric photo. Check server logs.",
+        variant: "destructive",
+      });
     }
   };
 
-  const fabricImageUrl = selectedFabric
-    ? `/api/quilting/fabrics/${selectedFabric.id}/image`
-    : null;
+  // Source image: prefer the uploaded test photo, fall back to the saved fabric image
+  const sourceImageUrl = testPhotoDataUrl
+    ? testPhotoDataUrl
+    : selectedFabric
+      ? `/api/quilting/fabrics/${selectedFabric.id}/image`
+      : null;
 
   return (
     <div className="space-y-6">
@@ -606,50 +684,91 @@ function AiLabContent() {
         </p>
       </div>
 
-      {/* Fabric picker */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium">Fabric</label>
-        <input
-          type="search"
-          placeholder="Search fabrics…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-        />
-        <div className="max-h-40 overflow-y-auto rounded-md border border-border bg-background">
-          {fabricList.length === 0 && (
-            <p className="px-3 py-2 text-sm text-muted-foreground">
-              No fabrics found.
+      {/* Fabric picker + optional test photo upload */}
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <label className="text-sm font-medium">
+            Fabric (from collection)
+          </label>
+          <input
+            type="search"
+            placeholder="Search fabrics…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+          <div className="max-h-40 overflow-y-auto rounded-md border border-border bg-background">
+            {fabricList.length === 0 && (
+              <p className="px-3 py-2 text-sm text-muted-foreground">
+                No fabrics found.
+              </p>
+            )}
+            {fabricList.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => {
+                  setSelectedFabric(f);
+                  setTestPhotoDataUrl(null);
+                  setTestPhotoName(null);
+                  setOpenaiResult(null);
+                  setReplicateResult(null);
+                  setDetectMsg(null);
+                  setSaveStatus({});
+                }}
+                className={`w-full px-3 py-2 text-left text-sm transition-colors hover:bg-muted ${
+                  selectedFabric?.id === f.id && !testPhotoDataUrl
+                    ? "bg-primary/10 font-medium"
+                    : ""
+                }`}
+              >
+                {f.name || `Fabric #${f.id}`}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* OR: upload a fresh test photo that isn't yet in the collection */}
+        <div className="space-y-1">
+          <label className="text-sm font-medium">
+            Or upload a test photo{" "}
+            <span className="font-normal text-muted-foreground">
+              (not saved to collection)
+            </span>
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted">
+            <input
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              onChange={handleTestPhotoUpload}
+            />
+            {testPhotoName ? (
+              <span className="truncate text-foreground">{testPhotoName}</span>
+            ) : (
+              <span>Choose image…</span>
+            )}
+          </label>
+          {testPhotoDataUrl && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              Using uploaded test photo. Detect/Remove will use this image.{" "}
+              {!selectedFabric && (
+                <span>Select a fabric above to enable Save.</span>
+              )}
             </p>
           )}
-          {fabricList.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              onClick={() => {
-                setSelectedFabric(f);
-                setOpenaiResult(null);
-                setReplicateResult(null);
-                setDetectMsg(null);
-                setSaveStatus({});
-              }}
-              className={`w-full px-3 py-2 text-left text-sm transition-colors hover:bg-muted ${
-                selectedFabric?.id === f.id ? "bg-primary/10 font-medium" : ""
-              }`}
-            >
-              {f.name || `Fabric #${f.id}`}
-            </button>
-          ))}
         </div>
       </div>
 
-      {selectedFabric && fabricImageUrl && (
+      {(selectedFabric || testPhotoDataUrl) && sourceImageUrl && (
         <>
           {/* Canvas editor */}
           <div className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm font-medium">
-                {selectedFabric.name || `Fabric #${selectedFabric.id}`}
+                {selectedFabric
+                  ? selectedFabric.name || `Fabric #${selectedFabric.id}`
+                  : (testPhotoName ?? "Test photo")}
               </span>
               <div className="flex items-center gap-3">
                 <label className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -679,8 +798,8 @@ function AiLabContent() {
             >
               <img
                 ref={imgRef}
-                src={fabricImageUrl}
-                alt={selectedFabric.name}
+                src={sourceImageUrl}
+                alt={selectedFabric?.name ?? "Test photo"}
                 onLoad={handleImageLoad}
                 className="absolute inset-0 h-full w-full object-contain"
                 draggable={false}
@@ -712,7 +831,7 @@ function AiLabContent() {
             <button
               type="button"
               onClick={detectCreases}
-              disabled={detecting || removing}
+              disabled={detecting || openaiRemoving || replicateRemoving}
               className="rounded-md border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
             >
               {detecting ? "Detecting…" : "Auto-detect creases"}
@@ -720,15 +839,20 @@ function AiLabContent() {
             <button
               type="button"
               onClick={removeCreases}
-              disabled={removing || detecting}
+              disabled={openaiRemoving || replicateRemoving || detecting}
               className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
             >
-              {removing ? "Running AI (30–60 s)…" : "Remove creases"}
+              {openaiRemoving || replicateRemoving
+                ? "Running AI (30–60 s)…"
+                : "Remove creases"}
             </button>
           </div>
 
           {/* Results */}
-          {(removing || openaiResult || replicateResult) && (
+          {(openaiRemoving ||
+            replicateRemoving ||
+            openaiResult ||
+            replicateResult) && (
             <div className="space-y-3">
               <h3 className="text-sm font-semibold">Side-by-side comparison</h3>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -738,7 +862,7 @@ function AiLabContent() {
                     Original
                   </p>
                   <img
-                    src={fabricImageUrl}
+                    src={sourceImageUrl}
                     alt="Original"
                     className="w-full rounded-md border border-border object-cover"
                   />
@@ -746,8 +870,9 @@ function AiLabContent() {
 
                 <LabResultPanel
                   label="OpenAI gpt-image-1"
-                  loading={removing && openaiResult === null}
+                  loading={openaiRemoving}
                   result={openaiResult}
+                  saveDisabled={!selectedFabric}
                   saveStatus={saveStatus["openai"]}
                   onSave={() => {
                     if (openaiResult?.dataUrl)
@@ -757,8 +882,9 @@ function AiLabContent() {
 
                 <LabResultPanel
                   label="Replicate FLUX Fill"
-                  loading={removing && replicateResult === null}
+                  loading={replicateRemoving}
                   result={replicateResult}
+                  saveDisabled={!selectedFabric}
                   saveStatus={saveStatus["replicate"]}
                   onSave={() => {
                     if (replicateResult?.dataUrl)
@@ -779,12 +905,14 @@ function LabResultPanel({
   loading,
   result,
   saveStatus,
+  saveDisabled,
   onSave,
 }: {
   label: string;
   loading: boolean;
   result: InpaintResult | null;
   saveStatus?: string;
+  saveDisabled?: boolean;
   onSave: () => void;
 }) {
   return (
@@ -794,7 +922,7 @@ function LabResultPanel({
       </p>
       {loading && (
         <div className="flex h-32 items-center justify-center rounded-md border border-border bg-muted">
-          <p className="text-xs text-muted-foreground animate-pulse">
+          <p className="animate-pulse text-xs text-muted-foreground">
             Running…
           </p>
         </div>
@@ -814,7 +942,8 @@ function LabResultPanel({
           <button
             type="button"
             onClick={onSave}
-            disabled={!!saveStatus}
+            disabled={!!saveStatus || saveDisabled}
+            title={saveDisabled ? "Select a fabric above to save" : undefined}
             className="w-full rounded-md bg-green-600 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60"
           >
             {saveStatus === "saving"
@@ -823,7 +952,9 @@ function LabResultPanel({
                 ? "✓ Saved as primary photo"
                 : saveStatus === "error"
                   ? "Save failed — try again"
-                  : "Save as primary photo"}
+                  : saveDisabled
+                    ? "Select a fabric to save"
+                    : "Save as primary photo"}
           </button>
         </>
       )}

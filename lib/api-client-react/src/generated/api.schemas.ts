@@ -3002,6 +3002,41 @@ export type GetBlockPreviewPngParams = {
 size?: number;
 };
 
+export type LabDetectCreasesBody = {
+  /** ID of the fabric to analyse (mutually exclusive with sourceDataUrl) */
+  fabricId?: number;
+  /** Base64 data URL of a fresh test photo (mutually exclusive with fabricId) */
+  sourceDataUrl?: string;
+};
+
+export type LabDetectCreases200 = {
+  description: string;
+  maskDataUrl: string;
+  imageWidth: number;
+  imageHeight: number;
+  creasesFound: number;
+};
+
+export type LabRemoveCreasesOpenaiBody = {
+  fabricId?: number;
+  sourceDataUrl?: string;
+  maskDataUrl: string;
+};
+
+export type LabRemoveCreasesOpenai200 = {
+  dataUrl: string;
+};
+
+export type LabRemoveCreasesReplicateBody = {
+  fabricId?: number;
+  sourceDataUrl?: string;
+  maskDataUrl: string;
+};
+
+export type LabRemoveCreasesReplicate200 = {
+  dataUrl: string;
+};
+
 export type SavePatternRequirementsBody = {
   requirements: QuiltingPatternRequirementInput[];
 };

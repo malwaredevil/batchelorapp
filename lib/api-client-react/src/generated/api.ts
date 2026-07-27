@@ -54,6 +54,12 @@ import type {
   JobsJobMutationResponse,
   JobsJobResponse,
   JobsJobRetryResponse,
+  LabDetectCreases200,
+  LabDetectCreasesBody,
+  LabRemoveCreasesOpenai200,
+  LabRemoveCreasesOpenaiBody,
+  LabRemoveCreasesReplicate200,
+  LabRemoveCreasesReplicateBody,
   LinkOrnamentToSeries200,
   ListFabricsParams,
   ListJobsParams,
@@ -8977,6 +8983,219 @@ export function useGetStaleCount<TData = Awaited<ReturnType<typeof getStaleCount
 
 
 
+
+export const getLabDetectCreasesUrl = () => {
+
+
+
+
+  return `/api/quilting/lab/detect-creases`
+}
+
+/**
+ * @summary Detect fabric creases via AI vision (owner only)
+ */
+export const labDetectCreases = async (labDetectCreasesBody: LabDetectCreasesBody, options?: RequestInit): Promise<LabDetectCreases200> => {
+
+  return customFetch<LabDetectCreases200>(getLabDetectCreasesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      labDetectCreasesBody,)
+  }
+);}
+
+
+
+
+export const getLabDetectCreasesMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof labDetectCreases>>, TError,{data: BodyType<LabDetectCreasesBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof labDetectCreases>>, TError,{data: BodyType<LabDetectCreasesBody>}, TContext> => {
+
+const mutationKey = ['labDetectCreases'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof labDetectCreases>>, {data: BodyType<LabDetectCreasesBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  labDetectCreases(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LabDetectCreasesMutationResult = NonNullable<Awaited<ReturnType<typeof labDetectCreases>>>
+    export type LabDetectCreasesMutationBody = BodyType<LabDetectCreasesBody>
+    export type LabDetectCreasesMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Detect fabric creases via AI vision (owner only)
+ */
+export const useLabDetectCreases = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof labDetectCreases>>, TError,{data: BodyType<LabDetectCreasesBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof labDetectCreases>>,
+        TError,
+        {data: BodyType<LabDetectCreasesBody>},
+        TContext
+      > => {
+      return useMutation(getLabDetectCreasesMutationOptions(options));
+    }
+
+export const getLabRemoveCreasesOpenaiUrl = () => {
+
+
+
+
+  return `/api/quilting/lab/remove-creases/openai`
+}
+
+/**
+ * @summary Inpaint crease areas with OpenAI gpt-image-1 (owner only)
+ */
+export const labRemoveCreasesOpenai = async (labRemoveCreasesOpenaiBody: LabRemoveCreasesOpenaiBody, options?: RequestInit): Promise<LabRemoveCreasesOpenai200> => {
+
+  return customFetch<LabRemoveCreasesOpenai200>(getLabRemoveCreasesOpenaiUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      labRemoveCreasesOpenaiBody,)
+  }
+);}
+
+
+
+
+export const getLabRemoveCreasesOpenaiMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof labRemoveCreasesOpenai>>, TError,{data: BodyType<LabRemoveCreasesOpenaiBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof labRemoveCreasesOpenai>>, TError,{data: BodyType<LabRemoveCreasesOpenaiBody>}, TContext> => {
+
+const mutationKey = ['labRemoveCreasesOpenai'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof labRemoveCreasesOpenai>>, {data: BodyType<LabRemoveCreasesOpenaiBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  labRemoveCreasesOpenai(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LabRemoveCreasesOpenaiMutationResult = NonNullable<Awaited<ReturnType<typeof labRemoveCreasesOpenai>>>
+    export type LabRemoveCreasesOpenaiMutationBody = BodyType<LabRemoveCreasesOpenaiBody>
+    export type LabRemoveCreasesOpenaiMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Inpaint crease areas with OpenAI gpt-image-1 (owner only)
+ */
+export const useLabRemoveCreasesOpenai = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof labRemoveCreasesOpenai>>, TError,{data: BodyType<LabRemoveCreasesOpenaiBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof labRemoveCreasesOpenai>>,
+        TError,
+        {data: BodyType<LabRemoveCreasesOpenaiBody>},
+        TContext
+      > => {
+      return useMutation(getLabRemoveCreasesOpenaiMutationOptions(options));
+    }
+
+export const getLabRemoveCreasesReplicateUrl = () => {
+
+
+
+
+  return `/api/quilting/lab/remove-creases/replicate`
+}
+
+/**
+ * @summary Inpaint crease areas with Replicate FLUX Fill Dev (owner only)
+ */
+export const labRemoveCreasesReplicate = async (labRemoveCreasesReplicateBody: LabRemoveCreasesReplicateBody, options?: RequestInit): Promise<LabRemoveCreasesReplicate200> => {
+
+  return customFetch<LabRemoveCreasesReplicate200>(getLabRemoveCreasesReplicateUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      labRemoveCreasesReplicateBody,)
+  }
+);}
+
+
+
+
+export const getLabRemoveCreasesReplicateMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof labRemoveCreasesReplicate>>, TError,{data: BodyType<LabRemoveCreasesReplicateBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof labRemoveCreasesReplicate>>, TError,{data: BodyType<LabRemoveCreasesReplicateBody>}, TContext> => {
+
+const mutationKey = ['labRemoveCreasesReplicate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof labRemoveCreasesReplicate>>, {data: BodyType<LabRemoveCreasesReplicateBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  labRemoveCreasesReplicate(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LabRemoveCreasesReplicateMutationResult = NonNullable<Awaited<ReturnType<typeof labRemoveCreasesReplicate>>>
+    export type LabRemoveCreasesReplicateMutationBody = BodyType<LabRemoveCreasesReplicateBody>
+    export type LabRemoveCreasesReplicateMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Inpaint crease areas with Replicate FLUX Fill Dev (owner only)
+ */
+export const useLabRemoveCreasesReplicate = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof labRemoveCreasesReplicate>>, TError,{data: BodyType<LabRemoveCreasesReplicateBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof labRemoveCreasesReplicate>>,
+        TError,
+        {data: BodyType<LabRemoveCreasesReplicateBody>},
+        TContext
+      > => {
+      return useMutation(getLabRemoveCreasesReplicateMutationOptions(options));
+    }
 
 export const getListBlockTemplatesUrl = () => {
 

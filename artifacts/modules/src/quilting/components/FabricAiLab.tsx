@@ -49,6 +49,14 @@ type LightboxState = { src: string; title: string } | null;
 
 type DrawMode = "paint" | "erase" | "pan";
 
+type DetectedCrease = {
+  x1Pct: number;
+  y1Pct: number;
+  x2Pct: number;
+  y2Pct: number;
+  widthPct: number;
+};
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -78,7 +86,8 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
   const lastPos = useRef({ x: 0, y: 0 }); // for pan drag delta
   const [drawMode, setDrawMode] = useState<DrawMode>("paint");
   const [brushSize, setBrushSize] = useState(BRUSH_SIZES[DEFAULT_BRUSH_IDX]);
-  const [hasMask, setHasMask] = useState(false);
+  const [canvasPainted, setCanvasPainted] = useState(false);
+  const [detectedCreases, setDetectedCreases] = useState<DetectedCrease[]>([]);
 
   // View transform (zoom + pan on the drawing canvas)
   const [viewScale, setViewScale] = useState(1);
@@ -211,7 +220,7 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
     ctx.beginPath();
     ctx.arc(x, y, brushSize / 2, 0, Math.PI * 2);
     ctx.fill();
-    setHasMask(true);
+    setCanvasPainted(true);
   }
 
   function handlePointerDown(e: ReactPointerEvent) {
@@ -252,10 +261,37 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
     if (!ctx || !canvas) return;
     ctx.globalCompositeOperation = "source-over";
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    setHasMask(false);
+    setCanvasPainted(false);
+    setDetectedCreases([]);
     setDetectDesc(null);
     setOpenaiResult({ status: "idle" });
     setReplResult({ status: "idle" });
+  }
+
+  function removeDetectedCrease(index: number) {
+    const crease = detectedCreases[index];
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx || !crease) return;
+    const minDim = Math.min(canvas.width, canvas.height);
+    const sw = Math.max(6, (crease.widthPct / 100) * minDim) + 10; // +10px margin
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.lineWidth = sw;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "rgba(0,0,0,1)";
+    ctx.beginPath();
+    ctx.moveTo(
+      (crease.x1Pct / 100) * canvas.width,
+      (crease.y1Pct / 100) * canvas.height,
+    );
+    ctx.lineTo(
+      (crease.x2Pct / 100) * canvas.width,
+      (crease.y2Pct / 100) * canvas.height,
+    );
+    ctx.stroke();
+    ctx.restore();
+    setDetectedCreases((prev) => prev.filter((_, i) => i !== index));
   }
 
   function getMaskDataUrl(): string | null {
@@ -277,7 +313,7 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
       ctx.fillStyle = PAINT_COLOR;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.globalCompositeOperation = "source-over";
-      setHasMask(true);
+      setCanvasPainted(true);
     };
     img.src = maskDataUrl;
   }
@@ -291,16 +327,23 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
     detectMutation.mutate(
       { data: { fabricId } },
       {
-        onSuccess: (data) => {
+        onSuccess: (rawData) => {
+          // Cast to include the `creases` array the server now returns
+          const data = rawData as typeof rawData & {
+            creases?: DetectedCrease[];
+          };
           setDetectDesc(data.description ?? null);
           if (data.maskDataUrl) loadMaskFromDataUrl(data.maskDataUrl);
+          if (data.creases?.length) {
+            setDetectedCreases(data.creases);
+          }
           if ((data.creasesFound ?? 0) === 0) {
             toast.info(
               "No creases found automatically — try painting them manually.",
             );
           } else {
             toast.success(
-              `Found ${data.creasesFound} fold line${data.creasesFound === 1 ? "" : "s"} — refine with Paint/Erase if needed.`,
+              `Found ${data.creasesFound} crease${data.creasesFound === 1 ? "" : "s"} — click ✕ on any chip below to remove one, or use Erase to paint over it.`,
             );
           }
         },
@@ -389,6 +432,8 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
   // ---------------------------------------------------------------------------
   // Derived state
   // ---------------------------------------------------------------------------
+
+  const hasMask = canvasPainted || detectedCreases.length > 0;
 
   const isRunning =
     openaiResult.status === "loading" || replResult.status === "loading";
@@ -609,6 +654,35 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
                 <p className="rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground italic">
                   AI detected: {detectDesc}
                 </p>
+              )}
+
+              {detectedCreases.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    Detected:
+                  </span>
+                  {detectedCreases.map((c, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => removeDetectedCrease(idx)}
+                      title="Click to remove this detected crease from the mask"
+                      className="flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-xs text-primary transition-colors hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      {((): string => {
+                        const dx = Math.abs(c.x2Pct - c.x1Pct);
+                        const dy = Math.abs(c.y2Pct - c.y1Pct);
+                        const vert = dy > dx;
+                        const mid = vert
+                          ? Math.round((c.x1Pct + c.x2Pct) / 2)
+                          : Math.round((c.y1Pct + c.y2Pct) / 2);
+                        return vert
+                          ? `↕ Vertical ~${mid}%`
+                          : `↔ Horizontal ~${mid}%`;
+                      })()}
+                      <X className="h-3 w-3" />
+                    </button>
+                  ))}
+                </div>
               )}
             </section>
 
@@ -853,7 +927,7 @@ function ModeButton({
 }
 
 const IMG_CONTAINER =
-  "relative h-56 w-full overflow-hidden rounded-xl border border-card-border bg-muted flex items-center justify-center";
+  "group relative h-72 w-full overflow-hidden rounded-xl border border-card-border bg-muted flex items-center justify-center";
 
 function ResultPanel(
   props:
@@ -992,9 +1066,18 @@ function ResultPanel(
 
 function ZoomHint() {
   return (
-    <div className="pointer-events-none absolute bottom-2 right-2 flex items-center gap-1 rounded-md bg-black/40 px-1.5 py-0.5 text-[10px] text-white/80">
-      <ZoomIn className="h-3 w-3" />
-      Click to zoom
-    </div>
+    <>
+      {/* Full-frame hover overlay */}
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100 bg-black/25">
+        <div className="flex items-center gap-1.5 rounded-lg bg-black/60 px-3 py-1.5 text-xs font-medium text-white">
+          <ZoomIn className="h-3.5 w-3.5" />
+          Click to zoom
+        </div>
+      </div>
+      {/* Persistent corner badge */}
+      <div className="pointer-events-none absolute bottom-2 right-2 flex items-center gap-1 rounded-md bg-black/40 px-1.5 py-0.5 text-[10px] text-white/70">
+        <ZoomIn className="h-3 w-3" />
+      </div>
+    </>
   );
 }

@@ -249,7 +249,7 @@ Apply this test: can you trace a continuous tonal shift (a narrow band that is s
 ## Rules
 - Only mark lines that are HORIZONTAL or VERTICAL (±20°). Diagonal lines almost always follow the printed design — skip them.
 - Maximum 4 creases total. Store fabric folds in 1–4 long straight lines. If you are seeing more than 4, you are detecting the print.
-- Each marked crease should span at least 50% of the relevant image dimension (width for horizontal, height for vertical). Short segments are not fold lines.
+- Short partial creases are fine — a crease doesn't have to run the full length. A crease that runs 20-30% across the fabric from a fold point is still a real crease worth marking.
 - Skip the fabric edge/selvage, any shadow from behind/below the fabric, or any line that is bolder or more saturated than the surrounding fabric (bold = print, not crease).
 
 ## Output
@@ -329,6 +329,7 @@ If a line fails the edge-to-edge or horizontal/vertical tests, omit it — not t
     imageWidth: w,
     imageHeight: h,
     creasesFound: creases.length,
+    creases,
   });
 });
 
@@ -537,10 +538,10 @@ async function runReplicateFluxFill(
           image: imgB64,
           mask: maskB64,
           prompt,
-          num_outputs: 1,
-          output_format: "png",
-          num_inference_steps: 28,
-          guidance_scale: 30, // FLUX Fill sweet-spot; 60 over-constrains and blocks visible edits
+          output_format: "webp",
+          output_quality: 95,
+          num_inference_steps: 50,
+          guidance_scale: 30,
         },
       }),
       signal: AbortSignal.timeout(90_000),
@@ -587,15 +588,28 @@ async function runReplicateFluxFill(
   }
 
   const outputUrl = Array.isArray(output) ? output[0] : output;
-  if (!outputUrl) throw new Error("Replicate returned no output URL.");
+  if (!outputUrl) {
+    logger.warn({ prediction }, "Replicate returned no output URL");
+    throw new Error("Replicate returned no output URL.");
+  }
 
-  const imgResp = await fetch(outputUrl, {
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!imgResp.ok)
-    throw new Error(`Failed to download Replicate output: ${imgResp.status}`);
-  const resultBuf = Buffer.from(await imgResp.arrayBuffer());
-  return `data:image/png;base64,${resultBuf.toString("base64")}`;
+  logger.info({ outputUrl: outputUrl.slice(0, 80) }, "Replicate output URL");
+
+  // Output URL may be a data URI (some Replicate model versions return this)
+  // or an https URL. Handle both.
+  let resultBuf: Buffer;
+  if (outputUrl.startsWith("data:")) {
+    const b64 = outputUrl.replace(/^data:[^;]+;base64,/, "");
+    resultBuf = Buffer.from(b64, "base64");
+  } else {
+    const imgResp = await fetch(outputUrl, {
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!imgResp.ok)
+      throw new Error(`Failed to download Replicate output: ${imgResp.status}`);
+    resultBuf = Buffer.from(await imgResp.arrayBuffer());
+  }
+  return `data:image/webp;base64,${resultBuf.toString("base64")}`;
 }
 
 export default router;

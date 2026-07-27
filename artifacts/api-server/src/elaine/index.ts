@@ -4649,12 +4649,20 @@ ${memorySummary ?? "(no summary yet — builds up as conversations grow)"}
 Specific facts (things explicitly asked to be remembered, or noteworthy details extracted from conversations):
 ${memoryBlock}
 
+THINK → PLAN → ACT (mandatory for every multi-step or trip-related question): Before calling any tool, take a moment to reason through what you actually need. Ask yourself: (1) What is the user really asking? (2) What information do I already have — from the page context, from earlier in this conversation, from a tool result I just received? (3) What am I missing that I genuinely need to look up? (4) What is the right sequence of tool calls, and do any of them depend on the result of a prior call? Only then call tools — in the correct dependency order. Never fire a tool with assumed/default parameters when the user's question implies specific context (e.g. their trip dates, their destination, their hotel) that you don't yet have. Examples of good planning:
+- User: "What's the weather when we visit?" → Plan: (1) Do I know which trip and its dates? No. → search_household_data for the trip to get destination + dates. (2) Are those dates within 10 days? If yes → get_weather_forecast. If no → web_search for seasonal/historical weather. Never skip step 1.
+- User: "What flights are available?" on a non-trip page → Plan: (1) Do I know the destination and dates? No → search_household_data for the upcoming trip. (2) Then call search_flights with those dates.
+- User: "What should I pack?" → Plan: (1) Do I have destination + trip dates? If not, search. (2) Call get_weather_forecast or web_search depending on how far out. (3) Synthesize weather + destination + duration into packing advice.
+If information was already established earlier in this conversation (e.g. the trip was shown via show_trip_card or the user already told you the dates), use it — don't re-search unless you need updated detail.
+
 TOOLS: You have tools available for navigation suggestions, remembering household facts, and proposing changes to trips/wishlist/packing lists/reminders. Each tool's own description explains exactly when and how to use it — follow those rules precisely, especially around never fabricating numeric ids and asking permission in your visible reply text before calling any trip/wishlist/packing/reminder tool. If a single request naturally involves more than one write-action (e.g. "add a reminder to book the hotel and add wine tasting to the wishlist"), call all of the relevant action tools in that same turn — don't limit yourself to one. Just make sure your visible reply names everything you're about to do before you call the tools, so nothing is a surprise. Navigation suggestions and remembering a fact can always accompany action tools.
 
 SEARCH FIRST — MANDATORY: Whenever the user asks about or references a trip, pottery piece, ornament, fabric, quilt, or pattern — by name ("my Croatia trip", "the blue bowl"), by destination ("our Sicily trip", "the hotel we're staying at in Catania", "our trip to Italy"), or implicitly ("our hotel", "our upcoming trip", "where we're going", "the place we're going to") — and you don't already have the item's full details in the current page context, act immediately without asking clarifying questions:
 - If the user hints at a specific destination (even vaguely, like "Sicily" or "Italy") → call search_household_data with the destination name as the query before writing any reply. Never ask "can you tell me the hotel name?" or "which trip do you mean?" before searching.
-- If the user says "our hotel/trip/next destination" with no destination hint at all → call query_household_data with include: ["travels"] to list upcoming trips, then follow up with search_household_data on the trip title to get full details including any booked hotel.
+- If the user says "our hotel/trip/next destination" with no destination hint at all → call query_household_data with include: ["travels"] to list upcoming trips, then follow up with search_household_data on the trip title to get full details.
 In both cases, make this your FIRST tool call — before writing any reply text and before asking any clarifying question. If the search returns a clear match, show a visual card (show_trip_card) and answer the question using the found data. Only ask for clarification if the search returns zero results or multiple equally plausible matches with no obvious winner.
+- search_household_data for trips returns the itinerary activities (flights, hotel check-ins, tours, etc.) alongside the trip metadata — use this data directly to answer questions like "where are we staying?", "what time is our flight?", "what's on the itinerary?". If the user asks for more detail on a specific document (e.g. the hotel booking confirmation PDF), additionally call search_trip_documents to find uploaded documents for that trip.
+- WEATHER + TRIP DATES: When the user asks about weather "for our trip", "when we visit", "when we're there", or similar phrasing implying a specific future trip — this is a two-step operation. Step 1: get the trip dates (from page context, from this conversation history, or from search_household_data — whichever already has them). Step 2: check whether the trip's start date is within 10 days of today. If yes → call get_weather_forecast. If no → call web_search immediately with a query like "average weather in [destination] in [month]" or "typical climate [destination] [month]" — do NOT just offer to search, do the search in the same turn. Never call get_weather_forecast when the user is asking about a trip date that is more than 10 days away; that tool only returns the current near-term forecast and will give the wrong dates every time.
 
 ${confirmationModeSection}
 
@@ -4695,7 +4703,7 @@ CONTEXT-AWARE LOOKUPS — read the on-screen state and act, don't ask: When the 
 
 **Trip detail page** (context starts with "Viewing trip … to <destination> … starts <date>, ends <date>"): The context includes the destination, start date, and end date.
 - "What are flights like?", "how much would it cost to fly?", "check flights", "find me a flight" → call search_flights with destination extracted from context and startDate/endDate as departDate/returnDate. Do not ask where they're going or when.
-- "What's the weather going to be?", "what will the weather be like?" → call get_weather_forecast with the destination from context. Note: weather forecasts are only reliable ~10 days ahead; for trips further out, explain that and offer to search for typical seasonal conditions instead (use web_search).
+- "What's the weather going to be?", "what will the weather be like?" → first check the trip's start date against today. If the trip starts within 10 days: call get_weather_forecast. If the trip starts more than 10 days away: skip get_weather_forecast entirely (it will only show today's dates) — instead immediately call web_search with a query like "average weather in [destination] in [month]" or "typical climate [destination] [month year]", then summarize what a traveler should expect. Do not just offer to search — do it in the same turn.
 - "What's near the hotel?", "what restaurants are nearby?", "find things to do there", "what's within walking distance?", "what's cool around our hotel?" → if you know the hotel name (from trip documents, context, or the user just told you), use web_search first with a query like "things to do near [Hotel Name] [City]" or "walking distance attractions [Hotel Name] [City]" — this gives rich, specific, up-to-date results. Never call find_nearby_places without real lat/lng; if you don't have exact coordinates, web_search always gives better results than guessing a location. If you do have the hotel's lat/lng from a prior search result, you may additionally call find_nearby_places for a structured POI list.
 
 **General rule**: If the data needed to call a tool is visible in the on-screen context, treat it as already provided and call the tool. Only ask for clarification if a required parameter is genuinely absent from both what the user said and what's on screen.
@@ -4714,7 +4722,7 @@ PRODUCT SEARCH HIERARCHY: When the user asks what something is worth, how much i
 
 EXPERT ADVICE: For genuine expertise/advice/recommendation questions — a judgment call where being one-sided could actually steer the user wrong (packing/gear advice for specific constraints, which option to book, negotiating tactics, whether something is a good idea, etc.) — use consult_experts rather than just answering solo; it cross-checks more than one independent source and gives you back a single synthesized answer to relay. Don't use it for simple facts, small talk, or anything that needs web_search instead (current/live data). It takes a bit longer than a normal reply — that's expected, not a malfunction.
 
-LIVE MAPS DATA: You also have five Google Maps-backed tools for real, current data instead of guessing — prefer these over web_search when they apply, since they return structured, accurate data rather than a text summary. get_weather_forecast gives a real multi-day forecast for a place (use it for "what's the weather", packing-for-climate, or rain-risk questions). find_nearby_places gives real restaurants/attractions/hotels/etc. with ratings (use it for recommendations or "what's near X"). get_route_info gives real distance/time between two places for a given travel mode (use it for "how far"/"how long to get there" questions). get_air_quality gives real current AQI/category/dominant pollutant (use it for pollution/smog questions or when giving packing/health advice for a destination). get_pollen_forecast gives real grass/tree/weed pollen categories (use it for allergy/hay-fever questions or packing advice when someone has allergies). When someone asks "what should I pack" for a trip, proactively check weather, and check air quality/pollen too if it's relevant (long trip, known allergy mentioned, or the destination is known for pollution) rather than only guessing from general knowledge. For get_weather_forecast: lat/lng are optional — just provide locationName and the server geocodes automatically, so ALWAYS call this tool when asked about weather (never use web_search as a fallback for weather). For find_nearby_places and get_route_info: still need real lat/lng — pull coordinates from on-screen trip/destination data or a prior find_nearby_places result; never invent coordinates. For get_air_quality and get_pollen_forecast: also need lat/lng from context.
+LIVE MAPS DATA: You also have five Google Maps-backed tools for real, current data instead of guessing — prefer these over web_search when they apply, since they return structured, accurate data rather than a text summary. get_weather_forecast gives a real multi-day forecast for a place (use it for "what's the weather", packing-for-climate, or rain-risk questions). find_nearby_places gives real restaurants/attractions/hotels/etc. with ratings (use it for recommendations or "what's near X"). get_route_info gives real distance/time between two places for a given travel mode (use it for "how far"/"how long to get there" questions). get_air_quality gives real current AQI/category/dominant pollutant (use it for pollution/smog questions or when giving packing/health advice for a destination). get_pollen_forecast gives real grass/tree/weed pollen categories (use it for allergy/hay-fever questions or packing advice when someone has allergies). When someone asks "what should I pack" for a trip, proactively check weather, and check air quality/pollen too if it's relevant (long trip, known allergy mentioned, or the destination is known for pollution) rather than only guessing from general knowledge. For get_weather_forecast: lat/lng are optional — just provide locationName and the server geocodes automatically. IMPORTANT TEMPORAL LIMIT: get_weather_forecast only returns the current ~10-day window. If the user's trip or event is more than 10 days away, this tool will show today's dates, not the trip dates — call web_search instead for seasonal/historical climate data. Never use get_weather_forecast when the relevant dates are beyond ~10 days. For find_nearby_places and get_route_info: still need real lat/lng — pull coordinates from on-screen trip/destination data or a prior find_nearby_places result; never invent coordinates. For get_air_quality and get_pollen_forecast: also need lat/lng from context.
 
 FORMATTING: ${formattingNote ?? defaultFormattingNote}
 
@@ -7700,6 +7708,7 @@ async function executeRestrictedSoftTool(
             status: travelsTrips.status,
             startDate: travelsTrips.startDate,
             endDate: travelsTrips.endDate,
+            itinerary: travelsTrips.itinerary,
           })
           .from(travelsTrips)
           .where(
@@ -7718,10 +7727,40 @@ async function executeRestrictedSoftTool(
                 : t.startDate
                   ? ` starting ${t.startDate}`
                   : "";
-            return `- "${t.title}" (${t.destination ?? "no destination"}), status: ${t.status}${dates}, tripId: ${t.id}`;
+            let line = `- "${t.title}" (${t.destination ?? "no destination"}), status: ${t.status}${dates}, tripId: ${t.id}`;
+            // Append itinerary activities so Elaine can answer hotel/flight/activity questions
+            const itin = t.itinerary as {
+              days?: Array<{
+                date?: string;
+                title?: string;
+                activities?: Array<{
+                  time?: string;
+                  name?: string;
+                  description?: string;
+                }>;
+              }>;
+            } | null;
+            if (itin?.days && itin.days.length > 0) {
+              const dayLines = itin.days
+                .map((day) => {
+                  const dayHeader = [day.date, day.title]
+                    .filter(Boolean)
+                    .join(" – ");
+                  const actLines = (day.activities ?? [])
+                    .map((a) => {
+                      const t2 = a.time ? `${a.time}: ` : "";
+                      return `      • ${t2}${a.name ?? a.description ?? "activity"}`;
+                    })
+                    .join("\n");
+                  return `    Day (${dayHeader}):\n${actLines}`;
+                })
+                .join("\n");
+              line += `\n  Itinerary:\n${dayLines}`;
+            }
+            return line;
           });
           parts.push(
-            `Found ${rows.length} trip(s) matching "${query}":\n${lines.join("\n")}\nCall show_trip_card with the trip data and tripId to show a visual card.`,
+            `Found ${rows.length} trip(s) matching "${query}":\n${lines.join("\n\n")}\nCall show_trip_card with the trip data and tripId to show a visual card.`,
           );
         } else {
           parts.push(`No trips found matching "${query}".`);

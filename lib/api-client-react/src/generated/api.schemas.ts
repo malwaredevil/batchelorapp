@@ -3025,19 +3025,8 @@ export type LabRemoveCreasesBody = {
   prompt?: string;
 };
 
-export type LabRemoveCreases200Openai = {
-  dataUrl?: string;
-  error?: string;
-};
-
-export type LabRemoveCreases200Replicate = {
-  dataUrl?: string;
-  error?: string;
-};
-
 export type LabRemoveCreases200 = {
-  openai: LabRemoveCreases200Openai;
-  replicate: LabRemoveCreases200Replicate;
+  dataUrl: string;
 };
 
 export type LabRemoveCreasesOpenaiBody = {
@@ -3052,16 +3041,24 @@ export type LabRemoveCreasesOpenai200 = {
   dataUrl: string;
 };
 
-export type LabRemoveCreasesReplicateBody = {
-  fabricId?: number;
-  sourceDataUrl?: string;
-  maskDataUrl: string;
-  /** Optional inpainting prompt; defaults to the server-side crease-removal prompt. */
-  prompt?: string;
+export type LabBulkCreaseFixBody = {
+  /**
+     * Fabric IDs to process in this batch (max 10 per request)
+     * @minItems 1
+     * @maxItems 10
+     */
+  ids: number[];
 };
 
-export type LabRemoveCreasesReplicate200 = {
-  dataUrl: string;
+export type LabBulkCreaseFix200FailedItem = {
+  id: number;
+  error: string;
+};
+
+export type LabBulkCreaseFix200 = {
+  /** IDs of fabrics that were successfully processed */
+  succeeded: number[];
+  failed: LabBulkCreaseFix200FailedItem[];
 };
 
 export type SavePatternRequirementsBody = {

@@ -1,11 +1,11 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod/v4";
 import sharp from "sharp";
-import { eq } from "drizzle-orm";
-import { db, fabrics } from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
+import { db, fabrics, quiltingImages } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { requireOwner } from "../../middleware/owner";
-import { downloadImageBuffer } from "../../lib/storage";
+import { downloadImageBuffer, uploadImage } from "../../lib/storage";
 import { env } from "../../lib/env";
 import { logger } from "../../lib/logger";
 import {
@@ -16,6 +16,7 @@ import {
 import {
   detectCreasesFromBuffer,
   removeCreasesFromBuffer,
+  buildFullWhiteMaskDataUrl,
   DEFAULT_INPAINT_PROMPT,
 } from "../../lib/crease-removal";
 
@@ -82,7 +83,6 @@ async function getSourceBuffer(
 router.get("/lab/status", (_req, res) => {
   res.json({
     openai: !!env.openaiApiKey,
-    replicate: !!env.replicateApiToken,
   });
 });
 
@@ -120,7 +120,7 @@ router.post("/lab/detect-creases", async (req, res) => {
 
 // ---------------------------------------------------------------------------
 // POST /lab/remove-creases
-// Unified orchestration endpoint — runs OpenAI edit and returns result.
+// Unified endpoint — runs OpenAI inpainting and returns the result.
 // Accepts an optional prompt override; falls back to the shared default.
 // ---------------------------------------------------------------------------
 
@@ -151,10 +151,10 @@ router.post("/lab/remove-creases", async (req, res) => {
       parsed.data.maskDataUrl,
       parsed.data.prompt,
     );
-    res.json({ openai: { dataUrl } });
+    res.json({ dataUrl });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "OpenAI inpainting failed";
-    res.status(500).json({ openai: { error: msg } });
+    res.status(500).json({ error: msg });
   }
 });
 
@@ -200,167 +200,90 @@ router.post("/lab/remove-creases/openai", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /lab/remove-creases/replicate
-// Per-provider endpoint — runs Replicate FLUX Fill Dev inpainting.
+// POST /lab/bulk-crease-fix
+// Auto-run crease removal on the default image of each supplied fabric ID.
+// Skips the flaky vision-detection step — uses a full-coverage white mask so
+// the inpainting model covers the whole image and relies on the prompt alone.
+// The processed image is added as a new supplemental photo and immediately set
+// as the fabric's new default.  requireAuth + requireOwner inherited from the
+// router.use() at the top.
 // ---------------------------------------------------------------------------
 
-router.post("/lab/remove-creases/replicate", async (req, res) => {
-  const parsed = InpaintBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({
-      error: "fabricId (or sourceDataUrl) and maskDataUrl are required.",
-    });
-    return;
-  }
-
-  let imgBuffer: Buffer;
-  try {
-    imgBuffer = await getSourceBuffer(
-      parsed.data.fabricId,
-      parsed.data.sourceDataUrl,
-    );
-  } catch (err: unknown) {
-    const status = (err as { status?: number }).status ?? 500;
-    res.status(status).json({ error: (err as Error).message });
-    return;
-  }
-
-  const prompt = parsed.data.prompt ?? DEFAULT_INPAINT_PROMPT;
-
-  try {
-    const { resizedImg, replMask, cropInfo } = await preprocessForInpaint(
-      imgBuffer,
-      parsed.data.maskDataUrl,
-    );
-    const dataUrl = await runReplicateFluxFill(
-      resizedImg,
-      replMask,
-      prompt,
-      cropInfo,
-    );
-    res.json({ dataUrl });
-  } catch (err) {
-    const msg =
-      err instanceof Error ? err.message : "Replicate inpainting failed.";
-    res.status(500).json({ error: msg });
-  }
+const BulkCreaseFixBody = z.object({
+  ids: z
+    .array(z.number().int().positive())
+    .min(1)
+    .max(10, "Send at most 10 fabric IDs per batch."),
 });
 
-// ---------------------------------------------------------------------------
-// Replicate helper (kept in this file — not shared with Elaine executor)
-// ---------------------------------------------------------------------------
-
-async function runReplicateFluxFill(
-  imgBuffer: Buffer,
-  maskBuffer: Buffer,
-  prompt: string,
-  cropInfo: CropInfo,
-): Promise<string> {
-  if (!env.replicateApiToken) {
-    throw new Error("REPLICATE_API_TOKEN is not configured.");
+router.post("/lab/bulk-crease-fix", async (req, res) => {
+  const parsed = BulkCreaseFixBody.safeParse(req.body);
+  if (!parsed.success) {
+    res
+      .status(400)
+      .json({ error: "ids must be a non-empty array of up to 10 fabric IDs." });
+    return;
   }
 
-  const imgB64 = `data:image/png;base64,${imgBuffer.toString("base64")}`;
-  const maskB64 = `data:image/png;base64,${maskBuffer.toString("base64")}`;
+  const { ids } = parsed.data;
 
-  const createResp = await fetch(
-    "https://api.replicate.com/v1/models/black-forest-labs/flux-fill-dev/predictions",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.replicateApiToken}`,
-        "Content-Type": "application/json",
-        Prefer: "wait=60",
-      },
-      body: JSON.stringify({
-        input: {
-          image: imgB64,
-          mask: maskB64,
-          prompt,
-          output_format: "webp",
-          output_quality: 95,
-          num_inference_steps: 28,
-          guidance: 30,
-        },
-      }),
-      signal: AbortSignal.timeout(90_000),
-    },
+  const results = await Promise.allSettled(
+    ids.map(async (fabricId) => {
+      const [row] = await db
+        .select({ imagePath: fabrics.imagePath })
+        .from(fabrics)
+        .where(eq(fabrics.id, fabricId))
+        .limit(1);
+      if (!row)
+        throw Object.assign(new Error("Fabric not found"), { fabricId });
+
+      const { buffer: imgBuffer } = await downloadImageBuffer(row.imagePath);
+      const maskDataUrl = await buildFullWhiteMaskDataUrl(imgBuffer);
+      const dataUrl = await removeCreasesFromBuffer(imgBuffer, maskDataUrl);
+
+      const b64 = dataUrl.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
+      const resultBuf = Buffer.from(b64, "base64");
+      const storagePath = await uploadImage(resultBuf, "image/png");
+
+      const existing = await db
+        .select({ position: quiltingImages.position })
+        .from(quiltingImages)
+        .where(sql`entity_type = 'fabric' AND entity_id = ${fabricId}`)
+        .orderBy(quiltingImages.position);
+      const nextPosition = (existing[existing.length - 1]?.position ?? 0) + 1;
+
+      await db.insert(quiltingImages).values({
+        entityType: "fabric",
+        entityId: fabricId,
+        storagePath,
+        label: "AI Crease Removed",
+        position: nextPosition,
+      });
+
+      await db
+        .update(fabrics)
+        .set({ imagePath: storagePath })
+        .where(eq(fabrics.id, fabricId));
+
+      return fabricId;
+    }),
   );
 
-  if (!createResp.ok) {
-    const txt = await createResp.text().catch(() => "");
-    throw new Error(
-      `Replicate API error ${createResp.status}: ${txt.slice(0, 300)}`,
-    );
-  }
+  const succeeded: number[] = [];
+  const failed: { id: number; error: string }[] = [];
 
-  const prediction = (await createResp.json()) as {
-    status?: string;
-    output?: string | string[];
-    error?: string;
-    urls?: { get?: string };
-  };
-
-  if (prediction.error) throw new Error(prediction.error);
-
-  let output = prediction.output;
-  if (prediction.status !== "succeeded" && prediction.urls?.get) {
-    const pollUrl = prediction.urls.get;
-    for (let attempt = 0; attempt < 40; attempt++) {
-      await new Promise((r) => setTimeout(r, 3_000));
-      const pollResp = await fetch(pollUrl, {
-        headers: { Authorization: `Bearer ${env.replicateApiToken}` },
-      });
-      const poll = (await pollResp.json()) as {
-        status?: string;
-        output?: string | string[];
-        error?: string;
-      };
-      if (poll.status === "succeeded") {
-        output = poll.output;
-        break;
-      }
-      if (poll.status === "failed") {
-        throw new Error(poll.error ?? "Replicate prediction failed.");
-      }
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") {
+      succeeded.push(r.value);
+    } else {
+      const err = r.reason as Error & { fabricId?: number };
+      const id = err.fabricId ?? ids[i];
+      logger.warn({ fabricId: id, err }, "bulk-crease-fix: fabric failed");
+      failed.push({ id, error: err.message ?? "Processing failed" });
     }
-  }
+  });
 
-  const outputUrl = Array.isArray(output) ? output[0] : output;
-  if (!outputUrl) {
-    logger.warn({ prediction }, "Replicate returned no output URL");
-    throw new Error("Replicate returned no output URL.");
-  }
-
-  logger.info({ outputUrl: outputUrl.slice(0, 80) }, "Replicate output URL");
-
-  // Output URL may be a data URI (some Replicate model versions return this)
-  // or an https URL. Handle both.
-  let resultBuf: Buffer;
-  if (outputUrl.startsWith("data:")) {
-    const b64 = outputUrl.replace(/^data:[^;]+;base64,/, "");
-    resultBuf = Buffer.from(b64, "base64");
-  } else {
-    const imgResp = await fetch(outputUrl, {
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!imgResp.ok)
-      throw new Error(`Failed to download Replicate output: ${imgResp.status}`);
-    resultBuf = Buffer.from(await imgResp.arrayBuffer());
-  }
-
-  // Crop letterbox padding and resize back to original dimensions.
-  const cropped = await sharp(resultBuf)
-    .extract({
-      left: cropInfo.left,
-      top: cropInfo.top,
-      width: cropInfo.width,
-      height: cropInfo.height,
-    })
-    .resize(cropInfo.origW, cropInfo.origH)
-    .png()
-    .toBuffer();
-  return `data:image/png;base64,${cropped.toString("base64")}`;
-}
+  res.json({ succeeded, failed });
+});
 
 export default router;

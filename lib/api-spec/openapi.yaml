@@ -2579,7 +2579,7 @@ paths:
       operationId: labRemoveCreases
       tags:
         - lab
-      summary: Inpaint crease areas — fans out to gpt-image-2 and FLUX Fill Dev in parallel (owner only)
+      summary: Inpaint crease areas with OpenAI gpt-image-2 (owner only)
       requestBody:
         required: true
         content:
@@ -2600,29 +2600,16 @@ paths:
                   description: Optional inpainting prompt; defaults to the server-side crease-removal prompt.
       responses:
         "200":
-          description: Combined inpainting results from both providers
+          description: Inpainted image as base64 data URL
           content:
             application/json:
               schema:
                 type: object
                 required:
-                  - openai
-                  - replicate
+                  - dataUrl
                 properties:
-                  openai:
-                    type: object
-                    properties:
-                      dataUrl:
-                        type: string
-                      error:
-                        type: string
-                  replicate:
-                    type: object
-                    properties:
-                      dataUrl:
-                        type: string
-                      error:
-                        type: string
+                  dataUrl:
+                    type: string
   /quilting/lab/remove-creases/openai:
     post:
       operationId: labRemoveCreasesOpenai
@@ -2659,12 +2646,12 @@ paths:
                 properties:
                   dataUrl:
                     type: string
-  /quilting/lab/remove-creases/replicate:
+  /quilting/lab/bulk-crease-fix:
     post:
-      operationId: labRemoveCreasesReplicate
+      operationId: labBulkCreaseFix
       tags:
         - lab
-      summary: Inpaint crease areas with Replicate FLUX Fill Dev (owner only)
+      summary: Auto-remove creases from the default image of multiple fabrics and set the result as the new default (owner only)
       requestBody:
         required: true
         content:
@@ -2672,29 +2659,43 @@ paths:
             schema:
               type: object
               required:
-                - maskDataUrl
+                - ids
               properties:
-                fabricId:
-                  type: integer
-                sourceDataUrl:
-                  type: string
-                maskDataUrl:
-                  type: string
-                prompt:
-                  type: string
-                  description: Optional inpainting prompt; defaults to the server-side crease-removal prompt.
+                ids:
+                  type: array
+                  items:
+                    type: integer
+                  minItems: 1
+                  maxItems: 10
+                  description: Fabric IDs to process in this batch (max 10 per request)
       responses:
         "200":
-          description: Inpainted image as base64 data URL
+          description: Per-fabric results
           content:
             application/json:
               schema:
                 type: object
                 required:
-                  - dataUrl
+                  - succeeded
+                  - failed
                 properties:
-                  dataUrl:
-                    type: string
+                  succeeded:
+                    type: array
+                    items:
+                      type: integer
+                    description: IDs of fabrics that were successfully processed
+                  failed:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - error
+                      properties:
+                        id:
+                          type: integer
+                        error:
+                          type: string
   /quilting/block-templates:
     get:
       tags:

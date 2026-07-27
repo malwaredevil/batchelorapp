@@ -40,6 +40,7 @@ import {
   useDeleteFabric,
   useReanalyzeFabric,
   useBulkReanalyzeFabrics,
+  useLabBulkCreaseFix,
   getListFabricsQueryKey,
   getGetFabricQueryKey,
   useGetStats,
@@ -418,6 +419,55 @@ export default function Fabrics() {
     },
   });
 
+  const [bulkCreaseProgress, setBulkCreaseProgress] = useState<{
+    done: number;
+    total: number;
+    failed: number;
+  } | null>(null);
+
+  const bulkCreaseFixMutation = useLabBulkCreaseFix();
+
+  const CREASE_BATCH_SIZE = 3;
+
+  async function runBulkCreaseFix() {
+    const ids = Array.from(selectedIds);
+    setBulkCreaseProgress({ done: 0, total: ids.length, failed: 0 });
+
+    let totalSucceeded = 0;
+    let totalFailed = 0;
+
+    for (let i = 0; i < ids.length; i += CREASE_BATCH_SIZE) {
+      const batch = ids.slice(i, i + CREASE_BATCH_SIZE);
+      try {
+        const result = await bulkCreaseFixMutation.mutateAsync({
+          data: { ids: batch },
+        });
+        totalSucceeded += result.succeeded.length;
+        totalFailed += result.failed.length;
+      } catch {
+        totalFailed += batch.length;
+      }
+      setBulkCreaseProgress({
+        done: totalSucceeded + totalFailed,
+        total: ids.length,
+        failed: totalFailed,
+      });
+    }
+
+    queryClient.invalidateQueries({ queryKey: getListFabricsQueryKey() });
+    setBulkCreaseProgress(null);
+    setSelectedIds(new Set());
+    setIsBulkMode(false);
+
+    if (totalFailed === 0) {
+      toast.success(
+        `Fixed creases on ${totalSucceeded} fabric${totalSucceeded !== 1 ? "s" : ""}`,
+      );
+    } else {
+      toast.success(`Fixed ${totalSucceeded} fabrics, ${totalFailed} failed`);
+    }
+  }
+
   function handleDelete(id: number) {
     setDeleteConfirmId(id);
   }
@@ -673,7 +723,19 @@ export default function Fabrics() {
         </div>
       )}
 
-      {isBulkMode && (
+      {isBulkMode && bulkCreaseProgress && (
+        <div className="mb-4 flex items-center gap-2.5 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5">
+          <Scissors className="h-4 w-4 shrink-0 animate-pulse text-amber-600" />
+          <p className="flex-1 text-sm font-medium text-amber-800">
+            Fixing creases… {bulkCreaseProgress.done} /{" "}
+            {bulkCreaseProgress.total}
+            {bulkCreaseProgress.failed > 0 &&
+              ` (${bulkCreaseProgress.failed} failed)`}
+          </p>
+        </div>
+      )}
+
+      {isBulkMode && !bulkCreaseProgress && (
         <div className="mb-4 flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5">
           <span className="flex-1 text-sm font-medium">
             {selectedIds.size === 0
@@ -693,18 +755,33 @@ export default function Fabrics() {
             None
           </button>
           {selectedIds.size > 0 && (
-            <Button
-              size="sm"
-              onClick={() =>
-                bulkReanalyze.mutate({ data: { ids: Array.from(selectedIds) } })
-              }
-              disabled={bulkReanalyze.isPending}
-            >
-              <RefreshCw
-                className={`mr-2 h-3.5 w-3.5 ${bulkReanalyze.isPending ? "animate-spin" : ""}`}
-              />
-              Refresh AI ({selectedIds.size})
-            </Button>
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={runBulkCreaseFix}
+                disabled={bulkCreaseFixMutation.isPending}
+              >
+                <Scissors
+                  className={`mr-2 h-3.5 w-3.5 ${bulkCreaseFixMutation.isPending ? "animate-pulse" : ""}`}
+                />
+                Fix Creases ({selectedIds.size})
+              </Button>
+              <Button
+                size="sm"
+                onClick={() =>
+                  bulkReanalyze.mutate({
+                    data: { ids: Array.from(selectedIds) },
+                  })
+                }
+                disabled={bulkReanalyze.isPending}
+              >
+                <RefreshCw
+                  className={`mr-2 h-3.5 w-3.5 ${bulkReanalyze.isPending ? "animate-spin" : ""}`}
+                />
+                Refresh AI ({selectedIds.size})
+              </Button>
+            </>
           )}
         </div>
       )}

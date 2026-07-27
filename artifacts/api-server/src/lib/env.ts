@@ -85,8 +85,6 @@ export const env = {
   // Direct OpenAI API key — used only for image edit (inpainting) in the
   // owner AI Lab. All other AI calls go through OpenRouter (openrouterApiKey).
   openaiApiKey: optional("OPENAI_API_KEY"),
-  // Replicate API token — used for FLUX Fill inpainting in the owner AI Lab.
-  replicateApiToken: optional("REPLICATE_API_TOKEN"),
   // Canonical public URL of this deployment (e.g. "https://app.batchelor.app").
   // Used as a safe fallback for constructing OAuth redirect URIs and
   // password-reset URLs when REPLIT_DOMAINS is empty. Optional so the app

@@ -419,7 +419,7 @@ export function MessengerChatPanel({
         );
         return;
       }
-      if (e.key === "Enter") {
+      if (e.key === "Enter" || e.key === "Tab") {
         e.preventDefault();
         selectMention(filteredMembers[mentionAnchor.selectIdx]);
         return;

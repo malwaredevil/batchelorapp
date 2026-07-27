@@ -54,14 +54,14 @@ import type {
   JobsJobMutationResponse,
   JobsJobResponse,
   JobsJobRetryResponse,
+  LabBulkCreaseFix200,
+  LabBulkCreaseFixBody,
   LabDetectCreases200,
   LabDetectCreasesBody,
   LabRemoveCreases200,
   LabRemoveCreasesBody,
   LabRemoveCreasesOpenai200,
   LabRemoveCreasesOpenaiBody,
-  LabRemoveCreasesReplicate200,
-  LabRemoveCreasesReplicateBody,
   LinkOrnamentToSeries200,
   ListFabricsParams,
   ListJobsParams,
@@ -9066,7 +9066,7 @@ export const getLabRemoveCreasesUrl = () => {
 }
 
 /**
- * @summary Inpaint crease areas — fans out to gpt-image-2 and FLUX Fill Dev in parallel (owner only)
+ * @summary Inpaint crease areas with OpenAI gpt-image-2 (owner only)
  */
 export const labRemoveCreases = async (labRemoveCreasesBody: LabRemoveCreasesBody, options?: RequestInit): Promise<LabRemoveCreases200> => {
 
@@ -9115,7 +9115,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type LabRemoveCreasesMutationError = ErrorType<unknown>
 
     /**
- * @summary Inpaint crease areas — fans out to gpt-image-2 and FLUX Fill Dev in parallel (owner only)
+ * @summary Inpaint crease areas with OpenAI gpt-image-2 (owner only)
  */
 export const useLabRemoveCreases = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof labRemoveCreases>>, TError,{data: BodyType<LabRemoveCreasesBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -9199,37 +9199,37 @@ export const useLabRemoveCreasesOpenai = <TError = ErrorType<unknown>,
       return useMutation(getLabRemoveCreasesOpenaiMutationOptions(options));
     }
 
-export const getLabRemoveCreasesReplicateUrl = () => {
+export const getLabBulkCreaseFixUrl = () => {
 
 
 
 
-  return `/api/quilting/lab/remove-creases/replicate`
+  return `/api/quilting/lab/bulk-crease-fix`
 }
 
 /**
- * @summary Inpaint crease areas with Replicate FLUX Fill Dev (owner only)
+ * @summary Auto-remove creases from the default image of multiple fabrics and set the result as the new default (owner only)
  */
-export const labRemoveCreasesReplicate = async (labRemoveCreasesReplicateBody: LabRemoveCreasesReplicateBody, options?: RequestInit): Promise<LabRemoveCreasesReplicate200> => {
+export const labBulkCreaseFix = async (labBulkCreaseFixBody: LabBulkCreaseFixBody, options?: RequestInit): Promise<LabBulkCreaseFix200> => {
 
-  return customFetch<LabRemoveCreasesReplicate200>(getLabRemoveCreasesReplicateUrl(),
+  return customFetch<LabBulkCreaseFix200>(getLabBulkCreaseFixUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
-      labRemoveCreasesReplicateBody,)
+      labBulkCreaseFixBody,)
   }
 );}
 
 
 
 
-export const getLabRemoveCreasesReplicateMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof labRemoveCreasesReplicate>>, TError,{data: BodyType<LabRemoveCreasesReplicateBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof labRemoveCreasesReplicate>>, TError,{data: BodyType<LabRemoveCreasesReplicateBody>}, TContext> => {
+export const getLabBulkCreaseFixMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof labBulkCreaseFix>>, TError,{data: BodyType<LabBulkCreaseFixBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof labBulkCreaseFix>>, TError,{data: BodyType<LabBulkCreaseFixBody>}, TContext> => {
 
-const mutationKey = ['labRemoveCreasesReplicate'];
+const mutationKey = ['labBulkCreaseFix'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -9239,10 +9239,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof labRemoveCreasesReplicate>>, {data: BodyType<LabRemoveCreasesReplicateBody>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof labBulkCreaseFix>>, {data: BodyType<LabBulkCreaseFixBody>}> = (props) => {
           const {data} = props ?? {};
 
-          return  labRemoveCreasesReplicate(data,requestOptions)
+          return  labBulkCreaseFix(data,requestOptions)
         }
 
 
@@ -9252,22 +9252,22 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type LabRemoveCreasesReplicateMutationResult = NonNullable<Awaited<ReturnType<typeof labRemoveCreasesReplicate>>>
-    export type LabRemoveCreasesReplicateMutationBody = BodyType<LabRemoveCreasesReplicateBody>
-    export type LabRemoveCreasesReplicateMutationError = ErrorType<unknown>
+    export type LabBulkCreaseFixMutationResult = NonNullable<Awaited<ReturnType<typeof labBulkCreaseFix>>>
+    export type LabBulkCreaseFixMutationBody = BodyType<LabBulkCreaseFixBody>
+    export type LabBulkCreaseFixMutationError = ErrorType<unknown>
 
     /**
- * @summary Inpaint crease areas with Replicate FLUX Fill Dev (owner only)
+ * @summary Auto-remove creases from the default image of multiple fabrics and set the result as the new default (owner only)
  */
-export const useLabRemoveCreasesReplicate = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof labRemoveCreasesReplicate>>, TError,{data: BodyType<LabRemoveCreasesReplicateBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+export const useLabBulkCreaseFix = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof labBulkCreaseFix>>, TError,{data: BodyType<LabBulkCreaseFixBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof labRemoveCreasesReplicate>>,
+        Awaited<ReturnType<typeof labBulkCreaseFix>>,
         TError,
-        {data: BodyType<LabRemoveCreasesReplicateBody>},
+        {data: BodyType<LabBulkCreaseFixBody>},
         TContext
       > => {
-      return useMutation(getLabRemoveCreasesReplicateMutationOptions(options));
+      return useMutation(getLabBulkCreaseFixMutationOptions(options));
     }
 
 export const getListBlockTemplatesUrl = () => {

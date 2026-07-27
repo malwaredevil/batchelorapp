@@ -27,7 +27,6 @@ import { toast } from "sonner";
 import {
   useLabDetectCreases,
   useLabRemoveCreasesOpenai,
-  useLabRemoveCreasesReplicate,
   getGetFabricQueryKey,
   getListFabricsQueryKey,
 } from "@workspace/api-client-react";
@@ -98,20 +97,12 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
   const [openaiResult, setOpenaiResult] = useState<ProviderResult>({
     status: "idle",
   });
-  const [replResult, setReplResult] = useState<ProviderResult>({
-    status: "idle",
-  });
-  const [savingFor, setSavingFor] = useState<"openai" | "replicate" | null>(
-    null,
-  );
-  const [saveConfirm, setSaveConfirm] = useState<"openai" | "replicate" | null>(
-    null,
-  );
+  const [savingFor, setSavingFor] = useState(false);
+  const [saveConfirm, setSaveConfirm] = useState(false);
   const [lightbox, setLightbox] = useState<LightboxState>(null);
 
   const detectMutation = useLabDetectCreases();
   const openaiMutation = useLabRemoveCreasesOpenai();
-  const replMutation = useLabRemoveCreasesReplicate();
 
   // ---------------------------------------------------------------------------
   // Canvas helpers
@@ -265,7 +256,6 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
     setDetectedCreases([]);
     setDetectDesc(null);
     setOpenaiResult({ status: "idle" });
-    setReplResult({ status: "idle" });
   }
 
   function removeDetectedCrease(index: number) {
@@ -357,8 +347,7 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
     const maskDataUrl = getMaskDataUrl();
     if (!maskDataUrl) return;
     setOpenaiResult({ status: "loading" });
-    setReplResult({ status: "loading" });
-    setSaveConfirm(null);
+    setSaveConfirm(false);
 
     openaiMutation.mutate(
       { data: { fabricId, maskDataUrl } },
@@ -377,34 +366,14 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
           }),
       },
     );
-
-    replMutation.mutate(
-      { data: { fabricId, maskDataUrl } },
-      {
-        onSuccess: (d) =>
-          setReplResult(
-            d.dataUrl
-              ? { status: "success", dataUrl: d.dataUrl }
-              : { status: "error", message: "No image returned" },
-          ),
-        onError: (err) =>
-          setReplResult({
-            status: "error",
-            message:
-              err instanceof Error ? err.message : "This AI couldn't run",
-          }),
-      },
-    );
   }
 
-  async function handleSave(provider: "openai" | "replicate") {
-    const dataUrl =
-      provider === "openai"
-        ? (openaiResult as { status: "success"; dataUrl: string }).dataUrl
-        : (replResult as { status: "success"; dataUrl: string }).dataUrl;
+  async function handleSave() {
+    const dataUrl = (openaiResult as { status: "success"; dataUrl: string })
+      .dataUrl;
     if (!dataUrl) return;
-    setSavingFor(provider);
-    setSaveConfirm(null);
+    setSavingFor(true);
+    setSaveConfirm(false);
     try {
       const blob = await (await fetch(dataUrl)).blob();
       const form = new FormData();
@@ -426,7 +395,7 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
     } catch {
       toast.error("Failed to save — please try again.");
     } finally {
-      setSavingFor(null);
+      setSavingFor(false);
     }
   }
 
@@ -436,10 +405,8 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
 
   const hasMask = canvasPainted || detectedCreases.length > 0;
 
-  const isRunning =
-    openaiResult.status === "loading" || replResult.status === "loading";
-  const hasResults =
-    openaiResult.status !== "idle" || replResult.status !== "idle";
+  const isRunning = openaiResult.status === "loading";
+  const hasResults = openaiResult.status !== "idle";
 
   const cursorStyle =
     drawMode === "pan"
@@ -729,7 +696,7 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
                     }
                   />
                   <ResultPanel
-                    title="Version A"
+                    title="Result"
                     subtitle="OpenAI GPT-Image"
                     result={openaiResult}
                     onZoom={
@@ -742,39 +709,15 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
                                   dataUrl: string;
                                 }
                               ).dataUrl,
-                              title: "Version A — OpenAI",
+                              title: "Result — OpenAI",
                             })
                         : null
                     }
-                    onSaveRequest={() => setSaveConfirm("openai")}
-                    onSaveConfirm={() => handleSave("openai")}
-                    saveConfirmPending={saveConfirm === "openai"}
-                    isSaving={savingFor === "openai"}
-                    onSaveCancel={() => setSaveConfirm(null)}
-                  />
-                  <ResultPanel
-                    title="Version B"
-                    subtitle="FLUX Fill (Replicate)"
-                    result={replResult}
-                    onZoom={
-                      replResult.status === "success"
-                        ? () =>
-                            setLightbox({
-                              src: (
-                                replResult as {
-                                  status: "success";
-                                  dataUrl: string;
-                                }
-                              ).dataUrl,
-                              title: "Version B — FLUX Fill",
-                            })
-                        : null
-                    }
-                    onSaveRequest={() => setSaveConfirm("replicate")}
-                    onSaveConfirm={() => handleSave("replicate")}
-                    saveConfirmPending={saveConfirm === "replicate"}
-                    isSaving={savingFor === "replicate"}
-                    onSaveCancel={() => setSaveConfirm(null)}
+                    onSaveRequest={() => setSaveConfirm(true)}
+                    onSaveConfirm={() => handleSave()}
+                    saveConfirmPending={saveConfirm}
+                    isSaving={savingFor}
+                    onSaveCancel={() => setSaveConfirm(false)}
                   />
                 </div>
               </section>

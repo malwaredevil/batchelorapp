@@ -2910,7 +2910,7 @@ export const LabDetectCreasesResponse = zod.object({
 
 
 /**
- * @summary Inpaint crease areas — fans out to gpt-image-2 and FLUX Fill Dev in parallel (owner only)
+ * @summary Inpaint crease areas with OpenAI gpt-image-2 (owner only)
  */
 export const LabRemoveCreasesBody = zod.object({
   "fabricId": zod.number().optional(),
@@ -2920,14 +2920,7 @@ export const LabRemoveCreasesBody = zod.object({
 })
 
 export const LabRemoveCreasesResponse = zod.object({
-  "openai": zod.object({
-  "dataUrl": zod.string().optional(),
-  "error": zod.string().optional()
-}),
-  "replicate": zod.object({
-  "dataUrl": zod.string().optional(),
-  "error": zod.string().optional()
-})
+  "dataUrl": zod.string()
 })
 
 
@@ -2947,17 +2940,22 @@ export const LabRemoveCreasesOpenaiResponse = zod.object({
 
 
 /**
- * @summary Inpaint crease areas with Replicate FLUX Fill Dev (owner only)
+ * @summary Auto-remove creases from the default image of multiple fabrics and set the result as the new default (owner only)
  */
-export const LabRemoveCreasesReplicateBody = zod.object({
-  "fabricId": zod.number().optional(),
-  "sourceDataUrl": zod.string().optional(),
-  "maskDataUrl": zod.string(),
-  "prompt": zod.string().optional().describe('Optional inpainting prompt; defaults to the server-side crease-removal prompt.')
+export const labBulkCreaseFixBodyIdsMax = 10;
+
+
+
+export const LabBulkCreaseFixBody = zod.object({
+  "ids": zod.array(zod.number()).min(1).max(labBulkCreaseFixBodyIdsMax).describe('Fabric IDs to process in this batch (max 10 per request)')
 })
 
-export const LabRemoveCreasesReplicateResponse = zod.object({
-  "dataUrl": zod.string()
+export const LabBulkCreaseFixResponse = zod.object({
+  "succeeded": zod.array(zod.number()).describe('IDs of fabrics that were successfully processed'),
+  "failed": zod.array(zod.object({
+  "id": zod.number(),
+  "error": zod.string()
+}))
 })
 
 

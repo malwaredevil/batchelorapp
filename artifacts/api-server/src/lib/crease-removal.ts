@@ -150,6 +150,31 @@ export async function detectCreasesFromBuffer(
 }
 
 /**
+ * Build a full-coverage white mask (same dimensions as the source image) as a
+ * data URL. Used for bulk crease-fix where auto-detection is skipped — the
+ * whole image is presented to the inpainting model and the prompt guides it to
+ * repair crease artefacts while preserving the fabric pattern.
+ */
+export async function buildFullWhiteMaskDataUrl(
+  imgBuffer: Buffer,
+): Promise<string> {
+  const meta = await sharp(imgBuffer).metadata();
+  const w = meta.width ?? 1024;
+  const h = meta.height ?? 1024;
+  const mask = await sharp({
+    create: {
+      width: w,
+      height: h,
+      channels: 4,
+      background: { r: 255, g: 255, b: 255, alpha: 255 },
+    },
+  })
+    .png()
+    .toBuffer();
+  return `data:image/png;base64,${mask.toString("base64")}`;
+}
+
+/**
  * Run OpenAI gpt-image-2 inpainting to remove creases from a fabric image.
  * Returns the result as a base64 data URL, cropped and resized back to the
  * original image dimensions.

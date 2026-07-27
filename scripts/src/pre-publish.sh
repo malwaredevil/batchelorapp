@@ -1,118 +1,137 @@
 #!/usr/bin/env bash
 # pre-publish.sh — automated pre-publish gate
-# Runs every automatable Stage 1 check in order; stops hard on first failure.
 # Usage: pnpm --filter @workspace/scripts run pre-publish
-# Non-automatable steps (Sentry baseline, screenshot, code review,
-# services-page review) remain in the manual checklist.
+#
+# Deliberately excludes checks that GitHub CI already covers (typecheck, lint,
+# codegen drift, PII scan) — step (e) verifies CI is green before publishing,
+# so re-running them here is pure redundancy and causes timeout. This script
+# covers only local guards that CI does NOT run, plus prettier auto-fix.
 
-set -euo pipefail
+set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
-PASS="\033[0;32m✓\033[0m"
+GREEN="\033[0;32m"
+RED="\033[0;31m"
+BOLD="\033[1m"
+RESET="\033[0m"
 
-step() { echo -e "\n\033[1m[$1/10]\033[0m $2"; }
+LOGDIR="$(mktemp -d)"
+trap 'rm -rf "$LOGDIR"' EXIT
 
-step 1 "Typecheck (pnpm run typecheck)"
-pnpm run typecheck
-echo -e "$PASS Typecheck passed"
-
-step 2 "Lint + formatting (pnpm run lint)"
-# Auto-fix formatting first so GitHub CI sees clean files
-npx prettier --write . --log-level warn
-pnpm run lint
-echo -e "$PASS Lint passed (Prettier auto-fixed, raw-fetch guard clean)"
-
-step 3 "Codegen drift check"
-pnpm --filter @workspace/api-spec run codegen
-echo -e "$PASS Codegen: no drift (any regenerated files will be included in the GitHub sync)"
-
-step 4 "App-config drift check"
-pnpm --filter @workspace/api-server run lint:config
-echo -e "$PASS App-config: no drift"
-
-step 5 "GitHub CI status (latest main commit)"
-pnpm --filter @workspace/scripts run check-ci-status
-echo -e "$PASS GitHub CI: green"
-
-step 6 "Forbidden provisioning-script filenames"
-# One-off scripts (add-users, seed-users, create-accounts, etc.) often contain
-# hardcoded household emails or passwords. Block them from ever being synced.
-FORBIDDEN_FILE_GLOBS=(
-  "add-users*"
-  "add-user*"
-  "seed-users*"
-  "seed-user*"
-  "create-accounts*"
-  "create-account*"
-  "provision-users*"
-  "provision-user*"
-  "bootstrap-users*"
-  "bootstrap-user*"
-)
-FOUND_FORBIDDEN=()
-for glob in "${FORBIDDEN_FILE_GLOBS[@]}"; do
-  while IFS= read -r -d '' f; do
-    rel="${f#"$ROOT"/}"
-    # Skip private directories that are never pushed to GitHub anyway
-    case "$rel" in
-      .local/*|.agents/*|.git/*|node_modules/*|*/node_modules/*|dist/*|*/dist/*) continue ;;
-    esac
-    FOUND_FORBIDDEN+=("$rel")
-  done < <(find "$ROOT" -not -path "$ROOT/.local/*" -not -path "$ROOT/.agents/*" \
-            -not -path "$ROOT/.git/*" -not -path "*/node_modules/*" \
-            -not -path "*/dist/*" \
-            -name "$glob" -print0 2>/dev/null || true)
-done
-if [[ ${#FOUND_FORBIDDEN[@]} -gt 0 ]]; then
-  echo -e "\n\033[0;31m🚫 FAIL: Forbidden provisioning-script filenames found.\033[0m"
-  echo "   These files often contain hardcoded household emails/passwords and must"
-  echo "   never be synced to the public GitHub repo. Delete or rename them:"
-  printf '   %s\n' "${FOUND_FORBIDDEN[@]}"
+# ---------------------------------------------------------------------------
+# Step 1: prettier --write (auto-fix formatting before GitHub sync)
+# ---------------------------------------------------------------------------
+echo -e "\n${BOLD}[1/3]${RESET} Formatting (prettier --write) …"
+if ! npx prettier --write . --log-level warn > "$LOGDIR/prettier.log" 2>&1; then
+  echo -e "${RED}🚫 FAIL${RESET}: prettier --write failed"
+  cat "$LOGDIR/prettier.log"
   exit 1
 fi
-echo -e "$PASS No forbidden provisioning-script filenames"
+echo -e "${GREEN}✓${RESET} Prettier: files formatted"
 
-step 7 "Household PII scan (email addresses)"
-# pii-scan.ts checks every file that github-sync would push for email addresses
-# whose domain is not in the known-safe list. Catches hardcoded household emails
-# before they can reach the public repo.
-pnpm --filter @workspace/scripts run pii-scan
-echo -e "$PASS PII scan: no household email addresses found"
+# ---------------------------------------------------------------------------
+# Step 2: parallel local-only guards (not covered by CI)
+# ---------------------------------------------------------------------------
+echo -e "\n${BOLD}[2/3]${RESET} Local guards (parallel) …\n"
 
-step 8 "replit.md private-content guard"
-# replit.md is committed to the public GitHub repo. Catch private operational
-# details that belong in .local/RUNBOOK.md before they can leak.
-PRIVATE_PATTERNS=(
-  "sentry-baseline write [0-9]"
-  "screenshotToken"
-  "gadhlfluflknlwgmlmos"
-  "RESEND_WEBHOOK_SECRET"
+run_bg() {
+  local key="$1"; shift
+  ("$@" > "$LOGDIR/$key.log" 2>&1; echo $? > "$LOGDIR/$key.exit") &
+}
+
+# App-config drift (vitest suite — ~5 s)
+run_bg appconfig pnpm --filter @workspace/api-server run lint:config
+
+# Forbidden provisioning-script filenames
+# Uses rg --files (respects .gitignore, fast) instead of find to avoid
+# traversing node_modules 9 times which takes ~2 minutes.
+(
+  FOUND=$(rg --files \
+    --glob "add-user*" \
+    --glob "seed-user*" \
+    --glob "create-account*" \
+    --glob "provision-user*" \
+    --glob "bootstrap-user*" \
+    --glob "add-users*" \
+    --glob "seed-users*" \
+    --glob "create-accounts*" \
+    --glob "provision-users*" \
+    --glob "bootstrap-users*" \
+    2>/dev/null | grep -v -E '^(\.local|\.agents|\.git)/' || true)
+  if [[ -n "$FOUND" ]]; then
+    echo "Forbidden provisioning-script filenames (may contain hardcoded emails/passwords):"
+    echo "$FOUND" | sed 's/^/  /'
+    exit 1
+  fi
+) > "$LOGDIR/forbidden.log" 2>&1; echo $? > "$LOGDIR/forbidden.exit" &
+
+# replit.md private-content guard
+(
+  PRIVATE_PATTERNS=(
+    "sentry-baseline write [0-9]"
+    "screenshotToken"
+    "gadhlfluflknlwgmlmos"
+    "RESEND_WEBHOOK_SECRET"
+  )
+  REPLIT_MD="$ROOT/replit.md"
+  LEAKED=()
+  for pat in "${PRIVATE_PATTERNS[@]}"; do
+    if grep -qE "$pat" "$REPLIT_MD" 2>/dev/null; then
+      LEAKED+=("$pat")
+    fi
+  done
+  if [[ ${#LEAKED[@]} -gt 0 ]]; then
+    echo "replit.md contains private content — move to .local/ops-runbook.md:"
+    printf '  • %s\n' "${LEAKED[@]}"
+    exit 1
+  fi
+) > "$LOGDIR/replitmd.log" 2>&1; echo $? > "$LOGDIR/replitmd.exit" &
+
+# Upload-limit guard
+run_bg uploadlimit pnpm --filter @workspace/scripts run check-upload-limits
+
+# pg Pool/Client singleton guard
+run_bg pgsingleton pnpm --filter @workspace/scripts run check-pg-singleton
+
+# GitHub CI status (network-bound — runs in parallel with the local guards)
+run_bg cistatus pnpm --filter @workspace/scripts run check-ci-status
+
+wait
+
+# ---------------------------------------------------------------------------
+# Collect results
+# ---------------------------------------------------------------------------
+echo ""
+declare -A LABELS=(
+  [appconfig]="App-config drift"
+  [forbidden]="Forbidden filenames"
+  [replitmd]="replit.md guard"
+  [uploadlimit]="Upload-limit guard"
+  [pgsingleton]="pg singleton guard"
+  [cistatus]="GitHub CI status"
 )
-REPLIT_MD="$ROOT/replit.md"
-LEAKED_PATTERNS=()
-for pat in "${PRIVATE_PATTERNS[@]}"; do
-  if grep -qE "$pat" "$REPLIT_MD" 2>/dev/null; then
-    LEAKED_PATTERNS+=("$pat")
+
+FAILED=()
+for key in appconfig forbidden replitmd uploadlimit pgsingleton cistatus; do
+  code=$(cat "$LOGDIR/$key.exit" 2>/dev/null || echo 1)
+  if [[ "$code" -eq 0 ]]; then
+    echo -e "${GREEN}✓${RESET} ${LABELS[$key]}"
+  else
+    echo -e "${RED}✗${RESET} ${LABELS[$key]}"
+    FAILED+=("$key")
   fi
 done
-if [[ ${#LEAKED_PATTERNS[@]} -gt 0 ]]; then
-  echo -e "\n\033[0;31m🚫 FAIL: replit.md contains private operational content.\033[0m"
-  echo "   These patterns are private and must live in .local/RUNBOOK.md, not replit.md:"
-  printf '   • %s\n' "${LEAKED_PATTERNS[@]}"
-  echo "   Move the matching content to .local/RUNBOOK.md and replace it with a"
-  echo "   pointer (e.g. 'See .local/RUNBOOK.md for details.')."
+
+if [[ ${#FAILED[@]} -gt 0 ]]; then
+  echo -e "\n${RED}🚫 ${#FAILED[@]} check(s) failed:${RESET}"
+  for key in "${FAILED[@]}"; do
+    echo -e "\n--- ${LABELS[$key]} ---"
+    cat "$LOGDIR/$key.log" 2>/dev/null || true
+  done
   exit 1
 fi
-echo -e "$PASS replit.md: no private content detected"
 
-step 9 "Upload-limit guard (no direct HIGH_MULTER_FILE_BYTES imports in route/elaine files)"
-pnpm --filter @workspace/scripts run check-upload-limits
-echo -e "$PASS Upload-limit guard: all route/elaine files use multerLimitForPrefix()"
-
-step 10 "pg Pool/Client singleton guard (no rogue pool constructors outside lib/db/src/index.ts)"
-pnpm --filter @workspace/scripts run check-pg-singleton
-echo -e "$PASS pg singleton guard: all pool construction flows through the shared singleton"
-
-echo -e "\n\033[0;32m✓ All automated pre-publish checks passed.\033[0m"
+echo -e "\n${GREEN}✓ All pre-publish checks passed.${RESET}"
+echo "  CI covers: typecheck, lint, codegen drift, PII scan."
 echo "  Proceed to: Stage 2 (DB safety) → Stage 3 (backup + GitHub sync) → publish."

@@ -1895,7 +1895,6 @@ paths:
           application/json:
             schema:
               type: object
-              required: [maskDataUrl]
               properties:
                 fabricId:
                   type: integer
@@ -1903,6 +1902,7 @@ paths:
                   type: string
                 maskDataUrl:
                   type: string
+                  description: Mask PNG as data URL. When omitted, a full-coverage white mask is used — the AI scans the entire image and removes any creases it finds.
                 prompt:
                   type: string
                   description: Optional inpainting prompt; defaults to the server-side crease-removal prompt.
@@ -1929,7 +1929,6 @@ paths:
           application/json:
             schema:
               type: object
-              required: [maskDataUrl]
               properties:
                 fabricId:
                   type: integer
@@ -1937,6 +1936,7 @@ paths:
                   type: string
                 maskDataUrl:
                   type: string
+                  description: Mask PNG as data URL. When omitted, a full-coverage white mask is used — the AI scans the entire image and removes any creases it finds.
                 prompt:
                   type: string
                   description: Optional inpainting prompt; defaults to the server-side crease-removal prompt.

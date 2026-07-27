@@ -193,7 +193,7 @@ function isExcluded(filePath: string): boolean {
   const segments = filePath.split("/");
   if (segments.some((seg) => EXCLUDED_DOT_DIRS.has(seg))) return true;
   // Exclude any file whose basename starts with "RUNBOOK" (case-sensitive).
-  // The canonical location .local/RUNBOOK.md is already blocked by the
+  // The canonical location .local/ops-runbook.md is already blocked by the
   // .local/ prefix, but this covers variants at any depth (RUNBOOK-v2.md,
   // RUNBOOK.secrets.md, nested/RUNBOOK.md, etc.) in case one is ever placed
   // outside .local/ by accident.

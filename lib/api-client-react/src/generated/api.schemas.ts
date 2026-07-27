@@ -3020,7 +3020,8 @@ export type LabDetectCreases200 = {
 export type LabRemoveCreasesBody = {
   fabricId?: number;
   sourceDataUrl?: string;
-  maskDataUrl: string;
+  /** Mask PNG as data URL. When omitted, a full-coverage white mask is used — the AI scans the entire image and removes any creases it finds. */
+  maskDataUrl?: string;
   /** Optional inpainting prompt; defaults to the server-side crease-removal prompt. */
   prompt?: string;
 };
@@ -3032,7 +3033,8 @@ export type LabRemoveCreases200 = {
 export type LabRemoveCreasesOpenaiBody = {
   fabricId?: number;
   sourceDataUrl?: string;
-  maskDataUrl: string;
+  /** Mask PNG as data URL. When omitted, a full-coverage white mask is used — the AI scans the entire image and removes any creases it finds. */
+  maskDataUrl?: string;
   /** Optional inpainting prompt; defaults to the server-side crease-removal prompt. */
   prompt?: string;
 };

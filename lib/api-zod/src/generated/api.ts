@@ -2915,7 +2915,7 @@ export const LabDetectCreasesResponse = zod.object({
 export const LabRemoveCreasesBody = zod.object({
   "fabricId": zod.number().optional(),
   "sourceDataUrl": zod.string().optional(),
-  "maskDataUrl": zod.string(),
+  "maskDataUrl": zod.string().optional().describe('Mask PNG as data URL. When omitted, a full-coverage white mask is used — the AI scans the entire image and removes any creases it finds.'),
   "prompt": zod.string().optional().describe('Optional inpainting prompt; defaults to the server-side crease-removal prompt.')
 })
 
@@ -2930,7 +2930,7 @@ export const LabRemoveCreasesResponse = zod.object({
 export const LabRemoveCreasesOpenaiBody = zod.object({
   "fabricId": zod.number().optional(),
   "sourceDataUrl": zod.string().optional(),
-  "maskDataUrl": zod.string(),
+  "maskDataUrl": zod.string().optional().describe('Mask PNG as data URL. When omitted, a full-coverage white mask is used — the AI scans the entire image and removes any creases it finds.'),
   "prompt": zod.string().optional().describe('Optional inpainting prompt; defaults to the server-side crease-removal prompt.')
 })
 

@@ -409,10 +409,12 @@ export function FabricCreaseRemoverModal({
   }
 
   function handleRemoveCreases() {
-    const maskDataUrl = getMaskDataUrl();
-    if (!maskDataUrl) return;
+    // When no mask exists yet (nothing detected and nothing painted),
+    // omit maskDataUrl — the server applies a full-coverage white mask so
+    // the AI scans and repairs the whole image without a prior detect step.
+    const maskDataUrl = hasMask ? (getMaskDataUrl() ?? undefined) : undefined;
     openaiMutation.mutate(
-      { data: { fabricId, maskDataUrl } },
+      { data: { fabricId, ...(maskDataUrl ? { maskDataUrl } : {}) } },
       {
         onSuccess: (d) => {
           if (d.dataUrl) {
@@ -699,7 +701,7 @@ export function FabricCreaseRemoverModal({
                 <Button
                   size="sm"
                   onClick={handleRemoveCreases}
-                  disabled={!hasMask || isRemoving || isDetecting}
+                  disabled={isRemoving || isDetecting}
                 >
                   {isRemoving ? (
                     <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />

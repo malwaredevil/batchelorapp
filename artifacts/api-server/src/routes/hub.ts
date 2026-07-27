@@ -1,8 +1,10 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
-import { db, appUsers } from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
+import { db, appUsers, STATEMENTS } from "@workspace/db";
 import { z } from "zod/v4";
 import { requireAuth } from "../middleware/auth";
+import { requireOwner } from "../middleware/owner";
+import { provisionAllBuckets } from "../lib/bucket-provisioning";
 import dns from "node:dns";
 import { isIP } from "node:net";
 import { Agent, fetch as undiciFetch } from "undici";
@@ -579,5 +581,54 @@ router.put("/hub/weather-config", requireAuth, async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
+// ---------------------------------------------------------------------------
+// GET /hub/db-status
+// Owner-only: returns which Supabase project the server is connected to
+// (dev vs prod) so the Infrastructure tab in the Owner Panel can display a
+// live status indicator.
+// ---------------------------------------------------------------------------
+
+router.get("/hub/db-status", requireAuth, requireOwner, (_req, res) => {
+  const isDeployed = process.env.REPLIT_DEPLOYMENT === "1";
+  const supabaseUrl = process.env.SUPABASE_URL ?? null;
+
+  res.json({
+    isDeployed,
+    activeTier: "prod" as const,
+    activeSupabaseUrl: supabaseUrl,
+    prodSupabaseUrl: supabaseUrl,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /hub/bootstrap-schema
+// Owner-only: runs the idempotent schema bootstrap (CREATE TABLE/INDEX IF NOT
+// EXISTS) and provisions Supabase Storage buckets on the currently-connected
+// database. Safe to call repeatedly.
+// ---------------------------------------------------------------------------
+
+router.post(
+  "/hub/bootstrap-schema",
+  requireAuth,
+  requireOwner,
+  async (req, res) => {
+    try {
+      for (const statement of STATEMENTS) {
+        await db.execute(sql.raw(statement));
+      }
+      await provisionAllBuckets();
+      res.json({
+        ok: true,
+        message: "Schema bootstrapped and buckets provisioned.",
+      });
+    } catch (err) {
+      req.log.error({ err }, "bootstrap-schema failed");
+      res.status(500).json({
+        error: err instanceof Error ? err.message : "Bootstrap failed.",
+      });
+    }
+  },
+);
 
 export default router;

@@ -11,6 +11,8 @@ import {
   Puzzle,
   FlaskConical,
   AlertTriangle,
+  Database,
+  CheckCircle2,
 } from "lucide-react";
 import { GlobalConfigCard } from "@workspace/elaine-ui";
 import {
@@ -33,7 +35,8 @@ type Tab =
   | "google-apis"
   | "services"
   | "ai-evidence"
-  | "ai-lab";
+  | "ai-lab"
+  | "infrastructure";
 
 const ALL_TABS: { id: Tab; label: string; icon: typeof Globe }[] = [
   { id: "travels", label: "Travels", icon: Globe },
@@ -43,6 +46,7 @@ const ALL_TABS: { id: Tab; label: string; icon: typeof Globe }[] = [
   { id: "services", label: "Services", icon: Puzzle },
   { id: "ai-evidence", label: "AI Evidence", icon: FlaskConical },
   { id: "ai-lab", label: "AI Lab", icon: FlaskConical },
+  { id: "infrastructure", label: "Infrastructure", icon: Database },
 ];
 
 function useFromParam() {
@@ -182,6 +186,7 @@ export default function OwnerPanel() {
         {safeTab === "ai-evidence" && isOwner && <AiEvidenceContent />}
 
         {safeTab === "ai-lab" && isOwner && <AiLabContent />}
+        {safeTab === "infrastructure" && isOwner && <InfrastructureContent />}
       </main>
     </div>
   );
@@ -1560,6 +1565,149 @@ function LabResultPanel({
                     : "Save as primary photo"}
           </button>
         </>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Infrastructure tab — owner-only view of DB connections and schema tools.
+// ---------------------------------------------------------------------------
+
+interface DbStatus {
+  isDeployed: boolean;
+  activeTier: "prod";
+  activeSupabaseUrl: string | null;
+  prodSupabaseUrl: string | null;
+}
+
+function InfrastructureContent() {
+  const [status, setStatus] = useState<DbStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [bootstrapping, setBootstrapping] = useState(false);
+  const [bootstrapResult, setBootstrapResult] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    fetch("/api/hub/db-status")
+      .then((r) => r.json())
+      .then((d: DbStatus) => {
+        setStatus(d);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  async function handleBootstrap() {
+    setBootstrapping(true);
+    setBootstrapResult(null);
+    try {
+      const r = await fetch("/api/hub/bootstrap-schema", { method: "POST" });
+      const d = (await r.json()) as {
+        ok?: boolean;
+        message?: string;
+        error?: string;
+      };
+      if (d.ok) {
+        setBootstrapResult(d.message ?? "Done.");
+        toast({ title: "Bootstrap succeeded", description: d.message });
+      } else {
+        setBootstrapResult(d.error ?? "Failed.");
+        toast({
+          title: "Bootstrap failed",
+          description: d.error,
+          variant: "destructive",
+        });
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Network error.";
+      setBootstrapResult(msg);
+      toast({
+        title: "Bootstrap error",
+        description: msg,
+        variant: "destructive",
+      });
+    } finally {
+      setBootstrapping(false);
+    }
+  }
+
+  function projectRef(url: string | null): string {
+    if (!url) return "—";
+    const match = url.match(/https?:\/\/([a-z0-9]+)\.supabase\.co/);
+    return match ? match[1] : url;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold tracking-tight">Infrastructure</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Database connections and schema management.
+        </p>
+      </div>
+
+      <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Database className="h-4 w-4 text-muted-foreground" />
+          <h3 className="text-sm font-semibold">Supabase Database</h3>
+        </div>
+
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : !status ? (
+          <p className="text-sm text-destructive">Could not fetch DB status.</p>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between rounded-md border px-4 py-3 border-green-500/40 bg-green-500/5">
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium">Production</p>
+                  <p className="text-xs text-muted-foreground font-mono">
+                    {status.prodSupabaseUrl
+                      ? `${projectRef(status.prodSupabaseUrl)}.supabase.co`
+                      : "Not configured"}
+                  </p>
+                </div>
+              </div>
+              <span className="text-xs font-medium text-green-600 bg-green-500/10 px-2 py-0.5 rounded-full">
+                Active
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground pt-1">
+              {status.isDeployed
+                ? "Running in deployed production environment."
+                : "Running in Replit editor (development)."}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {!status?.isDeployed && (
+        <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold">
+              Bootstrap Schema & Buckets
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Creates all tables and storage buckets on the production database.
+              Safe to run multiple times — uses CREATE IF NOT EXISTS
+              exclusively.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleBootstrap}
+            disabled={bootstrapping}
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {bootstrapping ? "Bootstrapping…" : "Bootstrap Schema & Buckets"}
+          </button>
+          {bootstrapResult && (
+            <p className="text-xs text-muted-foreground">{bootstrapResult}</p>
+          )}
+        </div>
       )}
     </div>
   );

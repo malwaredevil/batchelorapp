@@ -41,7 +41,9 @@ const InpaintBody = z
   .object({
     fabricId: z.number().int().positive().optional(),
     sourceDataUrl: z.string().min(1).optional(),
-    maskDataUrl: z.string().min(1),
+    // Optional: when omitted the server builds a full-coverage white mask so
+    // the AI scans and repairs the entire image without a prior detect step.
+    maskDataUrl: z.string().min(1).optional(),
     /** Optional caller-supplied inpainting prompt; falls back to the default. */
     prompt: z.string().max(1000).optional(),
   })
@@ -128,7 +130,7 @@ router.post("/lab/remove-creases", async (req, res) => {
   const parsed = InpaintBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({
-      error: "fabricId (or sourceDataUrl) and maskDataUrl are required.",
+      error: "fabricId (or sourceDataUrl) is required.",
     });
     return;
   }
@@ -146,9 +148,13 @@ router.post("/lab/remove-creases", async (req, res) => {
   }
 
   try {
+    // When no mask is supplied, cover the whole image so the AI finds and
+    // removes any creases without requiring a prior detection step.
+    const maskDataUrl =
+      parsed.data.maskDataUrl ?? (await buildFullWhiteMaskDataUrl(imgBuffer));
     const dataUrl = await removeCreasesFromBuffer(
       imgBuffer,
-      parsed.data.maskDataUrl,
+      maskDataUrl,
       parsed.data.prompt,
     );
     res.json({ dataUrl });
@@ -168,7 +174,7 @@ router.post("/lab/remove-creases/openai", async (req, res) => {
   const parsed = InpaintBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({
-      error: "fabricId (or sourceDataUrl) and maskDataUrl are required.",
+      error: "fabricId (or sourceDataUrl) is required.",
     });
     return;
   }
@@ -186,9 +192,13 @@ router.post("/lab/remove-creases/openai", async (req, res) => {
   }
 
   try {
+    // When no mask is supplied, cover the whole image so the AI finds and
+    // removes any creases without requiring a prior detection step.
+    const maskDataUrl =
+      parsed.data.maskDataUrl ?? (await buildFullWhiteMaskDataUrl(imgBuffer));
     const dataUrl = await removeCreasesFromBuffer(
       imgBuffer,
-      parsed.data.maskDataUrl,
+      maskDataUrl,
       parsed.data.prompt,
     );
     res.json({ dataUrl });

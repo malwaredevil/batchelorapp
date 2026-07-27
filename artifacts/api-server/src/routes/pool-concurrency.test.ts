@@ -164,7 +164,7 @@ describe("LAYER 1: Pool configuration enforces transaction mode", () => {
     // Import resolveDatabaseUrl() directly from the lib — this is the exact
     // function called at pool-creation time in lib/db/src/index.ts. Verifying
     // its output IS verifying the pool's connection string: the pool config
-    // calls resolveDatabaseUrl() and passes the result to new Pool().
+    // calls resolveDatabaseUrl() and passes the result to new Pool(). // pg-singleton-ok — test-only, verifies the singleton's URL resolver, never imported by the server
     const { resolveDatabaseUrl } =
       await import("../../../../lib/db/src/resolve-url.js");
 

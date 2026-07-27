@@ -88,7 +88,7 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
   3. Deep end-to-end code review of everything added/changed (verify it works as intended, not just that it typechecks). Diff Replit vs GitHub if unsure what changed.
   4. Full E2E UI/UX testing of new/changed features using the screenshot-login path above. If unsure of scope, diff Replit vs GitHub to see exactly what changed. **BROKEN IMAGE RULE (mandatory):** In every screenshot, explicitly scan for `<img>` elements showing alt text (broken-image icon + text label) instead of the actual image. If ANY such element is visible, it is a real bug — investigate and fix immediately. Never assume a broken image is a screenshot-tool artifact without confirming via curl that the endpoint returns 200 + valid image bytes (e.g. `curl -I 'https://$REPLIT_DEV_DOMAIN/api/...'`). This rule applies even when the rest of the page looks correct.
   5. Services page review: if any new external API service was added or removed this session, update `artifacts/web/src/pages/services-catalog.tsx` (service name, purpose, modules, env vars, implementation paths). This is the canonical owner-visible record of all integrations.
-  6. Run the automated pre-publish gate: `pnpm --filter @workspace/scripts run pre-publish`. This script runs in order and stops hard on first failure: (a) typecheck, (b) prettier --write + lint, (c) codegen drift, (d) app-config drift, (e) GitHub CI status, (f) forbidden provisioning-script filenames check, (g) household PII email-address scan. Do not skip this step or substitute individual manual checks — the script is the single enforced gate. Fix any failure before proceeding to Stage 2. Note: the pii-scan step (g) also runs as a dedicated `pii-scan` job in GitHub Actions CI on every PR and push to main, so any push that bypasses the local gate is still caught by CI.
+  6. Run the automated pre-publish gate: `pnpm --filter @workspace/scripts run pre-publish`. All checks run in parallel; script stops on first failure. Checks: (a) prettier --write, (b) lint, (c) codegen drift, (d) app-config drift, (e) GitHub CI status, (f) forbidden provisioning-script filenames, (g) PII scan. Typecheck is excluded — GitHub CI already runs it and step (e) verifies CI is green. Do not skip this step or substitute individual manual checks — it is the single enforced gate. Fix any failure before proceeding to Stage 2.
   7. **Replit-file leak check (mandatory):** confirm `.replit`, `.replitignore`, and `replit.nix` are NOT present in the public GitHub repo. Run: `curl -s -H "Authorization: Bearer $GH_PAT" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/malwaredevil/batchelorapp/git/trees/main?recursive=1" | jq '[.tree[] | select(.path | test("^\\.replit$|\\.replitignore$|replit\\.nix$|\\.upm/")) | .path]'` — the result must be `[]`. If any Replit-specific file appears, delete it immediately via the Git Data API (create a tree with `sha: null` for each offending path) before proceeding. These files have historically contained plaintext webhook secrets and personal email addresses and must never be in a public repo. The `github-sync.ts` script already excludes them, but they can re-appear if pushed by other means.
 
   **Stage 2 — DB safety (only after Stage 1 passes):** 8. Confirm the change cannot harm the shared production Supabase DB — no `drizzle-kit push --force`, additive-only migrations only.
@@ -111,43 +111,6 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
   **Stage 4 — post-publish Sentry delta check (after publishing):**
   Wait ~5 minutes for production traffic, then use Sentry MCP tools to check for issues that are NEW since the baseline written in Step 1. Compare against the IDs in `.local/state/sentry-baseline.json`. Look specifically at routes/features that changed. Check browser and server separately — filter by `platform:javascript` to surface client-side JS errors from the three frontend apps (modules/web/elaine). If new issues appear, fix them before considering the release stable. When done, clear state: `pnpm --filter @workspace/scripts run sentry-baseline clear`.
 
-## Secrets checklist (for moving to a Team Workspace, or any new environment)
-
-Names only — values must be re-entered manually in the new environment's Secrets tab, never copied through chat/code:
-
-- `DATABASE_URL` — must point to Supabase, not the new workspace's built-in DB
-- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — shared OAuth client
-- `GOOGLE_MAPS_API_KEY`, `VITE_GOOGLE_MAPS_API_KEY`
-- `GOOGLE_WALLET_ISSUER_ID`, `GOOGLE_WALLET_SERVICE_ACCOUNT_JSON`
-- `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_POOLER_HOST`
-- `SESSION_SECRET`
-- `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `JINA_API_KEY`, `VOYAGE_API_KEY` (all required, not optional — see below)
-- `OAUTH_TOKEN_ENCRYPTION_KEY` — AES-256-GCM key for stored Google OAuth tokens; generate with `node -e "require('crypto').randomBytes(32).toString('base64')"` and run `pnpm --filter @workspace/scripts run encrypt-oauth-tokens` after setting it to migrate any plaintext rows
-- `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_REMINDER_FROM_EMAIL`
-- `SENTRY_DSN`
-- `GH_PAT`
-- `AGENTPHONE_API_KEY`, `AGENTPHONE_WEBHOOK_SECRET`
-- `APIFY_WEBHOOK_SECRET`
-- `REPLICATE_API_TOKEN` — Replicate account API key (used by AI Lab crease removal via FLUX Fill Dev)
-- `REPLICATE_WEBHOOK_SIGNING_SECRET` — Replicate webhook signing key (`whsec_…` from replicate.com/account); not used by the current synchronous lab implementation but store now so dev→prod is a copy-paste when webhook-based async predictions are wired up
-- `EBAY_APP_ID`, `EBAY_CERT_ID`, `EBAY_DEV_ID` — eBay product catalog lookup (UPC/barcode for ornaments)
-- `MICROLINK_API_KEY` — optional; Microlink.io paid-tier key for link preview fallback; free tier works without it
-- `DEV_SCREENSHOT_TOKEN` (dev-only cookie-free login bypass — must be a plain env var, never a Replit secret, so the agent can read its literal value)
-- `AGENT_LOGIN_EMAIL`, `AGENT_LOGIN_PASSWORD` (dev-only test login fallback)
-- `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` — these back the Replit built-in DB used for backups; a new workspace provisions its own automatically, but re-run `pnpm --filter @workspace/scripts run backup-to-replit` after moving to repopulate it from Supabase
-
-Secrets are per-Repl/per-workspace and do not carry over automatically on a move — this list must be manually re-entered.
-
-## GitHub-side PII and credential protection
-
-The public GitHub repo (`malwaredevil/batchelorapp`) has these layers active:
-
-- **Secret scanning** (GitHub native) — enabled; scans for ~200 known provider credential patterns across all branches and commit history.
-- **Push protection** — enabled; blocks any push containing a detected secret before it lands on `main`, with a UI bypass for confirmed false-positives.
-- **CI `pii-scan` job** — runs on every PR and push; catches household email addresses outside the `SAFE_DOMAINS` allowlist in `scripts/src/pii-scan.ts`. This fills the gap that GitHub's native scanner leaves for project-specific PII patterns.
-- **Path exclusions** — `.github/secret_scanning.yml` tells GitHub's scanner to skip lockfiles, build output, and test fixtures, reducing false-positive noise.
-- **Custom patterns not available** — GitHub Advanced Security (GHAS) is required for custom regex patterns (e.g. a household email-domain match). This repo is on the free tier, so that API returns "Feature not available." The CI `pii-scan` job is the equivalent coverage. If the repo ever moves to GHAS, add custom patterns via the REST API; see `.github/secret-scanning.md` for guidance.
-
 ## Gotchas
 
 - `DATABASE_URL` is claimed by Replit's built-in DB — must be manually overridden in the Secrets tab to point at Supabase
@@ -160,4 +123,4 @@ The public GitHub repo (`malwaredevil/batchelorapp`) has these layers active:
 
 - See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
 - See `MERGE_HANDOFF_PROMPT.md` for the prompt to run in each existing app before merging code
-- See `.local/RUNBOOK.md` for the full pre-publish checklist, secrets list, operational gotchas, and backup/restore procedures (excluded from GitHub sync)
+- See `.local/ops-runbook.md` for the full pre-publish checklist, secrets checklist, GitHub PII protection layers, and backup/restore procedures (excluded from GitHub sync)

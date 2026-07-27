@@ -235,7 +235,7 @@ describe("LAYER 2: Real routes return 200 under concurrent household load", () =
 
   beforeAll(async () => {
     app = await buildApp();
-  });
+  }, 30_000);
 
   it("/api/pottery/stats returns 200 with valid stats shape from the real handler", async () => {
     selectQueue.push([]); // db.select({...}).from(potteryItems) → empty

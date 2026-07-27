@@ -171,8 +171,10 @@ describe("webhookLimiter — namespace / key prefix", () => {
     }));
 
     // Re-import so the mock takes effect on the module's top-level code.
-    const { webhookLimiter: _wl } =
-      await vi.importActual<typeof import("./rateLimit")>("./rateLimit");
+    // vi.importActual bypasses the mock registry and would pull in the real
+    // PostgresRateLimitStore (and its DB pool) even though we vi.doMock'd it
+    // above. A plain dynamic import() goes through the mock registry instead.
+    const { webhookLimiter: _wl } = await import("./rateLimit");
 
     // The mock constructor should have been called with "webhook".
     const calls = MockStore.mock.calls.map((c) => c[0] as string);

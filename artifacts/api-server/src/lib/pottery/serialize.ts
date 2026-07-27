@@ -1,4 +1,4 @@
-import { inArray } from "drizzle-orm";
+import { and, inArray, isNull } from "drizzle-orm";
 import { eq } from "drizzle-orm";
 import type { PotteryItemRow } from "@workspace/db";
 import {
@@ -70,7 +70,12 @@ const { serializeItem, serializeItems } = createCollectionSerializer<
     const rows = await db
       .select()
       .from(potteryImages)
-      .where(inArray(potteryImages.itemId, itemIds));
+      .where(
+        and(
+          inArray(potteryImages.itemId, itemIds),
+          isNull(potteryImages.deletedAt),
+        ),
+      );
     return rows.map((r) => ({
       itemId: r.itemId,
       id: r.id,

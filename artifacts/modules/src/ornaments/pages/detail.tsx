@@ -368,16 +368,21 @@ export default function OrnamentDetail() {
               }}
               onReplaceImage={handleReplaceImage}
               onDeleteImage={(imageId, isPrimary) => {
-                if (!isPrimary)
-                  void deleteImage
-                    .mutateAsync({ id, imageId })
-                    .then(() => {
-                      queryClient.invalidateQueries({
-                        queryKey: getGetOrnamentQueryKey(id),
-                      });
-                      toast.success("Image removed");
-                    })
-                    .catch(() => toast.error("Failed to remove image"));
+                if (isPrimary) {
+                  toast.error(
+                    "Set another photo as primary first, then you can delete this one.",
+                  );
+                  return;
+                }
+                void deleteImage
+                  .mutateAsync({ id, imageId })
+                  .then(() => {
+                    queryClient.invalidateQueries({
+                      queryKey: getGetOrnamentQueryKey(id),
+                    });
+                    toast.success("Image removed");
+                  })
+                  .catch(() => toast.error("Failed to remove image"));
               }}
               onSetPrimary={(imageId) =>
                 void setPrimaryImage

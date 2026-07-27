@@ -74,6 +74,12 @@ export function ItemImageGallery({
   const [isSavingAdd, setIsSavingAdd] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Delete confirmation ───────────────────────────────────────────────────
+  const [pendingDelete, setPendingDelete] = useState<{
+    id: number;
+    isPrimary: boolean;
+  } | null>(null);
+
   // ── Edit-existing flow ────────────────────────────────────────────────────
   const [editTarget, setEditTarget] = useState<GalleryImage | null>(null);
   const [editFile, setEditFile] = useState<File | null>(null);
@@ -253,27 +259,62 @@ export function ItemImageGallery({
           {/* Action bar — Set Primary + Delete (Edit is now on the image icon) */}
           {((!active.isPrimary && onSetPrimary) || onDeleteImage) && (
             <div className="flex items-center justify-center gap-2">
-              {!active.isPrimary && onSetPrimary && (
-                <button
-                  type="button"
-                  onClick={() => onSetPrimary(active.id)}
-                  className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm transition hover:bg-primary/10 hover:text-primary disabled:opacity-40"
-                  disabled={isBusy}
-                >
-                  <Star className="h-3.5 w-3.5" />
-                  Set primary
-                </button>
-              )}
-              {onDeleteImage && (
-                <button
-                  type="button"
-                  onClick={() => onDeleteImage(active.id, active.isPrimary)}
-                  className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 disabled:opacity-40"
-                  disabled={isBusy}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Delete
-                </button>
+              {pendingDelete?.id === active.id ? (
+                /* Confirmation strip */
+                <>
+                  <span className="text-xs text-muted-foreground">
+                    Delete this photo?
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPendingDelete(null)}
+                    className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm transition hover:bg-muted"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onDeleteImage!(pendingDelete.id, pendingDelete.isPrimary);
+                      setPendingDelete(null);
+                    }}
+                    className="flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 shadow-sm transition hover:bg-red-100 dark:border-red-900 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Confirm delete
+                  </button>
+                </>
+              ) : (
+                /* Normal action buttons */
+                <>
+                  {!active.isPrimary && onSetPrimary && (
+                    <button
+                      type="button"
+                      onClick={() => onSetPrimary(active.id)}
+                      className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm transition hover:bg-primary/10 hover:text-primary disabled:opacity-40"
+                      disabled={isBusy}
+                    >
+                      <Star className="h-3.5 w-3.5" />
+                      Set primary
+                    </button>
+                  )}
+                  {onDeleteImage && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPendingDelete({
+                          id: active.id,
+                          isPrimary: active.isPrimary,
+                        })
+                      }
+                      className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 disabled:opacity-40"
+                      disabled={isBusy}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete
+                    </button>
+                  )}
+                </>
               )}
             </div>
           )}

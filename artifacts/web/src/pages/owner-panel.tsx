@@ -13,6 +13,10 @@ import {
   AlertTriangle,
   Database,
   CheckCircle2,
+  Circle,
+  Wifi,
+  WifiOff,
+  TriangleAlert,
 } from "lucide-react";
 import { GlobalConfigCard } from "@workspace/elaine-ui";
 import {
@@ -39,6 +43,7 @@ type Tab =
   | "infrastructure";
 
 const ALL_TABS: { id: Tab; label: string; icon: typeof Globe }[] = [
+  { id: "infrastructure", label: "Infrastructure", icon: Database },
   { id: "travels", label: "Travels", icon: Globe },
   { id: "global-config", label: "Global Config", icon: Settings2 },
   { id: "control-panel", label: "Control Panel", icon: Code2 },
@@ -46,7 +51,6 @@ const ALL_TABS: { id: Tab; label: string; icon: typeof Globe }[] = [
   { id: "services", label: "Services", icon: Puzzle },
   { id: "ai-evidence", label: "AI Evidence", icon: FlaskConical },
   { id: "ai-lab", label: "AI Lab", icon: FlaskConical },
-  { id: "infrastructure", label: "Infrastructure", icon: Database },
 ];
 
 function useFromParam() {
@@ -123,26 +127,33 @@ export default function OwnerPanel() {
           </p>
         </div>
 
-        <div className="flex gap-1 rounded-lg border border-border bg-muted/40 p-1">
-          {visibleTabs.map((tab) => {
-            const Icon = tab.icon;
-            const active = safeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => navigateTab(tab.id)}
-                className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                  active
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                <span className="hidden sm:inline">{tab.label}</span>
-              </button>
-            );
-          })}
+        <div className="relative">
+          <div className="overflow-x-auto scrollbar-none border-b border-border">
+            <div className="flex min-w-max">
+              {visibleTabs.map((tab) => {
+                const Icon = tab.icon;
+                const active = safeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => navigateTab(tab.id)}
+                    className={`relative flex items-center gap-2 whitespace-nowrap px-4 py-3 text-sm font-medium transition-colors focus-visible:outline-none ${
+                      active
+                        ? "text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    {tab.label}
+                    {active && (
+                      <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-primary" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         {safeTab === "travels" && (
@@ -1574,45 +1585,132 @@ function LabResultPanel({
 // Infrastructure tab — owner-only view of DB connections and schema tools.
 // ---------------------------------------------------------------------------
 
+interface DbTierStatus {
+  url: string | null;
+  reachable: boolean;
+  configured?: boolean;
+}
 interface DbStatus {
   isDeployed: boolean;
-  activeTier: "prod";
-  activeSupabaseUrl: string | null;
-  prodSupabaseUrl: string | null;
+  prod: DbTierStatus;
+  dev: DbTierStatus & { configured: boolean };
+}
+
+function DbRow({
+  label,
+  tier,
+  url,
+  reachable,
+  configured,
+}: {
+  label: string;
+  tier: "Production" | "Development";
+  url: string | null;
+  reachable: boolean;
+  configured: boolean;
+}) {
+  function projectRef(u: string | null): string {
+    if (!u) return "";
+    const m = u.match(/https?:\/\/([a-z0-9]+)\.supabase\.co/);
+    return m ? `${m[1]}.supabase.co` : u;
+  }
+
+  const ref = projectRef(url);
+
+  if (!configured) {
+    return (
+      <div className="flex items-center gap-3 rounded-md border border-border bg-muted/20 px-4 py-3">
+        <Circle className="h-4 w-4 text-muted-foreground/40 shrink-0" />
+        <div>
+          <p className="text-sm font-medium text-muted-foreground">{label}</p>
+          <p className="text-xs text-muted-foreground/60">Not configured</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (reachable) {
+    return (
+      <div className="flex items-center justify-between rounded-md border border-green-500/40 bg-green-500/5 px-4 py-3">
+        <div className="flex items-center gap-3">
+          <Wifi className="h-4 w-4 text-green-500 shrink-0" />
+          <div>
+            <p className="text-sm font-medium">{label}</p>
+            <p className="text-xs text-muted-foreground font-mono">{ref}</p>
+          </div>
+        </div>
+        <span className="text-xs font-medium text-green-600 bg-green-500/10 px-2 py-0.5 rounded-full">
+          Connected
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between rounded-md border border-amber-500/40 bg-amber-500/5 px-4 py-3">
+      <div className="flex items-center gap-3">
+        <WifiOff className="h-4 w-4 text-amber-500 shrink-0" />
+        <div>
+          <p className="text-sm font-medium">{label}</p>
+          <p className="text-xs text-muted-foreground font-mono">
+            {ref || "—"}
+          </p>
+        </div>
+      </div>
+      <span className="text-xs font-medium text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-full">
+        Unreachable
+      </span>
+    </div>
+  );
 }
 
 function InfrastructureContent() {
   const [status, setStatus] = useState<DbStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [bootstrapping, setBootstrapping] = useState(false);
-  const [bootstrapResult, setBootstrapResult] = useState<string | null>(null);
+  const [bootstrapResult, setBootstrapResult] = useState<{
+    ok: boolean;
+    msg: string;
+  } | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
   const { toast } = useToast();
 
-  useEffect(() => {
-    fetch("/api/hub/db-status") // raw-fetch-ok — no Orval hook for owner-only admin endpoints
-      .then((r) => r.json())
-      .then((d: DbStatus) => {
+  function reload() {
+    setLoading(true);
+    // raw-fetch-ok — no Orval hook for owner-only admin endpoints
+    fetch("/api/hub/db-status")
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json() as Promise<DbStatus>;
+      })
+      .then((d) => {
         setStatus(d);
         setLoading(false);
       })
       .catch(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    reload();
   }, []);
 
   async function handleBootstrap() {
+    setShowConfirm(false);
     setBootstrapping(true);
     setBootstrapResult(null);
     try {
-      const r = await fetch("/api/hub/bootstrap-schema", { method: "POST" }); // raw-fetch-ok — no Orval hook for owner-only admin endpoints
+      // raw-fetch-ok — no Orval hook for owner-only admin endpoints
+      const r = await fetch("/api/hub/bootstrap-schema", { method: "POST" });
       const d = (await r.json()) as {
         ok?: boolean;
         message?: string;
         error?: string;
       };
       if (d.ok) {
-        setBootstrapResult(d.message ?? "Done.");
+        setBootstrapResult({ ok: true, msg: d.message ?? "Done." });
         toast({ title: "Bootstrap succeeded", description: d.message });
       } else {
-        setBootstrapResult(d.error ?? "Failed.");
+        setBootstrapResult({ ok: false, msg: d.error ?? "Failed." });
         toast({
           title: "Bootstrap failed",
           description: d.error,
@@ -1621,7 +1719,7 @@ function InfrastructureContent() {
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Network error.";
-      setBootstrapResult(msg);
+      setBootstrapResult({ ok: false, msg });
       toast({
         title: "Bootstrap error",
         description: msg,
@@ -1632,49 +1730,63 @@ function InfrastructureContent() {
     }
   }
 
-  function projectRef(url: string | null): string {
-    if (!url) return "—";
-    const match = url.match(/https?:\/\/([a-z0-9]+)\.supabase\.co/);
-    return match ? match[1] : url;
-  }
-
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold tracking-tight">Infrastructure</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Database connections and schema management.
+          Live connectivity check for each database. Green means reachable right
+          now — independent of which one the server is actively using.
         </p>
       </div>
 
+      {/* DB connectivity card */}
       <div className="rounded-lg border border-border bg-card p-5 space-y-4">
-        <div className="flex items-center gap-2">
-          <Database className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-sm font-semibold">Supabase Database</h3>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Database className="h-4 w-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold">Supabase Connectivity</h3>
+          </div>
+          <button
+            type="button"
+            onClick={reload}
+            disabled={loading}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+          >
+            {loading ? "Checking…" : "Re-check"}
+          </button>
         </div>
 
         {loading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <div className="space-y-2">
+            <div className="h-14 rounded-md border border-border bg-muted/20 animate-pulse" />
+            <div className="h-14 rounded-md border border-border bg-muted/20 animate-pulse" />
+          </div>
         ) : !status ? (
           <p className="text-sm text-destructive">Could not fetch DB status.</p>
         ) : (
           <div className="space-y-2">
-            <div className="flex items-center justify-between rounded-md border px-4 py-3 border-green-500/40 bg-green-500/5">
-              <div className="flex items-center gap-3">
-                <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-                <div>
-                  <p className="text-sm font-medium">Production</p>
-                  <p className="text-xs text-muted-foreground font-mono">
-                    {status.prodSupabaseUrl
-                      ? `${projectRef(status.prodSupabaseUrl)}.supabase.co`
-                      : "Not configured"}
-                  </p>
-                </div>
-              </div>
-              <span className="text-xs font-medium text-green-600 bg-green-500/10 px-2 py-0.5 rounded-full">
-                Active
-              </span>
-            </div>
+            <DbRow
+              label="Production"
+              tier="Production"
+              url={status.prod.url}
+              reachable={status.prod.reachable}
+              configured={!!status.prod.url}
+            />
+            <DbRow
+              label="Development"
+              tier="Development"
+              url={status.dev.url}
+              reachable={status.dev.reachable}
+              configured={status.dev.configured}
+            />
+            {!status.dev.configured && (
+              <p className="text-xs text-muted-foreground pt-1">
+                Set <code className="font-mono">DEV_SUPABASE_URL</code> and{" "}
+                <code className="font-mono">DEV_SUPABASE_SERVICE_ROLE_KEY</code>{" "}
+                in Replit Secrets to enable dev connectivity checks.
+              </p>
+            )}
             <p className="text-xs text-muted-foreground pt-1">
               {status.isDeployed
                 ? "Running in deployed production environment."
@@ -1684,31 +1796,67 @@ function InfrastructureContent() {
         )}
       </div>
 
-      {!status?.isDeployed && (
-        <div className="rounded-lg border border-border bg-card p-5 space-y-3">
-          <div>
-            <h3 className="text-sm font-semibold">
-              Bootstrap Schema & Buckets
-            </h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Creates all tables and storage buckets on the production database.
-              Safe to run multiple times — uses CREATE IF NOT EXISTS
-              exclusively.
-            </p>
+      {/* Bootstrap card */}
+      <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+        <div>
+          <h3 className="text-sm font-semibold">
+            Bootstrap Schema &amp; Buckets
+          </h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Runs <code className="font-mono">CREATE TABLE IF NOT EXISTS</code>{" "}
+            and provisions all storage buckets on the{" "}
+            <strong>currently-connected database</strong>. Safe to run multiple
+            times — never drops or modifies existing data.
+          </p>
+        </div>
+
+        {/* Confirmation prompt */}
+        {showConfirm ? (
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 space-y-2">
+            <div className="flex items-start gap-2">
+              <TriangleAlert className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                This will run schema migrations on the connected database. It is
+                safe (additive-only), but confirm before proceeding in
+                production.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleBootstrap}
+                className="inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700"
+              >
+                Yes, run bootstrap
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowConfirm(false)}
+                className="inline-flex items-center rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
+        ) : (
           <button
             type="button"
-            onClick={handleBootstrap}
+            onClick={() => setShowConfirm(true)}
             disabled={bootstrapping}
             className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {bootstrapping ? "Bootstrapping…" : "Bootstrap Schema & Buckets"}
           </button>
-          {bootstrapResult && (
-            <p className="text-xs text-muted-foreground">{bootstrapResult}</p>
-          )}
-        </div>
-      )}
+        )}
+
+        {bootstrapResult && (
+          <p
+            className={`text-xs ${bootstrapResult.ok ? "text-green-600" : "text-destructive"}`}
+          >
+            {bootstrapResult.msg}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

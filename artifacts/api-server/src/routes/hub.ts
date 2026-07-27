@@ -584,20 +584,53 @@ router.put("/hub/weather-config", requireAuth, async (req, res) => {
 
 // ---------------------------------------------------------------------------
 // GET /hub/db-status
-// Owner-only: returns which Supabase project the server is connected to
-// (dev vs prod) so the Infrastructure tab in the Owner Panel can display a
-// live status indicator.
+// Owner-only: independently probes both prod and dev Supabase projects via
+// the REST API (HTTP, not direct Postgres) and returns live reachability
+// status for each. The UI lights up whichever row is actually reachable.
 // ---------------------------------------------------------------------------
 
-router.get("/hub/db-status", requireAuth, requireOwner, (_req, res) => {
+async function probeSupabase(
+  url: string | null | undefined,
+  key: string | null | undefined,
+): Promise<boolean> {
+  if (!url || !key) return false;
+  try {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 4000);
+    const r = await fetch(`${url}/rest/v1/`, {
+      method: "HEAD",
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+      signal: controller.signal,
+    });
+    clearTimeout(t);
+    // 200 or 4xx (bad request / wrong table) both mean the server is reachable
+    return r.status < 500;
+  } catch {
+    return false;
+  }
+}
+
+router.get("/hub/db-status", requireAuth, requireOwner, async (_req, res) => {
   const isDeployed = process.env.REPLIT_DEPLOYMENT === "1";
-  const supabaseUrl = process.env.SUPABASE_URL ?? null;
+
+  const prodUrl = process.env.SUPABASE_URL ?? null;
+  const prodKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? null;
+  const devUrl = process.env.DEV_SUPABASE_URL ?? null;
+  const devKey = process.env.DEV_SUPABASE_SERVICE_ROLE_KEY ?? null;
+
+  const [prodReachable, devReachable] = await Promise.all([
+    probeSupabase(prodUrl, prodKey),
+    probeSupabase(devUrl, devKey),
+  ]);
 
   res.json({
     isDeployed,
-    activeTier: "prod" as const,
-    activeSupabaseUrl: supabaseUrl,
-    prodSupabaseUrl: supabaseUrl,
+    prod: { url: prodUrl, reachable: prodReachable },
+    dev: {
+      url: devUrl,
+      configured: !!(devUrl && devKey),
+      reachable: devReachable,
+    },
   });
 });
 

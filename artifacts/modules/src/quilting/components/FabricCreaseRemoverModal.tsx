@@ -681,7 +681,7 @@ export function FabricCreaseRemoverModal({
                 <p className="text-xs text-muted-foreground">
                   {hasMask
                     ? `${detectedCreases.length > 0 ? `${detectedCreases.length} auto-detected + ` : ""}manual marks — ready to remove`
-                    : "Paint purple lines over the creases, or use Auto-detect"}
+                    : "Paint creases manually, auto-detect, or click Remove Creases to fix the whole image"}
                 </p>
               </div>
               <div className="flex items-center gap-2">

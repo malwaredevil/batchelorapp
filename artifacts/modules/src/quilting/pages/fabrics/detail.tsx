@@ -46,7 +46,6 @@ import { ImageEditor } from "@/quilting/components/image-editor";
 import { downloadCollectionImage } from "@/quilting/lib/svg-export";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
 import { FabricIdentityResearchPanel } from "@/quilting/components/FabricIdentityResearchPanel";
-import { FabricAiLab } from "@/quilting/components/FabricAiLab";
 import { CollectionDetailSection } from "@workspace/collection-ui";
 
 type Fabric = {
@@ -1259,9 +1258,6 @@ export default function FabricDetail() {
 
             {/* Identity research */}
             <FabricIdentityResearchPanel fabricId={f.id} />
-
-            {/* AI Lab — crease removal (owner-only; server gate enforces this) */}
-            <FabricAiLab fabricId={f.id} imageUrl={f.imageUrl} />
 
             {/* Notes */}
             <CollectionDetailSection title="Notes">

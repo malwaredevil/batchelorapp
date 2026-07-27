@@ -16,7 +16,7 @@ import {
 } from "@workspace/api-client-react";
 import { useAuth } from "@workspace/web-core/auth";
 
-// ─── Notification sound via Web Audio API ────────────────────────────────────
+// ─── Notification sound — Replit-style ascending arpeggio ────────────────────
 function playNotificationSound(): void {
   try {
     const AudioCtx =
@@ -25,12 +25,7 @@ function playNotificationSound(): void {
         .webkitAudioContext;
     if (!AudioCtx) return;
     const ctx = new AudioCtx();
-    const playTone = (
-      freq: number,
-      start: number,
-      duration: number,
-      vol = 0.22,
-    ) => {
+    const playTone = (freq: number, start: number, duration: number) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
@@ -38,14 +33,16 @@ function playNotificationSound(): void {
       osc.type = "sine";
       osc.frequency.value = freq;
       gain.gain.setValueAtTime(0, start);
-      gain.gain.linearRampToValueAtTime(vol, start + 0.01);
+      gain.gain.linearRampToValueAtTime(0.13, start + 0.008);
       gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
       osc.start(start);
       osc.stop(start + duration);
     };
     const t = ctx.currentTime;
+    // A major arpeggio: A5 → C#6 → E6
     playTone(880, t, 0.18);
-    playTone(1108, t + 0.14, 0.24);
+    playTone(1109, t + 0.09, 0.18);
+    playTone(1319, t + 0.18, 0.28);
     setTimeout(() => ctx.close().catch(() => {}), 1200);
   } catch {
     // AudioContext not available

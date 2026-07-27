@@ -164,6 +164,19 @@ const DEFAULT_INPAINT_PROMPT =
   "flat, smooth fabric with no creases or folds, uniform surface texture, original print pattern preserved exactly";
 
 // ---------------------------------------------------------------------------
+// GET /lab/status
+// Returns which AI providers are currently configured, so the frontend can
+// surface a targeted banner instead of a generic 500 when keys are absent.
+// ---------------------------------------------------------------------------
+
+router.get("/lab/status", (_req, res) => {
+  res.json({
+    openai: !!env.openaiApiKey,
+    replicate: !!env.replicateApiToken,
+  });
+});
+
+// ---------------------------------------------------------------------------
 // POST /lab/detect-creases
 // Downloads the fabric image (or uses a supplied sourceDataUrl), sends it to
 // the vision model, and returns a mask PNG (white-on-transparent) covering the

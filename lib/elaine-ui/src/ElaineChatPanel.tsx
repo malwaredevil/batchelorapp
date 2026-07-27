@@ -43,6 +43,39 @@ import { MarkdownMessage } from "./MarkdownMessage";
 import { ChatWidget } from "./ChatWidgets";
 import { LinkPreviewCard } from "./LinkPreviewCard";
 
+// ─── Response-complete chime (Replit-style ascending arpeggio) ───────────────
+function playResponseChime(): void {
+  try {
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext })
+        .webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const playTone = (freq: number, start: number, duration: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.13, start + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+      osc.start(start);
+      osc.stop(start + duration);
+    };
+    const t = ctx.currentTime;
+    // A major arpeggio: A5 → C#6 → E6
+    playTone(880, t, 0.18);
+    playTone(1109, t + 0.09, 0.18);
+    playTone(1319, t + 0.18, 0.28);
+    setTimeout(() => ctx.close().catch(() => {}), 1200);
+  } catch {
+    // AudioContext not available
+  }
+}
+
 const URL_RE = /https?:\/\/[^\s)>"]+/;
 function extractFirstUrl(text: string | undefined | null): string | null {
   if (!text) return null;
@@ -224,7 +257,10 @@ export function ElaineChatPanel({
   useEffect(() => {
     const wasStreaming = wasStreamingRef.current;
     wasStreamingRef.current = isStreaming;
-    if (!wasStreaming || isStreaming || !tts.enabled) return;
+    if (!wasStreaming || isStreaming) return;
+    // Play the completion chime every time Elaine finishes a response.
+    playResponseChime();
+    if (!tts.enabled) return;
     const last = messages[messages.length - 1];
     if (last?.role === "assistant") {
       const { text } = parseMessageCitations(last.content);

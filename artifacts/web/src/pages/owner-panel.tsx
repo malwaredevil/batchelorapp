@@ -10,6 +10,7 @@ import {
   Settings2,
   Puzzle,
   FlaskConical,
+  AlertTriangle,
 } from "lucide-react";
 import { GlobalConfigCard } from "@workspace/elaine-ui";
 import {
@@ -341,9 +342,33 @@ interface InpaintResult {
 
 const CANVAS_MAX_PX = 520;
 
+type LabStatus = { openai: boolean; replicate: boolean } | null;
+
 function AiLabContent() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  // ── Provider status (checked on mount) ────────────────────────────────
+  const [labStatus, setLabStatus] = useState<LabStatus>(null);
+
+  useEffect(() => {
+    // raw-fetch-ok — owner-only AI lab; no generated hook for this endpoint
+    fetch("/api/quilting/lab/status")
+      .then((r) => r.json())
+      .then((d: { openai?: boolean; replicate?: boolean }) => {
+        setLabStatus({ openai: !!d.openai, replicate: !!d.replicate });
+      })
+      .catch(() => {
+        setLabStatus({ openai: false, replicate: false });
+      });
+  }, []);
+
+  const missingProviders: string[] = [];
+  if (labStatus !== null) {
+    if (!labStatus.openai) missingProviders.push("OPENAI_API_KEY");
+    if (!labStatus.replicate) missingProviders.push("REPLICATE_API_TOKEN");
+  }
+  const providersReady = labStatus !== null && missingProviders.length === 0;
 
   // ── Fabric picker ──────────────────────────────────────────────────────
   const [query, setQuery] = useState("");
@@ -684,6 +709,33 @@ function AiLabContent() {
         </p>
       </div>
 
+      {/* Missing-provider banners */}
+      {missingProviders.length > 0 && (
+        <div className="space-y-2">
+          {!labStatus?.openai && (
+            <div className="flex items-start gap-3 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <span className="font-semibold">OPENAI_API_KEY</span> is not
+                set. The OpenAI inpainting model (gpt-image-1) will be
+                unavailable. Add it in the <strong>Secrets</strong> tab of your
+                Replit workspace.
+              </div>
+            </div>
+          )}
+          {!labStatus?.replicate && (
+            <div className="flex items-start gap-3 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <span className="font-semibold">REPLICATE_API_TOKEN</span> is
+                not set. The Replicate FLUX Fill model will be unavailable. Add
+                it in the <strong>Secrets</strong> tab of your Replit workspace.
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Fabric picker + optional test photo upload */}
       <div className="space-y-4">
         <div className="space-y-2">
@@ -831,7 +883,17 @@ function AiLabContent() {
             <button
               type="button"
               onClick={detectCreases}
-              disabled={detecting || openaiRemoving || replicateRemoving}
+              disabled={
+                !providersReady ||
+                detecting ||
+                openaiRemoving ||
+                replicateRemoving
+              }
+              title={
+                !providersReady
+                  ? `Missing keys: ${missingProviders.join(", ")}`
+                  : undefined
+              }
               className="rounded-md border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
             >
               {detecting ? "Detecting…" : "Auto-detect creases"}
@@ -839,7 +901,17 @@ function AiLabContent() {
             <button
               type="button"
               onClick={removeCreases}
-              disabled={openaiRemoving || replicateRemoving || detecting}
+              disabled={
+                !providersReady ||
+                openaiRemoving ||
+                replicateRemoving ||
+                detecting
+              }
+              title={
+                !providersReady
+                  ? `Missing keys: ${missingProviders.join(", ")}`
+                  : undefined
+              }
               className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               {openaiRemoving || replicateRemoving

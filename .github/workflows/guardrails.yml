@@ -88,11 +88,22 @@ jobs:
 
       - name: "Ban: direct OpenAI SDK instantiation in server code"
         run: |
-          VIOLATIONS=$(cat /tmp/changed_files.txt \
-            | grep -E "\.(ts|tsx)$" \
-            | xargs grep -n "new OpenAI(" 2>/dev/null \
-            | grep -v "node_modules" \
-            | grep -v "// openai-direct-ok" || true)
+          # Check each matching line + its adjacent lines for the exemption comment
+          # (Prettier may reflow an inline comment to the next line, so we allow
+          # the comment on the preceding or following line as well — same 3-line
+          # window pattern used by check-raw-fetch.ts.)
+          VIOLATIONS=""
+          while IFS= read -r file; do
+            case "$file" in *.ts|*.tsx) ;; *) continue ;; esac
+            while IFS= read -r match; do
+              linenum=$(echo "$match" | cut -d: -f1)
+              start=$((linenum - 1)); [ $start -lt 1 ] && start=1
+              end=$((linenum + 1))
+              if ! sed -n "${start},${end}p" "$file" | grep -q "// openai-direct-ok"; then
+                VIOLATIONS="${VIOLATIONS}${file}:${match}"$'\n'
+              fi
+            done < <(grep -n "new OpenAI(" "$file" 2>/dev/null | grep -v "node_modules")
+          done < /tmp/changed_files.txt
           if [ -n "$VIOLATIONS" ]; then
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "ERROR: Direct OpenAI SDK instantiation found in changed files:"
@@ -102,6 +113,7 @@ jobs:
             echo "  artifacts/api-server/src/lib/ai-client.ts"
             echo ""
             echo "Jina and Voyage are the only exceptions (they have their own clients)."
+            echo "Add '// openai-direct-ok' on the new OpenAI( line or an adjacent line."
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             exit 1
           fi

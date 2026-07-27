@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import {
   LogOut,
   ChevronDown,
+  Wrench,
   Library,
   ShoppingBag,
   PenTool,
@@ -370,6 +371,16 @@ export function ModuleShell({ children }: { children: ReactNode }) {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  {currentUser?.isOwner && (
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        window.location.href = "/owner-panel";
+                      }}
+                    >
+                      <Wrench className="h-4 w-4 mr-2" />
+                      Owner Panel
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem
                     onSelect={() => {
                       window.location.href = "/account";

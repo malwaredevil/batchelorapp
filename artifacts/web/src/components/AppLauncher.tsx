@@ -817,10 +817,10 @@ export function AppLauncher() {
       return [
         {
           value:
-            ornamentsStatsData?.totalQuantity != null
-              ? String(ornamentsStatsData.totalQuantity)
+            ornamentsStatsData?.totalItems != null
+              ? String(ornamentsStatsData.totalItems)
               : "—",
-          label: "Quantity",
+          label: "Ornaments",
           href: `${base}modules/ornaments/`,
         },
       ];
@@ -1052,7 +1052,9 @@ export function AppLauncher() {
                 </DropdownMenuItem>
                 {user?.isOwner && (
                   <DropdownMenuItem
-                    onSelect={() => navigate(`${base}owner-panel`)}
+                    onSelect={() => {
+                      window.location.href = `/owner-panel?from=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+                    }}
                   >
                     <ShieldCheck className="w-4 h-4 mr-2" />
                     Owner Panel

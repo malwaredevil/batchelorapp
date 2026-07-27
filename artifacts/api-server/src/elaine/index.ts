@@ -765,6 +765,16 @@ const QUILTING_ACTION_TYPES = new Set<string>([
   "delete_shopping_item",
   "create_quilting_category",
   "delete_quilting_category",
+  "create_pattern",
+  "delete_quilt",
+  "rename_quilting_category",
+  "merge_quilting_categories",
+  "create_block",
+  "delete_block",
+  "create_layout",
+  "delete_layout",
+  "bulk_reanalyze_quilting",
+  "remove_fabric_creases",
 ]);
 const ORNAMENT_ACTION_TYPES = new Set<string>([
   "update_ornament_item",

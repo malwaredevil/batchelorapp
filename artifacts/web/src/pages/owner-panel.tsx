@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Link } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import {
   ArrowLeft,
   Code2,
@@ -45,18 +45,46 @@ const ALL_TABS: { id: Tab; label: string; icon: typeof Globe }[] = [
   { id: "ai-lab", label: "AI Lab", icon: FlaskConical },
 ];
 
+function useFromParam() {
+  const raw = new URLSearchParams(window.location.search).get("from") ?? "";
+  const from = raw || "/account";
+  let label = "Back to account";
+  if (raw && raw !== "/account") {
+    if (raw.startsWith("/modules/")) {
+      label = "Back to app";
+    } else {
+      label = "Back";
+    }
+  }
+  return { from, label };
+}
+
 export default function OwnerPanel() {
   const { user } = useAuth();
   const isOwner = !!user?.isOwner;
+  const { from: backHref, label: backLabel } = useFromParam();
+  const search = useSearch();
+  const [, navigate] = useLocation();
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const visibleTabs = isOwner
     ? ALL_TABS
     : ALL_TABS.filter((t) => t.id === "travels");
 
-  const [activeTab, setActiveTab] = useState<Tab>("travels");
-  const safeTab: Tab = visibleTabs.some((t) => t.id === activeTab)
-    ? activeTab
-    : "travels";
+  const tabParam = new URLSearchParams(search).get("tab") as Tab | null;
+  const safeTab: Tab =
+    tabParam && visibleTabs.some((t) => t.id === tabParam)
+      ? tabParam
+      : "travels";
+
+  const navigateTab = (id: Tab) => {
+    const params = new URLSearchParams(search);
+    params.set("tab", id);
+    navigate(`/owner-panel?${params.toString()}`, { replace: true });
+  };
 
   usePageAssistantContext(
     "hub-owner-panel",
@@ -66,13 +94,13 @@ export default function OwnerPanel() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background/80 px-6 py-4 backdrop-blur-md">
-        <Link
-          href="/account"
+        <a
+          href={backHref}
           className="flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to account
-        </Link>
+          {backLabel}
+        </a>
         <div className="flex items-center gap-2">
           <AppLogo className="h-7 w-7" />
           <span className="font-semibold tracking-tight text-primary">
@@ -99,7 +127,7 @@ export default function OwnerPanel() {
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => navigateTab(tab.id)}
                 className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                   active
                     ? "bg-background text-foreground shadow-sm"
@@ -325,7 +353,7 @@ function AiEvidenceContent() {
 
 // ---------------------------------------------------------------------------
 // AI Lab — owner-only tab for testing fabric crease / fold removal.
-// Lets the owner compare OpenAI gpt-image-1 vs Replicate FLUX Fill on a
+// Lets the owner test OpenAI gpt-image-2 inpainting on a
 // fabric photo side-by-side before rolling either technique into the quilting
 // module. Only visible when isOwner === true.
 // ---------------------------------------------------------------------------
@@ -345,7 +373,6 @@ interface BatchFabricResult {
   status: "queued" | "detecting" | "running" | "done" | "skipped" | "error";
   detectMsg?: string;
   openaiResult: InpaintResult | null;
-  replicateResult: InpaintResult | null;
   sourceImageUrl: string;
   saveStatus: Record<string, string>;
   error?: string;
@@ -353,7 +380,7 @@ interface BatchFabricResult {
 
 const CANVAS_MAX_PX = 520;
 
-type LabStatus = { openai: boolean; replicate: boolean } | null;
+type LabStatus = { openai: boolean } | null;
 
 function AiLabContent() {
   const queryClient = useQueryClient();
@@ -366,18 +393,17 @@ function AiLabContent() {
     // raw-fetch-ok — owner-only AI lab; no generated hook for this endpoint
     fetch("/api/quilting/lab/status")
       .then((r) => r.json())
-      .then((d: { openai?: boolean; replicate?: boolean }) => {
-        setLabStatus({ openai: !!d.openai, replicate: !!d.replicate });
+      .then((d: { openai?: boolean }) => {
+        setLabStatus({ openai: !!d.openai });
       })
       .catch(() => {
-        setLabStatus({ openai: false, replicate: false });
+        setLabStatus({ openai: false });
       });
   }, []);
 
   const missingProviders: string[] = [];
   if (labStatus !== null) {
     if (!labStatus.openai) missingProviders.push("OPENAI_API_KEY");
-    if (!labStatus.replicate) missingProviders.push("REPLICATE_API_TOKEN");
   }
   const providersReady = labStatus !== null && missingProviders.length === 0;
 
@@ -399,18 +425,30 @@ function AiLabContent() {
   const [canvasW, setCanvasW] = useState(CANVAS_MAX_PX);
   const [canvasH, setCanvasH] = useState(CANVAS_MAX_PX);
   const [brushSize, setBrushSize] = useState(24);
+  const [drawMode, setDrawMode] = useState<"paint" | "erase">("paint");
   const isDrawingRef = useRef(false);
+
+  // ── Zoom lightbox ───────────────────────────────────────────────────────
+  const [zoomSrc, setZoomSrc] = useState<string | null>(null);
+  const [zoomLabel, setZoomLabel] = useState("");
+  const [zoomScale, setZoomScale] = useState(1);
+  const [zoomPan, setZoomPan] = useState({ x: 0, y: 0 });
+  const zoomPanning = useRef(false);
+  const zoomPanStart = useRef({ x: 0, y: 0 });
+
+  const openZoom = (src: string, label: string) => {
+    setZoomSrc(src);
+    setZoomLabel(label);
+    setZoomScale(1);
+    setZoomPan({ x: 0, y: 0 });
+  };
+  const closeZoom = () => setZoomSrc(null);
 
   // ── Detection / removal ────────────────────────────────────────────────
   const [detecting, setDetecting] = useState(false);
   const [detectMsg, setDetectMsg] = useState<string | null>(null);
-  // Per-panel loading states so each resolves independently
   const [openaiRemoving, setOpenaiRemoving] = useState(false);
-  const [replicateRemoving, setReplicateRemoving] = useState(false);
   const [openaiResult, setOpenaiResult] = useState<InpaintResult | null>(null);
-  const [replicateResult, setReplicateResult] = useState<InpaintResult | null>(
-    null,
-  );
   const [saveStatus, setSaveStatus] = useState<Record<string, string>>({});
 
   // ── Load fabrics on mount + when query changes ─────────────────────────
@@ -438,7 +476,6 @@ function AiLabContent() {
       setTestPhotoDataUrl(dataUrl);
       setTestPhotoName(file.name);
       setOpenaiResult(null);
-      setReplicateResult(null);
       setDetectMsg(null);
       setSaveStatus({});
     };
@@ -460,7 +497,6 @@ function AiLabContent() {
     if (ctx) ctx.clearRect(0, 0, w, h);
     setDetectMsg(null);
     setOpenaiResult(null);
-    setReplicateResult(null);
     setSaveStatus({});
   }, []);
 
@@ -488,10 +524,17 @@ function AiLabContent() {
   const paintAt = (pos: { x: number; y: number }) => {
     const ctx = canvasRef.current?.getContext("2d");
     if (!ctx) return;
-    ctx.fillStyle = "rgba(139, 92, 246, 0.65)";
+    if (drawMode === "erase") {
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.fillStyle = "rgba(0,0,0,1)";
+    } else {
+      ctx.globalCompositeOperation = "source-over";
+      ctx.fillStyle = "rgba(139, 92, 246, 0.65)";
+    }
     ctx.beginPath();
     ctx.arc(pos.x, pos.y, brushSize / 2, 0, Math.PI * 2);
     ctx.fill();
+    ctx.globalCompositeOperation = "source-over";
   };
 
   const onMouseDown = (e: React.MouseEvent) => {
@@ -599,22 +642,18 @@ function AiLabContent() {
     }
   };
 
-  // ── Remove creases — calls both provider endpoints in parallel so each
-  //    result panel resolves independently as soon as its model finishes. ──
   const removeCreases = () => {
     if (!selectedFabric && !testPhotoDataUrl) return;
     const maskDataUrl = getMaskDataUrl();
     if (!maskDataUrl) return;
 
     setOpenaiResult(null);
-    setReplicateResult(null);
     setSaveStatus({});
 
     const sourceBody = testPhotoDataUrl
       ? { sourceDataUrl: testPhotoDataUrl }
       : { fabricId: selectedFabric!.id };
 
-    // OpenAI — resolves independently
     setOpenaiRemoving(true);
     // raw-fetch-ok — owner-only AI lab; no generated hook for this endpoint
     fetch("/api/quilting/lab/remove-creases/openai", {
@@ -639,32 +678,6 @@ function AiLabContent() {
         }),
       )
       .finally(() => setOpenaiRemoving(false));
-
-    // Replicate — resolves independently
-    setReplicateRemoving(true);
-    // raw-fetch-ok — owner-only AI lab; no generated hook for this endpoint
-    fetch("/api/quilting/lab/remove-creases/replicate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...sourceBody, maskDataUrl }),
-    })
-      .then(async (resp) => {
-        const data = (await resp.json()) as {
-          dataUrl?: string;
-          error?: string;
-        };
-        setReplicateResult(
-          resp.ok && data.dataUrl
-            ? { dataUrl: data.dataUrl }
-            : { error: data.error ?? "Replicate returned no result." },
-        );
-      })
-      .catch(() =>
-        setReplicateResult({
-          error: "Replicate request failed — check server logs.",
-        }),
-      )
-      .finally(() => setReplicateRemoving(false));
   };
 
   // ── Save result as fabric primary photo ───────────────────────────────
@@ -712,6 +725,68 @@ function AiLabContent() {
 
   return (
     <div className="space-y-6">
+      {/* Zoom lightbox */}
+      {zoomSrc && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+          onClick={closeZoom}
+          onWheel={(e) => {
+            e.preventDefault();
+            const factor = e.deltaY < 0 ? 1.12 : 0.89;
+            setZoomScale((s) => Math.min(Math.max(s * factor, 0.5), 10));
+          }}
+          onMouseDown={(e) => {
+            if (zoomScale <= 1) return;
+            e.preventDefault();
+            zoomPanning.current = true;
+            zoomPanStart.current = {
+              x: e.clientX - zoomPan.x,
+              y: e.clientY - zoomPan.y,
+            };
+          }}
+          onMouseMove={(e) => {
+            if (!zoomPanning.current) return;
+            setZoomPan({
+              x: e.clientX - zoomPanStart.current.x,
+              y: e.clientY - zoomPanStart.current.y,
+            });
+          }}
+          onMouseUp={() => {
+            zoomPanning.current = false;
+          }}
+          style={{ cursor: zoomScale > 1 ? "grab" : "default" }}
+        >
+          <button
+            type="button"
+            onClick={closeZoom}
+            className="absolute right-4 top-4 z-10 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
+            aria-label="Close zoom"
+          >
+            ✕
+          </button>
+          <p className="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-xs font-medium text-white/70 uppercase tracking-wide select-none">
+            {zoomLabel} {zoomScale !== 1 && `· ${Math.round(zoomScale * 100)}%`}
+          </p>
+          <p className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 text-xs text-white/40 select-none">
+            Scroll to zoom · drag to pan · click outside to close
+          </p>
+          <img
+            src={zoomSrc}
+            alt={zoomLabel}
+            className="rounded-lg shadow-2xl select-none"
+            style={{
+              maxHeight: "85vh",
+              maxWidth: "85vw",
+              transform: `scale(${zoomScale}) translate(${zoomPan.x / zoomScale}px, ${zoomPan.y / zoomScale}px)`,
+              transformOrigin: "center center",
+              transition: zoomPanning.current ? "none" : "transform 0.1s ease",
+            }}
+            onClick={(e) => e.stopPropagation()}
+            draggable={false}
+          />
+        </div>
+      )}
+
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">
@@ -749,30 +824,14 @@ function AiLabContent() {
         </div>
       </div>
 
-      {/* Missing-provider banners — shown in both modes */}
-      {missingProviders.length > 0 && (
-        <div className="space-y-2">
-          {!labStatus?.openai && (
-            <div className="flex items-start gap-3 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              <div>
-                <span className="font-semibold">OPENAI_API_KEY</span> is not
-                set. The OpenAI inpainting model (gpt-image-1) will be
-                unavailable. Add it in the <strong>Secrets</strong> tab of your
-                Replit workspace.
-              </div>
-            </div>
-          )}
-          {!labStatus?.replicate && (
-            <div className="flex items-start gap-3 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              <div>
-                <span className="font-semibold">REPLICATE_API_TOKEN</span> is
-                not set. The Replicate FLUX Fill model will be unavailable. Add
-                it in the <strong>Secrets</strong> tab of your Replit workspace.
-              </div>
-            </div>
-          )}
+      {/* Missing-provider banner */}
+      {!labStatus?.openai && labStatus !== null && (
+        <div className="flex items-start gap-3 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <span className="font-semibold">OPENAI_API_KEY</span> is not set.
+            Add it in the <strong>Secrets</strong> tab of your Replit workspace.
+          </div>
         </div>
       )}
 
@@ -811,7 +870,6 @@ function AiLabContent() {
                       setTestPhotoDataUrl(null);
                       setTestPhotoName(null);
                       setOpenaiResult(null);
-                      setReplicateResult(null);
                       setDetectMsg(null);
                       setSaveStatus({});
                     }}
@@ -871,7 +929,24 @@ function AiLabContent() {
                       ? selectedFabric.name || `Fabric #${selectedFabric.id}`
                       : (testPhotoName ?? "Test photo")}
                   </span>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                    {/* Paint / Erase mode toggle */}
+                    <div className="flex overflow-hidden rounded-md border border-border text-xs font-medium">
+                      <button
+                        type="button"
+                        onClick={() => setDrawMode("paint")}
+                        className={`px-2.5 py-1 transition-colors ${drawMode === "paint" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
+                      >
+                        Paint
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDrawMode("erase")}
+                        className={`border-l border-border px-2.5 py-1 transition-colors ${drawMode === "erase" ? "bg-destructive text-white" : "text-muted-foreground hover:bg-muted"}`}
+                      >
+                        Erase
+                      </button>
+                    </div>
                     <label className="flex items-center gap-1 text-xs text-muted-foreground">
                       Brush
                       <input
@@ -889,7 +964,7 @@ function AiLabContent() {
                       onClick={clearCanvas}
                       className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
                     >
-                      Clear
+                      Clear all
                     </button>
                   </div>
                 </div>
@@ -909,7 +984,10 @@ function AiLabContent() {
                     ref={canvasRef}
                     width={canvasW}
                     height={canvasH}
-                    className="absolute inset-0 cursor-crosshair"
+                    style={{
+                      cursor: drawMode === "erase" ? "cell" : "crosshair",
+                    }}
+                    className="absolute inset-0"
                     onMouseDown={onMouseDown}
                     onMouseMove={onMouseMove}
                     onMouseUp={onMouseUp}
@@ -932,12 +1010,7 @@ function AiLabContent() {
                 <button
                   type="button"
                   onClick={detectCreases}
-                  disabled={
-                    !providersReady ||
-                    detecting ||
-                    openaiRemoving ||
-                    replicateRemoving
-                  }
+                  disabled={!providersReady || detecting || openaiRemoving}
                   title={
                     !providersReady
                       ? `Missing keys: ${missingProviders.join(", ")}`
@@ -950,12 +1023,7 @@ function AiLabContent() {
                 <button
                   type="button"
                   onClick={removeCreases}
-                  disabled={
-                    !providersReady ||
-                    openaiRemoving ||
-                    replicateRemoving ||
-                    detecting
-                  }
+                  disabled={!providersReady || openaiRemoving || detecting}
                   title={
                     !providersReady
                       ? `Missing keys: ${missingProviders.join(", ")}`
@@ -963,36 +1031,41 @@ function AiLabContent() {
                   }
                   className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
-                  {openaiRemoving || replicateRemoving
-                    ? "Running AI (30–60 s)…"
-                    : "Remove creases"}
+                  {openaiRemoving ? "Running AI (30–60 s)…" : "Remove creases"}
                 </button>
               </div>
 
               {/* Results */}
-              {(openaiRemoving ||
-                replicateRemoving ||
-                openaiResult ||
-                replicateResult) && (
+              {(openaiRemoving || openaiResult) && (
                 <div className="space-y-3">
-                  <h3 className="text-sm font-semibold">
-                    Side-by-side comparison
-                  </h3>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     {/* Original */}
                     <div className="space-y-1">
                       <p className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Original
                       </p>
-                      <img
-                        src={sourceImageUrl}
-                        alt="Original"
-                        className="w-full rounded-md border border-border object-cover"
-                      />
+                      <div
+                        className="group relative h-72 cursor-zoom-in overflow-hidden rounded-md border border-border bg-muted"
+                        onClick={() => {
+                          if (sourceImageUrl)
+                            openZoom(sourceImageUrl, "Original");
+                        }}
+                      >
+                        <img
+                          src={sourceImageUrl}
+                          alt="Original"
+                          className="h-full w-full object-contain"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 transition-opacity group-hover:opacity-100">
+                          <span className="rounded-lg bg-black/60 px-3 py-1.5 text-xs font-medium text-white">
+                            Click to zoom
+                          </span>
+                        </div>
+                      </div>
                     </div>
 
                     <LabResultPanel
-                      label="OpenAI gpt-image-1"
+                      label="OpenAI gpt-image-2"
                       loading={openaiRemoving}
                       result={openaiResult}
                       saveDisabled={!selectedFabric}
@@ -1001,17 +1074,9 @@ function AiLabContent() {
                         if (openaiResult?.dataUrl)
                           saveResult(openaiResult.dataUrl, "openai");
                       }}
-                    />
-
-                    <LabResultPanel
-                      label="Replicate FLUX Fill"
-                      loading={replicateRemoving}
-                      result={replicateResult}
-                      saveDisabled={!selectedFabric}
-                      saveStatus={saveStatus["replicate"]}
-                      onSave={() => {
-                        if (replicateResult?.dataUrl)
-                          saveResult(replicateResult.dataUrl, "replicate");
+                      onZoom={() => {
+                        if (openaiResult?.dataUrl)
+                          openZoom(openaiResult.dataUrl, "OpenAI gpt-image-2");
                       }}
                     />
                   </div>
@@ -1097,7 +1162,6 @@ function BatchLabContent({
         fabric: f,
         status: "queued" as const,
         openaiResult: null,
-        replicateResult: null,
         sourceImageUrl: `/api/quilting/fabrics/${f.id}/image`,
         saveStatus: {},
       })),
@@ -1160,38 +1224,27 @@ function BatchLabContent({
         continue;
       }
 
-      // ── 2. Run both providers in parallel ──────────────────────────────
+      // ── 2. Run OpenAI ──────────────────────────────────────────────────
       updateResult(fabric.id, { status: "running", detectMsg });
 
-      const callProvider = async (provider: "openai" | "replicate") => {
+      let openaiResult: InpaintResult;
+      try {
         // raw-fetch-ok — owner-only AI lab; no generated hook
-        const r = await fetch(`/api/quilting/lab/remove-creases/${provider}`, {
+        const r = await fetch("/api/quilting/lab/remove-creases/openai", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ fabricId: fabric.id, maskDataUrl }),
         });
         const d = (await r.json()) as { dataUrl?: string; error?: string };
-        if (!r.ok || d.error)
-          return { error: d.error ?? `${provider} returned no result.` };
-        return { dataUrl: d.dataUrl };
-      };
+        openaiResult =
+          r.ok && d.dataUrl
+            ? { dataUrl: d.dataUrl }
+            : { error: d.error ?? "OpenAI returned no result." };
+      } catch {
+        openaiResult = { error: "OpenAI request failed." };
+      }
 
-      const [openaiSettled, replicateSettled] = await Promise.allSettled([
-        callProvider("openai"),
-        callProvider("replicate"),
-      ]);
-
-      updateResult(fabric.id, {
-        status: "done",
-        openaiResult:
-          openaiSettled.status === "fulfilled"
-            ? openaiSettled.value
-            : { error: "OpenAI request failed." },
-        replicateResult:
-          replicateSettled.status === "fulfilled"
-            ? replicateSettled.value
-            : { error: "Replicate request failed." },
-      });
+      updateResult(fabric.id, { status: "done", openaiResult });
       setProgress((prev) => (prev ? { ...prev, done: prev.done + 1 } : null));
     }
 
@@ -1372,31 +1425,14 @@ function BatchLabContent({
                     />
                   </div>
 
-                  {/* OpenAI */}
                   <LabResultPanel
-                    label="OpenAI gpt-image-1"
+                    label="OpenAI gpt-image-2"
                     loading={r.status === "running" && !r.openaiResult}
                     result={r.openaiResult}
                     saveStatus={r.saveStatus["openai"]}
                     onSave={() => {
                       if (r.openaiResult?.dataUrl)
                         saveResult(r.fabric, r.openaiResult.dataUrl, "openai");
-                    }}
-                  />
-
-                  {/* Replicate */}
-                  <LabResultPanel
-                    label="Replicate FLUX Fill"
-                    loading={r.status === "running" && !r.replicateResult}
-                    result={r.replicateResult}
-                    saveStatus={r.saveStatus["replicate"]}
-                    onSave={() => {
-                      if (r.replicateResult?.dataUrl)
-                        saveResult(
-                          r.fabric,
-                          r.replicateResult.dataUrl,
-                          "replicate",
-                        );
                     }}
                   />
                 </div>
@@ -1459,6 +1495,7 @@ function LabResultPanel({
   saveStatus,
   saveDisabled,
   onSave,
+  onZoom,
 }: {
   label: string;
   loading: boolean;
@@ -1466,6 +1503,7 @@ function LabResultPanel({
   saveStatus?: string;
   saveDisabled?: boolean;
   onSave: () => void;
+  onZoom?: () => void;
 }) {
   return (
     <div className="space-y-2">
@@ -1473,11 +1511,14 @@ function LabResultPanel({
         {label}
       </p>
       {loading && (
-        <div className="flex h-32 items-center justify-center rounded-md border border-border bg-muted">
+        <div className="flex h-72 items-center justify-center rounded-md border border-border bg-muted">
           <p className="animate-pulse text-xs text-muted-foreground">
             Running…
           </p>
         </div>
+      )}
+      {!loading && !result && (
+        <div className="h-72 rounded-md border border-dashed border-border bg-muted/50" />
       )}
       {result?.error && (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
@@ -1486,11 +1527,21 @@ function LabResultPanel({
       )}
       {result?.dataUrl && (
         <>
-          <img
-            src={result.dataUrl}
-            alt={label}
-            className="w-full rounded-md border border-border object-cover"
-          />
+          <div
+            className="group relative h-72 cursor-zoom-in overflow-hidden rounded-md border border-border bg-muted"
+            onClick={onZoom}
+          >
+            <img
+              src={result.dataUrl}
+              alt={label}
+              className="h-full w-full object-contain"
+            />
+            <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 transition-opacity group-hover:opacity-100">
+              <span className="rounded-lg bg-black/60 px-3 py-1.5 text-xs font-medium text-white">
+                Click to zoom
+              </span>
+            </div>
+          </div>
           <button
             type="button"
             onClick={onSave}

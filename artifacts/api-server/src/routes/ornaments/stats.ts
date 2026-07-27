@@ -5,6 +5,7 @@ import {
   ListOrnamentSeriesResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../../middleware/auth";
+import { isNull } from "drizzle-orm";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -16,7 +17,8 @@ router.get("/stats", async (_req, res) => {
       quantity: ornamentsItems.quantity,
       bookValue: ornamentsItems.bookValue,
     })
-    .from(ornamentsItems);
+    .from(ornamentsItems)
+    .where(isNull(ornamentsItems.deletedAt));
 
   let totalItems = 0;
   let totalQuantity = 0;
@@ -59,7 +61,8 @@ router.get("/stats", async (_req, res) => {
 router.get("/series", async (_req, res) => {
   const rows = await db
     .select({ seriesOrCollection: ornamentsItems.seriesOrCollection })
-    .from(ornamentsItems);
+    .from(ornamentsItems)
+    .where(isNull(ornamentsItems.deletedAt));
 
   const counts = new Map<string, number>();
   for (const row of rows) {

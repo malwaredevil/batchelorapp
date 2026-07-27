@@ -14,6 +14,11 @@ import {
   entityCategories,
 } from "@workspace/db";
 import { logActivity } from "../lib/soft-delete";
+import { uploadImage, downloadImageBuffer } from "../lib/storage";
+import {
+  detectCreasesFromBuffer,
+  removeCreasesFromBuffer,
+} from "../lib/crease-removal";
 import { bulkReanalyzeFabrics } from "../routes/quilting/fabrics";
 import { bulkReanalyzePatterns } from "../routes/quilting/patterns";
 import {
@@ -180,6 +185,11 @@ export const BulkReanalyzeQuiltingActionPayload = z.object({
   ids: z.array(z.number().int().positive()).max(20).optional(),
 });
 
+export const RemoveFabricCreasesPayload = z.object({
+  fabricId: z.number().int().positive(),
+  setAsDefault: z.boolean().optional(),
+});
+
 export const quiltingActionSchemas = [
   z.object({
     type: z.literal("update_fabric"),
@@ -253,6 +263,10 @@ export const quiltingActionSchemas = [
     type: z.literal("bulk_reanalyze_quilting"),
     payload: BulkReanalyzeQuiltingActionPayload,
   }),
+  z.object({
+    type: z.literal("remove_fabric_creases"),
+    payload: RemoveFabricCreasesPayload,
+  }),
 ] as const;
 
 export type QuiltingActionType =
@@ -273,7 +287,8 @@ export type QuiltingActionType =
   | "delete_block"
   | "create_layout"
   | "delete_layout"
-  | "bulk_reanalyze_quilting";
+  | "bulk_reanalyze_quilting"
+  | "remove_fabric_creases";
 
 async function getFabricLabelInfo(
   fabricId: number,
@@ -829,6 +844,83 @@ export const quiltingActionExecutors: Record<
     };
   }) as ActionExecutor,
 
+  remove_fabric_creases: (async (
+    payload: z.infer<typeof RemoveFabricCreasesPayload>,
+  ) => {
+    const [fabric] = await db
+      .select({
+        id: fabrics.id,
+        name: fabrics.name,
+        imagePath: fabrics.imagePath,
+      })
+      .from(fabrics)
+      .where(eq(fabrics.id, payload.fabricId))
+      .limit(1);
+    if (!fabric) return { status: 404, body: { error: "Fabric not found" } };
+
+    const { buffer: imgBuffer } = await downloadImageBuffer(fabric.imagePath);
+    const detected = await detectCreasesFromBuffer(imgBuffer);
+    if (!detected.creases || detected.creases.length === 0) {
+      return {
+        status: 200,
+        body: {
+          type: "remove_fabric_creases",
+          result: {
+            fabricId: payload.fabricId,
+            message: "No creases detected in this fabric image.",
+          },
+        },
+      };
+    }
+
+    const dataUrl = await removeCreasesFromBuffer(
+      imgBuffer,
+      detected.maskDataUrl,
+    );
+    const b64 = dataUrl.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
+    const resultBuf = Buffer.from(b64, "base64");
+    const storagePath = await uploadImage(resultBuf, "image/png");
+
+    const existing = await db
+      .select({ position: quiltingImages.position })
+      .from(quiltingImages)
+      .where(sql`entity_type = 'fabric' AND entity_id = ${payload.fabricId}`)
+      .orderBy(quiltingImages.position);
+    const nextPosition = (existing[existing.length - 1]?.position ?? 0) + 1;
+
+    const [image] = await db
+      .insert(quiltingImages)
+      .values({
+        entityType: "fabric",
+        entityId: payload.fabricId,
+        storagePath,
+        label: "AI Crease Removed",
+        position: nextPosition,
+      })
+      .returning();
+
+    if (payload.setAsDefault) {
+      await db
+        .update(fabrics)
+        .set({ imagePath: storagePath })
+        .where(eq(fabrics.id, payload.fabricId));
+    }
+
+    return {
+      status: 200,
+      body: {
+        type: "remove_fabric_creases",
+        result: {
+          fabricId: payload.fabricId,
+          imageId: image.id,
+          setAsDefault: payload.setAsDefault ?? false,
+          creasesFound: detected.creases.length,
+          message: `Removed ${detected.creases.length} crease(s) from "${fabric.name}". The cleaned image has been saved${payload.setAsDefault ? " and set as the default photo" : " as a supplemental photo"}.`,
+        },
+      },
+    };
+  }) as ActionExecutor,
+
   bulk_reanalyze_quilting: (async (
     payload: z.infer<typeof BulkReanalyzeQuiltingActionPayload>,
   ) => {
@@ -1013,6 +1105,14 @@ export async function buildQuiltingActionLabel(action: {
       return payload.ids && payload.ids.length > 0
         ? `Run AI re-analysis on ${payload.ids.length} ${label}`
         : `Run AI re-analysis on every ${payload.entityType} that needs it`;
+    }
+    case "remove_fabric_creases": {
+      const payload = action.payload as z.infer<
+        typeof RemoveFabricCreasesPayload
+      >;
+      return payload.setAsDefault
+        ? `Remove creases from fabric ${payload.fabricId} and set as default photo`
+        : `Remove creases from fabric ${payload.fabricId}`;
     }
   }
 }
@@ -1318,6 +1418,29 @@ export const quiltingActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
             ids: { type: "array", items: { type: "integer" } },
           },
           required: ["entityType"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "remove_fabric_creases",
+        description:
+          "Automatically detect and remove fold creases from a fabric's photo using AI inpainting. Only call this if the fabric's numeric id is visible on screen; never guess an id. Optionally set the cleaned image as the fabric's default photo.",
+        parameters: {
+          type: "object",
+          properties: {
+            fabricId: {
+              type: "integer",
+              description: "The numeric id of the fabric to process",
+            },
+            setAsDefault: {
+              type: "boolean",
+              description:
+                "If true, replace the fabric's primary photo with the cleaned result. Defaults to false (saves as a supplemental photo instead).",
+            },
+          },
+          required: ["fabricId"],
         },
       },
     },

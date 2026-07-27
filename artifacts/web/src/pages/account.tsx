@@ -801,7 +801,7 @@ export default function Account() {
         {user?.isOwner && (
           <div className="mx-auto w-full max-w-xl">
             <Link
-              href="/owner-panel"
+              href="/owner-panel?from=/account"
               className="flex w-full items-center justify-between rounded-xl border border-card-border bg-card px-5 py-4 text-sm font-medium transition-colors hover:bg-muted/60"
             >
               <div>

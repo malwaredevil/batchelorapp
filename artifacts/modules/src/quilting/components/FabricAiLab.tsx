@@ -409,6 +409,7 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
       const blob = await (await fetch(dataUrl)).blob();
       const form = new FormData();
       form.append("image", blob, "fabric-photo.png");
+      // raw-fetch-ok: PUT /fabrics/:id/image (replace primary image) has no generated hook — route not in OpenAPI spec
       const r = await fetch(`/api/quilting/fabrics/${fabricId}/image`, {
         method: "PUT",
         body: form,

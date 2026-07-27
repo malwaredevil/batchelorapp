@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, potteryItems } from "@workspace/db";
 import { GetCollectionStatsResponse } from "@workspace/api-zod";
 import { requireAuth } from "../../middleware/auth";
+import { isNull } from "drizzle-orm";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -22,7 +23,8 @@ router.get("/stats", async (_req, res) => {
       colors: potteryItems.dominantColors,
       quantity: potteryItems.quantity,
     })
-    .from(potteryItems);
+    .from(potteryItems)
+    .where(isNull(potteryItems.deletedAt));
 
   const motifCounts = new Map<string, number>();
   const colorCounts = new Map<string, number>();

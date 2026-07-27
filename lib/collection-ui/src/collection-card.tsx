@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import {
   ZoomIn,
   MoreVertical,
@@ -68,6 +68,10 @@ export function CollectionCard({
 }: CollectionCardProps) {
   const [imgLoaded, setImgLoaded] = useState(false);
   const [zoomOpen, setZoomOpen] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+  useEffect(() => {
+    if (imgRef.current?.complete) setImgLoaded(true);
+  }, []);
 
   return (
     <div className="relative group">
@@ -165,10 +169,12 @@ export function CollectionCard({
         <div className="aspect-square overflow-hidden bg-muted">
           {imageUrl ? (
             <img
+              ref={imgRef}
               src={imageUrl}
               alt={name}
               loading="lazy"
               onLoad={() => setImgLoaded(true)}
+              onError={() => setImgLoaded(true)}
               style={{
                 filter: imgLoaded ? "none" : "blur(8px)",
                 transition: "filter 0.4s ease",

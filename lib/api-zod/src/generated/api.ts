@@ -7,7 +7,6 @@
  */
 import * as zod from 'zod';
 
-
 /**
  * @summary Health check
  */
@@ -6331,5 +6330,3 @@ export const UpdateStateResponse = zod.object({
   "dismissedAt": zod.coerce.date().nullish(),
   "snoozedUntil": zod.coerce.date().nullish()
 })
-
-

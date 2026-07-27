@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import {
   useListPottery,
@@ -237,6 +237,10 @@ function PieceCard({
 }) {
   const [imgLoaded, setImgLoaded] = useState(false);
   const [zoomOpen, setZoomOpen] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+  useEffect(() => {
+    if (imgRef.current?.complete) setImgLoaded(true);
+  }, []);
   return (
     <div className="relative group">
       {/* Selection checkbox (selecting mode) — top-left */}
@@ -352,10 +356,12 @@ function PieceCard({
       >
         <div className="aspect-square overflow-hidden bg-muted">
           <img
+            ref={imgRef}
             src={item.imageUrl}
             alt={item.name}
             loading="lazy"
             onLoad={() => setImgLoaded(true)}
+            onError={() => setImgLoaded(true)}
             style={{
               filter: imgLoaded ? "none" : "blur(8px)",
               transition: "filter 0.4s ease",

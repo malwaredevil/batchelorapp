@@ -9,7 +9,7 @@ import {
 } from "@workspace/db";
 import { GetStatsResponse, GetStaleCountResponse } from "@workspace/api-zod";
 import { requireAuth } from "../../middleware/auth";
-import { sql } from "drizzle-orm";
+import { sql, isNull, and } from "drizzle-orm";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -28,6 +28,7 @@ function topArrayCounts(
         select lower(trim(value)) as label, count(*)::int as count
         from ${fabrics}, unnest(${column}) as value
         where trim(value) <> ''
+          and ${fabrics.deletedAt} is null
         group by lower(trim(value))
         order by count desc, label asc
         limit ${TOP_LIMIT}
@@ -59,6 +60,7 @@ router.get("/stats", async (_req, res) => {
                 0
               )::double precision as yardage
             from ${fabrics}
+            where ${fabrics.deletedAt} is null
           `,
       )
       .then((r) => r.rows[0]),
@@ -71,6 +73,7 @@ router.get("/stats", async (_req, res) => {
             from ${fabrics}
             where ${fabrics.printType} is not null
               and trim(${fabrics.printType}) <> ''
+              and ${fabrics.deletedAt} is null
             group by lower(trim(${fabrics.printType}))
             order by count desc, label asc
             limit ${TOP_LIMIT}
@@ -80,10 +83,12 @@ router.get("/stats", async (_req, res) => {
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(quiltPatterns)
+      .where(isNull(quiltPatterns.deletedAt))
       .then((r) => r[0].count),
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(finishedQuilts)
+      .where(isNull(finishedQuilts.deletedAt))
       .then((r) => r[0].count),
     db
       .select({ count: sql<number>`count(*)::int` })
@@ -127,12 +132,17 @@ router.get("/stats/stale", async (_req, res) => {
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(fabrics)
-      .where(sql`${fabrics.embedding} IS NULL`)
+      .where(and(sql`${fabrics.embedding} IS NULL`, isNull(fabrics.deletedAt)))
       .then((r) => r[0].count),
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(quiltPatterns)
-      .where(sql`${quiltPatterns.embedding} IS NULL`)
+      .where(
+        and(
+          sql`${quiltPatterns.embedding} IS NULL`,
+          isNull(quiltPatterns.deletedAt),
+        ),
+      )
       .then((r) => r[0].count),
   ]);
 

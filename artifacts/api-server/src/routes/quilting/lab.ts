@@ -1,15 +1,23 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod/v4";
 import sharp from "sharp";
-import OpenAI, { toFile } from "openai";
 import { eq } from "drizzle-orm";
 import { db, fabrics } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { requireOwner } from "../../middleware/owner";
-import { callModel, MODELS } from "../../lib/ai-client";
 import { downloadImageBuffer } from "../../lib/storage";
 import { env } from "../../lib/env";
 import { logger } from "../../lib/logger";
+import {
+  validateSourceDataUrl,
+  preprocessForInpaint,
+  type CropInfo,
+} from "@workspace/ai-actions";
+import {
+  detectCreasesFromBuffer,
+  removeCreasesFromBuffer,
+  DEFAULT_INPAINT_PROMPT,
+} from "../../lib/crease-removal";
 
 const router: IRouter = Router();
 
@@ -44,31 +52,6 @@ const InpaintBody = z
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Max accepted sourceDataUrl payload: 10 MB decoded (matches JSON body limit). */
-const MAX_SOURCE_DATA_URL_BYTES = 10 * 1024 * 1024;
-
-function validateSourceDataUrl(dataUrl: string): Buffer {
-  if (!/^data:image\/(jpeg|jpg|png|webp|gif);base64,/i.test(dataUrl)) {
-    throw Object.assign(
-      new Error(
-        "sourceDataUrl must be a base64-encoded image (jpeg/png/webp/gif).",
-      ),
-      { status: 400 },
-    );
-  }
-  const b64 = dataUrl.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
-  const buf = Buffer.from(b64, "base64");
-  if (buf.byteLength > MAX_SOURCE_DATA_URL_BYTES) {
-    throw Object.assign(
-      new Error(
-        `sourceDataUrl exceeds the 10 MB limit (got ${Math.round(buf.byteLength / 1024 / 1024)}MB).`,
-      ),
-      { status: 400 },
-    );
-  }
-  return buf;
-}
-
 async function getSourceBuffer(
   fabricId?: number,
   sourceDataUrl?: string,
@@ -89,86 +72,6 @@ async function getSourceBuffer(
   }
   throw new Error("Either fabricId or sourceDataUrl is required.");
 }
-
-/** Preprocess source + mask into the two format variants required by each API. */
-async function preprocessForInpaint(
-  imgBuffer: Buffer,
-  maskDataUrl: string,
-): Promise<{ resizedImg: Buffer; openaiMask: Buffer; replMask: Buffer }> {
-  const maskB64 = maskDataUrl.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
-  const maskBuffer = Buffer.from(maskB64, "base64");
-
-  // Both image and mask MUST use the same fit strategy so pixel coordinates
-  // stay aligned. "contain" letterboxes both to 1024×1024 with padding.
-  // Image padding = white (neutral); mask padding = black (= "keep" for both
-  // OpenAI transparent-means-inpaint and Replicate white-means-inpaint).
-  const [resizedImg, rawMask] = await Promise.all([
-    sharp(imgBuffer)
-      .resize(1024, 1024, {
-        fit: "contain",
-        background: { r: 255, g: 255, b: 255, alpha: 255 },
-      })
-      .ensureAlpha()
-      .png()
-      .toBuffer(),
-    sharp(maskBuffer)
-      .resize(1024, 1024, {
-        fit: "contain",
-        background: { r: 0, g: 0, b: 0, alpha: 0 }, // black transparent → "keep" in both APIs
-      })
-      .ensureAlpha()
-      .raw()
-      .toBuffer({ resolveWithObject: true }),
-  ]);
-
-  // OpenAI mask: transparent = inpaint area, opaque white = keep.
-  // User painted opaque purple where creases are → invert alpha.
-  const openaiMaskData = Buffer.from(rawMask.data);
-  for (let i = 3; i < openaiMaskData.length; i += 4) {
-    const wasOpaque = openaiMaskData[i] > 10;
-    openaiMaskData[i] = wasOpaque ? 0 : 255;
-    if (!wasOpaque) {
-      openaiMaskData[i - 3] = 255;
-      openaiMaskData[i - 2] = 255;
-      openaiMaskData[i - 1] = 255;
-    }
-  }
-  const openaiMask = await sharp(openaiMaskData, {
-    raw: {
-      width: rawMask.info.width,
-      height: rawMask.info.height,
-      channels: 4,
-    },
-  })
-    .png()
-    .toBuffer();
-
-  // Replicate mask: white = inpaint, black = keep (no alpha).
-  const replMaskData = Buffer.from(rawMask.data);
-  for (let i = 0; i < replMaskData.length; i += 4) {
-    const alpha = replMaskData[i + 3];
-    const painted = alpha > 10;
-    replMaskData[i] = painted ? 255 : 0;
-    replMaskData[i + 1] = painted ? 255 : 0;
-    replMaskData[i + 2] = painted ? 255 : 0;
-    replMaskData[i + 3] = 255;
-  }
-  const replMask = await sharp(replMaskData, {
-    raw: {
-      width: rawMask.info.width,
-      height: rawMask.info.height,
-      channels: 4,
-    },
-  })
-    .removeAlpha()
-    .png()
-    .toBuffer();
-
-  return { resizedImg, openaiMask, replMask };
-}
-
-const DEFAULT_INPAINT_PROMPT =
-  "flat, smooth fabric with no creases or folds, uniform surface texture, original print pattern preserved exactly";
 
 // ---------------------------------------------------------------------------
 // GET /lab/status
@@ -211,133 +114,14 @@ router.post("/lab/detect-creases", async (req, res) => {
     return;
   }
 
-  const meta = await sharp(imgBuffer).metadata();
-  const w = meta.width ?? 1024;
-  const h = meta.height ?? 1024;
-
-  const imageDataUrl = `data:image/png;base64,${imgBuffer.toString("base64")}`;
-
-  let description = "Could not analyse the image.";
-  let creases: Array<{
-    x1Pct: number;
-    y1Pct: number;
-    x2Pct: number;
-    y2Pct: number;
-    widthPct: number;
-  }> = [];
-
-  try {
-    const raw = await callModel(MODELS.FAST_VISION, async (client, model) => {
-      const resp = await client.chat.completions.create({
-        model,
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "image_url", image_url: { url: imageDataUrl } },
-              {
-                type: "text",
-                text: `You are analysing a fabric photo to find PHYSICAL FOLD LINES — the actual crease lines left when fabric is stored folded on a bolt or fat quarter.
-
-## The one key test: does the line run continuously edge-to-edge?
-A physical bolt fold is a straight or nearly-straight band that runs continuously from near one edge of the image to near the other, crossing through ALL printed motifs it encounters — the pattern continues normally on both sides, but the fabric surface itself is bent so there is a subtle shadow or lighter ridge at that line.
-
-A printed design element (stripe, motif outline, border, grid in the pattern) STOPS at the edges of individual motifs — it is part of the design, not a continuous surface deformation.
-
-Apply this test: can you trace a continuous tonal shift (a narrow band that is slightly darker or lighter than the surrounding fabric) all the way across the image, cutting through multiple separate printed motifs? If yes → mark it. If the line stops or starts within individual motifs → skip it.
-
-## Rules
-- Only mark lines that are HORIZONTAL or VERTICAL (±20°). Diagonal lines almost always follow the printed design — skip them.
-- Maximum 4 creases total. Store fabric folds in 1–4 long straight lines. If you are seeing more than 4, you are detecting the print.
-- Short partial creases are fine — a crease doesn't have to run the full length. A crease that runs 20-30% across the fabric from a fold point is still a real crease worth marking.
-- Skip the fabric edge/selvage, any shadow from behind/below the fabric, or any line that is bolder or more saturated than the surrounding fabric (bold = print, not crease).
-
-## Output
-Return ONLY valid JSON (no markdown, no explanation):
-{
-  "description": "One sentence describing the physical fold lines found (their direction and position), or 'No fold lines detected' if the fabric is flat.",
-  "creases": [
-    {
-      "x1Pct": <number 0-100>,
-      "y1Pct": <number 0-100>,
-      "x2Pct": <number 0-100>,
-      "y2Pct": <number 0-100>,
-      "widthPct": <number 2-10>
-    }
-  ]
-}
-
-x1Pct/y1Pct: one end of the crease line as % of image width/height.
-x2Pct/y2Pct: the other end (must be on the opposite or far side of the image).
-widthPct: the crease band thickness as % of the shorter image dimension.
-If a line fails the edge-to-edge or horizontal/vertical tests, omit it — not the whole array.`,
-              },
-            ],
-          },
-        ],
-        response_format: { type: "json_object" },
-      });
-      return resp.choices[0]?.message?.content ?? "{}";
-    });
-
-    const parsed2 = JSON.parse(raw) as {
-      description?: string;
-      creases?: unknown[];
-    };
-    description = parsed2.description ?? description;
-    if (Array.isArray(parsed2.creases)) {
-      creases = parsed2.creases.filter(
-        (c): c is (typeof creases)[number] =>
-          c !== null &&
-          typeof c === "object" &&
-          "x1Pct" in c &&
-          "y1Pct" in c &&
-          "x2Pct" in c &&
-          "y2Pct" in c,
-      );
-    }
-  } catch (err) {
-    logger.warn({ err }, "lab/detect-creases: vision call failed");
-    description = "Detection failed — you can paint the mask manually.";
-  }
-
-  const minDim = Math.min(w, h);
-  const svgLines = creases
-    .map((c) => {
-      const x1 = Math.round((c.x1Pct / 100) * w);
-      const y1 = Math.round((c.y1Pct / 100) * h);
-      const x2 = Math.round((c.x2Pct / 100) * w);
-      const y2 = Math.round((c.y2Pct / 100) * h);
-      const sw = Math.max(4, Math.round((c.widthPct / 100) * minDim));
-      return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="white" stroke-width="${sw}" stroke-linecap="round"/>`;
-    })
-    .join("\n");
-
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
-  <rect width="${w}" height="${h}" fill="black" fill-opacity="0"/>
-  ${svgLines}
-</svg>`;
-
-  const maskBuffer = await sharp(Buffer.from(svg))
-    .ensureAlpha()
-    .png()
-    .toBuffer();
-
-  res.json({
-    description,
-    maskDataUrl: `data:image/png;base64,${maskBuffer.toString("base64")}`,
-    imageWidth: w,
-    imageHeight: h,
-    creasesFound: creases.length,
-    creases,
-  });
+  const result = await detectCreasesFromBuffer(imgBuffer);
+  res.json(result);
 });
 
 // ---------------------------------------------------------------------------
 // POST /lab/remove-creases
-// Unified orchestration endpoint — fans out to both providers in parallel
-// and returns combined results once both settle. Accepts an optional prompt
-// override; falls back to the shared default.
+// Unified orchestration endpoint — runs OpenAI edit and returns result.
+// Accepts an optional prompt override; falls back to the shared default.
 // ---------------------------------------------------------------------------
 
 router.post("/lab/remove-creases", async (req, res) => {
@@ -361,42 +145,22 @@ router.post("/lab/remove-creases", async (req, res) => {
     return;
   }
 
-  const prompt = parsed.data.prompt ?? DEFAULT_INPAINT_PROMPT;
-  const { resizedImg, openaiMask, replMask } = await preprocessForInpaint(
-    imgBuffer,
-    parsed.data.maskDataUrl,
-  );
-
-  const [openaiResult, replicateResult] = await Promise.allSettled([
-    runOpenAIEdit(resizedImg, openaiMask, prompt),
-    runReplicateFluxFill(resizedImg, replMask, prompt),
-  ]);
-
-  res.json({
-    openai:
-      openaiResult.status === "fulfilled"
-        ? { dataUrl: openaiResult.value }
-        : {
-            error:
-              openaiResult.reason instanceof Error
-                ? openaiResult.reason.message
-                : "OpenAI inpainting failed",
-          },
-    replicate:
-      replicateResult.status === "fulfilled"
-        ? { dataUrl: replicateResult.value }
-        : {
-            error:
-              replicateResult.reason instanceof Error
-                ? replicateResult.reason.message
-                : "Replicate inpainting failed",
-          },
-  });
+  try {
+    const dataUrl = await removeCreasesFromBuffer(
+      imgBuffer,
+      parsed.data.maskDataUrl,
+      parsed.data.prompt,
+    );
+    res.json({ openai: { dataUrl } });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "OpenAI inpainting failed";
+    res.status(500).json({ openai: { error: msg } });
+  }
 });
 
 // ---------------------------------------------------------------------------
 // POST /lab/remove-creases/openai
-// Per-provider endpoint — runs only OpenAI gpt-image-2 edit so the UI can
+// Per-provider endpoint — runs OpenAI gpt-image-2 edit so the UI can
 // resolve this panel independently the moment this model finishes.
 // ---------------------------------------------------------------------------
 
@@ -421,14 +185,12 @@ router.post("/lab/remove-creases/openai", async (req, res) => {
     return;
   }
 
-  const prompt = parsed.data.prompt ?? DEFAULT_INPAINT_PROMPT;
-
   try {
-    const { resizedImg, openaiMask } = await preprocessForInpaint(
+    const dataUrl = await removeCreasesFromBuffer(
       imgBuffer,
       parsed.data.maskDataUrl,
+      parsed.data.prompt,
     );
-    const dataUrl = await runOpenAIEdit(resizedImg, openaiMask, prompt);
     res.json({ dataUrl });
   } catch (err) {
     const msg =
@@ -439,8 +201,7 @@ router.post("/lab/remove-creases/openai", async (req, res) => {
 
 // ---------------------------------------------------------------------------
 // POST /lab/remove-creases/replicate
-// Per-provider endpoint — runs only Replicate FLUX Fill Dev so the UI can
-// resolve this panel independently the moment this model finishes.
+// Per-provider endpoint — runs Replicate FLUX Fill Dev inpainting.
 // ---------------------------------------------------------------------------
 
 router.post("/lab/remove-creases/replicate", async (req, res) => {
@@ -467,11 +228,16 @@ router.post("/lab/remove-creases/replicate", async (req, res) => {
   const prompt = parsed.data.prompt ?? DEFAULT_INPAINT_PROMPT;
 
   try {
-    const { resizedImg, replMask } = await preprocessForInpaint(
+    const { resizedImg, replMask, cropInfo } = await preprocessForInpaint(
       imgBuffer,
       parsed.data.maskDataUrl,
     );
-    const dataUrl = await runReplicateFluxFill(resizedImg, replMask, prompt);
+    const dataUrl = await runReplicateFluxFill(
+      resizedImg,
+      replMask,
+      prompt,
+      cropInfo,
+    );
     res.json({ dataUrl });
   } catch (err) {
     const msg =
@@ -481,41 +247,14 @@ router.post("/lab/remove-creases/replicate", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// API helpers
+// Replicate helper (kept in this file — not shared with Elaine executor)
 // ---------------------------------------------------------------------------
-
-async function runOpenAIEdit(
-  imgBuffer: Buffer,
-  maskBuffer: Buffer,
-  prompt: string,
-): Promise<string> {
-  if (!env.openaiApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured.");
-  }
-  const client = new OpenAI({
-    apiKey: env.openaiApiKey, // openai-direct-ok — images.edit not available via OpenRouter
-    timeout: 90_000,
-    maxRetries: 0,
-  });
-
-  const response = await client.images.edit({
-    model: "gpt-image-2",
-    image: await toFile(imgBuffer, "image.png", { type: "image/png" }),
-    mask: await toFile(maskBuffer, "mask.png", { type: "image/png" }),
-    prompt,
-    n: 1,
-    size: "1024x1024",
-  });
-
-  const b64 = response.data?.[0]?.b64_json;
-  if (!b64) throw new Error("OpenAI returned no image data.");
-  return `data:image/png;base64,${b64}`;
-}
 
 async function runReplicateFluxFill(
   imgBuffer: Buffer,
   maskBuffer: Buffer,
   prompt: string,
+  cropInfo: CropInfo,
 ): Promise<string> {
   if (!env.replicateApiToken) {
     throw new Error("REPLICATE_API_TOKEN is not configured.");
@@ -540,8 +279,8 @@ async function runReplicateFluxFill(
           prompt,
           output_format: "webp",
           output_quality: 95,
-          num_inference_steps: 50,
-          guidance_scale: 30,
+          num_inference_steps: 28,
+          guidance: 30,
         },
       }),
       signal: AbortSignal.timeout(90_000),
@@ -609,7 +348,19 @@ async function runReplicateFluxFill(
       throw new Error(`Failed to download Replicate output: ${imgResp.status}`);
     resultBuf = Buffer.from(await imgResp.arrayBuffer());
   }
-  return `data:image/webp;base64,${resultBuf.toString("base64")}`;
+
+  // Crop letterbox padding and resize back to original dimensions.
+  const cropped = await sharp(resultBuf)
+    .extract({
+      left: cropInfo.left,
+      top: cropInfo.top,
+      width: cropInfo.width,
+      height: cropInfo.height,
+    })
+    .resize(cropInfo.origW, cropInfo.origH)
+    .png()
+    .toBuffer();
+  return `data:image/png;base64,${cropped.toString("base64")}`;
 }
 
 export default router;

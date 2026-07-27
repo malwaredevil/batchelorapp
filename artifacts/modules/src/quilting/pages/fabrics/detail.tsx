@@ -15,6 +15,7 @@ import {
   Crown,
   Plus,
   Crop,
+  Scissors,
 } from "lucide-react";
 import { LockButton } from "@/quilting/components/LockButton";
 import { Button } from "@/components/ui/button";
@@ -46,7 +47,7 @@ import { ImageEditor } from "@/quilting/components/image-editor";
 import { downloadCollectionImage } from "@/quilting/lib/svg-export";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
 import { FabricIdentityResearchPanel } from "@/quilting/components/FabricIdentityResearchPanel";
-import { FabricAiLab } from "@/quilting/components/FabricAiLab";
+import { FabricCreaseRemoverModal } from "@/quilting/components/FabricCreaseRemoverModal";
 import { CollectionDetailSection } from "@workspace/collection-ui";
 
 type Fabric = {
@@ -172,6 +173,7 @@ export default function FabricDetail() {
   const [isSavingCrop, setIsSavingCrop] = useState(false);
   const [renamingName, setRenamingName] = useState(false);
   const [renameValue, setRenameValue] = useState("");
+  const [creaseModalOpen, setCreaseModalOpen] = useState(false);
   const rawSearch = useSearch();
   useEffect(() => {
     if (new URLSearchParams(rawSearch).get("edit") === "1") setIsEditing(true);
@@ -583,13 +585,13 @@ export default function FabricDetail() {
           {/* Col 1: main photo + gallery strip */}
           <div className="flex flex-col gap-3">
             <div
-              className="relative aspect-square overflow-hidden rounded-2xl border border-card-border bg-muted cursor-zoom-in group md:aspect-auto"
+              className="relative aspect-square overflow-hidden rounded-2xl border border-card-border bg-muted cursor-zoom-in group"
               onClick={() => setLightboxIndex(0)}
             >
               <img
                 src={f.imageUrl}
                 alt={f.name}
-                className="h-full w-full object-cover md:object-contain"
+                className="h-full w-full object-cover"
               />
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/20 group-hover:opacity-100">
                 <ZoomIn className="h-10 w-10 text-white drop-shadow-lg" />
@@ -843,6 +845,14 @@ export default function FabricDetail() {
                         title="Edit"
                       >
                         <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        title="Remove creases with AI"
+                        onClick={() => setCreaseModalOpen(true)}
+                      >
+                        <Scissors className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="outline"
@@ -1260,9 +1270,6 @@ export default function FabricDetail() {
             {/* Identity research */}
             <FabricIdentityResearchPanel fabricId={f.id} />
 
-            {/* AI Lab — crease removal (owner-only; server gate enforces this) */}
-            <FabricAiLab fabricId={f.id} imageUrl={f.imageUrl} />
-
             {/* Notes */}
             <CollectionDetailSection title="Notes">
               {isEditing ? (
@@ -1290,6 +1297,14 @@ export default function FabricDetail() {
           </div>
         </div>
       </div>
+
+      <FabricCreaseRemoverModal
+        fabricId={f.id}
+        fabricName={f.name}
+        imageUrl={f.imageUrl}
+        open={creaseModalOpen}
+        onClose={() => setCreaseModalOpen(false)}
+      />
     </>
   );
 }

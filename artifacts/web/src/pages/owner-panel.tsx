@@ -1592,22 +1592,24 @@ interface DbTierStatus {
 }
 interface DbStatus {
   isDeployed: boolean;
+  activeTier: "prod" | "dev";
+  activeSupabaseUrl: string | null;
   prod: DbTierStatus;
   dev: DbTierStatus & { configured: boolean };
 }
 
 function DbRow({
   label,
-  tier,
   url,
   reachable,
   configured,
+  isActive,
 }: {
   label: string;
-  tier: "Production" | "Development";
   url: string | null;
   reachable: boolean;
   configured: boolean;
+  isActive: boolean;
 }) {
   function projectRef(u: string | null): string {
     if (!u) return "";
@@ -1639,9 +1641,16 @@ function DbRow({
             <p className="text-xs text-muted-foreground font-mono">{ref}</p>
           </div>
         </div>
-        <span className="text-xs font-medium text-green-600 bg-green-500/10 px-2 py-0.5 rounded-full">
-          Connected
-        </span>
+        <div className="flex items-center gap-2">
+          {isActive && (
+            <span className="text-xs font-semibold text-blue-600 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-400/30">
+              In use
+            </span>
+          )}
+          <span className="text-xs font-medium text-green-600 bg-green-500/10 px-2 py-0.5 rounded-full">
+            Connected
+          </span>
+        </div>
       </div>
     );
   }
@@ -1768,17 +1777,17 @@ function InfrastructureContent() {
           <div className="space-y-2">
             <DbRow
               label="Production"
-              tier="Production"
               url={status.prod.url}
               reachable={status.prod.reachable}
               configured={!!status.prod.url}
+              isActive={status.activeTier === "prod"}
             />
             <DbRow
               label="Development"
-              tier="Development"
               url={status.dev.url}
               reachable={status.dev.reachable}
               configured={status.dev.configured}
+              isActive={status.activeTier === "dev"}
             />
             {!status.dev.configured && (
               <p className="text-xs text-muted-foreground pt-1">

@@ -618,6 +618,24 @@ router.get("/hub/db-status", requireAuth, requireOwner, async (_req, res) => {
   const devUrl = process.env.DEV_SUPABASE_URL ?? null;
   const devKey = process.env.DEV_SUPABASE_SERVICE_ROLE_KEY ?? null;
 
+  // Active tier: determine which Supabase project DATABASE_URL resolves to by
+  // extracting its project ref and comparing against the known prod/dev refs.
+  // This reflects reality — DATABASE_URL may point at either project depending
+  // on how Replit secrets are configured, and the UI should show which one the
+  // server is actually using for all queries.
+  function supabaseRef(url: string | null): string | null {
+    if (!url) return null;
+    const m = url.match(/[/.]([a-z0-9]{20})\.supabase\./);
+    return m ? m[1] : null;
+  }
+  const dbUrl = process.env.DATABASE_URL ?? null;
+  const dbRef = supabaseRef(dbUrl);
+  const prodRef = supabaseRef(prodUrl);
+  const devRef = supabaseRef(devUrl);
+  const activeTier: "prod" | "dev" =
+    dbRef && devRef && dbRef === devRef ? "dev" : "prod";
+  const activeSupabaseUrl = activeTier === "dev" ? devUrl : prodUrl;
+
   const [prodReachable, devReachable] = await Promise.all([
     probeSupabase(prodUrl, prodKey),
     probeSupabase(devUrl, devKey),
@@ -625,6 +643,8 @@ router.get("/hub/db-status", requireAuth, requireOwner, async (_req, res) => {
 
   res.json({
     isDeployed,
+    activeTier,
+    activeSupabaseUrl,
     prod: { url: prodUrl, reachable: prodReachable },
     dev: {
       url: devUrl,

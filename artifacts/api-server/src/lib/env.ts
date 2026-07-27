@@ -25,6 +25,15 @@ export const env = {
   ),
   googleWalletIssuerId: optional("GOOGLE_WALLET_ISSUER_ID"),
   isProduction: process.env.NODE_ENV === "production",
+  // True when running in a Replit deployment (REPLIT_DEPLOYMENT=1). False in
+  // local dev. Used to select between prod/dev Supabase credentials.
+  isDeployed: process.env.REPLIT_DEPLOYMENT === "1",
+  // Dev Supabase project URL and service-role key. When set and not deployed,
+  // the server uses these instead of SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY
+  // so local dev work never touches the production Supabase project.
+  devSupabaseUrl: process.env.DEV_SUPABASE_URL?.trim() || undefined,
+  devSupabaseServiceRoleKey:
+    process.env.DEV_SUPABASE_SERVICE_ROLE_KEY?.trim() || undefined,
   // Dev-only automation: lets the automated screenshot tool log in as a fixed
   // account (AGENT_LOGIN_EMAIL) without a browser-driven form submission, so
   // it can capture authenticated screenshots. Never usable in production even

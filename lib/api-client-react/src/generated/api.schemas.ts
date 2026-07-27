@@ -3017,10 +3017,35 @@ export type LabDetectCreases200 = {
   creasesFound: number;
 };
 
+export type LabRemoveCreasesBody = {
+  fabricId?: number;
+  sourceDataUrl?: string;
+  maskDataUrl: string;
+  /** Optional inpainting prompt; defaults to the server-side crease-removal prompt. */
+  prompt?: string;
+};
+
+export type LabRemoveCreases200Openai = {
+  dataUrl?: string;
+  error?: string;
+};
+
+export type LabRemoveCreases200Replicate = {
+  dataUrl?: string;
+  error?: string;
+};
+
+export type LabRemoveCreases200 = {
+  openai: LabRemoveCreases200Openai;
+  replicate: LabRemoveCreases200Replicate;
+};
+
 export type LabRemoveCreasesOpenaiBody = {
   fabricId?: number;
   sourceDataUrl?: string;
   maskDataUrl: string;
+  /** Optional inpainting prompt; defaults to the server-side crease-removal prompt. */
+  prompt?: string;
 };
 
 export type LabRemoveCreasesOpenai200 = {
@@ -3031,6 +3056,8 @@ export type LabRemoveCreasesReplicateBody = {
   fabricId?: number;
   sourceDataUrl?: string;
   maskDataUrl: string;
+  /** Optional inpainting prompt; defaults to the server-side crease-removal prompt. */
+  prompt?: string;
 };
 
 export type LabRemoveCreasesReplicate200 = {

@@ -56,6 +56,8 @@ import type {
   JobsJobRetryResponse,
   LabDetectCreases200,
   LabDetectCreasesBody,
+  LabRemoveCreases200,
+  LabRemoveCreasesBody,
   LabRemoveCreasesOpenai200,
   LabRemoveCreasesOpenaiBody,
   LabRemoveCreasesReplicate200,
@@ -9055,6 +9057,77 @@ export const useLabDetectCreases = <TError = ErrorType<unknown>,
       return useMutation(getLabDetectCreasesMutationOptions(options));
     }
 
+export const getLabRemoveCreasesUrl = () => {
+
+
+
+
+  return `/api/quilting/lab/remove-creases`
+}
+
+/**
+ * @summary Inpaint crease areas — fans out to gpt-image-2 and FLUX Fill Dev in parallel (owner only)
+ */
+export const labRemoveCreases = async (labRemoveCreasesBody: LabRemoveCreasesBody, options?: RequestInit): Promise<LabRemoveCreases200> => {
+
+  return customFetch<LabRemoveCreases200>(getLabRemoveCreasesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      labRemoveCreasesBody,)
+  }
+);}
+
+
+
+
+export const getLabRemoveCreasesMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof labRemoveCreases>>, TError,{data: BodyType<LabRemoveCreasesBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof labRemoveCreases>>, TError,{data: BodyType<LabRemoveCreasesBody>}, TContext> => {
+
+const mutationKey = ['labRemoveCreases'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof labRemoveCreases>>, {data: BodyType<LabRemoveCreasesBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  labRemoveCreases(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LabRemoveCreasesMutationResult = NonNullable<Awaited<ReturnType<typeof labRemoveCreases>>>
+    export type LabRemoveCreasesMutationBody = BodyType<LabRemoveCreasesBody>
+    export type LabRemoveCreasesMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Inpaint crease areas — fans out to gpt-image-2 and FLUX Fill Dev in parallel (owner only)
+ */
+export const useLabRemoveCreases = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof labRemoveCreases>>, TError,{data: BodyType<LabRemoveCreasesBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof labRemoveCreases>>,
+        TError,
+        {data: BodyType<LabRemoveCreasesBody>},
+        TContext
+      > => {
+      return useMutation(getLabRemoveCreasesMutationOptions(options));
+    }
+
 export const getLabRemoveCreasesOpenaiUrl = () => {
 
 
@@ -9064,7 +9137,7 @@ export const getLabRemoveCreasesOpenaiUrl = () => {
 }
 
 /**
- * @summary Inpaint crease areas with OpenAI gpt-image-1 (owner only)
+ * @summary Inpaint crease areas with OpenAI gpt-image-2 (owner only)
  */
 export const labRemoveCreasesOpenai = async (labRemoveCreasesOpenaiBody: LabRemoveCreasesOpenaiBody, options?: RequestInit): Promise<LabRemoveCreasesOpenai200> => {
 
@@ -9113,7 +9186,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type LabRemoveCreasesOpenaiMutationError = ErrorType<unknown>
 
     /**
- * @summary Inpaint crease areas with OpenAI gpt-image-1 (owner only)
+ * @summary Inpaint crease areas with OpenAI gpt-image-2 (owner only)
  */
 export const useLabRemoveCreasesOpenai = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof labRemoveCreasesOpenai>>, TError,{data: BodyType<LabRemoveCreasesOpenaiBody>}, TContext>, request?: SecondParameter<typeof customFetch>}

@@ -2911,12 +2911,35 @@ export const LabDetectCreasesResponse = zod.object({
 
 
 /**
- * @summary Inpaint crease areas with OpenAI gpt-image-1 (owner only)
+ * @summary Inpaint crease areas — fans out to gpt-image-2 and FLUX Fill Dev in parallel (owner only)
+ */
+export const LabRemoveCreasesBody = zod.object({
+  "fabricId": zod.number().optional(),
+  "sourceDataUrl": zod.string().optional(),
+  "maskDataUrl": zod.string(),
+  "prompt": zod.string().optional().describe('Optional inpainting prompt; defaults to the server-side crease-removal prompt.')
+})
+
+export const LabRemoveCreasesResponse = zod.object({
+  "openai": zod.object({
+  "dataUrl": zod.string().optional(),
+  "error": zod.string().optional()
+}),
+  "replicate": zod.object({
+  "dataUrl": zod.string().optional(),
+  "error": zod.string().optional()
+})
+})
+
+
+/**
+ * @summary Inpaint crease areas with OpenAI gpt-image-2 (owner only)
  */
 export const LabRemoveCreasesOpenaiBody = zod.object({
   "fabricId": zod.number().optional(),
   "sourceDataUrl": zod.string().optional(),
-  "maskDataUrl": zod.string()
+  "maskDataUrl": zod.string(),
+  "prompt": zod.string().optional().describe('Optional inpainting prompt; defaults to the server-side crease-removal prompt.')
 })
 
 export const LabRemoveCreasesOpenaiResponse = zod.object({
@@ -2930,7 +2953,8 @@ export const LabRemoveCreasesOpenaiResponse = zod.object({
 export const LabRemoveCreasesReplicateBody = zod.object({
   "fabricId": zod.number().optional(),
   "sourceDataUrl": zod.string().optional(),
-  "maskDataUrl": zod.string()
+  "maskDataUrl": zod.string(),
+  "prompt": zod.string().optional().describe('Optional inpainting prompt; defaults to the server-side crease-removal prompt.')
 })
 
 export const LabRemoveCreasesReplicateResponse = zod.object({

@@ -10,4 +10,6 @@ export type LabRemoveCreasesOpenaiBody = {
   fabricId?: number;
   sourceDataUrl?: string;
   maskDataUrl: string;
+  /** Optional inpainting prompt; defaults to the server-side crease-removal prompt. */
+  prompt?: string;
 };

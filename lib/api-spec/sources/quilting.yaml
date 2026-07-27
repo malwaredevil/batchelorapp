@@ -1884,11 +1884,11 @@ paths:
                   creasesFound:
                     type: integer
 
-  /lab/remove-creases/openai:
+  /lab/remove-creases:
     post:
-      operationId: labRemoveCreasesOpenai
+      operationId: labRemoveCreases
       tags: [lab]
-      summary: Inpaint crease areas with OpenAI gpt-image-1 (owner only)
+      summary: Inpaint crease areas — fans out to gpt-image-2 and FLUX Fill Dev in parallel (owner only)
       requestBody:
         required: true
         content:
@@ -1903,6 +1903,55 @@ paths:
                   type: string
                 maskDataUrl:
                   type: string
+                prompt:
+                  type: string
+                  description: Optional inpainting prompt; defaults to the server-side crease-removal prompt.
+      responses:
+        "200":
+          description: Combined inpainting results from both providers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [openai, replicate]
+                properties:
+                  openai:
+                    type: object
+                    properties:
+                      dataUrl:
+                        type: string
+                      error:
+                        type: string
+                  replicate:
+                    type: object
+                    properties:
+                      dataUrl:
+                        type: string
+                      error:
+                        type: string
+
+  /lab/remove-creases/openai:
+    post:
+      operationId: labRemoveCreasesOpenai
+      tags: [lab]
+      summary: Inpaint crease areas with OpenAI gpt-image-2 (owner only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [maskDataUrl]
+              properties:
+                fabricId:
+                  type: integer
+                sourceDataUrl:
+                  type: string
+                maskDataUrl:
+                  type: string
+                prompt:
+                  type: string
+                  description: Optional inpainting prompt; defaults to the server-side crease-removal prompt.
       responses:
         "200":
           description: Inpainted image as base64 data URL
@@ -1934,6 +1983,9 @@ paths:
                   type: string
                 maskDataUrl:
                   type: string
+                prompt:
+                  type: string
+                  description: Optional inpainting prompt; defaults to the server-side crease-removal prompt.
       responses:
         "200":
           description: Inpainted image as base64 data URL

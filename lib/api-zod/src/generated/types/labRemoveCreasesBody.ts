@@ -6,7 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type LabRemoveCreasesReplicateBody = {
+export type LabRemoveCreasesBody = {
   fabricId?: number;
   sourceDataUrl?: string;
   maskDataUrl: string;

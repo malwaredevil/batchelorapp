@@ -33,6 +33,8 @@ const InpaintBody = z
     fabricId: z.number().int().positive().optional(),
     sourceDataUrl: z.string().min(1).optional(),
     maskDataUrl: z.string().min(1),
+    /** Optional caller-supplied inpainting prompt; falls back to the default. */
+    prompt: z.string().max(1000).optional(),
   })
   .refine((d) => d.fabricId !== undefined || d.sourceDataUrl !== undefined, {
     message: "Either fabricId or sourceDataUrl is required.",
@@ -136,7 +138,7 @@ async function preprocessForInpaint(
   return { resizedImg, openaiMask, replMask };
 }
 
-const INPAINT_PROMPT =
+const DEFAULT_INPAINT_PROMPT =
   "flat, smooth fabric with no creases or folds, uniform surface texture, original print pattern preserved exactly";
 
 // ---------------------------------------------------------------------------
@@ -275,10 +277,70 @@ Include all visible creases, including faint ones.`,
 });
 
 // ---------------------------------------------------------------------------
+// POST /lab/remove-creases
+// Unified orchestration endpoint — fans out to both providers in parallel
+// and returns combined results once both settle. Accepts an optional prompt
+// override; falls back to the shared default.
+// ---------------------------------------------------------------------------
+
+router.post("/lab/remove-creases", async (req, res) => {
+  const parsed = InpaintBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({
+      error: "fabricId (or sourceDataUrl) and maskDataUrl are required.",
+    });
+    return;
+  }
+
+  let imgBuffer: Buffer;
+  try {
+    imgBuffer = await getSourceBuffer(
+      parsed.data.fabricId,
+      parsed.data.sourceDataUrl,
+    );
+  } catch (err: unknown) {
+    const status = (err as { status?: number }).status ?? 500;
+    res.status(status).json({ error: (err as Error).message });
+    return;
+  }
+
+  const prompt = parsed.data.prompt ?? DEFAULT_INPAINT_PROMPT;
+  const { resizedImg, openaiMask, replMask } = await preprocessForInpaint(
+    imgBuffer,
+    parsed.data.maskDataUrl,
+  );
+
+  const [openaiResult, replicateResult] = await Promise.allSettled([
+    runOpenAIEdit(resizedImg, openaiMask, prompt),
+    runReplicateFluxFill(resizedImg, replMask, prompt),
+  ]);
+
+  res.json({
+    openai:
+      openaiResult.status === "fulfilled"
+        ? { dataUrl: openaiResult.value }
+        : {
+            error:
+              openaiResult.reason instanceof Error
+                ? openaiResult.reason.message
+                : "OpenAI inpainting failed",
+          },
+    replicate:
+      replicateResult.status === "fulfilled"
+        ? { dataUrl: replicateResult.value }
+        : {
+            error:
+              replicateResult.reason instanceof Error
+                ? replicateResult.reason.message
+                : "Replicate inpainting failed",
+          },
+  });
+});
+
+// ---------------------------------------------------------------------------
 // POST /lab/remove-creases/openai
-// Runs OpenAI gpt-image-1 edit on the source image + mask. Returns a single
-// inpainted result so the frontend can resolve this panel independently of the
-// Replicate call.
+// Per-provider endpoint — runs only OpenAI gpt-image-2 edit so the UI can
+// resolve this panel independently the moment this model finishes.
 // ---------------------------------------------------------------------------
 
 router.post("/lab/remove-creases/openai", async (req, res) => {
@@ -302,12 +364,14 @@ router.post("/lab/remove-creases/openai", async (req, res) => {
     return;
   }
 
+  const prompt = parsed.data.prompt ?? DEFAULT_INPAINT_PROMPT;
+
   try {
     const { resizedImg, openaiMask } = await preprocessForInpaint(
       imgBuffer,
       parsed.data.maskDataUrl,
     );
-    const dataUrl = await runOpenAIEdit(resizedImg, openaiMask, INPAINT_PROMPT);
+    const dataUrl = await runOpenAIEdit(resizedImg, openaiMask, prompt);
     res.json({ dataUrl });
   } catch (err) {
     const msg =
@@ -318,9 +382,8 @@ router.post("/lab/remove-creases/openai", async (req, res) => {
 
 // ---------------------------------------------------------------------------
 // POST /lab/remove-creases/replicate
-// Runs Replicate FLUX Fill Dev on the source image + mask. Returns a single
-// inpainted result so the frontend can resolve this panel independently of the
-// OpenAI call.
+// Per-provider endpoint — runs only Replicate FLUX Fill Dev so the UI can
+// resolve this panel independently the moment this model finishes.
 // ---------------------------------------------------------------------------
 
 router.post("/lab/remove-creases/replicate", async (req, res) => {
@@ -344,16 +407,14 @@ router.post("/lab/remove-creases/replicate", async (req, res) => {
     return;
   }
 
+  const prompt = parsed.data.prompt ?? DEFAULT_INPAINT_PROMPT;
+
   try {
     const { resizedImg, replMask } = await preprocessForInpaint(
       imgBuffer,
       parsed.data.maskDataUrl,
     );
-    const dataUrl = await runReplicateFluxFill(
-      resizedImg,
-      replMask,
-      INPAINT_PROMPT,
-    );
+    const dataUrl = await runReplicateFluxFill(resizedImg, replMask, prompt);
     res.json({ dataUrl });
   } catch (err) {
     const msg =
@@ -381,7 +442,7 @@ async function runOpenAIEdit(
   });
 
   const response = await client.images.edit({
-    model: "gpt-image-1",
+    model: "gpt-image-2",
     image: await toFile(imgBuffer, "image.png", { type: "image/png" }),
     mask: await toFile(maskBuffer, "mask.png", { type: "image/png" }),
     prompt,

@@ -1589,7 +1589,7 @@ function InfrastructureContent() {
   const { toast } = useToast();
 
   useEffect(() => {
-    fetch("/api/hub/db-status")
+    fetch("/api/hub/db-status") // raw-fetch-ok — no Orval hook for owner-only admin endpoints
       .then((r) => r.json())
       .then((d: DbStatus) => {
         setStatus(d);
@@ -1602,7 +1602,7 @@ function InfrastructureContent() {
     setBootstrapping(true);
     setBootstrapResult(null);
     try {
-      const r = await fetch("/api/hub/bootstrap-schema", { method: "POST" });
+      const r = await fetch("/api/hub/bootstrap-schema", { method: "POST" }); // raw-fetch-ok — no Orval hook for owner-only admin endpoints
       const d = (await r.json()) as {
         ok?: boolean;
         message?: string;

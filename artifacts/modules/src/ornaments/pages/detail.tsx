@@ -406,49 +406,6 @@ export default function OrnamentDetail() {
               maxImages={10}
             />
 
-            {/* Valuation action buttons */}
-            <div className="grid grid-cols-3 gap-2">
-              <Button
-                variant="outline"
-                className="h-auto py-3 flex flex-col gap-1 items-center justify-center bg-card shadow-sm"
-                onClick={handleLookupPrice}
-                disabled={lookupBookValue.isPending}
-              >
-                {lookupBookValue.isPending ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <Search className="h-5 w-5 text-primary" />
-                )}
-                <span className="text-xs">Book Value</span>
-              </Button>
-              <Button
-                variant="outline"
-                className="h-auto py-3 flex flex-col gap-1 items-center justify-center bg-card shadow-sm"
-                onClick={handleLookupEbayPrice}
-                disabled={lookupEbay.isPending}
-              >
-                {lookupEbay.isPending ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <ShoppingBag className="h-5 w-5 text-primary" />
-                )}
-                <span className="text-xs">eBay Price</span>
-              </Button>
-              <Button
-                variant="outline"
-                className="h-auto py-3 flex flex-col gap-1 items-center justify-center bg-card shadow-sm"
-                onClick={handleReanalyze}
-                disabled={reanalyze.isPending}
-              >
-                {reanalyze.isPending ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <RefreshCcw className="h-5 w-5 text-primary" />
-                )}
-                <span className="text-xs">AI Analysis</span>
-              </Button>
-            </div>
-
             {/* Book value card */}
             {ornament.bookValue != null && (
               <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-center">
@@ -561,6 +518,48 @@ export default function OrnamentDetail() {
             </>
           ) : (
             <>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleLookupPrice}
+                disabled={lookupBookValue.isPending}
+                title="Look up book value"
+                data-testid="button-book-value"
+              >
+                {lookupBookValue.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Search className="h-4 w-4" />
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleLookupEbayPrice}
+                disabled={lookupEbay.isPending}
+                title="Look up eBay price"
+                data-testid="button-ebay-price"
+              >
+                {lookupEbay.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ShoppingBag className="h-4 w-4" />
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleReanalyze}
+                disabled={reanalyze.isPending}
+                title="Re-run AI analysis"
+                data-testid="button-reanalyze"
+              >
+                {reanalyze.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCcw className="h-4 w-4" />
+                )}
+              </Button>
               <Button
                 variant="outline"
                 size="icon"

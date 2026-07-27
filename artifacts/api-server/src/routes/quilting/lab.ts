@@ -237,42 +237,40 @@ router.post("/lab/detect-creases", async (req, res) => {
               { type: "image_url", image_url: { url: imageDataUrl } },
               {
                 type: "text",
-                text: `You are analysing a fabric photo to find PHYSICAL FOLD LINES — actual creases caused by how the fabric was stored, folded, or rolled. Your job is extremely conservative: only mark lines you are CERTAIN are physical deformations, not anything in the printed design.
+                text: `You are analysing a fabric photo to find PHYSICAL FOLD LINES — the actual crease lines left when fabric is stored folded on a bolt or fat quarter.
 
-## What a physical crease looks like
-- A straight or gently curved line where the fabric surface bends, creating a faint shadow or tonal shift that cuts ACROSS the printed design regardless of what the pattern shows underneath
-- Store-bought quilt fabric from a bolt is typically folded 1–3 times, producing 0–3 long horizontal or vertical fold lines that run roughly straight across most of the image width or height
-- The crease itself looks like a subtle darker or lighter band — NOT a bold printed element
+## The one key test: does the line run continuously edge-to-edge?
+A physical bolt fold is a straight or nearly-straight band that runs continuously from near one edge of the image to near the other, crossing through ALL printed motifs it encounters — the pattern continues normally on both sides, but the fabric surface itself is bent so there is a subtle shadow or lighter ridge at that line.
 
-## What is NOT a crease — do NOT mark these
-- Any line that is part of the printed design (stripes, borders, grid lines, outlines around motifs, edges between colours in the pattern)
-- Diagonal lines that echo or follow the direction of the printed pattern
-- The edge/seam of the fabric
-- Shadows around wrinkles in a background or tablecloth behind the fabric
-- Any line on a fabric with a complex or busy pattern (animals, flowers, patchwork blocks, etc.) unless it CLEARLY crosses pattern elements as a surface deformation
+A printed design element (stripe, motif outline, border, grid in the pattern) STOPS at the edges of individual motifs — it is part of the design, not a continuous surface deformation.
 
-## IMPORTANT: busy patterned fabric
-If the fabric has a complex printed pattern (multiple colours, motifs, figures, or overlapping design elements), the risk of false detection is extremely high. In this case: be VERY conservative. Only mark a line if it is unmistakably a physical fold — a continuous tonal band that cuts across multiple design elements in a way that cannot be explained by the print itself. If in doubt, return an EMPTY creases array rather than guessing.
+Apply this test: can you trace a continuous tonal shift (a narrow band that is slightly darker or lighter than the surrounding fabric) all the way across the image, cutting through multiple separate printed motifs? If yes → mark it. If the line stops or starts within individual motifs → skip it.
+
+## Rules
+- Only mark lines that are HORIZONTAL or VERTICAL (±20°). Diagonal lines almost always follow the printed design — skip them.
+- Maximum 4 creases total. Store fabric folds in 1–4 long straight lines. If you are seeing more than 4, you are detecting the print.
+- Each marked crease should span at least 50% of the relevant image dimension (width for horizontal, height for vertical). Short segments are not fold lines.
+- Skip the fabric edge/selvage, any shadow from behind/below the fabric, or any line that is bolder or more saturated than the surrounding fabric (bold = print, not crease).
 
 ## Output
 Return ONLY valid JSON (no markdown, no explanation):
 {
-  "description": "One sentence describing only the physical fold lines found, or 'No physical fold lines detected' if the fabric is flat or the pattern makes it ambiguous.",
+  "description": "One sentence describing the physical fold lines found (their direction and position), or 'No fold lines detected' if the fabric is flat.",
   "creases": [
     {
       "x1Pct": <number 0-100>,
       "y1Pct": <number 0-100>,
       "x2Pct": <number 0-100>,
       "y2Pct": <number 0-100>,
-      "widthPct": <number 2-12>
+      "widthPct": <number 2-10>
     }
   ]
 }
 
 x1Pct/y1Pct: one end of the crease line as % of image width/height.
-x2Pct/y2Pct: the other end as % of image width/height.
-widthPct: the crease band thickness as % of the shorter image dimension (2–12).
-When uncertain: omit the line. An empty array is the correct answer for flat fabric or ambiguous patterned fabric.`,
+x2Pct/y2Pct: the other end (must be on the opposite or far side of the image).
+widthPct: the crease band thickness as % of the shorter image dimension.
+If a line fails the edge-to-edge or horizontal/vertical tests, omit it — not the whole array.`,
               },
             ],
           },

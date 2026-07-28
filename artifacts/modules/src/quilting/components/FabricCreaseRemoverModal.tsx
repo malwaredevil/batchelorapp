@@ -668,7 +668,7 @@ export function FabricCreaseRemoverModal({
             {/* Canvas area */}
             <div
               ref={outerRef}
-              className="relative flex-1 overflow-hidden bg-checkerboard select-none"
+              className="relative flex-1 overflow-hidden bg-checkerboard select-none p-4"
               style={{ cursor: cursorStyle }}
               onWheel={handleOuterWheel}
             >

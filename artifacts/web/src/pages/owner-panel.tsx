@@ -10,6 +10,7 @@ import {
   Settings2,
   Puzzle,
   FlaskConical,
+  Microscope,
   AlertTriangle,
   Database,
   CheckCircle2,
@@ -51,8 +52,8 @@ const ALL_TABS: { id: Tab; label: string; icon: typeof Globe }[] = [
   { id: "control-panel", label: "Control Panel", icon: Code2 },
   { id: "google-apis", label: "Google APIs", icon: Map },
   { id: "services", label: "Services", icon: Puzzle },
-  { id: "ai-evidence", label: "AI Evidence", icon: FlaskConical },
-  { id: "ai-lab", label: "AI Lab", icon: FlaskConical },
+  { id: "ai-evidence", label: "AI Evidence", icon: Microscope },
+  { id: "ai-lab", label: "Lab", icon: FlaskConical },
 ];
 
 function useFromParam() {
@@ -170,13 +171,24 @@ export default function OwnerPanel() {
   const safeTab: Tab =
     tabParam && visibleTabs.some((t) => t.id === tabParam)
       ? tabParam
-      : "travels";
+      : isOwner
+        ? "infrastructure"
+        : "travels";
 
   const navigateTab = (id: Tab) => {
     const params = new URLSearchParams(search);
     params.set("tab", id);
     navigate(`/owner-panel?${params.toString()}`, { replace: true });
   };
+
+  const displayName =
+    (user?.displayName ?? "").trim() || user?.email || "Owner";
+  const initials = displayName
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w: string) => w[0].toUpperCase())
+    .join("");
 
   usePageAssistantContext(
     "hub-owner-panel",
@@ -185,65 +197,85 @@ export default function OwnerPanel() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background/80 px-6 py-4 backdrop-blur-md">
-        <a
-          href={backHref}
-          className="flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          {backLabel}
-        </a>
-        <div className="flex items-center gap-2">
-          <AppLogo className="h-7 w-7" />
-          <span className="font-semibold tracking-tight text-primary">
-            Batchelor
+      {/* Quilting-style top bar */}
+      <header
+        className="sticky top-0 z-20 flex items-stretch border-b border-border bg-background/95 backdrop-blur-sm"
+        style={{ height: 56 }}
+      >
+        {/* Left: back arrow + logo + title */}
+        <div className="flex items-center gap-2 pl-3 pr-2 shrink-0 border-r border-border/40">
+          <a
+            href={backHref}
+            aria-label={backLabel}
+            title={backLabel}
+            className="flex items-center justify-center w-7 h-7 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </a>
+          <AppLogo className="h-6 w-6 shrink-0" />
+          <span className="font-semibold text-sm tracking-tight whitespace-nowrap">
+            Owner Panel
           </span>
         </div>
-      </header>
 
-      <main className="mx-auto max-w-3xl space-y-6 p-6 md:p-8">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Owner Panel</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {isOwner
-              ? "App settings, AI configuration, runtime tuning, and developer tools."
-              : "App settings for the Travels module."}
-          </p>
-        </div>
-
-        {isOwner && (
-          <EnvironmentBanner status={envStatus} loading={envLoading} />
-        )}
-
-        <div className="relative">
-          <div className="overflow-x-auto scrollbar-none border-b border-border">
-            <div className="flex min-w-max">
-              {visibleTabs.map((tab) => {
-                const Icon = tab.icon;
-                const active = safeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => navigateTab(tab.id)}
-                    className={`relative flex items-center gap-2 whitespace-nowrap px-4 py-3 text-sm font-medium transition-colors focus-visible:outline-none ${
-                      active
-                        ? "text-foreground"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <Icon className="h-3.5 w-3.5 shrink-0" />
-                    {tab.label}
-                    {active && (
-                      <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-primary" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+        {/* Center: tab navigation, horizontally scrollable */}
+        <div className="flex-1 overflow-x-auto scrollbar-none">
+          <div className="flex items-stretch h-full min-w-max px-1">
+            {visibleTabs.map((tab) => {
+              const Icon = tab.icon;
+              const active = safeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => navigateTab(tab.id)}
+                  className={`relative flex items-center gap-1.5 px-3 h-full text-sm font-medium transition-colors whitespace-nowrap focus-visible:outline-none ${
+                    active
+                      ? "text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  {tab.label}
+                  {active && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t-full bg-primary" />
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
+        {/* Right: user avatar + info */}
+        <div className="flex items-center gap-2.5 pr-3 pl-3 shrink-0 border-l border-border/40">
+          <div className="text-right hidden sm:block">
+            <div className="text-xs font-semibold leading-tight truncate max-w-[130px]">
+              {displayName.split(" ").slice(0, 2).join(" ")}
+            </div>
+            <div className="text-[10px] text-muted-foreground leading-tight truncate max-w-[130px]">
+              {user?.email}
+            </div>
+          </div>
+          <div
+            className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+            style={{
+              background: "hsl(var(--primary))",
+              color: "hsl(var(--primary-foreground))",
+            }}
+          >
+            {initials}
+          </div>
+        </div>
+      </header>
+
+      {/* Environment banner — shown just below the top bar */}
+      {isOwner && (envStatus || envLoading) && (
+        <div className="px-6 py-3 border-b border-border">
+          <EnvironmentBanner status={envStatus} loading={envLoading} />
+        </div>
+      )}
+
+      <main className="mx-auto max-w-3xl space-y-6 p-6 md:p-8">
         {safeTab === "travels" && (
           <div className="mx-auto w-full max-w-xl space-y-4">
             <div>

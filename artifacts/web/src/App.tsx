@@ -1,6 +1,12 @@
 import { useEffect } from "react";
 import * as Sentry from "@sentry/react";
-import { Switch, Route, Redirect, Router as WouterRouter } from "wouter";
+import {
+  Switch,
+  Route,
+  Redirect,
+  Router as WouterRouter,
+  useLocation,
+} from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { Toaster } from "@/components/ui/toaster";
@@ -55,6 +61,14 @@ function ThemeSync() {
   return null;
 }
 
+function ScrollToTop() {
+  const [location] = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location]);
+  return null;
+}
+
 function Routes() {
   const { user, isLoading } = useAuth();
 
@@ -83,6 +97,7 @@ function Routes() {
 
   return (
     <>
+      <ScrollToTop />
       <ThemeSync />
       <BirthdayBanner />
       <Switch>

@@ -194,6 +194,14 @@ function GlobalElaineWidget() {
   );
 }
 
+function ScrollToTop() {
+  const [location] = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location]);
+  return null;
+}
+
 function Routes() {
   const { user, isLoading } = useAuth();
 
@@ -213,6 +221,7 @@ function Routes() {
 
   return (
     <>
+      <ScrollToTop />
       <BackgroundTaskProvider>
         <ModuleShell>
           <BulkAddProvider>

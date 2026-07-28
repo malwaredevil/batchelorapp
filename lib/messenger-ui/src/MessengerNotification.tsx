@@ -112,10 +112,11 @@ function PushPermissionBanner() {
         bottom: 24,
         left: 24,
         zIndex: 9996,
-        background: "var(--background, #fff)",
-        border: "1px solid rgba(0,0,0,0.09)",
+        background: "#1e40af",
+        border: "2px solid #3b82f6",
         borderRadius: 12,
-        boxShadow: "0 4px 20px rgba(0,0,0,0.12)",
+        boxShadow:
+          "0 8px 32px rgba(59,130,246,0.35), 0 2px 8px rgba(0,0,0,0.18)",
         padding: "10px 14px",
         display: "flex",
         alignItems: "center",
@@ -124,8 +125,10 @@ function PushPermissionBanner() {
         maxWidth: 300,
       }}
     >
-      <Bell size={15} style={{ color: "#3b82f6", flexShrink: 0 }} />
-      <span style={{ fontSize: 12, color: "var(--foreground, #111)", flex: 1 }}>
+      <Bell size={15} style={{ color: "#93c5fd", flexShrink: 0 }} />
+      <span
+        style={{ fontSize: 12, color: "#e0f2fe", flex: 1, fontWeight: 500 }}
+      >
         Get notified when messages arrive
       </span>
       <button
@@ -133,7 +136,7 @@ function PushPermissionBanner() {
         style={{
           background: "#3b82f6",
           color: "#fff",
-          border: "none",
+          border: "1px solid #60a5fa",
           borderRadius: 7,
           padding: "5px 10px",
           fontSize: 11,
@@ -152,7 +155,7 @@ function PushPermissionBanner() {
           border: "none",
           cursor: "pointer",
           padding: 2,
-          color: "rgba(0,0,0,0.35)",
+          color: "rgba(255,255,255,0.6)",
           display: "flex",
           lineHeight: 0,
         }}

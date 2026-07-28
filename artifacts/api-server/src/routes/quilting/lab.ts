@@ -274,7 +274,13 @@ router.post("/lab/bulk-crease-fix", async (req, res) => {
       if (!row.imagePath)
         throw Object.assign(new Error("Fabric has no image"), { fabricId });
 
-      const { buffer: imgBuffer } = await downloadImageBuffer(row.imagePath);
+      // Remember the original path — it becomes the supplemental after we
+      // promote the crease-removed image to default.  This mirrors the swap
+      // that the single-item set-default endpoint performs, so the gallery
+      // always shows [crease-removed (default), original (supplemental)].
+      const originalPath = row.imagePath;
+
+      const { buffer: imgBuffer } = await downloadImageBuffer(originalPath);
       // Use a fully-transparent mask so the inpainting prompt guides gentle
       // smoothing across the whole image — same path as single-item "no
       // detection" — rather than a full-white mask which causes gpt-image-2 to
@@ -299,7 +305,7 @@ router.post("/lab/bulk-crease-fix", async (req, res) => {
       // URL declares "image/png".  Storing mismatched bytes breaks librsvg
       // (used by Sharp to rasterise block-preview SVGs).
       const pngBuf = await dataUrlToPngBuffer(rawDataUrl);
-      const storagePath = await uploadImage(pngBuf, "image/png");
+      const newStoragePath = await uploadImage(pngBuf, "image/png");
 
       const existing = await db
         .select({ position: quiltingImages.position })
@@ -308,17 +314,22 @@ router.post("/lab/bulk-crease-fix", async (req, res) => {
         .orderBy(quiltingImages.position);
       const nextPosition = (existing[existing.length - 1]?.position ?? 0) + 1;
 
+      // Insert the ORIGINAL photo as the supplemental (not the crease-removed
+      // one).  This is the same logical result as the single-item flow's
+      // set-default swap: new crease-removed image becomes the default, the
+      // old original photo gets preserved as a supplemental so the gallery
+      // shows both.
       await db.insert(quiltingImages).values({
         entityType: "fabric",
         entityId: fabricId,
-        storagePath,
-        label: "AI Crease Removed",
+        storagePath: originalPath,
+        label: "Original",
         position: nextPosition,
       });
 
       await db
         .update(fabrics)
-        .set({ imagePath: storagePath })
+        .set({ imagePath: newStoragePath })
         .where(eq(fabrics.id, fabricId));
 
       return fabricId;

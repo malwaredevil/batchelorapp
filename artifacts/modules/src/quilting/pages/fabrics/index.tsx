@@ -19,11 +19,10 @@ import {
   Tag,
   Camera,
   Sparkles,
-  ChevronLeft,
-  ChevronRight,
   Check,
   XCircle,
 } from "lucide-react";
+import { GalleryPaginator } from "@/components/GalleryPaginator";
 import { useBulkAdd } from "@/quilting/contexts/bulk-add-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1175,6 +1174,15 @@ export default function Fabrics() {
         </div>
       )}
 
+      {totalPages > 1 && sorted && sorted.length > 0 && (
+        <GalleryPaginator
+          page={page}
+          totalPages={totalPages}
+          onPageChange={(p) => setPage(p)}
+          className="mb-4"
+        />
+      )}
+
       {(uploadingItems.length > 0 || (sorted && sorted.length > 0)) && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
           {uploadingItems.map((item) => (
@@ -1235,30 +1243,13 @@ export default function Fabrics() {
             ))}
         </div>
       )}
-      {totalPages > 1 && (
-        <div className="mt-6 flex items-center justify-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => p - 1)}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            Page {page} of {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
+      {totalPages > 1 && sorted && sorted.length > 0 && (
+        <GalleryPaginator
+          page={page}
+          totalPages={totalPages}
+          onPageChange={(p) => setPage(p)}
+          className="mt-6"
+        />
       )}
       <CategoryEditDialog
         open={categoryEditItem !== null}

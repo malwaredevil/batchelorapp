@@ -6,10 +6,9 @@ import {
   SortAsc,
   SortDesc,
   RefreshCw,
-  ChevronLeft,
-  ChevronRight,
   Sparkles,
 } from "lucide-react";
+import { GalleryPaginator } from "@/components/GalleryPaginator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -488,6 +487,16 @@ export function CollectionPageShell<T extends CollectionPageItem>({
         </div>
       )}
 
+      {/* Top pagination */}
+      {totalPages > 1 && paged && paged.length > 0 && (
+        <GalleryPaginator
+          page={page}
+          totalPages={totalPages}
+          onPageChange={(p) => setPage(p)}
+          className="mb-4"
+        />
+      )}
+
       {/* Item grid */}
       {paged && paged.length > 0 && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
@@ -495,31 +504,14 @@ export function CollectionPageShell<T extends CollectionPageItem>({
         </div>
       )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="mt-6 flex items-center justify-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => p - 1)}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            Page {page} of {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
+      {/* Bottom pagination */}
+      {totalPages > 1 && paged && paged.length > 0 && (
+        <GalleryPaginator
+          page={page}
+          totalPages={totalPages}
+          onPageChange={(p) => setPage(p)}
+          className="mt-6"
+        />
       )}
 
       {/* Category edit dialog */}

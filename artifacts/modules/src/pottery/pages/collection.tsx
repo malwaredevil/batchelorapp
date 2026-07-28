@@ -27,12 +27,11 @@ import {
   MoreVertical,
   ExternalLink,
   Users,
-  ChevronLeft,
-  ChevronRight,
   ZoomIn,
   Tag,
   Trash2,
 } from "lucide-react";
+import { GalleryPaginator } from "@/components/GalleryPaginator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -1363,55 +1362,47 @@ export default function Collection() {
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {paged.map((item) => (
-                <PieceCard
-                  key={item.id}
-                  item={item}
-                  selecting={compareMode || bulkMode}
-                  selected={
-                    bulkMode
-                      ? bulkSelectedIds.has(item.id)
-                      : selectedIds.includes(item.id)
-                  }
-                  onToggleSelect={bulkMode ? toggleBulkSelect : toggleSelect}
-                  onQuickEdit={setQuickEditItem}
-                  onReanalyze={handleReanalyze}
-                  onColorFilter={(c) =>
-                    setFilterColor(filterColor === c ? null : c)
-                  }
-                  activeColor={filterColor}
-                  onSetCategories={setCategoryEditItem}
-                  onDelete={(item) => setDeleteConfirmId(item.id)}
+            <>
+              {totalPages > 1 && (
+                <GalleryPaginator
+                  page={page}
+                  totalPages={totalPages}
+                  onPageChange={(p) => setPage(p)}
+                  className="mb-4"
                 />
-              ))}
-            </div>
-          )}
-          {/* Pagination controls */}
-          {!groupByMaker && totalPages > 1 && (
-            <div className="mt-6 flex items-center justify-center gap-2">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                Page {page} of {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
+              )}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                {paged.map((item) => (
+                  <PieceCard
+                    key={item.id}
+                    item={item}
+                    selecting={compareMode || bulkMode}
+                    selected={
+                      bulkMode
+                        ? bulkSelectedIds.has(item.id)
+                        : selectedIds.includes(item.id)
+                    }
+                    onToggleSelect={bulkMode ? toggleBulkSelect : toggleSelect}
+                    onQuickEdit={setQuickEditItem}
+                    onReanalyze={handleReanalyze}
+                    onColorFilter={(c) =>
+                      setFilterColor(filterColor === c ? null : c)
+                    }
+                    activeColor={filterColor}
+                    onSetCategories={setCategoryEditItem}
+                    onDelete={(item) => setDeleteConfirmId(item.id)}
+                  />
+                ))}
+              </div>
+              {totalPages > 1 && (
+                <GalleryPaginator
+                  page={page}
+                  totalPages={totalPages}
+                  onPageChange={(p) => setPage(p)}
+                  className="mt-6"
+                />
+              )}
+            </>
           )}
         </>
       )}

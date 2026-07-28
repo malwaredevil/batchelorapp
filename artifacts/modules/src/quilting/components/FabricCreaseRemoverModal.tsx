@@ -756,7 +756,7 @@ export function FabricCreaseRemoverModal({
                 </div>
                 <div
                   ref={leftPanel.outerRef}
-                  className="relative flex-1 overflow-hidden bg-checkerboard cursor-grab select-none"
+                  className="relative flex-1 overflow-hidden bg-checkerboard cursor-grab select-none p-4"
                   onWheel={leftPanel.handleWheel}
                   onPointerDown={leftPanel.handlePointerDown}
                   onPointerMove={leftPanel.handlePointerMove}
@@ -797,7 +797,7 @@ export function FabricCreaseRemoverModal({
                 </div>
                 <div
                   ref={rightPanel.outerRef}
-                  className="relative flex-1 overflow-hidden bg-checkerboard cursor-grab select-none"
+                  className="relative flex-1 overflow-hidden bg-checkerboard cursor-grab select-none p-4"
                   onWheel={rightPanel.handleWheel}
                   onPointerDown={rightPanel.handlePointerDown}
                   onPointerMove={rightPanel.handlePointerMove}

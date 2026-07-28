@@ -182,10 +182,23 @@ router.post("/lab/remove-creases", async (req, res) => {
   }
 
   try {
-    // When no mask is supplied, cover the whole image so the AI finds and
-    // removes any creases without requiring a prior detection step.
-    const maskDataUrl =
-      parsed.data.maskDataUrl ?? (await buildFullWhiteMaskDataUrl(imgBuffer));
+    // When no mask is supplied, auto-detect creases and use only those narrow
+    // bands. A full-coverage mask causes gpt-image-2 to regenerate the entire
+    // image from scratch (hallucination), because it has no pixel reference.
+    let maskDataUrl: string;
+    if (parsed.data.maskDataUrl) {
+      maskDataUrl = parsed.data.maskDataUrl;
+    } else {
+      const detected = await detectCreasesFromBuffer(imgBuffer);
+      if (detected.creasesFound === 0) {
+        res.status(422).json({
+          error:
+            "No creases detected automatically. Paint crease areas manually with the brush, then press Remove Creases.",
+        });
+        return;
+      }
+      maskDataUrl = detected.maskDataUrl;
+    }
     const prompt = buildEnrichedPrompt(fabricMeta, parsed.data.prompt);
     const dataUrl = await removeCreasesFromBuffer(
       imgBuffer,
@@ -244,10 +257,23 @@ router.post("/lab/remove-creases/openai", async (req, res) => {
   }
 
   try {
-    // When no mask is supplied, cover the whole image so the AI finds and
-    // removes any creases without requiring a prior detection step.
-    const maskDataUrl =
-      parsed.data.maskDataUrl ?? (await buildFullWhiteMaskDataUrl(imgBuffer));
+    // When no mask is supplied, auto-detect creases and use only those narrow
+    // bands. A full-coverage mask causes gpt-image-2 to regenerate the entire
+    // image from scratch (hallucination), because it has no pixel reference.
+    let maskDataUrl: string;
+    if (parsed.data.maskDataUrl) {
+      maskDataUrl = parsed.data.maskDataUrl;
+    } else {
+      const detected = await detectCreasesFromBuffer(imgBuffer);
+      if (detected.creasesFound === 0) {
+        res.status(422).json({
+          error:
+            "No creases detected automatically. Paint crease areas manually with the brush, then press Remove Creases.",
+        });
+        return;
+      }
+      maskDataUrl = detected.maskDataUrl;
+    }
     const prompt = buildEnrichedPrompt(fabricMeta, parsed.data.prompt);
     const dataUrl = await removeCreasesFromBuffer(
       imgBuffer,

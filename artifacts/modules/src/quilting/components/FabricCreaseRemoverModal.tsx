@@ -410,8 +410,9 @@ export function FabricCreaseRemoverModal({
 
   function handleRemoveCreases() {
     // When no mask exists yet (nothing detected and nothing painted),
-    // omit maskDataUrl — the server applies a full-coverage white mask so
-    // the AI scans and repairs the whole image without a prior detect step.
+    // omit maskDataUrl — the server will auto-detect creases and use only
+    // those narrow bands as the inpainting mask (a full-coverage mask causes
+    // gpt-image-2 to regenerate the entire image from scratch).
     const maskDataUrl = hasMask ? (getMaskDataUrl() ?? undefined) : undefined;
     openaiMutation.mutate(
       { data: { fabricId, ...(maskDataUrl ? { maskDataUrl } : {}) } },
@@ -426,10 +427,17 @@ export function FabricCreaseRemoverModal({
             toast.error("No image returned from AI — please try again.");
           }
         },
-        onError: (err) =>
+        onError: (err) => {
+          // Extract the server's error message (e.g. "No creases detected…")
+          // from the axios response body when available.
+          const serverMsg = (
+            err as { response?: { data?: { error?: string } } }
+          ).response?.data?.error;
           toast.error(
-            err instanceof Error ? err.message : "AI removal failed.",
-          ),
+            serverMsg ??
+              (err instanceof Error ? err.message : "AI removal failed."),
+          );
+        },
       },
     );
   }

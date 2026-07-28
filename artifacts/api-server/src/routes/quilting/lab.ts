@@ -16,7 +16,6 @@ import {
 import {
   detectCreasesFromBuffer,
   removeCreasesFromBuffer,
-  buildFullWhiteMaskDataUrl,
   DEFAULT_INPAINT_PROMPT,
 } from "../../lib/crease-removal";
 
@@ -242,7 +241,23 @@ router.post("/lab/bulk-crease-fix", async (req, res) => {
         throw Object.assign(new Error("Fabric not found"), { fabricId });
 
       const { buffer: imgBuffer } = await downloadImageBuffer(row.imagePath);
-      const maskDataUrl = await buildFullWhiteMaskDataUrl(imgBuffer);
+      // Use a fully-transparent mask so the inpainting prompt guides gentle
+      // smoothing across the whole image — same path as single-item "no
+      // detection" — rather than a full-white mask which causes gpt-image-2 to
+      // regenerate the entire image (hallucination).
+      const meta = await sharp(imgBuffer).metadata();
+      const maskDataUrl = `data:image/png;base64,${(
+        await sharp({
+          create: {
+            width: meta.width ?? 1024,
+            height: meta.height ?? 1024,
+            channels: 4,
+            background: { r: 0, g: 0, b: 0, alpha: 0 },
+          },
+        })
+          .png()
+          .toBuffer()
+      ).toString("base64")}`;
       const dataUrl = await removeCreasesFromBuffer(imgBuffer, maskDataUrl);
 
       const b64 = dataUrl.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");

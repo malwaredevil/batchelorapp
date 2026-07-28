@@ -409,8 +409,16 @@ export function FabricCreaseRemoverModal({
   }
 
   function handleRemoveCreases() {
-    const maskDataUrl = getMaskDataUrl();
-    if (!maskDataUrl) return;
+    // Send the current canvas as the inpainting mask. A transparent canvas
+    // (nothing detected, nothing painted) tells gpt-image-2 to apply
+    // prompt-guided smoothing across the whole image rather than inpainting
+    // specific areas — this removes creases while largely preserving the pattern.
+    // If detection ran and found creases, the canvas has those marks and
+    // gpt-image-2 targets only those bands (better result when it works).
+    const maskDataUrl =
+      getMaskDataUrl() ??
+      // Fallback 1×1 transparent PNG in case canvas ref isn't mounted yet.
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
     openaiMutation.mutate(
       { data: { fabricId, maskDataUrl } },
       {
@@ -685,8 +693,8 @@ export function FabricCreaseRemoverModal({
               <div className="flex items-center gap-2">
                 <p className="text-xs text-muted-foreground">
                   {hasMask
-                    ? `${detectedCreases.length > 0 ? `${detectedCreases.length} auto-detected + ` : ""}manual marks — ready to remove`
-                    : "Use Detect Creases to auto-mark fold lines, or paint them manually, then click Remove Creases"}
+                    ? `${detectedCreases.length > 0 ? `${detectedCreases.length} crease${detectedCreases.length === 1 ? "" : "s"} detected — targeted removal` : "manual marks — ready for targeted removal"}`
+                    : "Ready — click Remove Creases to smooth the image, or use Detect Creases first to target specific fold lines"}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -706,7 +714,7 @@ export function FabricCreaseRemoverModal({
                 <Button
                   size="sm"
                   onClick={handleRemoveCreases}
-                  disabled={!hasMask || isRemoving || isDetecting}
+                  disabled={isRemoving || isDetecting}
                 >
                   {isRemoving ? (
                     <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />

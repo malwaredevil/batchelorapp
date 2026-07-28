@@ -146,7 +146,18 @@ async function pollLoop(
   queue?: string,
 ): Promise<void> {
   while (!signal.aborted) {
-    await processOne(workerId, signal, queue);
+    try {
+      await processOne(workerId, signal, queue);
+    } catch (err) {
+      // Transient DB errors (e.g. "Connection terminated unexpectedly" when
+      // Supabase drops an idle connection) must not crash the server process.
+      // Log and continue — the pool will establish a fresh connection on the
+      // next poll tick.
+      logger.warn(
+        { err },
+        "job-worker: transient error in poll loop, retrying",
+      );
+    }
     await sleep(5_000, signal);
   }
 }

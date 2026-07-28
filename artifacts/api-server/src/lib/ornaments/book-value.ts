@@ -11,9 +11,9 @@
  */
 
 import { callModel, getModels } from "../ai-client";
-import { runApifyActor } from "../apify-client";
 import { env } from "../env";
 import { logger } from "../logger";
+import { withRetry } from "../retry";
 
 export interface BookValueLookupInput {
   name: string;
@@ -90,41 +90,44 @@ async function extractValueFromText(
   }
 }
 
+const FETCH_TIMEOUT_MS = 20_000;
+const FETCH_MAX_CHARS = 8_000;
+
 /**
- * Fetch page text for a URL via the Apify `apify/website-content-crawler`
- * actor, which handles proxy rotation and retries automatically.
+ * Fetch page text for a URL via the Jina Reader API (r.jina.ai), which
+ * converts any public webpage to clean, LLM-friendly markdown without
+ * requiring any special actor or plan.
  */
-async function fetchPageTextViaApify(url: string): Promise<string | null> {
-  const apiToken = env.apifyApiToken;
-  if (!apiToken) return null;
+async function fetchPageText(url: string): Promise<string | null> {
+  if (!env.jinaApiKey) {
+    logger.warn("book-value: JINA_API_KEY not configured, skipping fetch");
+    return null;
+  }
 
   try {
-    const items = await runApifyActor(
-      "apify/website-content-crawler",
-      {
-        startUrls: [{ url }],
-        maxCrawlPages: 1,
-        crawlerType: "cheerio",
-        maxCrawlDepth: 0,
-        saveMarkdown: true,
-        saveHtml: false,
-      },
-      apiToken,
-      { timeoutMs: 60_000, maxItems: 1 },
+    const resp = await withRetry(
+      () =>
+        fetch(`https://r.jina.ai/${url}`, {
+          headers: {
+            Authorization: `Bearer ${env.jinaApiKey}`,
+            Accept: "text/plain",
+            "X-Return-Format": "markdown",
+          },
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        }),
+      { label: "jina-reader-book-value" },
     );
-
-    const first = items[0];
-    if (!first) return null;
-
-    // The actor returns `markdown` or `text` fields
-    const text =
-      (first.markdown as string | undefined) ??
-      (first.text as string | undefined) ??
-      (first.content as string | undefined);
-
-    return typeof text === "string" && text.length > 10 ? text : null;
+    if (!resp.ok) {
+      logger.warn(
+        { url, status: resp.status },
+        "book-value: Jina fetch failed",
+      );
+      return null;
+    }
+    const text = (await resp.text()).trim();
+    return text.length > 10 ? text.slice(0, FETCH_MAX_CHARS) : null;
   } catch (err) {
-    logger.warn({ err, url }, "book-value: Apify page fetch failed");
+    logger.warn({ err, url }, "book-value: page fetch failed");
     return null;
   }
 }
@@ -146,7 +149,7 @@ export async function lookupBookValue(
   const found: BookValueResult[] = [];
 
   for (const site of SITES) {
-    const pageText = await fetchPageTextViaApify(site.searchUrl(query));
+    const pageText = await fetchPageText(site.searchUrl(query));
     if (!pageText) continue;
 
     const value = await extractValueFromText(pageText, input);

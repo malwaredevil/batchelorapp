@@ -409,13 +409,10 @@ export function FabricCreaseRemoverModal({
   }
 
   function handleRemoveCreases() {
-    // When no mask exists yet (nothing detected and nothing painted),
-    // omit maskDataUrl — the server will auto-detect creases and use only
-    // those narrow bands as the inpainting mask (a full-coverage mask causes
-    // gpt-image-2 to regenerate the entire image from scratch).
-    const maskDataUrl = hasMask ? (getMaskDataUrl() ?? undefined) : undefined;
+    const maskDataUrl = getMaskDataUrl();
+    if (!maskDataUrl) return;
     openaiMutation.mutate(
-      { data: { fabricId, ...(maskDataUrl ? { maskDataUrl } : {}) } },
+      { data: { fabricId, maskDataUrl } },
       {
         onSuccess: (d) => {
           if (d.dataUrl) {
@@ -689,7 +686,7 @@ export function FabricCreaseRemoverModal({
                 <p className="text-xs text-muted-foreground">
                   {hasMask
                     ? `${detectedCreases.length > 0 ? `${detectedCreases.length} auto-detected + ` : ""}manual marks — ready to remove`
-                    : "Paint creases manually, auto-detect, or click Remove Creases to fix the whole image"}
+                    : "Use Detect Creases to auto-mark fold lines, or paint them manually, then click Remove Creases"}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -709,7 +706,7 @@ export function FabricCreaseRemoverModal({
                 <Button
                   size="sm"
                   onClick={handleRemoveCreases}
-                  disabled={isRemoving || isDetecting}
+                  disabled={!hasMask || isRemoving || isDetecting}
                 >
                   {isRemoving ? (
                     <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />

@@ -130,9 +130,9 @@ router.post("/lab/detect-creases", async (req, res) => {
 
 router.post("/lab/remove-creases", async (req, res) => {
   const parsed = InpaintBody.safeParse(req.body);
-  if (!parsed.success) {
+  if (!parsed.success || !parsed.data.maskDataUrl) {
     res.status(400).json({
-      error: "fabricId (or sourceDataUrl) is required.",
+      error: "fabricId (or sourceDataUrl) and maskDataUrl are required.",
     });
     return;
   }
@@ -150,13 +150,9 @@ router.post("/lab/remove-creases", async (req, res) => {
   }
 
   try {
-    // When no mask is supplied, cover the whole image so the AI finds and
-    // removes any creases without requiring a prior detection step.
-    const maskDataUrl =
-      parsed.data.maskDataUrl ?? (await buildFullWhiteMaskDataUrl(imgBuffer));
     const dataUrl = await removeCreasesFromBuffer(
       imgBuffer,
-      maskDataUrl,
+      parsed.data.maskDataUrl,
       parsed.data.prompt,
     );
     res.json({ dataUrl });
@@ -174,9 +170,9 @@ router.post("/lab/remove-creases", async (req, res) => {
 
 router.post("/lab/remove-creases/openai", async (req, res) => {
   const parsed = InpaintBody.safeParse(req.body);
-  if (!parsed.success) {
+  if (!parsed.success || !parsed.data.maskDataUrl) {
     res.status(400).json({
-      error: "fabricId (or sourceDataUrl) is required.",
+      error: "fabricId (or sourceDataUrl) and maskDataUrl are required.",
     });
     return;
   }
@@ -194,13 +190,9 @@ router.post("/lab/remove-creases/openai", async (req, res) => {
   }
 
   try {
-    // When no mask is supplied, cover the whole image so the AI finds and
-    // removes any creases without requiring a prior detection step.
-    const maskDataUrl =
-      parsed.data.maskDataUrl ?? (await buildFullWhiteMaskDataUrl(imgBuffer));
     const dataUrl = await removeCreasesFromBuffer(
       imgBuffer,
-      maskDataUrl,
+      parsed.data.maskDataUrl,
       parsed.data.prompt,
     );
     res.json({ dataUrl });
